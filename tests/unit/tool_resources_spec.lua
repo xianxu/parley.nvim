@@ -47,6 +47,13 @@ describe('pure tool resource admission',function()
         assert.same({running=2,queued=2,unknown=1},R.stats(s))
         s=R.cancel(s,'b');s=release(s,'d');local ready;s,ready=R.pump(s);assert.same({'e'},ready)
     end)
+    -- #266 M3: the scheduler releases a crashed tool once its process has ended,
+    -- naming that as the evidence; anything short of evidence still refuses.
+    it('releases an unknown record on evidence that its process ended',function()
+        local s=admitted(R.new(),request('a',{claim('/a')}));s=R.unknown(s,'a')
+        local same,refused=R.release(s,'a',{effect='ended'});assert.equals('unresolved',refused.status);assert.same(s,same)
+        local _,released=R.release(s,'a',{effect='ended',evidence_ref='exited'});assert.equals('released',released.status)
+    end)
     it('lets disjoint work in the same document and generation bypass an unknown conflict',function()
         local s=admitted(R.new(),request('unknown',{claim('/one/a')}));s=R.unknown(s,'unknown')
         local waiting=request('waiting',{claim('/one/a')});waiting.generation='later'

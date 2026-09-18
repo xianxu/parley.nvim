@@ -103,6 +103,15 @@ one `{role = "tool", tool_call_id}` message per result. `is_error` folds into
 the content string (OpenAI has no such field). Translating in the adapter rather
 than forking the emitter keeps those invariants single-sourced.
 
+A saved round is laid out `🔧a 📎a 🔧b 📎b` — each call immediately before its own
+result (#266) — so re-parsing a transcript emits four messages where the live
+round sent two: assistant `[tool_use a]`, user `[result a]`, assistant
+`[tool_use b]`, user `[result b]`. That is accepted deliberately: the wire
+reflects the file, and batching them back into one parallel turn would need round
+identity written into the transcript. The live round is unaffected — its
+continuation is built from the frozen round (Loop Model, step 5) and still sends
+every call in one assistant message and every result in one user message.
+
 ### Stream decoding differs structurally
 
 Anthropic frames each call with `content_block_start`/`_stop` around a top-level
@@ -151,19 +160,62 @@ tool rounds, and pending presentation under one document generation. The
 adapters receive operation handles, not authority to write arbitrary positions.
 
 1. Submission captures the target and request source before asynchronous
-   preparation. Preparation validates ownership before changing the answer shell.
+   preparation. Preparation validates ownership before changing the answer shell,
+   and changes it immediately before the generation's first write.
 2. `response_provider` streams position-free output into the runner. On successful
    completion it decodes and freezes tool declarations using the request's wire.
-3. `response_tools` reserves document capacity, appends calls and ordered
-   `(Tool result pending)` result slots, then acquires a separate grant for each result slot.
-   No child starts before its slot reservation is confirmed.
-4. Producers may complete out of order. Each known result replaces only its own
-   granted slot through the runner; results retain declaration order in both the
-   transcript and the next request.
+3. A declared round starts its tools at once — at most four running — whatever
+   the write turn: execution is concurrent. Nothing is written for them yet, and
+   no placeholder is ever written.
+4. The generation machine writes the round one block at a time in declared order
+   — call 1, its result, call 2, its result — ordered by `tools/sequence.lua`
+   and held, like output, behind the text streamed before the round, the write
+   turn and the deferred gap. An outcome that arrives early waits for everything
+   before it, so the transcript only grows at its tail. `response_tools` renders
+   the block the machine asks for (`insert_tool`); a result block and the
+   continuation carry the same recorded result. A **failed** call — `unknown`,
+   `rejected`, `cancelled_before_effect` — is written as an ordinary
+   `📎: … error=true` result saying what is known about its effect, and the round
+   continues so the model can try another way; an outcome is final once written.
+   Only a call whose outcome never arrives holds the blocks behind it: those tools
+   still run and presentation counts them
+   ([response progress](../chat/response_progress.md)). `:ParleyStop` during
+   the round writes the round out before the answer ends — see
+   [Stop during a tool round](#stop-during-a-tool-round).
 5. After the round is settled, `response_tools` builds continuation messages from
-   the frozen previous request, assistant text, calls, and known results. The same
+   the frozen previous request, assistant text, calls, and each call's recorded
+   result — the error result of a failed call included. The same
    Session admits the next provider operation; it neither recursively calls
    `respond` nor rebuilds the request from the mutable transcript.
+
+### Stop during a tool round
+
+The one statement of what a Stop writes (#266 M3; the generation's `flushing`
+phase). Other pages point here rather than restate it. It is derived from the
+composed system — the machine's walk plus the producer's cancel — not from the
+machine alone.
+
+A user's Stop while a round is not fully written cancels every running tool,
+starts none, and writes each `(call, result)` pair in declared order. A tool's
+result is written from what is known about it when its pair is reached:
+
+| The tool, at that point | Written result |
+|---|---|
+| reported an outcome before its cancellation took effect | that outcome, as is |
+| running — the producer hands it to its supervisor | "Cancelled by the user while running; it may have partly taken effect." |
+| queued in the scheduler, never run | the scheduler's own "Tool cancelled before execution" |
+| never started by the runner, or never started at all | "Cancelled by the user before it ran." |
+
+The walk waits for a running tool's cancellation to settle before writing its
+pair; the real producer settles it at once. Then the answer ends, with no
+continuation. It keeps the write turn throughout, so behind another answer it
+waits and says so.
+
+A flush ends early — dropping the pairs not yet written — on exactly the
+`stop()` calls reachable from `flushing` (`generation.lua`): a second Stop; an
+overflow; revocation of the answer (an edit inside it, reload, detach); or a
+failed write of its held text, its gap, or one of its blocks. A change that adds
+a `stop()` reachable from `flushing` updates this list.
 
 The prepared response profile captures iteration and result-byte limits once per
 generation, including an agent explicitly chosen during onboarding. Limits are
@@ -173,9 +225,13 @@ metadata cannot raise these captured limits.
 Logical cancellation and physical cleanup are separate. Stopping or invalidating
 an answer prevents further admission immediately, but its operation remains
 unresolved until the producer reports cleanup. A throwing producer may already
-have caused an effect: an `unknown` outcome prevents continuation and is not
-converted into a successful or cancelled result. A later known outcome and
-positive cleanup can settle it; a cancellation request alone cannot.
+have caused an effect, so an `unknown` outcome is never converted into a
+successful or cancelled result: a crashed tool is a plain failure (#266 M3,
+operator decision), written as an error result saying it may have partly taken
+effect, and the round continues once the tool's process has ended. By then it
+holds nothing, so a retry — in this answer or another — simply runs
+([tool execution](tool_execution.md)). A cancellation request alone settles
+nothing.
 
 Builtin definitions expose asynchronous execution and resource declarations.
 The captured dispatcher profile, process-scoped scheduler, checked filesystem
@@ -287,7 +343,7 @@ block still starts a turn.
 - **Unknown tools**: return friendly error "Tool 'X' is not available on this client"
 - **Malformed blocks**: `build_messages_from_model` degrades to text (no Anthropic rejection)
 - **Buffer diagnostic**: `:lua require('parley').check_buffer()` validates invariants
-- **Transcript drift**: Document grants and captured source guards fence answer, tool, progress, and topic callbacks. Editing a protected region or deleting its marker invalidates that work; disjoint draft edits and sibling generations can continue. Reload invalidates active writes.
+- **Transcript drift**: Document grants and captured source guards fence answer, tool, progress, and topic callbacks. Editing a protected region or deleting its marker invalidates that work; disjoint draft edits leave it valid, and so does a sibling generation's work (which writes only when it holds the write turn — see [write ownership](../chat/ownership.md)). Reload invalidates active writes.
 
 ## Visual Treatment
 
@@ -302,7 +358,8 @@ block still starts a turn.
 
 The builtin list lives in `lua/parley/tools/init.lua`; `response_session.lua`
 composes the chat response, `response_provider.lua` owns transport callbacks,
-and `response_tools.lua` owns reserved result slots and frozen continuations.
+`response_tools.lua` runs a round's tools, renders its blocks and builds frozen
+continuations, and `tools/sequence.lua` orders the blocks.
 `tools/dispatcher.lua` owns execution/root checks/paging, and `tools/wire.lua`
 selects the protocol. Native integration coverage includes
 `response_session_spec.lua`, `response_tools_spec.lua`, and
@@ -317,12 +374,13 @@ history search, explicit additional roots, symlink rejection, and forged input
 policy. The dispatcher passes policy as handler context, separately from model
 arguments.
 
-Pending reservations use fixed inert text, never result Markdown. Only a confirmed
-child outcome passes through the result serializer. Reloaded or cancelled pending
-calls remain unmatched calls; historical provider projection may report their
-missing result as an error, and never as successful execution evidence.
+No placeholder is ever written: a result block exists only once its outcome
+arrives. A call cut off by reload or Stop before its result lands stays an
+unmatched call; historical provider projection reports its missing result as an
+error, never as successful execution evidence.
 
-Tool adapter retirement joins known outcome, positive producer cleanup and the
-publication decision. Every contributing event reevaluates that join, including
-late outcomes after cancellation. Publication is reserved before calling outcome
-observers, so a reentrant cleanup callback cannot retire the pending write.
+Tool adapter retirement joins a recorded outcome and positive producer cleanup;
+every contributing event reevaluates that join, including late outcomes after
+cancellation. The outcome is recorded before outcome observers can report cleanup
+reentrantly. Writing is the machine's decision, not the adapter's, so a tool's
+retirement never races its own result block.

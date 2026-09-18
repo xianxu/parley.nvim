@@ -91,4 +91,47 @@ describe("progress_message", function()
         assert.are.same({}, cleared)
         assert.are.equal("Done", message)
     end)
+
+    -- #266: a generation held behind the write turn names what it waits for and
+    -- why, so a stalled holder never reads as a frozen editor.
+    it('names the answer holding the write turn and what it is doing',function()
+        local message=presentation.waiting_message(12,'executing_tools')
+        assert.truthy(message:find('line 12',1,true))
+        assert.truthy(message:find('running tools',1,true))
+        assert.truthy(message:find(':ParleyStop',1,true))
+        for phase,why in pairs({preparing='preparing',requesting='streaming',draining='finishing',
+            finalizing='finishing',flushing='stopping',stopping='stopping'}) do
+            assert.truthy(presentation.waiting_message(3,phase):find(why,1,true),phase)
+        end
+        assert.truthy(presentation.waiting_message(nil,nil):find('another answer',1,true))
+    end)
+    -- #266 M2: a round's blocks land one at a time, so the tools still running
+    -- are counted here rather than seen in the transcript.
+    it('counts a round\'s tools as they finish, then names a wait on cleanup',function()
+        assert.truthy(presentation.tools_message({total=3,finished=1,settled=1}):find('Running tools: 1 of 3 finished',1,true))
+        assert.truthy(presentation.tools_message({total=3,finished=3,settled=1}):find('Tools finished; waiting for 2 to clean up',1,true))
+    end)
+    -- The rule behind the stall-visibility findings: every note shown while an
+    -- answer waits names what ends the wait. Walks every such note.
+    it('names an escape in every note an answer shows while it waits',function()
+        local notes={
+            presentation.tools_message({total=2,finished=0,settled=0}),
+            presentation.tools_message({total=2,finished=2,settled=1}),
+            presentation.flushing_message(3),presentation.flushing_message(nil),
+        }
+        for _,phase in ipairs({'preparing','requesting','executing_tools','draining','finalizing','flushing','stopping'}) do
+            notes[#notes+1]=presentation.waiting_message(4,phase)
+        end
+        for _,note in ipairs(notes) do assert.truthy(note:find(':ParleyStop',1,true),note) end
+    end)
+    -- #266 M3: a Stop during a tool round writes the round out first.
+    it('says a stopped answer is writing its tool results, and after whom',function()
+        assert.truthy(presentation.flushing_message(4):find('Stopped; writing its tool results after the answer to line 4',1,true))
+        assert.truthy(presentation.flushing_message(nil):find('a second :ParleyStop drops the rest',1,true))
+    end)
+    it('says why a response stopped at its staging budget, naming the answer it waited behind',function()
+        local held=presentation.overflow_message(7)
+        assert.truthy(held:find('staging budget',1,true));assert.truthy(held:find('line 7',1,true))
+        assert.is_nil(presentation.overflow_message(nil):find('waiting',1,true),'not held: no holder to name')
+    end)
 end)

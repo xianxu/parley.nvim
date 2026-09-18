@@ -91,7 +91,7 @@ function M.step(op)
         s.accepted=s.accepted+(applied.accepted_bytes or 0)
         if (applied.accepted_bytes or 0)>0 then s.bootstrap=false end
         if applied.status=='applied' then return result(s)end
-        if applied.status=='more' or applied.status=='read' or applied.status=='suspended' then return waiting(s)end
+        if applied.status=='more' or applied.status=='read' or applied.status=='suspended' or applied.status=='waiting' then return waiting(s)end
         retire(s,'error',applied.reason or applied.error or applied.status);return result(s)
     end
     local gap=s.spec.gaps[s.index]
@@ -100,7 +100,7 @@ function M.step(op)
         request.first_offset=gap.first_offset;request.retain_prefix=gap.retain_prefix
         local cursor,reason=D.replace_new(s.doc,request)
         if not cursor then
-            if reason=='uncertain' or reason=='suspended'then return waiting(s)end
+            if reason=='uncertain' or reason=='suspended' or reason=='waiting'then return waiting(s)end
             retire(s,'error',reason);return result(s)
         end
         s.cursor=cursor
@@ -110,7 +110,7 @@ function M.step(op)
     if applied.status=='applied'then
         s.cursor=nil;s.index=s.index+1
         if s.index>#s.grants then retire(s,'applied')end
-    elseif applied.status=='suspended'then return waiting(s)
+    elseif applied.status=='suspended' or applied.status=='waiting'then return waiting(s)
     elseif applied.status~='more'then retire(s,'error',applied.error or applied.status)end
     return result(s)
 end

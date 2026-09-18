@@ -168,9 +168,16 @@ function M.new(opts)
         local r=records[handle]
         if not r then return false end
         if r.refused then invoke(done);return true end
+        if not r.op then r.events=nil;r.token=nil;return false end
+        service:cancel(r.op)
+        -- #266 M3 review BR-15: a tool the scheduler had not started is settled by
+        -- its own outcome ("cancelled before execution") and cleanup, delivered as
+        -- usual. Handing it to the supervisor would erase the evidence that it
+        -- never ran, and the transcript would say it was cancelled while running.
+        local snapshot=service:snapshot(r.op)
+        if snapshot and snapshot.physical_resolved then return true end
         r.events=nil;r.token=nil
-        if not r.op then return false end
-        service:cancel(r.op);invoke(done,{supervised=true});return true
+        invoke(done,{supervised=true});return true
     end
     function producer.close()
         if closed then return end;closed=true

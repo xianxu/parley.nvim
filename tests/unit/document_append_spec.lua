@@ -15,9 +15,12 @@ local function fixture(body)
         marker_revision=1,revision=1,first=D.query(doc,2,3)[1].start_byte,last=D.size(doc).bytes-1,confirmed=true}}})
     assert.is_true(acquired.ok)
     local grant=acquired.grants[1]
-    local function intent(bytes)
-        return {epoch=D.snapshot(doc).epoch,generation=generation,grant=grant,entity=entity,
-            revision=D.snapshot(doc).grants[grant].revision,operation='stream',bytes=bytes}
+    -- #266 M1: write authority now includes the document's write turn.
+    assert.is_true(D.transition(doc,{kind='request_turn',generation=generation}).ok)
+    local function intent(bytes,target)
+        target=target or grant
+        return {epoch=D.snapshot(doc).epoch,generation=generation,grant=target,entity=entity,
+            revision=D.snapshot(doc).grants[target].revision,operation='stream',bytes=bytes}
     end
     return doc,fake,intent,grant
 end
@@ -89,30 +92,26 @@ describe('owned bounded append',function()
         assert.is_true(suspended)
         assert.same({'💬: q','draft','🤖: answer','```lua','code','```','plain'},fake.lines)
     end)
-    it('keeps a tail cursor through disjoint human edits and immediately preceding child insertions',function()
-        local doc,fake,intent,parent=fixture('body')
+    it('keeps a tail cursor through disjoint human edits and an owned insertion immediately before its grant',function()
+        local doc,fake,intent,answer=fixture('body')
         local marker=D.query(doc,2,3)[1]
-        -- Delegate an empty slot immediately before the answer's body row.
         local generation=intent('').generation
-        local child=D.transition(doc,{kind='acquire',generation=generation,parent=parent,regions={{entity=marker.handle,
-            marker_revision=1,revision=1,first=marker.end_byte,last=marker.end_byte,confirmed=true}}})
-        assert.is_true(child.ok)
-        assert.equals('refused',D.append(doc,intent('no parent write')).status)
-        -- A separate leaf at the actual tail excludes the child's boundary.
-        local tail=D.transition(doc,{kind='acquire',generation=generation,parent=parent,regions={{entity=marker.handle,
-            marker_revision=1,revision=1,first=marker.end_byte+1,last=D.size(doc).bytes-1,confirmed=true}}})
-        assert.is_true(tail.ok)
-        local leaf=tail.grants[1]
-        local function leaf_intent(bytes)
-            local q=intent(bytes);q.grant=leaf;q.revision=D.snapshot(doc).grants[leaf].revision;return q
-        end
+        -- Two disjoint grants of one generation: an empty one immediately before
+        -- the answer's body row, and a leaf at the actual tail.
+        D.transition(doc,{kind='revoke',grant=answer})
+        local acquired=D.transition(doc,{kind='acquire',generation=generation,regions={
+            {entity=marker.handle,marker_revision=1,revision=1,first=marker.end_byte,last=marker.end_byte,confirmed=true},
+            {entity=marker.handle,marker_revision=1,revision=1,first=marker.end_byte+1,last=D.size(doc).bytes-1,confirmed=true}}})
+        assert.is_true(acquired.ok,acquired.reason)
+        local neighbor,leaf=acquired.grants[1],acquired.grants[2]
+        local function leaf_intent(bytes)return intent(bytes,leaf)end
         assert.equals('more',D.append(doc,leaf_intent('x')).status)
         assert.equals(1,D.append(doc,leaf_intent('x')).accepted_bytes)
         fake:edit(1,0,1,1,{'D'})
-        local child_grant=D.snapshot(doc).grants[child.grants[1]]
+        local neighbor_grant=D.snapshot(doc).grants[neighbor]
         local pos=marker.end_byte
-        local result=D.apply(doc,{epoch=D.snapshot(doc).epoch,generation=generation,operation='child',entity=marker.handle,
-            grant=child_grant.id,revision=child_grant.revision,patches={{start={row=3,col=0,byte=pos},
+        local result=D.apply(doc,{epoch=D.snapshot(doc).epoch,generation=generation,operation='neighbor',entity=marker.handle,
+            grant=neighbor_grant.id,revision=neighbor_grant.revision,patches={{start={row=3,col=0,byte=pos},
                 finish={row=3,col=0,byte=pos},expected_old='',text='child\n'}}})
         assert.is_true(#result.receipts>0)
         assert.equals('idle',D.drain(doc,1000).status)

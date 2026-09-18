@@ -102,6 +102,21 @@ describe('public scoped response command',function()
         wait(function()return Respond.response_snapshot(session).status=='terminal'end)
         assert.is_false(calls[1].running)
     end)
+    -- #266 Task 1.7: an overflow is reported, not silent — and a held answer's
+    -- report names the answer it was waiting for (generation_turn_spec).
+    it('says why a response stopped at its staging budget',function()
+        local notices={};local old_notify=vim.notify
+        vim.notify=function(message,level)notices[#notices+1]={message=message,level=level}end
+        local session=submit('first');wait(function()return #calls==1 end)
+        calls[1].output(calls[1].id,string.rep('x',1048577))
+        wait(function()return Respond.response_snapshot(session).status=='terminal'end)
+        vim.notify=old_notify
+        assert.equals('overflow',Respond.response_snapshot(session).generation.outcome)
+        local found
+        for _,n in ipairs(notices)do if n.message:find('staging budget',1,true)then found=n end end
+        assert.is_not_nil(found,vim.inspect(notices))
+        assert.equals(vim.log.levels.WARN,found.level)
+    end)
     it('writes an automatic topic through its captured header after the answer completes',function()
         vim.api.nvim_buf_set_lines(buf,0,1,false,{'# topic: ?'})
         local session=submit('first');wait(function()return #calls==1 end)

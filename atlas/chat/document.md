@@ -5,7 +5,7 @@ owned text. The buffer coordinator owns the live index used by highlighting, fol
 and diagnostic candidate queries. Explicit materialization still uses the
 [parser and exchange model](parsing.md). Response sessions capture source and
 acquire document grants before asynchronous preparation. Provider text, tool
-slots, completion prompts, and automatic topics use those scoped operations;
+blocks, completion prompts, and automatic topics use those scoped operations;
 the materialized exchange model supplies request input only.
 
 ## Ownership and data flow
@@ -20,7 +20,8 @@ the materialized exchange model supplies request input only.
 | `semantic` | Scheduled semantic transitions, scoped answer sections, confirmed-region tracking. |
 | `structure` | Document lifetime, publication, edit invalidation, and repair orchestration. |
 | `projection` | Derived index summaries for exchange boundaries, folds, outline, and diagnostics. |
-| `state` | Pure generation/grant transitions, dependency staleness, and write-plan revisions. |
+| `state` | Pure generation/grant transitions, dependency staleness, write-plan revisions, and the write turn. |
+| `write_turn` | Pure holder decision for the write turn: an eligible incumbent keeps it, else the lowest admitted id. |
 | `editor` | One native buffer attachment, normalized edit events, exact mutation receipts, and undo ownership. |
 | `replacement` | Finite replacement cursors, bounded native writes, and private successor evidence across deletion/insertion receipts. |
 | `init` | Per-buffer coordinator, immediate authority invalidation, bounded repair, and subscriptions. |
@@ -85,8 +86,12 @@ semantic checkpoint immediately; unknown or broad edits become opaque spans and
 repair in scheduled slices. Deleting marker bytes retires their identity even
 when the replacement text is identical. Surviving markers move with the index.
 
-A generation receives grants over confirmed byte ranges. Child tool slots exclude
-the parent from their ranges. Editing granted output revokes overlapping writers;
+A generation receives grants over confirmed byte ranges; a tool round appends its
+blocks through the answer's own grant, with none of its own (#266 M2). A grant is
+one closed range, disjoint from every other live grant and never carved out of
+one (#266 M4), so an insertion at its boundary is inside it. A continuation first
+narrows its answer's grant to the tail (`reclaim_tail`). Editing
+granted output revokes overlapping writers;
 editing an input dependency marks the captured input stale. Disjoint edits can
 move a grant without cancelling its writer, but retire plans with old revisions.
 Reload replaces the epoch and invalidates every old grant and callback.

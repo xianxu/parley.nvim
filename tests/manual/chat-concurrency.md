@@ -9,8 +9,11 @@ These checks complement the automated event-order and filesystem fault suites.
 
 1. Start a long answer with `:ParleyChatRespond`. Type the next question while it
    streams. The draft stays intact and typing, highlighting and folds stay usable.
-2. Start another response at a different question. Move between both answers and
-   a different window. Each stream stays in its own answer.
+2. Start another response at a different question. Both requests stream, but
+   only one answer is written at a time: the second one's pending line names the
+   answer it waits for, and its held text lands at once when the turn reaches it
+   ([ownership](../../atlas/chat/ownership.md), #266). Move between both answers
+   and a different window. Each answer's text stays in its own answer.
 3. Edit generated text directly. Your edit survives and that writer stops;
    independent responses continue. Undo/redo must not resurrect the old writer.
 4. Delete a selection spanning an answer, several whole exchanges and part of the
@@ -35,10 +38,15 @@ These checks complement the automated event-order and filesystem fault suites.
 Ask for independent reads or writes in the temporary directory in one tool round.
 Try overlapping writes to the same file in a separate round. Independent work
 can overlap; conflicting effects serialize. Results keep provider declaration
-order even when completion order differs. Pending slots never claim success.
+order even when completion order differs: each call's block lands just before its
+own result, and a tool still running shows only in the pending line, never as
+transcript text ([tool use](../../atlas/providers/tool_use.md#loop-model)).
 
-Stop or reload during tool activity. Already-started external effects may finish;
-late output cannot overwrite the chat. Inspect retained work with
+Stop during tool activity: the round is written out in declared order, then the
+answer ends — what each call gets is listed once in
+[Stop during a tool round](../../atlas/providers/tool_use.md#stop-during-a-tool-round).
+Reload during tool activity: already-started external effects may finish; late
+output cannot write into the reloaded chat. Inspect retained work with
 `:ParleyToolOperations`. An effect decision must not invent process or file
 cleanup. Check edited files and the reported pre-image backups directly.
 

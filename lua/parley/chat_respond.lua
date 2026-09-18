@@ -1474,6 +1474,9 @@ local function start_scoped_response(frame)
         messages, final_payload = next_messages, request.payload
         return request
     end
+    -- Runs at finalize, not at request start: since #266 the answer header is
+    -- written with the generation's first write, so a request-time capture would
+    -- find no header (or, when regenerating, the old answer's header).
     local function capture_topic_parent(ctx)
         if not topic_source or topic_parent or topic_attempted then return end
         local marker = D.lookup(doc, ctx.entity)
@@ -1529,6 +1532,7 @@ local function start_scoped_response(frame)
             self.cancelled = true
             if self.resolved then done() else self.cancel_done = done end
             if self.remote then self.remote:cancel() end
+            if self.unproved then self.unproved(); self.unproved = nil; resolve() end
         end
         local function logical_failure(reason)
             if operation.cancelled or operation.failed then return end
@@ -1544,6 +1548,20 @@ local function start_scoped_response(frame)
         local function build(remote, remote_error)
             if operation.cancelled or ctx.cancelled() then resolve(); return end
             if remote_error then fail(remote_error); return end
+            -- #266: another generation's first write (its preparation gap) can
+            -- leave this grant suspended until repair re-proves it, and the
+            -- recovery snapshot below reads the live answer. A suspended grant is
+            -- still ours, so wait for the proof instead of failing on it.
+            local grant = D.snapshot(doc).grants[ctx.grant]
+            if replacing_answer and grant and grant.status == 'suspended' then
+                operation.unproved = D.subscribe(doc, function()
+                    local current = D.snapshot(doc).grants[ctx.grant]
+                    if not operation.unproved or current and current.status == 'suspended' then return end
+                    operation.unproved(); operation.unproved = nil
+                    vim.schedule(function() build(remote, remote_error) end)
+                end)
+                return
+            end
             local ok, err = xpcall(function()
                 messages, message_lead = M.build_messages({parsed_chat = input_parsed, start_index = frame.start_index,
                     end_index = frame.end_index, exchange_idx = input_index, agent = agent, config = config,
@@ -1623,7 +1641,6 @@ local function start_scoped_response(frame)
         help_root = installed_root,
         root_policy = info.root_policy, max_iterations = info.max_tool_iterations or config.max_tool_iterations,
         max_result_bytes = info.tool_result_max_bytes, prepare_input = prepare_input, build_input = payload,
-        requesting = capture_topic_parent,
         changed = function(value)
             require('parley.response_status').update(buf,doc,value)
             if value.phase=='paused' then
@@ -1654,6 +1671,7 @@ local function start_scoped_response(frame)
             pcall(vim.api.nvim_win_set_cursor, frame.win, last_cursor)
         end,
         finalize = function(ctx, done)
+            capture_topic_parent(ctx)
             start_topic()
             local completion,settlement
             local cancelled=false
@@ -1684,6 +1702,12 @@ local function start_scoped_response(frame)
                 require('parley.buffer_lifecycle').finalize_mutated_api_leg(buf, true)
             end
             if failure_notice then vim.notify(failure_notice, vim.log.levels.WARN); failure_notice = nil end
+            -- #266: an overflow stops a response on purpose (dropping bytes would
+            -- lose provider output); say so, naming the answer it waited behind.
+            if result.outcome == 'overflow' then
+                vim.notify(require('parley.chat_presentation').overflow_message(result.waited_for_line),
+                    vim.log.levels.WARN)
+            end
             if recovery then require('parley.chat_recovery').finish(recovery, result.outcome) end
             if frame.terminal then frame.terminal(result) end
             if result.outcome == 'success' then

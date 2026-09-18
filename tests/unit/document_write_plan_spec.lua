@@ -2,6 +2,7 @@
 -- computed from chosen actions, never from receipts or the grant reducer.
 local D=require('parley.document')
 local Fake=require('tests.helpers.fake_document_editor')
+local Grants=require('tests.helpers.grants')
 local nextbuf=98000
 local fixtures={}
 local function serialized(lines) return table.concat(lines,'\n')..'\n' end
@@ -38,10 +39,10 @@ local function attach(lines,native)
     end
     fixtures[#fixtures+1]=c;settle(c);return c
 end
-local function acquire(c,row,last_row,generation,parent)
+local function acquire(c,row,last_row,generation)
     local indexed=D.query(c.doc,row,last_row+1)
     generation=generation or D.transition(c.doc,{kind='register_generation'}).generation
-    local result=D.transition(c.doc,{kind='acquire',generation=generation,parent=parent,
+    local result=D.transition(c.doc,{kind='acquire',generation=generation,
         regions={{entity=indexed[1].handle,marker_revision=1,revision=1,first=indexed[1].start_byte,
             last=indexed[#indexed].end_byte-1,confirmed=true}}})
     assert.is_true(result.ok,result.reason)
@@ -141,22 +142,6 @@ describe('adversarial document write plans',function()
         apply(c,plan(c,a,{patch(c.expected,2,1,1,'NO')}),'stale')
         apply(c,plan(c,b,{patch(c.expected,5,1,1,'B')}))
     end)
-    it('keeps delegated tool slots excluded from their parent before and after child growth',function()
-        local c=attach({'💬: q','🤖: a','head','📎: tool','```','same','```','tail','💬: next','draft'})
-        local parent=acquire(c,1,7)
-        local indexed=D.query(c.doc,3,7)
-        local child_result=D.transition(c.doc,{kind='acquire',generation=parent.generation,parent=parent.grant,
-            regions={{entity=parent.entity,marker_revision=1,revision=1,first=indexed[1].start_byte,
-                last=indexed[#indexed].end_byte-1,confirmed=true}}})
-        assert.is_true(child_result.ok,child_result.reason)
-        local child={generation=parent.generation,entity=parent.entity,grant=child_result.grants[1]}
-        apply(c,plan(c,parent,{patch(c.expected,5,0,0,'forbidden')}),'stale')
-        apply(c,plan(c,child,{patch(c.expected,5,4,0,' child')}))
-        apply(c,plan(c,parent,{patch(c.expected,2,4,0,' parent')}))
-        D.transition(c.doc,{kind='revoke',grant=child.grant})
-        apply(c,plan(c,parent,{patch(c.expected,5,0,0,'still forbidden')}),'stale')
-        assert.equals('valid',D.snapshot(c.doc).grants[parent.grant].status)
-    end)
     it('rejects old plans after native undo and fake reload even when bytes return',function()
         local c,a=writers(true)
         vim.api.nvim_set_current_buf(c.buf)
@@ -197,9 +182,14 @@ describe('adversarial document write plans',function()
         local function random(n) seed=(seed*48271)%2147483647;return seed%n end
         local saved={}
         for i=1,36 do
-            local choice=random(4)
+            local choice=random(5)
             if choice==0 then human(c,7,#rows(c.expected)[8],0,'h')
             elseif choice==1 and #saved>0 then apply(c,saved[random(#saved)+1],'stale')
+            elseif choice==4 then
+                -- A continuation narrows its grant to the tail; later writes land there.
+                local w=random(2)==0 and a or b;local g=D.snapshot(c.doc).grants[w.grant]
+                assert.is_true(D.reclaim_tail(c.doc,{epoch=D.snapshot(c.doc).epoch,generation=w.generation,
+                    grant=w.grant,entity=w.entity,revision=g.revision}).ok)
             else
                 local writer,row=a,2
                 if choice==3 then writer,row=b,5 end
@@ -208,6 +198,7 @@ describe('adversarial document write plans',function()
             end
             assert.equals('valid',D.snapshot(c.doc).grants[a.grant].status)
             assert.equals('valid',D.snapshot(c.doc).grants[b.grant].status)
+            Grants.assert_disjoint(D.snapshot(c.doc).grants)
             check(c)
         end
     end)

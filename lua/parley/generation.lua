@@ -1,5 +1,6 @@
 -- Pure generation decisions. Opaque states retain scalar immutable blob IDs,
 -- never editor coordinates, payload strings, IO handles or callback closures.
+local Seq=require('parley.tools.sequence')
 local M={}
 local private=setmetatable({},{__mode='k'})
 local function integer(n) return type(n)=='number' and n>=0 and n<=9007199254740991 and n%1==0 end
@@ -29,19 +30,54 @@ local function phase(s) return s.phase=='paused' and s.resume_phase or s.phase e
 local function advance(s,value)
     if s.phase=='paused' then s.resume_phase=value else s.phase=value end
 end
-local function writable(s,grant)
-    if s.grant_status=='revoked' or s.phase=='stopping' or s.phase=='terminal' then return false end
-    if grant==s.grant then return s.grant_status=='valid' and s.phase~='paused' end
-    for _,child in ipairs(s.round and s.round.children or {}) do
-        if child.grant==grant then return child.grant_status=='valid' end
-    end
-    return false
+--- #266: may this generation emit a write-producing effect (an output `write`,
+--- `insert_tool` or `finalize`) now? One predicate for all three, so none of
+--- them can outrun the other two's preconditions:
+---   * the turn — an optimization, not the enforcement point: the coordinator
+---     refuses a turnless write with 'waiting' regardless, but gating here stops a
+---     queued generation emitting effects that would only park;
+---   * the deferred preparation gap — it must land before anything else this
+---     generation writes, or a call block or output lands inside the old answer's
+---     region ahead of the replacement that clears it.
+local function may_write(s)
+    return s.turn_status=='held' and s.gap=='none'
 end
+--- Is one of the three write-producing emissions due? This is what pulls a
+--- deferred gap in: the gap is written immediately before the generation's first
+--- write, whatever kind that write turns out to be.
+local function write_due(s,bytes)
+    if #s.queue>0 then return true end
+    if s.phase=='executing_tools' or s.phase=='flushing' then
+        local round=s.round
+        return round~=nil and not round.inserting and bytes==0
+            and (Seq.next(round.seq)~=nil or s.phase=='flushing' and Seq.waiting(round.seq)~=nil)
+    end
+    return s.phase=='finalizing' and bytes==0 and not s.finalized
+end
+local function writable(s)
+    if s.grant_status~='valid' or s.phase=='stopping' or s.phase=='terminal' or s.phase=='paused' then return false end
+    return may_write(s)
+end
+--- Desire for the write turn. Tracked so a release is not emitted by a
+--- generation that never asked, and a request is not emitted twice.
+local function request_turn(s,effects)
+    if s.turn_wanted then return end
+    s.turn_wanted=true; emit(s,effects,'request_turn',{})
+end
+local function release_turn(s,effects)
+    if not s.turn_wanted then return end
+    s.turn_wanted=false; emit(s,effects,'release_turn',{})
+end
+
 local function stop(s,effects,outcome)
     if s.phase=='stopping' then return end
     s.phase='stopping';s.outcome=outcome;s.grant_status='revoked'
+    -- Revoke before yielding the turn. The runner executes one effect per step,
+    -- and the machine can report `terminal` in this same transition, so an effect
+    -- queued ahead of the revoke keeps the region held while the phase already
+    -- says it is free — an immediate regenerate is then refused as 'overlap'.
     emit(s,effects,'revoke',{grant=s.grant})
-    if s.round and s.round.reservation_pending then emit(s,effects,'cancel_reservation',{round=s.round.id}) end
+    release_turn(s,effects)
     for _,item in ipairs(s.queue) do
         s.discarded_bytes=s.discarded_bytes+item.bytes
         emit(s,effects,'release_blob',{blob_ref=item.blob_ref,operation=item.operation,seq=item.seq})
@@ -51,25 +87,6 @@ local function stop(s,effects,outcome)
         if s.operations[operation] and not s.operations[operation].resolved then emit(s,effects,'cancel_operation',{operation=operation}) end
     end
 end
-local function child_by_grant(s,grant)
-    for _,child in ipairs(s.round and s.round.children or {}) do if child.grant==grant then return child end end
-end
-local function revoke_child(s,effects,child)
-    child.grant_status='revoked'
-    if not child.started then child.resolved=true;child.outcome='cancelled_before_effect' end
-    if s.phase~='paused' and s.phase~='stopping' then s.resume_phase=s.phase;s.phase='paused' end
-    emit(s,effects,'revoke',{grant=child.grant})
-    local op=s.operations[child.operation]
-    if op and not op.resolved then emit(s,effects,'cancel_operation',{operation=child.operation}) end
-    local kept={}
-    for _,item in ipairs(s.queue) do
-        if item.grant==child.grant then
-            s.discarded_bytes=s.discarded_bytes+item.bytes
-            emit(s,effects,'release_blob',{blob_ref=item.blob_ref,operation=item.operation,seq=item.seq})
-        else kept[#kept+1]=item end
-    end
-    s.queue=kept
-end
 local function operation(s,effects,kind,fields)
     local e=emit(s,effects,kind,fields)
     e.operation=e.id
@@ -77,24 +94,65 @@ local function operation(s,effects,kind,fields)
     s.operation_order[#s.operation_order+1]=e.operation
     return e.operation
 end
+--- Tools run as soon as they are declared (#266): execution is concurrent, only
+--- their blocks are serialized. A slot frees when a tool is cleaned up, not when
+--- its result is written, so a result held behind an earlier one never blocks
+--- the next tool from starting.
 local function start_children(s,effects)
     local running=0
     for _,child in ipairs(s.round.children) do if child.started and not child.resolved then running=running+1 end end
     for _,child in ipairs(s.round.children) do
         if running>=4 then break end
-        if not child.started and not child.resolved and child.grant_status=='valid' then
+        if not child.started and not child.resolved then
             child.started=true;running=running+1
-            s.operations[child.operation]={kind='child',next_seq=1,grant=child.grant}
+            s.operations[child.operation]={kind='child',next_seq=1}
             s.operation_order[#s.operation_order+1]=child.operation
-            emit(s,effects,'start_child',{operation=child.operation,round=s.round.id,grant=child.grant,
+            emit(s,effects,'start_child',{operation=child.operation,round=s.round.id,
                 call_id=child.call_id,arguments_ref=child.arguments_ref,capabilities_ref=s.capabilities_ref})
         end
     end
 end
+--- The one tool block this round may write next, if any (tools/sequence.lua).
+--- Held behind the text staged before the round, behind the turn and the gap
+--- (`may_write`), and behind the block already in flight.
+local function insert_next(s,effects,bytes)
+    local round=s.round
+    if round.inserting or bytes>0 or not may_write(s) then return end
+    local item=Seq.next(round.seq)
+    if not item then return end
+    local child=round.children[item.index]
+    local result=item.kind=='result'
+    round.inserting={id=emit(s,effects,'insert_tool',{round=round.id,index=item.index,kind=item.kind,
+        call_id=child.call_id,result_ref=result and not child.cancelled and child.result_ref or nil,
+        cancelled=result and child.cancelled or nil}).id,item=item}
+end
+--- #266 M3 (operator): Stop during a tool round writes the round out rather than
+--- dropping the pairs of tools that already ran. Every tool still running is
+--- cancelled and none starts; the walk then writes each pair in declared order
+--- (`flushing` in pump). The turn is kept: a stopped generation behind another
+--- answer keeps its place and writes when the turn arrives.
+local function flush(s,effects)
+    s.phase='flushing'
+    for _,child in ipairs(s.round.children) do
+        local op=s.operations[child.operation]
+        if child.started and not child.outcome and op and not op.resolved then
+            emit(s,effects,'cancel_operation',{operation=child.operation})
+        end
+    end
+end
+--- Record a tool as cancelled by the user — `running` (it may have partly taken
+--- effect) or `queued` (it never ran) — from evidence, not from timing: the walk
+--- records `queued` only for a tool never started, and `running` only on the
+--- supervisor handoff that says it was (#266 M3 review BR-15).
+local function cancel_child(s,child)
+    child.outcome='cancelled_by_user';child.cancelled=child.started and 'running' or 'queued'
+    if not child.started then child.resolved=true end
+    s.round.seq=Seq.outcome(s.round.seq,child.index)
+end
 local function pump(s,effects)
     if s.phase=='stopping' then
         if outstanding(s)==0 and not s.inflight and not s.finalize_pending
-            and not (s.round and s.round.reservation_pending) then
+            and not (s.round and s.round.inserting) then
             s.phase='terminal';emit(s,effects,'terminal',{outcome=s.outcome,
                 committed_bytes=s.committed_bytes,discarded_bytes=s.discarded_bytes})
         end
@@ -105,13 +163,12 @@ local function pump(s,effects)
         s.attempt=operation(s,effects,'request',{input_ref=s.input_ref,capabilities_ref=s.capabilities_ref})
     end
     if not s.inflight then
-        for i,item in ipairs(s.queue) do
-            if writable(s,item.grant) then
-                table.remove(s.queue,i)
-                local e=emit(s,effects,'write',{operation=item.operation,grant=item.grant,blob_ref=item.blob_ref,
-                    offset=item.offset,bytes=math.min(4096,item.bytes),seq=item.seq})
-                s.inflight={id=e.id,item=item,bytes=e.bytes};break
-            end
+        local item=s.queue[1]
+        if item and writable(s) then
+            table.remove(s.queue,1)
+            local e=emit(s,effects,'write',{operation=item.operation,grant=s.grant,blob_ref=item.blob_ref,
+                offset=item.offset,bytes=math.min(4096,item.bytes),seq=item.seq})
+            s.inflight={id=e.id,item=item,bytes=e.bytes}
         end
     end
     local bytes=staged(s)
@@ -120,35 +177,52 @@ local function pump(s,effects)
         pump(s,effects)
         return
     end
+    -- After the failure check, not before: a provider that failed with nothing
+    -- staged has nothing to write, so its gap must never be (M1 review I3).
+    if s.gap=='deferred' and s.turn_status=='held' and s.grant_status=='valid' and s.phase~='paused'
+        and write_due(s,bytes) then
+        s.gap='writing';emit(s,effects,'write_gap',{grant=s.grant})
+    end
     if s.round and s.round.prepared_input_ref and s.phase=='executing_tools'
         and bytes==0 and s.grant_status=='valid' then
         s.input_ref=s.round.prepared_input_ref;s.round=nil;s.phase='requesting'
         for id,op in pairs(s.operations) do if op.resolved then s.operations[id]=nil end end
         s.attempt=operation(s,effects,'request',{input_ref=s.input_ref,capabilities_ref=s.capabilities_ref})
     end
-    if s.round and s.phase=='executing_tools' and bytes==0 and s.grant_status=='valid' then
+    if s.round and s.phase=='executing_tools' and s.grant_status=='valid' then
         local round=s.round
-        if not round.reserved and not round.reservation_pending then
-            round.reservation_pending=true
-            emit(s,effects,'reserve_round',{round=round.id,children=copy(round.children),grant=s.grant})
-        elseif round.reserved then
-            start_children(s,effects)
-            local complete=outstanding(s)==0
+        start_children(s,effects)
+        insert_next(s,effects,bytes)
+        -- Every block written and every tool cleaned up — whatever its outcome:
+        -- a failed call is written as its error result and the model reads it
+        -- (operator, 2026-09-18), so nothing here waits on a known outcome.
+        if Seq.complete(round.seq) and not round.inserting and outstanding(s)==0 and not round.join_pending then
             local results={}
-            for i,child in ipairs(round.children) do
-                if not child.resolved or child.outcome~='known' then complete=false end
-                results[i]=child.result_ref
-            end
-            if complete and not round.join_pending then
-                round.join_pending=true
-                round.preparation=operation(s,effects,'continue_round',{round=round.id,result_refs=results,
-                    input_seed_ref=s.input_seed_ref,dependencies_ref=s.dependencies_ref})
-            end
+            for i,child in ipairs(round.children) do results[i]=child.result_ref end
+            round.join_pending=true
+            round.preparation=operation(s,effects,'continue_round',{round=round.id,result_refs=results,
+                input_seed_ref=s.input_seed_ref,dependencies_ref=s.dependencies_ref})
         end
     end
+    if s.phase=='flushing' then
+        local round=s.round
+        if s.grant_status=='valid' then
+            -- The walk is blocked on a result with no outcome. A tool never started
+            -- is cancelled here and now; a started one was sent cancel_operation on
+            -- entry, and its settlement (an outcome, or the supervisor handoff) is
+            -- what the walk waits for, so what is written is what happened.
+            local index=not round.inserting and bytes==0 and may_write(s) and Seq.waiting(round.seq)
+            if index and not round.children[index].started then cancel_child(s,round.children[index]) end
+            insert_next(s,effects,bytes)
+        end
+        if Seq.complete(round.seq) and not round.inserting then
+            stop(s,effects,'cancelled');pump(s,effects);return
+        end
+    end
+    if phase(s)=='draining' and bytes==0 and not s.provider_failed then advance(s,'finalizing') end
     if s.phase=='finalizing' and bytes==0 and s.grant_status=='valid' then
         if not s.finalize_pending and not s.finalized then
-            s.finalize_pending=emit(s,effects,'finalize',{grant=s.grant,exchange=s.exchange}).id
+            if may_write(s) then s.finalize_pending=emit(s,effects,'finalize',{grant=s.grant,exchange=s.exchange}).id end
         elseif s.finalized and outstanding(s)==0 then
             s.phase='terminal';s.outcome='success'
             emit(s,effects,'terminal',{outcome='success',committed_bytes=s.committed_bytes,discarded_bytes=s.discarded_bytes})
@@ -164,8 +238,24 @@ function M.new(spec)
     assert(integer(items) and items>0 and items<=256,'invalid staged item limit')
     return wrap({epoch=spec.epoch,generation=spec.generation,exchange=spec.exchange,grant=spec.grant,
         input_seed_ref=spec.input_seed_ref,dependencies_ref=spec.dependencies_ref,capabilities_ref=spec.capabilities_ref,
-        phase='preparing',grant_status='valid',serial=0,operations={},operation_order={},queue={},
+        phase='preparing',grant_status='valid',turn_status='held',gap='none',serial=0,operations={},operation_order={},queue={},
         accepted_bytes=0,committed_bytes=0,discarded_bytes=0,limits={staged_bytes=bytes,queued_items=items}})
+end
+--- O(1) phase, for per-sync callers that need nothing else: M.snapshot builds
+--- a fresh table and walks the operations.
+function M.phase(handle) return get(handle).phase end
+--- The round's tools for presentation (#266 M2): how many are declared, how many
+--- have an outcome, and how many are cleaned up — the round continues only once
+--- every one is. The transcript shows only blocks that have landed, so this is
+--- where a tool still running, or still cleaning up, stays visible.
+local function tools(s)
+    if not s.round then return nil end
+    local finished,settled=0,0
+    for _,child in ipairs(s.round.children) do
+        if child.outcome then finished=finished+1 end
+        if child.resolved then settled=settled+1 end
+    end
+    return {total=#s.round.children,finished=finished,settled=settled}
 end
 function M.snapshot(handle)
     local s=get(handle);local bytes,items=staged(s)
@@ -181,7 +271,7 @@ function M.snapshot(handle)
         dependencies_ref=s.dependencies_ref,capabilities_ref=s.capabilities_ref,stale_input=s.stale_input or false,
         staged_bytes=bytes,staged_items=items,accepted_bytes=s.accepted_bytes,committed_bytes=s.committed_bytes,
         discarded_bytes=s.discarded_bytes,outstanding_operations=outstanding(s),retained_operations=retained,outcome=s.outcome,
-        round=s.round and s.round.id,attempt=s.attempt,supervised_children=supervised}
+        round=s.round and s.round.id,attempt=s.attempt,supervised_children=supervised,gap=s.gap,tools=tools(s)}
 end
 function M.transition(handle,event)
     local old=get(handle)
@@ -193,11 +283,23 @@ function M.transition(handle,event)
     if kind=='start' then
         if s.started or s.phase~='preparing' then return reject('duplicate') end
         s.started=true
+        request_turn(s,effects)
         s.preparation=operation(s,effects,'prepare',{input_seed_ref=s.input_seed_ref,dependencies_ref=s.dependencies_ref})
+    elseif kind=='turn' then
+        if event.status~='held' and event.status~='waiting' then return reject('turn status') end
+        s.turn_status=event.status
     elseif kind=='prepared' then
         if phase(s)~='preparing' or event.preparation~=s.preparation or not s.operations[event.preparation]
-            or s.input_ref or not ref(event.input_ref) then return reject('preparation') end
+            or s.input_ref or not ref(event.input_ref) or (event.gap~=nil and event.gap~=true) then return reject('preparation') end
         s.input_ref=event.input_ref
+        -- #266: a preparation may report its input before writing its gap, so the
+        -- request starts without waiting on the turn; the gap then lands just
+        -- before this generation's first write.
+        if event.gap then s.gap='deferred' end
+    elseif kind=='gap_result' then
+        if s.gap~='writing' or (event.status~='applied' and event.status~='failed') then return reject('gap') end
+        s.gap='none'
+        if event.status=='failed' then stop(s,effects,'prepare_failed') end
     elseif kind=='prepare_failed' then
         local current=event.preparation==s.preparation or s.round and event.preparation==s.round.preparation
         local owner=s.operations[event.preparation]
@@ -205,18 +307,30 @@ function M.transition(handle,event)
         stop(s,effects,'prepare_failed')
     elseif kind=='output' then
         local owner=s.operations[event.operation]
-        if not owner or (owner.kind~='request' and owner.kind~='child') or owner.complete or owner.resolved
+        if not owner or owner.kind~='request' or owner.complete or owner.resolved
             or s.phase=='stopping' then return reject('operation') end
         if not integer(event.seq) or event.seq~=owner.next_seq or not integer(event.bytes)
             or (event.bytes>0 and not ref(event.blob_ref)) then return reject('output') end
+        -- #266: `extend` grows the LAST queued item, which must be this operation's
+        -- and carry this blob. A held generation receives one event per SSE
+        -- delta; extending keeps it one item bounded by bytes (and keeps the queue
+        -- every transition copies short). An item already in flight is not in the
+        -- queue, so it can never grow under a write that has been issued.
+        local tail=event.extend and s.queue[#s.queue]
+        if event.extend and not (tail and tail.operation==event.operation and tail.blob_ref==event.blob_ref) then
+            return reject('extend')
+        end
         owner.next_seq=owner.next_seq+1
         if event.bytes>0 then
             local bytes,items=staged(s)
-            if bytes+event.bytes>s.limits.staged_bytes or items>=s.limits.queued_items then stop(s,effects,'overflow')
+            if bytes+event.bytes>s.limits.staged_bytes or not tail and items>=s.limits.queued_items then stop(s,effects,'overflow')
             else
                 s.accepted_bytes=s.accepted_bytes+event.bytes
-                s.queue[#s.queue+1]={operation=event.operation,grant=owner.grant or s.grant,
-                    blob_ref=event.blob_ref,bytes=event.bytes,offset=0,seq=event.seq}
+                if tail then tail.bytes=tail.bytes+event.bytes
+                else
+                    s.queue[#s.queue+1]={operation=event.operation,
+                        blob_ref=event.blob_ref,bytes=event.bytes,offset=0,seq=event.seq}
+                end
             end
         end
     elseif kind=='write_result' then
@@ -231,32 +345,19 @@ function M.transition(handle,event)
         local item=pending.item;s.inflight=nil
         s.committed_bytes=s.committed_bytes+event.committed_bytes
         item.bytes=item.bytes-event.committed_bytes;item.offset=item.offset+event.committed_bytes
-        local child=child_by_grant(s,item.grant)
-        if status=='revoked' or status=='uncertain' then
-            if child then
-                if child.grant_status~='revoked' then revoke_child(s,effects,child) end
-            else stop(s,effects,status) end
-        end
-        if s.phase=='stopping' or (child and child.grant_status=='revoked') then
+        if status=='revoked' or status=='uncertain' then stop(s,effects,status) end
+        if s.phase=='stopping' then
             s.discarded_bytes=s.discarded_bytes+item.bytes
             emit(s,effects,'release_blob',{blob_ref=item.blob_ref,operation=item.operation,seq=item.seq})
         else
             if item.bytes==0 then emit(s,effects,'release_blob',{blob_ref=item.blob_ref,operation=item.operation,seq=item.seq}) end
             if item.bytes>0 then table.insert(s.queue,1,item) end
-            if status=='suspended' then
-                if item.grant==s.grant then s.grant_status='suspended'
-                elseif child then child.grant_status='suspended' end
-            end
+            if status=='suspended' then s.grant_status='suspended' end
         end
     elseif kind=='grant_suspended' or kind=='grant_resumed' or kind=='grant_revoked' then
         if s.grant_status=='revoked' then return reject('revoked') end
         local status=kind=='grant_suspended' and 'suspended' or 'valid'
-        if event.grant~=s.grant then
-            local child=child_by_grant(s,event.grant)
-            if not child or child.grant_status=='revoked' then return reject('grant') end
-            if kind=='grant_revoked' then revoke_child(s,effects,child)
-            elseif child.grant_status==status then return reject('duplicate')
-            else child.grant_status=status end
+        if event.grant~=s.grant then return reject('grant')
         elseif kind=='grant_revoked' then stop(s,effects,'revoked')
         elseif s.grant_status==status then return reject('duplicate')
         else s.grant_status=status end
@@ -268,11 +369,11 @@ function M.transition(handle,event)
         if phase(s)~='requesting' or event.attempt~=s.attempt or not attempt or attempt.complete then return reject('attempt') end
         -- Transport failure ends admission, not already admitted output. Drain
         -- valid writes before failure retirement; human revocation still wins.
-        attempt.complete=true;s.provider_failed=true;advance(s,'finalizing')
+        attempt.complete=true;s.provider_failed=true;advance(s,staged(s)>0 and 'draining' or 'finalizing')
     elseif kind=='provider_complete' then
         local attempt=s.operations[event.attempt]
         if phase(s)~='requesting' or event.attempt~=s.attempt or not attempt or attempt.complete then return reject('attempt') end
-        attempt.complete=true;advance(s,'finalizing')
+        attempt.complete=true;advance(s,staged(s)>0 and 'draining' or 'finalizing')
     elseif kind=='round_declared' then
         local attempt=s.operations[event.attempt]
         if phase(s)~='requesting' or event.attempt~=s.attempt or not attempt or attempt.complete then return reject('attempt') end
@@ -288,39 +389,17 @@ function M.transition(handle,event)
             attempt.complete=true;advance(s,'executing_tools')
             s.serial=s.serial+1;local round={id=s.generation..':round:'..s.serial,children={}}
             for i,call in ipairs(event.calls) do
-                local id=round.id..':child:'..i
-                round.children[i]={operation=id,index=i,call_id=call.call_id,arguments_ref=call.arguments_ref,
-                    call_block=id..':call',result_slot=id..':result'}
+                round.children[i]={operation=round.id..':child:'..i,index=i,call_id=call.call_id,arguments_ref=call.arguments_ref}
             end
+            round.seq=Seq.new(#event.calls)
             s.round=round
         end
-    elseif kind=='round_reservation_failed' then
+    elseif kind=='inserted' then
         local round=s.round
-        if not round or event.round~=round.id or not round.reservation_pending then return reject('reservation') end
-        if event.status~='cancelled' and event.status~='suspended' and event.status~='failed' then return reject('reservation status') end
-        round.reservation_pending=false
-        if s.phase~='stopping' then
-            if event.status=='suspended' then s.grant_status='suspended'
-            else stop(s,effects,'reservation_failed') end
-        end
-    elseif kind=='round_reserved' then
-        local round=s.round
-        if not round or event.round~=round.id or not round.reservation_pending or not ref(event.receipt_ref)
-            or type(event.grants)~='table' or #event.grants~=#round.children then return reject('reservation') end
-        local seen={}
-        for _,grant in ipairs(event.grants) do
-            if not identity(grant) or grant==s.grant or seen[grant] then return reject('child grant') end;seen[grant]=true
-        end
-        round.reservation_pending=false;round.reserved=true
-        for i,child in ipairs(round.children) do child.grant=event.grants[i];child.grant_status='valid' end
-        if s.phase=='stopping' then emit(s,effects,'revoke',{grant=s.grant}) end
-    elseif kind=='cancel_child' then
-        local child
-        if s.round and event.round==s.round.id then
-            for _,candidate in ipairs(s.round.children) do if candidate.operation==event.operation then child=candidate end end
-        end
-        if not child or not child.grant or child.grant_status=='revoked' or s.phase=='stopping' then return reject('child') end
-        revoke_child(s,effects,child)
+        if not round or not round.inserting or event.insert~=round.inserting.id then return reject('insert') end
+        local item=round.inserting.item;round.inserting=nil
+        if event.status=='applied' then round.seq=Seq.written(round.seq,item)
+        else stop(s,effects,(event.status=='revoked' or event.status=='uncertain') and event.status or 'insert_failed') end
     elseif kind=='child_outcome' then
         local round=s.round;local found
         if round and event.round==round.id then for _,child in ipairs(round.children) do
@@ -329,9 +408,15 @@ function M.transition(handle,event)
         if not found or not found.started or found.supervised or (found.outcome and not (found.outcome=='unknown' and event.outcome=='known'))
             or not ref(event.result_ref)
             or (event.outcome~='known' and event.outcome~='unknown' and event.outcome~='rejected' and event.outcome~='cancelled_before_effect') then return reject('child') end
+        -- An outcome is final once its result is on its way to the transcript:
+        -- the block written and the result the next request carries are one blob.
+        local writing=round.inserting and round.inserting.item.kind=='result' and round.inserting.item.index==found.index
+        if writing or Seq.final(round.seq,found.index) then return reject('written') end
         found.outcome=event.outcome;found.result_ref=event.result_ref
+        -- Refused before it ran because of a Stop: that is the user cancelling it.
+        if s.phase=='flushing' and event.outcome=='cancelled_before_effect' then found.cancelled='queued' end
         if s.operations[event.operation] then s.operations[event.operation].complete=true end
-        if event.outcome~='known' and s.phase~='stopping' and s.phase~='paused' then s.resume_phase=s.phase;s.phase='paused' end
+        round.seq=Seq.outcome(round.seq,found.index)
     elseif kind=='round_prepared' then
         if (s.phase~='executing_tools' and s.phase~='paused') or not s.round or event.round~=s.round.id
             or not s.round.join_pending or s.round.prepared_input_ref or not ref(event.input_ref)
@@ -339,20 +424,23 @@ function M.transition(handle,event)
         s.round.prepared_input_ref=event.input_ref
     elseif kind=='pause' then
         if s.phase=='stopping' or s.phase=='paused' then return reject('phase') end
-        s.resume_phase=s.phase;s.phase='paused'
+        s.resume_phase=s.phase;s.phase='paused';release_turn(s,effects)
     elseif kind=='resume_validated' then
         if s.phase~='paused' or s.grant_status~='valid' or not ref(event.policy_ref) then return reject('resume') end
-        s.phase=s.resume_phase;s.resume_phase=nil
+        s.phase=s.resume_phase;s.resume_phase=nil;request_turn(s,effects)
     elseif kind=='operation_resolved' or kind=='operation_supervised' then
         local supervised=kind=='operation_supervised'
         local op=s.operations[event.operation]
         if not op or op.resolved then return reject('operation') end
         -- Transfer is local retirement only: a separate supervisor retains the
         -- physical operation and unknown effect ledger. It can never join a round.
-        if supervised and (s.phase~='stopping' or op.kind~='child')then return reject('supervision')end
+        if supervised and ((s.phase~='stopping' and s.phase~='flushing') or op.kind~='child')then return reject('supervision')end
+        -- A tool resolves on cleanup whatever its outcome (#266 M2): an unknown
+        -- one is written as an error result and the round goes on. It still
+        -- needs *an* outcome — cleanup alone says nothing about the effect.
         if op.kind=='child' and not supervised then
             for _,child in ipairs(s.round.children) do
-                if child.operation==event.operation and (not child.outcome or child.outcome=='unknown') then
+                if child.operation==event.operation and not child.outcome then
                     return reject('unresolved child outcome')
                 end
             end
@@ -363,7 +451,13 @@ function M.transition(handle,event)
         for _,child in ipairs(s.round and s.round.children or {}) do
             if child.operation==event.operation then
                 child.resolved=true
-                if supervised then child.supervised=true;child.outcome=child.outcome or 'unknown' end
+                if supervised then
+                    child.supervised=true
+                    -- Handed off mid-flush with nothing reported: it was cancelled
+                    -- while running, and the walk writes it so.
+                    if not child.outcome and s.phase=='flushing' then cancel_child(s,child) end
+                    child.outcome=child.outcome or 'unknown'
+                end
             end
         end
     elseif kind=='finalize_result' then
@@ -372,7 +466,14 @@ function M.transition(handle,event)
         if event.status=='applied' then s.finalized=true else stop(s,effects,'finalize_failed') end
     elseif kind=='cancel' then
         if s.phase=='stopping' then return reject('duplicate') end
-        stop(s,effects,'cancelled')
+        if event.reason~=nil and event.reason~='overflow' then return reject('cancel reason') end
+        -- The runner's byte check refuses before admission and cancels; the
+        -- machine's own check stops. Both are an overflow, not a user's Stop.
+        -- A user's Stop during a tool round writes the round out first (#266 M3);
+        -- a second Stop, while it does, drops the rest.
+        if event.reason==nil and s.phase=='executing_tools' and s.round and not Seq.complete(s.round.seq)
+            and s.grant_status~='revoked' then flush(s,effects)
+        else stop(s,effects,event.reason=='overflow' and 'overflow' or 'cancelled') end
     else return reject('event') end
     pump(s,effects)
     return wrap(s),{accepted=true,admitted_bytes=s.accepted_bytes-old.accepted_bytes,effects=copy(effects)}

@@ -7,8 +7,8 @@ end
 local function proof(entity, first, last)
     return {entity=entity, marker_revision=1, revision=1, first=first, last=last, confirmed=true}
 end
-local function acquire(doc, gen, regions, parent)
-    return State.transition(doc, {kind='acquire', generation=gen, regions=regions, parent=parent})
+local function acquire(doc, gen, regions)
+    return State.transition(doc, {kind='acquire', generation=gen, regions=regions})
 end
 local function resolve(doc, gen, grant, p, first, last)
     return State.resolve(doc, {epoch=State.snapshot(doc).epoch, generation=gen, grant=grant,
@@ -95,15 +95,62 @@ describe('document authority state', function()
         assert.is_true(resolve(d,g,id,proof('a',10,20)).ok)
     end)
 
-    it('excludes delegated child text and boundary slots from the parent', function()
-        local d=State.new(); local g=generation(d); local parent=acquire(d,g,{proof('a',0,30)}).grants[1]
-        local child=acquire(d,g,{proof('child',10,20)},parent).grants[1]
-        assert.is_true(resolve(d,g,parent,proof('a',0,30),0,5).ok)
-        assert.is_false(resolve(d,g,parent,proof('a',0,30),10,10).ok)
-        assert.is_false(resolve(d,g,parent,proof('a',0,30),5,25).ok)
-        assert.is_true(resolve(d,g,child,proof('child',10,20),10,10).ok)
-        State.transition(d,{kind='revoke',grant=child})
-        assert.is_false(resolve(d,g,parent,proof('a',0,30),10,10).ok)
+    -- #266 M4: a tool round writes through the answer's own grant, so no grant is
+    -- ever carved out of another. Naming a `parent` no longer delegates a slot.
+    it('never nests grants: a region inside a live grant is refused, even for its own generation', function()
+        local d=State.new(); local g=generation(d); local outer=acquire(d,g,{proof('a',0,30)}).grants[1]
+        local nested=State.transition(d,{kind='acquire',generation=g,parent=outer,regions={proof('child',10,20)}})
+        assert.is_false(nested.ok); assert.equals('overlap',nested.reason)
+        assert.is_true(resolve(d,g,outer,proof('a',0,30),5,25).ok)
+    end)
+
+    -- #266 M4: reclaim_tail no longer scans for another grant on the tail; it
+    -- relies on live grants staying disjoint. That is a property of the composed
+    -- transitions, so drive seeded sequences of them and check it after each one.
+    it('keeps live grants pairwise disjoint across seeded transition sequences', function()
+        local Grants=require('tests.helpers.grants')
+        for run=1,40 do
+            local seed=run*7919
+            local function random(n) seed=(seed*48271)%2147483647; return seed%n end
+            local d=State.new(); local gens={generation(d),generation(d)}; local entity=0
+            local function current(g) local p=vim.deepcopy(g); p.confirmed=true; return p end
+            for _=1,80 do
+                local live=Grants.assert_disjoint(State.snapshot(d).grants)
+                local g=#live>0 and live[random(#live)+1] or nil
+                local choice=random(9)
+                if choice<=1 or not g then
+                    -- Half pack a new grant right after a live one, so edits can span two.
+                    local first=g and random(2)==0 and g.last+1+random(3) or random(200); entity=entity+1
+                    acquire(d,gens[random(#gens)+1],{proof('e'..entity,first,first+random(20))})
+                elseif choice==2 then
+                    -- An owned edit inside its grant, boundaries included; a quarter
+                    -- spill past it, which must cost the owner its exemption.
+                    local first=g.first+random(g.last-g.first+1)
+                    local reach=random(4)==0 and 12 or g.last-first+1
+                    State.transition(d,{kind='observed_edit',first=first,last=first+random(reach),
+                        new_bytes=random(6),owner_grant=g.id})
+                elseif choice==3 then
+                    -- A human edit; half straddle a live grant's tail.
+                    local first=random(2)==0 and math.max(0,g.last-random(4)) or random(230)
+                    State.transition(d,{kind='observed_edit',first=first,last=first+random(12),new_bytes=random(6)})
+                elseif choice==4 then
+                    State.transition(d,{kind='reclaim_tail',epoch=State.snapshot(d).epoch,generation=g.generation,
+                        grant=g.id,entity=g.entity,revision=g.revision,current=current(g)})
+                elseif choice==5 then
+                    local token=State.successor_new(d,{epoch=State.snapshot(d).epoch,generation=g.generation,
+                        grant=g.id,entity=g.entity,revision=g.revision},current(g))
+                    if token then State.successor_finish(d,token,g.first+random(g.last-g.first+1)) end
+                elseif choice==6 then
+                    State.transition(d,{kind='uncertain',first=g.first,last=g.last})
+                elseif choice==7 then
+                    State.transition(d,{kind='revoke',grant=g.id})
+                else
+                    local i=random(#gens)+1
+                    State.transition(d,{kind='finish_generation',generation=gens[i]}); gens[i]=generation(d)
+                end
+            end
+            Grants.assert_disjoint(State.snapshot(d).grants)
+        end
     end)
 
     it('bounds admission and frees finished registrations without ID resurrection', function()
@@ -116,20 +163,6 @@ describe('document authority state', function()
         local fresh=generation(d); local id=acquire(d,fresh,{proof('e1',10,11)}).grants[1]
         assert.is_not_equal(ids[1],id)
         assert.is_false(resolve(d,gens[1],ids[1],proof('e1',10,11)).ok)
-    end)
-
-    it('keeps child insertion boundaries excluded after authorized growth', function()
-        for _,at in ipairs({10,20}) do
-            local d=State.new(); local g=generation(d); local parent=acquire(d,g,{proof('a',0,30)}).grants[1]
-            local child=acquire(d,g,{proof('child',10,20)},parent).grants[1]
-            State.transition(d,{kind='observed_edit',first=at,last=at,new_bytes=2,owner_grant=child})
-            local parent_proof=proof('a',0,32);parent_proof.revision=2
-            for p=10,22 do
-                assert.equals('outside grant',resolve(d,g,parent,parent_proof,p,p).reason)
-            end
-            local cp=proof('child',10,22); cp.revision=2
-            assert.is_true(resolve(d,g,child,cp,10,22).ok)
-        end
     end)
 
     it('rejects oversized or malformed evidence without partial registration', function()
@@ -198,4 +231,101 @@ describe('finite replacement authority',function()
         State.transition(d,{kind='observed_edit',first=19,last=20,new_bytes=0,owner_grant=gid,successor=witness})
         assert.equals('revoked',State.snapshot(d).grants[gid].status)
     end)
+
+    -- #266 M1: the write turn. One generation may mutate a document at a time;
+    -- eligibility order is admission order.
+    it('serializes the write turn by admission order and releases it on finish',function()
+        local d=State.new()
+        local a,b=generation(d),generation(d)
+        assert.is_nil(State.snapshot(d).turn)
+        local r=State.transition(d,{kind='request_turn',generation=a})
+        assert.is_true(r.ok); assert.equals(a,r.turn); assert.equals(a,State.snapshot(d).turn)
+        r=State.transition(d,{kind='request_turn',generation=b})
+        assert.is_true(r.ok); assert.equals(a,r.turn,'a keeps the turn while eligible')
+        r=State.transition(d,{kind='finish_generation',generation=a})
+        assert.equals(b,r.turn,'turn passes to the next admitted')
+        assert.equals(b,State.snapshot(d).turn)
+    end)
+
+    it('releases the turn on request so a blocked holder cannot starve the queue',function()
+        local d=State.new()
+        local a,b=generation(d),generation(d)
+        State.transition(d,{kind='request_turn',generation=a})
+        State.transition(d,{kind='request_turn',generation=b})
+        local r=State.transition(d,{kind='release_turn',generation=a})
+        assert.equals(b,r.turn); assert.equals(b,State.snapshot(d).turn)
+    end)
+
+    it('re-queues a released generation behind the current holder',function()
+        local d=State.new()
+        local a,b=generation(d),generation(d)
+        State.transition(d,{kind='request_turn',generation=a})
+        State.transition(d,{kind='request_turn',generation=b})
+        State.transition(d,{kind='release_turn',generation=a})
+        local r=State.transition(d,{kind='request_turn',generation=a})
+        assert.equals(b,r.turn,'b keeps the turn it was handed')
+    end)
+
+    it('leaves the turn unheld when the only wanter releases',function()
+        local d=State.new()
+        local a=generation(d)
+        State.transition(d,{kind='request_turn',generation=a})
+        local r=State.transition(d,{kind='release_turn',generation=a})
+        assert.is_nil(r.turn); assert.is_nil(State.snapshot(d).turn)
+    end)
+
+    it('clears the turn on reload and on detach',function()
+        for _,kind in ipairs({'reload','detach'})do
+            local d=State.new()
+            local a=generation(d)
+            State.transition(d,{kind='request_turn',generation=a})
+            assert.equals(a,State.snapshot(d).turn)
+            State.transition(d,{kind=kind})
+            assert.is_nil(State.snapshot(d).turn,kind..' must clear the turn')
+        end
+    end)
+
+    it('does not resurrect a want after the generation is gone',function()
+        local d=State.new()
+        local a,b=generation(d),generation(d)
+        State.transition(d,{kind='request_turn',generation=a})
+        State.transition(d,{kind='request_turn',generation=b})
+        State.transition(d,{kind='finish_generation',generation=b})
+        -- b's want must not survive its registration; only a is eligible now.
+        local r=State.transition(d,{kind='release_turn',generation=a})
+        assert.is_nil(r.turn,'no eligible generation remains')
+    end)
+
+    it('rejects a turn request from an unknown generation',function()
+        local d=State.new()
+        assert.equals('generation',State.transition(d,{kind='request_turn',generation=999}).reason)
+        assert.equals('generation',State.transition(d,{kind='release_turn',generation=999}).reason)
+    end)
+
+    -- state.lua's copy() asserts getmetatable(v)==nil, so the wanted-set must not
+    -- live inside the state table or every snapshot would throw.
+    it('keeps snapshots copyable while the turn is held',function()
+        local d=State.new()
+        local a=generation(d)
+        State.transition(d,{kind='request_turn',generation=a})
+        assert.has_no.errors(function()State.snapshot(d)end)
+    end)
+
+    -- M1 review I5: one O(1) predicate for every generated write entry point.
+    -- 'waiting' means "you own this and could write, just not now"; a writer that
+    -- does not own the grant must fall through to the ownership checks instead.
+    it('waits for the turn only when the writer owns the grant and another holds the turn', function()
+        local d=State.new()
+        local a,b=generation(d),generation(d)
+        local ga=acquire(d,a,{proof('a',10,20)}).grants[1]
+        local gb=acquire(d,b,{proof('b',30,40)}).grants[1]
+        assert.is_false(State.waits_for_turn(d,b,gb),'nobody holds the turn')
+        State.transition(d,{kind='request_turn',generation=a})
+        assert.is_false(State.waits_for_turn(d,a,ga),'the holder never waits')
+        assert.is_true(State.waits_for_turn(d,b,gb),'an owner behind the holder waits')
+        assert.is_false(State.waits_for_turn(d,b,ga),'a non-owner is an ownership failure, not a wait')
+        assert.is_false(State.waits_for_turn(d,b,'missing'))
+        assert.is_false(State.waits_for_turn(d,nil,gb),'a human write is never subject to the turn')
+    end)
 end)
+

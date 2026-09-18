@@ -3,7 +3,7 @@
 --
 -- This module is the SINGLE SOURCE OF TRUTH for the schema. The chat
 -- parser (chat_parser.lua) reads blocks rendered here, and every
--- response adapter that prepares tool calls or result slots goes
+-- response adapter that writes tool call or result blocks goes
 -- through render_call / render_result. Changes to the schema must
 -- land in this file AND this file only.
 --

@@ -63,7 +63,7 @@ function M.step(op)
         local cursor,reason=D.insert_released_new(s.doc,{epoch=ctx.epoch,generation=ctx.generation,entity=ctx.entity,
             grant=grant.id,revision=grant.revision,operation=ctx.operation,bytes=s.bytes,point=target.point})
         if not cursor then
-            if reason=='uncertain' or reason=='suspended'then return repair(s)end
+            if reason=='uncertain' or reason=='suspended' or reason=='waiting'then return repair(s)end
             retire(s,'cancelled',reason);return snapshot(s)
         end
         s.cursor=cursor
@@ -72,7 +72,7 @@ function M.step(op)
     s.accepted=s.accepted+(applied.accepted_bytes or 0)
     if s.status~='more'then return snapshot(s)end
     if applied.status=='applied'then s.cursor=nil;retire(s,'applied')
-    elseif applied.status=='suspended'then return repair(s)
+    elseif applied.status=='suspended' or applied.status=='waiting'then return repair(s)
     elseif applied.status~='more'then retire(s,'cancelled',applied.error or applied.status)end
     return snapshot(s)
 end

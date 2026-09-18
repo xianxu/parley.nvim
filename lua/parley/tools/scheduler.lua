@@ -80,7 +80,11 @@ function M.new(opts)
         if transition(r,{type='release'}).release_claims then
             local permission
             if R.get(resources,r.id).status=='queued'then resources,permission=R.cancel(resources,r.id)
-            else resources,permission=R.release(resources,r.id,{effect='known',evidence_ref=r.id})end
+            else
+                -- A crashed tool (#266 M3) is released on its process ending.
+                resources,permission=R.release(resources,r.id,
+                    {effect=lifecycle(r).known and 'known' or 'ended',evidence_ref=r.id})
+            end
             assert(permission.status=='released' or permission.status=='cancelled','resource release rejected')
             pump()
         end

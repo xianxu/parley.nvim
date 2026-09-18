@@ -57,12 +57,41 @@ describe('supervised tool producer adapter',function()
         done[2](outcome(true));flush();assert.same({'b'},results)
         done[1](outcome(true));flush();assert.same({'b'},results)
     end)
-    it('severs closed generation callbacks while preserving unknown quarantine',function()
+    -- #266 M3: only a tool whose process still runs keeps its claims past close;
+    -- one that ended (even with an unknown outcome) is a plain failure and holds
+    -- nothing.
+    -- #266 M3 review BR-15: a tool the scheduler had not started is settled by
+    -- its own "cancelled before execution" outcome, not handed to the supervisor,
+    -- which would erase the evidence that it never ran.
+    it('settles a cancelled tool that never started by its own outcome',function()
+        local same={name='fixture',description='fixture',input_schema={},kind='write',
+            resources=function()return {{path=root..'/same',scope='file',mode='write'}}end,
+            execute_async=function(_,_,cb)starts=starts+1;done[#done+1]=cb;return {cancel=function()end}end}
+        local p=assert(Producer.new({allowed_tools={'fixture'},registry={get=function()return same end},
+            root_policy={write_root=root,read_roots={root}},buf=56,scheduler=service}))
+        p.start(call('first'),ctx(),{})
+        local kind,result,resolved,supervised
+        local second=p.start(call('second'),ctx(),{outcome=function(k,r)kind,result=k,r end,resolved=function()resolved=true end})
+        assert.equals(1,starts,'the second waits behind the first')
+        p.cancel(second,function(evidence)supervised=evidence and evidence.supervised end)
+        flush()
+        assert.equals(1,starts,'it never ran');assert.is_nil(supervised,'not handed to the supervisor')
+        assert.equals('known',kind);assert.is_true(result.is_error)
+        assert.truthy(result.content:find('before execution',1,true),result.content)
+        assert.is_true(resolved)
+        p.close()
+    end)
+    it('severs closed generation callbacks while a still-running unknown keeps its claims',function()
         local callbacks=0
         producer.start(call(),ctx(),{outcome=function()callbacks=callbacks+1 end})
-        done[1]({certainty='unknown',effect='unknown',physical_resolved=true,result={content='uncertain'}});flush()
+        done[1]({certainty='unknown',effect='unknown',physical_resolved=false,result={content='uncertain'}});flush()
         assert.equals(1,callbacks);producer.close();assert.equals(1,service:stats().records)
         done[1](outcome(true));flush();assert.equals(1,callbacks);assert.equals(0,service:stats().records)
+    end)
+    it('retires a crashed tool at close once its process has ended',function()
+        producer.start(call(),ctx(),{outcome=function()end})
+        done[1]({certainty='unknown',effect='unknown',physical_resolved=true,result={content='crashed'}});flush()
+        producer.close();assert.equals(0,service:stats().records)
     end)
     it('delivers later known evidence after physical completion of an unknown outcome',function()
         local kinds,resolved={},0

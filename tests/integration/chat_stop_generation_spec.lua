@@ -187,13 +187,26 @@ describe('generation scoped Stop commands',function()
         end)
     end
 
+    -- #266: b was admitted first and holds the write turn until it terminates.
+    -- a's tool round still runs while b streams — execution is concurrent (M2) —
+    -- and only its blocks wait, so a continues once b is done. The invariant this
+    -- test defends is order-independent: b's writes below a never make a's input
+    -- stale.
     it('keeps an earlier target independent from a later active writer',function()
         local b=submit('second');wait(function()return #calls==1 end)
         local a=submit('first');calls[1].output(calls[1].id,'later writer output')
         wait(function()return #calls==2 end)
-        tool_round(calls[2]);wait(function()return #calls==3 or Respond.response_snapshot(a).generation.phase=='paused'end)
+        tool_round(calls[2])
+        wait(function()
+            local tools=Respond.response_snapshot(a).generation.tools
+            return tools~=nil and tools.finished==1
+        end)
+        assert.equals('running',Respond.response_snapshot(b).status,'a\'s tool ran while b is still streaming')
+        assert.equals(2,#calls,'but a continues only once its blocks can land')
+        calls[1].complete(calls[1].id)
+        wait(function()return #calls==3 or Respond.response_snapshot(a).generation.phase=='paused'end)
         assert.equals(3,#calls);assert.is_false(Respond.response_snapshot(a).generation.stale_input)
-        assert.equals('running',Respond.response_snapshot(b).status)
+        assert.equals('success',Respond.response_snapshot(b).generation.outcome)
     end)
 
 end)

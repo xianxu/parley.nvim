@@ -54,7 +54,10 @@ describe('native generation input provenance',function()
             assert.equals('ready',Target.snapshot(target).status)
             assert.equals(consumed,Runner.snapshot(runner).stale_input)
             assert.equals(0,#fake.preparations)
-            Runner.step(runner)
+            -- #266 M1: `start` now emits request_turn before the prepare
+            -- operation, so preparation begins one effect later.
+            for _=1,10 do if #fake.preparations>0 then break end; Runner.step(runner) end
+            assert.equals(1,#fake.preparations,'preparation never started')
             assert.equals(consumed,fake.preparations[1].ctx.stale_input)
             assert.equals('frozen',fake.preparations[1].ctx.input.message)
             Runner.cancel(runner)

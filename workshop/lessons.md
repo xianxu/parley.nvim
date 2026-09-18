@@ -1,5 +1,118 @@
 # Lessons
 
+## 2026-09-17 (#266 M1 closed at review round 4)
+
+- **A rule about prose is enforced by a query, kept next to the rule.** Two doc
+  families recurred for four rounds because each round fixed the sentences a
+  reviewer quoted. What closed them was a grep that lists every candidate
+  sentence, with each hit classified (unconditional / names its exceptions /
+  points to the single statement / struck), and, for milestone labels, a check of
+  what each `M[0-9]` *refers to*, not how it is spelled. Rule: when you fix a doc
+  family, write the query into the response (plan Revisions) so the next reader
+  can re-run it, and prefer stable ids (chunk, task) over labels that renumber.
+
+## 2026-09-17 (#266 M1 review round 3 — a rule restated in prose drifts)
+
+- **State a code-derived rule once, next to a pointer to the code, and link to it
+  everywhere else.** Undo grouping was restated in the atlas, the target and the
+  plan; each fix to one copy introduced a new overclaim in another ("no partial
+  slice, unconditionally"). Rule: when a guarantee is a consequence of one
+  predicate (here `Editor:can_join_undo`), write it in exactly one document,
+  enumerate every event the predicate reacts to, and make the other documents
+  say "see there" rather than paraphrase.
+
+- **A renumbering is a whole-document edit.** Merging two milestones renamed
+  every later one; a review found one stale label, the next found twelve more.
+  Rule: after renumbering milestones, grep `M[0-9]` across the plan and reconcile
+  every hit outside historical records before the next review boundary.
+
+## 2026-09-17 (#266 M1 review round 2 — the same family, twice)
+
+- **A pattern a review names is a grep over the whole diff, not an edit at the
+  named file.** Round 1 flagged "snapshot before an O(1) check on a hot path" at
+  the coordinator; I fixed the coordinator and added the same shape to the
+  runner in the same change. Round 2 found it there. Rule: when a finding names
+  a pattern, search every file the diff touches for it before closing the
+  finding, and say in the response which other sites were checked.
+
+- **An invariant written for users or for a later issue must carry its
+  exceptions in the same sentence.** "Each generation's writes stay one
+  contiguous run" was true only while the turn is held uninterrupted — and the
+  pause that interrupts it was a release this same milestone made work. Rule:
+  when you state an ordering or grouping guarantee in the atlas or a target,
+  list every event that ends the grouping, and check each against the code that
+  emits it.
+
+## 2026-09-17 (#266 M1 boundary review, REWORK — what the review caught)
+
+- **Removing plan rows can silently remove a mechanism a surviving row needs.**
+  The operator dropped the suspension release rows; the plan's "release must not
+  travel as a queued effect" prescription went with them, though the stale-input
+  pause row still parked an effect at the head of the FIFO. A paused generation
+  then held the turn forever. Rule: when a decision deletes rows from a
+  table-shaped design, re-read every surviving row against each mechanism the
+  deleted rows carried, and ask which of them still depend on it.
+
+- **A machine test that asserts an effect was *emitted* is not coverage of it
+  *executing*.** `generation_spec` pinned that pause emits `release_turn`; the bug
+  was that the runner never ran it. Rule: for an effect whose purpose is to reach
+  another component, assert the outcome at that component (here `D.turn`), with a
+  real runner in the loop.
+
+- **Every exit path of an async callback contract must settle.** The gap writer
+  had two paths that returned without calling `done`, which leaves a state
+  (`gap='writing'`) that blocks all further writes with no error. Rule: when you
+  hand a continuation to another module, enumerate its success, failure and
+  cancel paths and make each one settle; make the settle idempotent so the
+  enumeration can be generous.
+
+- **"Nothing is written if X" needs X checked before the write is emitted, in the
+  same pass.** `pump` emitted `write_gap` and then stopped on provider failure,
+  relying on a later runner check. Rule: when a guarantee is "no mutation when
+  …", put the guard ahead of the emission, not behind it downstream.
+
+- **A guard added at N entry points is a family on its first day.** Three
+  spellings of one predicate appeared across five sites in one milestone, one of
+  them paying a full state copy per write chunk. Rule: when the same condition is
+  needed at more than two sites, write it once on the owner of the state it reads.
+
+## 2026-09-17 (#266 M1 — a budget, a vacuous test, a stash, and "one cause")
+
+- **A budget analysis must cover every limit on the path, at the real delivery
+  granularity.** The plan measured answer *bytes* and kept a 1 MiB budget, but
+  the machine also caps *items* at 256 and providers deliver one item per SSE
+  delta — so a held answer died after a paragraph. Only a test that fed
+  hundreds of tiny deltas found it. Rule: when you size a buffer, list every cap
+  the data passes through, and drive the test with the producer's real chunking,
+  not one big write.
+
+- **A characterization test needs its counterfactual run, not assumed.** The
+  undo-coherence test passed with the write turn disabled: batched runner steps
+  let each writer finish its slices before the other moved, so interleaving never
+  happened. Rule: for every test written "expected PASS", disable the mechanism
+  it claims to protect and watch it fail; if it doesn't, the harness is hiding
+  the hazard (here: step granularity) — make it finer.
+
+- **Never use `git stash push <path>` + `pop` for a counterfactual.** On a path
+  with no changes, `push` creates nothing and `pop` pops an unrelated older stash
+  (here it refused only because that stash held untracked files). Rule: edit the
+  clean committed file, run, then `git checkout -- <file>`; confirm the file was
+  clean first (`git diff --quiet -- <file>`).
+
+- **"N failures, one cause" is a hypothesis — trace each one.** The plan said nine
+  tests failed only because a second request never started. Deferral fixed four;
+  the other five were an effect-order regression (release before revoke), a
+  recovery check that could not wait out a transient suspension, and two tests
+  asserting the very concurrency the issue reverses. Rule: when a fix is
+  predicted to clear a list, run the list after it and debug every survivor on
+  its own — and check survivors against `main` to separate "ours" from "theirs".
+
+- **An effect's position in an emitted list is behaviour.** The runner executes one
+  effect per step while the machine may already report `terminal`, so queuing
+  `release_turn` ahead of `revoke` left a region held while the phase said free.
+  Rule: when a transition emits several effects, order them by what an observer
+  of the *phase* may assume has already happened, and pin the order in a test.
+
 ## 2026-09-16 (#263 close round 4 — prose is not enforcement)
 
 - **A rule written in a module header does not stop the fifth copy.** Round 3
@@ -2962,3 +3075,100 @@ download.
   closes is already whole, and the pull-back silently truncated whole-exchange
   deletes and stranded answer content. When adding a protective clamp, write
   the case where the clamp must NOT fire.
+
+- #266 M2: a test that waits for one event must not lean on another it used to
+  imply. Tests pressed `:ParleyStop` right after "the tool started", and that
+  worked only because a tool could not start until its reservation had been
+  written *and confirmed* by the structure, so the index was always settled.
+  Once tools started before any write, Stop-at-cursor saw an exchange mid-repair,
+  fell back to its picker, and aborted the headless run with no summary. Wait
+  for the condition the next step needs (here, an idle repair), not a proxy that
+  happens to precede it today.
+
+- #266 M2: a generation captures its input at submit, so submitting while an
+  exchange above it is still being written makes it stale by construction. When
+  a change makes a write land sooner or later than before (an unknown outcome now
+  written at once instead of pausing), re-check every test that submits right
+  after that write — it may now be racing it.
+
+- #266 M2 review (4th in `invariant-statement-omits-exception`): a rule stated
+  in a review response dies with the response. Three rounds of M1 fixed undo
+  claims one sentence at a time, and M2 added a fresh unconditional sentence to
+  the very page that had been corrected. The fix that holds puts the rule ON the
+  page that invites the claim ("only this bullet is unconditional; anything else
+  names its splitting event and ships a test driving it"), where the next author
+  reads it before writing.
+
+- #266 M2 review BR-10: when a behavior changes, sweep for the old CLAIM, not
+  the pages the plan listed. The plan named `tool_use.md`, and that page was
+  rewritten — yet a paragraph lower on the same page still said "an unknown
+  outcome prevents continuation". Scope and method: "The superseded-claim
+  sweep" (#266 M4 review) below — the one statement of both.
+
+- #266 M2 review BR-11: relaxing one safety rule can strand another that was
+  designed around it. "An unknown outcome pauses" was what kept the resource
+  quarantine (claims held until reconciled) from ever blocking its own
+  generation; removing the pause turned a retry into a self-deadlock. When a
+  change lets work continue past uncertainty, list every mechanism that holds
+  something for that uncertainty and ask who can now wait on it.
+
+- #266 M3 review BR-15: write what the evidence says, not what the timing
+  suggests. The Stop walk labelled a tool "cancelled while running" because it
+  had been *told* to start, while the runner had refused it and the scheduler had
+  never run another. When a label claims something about the world (ran / never
+  ran), derive it from the settlement that proves it, and wait for that
+  settlement rather than guessing at the moment you happen to look.
+
+- #266 M3 review (5th in `invariant-statement-omits-exception`): a guarantee
+  about a mechanism must be derived from the COMPOSED system, not the component
+  you just wrote. The flush's promises were true of the machine alone and false
+  once the producer's cancel semantics and every `stop()` reachable from the
+  phase were included. State such lists once, next to the code that makes them
+  true, with "a change that adds X updates this list", and point to it.
+
+- #266 M3 review round 2: a rule's scope is every place a reader meets the claim.
+  The "state it once, point to it" rule was applied to the atlas and the target,
+  and README — the one page a user reads — still paraphrased the same guarantee
+  (scope now stated once: "The superseded-claim sweep" below). And a mechanism a fix
+  claims must have a consumer a test actually enters: round 1's outcome-kind
+  rendering was credited as part of the fix, but no test (and no code path)
+  reached it, so it was deleted rather than kept as dead insurance.
+
+- **The superseded-claim sweep** (#266 M4 review; 3rd in
+  `behavior-change-sweep-by-claim` — the one statement of scope and method; the
+  BR-10 and M3 round-2 entries above point here). Each earlier entry restated the
+  scope from memory and each dropped a different place: M4's own first draft of
+  this lesson added `tests/manual/` and lost the plan's Core concepts, and the
+  plan's "`writable`/`resolve` are not changed" was exactly what leaked.
+  1. **Terms come from the diff, not from memory:** every identifier and quoted
+     string on a removed line — `git diff BASE..HEAD | grep '^-'` — plus the key
+     phrases of any superseded sentence.
+  2. **Scope, all of it, every time:** `atlas/`, `README.md`, `docs/`,
+     `tests/manual/`, code comments and identifiers (a variable still named for a
+     removed concept counts), user-visible strings, `workshop/targets/`, and the
+     plan outside `## Revisions`.
+  3. Classify every hit — same concept / different concept that shares the word
+     / historical record — and write the query into the response so the next
+     reader can re-run it.
+- #266 M4: after removing the mechanism that made a structure plural, check what
+  the structure degenerates to. With carving gone, every grant's slot list was
+  provably its own range repeated — a second copy of one fact that the plan's
+  line-by-line removal list would have left in place.
+- #266 M4 review (2nd in `composed-claim-tested-at-one-seam`): when a runtime
+  guard is deleted because an invariant makes it dead, the invariant BECOMES the
+  guard, and a per-transition test does not cover it. `reclaim_tail`'s overlap
+  scan went because live grants are pairwise disjoint, a fact that holds only
+  through acquire, owned and human edits, `move`, `reclaim_tail` and
+  `successor_finish` together. Test such an invariant by driving seeded
+  sequences of the real transitions, asserting it after every step. Then mutate
+  each transition that maintains it and watch the test fail. The first draft
+  caught only three of four mutations: its generator never packed grants close
+  enough for one edit to span two.
+- #266 close review (4th in `stall-visibility`): a status the user needs while
+  something waits is STATE, and the display it lives on has a lifecycle of its
+  own. The note was pushed only when its text changed. The status line was
+  cleared by every output write and recreated after a pause, so the note
+  vanished right when a held answer started writing. Tie such state to the
+  display: re-assert it on every clear and recreate, and test it in the composed
+  session across the event that clears it. A test of the composer's strings
+  cannot see this.

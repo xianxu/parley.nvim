@@ -252,6 +252,8 @@ function M.query(doc,first,last,opts)
     local s=state(doc); return s.dead and {} or measured_query(s,Structure.query,first,last,opts)
 end
 function M.snapshot(doc) return State.snapshot(state(doc).authority) end
+--- Current write-turn holder, without the cost of a full snapshot copy.
+function M.turn(doc) return State.turn(state(doc).authority) end
 function M.stats(doc,reset)
     local s=state(doc); return s.dead and {} or Structure.stats(s.structure,reset)
 end
@@ -307,21 +309,11 @@ function M.subscribe(doc,callback)
     local key={}; s.subscribers[key]=callback
     return function() s.subscribers[key]=nil end
 end
--- Capacity reserves bounded grant slots only; acquisition still validates
--- confirmed document regions through the ordinary authority path below.
-function M.reserve_capacity(doc,intent)
-    return M.transition(doc,{kind='reserve_capacity',epoch=intent.epoch,generation=intent.generation,
-        operation=intent.operation,count=intent.count})
-end
-function M.release_capacity(doc,intent)
-    return M.transition(doc,{kind='release_capacity',epoch=intent.epoch,generation=intent.generation,
-        operation=intent.operation,ticket=intent.ticket})
-end
 function M.transition(doc,event)
     local s=state(doc)
     if s.dead or type(event)~='table' then return effects(s,State.transition(s.authority,event)) end
     if event.kind~='register_generation' and event.kind~='acquire' and event.kind~='revoke'
-        and event.kind~='finish_generation' and event.kind~='reserve_capacity' and event.kind~='release_capacity' then return {ok=false,reason='coordinator-owned event',effects={}} end
+        and event.kind~='finish_generation' and event.kind~='request_turn' and event.kind~='release_turn' then return {ok=false,reason='coordinator-owned event',effects={}} end
     if event.kind=='acquire' then
         if type(event.regions)~='table' or #event.regions>16 then return {ok=false,reason='grant limit',effects={}} end
         for _,region in ipairs(event.regions or {}) do
@@ -334,9 +326,15 @@ function M.transition(doc,event)
             end
         end
     end
+    local before=State.turn(s.authority)
     local result=effects(s,State.transition(s.authority,event))
     if Replacement.prune(s) then schedule(doc) end
     Append.prune(s.append,State.snapshot(s.authority).grants)
+    -- Compare the value rather than listing event kinds. finish_generation moves
+    -- the turn as often as an explicit release does, and a per-event list drops it
+    -- — leaving a generation parked on a 'waiting' step asleep for good.
+    local after=State.turn(s.authority)
+    if after~=before then notify(s,{kind='turn',turn=after}) end
     return result
 end
 function M.repair_step(doc,budget)
@@ -433,8 +431,8 @@ function M.apply_user(doc,token,request)
     local s=state(doc)
     return User.apply(s.structure,s.editor,s.epoch,token,request)
 end
--- Fresh confirmation may restore only the current parent endpoint after all
--- delegated writers have retired. This never uses finite successor authority.
+-- Fresh confirmation narrows a grant to its current tail endpoint, where a
+-- continuation writes next. This never uses finite successor authority.
 function M.reclaim_tail(doc,intent)
     local s=state(doc)
     if s.dead or type(intent)~='table' then return {ok=false,reason='detached',effects={}} end
@@ -446,6 +444,7 @@ end
 function M.replace_new(doc,intent)
     local s=state(doc)
     if s.dead or type(intent)~='table' then return nil,'detached' end
+    if State.waits_for_turn(s.authority,intent.generation,intent.grant) then return nil,'waiting' end
     local grant=State.snapshot(s.authority).grants[intent.grant]
     if not grant then return nil,'grant' end
     local entity=Structure.lookup(s.structure,grant.entity)
@@ -460,6 +459,7 @@ function M.insert_released_new(doc,intent)
     local s=state(doc)
     if s.dead or type(intent)~='table' or type(intent.bytes)~='string' or #intent.bytes>4096
         or type(intent.point)~='number' or intent.point%1~=0 then return nil,'invalid released insertion' end
+    if State.waits_for_turn(s.authority,intent.generation,intent.grant) then return nil,'waiting' end
     local _,newlines=intent.bytes:gsub('\n','')
     if newlines>255 then return nil,'row slice limit'end
     local grant=State.snapshot(s.authority).grants[intent.grant]
@@ -490,6 +490,9 @@ function M.replace_cancel(doc,cursor)
 end
 function M.apply(doc,plan)
     local s=state(doc)
+    if State.waits_for_turn(s.authority,plan.generation,plan.grant) then
+        return {status='waiting',reason='write turn held elsewhere'}
+    end
     local expected=plan.revision
     return s.editor:apply(plan,function(_,patch,phase,event)
         local grant=State.snapshot(s.authority).grants[plan.grant]
@@ -525,9 +528,7 @@ local function append(doc,intent)
     local snapshot=State.snapshot(s.authority)
     local grant=snapshot.grants[intent.grant]
     if not grant then return reject('stale','grant') end
-    for _,other in pairs(snapshot.grants) do
-        if other.parent==grant.id and other.status~='revoked' then return reject('refused','delegated parent') end
-    end
+    if State.waits_for_turn(s.authority,intent.generation,intent.grant) then return reject('waiting','write turn held elsewhere') end
     local current=proof(s,grant)
     if not current then return reject('stale','identity') end
     local resolved=effects(s,State.resolve(s.authority,{epoch=intent.epoch,generation=intent.generation,

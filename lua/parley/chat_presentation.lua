@@ -45,6 +45,44 @@ local function bounded(text,limit)
     return text:sub(1,last)
 end
 M.bounded_message=bounded
+-- #266: what a generation held behind the write turn shows instead of looking
+-- frozen. `line` is the 1-based row of the holder's question, `phase` its
+-- generation phase; either may be unknown.
+local waiting_reasons={preparing='preparing',requesting='streaming',executing_tools='running tools',
+    draining='finishing',finalizing='finishing',flushing='stopping',stopping='stopping'}
+local function holder(line)return line and ('the answer to line '..line) or 'another answer' end
+--- Every note an answer shows while it waits names what it waits on AND what
+--- ends the wait (#266 review, stall-visibility). One composer, so a new wait
+--- cannot be written without its escape.
+local function wait_note(what,escape)
+    assert(type(escape)=='string' and escape:find(':ParleyStop',1,true),'a wait note names its escape')
+    return what..'; '..escape
+end
+function M.waiting_message(line,phase)
+    return wait_note('Waiting for '..holder(line)..' ('..(waiting_reasons[phase] or 'writing')..')',':ParleyStop there stops it')
+end
+-- #266 M3: a Stop during a tool round writes the round out before the answer
+-- ends — after the answer to `line` when another holds the turn.
+function M.flushing_message(line)
+    return wait_note('Stopped; writing its tool results'..(line and ' after '..holder(line) or ''),
+        'a second :ParleyStop drops the rest')
+end
+-- #266 M2: a round's tools run at once but their blocks land one at a time, in
+-- declared order, so the transcript can lag them. This is what shows they run —
+-- and, once every outcome is in, that the round is waiting on cleanup rather
+-- than finished (`tools` is the generation snapshot's {total, finished, settled}).
+function M.tools_message(tools)
+    if tools.finished>=tools.total and tools.settled<tools.total then
+        return wait_note('Tools finished; waiting for '..(tools.total-tools.settled)..' to clean up',':ParleyStop stops it')
+    end
+    return wait_note('Running tools: '..tools.finished..' of '..tools.total..' finished',':ParleyStop stops it')
+end
+-- An overflow stops the response on purpose: dropping bytes would lose provider
+-- output. `line` is set when it overflowed while held behind another answer.
+function M.overflow_message(line)
+    return 'Response stopped: its output passed the staging budget'
+        ..(line and ' while waiting for '..holder(line) or '')
+end
 -- Accumulate one provider detail stream and derive its meaningful status text.
 M.progress_message = function(detail_state, event)
     local detail = bounded(event.text)

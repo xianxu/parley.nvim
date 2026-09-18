@@ -73,13 +73,13 @@ describe('arch: captured document ownership',function()
                 '#254: pending UI owns extmarks and timers; its visibility cannot admit, delay or perform a content write')
         end
         for _,method in ipairs({'append','apply','apply_user','replace_new','replace_step',
-            'insert_released_new','reserve_capacity','acquire'})do
+            'insert_released_new','acquire'})do
             forbid(scope,'[%.:]'..method..'%s*%(',
                 '#254: presentation may observe document lifetime, but cannot mint grants or mutate content',true)
         end
         -- Presentation has its own pure transition function. Guard document
         -- ownership commands, rather than banning every state transition.
-        for _,event in ipairs({'register_generation','acquire','revoke','finish_generation','reserve_capacity'})do
+        for _,event in ipairs({'register_generation','acquire','revoke','finish_generation'})do
             forbid(scope,"kind%s*=%s*['\"]"..event.."['\"]",
                 '#254: pending UI cannot create or cancel document authority',true)
         end
@@ -94,6 +94,19 @@ describe('arch: captured document ownership',function()
     it('does not restore positional streaming through the legacy dispatcher handler',function()
         forbid('lua/parley/**/*.lua','%.create_handler%s*%(',
             '#254: production streaming uses the position-free provider and captured document grants',true)
+    end)
+    it('does not restore nested grants or the geometry that carved them',function()
+        -- `.parent` and `.slots` are forbidden only where grants live: the
+        -- document's sequence tree and append cursors use those names too.
+        for _,pattern in ipairs({'%.parent','%.slots','open_first','open_last','tail_lost'})do
+            forbid({'lua/parley/document/state.lua','lua/parley/document/init.lua'},pattern,
+                '#266 M4: a tool round writes through its answer\'s own grant, so a grant is one closed range'
+                ..' and none is carved out of another',true)
+        end
+        for _,pattern in ipairs({'result_slot','call_block','receipt%.markers'})do
+            forbid('lua/parley/**/*.lua',pattern,
+                '#266: tool results are appended in call order; no block reserves a slot to fill later',true)
+        end
     end)
 
 end)

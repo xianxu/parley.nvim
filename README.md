@@ -47,10 +47,15 @@ and settings. Existing Neovim users can use the
 ## Editing while an answer is generated
 
 You can write the next question while one or more answers stream elsewhere in
-this chat. Editing generated output preserves your edit and stops that region's
-writer. Deleting an exchange invalidates its writers; reloading the file
-invalidates all active writes. Undo and redo remain native Neovim edits and can
-also revoke a writer; undo does not restart a cancelled request.
+this chat. Their requests run at the same time, but answers are written one at a
+time: a later answer waits, showing which answer it is waiting for, then appears
+in full once the earlier one finishes or pauses — so an undo step never mixes two
+answers. An answer's header appears with its first output; regenerating keeps the
+old answer visible until the new one starts arriving. Editing generated output
+preserves your edit and stops that region's writer. Deleting an exchange
+invalidates its writers; reloading the file invalidates all active writes. Undo
+and redo remain native Neovim edits and can also revoke a writer; undo does not
+restart a cancelled request.
 
 Changing earlier input leaves an in-flight request on its original input. A
 visible **input changed** note stays with the answer for this editor session.
@@ -63,9 +68,14 @@ The stale note clears when a fresh response starts or the file is reloaded.
 - `:ParleyStop` cancels the response under the cursor. If none is selected, it
   offers the active responses in this chat. Cancelling the picker changes nothing.
 - `:ParleyStopDocument` cancels all responses in the current chat.
-- Tool slots show `(Tool result pending)` until a confirmed result replaces them.
-  Pending text is not a successful tool result. Already started effects may still
-  need to finish cleanup after Stop; stopping does not undo an external effect.
+- A tool round's tools run at once, but each call is written immediately before
+  its own result, in the order the model asked for them; the status line counts
+  the tools still running. A failed call is written as an error result and the
+  answer goes on. Stopping during a tool round cancels its running tools and
+  still writes the round out before the answer ends; what each call's result
+  says, and what ends that early, is in
+  [Stop during a tool round](atlas/providers/tool_use.md#stop-during-a-tool-round).
+  Stopping does not undo an external effect.
 
 These controls apply to concurrent work in one Neovim instance.
 
@@ -105,8 +115,10 @@ conflicting file operations wait for earlier work. Capabilities, roots and tool
 configuration are captured for the response. Custom tools need an `execute_async`
 implementation to run in this workflow; a synchronous handler alone is refused.
 
-Stop and reload prevent further chat writes, while the process supervisor keeps
-unfinished tool effects and their resource claims. `:ParleyToolOperations` shows
+Reload prevents further chat writes, and so does Stop once it has written out a
+tool round in progress, while the process supervisor keeps tools that are still
+running and their resource claims. A tool whose process has ended holds nothing,
+even when its outcome is unknown: it is reported to the model as a failure. `:ParleyToolOperations` shows
 retained operations and their evidence. After independently inspecting an effect,
 you can record whether it happened, did not happen, or partially happened. This
 never reruns it or invents process/file cleanup; conflicting work remains blocked

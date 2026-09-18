@@ -21,6 +21,24 @@ end
 local function output(s,a,seq,bytes)
     return send(s,{type='output',operation=a,seq=seq,blob_ref='blob'..seq,bytes=bytes})
 end
+local function effects(result,kind)
+    local out={};for _,e in ipairs(result.effects) do if e.type==kind then out[#out+1]=e end end;return out
+end
+-- #266 M2: declare a round of `n` calls; returns the state, the result and the
+-- child operations by call index (children start as soon as they are declared).
+local function declare(s,a,n)
+    local calls={};for i=1,n do calls[i]={index=i,call_id='c'..i,arguments_ref='args'..i} end
+    local r;s,r=send(s,{type='round_declared',attempt=a,calls=calls})
+    local children={}
+    for _,e in ipairs(effects(r,'start_child')) do children[tonumber(e.call_id:sub(2))]=e.operation end
+    return s,r,children,effect(r,'start_child') and effect(r,'start_child').round
+end
+-- Acknowledge the one in-flight tool block as written; returns the next one.
+local function insert(s,r,status)
+    local e=assert(effect(r,'insert_tool'),'no tool block in flight')
+    local after;s,after=send(s,{type='inserted',insert=e.id,status=status or 'applied'})
+    return s,after,e
+end
 
 describe('pure generation lifecycle',function()
     it('provides the reducer',function() assert.is_true(loaded,tostring(G)) end)
@@ -122,8 +140,12 @@ describe('pure generation lifecycle',function()
         local s,a=requesting();local r;s,r=output(s,a,1,5)
         local write=effect(r,'write')
         s,r=send(s,{type='provider_complete',attempt=a})
-        assert.equals('finalizing',G.snapshot(s).phase);assert.is_nil(effect(r,'finalize'))
+        -- #266 M1: this window now has a name. Complete-but-unwritten is `draining`,
+        -- not `finalizing` with a non-empty queue — which is what let one bytes==0
+        -- test stand for both "my writes landed" and "I may proceed".
+        assert.equals('draining',G.snapshot(s).phase);assert.is_nil(effect(r,'finalize'))
         s,r=send(s,{type='write_result',write=write.id,committed_bytes=5,status='applied'})
+        assert.equals('finalizing',G.snapshot(s).phase)
         local final=effect(r,'finalize');assert.is_table(final)
         s=send(s,{type='finalize_result',finalize=final.id,status='applied'})
         assert.equals('finalizing',G.snapshot(s).phase)
@@ -152,40 +174,95 @@ describe('pure generation lifecycle',function()
         s,r=send(s,{type='invented'});assert.equals(before,s);assert.same({},r.effects)
     end)
 
-    it('reserves ordered round slots before child dispatch and joins recorded outcomes',function()
-        local s,a=requesting();local r
-        s,r=send(s,{type='round_declared',attempt=a,calls={
-            {index=1,call_id='c2',arguments_ref='args2'},{index=2,call_id='c1',arguments_ref='args1'}}})
-        local reserved=effect(r,'reserve_round')
-        assert.is_nil(effect(r,'start_child'))
-        assert.equals('c2',reserved.children[1].call_id);assert.equals('c1',reserved.children[2].call_id)
-        local one,two=reserved.children[1].operation,reserved.children[2].operation
-        s,r=send(s,{type='round_reserved',round=reserved.round,grants={'g1','g2'},receipt_ref='reservation'})
-        assert.equals(one,effect(r,'start_child').operation)
-        s=send(s,{type='child_outcome',round=reserved.round,operation=two,outcome='known',result_ref='result2'})
-        s=send(s,{type='operation_resolved',operation=two})
-        s=send(s,{type='child_outcome',round=reserved.round,operation=one,outcome='known',result_ref='result1'})
-        s,r=send(s,{type='operation_resolved',operation=one})
+    -- #266 M2: tools run as soon as they are declared; their blocks land one at a
+    -- time in declared order — call 1, result 1, call 2, result 2 — whatever
+    -- order the outcomes arrive in.
+    it('starts every declared tool at once and writes their blocks in declared order',function()
+        local s,a=requesting()
+        local r,children,round;s,r,children,round=declare(s,a,2)
+        assert.equals(2,#effects(r,'start_child'),'execution never waits on a write')
+        local e=effect(r,'insert_tool')
+        assert.same({'call',1,'c1'},{e.kind,e.index,e.call_id})
+        s=send(s,{type='child_outcome',round=round,operation=children[2],outcome='known',result_ref='result2'})
+        s=send(s,{type='operation_resolved',operation=children[2]})
+        s,r=insert(s,r)
+        assert.is_nil(effect(r,'insert_tool'),'result 2 arrived first but waits behind result 1')
+        s,r=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='result1'})
+        local written={}
+        while effect(r,'insert_tool') do
+            local item;s,r,item=insert(s,r)
+            written[#written+1]=item.kind..item.index..(item.result_ref and ':'..item.result_ref or '')
+        end
+        assert.same({'result1:result1','call2','result2:result2'},written)
+        s,r=send(s,{type='operation_resolved',operation=children[1]})
         assert.is_nil(effect(r,'continue_round')) -- original provider still owned
         s,r=send(s,{type='operation_resolved',operation=a})
         local join=effect(r,'continue_round');assert.is_table(join)
         assert.same({'result1','result2'},join.result_refs)
         assert.equals('executing_tools',G.snapshot(s).phase)
-        s,r=send(s,{type='round_prepared',round=reserved.round,input_ref='next-input'})
+        s,r=send(s,{type='round_prepared',round=round,input_ref='next-input'})
         assert.equals('next-input',effect(r,'request').input_ref)
     end)
 
-    it('keeps unknown child work owned and prevents paused continuation',function()
-        local s,a=requesting();local r
-        s,r=send(s,{type='round_declared',attempt=a,calls={{index=1,call_id='c',arguments_ref='args'}}})
-        local round=effect(r,'reserve_round');local child=round.children[1].operation
-        s=send(s,{type='round_reserved',round=round.round,grants={'child-grant'},receipt_ref='r'})
-        s=send(s,{type='child_outcome',round=round.round,operation=child,outcome='unknown',result_ref='uncertain'})
-        s=send(s,{type='pause',reason='human child edit'})
-        s=send(s,{type='operation_resolved',operation=a})
+    it('holds tool blocks while another generation holds the turn, but still runs the tools',function()
+        local s,a=requesting()
+        s=send(s,{type='turn',status='waiting'})
+        local r;s,r=declare(s,a,2)
+        assert.equals(2,#effects(r,'start_child'),'tools run without the turn')
+        assert.is_nil(effect(r,'insert_tool'),'but write nothing without it')
+        s,r=send(s,{type='turn',status='held'})
+        assert.equals('call',effect(r,'insert_tool').kind)
+    end)
+
+    it('holds tool blocks behind the text staged before them',function()
+        local s,a=requesting()
+        local r;s,r=output(s,a,1,5)
+        local text=effect(r,'write')
+        s,r=declare(s,a,1)
+        assert.is_not_nil(effect(r,'start_child'))
+        assert.is_nil(effect(r,'insert_tool'),'a call block must not land ahead of the text before it')
+        s,r=send(s,{type='write_result',write=text.id,committed_bytes=5,status='applied'})
+        assert.equals('call',effect(r,'insert_tool').kind)
+    end)
+
+    it('stops when a tool block cannot be written',function()
+        for status,outcome in pairs({revoked='revoked',uncertain='uncertain',failed='insert_failed'}) do
+            local s,a=requesting()
+            local r;s,r=declare(s,a,1)
+            s=insert(s,r,status)
+            assert.equals('stopping',G.snapshot(s).phase,status)
+            assert.equals(outcome,G.snapshot(s).outcome,status)
+        end
+    end)
+
+    it('reports a round\'s tools for presentation, cleanup counted apart from outcome',function()
+        local s,a=requesting()
+        local _,children,round;s,_,children,round=declare(s,a,2)
+        assert.same({total=2,finished=0,settled=0},G.snapshot(s).tools)
+        s=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='r1'})
+        assert.same({total=2,finished=1,settled=0},G.snapshot(s).tools,'an outcome is not cleanup')
+        s=send(s,{type='operation_resolved',operation=children[1]})
+        assert.same({total=2,finished=1,settled=1},G.snapshot(s).tools)
+    end)
+
+    it('refuses output from a tool, which has no place of its own to write',function()
+        local s,a=requesting()
+        local _,children;s,_,children=declare(s,a,1)
+        local unchanged,refused=output(s,children[1],1,3)
+        assert.equals(s,unchanged);assert.is_false(refused.accepted)
+    end)
+
+    it('keeps a tool with an unknown outcome owned until its cleanup is positively resolved',function()
+        local s,a=requesting()
+        local r,children,round;s,r,children,round=declare(s,a,1)
+        s=insert(s,r)
+        s,r=send(s,{type='child_outcome',round=round,operation=children[1],outcome='unknown',result_ref='uncertain'})
+        s=insert(s,r)
+        s,r=send(s,{type='operation_resolved',operation=a})
+        assert.is_nil(effect(r,'continue_round'),'written, but the tool has not been cleaned up')
         s,r=send(s,{type='cancel'})
         assert.equals('stopping',G.snapshot(s).phase)
-        assert.equals(child,effect(r,'cancel_operation').operation)
+        assert.equals(children[1],effect(r,'cancel_operation').operation)
         assert.is_nil(effect(r,'terminal'))
     end)
 
@@ -245,23 +322,51 @@ describe('pure generation lifecycle',function()
         assert.is_true(r.accepted);assert.is_table(effect(r,'request'))
     end)
 
-    it('revokes one child slot without cancelling its sibling or granting unknown-result resolution',function()
-        local s,a=requesting();local r
-        s,r=send(s,{type='round_declared',attempt=a,calls={{index=1,call_id='a',arguments_ref='a'},
-            {index=2,call_id='b',arguments_ref='b'}}})
-        local round=effect(r,'reserve_round');local one,two=round.children[1].operation,round.children[2].operation
-        s=send(s,{type='round_reserved',round=round.round,grants={'g1','g2'},receipt_ref='r'})
-        s,r=send(s,{type='grant_revoked',grant='g1'})
-        assert.equals('paused',G.snapshot(s).phase);assert.equals('valid',G.snapshot(s).grant_status)
-        assert.equals(one,effect(r,'cancel_operation').operation)
-        for _,e in ipairs(r.effects) do assert.is_false(e.type=='cancel_operation' and e.operation==two) end
-        s,r=output(s,two,1,3);assert.equals('g2',effect(r,'write').grant)
-        s=send(s,{type='child_outcome',round=round.round,operation=one,outcome='unknown',result_ref='unknown'})
-        local prior=s;s,r=send(s,{type='operation_resolved',operation=one})
-        assert.equals(prior,s);assert.is_false(r.accepted)
-        s,r=send(s,{type='child_outcome',round=round.round,operation=one,outcome='known',result_ref='resolved'})
-        assert.is_true(r.accepted)
-        s,r=send(s,{type='operation_resolved',operation=one});assert.is_true(r.accepted)
+    -- #266 M2 (operator, 2026-09-18): a failed call is written as its error
+    -- result and the round goes on, so the model can try another way. Nothing
+    -- pauses, and the calls behind it are not held.
+    for _,failure in ipairs({'unknown','rejected','cancelled_before_effect'}) do
+        it('writes a '..failure..' outcome as its result and continues without pausing',function()
+            local s,a=requesting()
+            local r,children,round;s,r,children,round=declare(s,a,2)
+            s=insert(s,r)
+            s,r=send(s,{type='child_outcome',round=round,operation=children[1],outcome=failure,result_ref='failed1'})
+            assert.is_nil(effect(r,'release_turn'),'a failed call keeps the turn')
+            assert.equals('executing_tools',G.snapshot(s).phase)
+            local e=effect(r,'insert_tool');assert.same({'result',1,'failed1'},{e.kind,e.index,e.result_ref})
+            s,r=insert(s,r)
+            assert.equals('call',effect(r,'insert_tool').kind,'the calls behind it are not held')
+            s=insert(s,r)
+            s,r=send(s,{type='operation_resolved',operation=children[1]})
+            assert.is_true(r.accepted,'a failed call resolves on cleanup, whatever its outcome')
+            s,r=send(s,{type='child_outcome',round=round,operation=children[2],outcome='known',result_ref='result2'})
+            s=insert(s,r)
+            s=send(s,{type='operation_resolved',operation=children[2]})
+            s,r=send(s,{type='operation_resolved',operation=a})
+            assert.same({'failed1','result2'},effect(r,'continue_round').result_refs)
+        end)
+    end
+
+    it('lets an unknown outcome be confirmed only until its result is on its way',function()
+        local s,a=requesting()
+        local r,children,round;s,r,children,round=declare(s,a,2)
+        local call1=effect(r,'insert_tool')
+        s=send(s,{type='child_outcome',round=round,operation=children[2],outcome='unknown',result_ref='u2'})
+        s,r=send(s,{type='child_outcome',round=round,operation=children[2],outcome='known',result_ref='k2'})
+        assert.is_true(r.accepted,'confirmed before its slot is reached')
+        s=send(s,{type='inserted',insert=call1.id,status='applied'})
+        s,r=send(s,{type='child_outcome',round=round,operation=children[1],outcome='unknown',result_ref='u1'})
+        assert.equals('u1',effect(r,'insert_tool').result_ref)
+        local held,refused=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='k1'})
+        assert.is_false(refused.accepted,'its result is already on its way to the transcript')
+        assert.equals(s,held)
+        s,r=insert(s,r) -- result 1, as unknown
+        held,refused=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='k1'})
+        assert.is_false(refused.accepted,'an outcome is final once written')
+        s,r=insert(s,r) -- call 2
+        assert.equals('k2',effect(r,'insert_tool').result_ref,'the confirmation came in time, so it is what lands')
+        held,refused=send(s,{type='child_outcome',round=round,operation=children[2],outcome='known',result_ref='late'})
+        assert.is_false(refused.accepted,'only unknown may be confirmed, and only once')
     end)
 
     it('bounds writes to the editor slice while retaining aggregate staging credit',function()
@@ -289,29 +394,26 @@ describe('pure generation lifecycle',function()
         assert.is_nil(effect(again,'release_blob'))
     end)
 
-    it('admits four child effects only after reservation and drains queued children fairly',function()
-        local s,a=requesting();local calls={}
-        for i=1,5 do calls[i]={index=i,call_id='call'..i,arguments_ref='args'..i} end
-        local r;s,r=send(s,{type='round_declared',attempt=a,calls=calls})
-        local round=effect(r,'reserve_round')
-        s,r=send(s,{type='round_reserved',round=round.round,grants={'1','2','3','4','5'},receipt_ref='r'})
-        local started=0;for _,e in ipairs(r.effects) do if e.type=='start_child' then started=started+1 end end
-        assert.equals(4,started)
-        local first=round.children[1].operation
-        s=send(s,{type='child_outcome',round=round.round,operation=first,outcome='known',result_ref='r1'})
-        s,r=send(s,{type='operation_resolved',operation=first})
-        assert.equals(round.children[5].operation,effect(r,'start_child').operation)
+    it('runs at most four tools at once and starts the next as one is cleaned up',function()
+        local s,a=requesting()
+        local r,children,round;s,r,children,round=declare(s,a,5)
+        assert.equals(4,#effects(r,'start_child'))
+        s=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='r1'})
+        s,r=send(s,{type='operation_resolved',operation=children[1]})
+        assert.equals('c5',effect(r,'start_child').call_id,'cleanup, not writing, frees a slot')
     end)
 
-    it('allows cancelled reservation acknowledgements and provider failure to resolve without orphaned work',function()
-        local s,a=requesting();local r
-        s,r=send(s,{type='round_declared',attempt=a,calls={{index=1,call_id='c',arguments_ref='a'}}})
-        local round=effect(r,'reserve_round').round
-        s,r=send(s,{type='cancel'});assert.equals(round,effect(r,'cancel_reservation').round)
-        s,r=send(s,{type='cancel'});assert.is_nil(effect(r,'cancel_reservation'))
+    it('waits for an in-flight tool block before terminal and resolves provider failure without orphaned work',function()
+        local s,a=requesting()
+        local r,children,round;s,r,children,round=declare(s,a,1)
+        local block=effect(r,'insert_tool')
+        -- A hard stop (revocation): a user's Stop would write the round out (M3).
+        s=send(s,{type='grant_revoked',grant='grant'})
         s=send(s,{type='operation_resolved',operation=a})
-        assert.equals('stopping',G.snapshot(s).phase)
-        s,r=send(s,{type='round_reservation_failed',round=round,status='cancelled'})
+        s=send(s,{type='child_outcome',round=round,operation=children[1],outcome='cancelled_before_effect',result_ref='x'})
+        s=send(s,{type='operation_resolved',operation=children[1]})
+        assert.equals('stopping',G.snapshot(s).phase,'the block in flight is still owned')
+        s,r=send(s,{type='inserted',insert=block.id,status='failed'})
         assert.equals('terminal',G.snapshot(s).phase);assert.is_table(effect(r,'terminal'))
         local t,b=requesting();t=send(t,{type='provider_failed',attempt=b})
         assert.equals('stopping',G.snapshot(t).phase)
@@ -347,37 +449,21 @@ describe('pure generation lifecycle',function()
         end
     end)
 
-    it('cancels a queued child before effect admission without cancelling running siblings',function()
-        local s,a=requesting();local calls={}
-        for i=1,5 do calls[i]={index=i,call_id='c'..i,arguments_ref='a'..i} end
-        local r;s,r=send(s,{type='round_declared',attempt=a,calls=calls})
-        local round=effect(r,'reserve_round')
-        s=send(s,{type='round_reserved',round=round.round,grants={'g1','g2','g3','g4','g5'},receipt_ref='r'})
-        s,r=send(s,{type='cancel_child',round=round.round,operation=round.children[5].operation})
-        assert.is_true(r.accepted);assert.is_nil(effect(r,'cancel_operation'))
-        assert.equals('paused',G.snapshot(s).phase)
-        s=send(s,{type='child_outcome',round=round.round,operation=round.children[1].operation,outcome='known',result_ref='r1'})
-        s=send(s,{type='operation_resolved',operation=round.children[1].operation})
-        s,r=send(s,{type='resume_validated',policy_ref='explicit'})
-        assert.is_nil(effect(r,'start_child'))
-        assert.equals(4,G.snapshot(s).outstanding_operations) -- provider and three running siblings
-    end)
-
-    it('refuses excess round fanout before reserving or launching any child effect',function()
+    it('refuses excess round fanout before launching or writing anything',function()
         local s,a=requesting();local calls={}
         for i=1,33 do calls[i]={index=i,call_id='c'..i,arguments_ref='a'} end
         local r;s,r=send(s,{type='round_declared',attempt=a,calls=calls})
         assert.equals('stopping',G.snapshot(s).phase)
-        assert.is_nil(effect(r,'reserve_round'));assert.is_nil(effect(r,'start_child'))
+        assert.is_nil(effect(r,'insert_tool'));assert.is_nil(effect(r,'start_child'))
     end)
 
     it('owns asynchronous continuation preparation and holds its result through suspension',function()
-        local s,a=requesting();local r
-        s,r=send(s,{type='round_declared',attempt=a,calls={{index=1,call_id='c',arguments_ref='a'}}})
-        local round=effect(r,'reserve_round');local child=round.children[1].operation
-        s=send(s,{type='round_reserved',round=round.round,grants={'child'},receipt_ref='r'})
-        s=send(s,{type='child_outcome',round=round.round,operation=child,outcome='known',result_ref='result'})
-        s=send(s,{type='operation_resolved',operation=child})
+        local s,a=requesting()
+        local r,children,round;s,r,children,round=declare(s,a,1)
+        s=insert(s,r)
+        s,r=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='result'})
+        s=insert(s,r)
+        s=send(s,{type='operation_resolved',operation=children[1]})
         s,r=send(s,{type='operation_resolved',operation=a})
         local preparation=effect(r,'continue_round').operation
         assert.is_string(preparation)
@@ -392,7 +478,7 @@ describe('pure generation lifecycle',function()
         cancelled=send(cancelled,{type='operation_resolved',operation=preparation})
         assert.equals('terminal',G.snapshot(cancelled).phase)
         s=send(s,{type='grant_suspended',grant='grant'})
-        s,r=send(s,{type='round_prepared',round=round.round,input_ref='fixed-round'})
+        s,r=send(s,{type='round_prepared',round=round,input_ref='fixed-round'})
         assert.is_true(r.accepted);assert.is_nil(effect(r,'request'))
         s,r=send(s,{type='grant_resumed',grant='grant'})
         assert.equals('fixed-round',effect(r,'request').input_ref)
@@ -401,11 +487,11 @@ describe('pure generation lifecycle',function()
     it('bounds continuation admission while earlier preparation handles remain unresolved',function()
         local s,r=send(G.new(spec()),{type='start'});local prep=effect(r,'prepare').operation
         s,r=send(s,{type='prepared',preparation=prep,input_ref='input'});local a=effect(r,'request').operation
-        s,r=send(s,{type='round_declared',attempt=a,calls={{index=1,call_id='c',arguments_ref='a'}}})
-        local round=effect(r,'reserve_round');local child=round.children[1].operation
-        s=send(s,{type='round_reserved',round=round.round,grants={'child'},receipt_ref='r'})
-        s=send(s,{type='child_outcome',round=round.round,operation=child,outcome='known',result_ref='r'})
-        s=send(s,{type='operation_resolved',operation=child})
+        local children,round;s,r,children,round=declare(s,a,1)
+        s=insert(s,r)
+        s,r=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='r'})
+        s=insert(s,r)
+        s=send(s,{type='operation_resolved',operation=children[1]})
         s,r=send(s,{type='operation_resolved',operation=a});assert.is_nil(effect(r,'continue_round'))
         s,r=send(s,{type='operation_resolved',operation=prep});assert.is_table(effect(r,'continue_round'))
     end)
@@ -441,18 +527,19 @@ describe('pure generation lifecycle',function()
         local s,a=requesting()
         local identities={}
         for index=1,100 do
-            local r;s,r=send(s,{type='round_declared',attempt=a,calls={{index=1,call_id='c',arguments_ref='args'}}})
-            local round=effect(r,'reserve_round');local child=round.children[1].operation
+            local r,children,round;s,r,children,round=declare(s,a,1)
+            local child=children[1]
             assert.is_nil(identities[child]);identities[child]=true
-            s=send(s,{type='round_reserved',round=round.round,grants={'slot'..index},receipt_ref='r'})
-            s=send(s,{type='child_outcome',round=round.round,operation=child,outcome='known',result_ref='r'..index})
+            s=insert(s,r)
+            s,r=send(s,{type='child_outcome',round=round,operation=child,outcome='known',result_ref='r'..index})
+            s=insert(s,r)
             s=send(s,{type='operation_resolved',operation=child})
             s,r=send(s,{type='operation_resolved',operation=a})
             local prep=effect(r,'continue_round').operation
             assert.is_number(G.snapshot(s).retained_operations)
             assert.is_true(G.snapshot(s).retained_operations<=4)
             s=send(s,{type='operation_resolved',operation=prep})
-            s,r=send(s,{type='round_prepared',round=round.round,input_ref='input'..index})
+            s,r=send(s,{type='round_prepared',round=round,input_ref='input'..index})
             a=effect(r,'request').operation
             assert.equals(1,G.snapshot(s).retained_operations)
             local same,duplicate=send(s,{type='operation_resolved',operation=child})
@@ -493,13 +580,13 @@ describe('pure generation lifecycle',function()
     end)
 
     it('transfers child supervision only while stopping without inventing a known outcome',function()
-        local s,a=requesting();local r
-        s,r=send(s,{type='round_declared',attempt=a,calls={{index=1,call_id='a',arguments_ref='args'}}})
-        local round=effect(r,'reserve_round');local child=round.children[1].operation
-        s=send(s,{type='round_reserved',round=round.round,grants={'child'},receipt_ref='receipt'})
+        local s,a=requesting()
+        local r,children;s,r,children=declare(s,a,1)
+        local child=children[1]
+        s=insert(s,r)
         local unchanged,rejected=send(s,{type='operation_supervised',operation=child})
         assert.equals(s,unchanged);assert.is_false(rejected.accepted)
-        s=send(s,{type='operation_resolved',operation=a});s=send(s,{type='cancel'})
+        s=send(s,{type='operation_resolved',operation=a});s=send(s,{type='grant_revoked',grant='grant'})
         unchanged,rejected=send(s,{type='operation_resolved',operation=child,supervised=true})
         assert.equals(s,unchanged);assert.is_false(rejected.accepted)
         s,r=send(s,{type='operation_supervised',operation=child})
@@ -509,23 +596,409 @@ describe('pure generation lifecycle',function()
         assert.is_nil(effect(r,'continue_round'))
     end)
     it('keeps transferred unknown evidence frozen while sibling cleanup is pending',function()
-        local s,a=requesting();local r
-        s,r=send(s,{type='round_declared',attempt=a,calls={
-            {index=1,call_id='a',arguments_ref='a'},{index=2,call_id='b',arguments_ref='b'}}})
-        local round=effect(r,'reserve_round');local first=round.children[1].operation
-        s=send(s,{type='round_reserved',round=round.round,grants={'one','two'},receipt_ref='receipt'})
-        s=send(s,{type='child_outcome',round=round.round,operation=first,outcome='unknown',result_ref='uncertain'})
-        s=send(s,{type='cancel'})
+        local s,a=requesting()
+        local r,children,round;s,r,children,round=declare(s,a,2)
+        local first=children[1]
+        s=insert(s,r)
+        s,r=send(s,{type='child_outcome',round=round,operation=first,outcome='unknown',result_ref='uncertain'})
+        s,r=insert(s,r) -- result 1, written as unknown
+        s=insert(s,r) -- call 2
+        s=send(s,{type='grant_revoked',grant='grant'})
         local unchanged,rejected=send(s,{type='operation_supervised',operation=a})
         assert.equals(s,unchanged);assert.is_false(rejected.accepted)
         s=send(s,{type='operation_resolved',operation=a})
         s,r=send(s,{type='operation_supervised',operation=first});assert.is_true(r.accepted)
         assert.equals('stopping',G.snapshot(s).phase)
-        unchanged,rejected=send(s,{type='child_outcome',round=round.round,operation=first,outcome='known',result_ref='late'})
+        unchanged,rejected=send(s,{type='child_outcome',round=round,operation=first,outcome='known',result_ref='late'})
         assert.equals(s,unchanged);assert.is_false(rejected.accepted)
         assert.equals('uncertain',G.snapshot(s).supervised_children[first].result_ref)
-        s=send(s,{type='operation_supervised',operation=round.children[2].operation})
+        s=send(s,{type='operation_supervised',operation=children[2]})
         assert.equals('terminal',G.snapshot(s).phase)
     end)
 
+    -- #266 M3 (operator): Stop during a tool round writes the round out. Every
+    -- running tool is cancelled, none starts, and each pair lands in order — a
+    -- tool with an outcome by the time the walk reaches it is written as is, one
+    -- without is recorded as cancelled by the user. Then the generation stops.
+    local function blocks(s,r)
+        local out={}
+        while effect(r,'insert_tool') do
+            local e;s,r,e=insert(s,r)
+            out[#out+1]=e.kind..e.index..(e.result_ref and ':'..e.result_ref or '')..(e.cancelled and ':cancelled_'..e.cancelled or '')
+        end
+        return s,r,out
+    end
+    it('writes a stopped tool round out instead of dropping it',function()
+        local s,a=requesting()
+        local r,children,round;s,r,children,round=declare(s,a,2)
+        s,r=insert(s,r) -- call 1
+        s=send(s,{type='child_outcome',round=round,operation=children[2],outcome='known',result_ref='r2'})
+        s,r=send(s,{type='cancel'})
+        assert.equals('flushing',G.snapshot(s).phase)
+        assert.is_nil(effect(r,'revoke'),'the answer keeps its grant to write the round');assert.is_nil(effect(r,'release_turn'))
+        local cancelled={};for _,e in ipairs(effects(r,'cancel_operation')) do cancelled[e.operation]=true end
+        assert.is_true(cancelled[children[1]],'a running tool is cancelled')
+        assert.is_nil(effect(r,'insert_tool'),'the walk waits for that cancellation to settle')
+        -- As the real producer does for a running tool: hand it to its supervisor.
+        s,r=send(s,{type='operation_supervised',operation=children[1]})
+        local written;s,r,written=blocks(s,r)
+        assert.same({'result1:cancelled_running','call2','result2:r2'},written)
+        assert.equals('stopping',G.snapshot(s).phase);assert.equals('cancelled',G.snapshot(s).outcome)
+        assert.is_not_nil(effect(r,'revoke'));assert.is_not_nil(effect(r,'release_turn'))
+        s=send(s,{type='operation_resolved',operation=children[2]})
+        s=send(s,{type='operation_resolved',operation=a})
+        assert.equals('terminal',G.snapshot(s).phase)
+    end)
+    it('writes a tool that never started as cancelled before it ran, and starts none',function()
+        local s,a=requesting()
+        local r,children;s,r,children=declare(s,a,5)
+        s,r=insert(s,r)
+        s=send(s,{type='cancel'})
+        local walk
+        for i=1,4 do
+            local after;s,after=send(s,{type='operation_supervised',operation=children[i]})
+            assert.is_nil(effect(after,'start_child'),'a freed slot starts nothing while flushing')
+            walk=walk or (effect(after,'insert_tool') and after)
+        end
+        local written;s,r,written=blocks(s,walk)
+        assert.equals('result4:cancelled_running',written[#written-2])
+        assert.equals('call5',written[#written-1]);assert.equals('result5:cancelled_queued',written[#written])
+    end)
+    -- The runner refuses a start_child still queued when the Stop lands: that tool
+    -- never ran, and the transcript must say so (M3 review BR-15).
+    it('records a tool refused before it ran during the flush as cancelled before it ran',function()
+        local s,a=requesting()
+        local r,children,round;s,r,children,round=declare(s,a,1)
+        s,r=insert(s,r)
+        s=send(s,{type='cancel'})
+        s,r=send(s,{type='child_outcome',round=round,operation=children[1],outcome='cancelled_before_effect',result_ref='refused'})
+        local written;s,r,written=blocks(s,r)
+        assert.same({'result1:cancelled_queued'},written)
+    end)
+    it('writes an outcome that arrives during the flush as it is',function()
+        local s,a=requesting()
+        local r,children,round;s,r,children,round=declare(s,a,2)
+        s,r=insert(s,r)
+        s=send(s,{type='cancel'})
+        s=send(s,{type='child_outcome',round=round,operation=children[2],outcome='known',result_ref='late'})
+        s,r=send(s,{type='operation_supervised',operation=children[1]})
+        local written;s,r,written=blocks(s,r)
+        assert.same({'result1:cancelled_running','call2','result2:late'},written)
+        local _,refused=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='too-late'})
+        assert.is_false(refused.accepted,'a cancelled call\'s later outcome changes nothing')
+    end)
+    it('keeps its place behind another answer and writes the round when the turn arrives',function()
+        local s,a=requesting()
+        local r,children;s,r,children=declare(s,a,1)
+        s,r=insert(s,r)
+        s=send(s,{type='turn',status='waiting'})
+        s,r=send(s,{type='cancel'})
+        assert.equals('flushing',G.snapshot(s).phase)
+        assert.is_nil(effect(r,'release_turn'),'it keeps its place in line')
+        s,r=send(s,{type='operation_supervised',operation=children[1]})
+        assert.is_nil(effect(r,'insert_tool'),'nothing is written without the turn')
+        s,r=send(s,{type='turn',status='held'})
+        local written;s,r,written=blocks(s,r)
+        assert.same({'result1:cancelled_running'},written)
+        assert.equals('stopping',G.snapshot(s).phase)
+    end)
+    it('drops the rest on a second Stop, and stops on revocation or overflow',function()
+        for _,ev in ipairs({{type='cancel'},{type='grant_revoked',grant='grant'},{type='cancel',reason='overflow'}}) do
+            local s,a=requesting()
+            local r;s,r=declare(s,a,2)
+            s=insert(s,r);s=send(s,{type='cancel'})
+            assert.equals('flushing',G.snapshot(s).phase)
+            s,r=send(s,ev)
+            assert.equals('stopping',G.snapshot(s).phase,ev.type..(ev.reason or ''))
+            assert.is_not_nil(effect(r,'revoke'))
+        end
+    end)
+    it('stops at once when Stop lands outside a tool round or after the round is written',function()
+        local s=requesting();s=send(s,{type='cancel'})
+        assert.equals('stopping',G.snapshot(s).phase,'streaming text: unchanged')
+        local t,a=requesting()
+        local r,children,round;t,r,children,round=declare(t,a,1)
+        t,r=insert(t,r)
+        t,r=send(t,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='r1'})
+        t=insert(t,r)
+        t=send(t,{type='cancel'})
+        assert.equals('stopping',G.snapshot(t).phase,'every block written: nothing to flush')
+        local o,b=requesting();local r2;o,r2=declare(o,b,1);o=insert(o,r2)
+        o=send(o,{type='cancel',reason='overflow'})
+        assert.equals('stopping',G.snapshot(o).phase,'an overflow is not a Stop')
+    end)
+    it('accepts supervision while flushing and writes that tool as cancelled while running',function()
+        local s,a=requesting()
+        local r,children;s,r,children=declare(s,a,1)
+        local call1=effect(r,'insert_tool')
+        s=send(s,{type='cancel'})
+        s,r=send(s,{type='operation_supervised',operation=children[1]})
+        assert.is_true(r.accepted,'a cancelled tool may be handed to its supervisor while flushing')
+        s,r=send(s,{type='inserted',insert=call1.id,status='applied'})
+        local written;s,r,written=blocks(s,r)
+        assert.same({'result1:cancelled_running'},written)
+    end)
+
+    -- #266 M1: the write turn and the draining phase.
+    it('holds output while another generation holds the write turn',function()
+        local s,a=requesting()
+        local r
+        s,r=send(s,{type='turn',status='waiting'})
+        s,r=output(s,a,1,4)
+        assert.is_nil(effect(r,'write'),'must not write without the turn')
+        s,r=send(s,{type='turn',status='held'})
+        assert.is_not_nil(effect(r,'write'),'writes as soon as the turn arrives')
+    end)
+
+    it('requests the turn on start and releases it when it pauses',function()
+        local s,r=send(G.new(spec()),{type='start'})
+        assert.is_not_nil(effect(r,'request_turn'),'start must request the turn')
+        s,r=send(s,{type='pause'})
+        assert.is_not_nil(effect(r,'release_turn'),'a pause must not hold the turn')
+    end)
+
+    -- The runner executes one effect per step and the machine may already report
+    -- `terminal`; a release queued ahead of the revoke left the region held while
+    -- the phase said it was free, so an immediate regenerate was refused 'overlap'
+    -- (batch_lifecycle_spec's single retry cases).
+    it('revokes its grant before yielding the turn when it stops',function()
+        local s,a=requesting()
+        s=send(s,{type='operation_resolved',operation=a})
+        local _,r=send(s,{type='cancel'})
+        local order={}
+        for i,e in ipairs(r.effects) do order[e.type]=order[e.type] or i end
+        assert.is_not_nil(order.revoke);assert.is_not_nil(order.release_turn)
+        assert.is_true(order.revoke<order.release_turn,'revoke must precede release_turn')
+    end)
+
+    -- #266 (operator decision, 2026-09-17): a transient suspension keeps the turn.
+    -- Suspension is routine — any edit the structure cannot classify at once —
+    -- and releasing would queue the holder behind the next generation for that
+    -- generation's whole lifetime, splitting one answer's history around another.
+    it('holds the turn through a grant suspension and resumes without re-requesting',function()
+        local s,a=requesting()
+        local r
+        s,r=send(s,{type='grant_suspended',grant='grant'})
+        assert.is_nil(effect(r,'release_turn'),'a suspension must not yield the turn')
+        s,r=output(s,a,1,4)
+        assert.is_nil(effect(r,'write'),'nothing is written while suspended')
+        s,r=send(s,{type='grant_resumed',grant='grant'})
+        assert.is_nil(effect(r,'request_turn'),'it never gave the turn up')
+        assert.is_not_nil(effect(r,'write'),'writing resumes on the proof')
+    end)
+
+    it('re-requests the turn when a paused generation resumes',function()
+        local s=send(G.new(spec()),{type='start'})
+        local r
+        s,r=send(s,{type='pause'})
+        s,r=send(s,{type='resume_validated',policy_ref='operator:test'})
+        assert.is_not_nil(effect(r,'request_turn'),'resume must re-request the turn')
+    end)
+
+    -- The state the Spec names: complete but not yet written. Without it, the
+    -- bytes==0 gates cannot tell a held generation from a streaming one.
+    it('enters draining when the provider completes with output still staged',function()
+        local s,a=requesting()
+        s=send(s,{type='turn',status='waiting'})
+        s=output(s,a,1,4)
+        s=send(s,{type='provider_complete',attempt=a})
+        assert.equals('draining',G.snapshot(s).phase)
+        assert.is_true(G.snapshot(s).staged_bytes>0)
+    end)
+
+    it('leaves draining for finalizing once the staged output lands',function()
+        local s,a=requesting()
+        s=send(s,{type='turn',status='waiting'})
+        s=output(s,a,1,4)
+        s=send(s,{type='provider_complete',attempt=a})
+        assert.equals('draining',G.snapshot(s).phase)
+        local r
+        s,r=send(s,{type='turn',status='held'})
+        local w=effect(r,'write')
+        s,r=send(s,{type='write_result',write=w.id,attempted_bytes=4,committed_bytes=4,status='applied'})
+        assert.equals('finalizing',G.snapshot(s).phase)
+    end)
+
+    it('goes straight to finalizing when nothing is staged',function()
+        local s,a=requesting()
+        s=send(s,{type='provider_complete',attempt=a})
+        assert.equals('finalizing',G.snapshot(s).phase)
+    end)
+
+    -- Cancellation, revocation and staleness must be expressible from draining —
+    -- that is why it is a phase and not a boolean.
+    it('expresses cancellation and revocation from draining',function()
+        for _,ev in ipairs({{type='cancel'},{type='grant_revoked',grant='grant'}}) do
+            local s,a=requesting()
+            s=send(s,{type='turn',status='waiting'})
+            s=output(s,a,1,4)
+            s=send(s,{type='provider_complete',attempt=a})
+            assert.equals('draining',G.snapshot(s).phase)
+            s=send(s,ev)
+            assert.equals('stopping',G.snapshot(s).phase,ev.type..' must be expressible from draining')
+        end
+    end)
+
+    -- #266 Task 1.7: a held generation receives one output event per SSE delta.
+    -- Consecutive output of one operation extends the last queued item, so what
+    -- is held is bounded by bytes, not chunk count — and the queue each transition
+    -- copies stays one item long.
+    it('extends the last queued item of the same operation instead of queueing another',function()
+        local s,a=requesting()
+        local r
+        s=send(s,{type='turn',status='waiting'})
+        s,r=output(s,a,1,4)
+        for seq=2,300 do
+            s,r=send(s,{type='output',operation=a,seq=seq,blob_ref='blob1',bytes=4,extend=true})
+            assert.is_true(r.accepted,'extension '..seq)
+        end
+        assert.equals(1,G.snapshot(s).staged_items);assert.equals(1200,G.snapshot(s).staged_bytes)
+        s,r=send(s,{type='turn',status='held'})
+        local w=effect(r,'write');assert.equals('blob1',w.blob_ref);assert.equals(1200,w.bytes)
+    end)
+    it('refuses to extend an item that is being written or belongs to something else',function()
+        local s,a=requesting()
+        local r
+        s,r=output(s,a,1,4)
+        assert.is_not_nil(effect(r,'write'),'the only item is now in flight')
+        local _,refused=send(s,{type='output',operation=a,seq=2,blob_ref='blob1',bytes=4,extend=true})
+        assert.is_false(refused.accepted,'an in-flight item cannot grow')
+        s=send(s,{type='turn',status='waiting'})
+        s=output(s,a,2,4)
+        _,refused=send(s,{type='output',operation=a,seq=3,blob_ref='other',bytes=4,extend=true})
+        assert.is_false(refused.accepted,'only the queued blob may grow')
+    end)
+    it('bounds a held answer by its bytes',function()
+        -- queued_items=1: only extension can admit the second delta at all, so
+        -- the overflow below can only come from the byte budget.
+        local s,a=requesting({staged_bytes=16,queued_items=1})
+        s=send(s,{type='turn',status='waiting'})
+        s=output(s,a,1,8)
+        s=send(s,{type='output',operation=a,seq=2,blob_ref='blob1',bytes=8,extend=true})
+        assert.equals('requesting',G.snapshot(s).phase,'within budget')
+        s=send(s,{type='output',operation=a,seq=3,blob_ref='blob1',bytes=1,extend=true})
+        assert.equals('overflow',G.snapshot(s).outcome,'one byte past the budget')
+    end)
+
+    -- Both overflow sites — the runner's byte check before admission and the
+    -- machine's own — must end the same way, so a caller can tell an overflow
+    -- from a user's Stop.
+    it('records a cancellation for overflow as an overflow',function()
+        local s=requesting()
+        s=send(s,{type='cancel',reason='overflow'})
+        assert.equals('overflow',G.snapshot(s).outcome)
+        local t=requesting()
+        t=send(t,{type='cancel'})
+        assert.equals('cancelled',G.snapshot(t).outcome)
+    end)
+
+    -- #266: the preparation gap is deferred to the generation's first write, so
+    -- the provider request never waits on the turn (the Spec's option (b)) and a
+    -- response cancelled before its first byte leaves the transcript untouched.
+    local function deferred(limits)
+        local s,r=send(G.new(spec(limits)),{type='start'})
+        local prep=effect(r,'prepare').operation
+        s,r=send(s,{type='prepared',preparation=prep,input_ref='input',gap=true})
+        return s,effect(r,'request'),prep,r
+    end
+    local function all(results,kind)
+        for _,r in ipairs(results) do if effect(r,kind) then return true end end
+        return false
+    end
+
+    it('starts the request as soon as input is prepared, before the gap is written',function()
+        local s,request,_,r=deferred()
+        assert.is_not_nil(request,'the request must not wait for the gap')
+        assert.equals('requesting',G.snapshot(s).phase)
+        assert.equals('deferred',G.snapshot(s).gap)
+        assert.is_nil(effect(r,'write_gap'),'nothing to write yet')
+    end)
+
+    it('writes the gap immediately before the first output, and the output only after it lands',function()
+        local s,request=deferred()
+        local r
+        s,r=output(s,request.operation,1,4)
+        assert.is_not_nil(effect(r,'write_gap'),'first output must bring the gap')
+        assert.is_nil(effect(r,'write'),'output must not outrun its gap')
+        assert.equals('writing',G.snapshot(s).gap)
+        s,r=output(s,request.operation,2,4)
+        assert.is_nil(effect(r,'write_gap'),'the gap is written exactly once')
+        assert.is_nil(effect(r,'write'),'still not before the gap lands')
+        s,r=send(s,{type='gap_result',status='applied'})
+        assert.equals('none',G.snapshot(s).gap)
+        assert.is_not_nil(effect(r,'write'),'output follows the gap')
+    end)
+
+    it('holds the gap while another generation holds the turn',function()
+        local s,request=deferred()
+        local r
+        s=send(s,{type='turn',status='waiting'})
+        s,r=output(s,request.operation,1,4)
+        assert.is_nil(effect(r,'write_gap'),'no gap without the turn')
+        s,r=send(s,{type='turn',status='held'})
+        assert.is_not_nil(effect(r,'write_gap'),'the gap lands once the turn arrives')
+        assert.is_nil(effect(r,'write'))
+    end)
+
+    it('never writes the gap when cancelled before any output',function()
+        local s,request,prep=deferred()
+        local results={}
+        local r
+        s,r=send(s,{type='cancel'});results[#results+1]=r
+        s,r=send(s,{type='operation_resolved',operation=request.operation});results[#results+1]=r
+        s,r=send(s,{type='operation_resolved',operation=prep});results[#results+1]=r
+        assert.equals('terminal',G.snapshot(s).phase)
+        assert.is_false(all(results,'write_gap'),'a response with nothing to say must not touch the transcript')
+    end)
+
+    -- M1 review I3: a provider that fails before its first byte has nothing to
+    -- write, so the transcript — including a regenerated answer — stays as it was.
+    it('never writes the gap when the provider fails before any output',function()
+        local s,request=deferred()
+        local r
+        s,r=send(s,{type='provider_failed',attempt=request.operation})
+        assert.is_nil(effect(r,'write_gap'),'a failure with nothing staged must not write the gap')
+        assert.equals('stopping',G.snapshot(s).phase)
+        assert.equals('provider_failed',G.snapshot(s).outcome)
+    end)
+
+    it('writes the gap before a tool round writes its first block, but starts its tools at once',function()
+        local s,request=deferred()
+        local r
+        s,r=send(s,{type='round_declared',attempt=request.operation,
+            calls={{index=1,call_id='c1',arguments_ref='args1'}}})
+        assert.is_not_nil(effect(r,'start_child'),'tools do not wait for the gap')
+        assert.is_not_nil(effect(r,'write_gap'))
+        assert.is_nil(effect(r,'insert_tool'),'call blocks must not outrun the gap')
+        s,r=send(s,{type='gap_result',status='applied'})
+        assert.is_not_nil(effect(r,'insert_tool'))
+    end)
+
+    it('writes the gap before finalizing an answer that produced no output',function()
+        local s,request=deferred()
+        local r
+        s,r=send(s,{type='provider_complete',attempt=request.operation})
+        assert.equals('finalizing',G.snapshot(s).phase)
+        assert.is_not_nil(effect(r,'write_gap'))
+        assert.is_nil(effect(r,'finalize'),'finalize must not outrun the gap')
+        s,r=send(s,{type='gap_result',status='applied'})
+        assert.is_not_nil(effect(r,'finalize'))
+    end)
+
+    it('stops when the gap cannot be written',function()
+        local s,request=deferred()
+        s=output(s,request.operation,1,4)
+        s=send(s,{type='gap_result',status='failed'})
+        assert.equals('stopping',G.snapshot(s).phase)
+        assert.equals('prepare_failed',G.snapshot(s).outcome)
+    end)
+
+    it('rejects a gap result that was never asked for',function()
+        local s=deferred()
+        local _,r=send(s,{type='gap_result',status='applied'})
+        assert.is_false(r.accepted)
+        local plain=requesting()
+        _,r=send(plain,{type='gap_result',status='applied'})
+        assert.is_false(r.accepted)
+    end)
 end)

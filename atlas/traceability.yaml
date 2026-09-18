@@ -294,6 +294,7 @@ atlas:
   chat/ownership:
     code:
       - lua/parley/document/state.lua
+      - lua/parley/document/init.lua
       - lua/parley/document/editor.lua
       - lua/parley/document/user_edits.lua
       - lua/parley/document/replacement.lua
@@ -304,6 +305,8 @@ atlas:
       - lua/parley/response_provider.lua
       - lua/parley/response_tools.lua
     tests:
+      - tests/integration/generation_turn_spec.lua
+      - tests/integration/document_turn_wake_spec.lua
       - tests/unit/document_state_spec.lua
       - tests/unit/document_write_plan_spec.lua
       - tests/unit/document_coordinator_spec.lua
@@ -322,7 +325,6 @@ atlas:
       - tests/integration/topic_presentation_spec.lua
       - tests/integration/user_edit_callers_spec.lua
       - tests/unit/document_append_spec.lua
-      - tests/unit/document_capacity_spec.lua
       - tests/unit/document_dependency_affinity_spec.lua
       - tests/unit/document_replacement_spec.lua
       - tests/unit/document_successor_guard_spec.lua
@@ -369,8 +371,10 @@ atlas:
       - lua/parley/document/init.lua
       - lua/parley/document/editor.lua
       - lua/parley/document/state.lua
+      - lua/parley/document/write_turn.lua
       - lua/parley/document/projection.lua
     tests:
+      - tests/unit/document_write_turn_spec.lua
       - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/unit/document_sequence_spec.lua
       - tests/unit/document_lexical_spec.lua
@@ -858,6 +862,7 @@ atlas:
       - lua/parley/tools/init.lua
       - lua/parley/tools/dispatcher.lua
       - lua/parley/tools/serialize.lua
+      - lua/parley/tools/sequence.lua
       - lua/parley/fence.lua
       - lua/parley/tools/types.lua
       - lua/parley/tools/builtin/argv.lua
@@ -894,6 +899,7 @@ atlas:
       - tests/unit/tools_registry_spec.lua
       - tests/unit/tools_dispatcher_spec.lua
       - tests/unit/tools_serialize_spec.lua
+      - tests/unit/tools_sequence_spec.lua
       - tests/unit/tools_types_spec.lua
       - tests/unit/tools_builtin_read_file_spec.lua
       - tests/unit/tools_builtin_registered_spec.lua

@@ -5,40 +5,32 @@ local function setup()
     local d=S.new({epoch=88});local gen=S.transition(d,{kind='register_generation'}).generation
     local p={entity='q',first=10,last=30,revision=1,marker_revision=1,confirmed=true}
     local g=S.transition(d,{kind='acquire',generation=gen,regions={p}}).grants[1]
-    local child=S.transition(d,{kind='acquire',generation=gen,parent=g,
-        regions={{entity='q',first=20,last=30,revision=1,marker_revision=1,confirmed=true}}}).grants[1]
-    return d,gen,g,child
+    return d,gen,g
 end
 local function reclaim(d,gen,g)
     local current=S.snapshot(d).grants[g];current.confirmed=true
     return S.transition(d,{kind='reclaim_tail',epoch=88,generation=gen,grant=g,entity='q',
         revision=current.revision,current=current})
 end
-describe('parent tail reclaim',function()
-    it('requires child retirement and restores only the fresh zero-width tail',function()
-        local d,gen,g,c=setup();assert.is_false(reclaim(d,gen,g).ok)
-        S.transition(d,{kind='revoke',grant=c})
+-- A continuation narrows its answer's grant to the tail before writing there.
+-- Since #266 M4 no grant is carved out of another, so nothing but the grant
+-- itself can occupy its tail.
+describe('tail reclaim',function()
+    it('restores only the fresh zero-width tail',function()
+        local d,gen,g=setup()
         assert.is_true(reclaim(d,gen,g).ok)
         local p=S.snapshot(d).grants[g];assert.equals(30,p.first);assert.equals(30,p.last)
-        assert.same({{first=30,last=30}},p.slots)
     end)
-    it('never follows a human insertion at a delegated tail',function()
+    it('never follows a human insertion at its tail: the edit revokes the grant',function()
         local d,gen,g=setup()
         S.transition(d,{kind='observed_edit',first=30,last=30,new_bytes=5})
-        assert.is_false(reclaim(d,gen,g).ok)
+        assert.equals('revoked',S.snapshot(d).grants[g].status)
+        assert.equals('ownership',reclaim(d,gen,g).reason)
     end)
-    it('accepts an exact owned child extension before retiring its slot',function()
-        local d,gen,g,c=setup()
-        S.transition(d,{kind='observed_edit',first=30,last=30,new_bytes=5,owner_grant=c})
-        S.transition(d,{kind='revoke',grant=c})
+    it('follows its own insertion at the tail',function()
+        local d,gen,g=setup()
+        S.transition(d,{kind='observed_edit',first=30,last=30,new_bytes=5,owner_grant=g})
         assert.is_true(reclaim(d,gen,g).ok);assert.equals(35,S.snapshot(d).grants[g].last)
-    end)
-    it('rejects another generation occupying the retired endpoint',function()
-        local d,gen,g,c=setup();S.transition(d,{kind='revoke',grant=c})
-        local other=S.transition(d,{kind='register_generation'}).generation
-        assert.is_true(S.transition(d,{kind='acquire',generation=other,
-            regions={{entity='q',first=30,last=30,revision=1,marker_revision=1,confirmed=true}}}).ok)
-        assert.is_false(reclaim(d,gen,g).ok)
     end)
     it('validates the live document proof and fences reload',function()
         local fake=Fake.new({'💬: q','🤖: a','body'});local doc=D.attach(199901,{driver=fake.driver,schedule=false})

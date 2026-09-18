@@ -2,6 +2,14 @@
 -- harness against each transcript fixture. Run via:
 --   nvim --headless --noplugin -u tests/minimal_init.vim \
 --     -c 'luafile scripts/refresh_goldens.lua' -c 'qa!'
+--
+-- Writes the NORMALIZED payload, not the raw one. Tool descriptions embed host
+-- probe results -- "BSD ls (macOS)", "ripgrep 15.1.0" -- so a raw fixture
+-- records whichever machine last regenerated it and flips back on the next
+-- machine, churning the diff while the verifier (which normalizes both sides)
+-- never notices either way. normalize_payload is idempotent, so writing it here
+-- makes regeneration machine-independent and the committed fixture portable --
+-- which is what the goldens claim to be.
 
 local harness = require("scripts.parley_harness")
 local golden = require("scripts.golden_fixture")
@@ -22,7 +30,7 @@ for _, name in ipairs(FIXTURES) do
     )
     local path = "tests/fixtures/golden_payloads/" .. name .. ".json"
     local f = assert(io.open(path, "w"))
-    f:write(vim.json.encode(payload))
+    f:write(vim.json.encode(golden.normalize_payload(payload)))
     f:close()
     print("wrote " .. path)
 end
@@ -44,7 +52,7 @@ for _, name in ipairs(golden.OPENAI_FIXTURES) do
     )
     local path = "tests/fixtures/golden_payloads/openai-" .. name .. ".json"
     local f = assert(io.open(path, "w"))
-    f:write(vim.json.encode(payload))
+    f:write(vim.json.encode(golden.normalize_payload(payload)))
     f:close()
     print("wrote " .. path)
 end

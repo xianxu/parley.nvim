@@ -6,6 +6,7 @@ local Preparation=require('parley.response_preparation')
 local Provider=require('parley.response_provider')
 local Tools=require('parley.response_tools')
 local Pending=require('parley.chat_pending')
+local Presentation=require('parley.chat_presentation')
 local D=require('parley.document')
 local M={}
 local states=setmetatable({},{__mode='k'})
@@ -49,6 +50,13 @@ function M.start(doc,spec,opts)
         opts=nil;doc=nil;plan=nil;frozen=nil;tools=nil
         safe(callback,result)
     end
+    -- #266: a wait note is state, not an event. The status line it lives on is
+    -- cleared by every output write and recreated after a pause, so the current
+    -- note is shown again on both — or an answer that got the turn runs its
+    -- tools with nothing on screen while the others say they wait on it.
+    local function show_note()
+        if s.pending and s.note then s.pending:progress({message=s.note})end
+    end
     local function presentation(ctx)
         if s.pending or opts.pending==false or not opts.buf then return end
         local cancelled=ctx.cancelled
@@ -59,7 +67,7 @@ function M.start(doc,spec,opts)
                 local grant=D.snapshot(s.doc).grants[ctx.grant]
                 return grant and grant.status~='revoked' and D.byte_position(s.doc,grant.last) or nil
             end})
-        if success then s.pending=pending end
+        if success then s.pending=pending;show_note()end
     end
     local function capture_profile(input,ctx)
         local profile=input.response_profile
@@ -83,7 +91,7 @@ function M.start(doc,spec,opts)
             root_policy=opts.root_policy,allowed_tools=profile.allowed_tools or opts.allowed_tools or {},
             buf=opts.buf,state_dir=opts.state_dir,chat_roots=opts.chat_roots,help_root=opts.help_root,page_limit=opts.page_limit,
             max_iterations=limit('max_iterations'),
-            max_result_bytes=limit('max_result_bytes'),build_input=opts.build_input,schedule=frozen.schedule})
+            max_result_bytes=limit('max_result_bytes'),build_input=opts.build_input})
         if not ok then return false,tostring(adapter)end
         tools=adapter;s.tools=adapter
         if profile.agent and profile.agent~=opts.agent then
@@ -98,7 +106,9 @@ function M.start(doc,spec,opts)
             if opts.on_result then opts.on_result(ctx,qt,calls,failure)end
         end,
         on_activity=function()if s.pending then s.pending:activity()end end,
-        on_progress=function(_,event)if s.pending then s.pending:progress(event)end end})
+        -- While held behind the turn, the waiting note owns the one status slot:
+        -- provider detail would bury it and it would not be re-asserted (#266).
+        on_progress=function(_,event)if s.pending and not s.note then s.pending:progress(event)end end})
     local function prepare(ctx,cb)
         presentation(ctx)
         local r={kind='prepare',ctx=ctx,cb=cb,io_done=false,local_done=false}
@@ -127,16 +137,29 @@ function M.start(doc,spec,opts)
             if not profiled then failed(profile_error);return false end
             r.input=vim.deepcopy(input)
             local prepared_ctx=vim.tbl_extend('force',{},ctx,{input=r.input})
-            local op,reason=Preparation.start(doc,prepared_ctx,{
-                prepared=function(value)
-                    if r.cancelled or ctx.cancelled()then return false end
-                    return cb.prepared(value)
-                end,
-                failed=failed,
-                resolved=function()r.local_done=true;resolve()end,
-            },replacement,{schedule=frozen.schedule})
-            if not op then failed(reason);return false end
-            r.op=op
+            -- #266: the input goes to the runner now, so the provider request
+            -- starts without waiting on the write turn. The gap is handed over as
+            -- a writer the machine calls immediately before this generation's
+            -- first write — never, if it is cancelled first. This operation stays
+            -- unresolved until Preparation retires, so cancellation reaches the
+            -- writer through the ordinary cancel_operation path.
+            -- The writer settles `done` on every path (M1 review I2): an unsettled
+            -- gap stays 'writing' and nothing may ever write again. `done` is
+            -- idempotent, so the settle in `resolved` is a no-op after 'applied'
+            -- and covers a Preparation that retires 'cancelled' without reporting.
+            -- `failed` runs first so its reason is recorded before the stop.
+            local function write_gap(done)
+                if r.retired or r.cancelled or ctx.cancelled()then return done('cancelled')end
+                local op,reason=Preparation.start(doc,prepared_ctx,{
+                    prepared=function()return done('applied')end,
+                    failed=function(why)failed(why);done('failed')end,
+                    resolved=function()done('cancelled');r.local_done=true;resolve()end,
+                },replacement,{schedule=frozen.schedule})
+                if not op then failed(reason);done('failed');return end
+                r.op=op
+            end
+            local ok,accepted=pcall(cb.prepared,r.input,write_gap)
+            if not ok or accepted==false then failed(ok and 'prepared callback refused' or tostring(accepted));return false end
             return true
         end
         function callbacks.failed(reason)failed(reason)end
@@ -168,22 +191,38 @@ function M.start(doc,spec,opts)
     end
     local hooks={prepare=prepare,request=wrap('provider',function(ctx,cb)
             presentation(ctx)
-            safe(opts.requesting,ctx)
             return provider.request(ctx,cb)
         end),
-        reserve_round=tool_adapter('reserve_round'),cancel_reservation=tool_adapter('cancel_reservation'),
+        insert_tool=tool_adapter('insert_tool'),
         start_child=wrap('tool',tool_adapter('start_child')),continue_round=wrap('continuation',tool_adapter('continue_round')),
         finalize=function(ctx,done)
             if opts.finalize then return opts.finalize(ctx,done)end
             done('applied')
         end,
         written=function(ctx,receipt)
-            if s.pending and receipt.kind=='output' and receipt.tip then s.pending:written(receipt.tip.row,receipt.tip.col)end
+            if s.pending and receipt.kind=='output' and receipt.tip then
+                s.pending:written(receipt.tip.row,receipt.tip.col);show_note()
+            end
             safe(opts.written,ctx,receipt)
         end,
         changed=function(value)
             if not s.active then return end
             if value.phase=='paused' and s.pending then s.pending:cancel();s.pending=nil end
+            -- #266: a generation held behind the write turn names what it waits
+            -- for; one running tools says how far they are, since their blocks
+            -- land one at a time. Presentation only: an extmark, never transcript.
+            local note
+            if value.phase=='flushing' then note=Presentation.flushing_message(value.blocked and value.blocked.line)
+            elseif value.blocked then note=Presentation.waiting_message(value.blocked.line,value.blocked.phase)
+            elseif value.tools and value.phase=='executing_tools' then
+                note=Presentation.tools_message(value.tools)
+            end
+            -- Recorded even with no status line up (after a pause), so the next
+            -- one shows the current note rather than a stale comparison.
+            if note~=s.note then
+                s.note=note
+                if s.pending then s.pending:progress({message=note or 'Working...'})end
+            end
             safe(opts.changed,value)
         end,
         terminal=function(result)finish(result,false)end,rejected=function(reason)finish(reason,true)end}
@@ -222,7 +261,6 @@ function M.step(session)
     local s=state(session)
     if s.active then
         for r in pairs(s.preparations)do if r.op and not r.local_done then Preparation.step(r.op)end end
-        if s.tools then s.tools.step()end
     end
     return Submission.step(s.submission)
 end

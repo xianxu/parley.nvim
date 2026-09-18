@@ -1,7 +1,8 @@
 -- Tool rounds compose typed document grants and frozen provider messages. They
 -- never rebuild a transcript from the live buffer or recursively submit a chat.
+-- The generation machine decides which tool block is written when (#266 M2);
+-- this adapter runs the tools and renders the blocks it is asked for.
 local D=require('parley.document')
-local Deferred=require('parley.deferred_work')
 local Serialize=require('parley.tools.serialize')
 local M={}
 local function copy(value)return type(value)=='table' and vim.deepcopy(value) or value end
@@ -11,64 +12,45 @@ local function call(value,id)
     assert(type(value.input)=='table','invalid tool input')
     return {id=id,name=value.name,input=copy(value.input)}
 end
-local function parent(doc,ctx)
+local function answer_grant(doc,ctx)
     local snapshot=D.snapshot(doc)
     local grant=snapshot.grants[ctx.grant]
     if snapshot.epoch~=ctx.epoch or not snapshot.attached or not grant or grant.status=='revoked'
         or grant.entity~=ctx.entity or grant.generation~=ctx.generation then return nil end
     return grant
 end
-local function release_ticket(s,r)
-    if r.ticket then
-        D.release_capacity(s.doc,{epoch=r.ctx.epoch,generation=r.ctx.generation,
-            operation=r.ticket_operation,ticket=r.ticket});r.ticket=nil
-    end
+-- A failed call is written as an error result the model reads, so it can try
+-- another way (#266 M2, operator decision): the round never pauses on one.
+-- Each names what is and is not known about the effect.
+local failures={
+    unknown='The tool call failed: it ended without reporting a result, so it may have partly taken effect.',
+    rejected='The tool call was rejected before it ran.',
+    cancelled_before_effect='The tool call was cancelled before it ran.',
+    -- #266 M3: written by a Stop that lands during a tool round.
+    cancelled_running='Cancelled by the user while running; it may have partly taken effect.',
+    cancelled_queued='Cancelled by the user before it ran.',
+}
+local function failure_text(outcome,value)
+    local detail=type(value)=='table' and (value.content or value.error) or nil
+    detail=detail~=nil and tostring(detail) or ''
+    return failures[outcome]..(detail~='' and '\n\n'..detail or '')
 end
-local function retire_reservation(s,r,grants,receipt,cancelled)
-    if r.retired then return end;r.retired=true
-    if r.work then r.work:close();r.work=nil end
-    if r.off then r.off();r.off=nil end
-    release_ticket(s,r)
-    if s.reservation==r then s.reservation=nil end
-    local done=r.done;r.done=nil;r.payload=nil;r.slots=nil;r.ctx=nil
-    if not cancelled then done(grants,receipt)end
-end
-local function reserve_step(s,r)
-    if r.retired or r.appending then return false end
-    local grant=parent(s.doc,r.ctx)
-    if not grant or r.ctx.cancelled()then retire_reservation(s,r);return false end
-    D.repair_step(s.doc)
-    grant=parent(s.doc,r.ctx)
-    if not grant then retire_reservation(s,r);return false end
-    if grant.status~='valid'then return true end
-    -- The complete payload was appended through this parent's exact receipts.
-    -- Parent revocation catches internal edits; unrelated movement rebases its
-    -- current endpoint. No saved absolute slot coordinate crosses a yield.
-    local base=grant.last-r.bytes
-    local regions,markers={},{}
-    for i,slot in ipairs(r.slots)do
-        local first,last=base+slot.first,base+slot.last
-        local p=D.byte_position(s.doc,first)
-        if not p or p.col~=0 then retire_reservation(s,r);return false end
-        local row=D.query(s.doc,p.row,p.row+1)[1]
-        if not row or not row.metadata or not row.metadata.confirmed then return true end
-        if not row.metadata.token or row.metadata.token.kind~='text' then retire_reservation(s,r);return false end
-        regions[i]={entity=r.ctx.entity,first=first,last=last,revision=1,marker_revision=1,confirmed=true}
-        markers[i]=row.handle
+-- The result call `c`'s block and its continuation both carry. The only result
+-- that arrives without identity is a failure the runner reports for a tool that
+-- never got a producer (its adapter threw) — an unknown outcome. A tool refused
+-- before it ran during a Stop is written from the machine's `cancelled` record
+-- instead (`ctx.failure`). One function for both readers, so the transcript and
+-- the wire cannot differ.
+local function settled(c,r)
+    if type(r)=='table' and r.id~=nil then
+        assert(r.id==c.id and r.name==c.name and type(r.content)=='string','tool result identity')
+        return r
     end
-    local acquired=D.transition(s.doc,{kind='acquire',generation=r.ctx.generation,parent=r.ctx.grant,
-        capacity=r.ticket,operation=r.ticket_operation,regions=regions})
-    if not acquired.ok then
-        if acquired.reason=='unconfirmed identity' or acquired.reason=='parent'then return true end
-        retire_reservation(s,r);return false
-    end
-    r.ticket=nil
-    retire_reservation(s,r,acquired.grants,{markers=markers,round=r.round})
-    return false
+    return {id=c.id,name=c.name,content=failure_text('unknown',r),is_error=true}
 end
 local function maybe_resolve(s,r)
-    if r.retired or not r.producer_done or r.writing then return end
-    if not r.supervised and (not r.outcome or r.outcome=='unknown')then return end
+    if r.retired or not r.producer_done then return end
+    if not r.supervised and not r.outcome then return end
     r.retired=true;s.active[r]=nil
     local resolved=r.cancel_resolved or r.cb.resolved
     r.cb=nil;r.ctx=nil;r.call=nil;r.producer_handle=nil;r.cancel_resolved=nil
@@ -83,21 +65,15 @@ local function tool_outcome(s,r,outcome,value)
         result=require('parley.tools.result_evidence').publish(value,s.result_limit)
         result.id=r.call.id;result.name=r.call.name;result.is_error=value.is_error==true
     else result=require('parley.tools.result_evidence').publish({id=r.call.id,name=r.call.name,
-        content=type(value)=='table' and tostring(value.content or '') or '',is_error=true},s.result_limit)end
+        content=failure_text(outcome,value),is_error=true},s.result_limit)end
+    -- The machine writes the result when its turn in the round comes. Observers
+    -- may report cleanup reentrantly; `maybe_resolve` waits for the outcome to be
+    -- recorded here first. A confirmation the machine refuses — its unknown
+    -- result is already written — leaves the recorded outcome standing.
+    local accepted=r.cb.outcome(outcome,result)
+    if r.outcome and not accepted then return false end
     r.outcome=outcome
-    -- Reserve publication before invoking outcome observers: they may report
-    -- physical cleanup or cancel reentrantly. Neither can retire this record
-    -- while a known result still needs its publication decision.
-    r.writing=outcome=='known' and not r.cancelled
-    r.cb.outcome(outcome,result)
-    if r.cancelled or outcome~='known' then
-        r.writing=false;maybe_resolve(s,r);return true
-    end
-    local text=Serialize.render_result(result)
-    local admitted=r.ctx.replace(text,function()
-        r.writing=false;maybe_resolve(s,r)
-    end)
-    if not admitted then r.writing=false;maybe_resolve(s,r)end
+    maybe_resolve(s,r)
     return true
 end
 
@@ -110,6 +86,25 @@ function M.new(doc,opts)
     assert(type(result_limit)=='number' and result_limit>=1 and result_limit<=524288 and result_limit%1==0,'invalid tool result limit')
     local s={doc=doc,rounds={},iterations=0,active={},records=setmetatable({},{__mode='k'}),
         result_limit=result_limit,producer=opts.producer}
+    -- The round a declared call belongs to, frozen from the provider's response
+    -- the first time the machine names it — by starting a tool or asking for a
+    -- block, whichever comes first. Nothing is written by freezing.
+    local function round_of(ctx)
+        local round=s.rounds[ctx.round]
+        if round then return round end
+        local pending=s.pending
+        assert(not s.closed and pending,'missing frozen tool response')
+        assert(pending.epoch==ctx.epoch and pending.generation==ctx.generation,'tool response identity')
+        round={calls=pending.calls,text=pending.text,attempt=pending.attempt}
+        s.rounds[ctx.round]=round;s.pending=nil;s.iterations=s.iterations+1
+        return round
+    end
+    local function declared(round,c)
+        for _,known in ipairs(round.calls)do
+            if known.id==c.id then assert(vim.deep_equal(c,known),'tool call source changed');return known end
+        end
+        error('tool call source changed')
+    end
     if not s.producer then
         local reason
         s.producer,reason=require('parley.tools.producer').new({registry=opts.registry,
@@ -134,61 +129,32 @@ function M.new(doc,opts)
         end
         s.pending=frozen
     end
-    function adapter.reserve_round(ctx,done)
-        local handle={}
-        assert(not s.closed and not s.reservation and s.pending,'missing frozen tool response')
-        local pending=s.pending
-        assert(pending.epoch==ctx.epoch and pending.generation==ctx.generation,'tool response identity')
-        assert(#ctx.children==#pending.calls and #ctx.children>0 and #ctx.children<=15,'tool child capacity')
-        local calls,blocks,slots={}, {},{}
-        local length=0
-        local function append(text)blocks[#blocks+1]=text;length=length+#text end
-        for i,child in ipairs(ctx.children)do
-            local c=call(child.arguments,child.call_id)
-            assert(vim.deep_equal(c,pending.calls[i]),'tool call source changed')
-            calls[i]=c
-            local rendered=Serialize.render_call(c)
-            assert(#rendered<=65536,'tool argument limit')
-            append('\n\n'..rendered)
-        end
-        for i in ipairs(calls)do
-            append('\n\n')
-            local first=length
-            -- Reservation text is inert: result Markdown is evidence and may
-            -- only be published after a producer reports a known outcome.
-            append('(Tool result pending)')
-            slots[i]={first=first,last=length}
-        end
-        append('\n\n');assert(length<=1048576,'tool round output limit')
-        local operation='tool-reservation:'..tostring(ctx.round)
-        local reserved=D.reserve_capacity(doc,{epoch=ctx.epoch,generation=ctx.generation,operation=operation,count=#calls})
-        if not reserved.ok then done(nil);return handle end
-        local r={ctx=ctx,done=done,slots=slots,bytes=length,payload=table.concat(blocks),ticket=reserved.ticket,
-            ticket_operation=operation,round=ctx.round,appending=true,epoch=ctx.epoch,generation=ctx.generation}
-        s.records[handle]=r;s.reservation=r;s.pending=nil;s.iterations=s.iterations+1
-        s.rounds[ctx.round]={calls=calls,text=pending.text,attempt=pending.attempt}
-        r.work=Deferred.new(function()return reserve_step(s,r)end)
-        r.off=D.subscribe(doc,function(event)
-            if not r.retired and (event.kind=='reload' or event.kind=='detach')then retire_reservation(s,r)end
-        end)
-        local admitted=ctx.append(r.payload,function(result)
-            if r.retired then return end
-            r.appending=false;r.payload=nil
-            if result.status~='applied' or result.accepted_bytes~=r.bytes then retire_reservation(s,r);return end
-            if opts.schedule~=false then r.work:request()end
-        end)
-        if not admitted then retire_reservation(s,r)end
-        return handle
-    end
-    function adapter.cancel_reservation(ctx,resolved)
-        local r=s.records[ctx.handle]
-        if not r or r.epoch~=ctx.epoch or r.generation~=ctx.generation or r.round~=ctx.round then return false end
-        retire_reservation(s,r,nil,nil,true);resolved();return true
+    --- One block of a round, appended at the answer's tail: call `ctx.index`'s
+    --- block, or its result (`ctx.result`, the blob the machine recorded). The
+    --- round is laid out as the text, a blank line, then every block followed by
+    --- a blank line, so the next request's text starts on its own paragraph.
+    function adapter.insert_tool(ctx,done)
+        local round=round_of(ctx)
+        local c=round.calls[ctx.index]
+        assert(c and c.id==ctx.call_id,'tool call source changed')
+        local block
+        if ctx.kind=='call'then
+            block=Serialize.render_call(c);assert(#block<=65536,'tool argument limit')
+        elseif ctx.failure then
+            block=Serialize.render_result({id=c.id,name=c.name,content=failure_text(ctx.failure),is_error=true})
+        else block=Serialize.render_result(settled(c,ctx.result))end
+        local text=(ctx.kind=='call' and ctx.index==1 and '\n\n' or '')..block..'\n\n'
+        local admitted=ctx.append(text,function(result)done(result.status)end)
+        if not admitted then done('failed')end
     end
     function adapter.start_child(ctx,cb)
         local c=call(ctx.arguments,ctx.call_id)
-        local grant=parent(doc,ctx)
-        if not grant then cb.outcome('cancelled_before_effect',{id=c.id,name=c.name,content='',is_error=true});cb.resolved();return {}end
+        declared(round_of(ctx),c)
+        local grant=answer_grant(doc,ctx)
+        if not grant then
+            cb.outcome('cancelled_before_effect',{id=c.id,name=c.name,content=failure_text('cancelled_before_effect'),is_error=true})
+            cb.resolved();return {}
+        end
         local handle={};local r={ctx=ctx,cb=cb,call=c,epoch=ctx.epoch,generation=ctx.generation,
             operation=ctx.operation,grant=ctx.grant}
         s.records[handle]=r;s.active[r]=true
@@ -225,8 +191,7 @@ function M.new(doc,opts)
         local assistant,results={},{}
         if round.text~=''then assistant[#assistant+1]={type='text',text=round.text}end
         for i,c in ipairs(round.calls)do
-            local r=ctx.results[i]
-            assert(type(r)=='table' and r.id==c.id and r.name==c.name and type(r.content)=='string','tool result identity')
+            local r=settled(c,ctx.results[i])
             assistant[#assistant+1]={type='tool_use',id=c.id,name=c.name,input=copy(c.input)}
             results[i]={type='tool_result',tool_use_id=c.id,content=r.content,is_error=r.is_error==true}
         end
@@ -237,11 +202,9 @@ function M.new(doc,opts)
         s.rounds[ctx.round]=nil
         cb.prepared(input);cb.resolved();return {}
     end
-    function adapter.step()if s.reservation then return reserve_step(s,s.reservation)end;return false end
     function adapter.close()
         s.closed=true;s.pending=nil;s.rounds={}
         if s.producer.close then s.producer.close()end
-        if s.reservation then retire_reservation(s,s.reservation)end
         return next(s.active)==nil
     end
     return adapter

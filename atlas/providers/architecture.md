@@ -26,12 +26,15 @@ primitives.
 The Session composes guarded preparation, `response_provider`, `response_tools`,
 and pending presentation. Provider callbacks deliver bytes and round outcomes to
 `response_runner`; they hold no saved buffer ranges. The runner applies output
-through current Document grants, so disjoint human edits and sibling generations
-can proceed in the same buffer.
+through current Document grants, so disjoint human edits proceed in the same
+buffer; sibling generations run concurrently but write one at a time under the
+document's write turn (see [write ownership](../chat/ownership.md)).
 
 `response_provider` freezes decoded tool declarations from a successful response.
-`response_tools` reserves ordered result slots before starting children, then
-builds the next request from captured messages and settled results. It does not
+`response_tools` runs a round's tools as soon as it is declared, renders the
+call and result blocks the generation machine writes one at a time in declared
+order (`tools/sequence.lua`), then builds the next request from captured messages
+and settled results. It does not
 reparse the live buffer or recursively submit a new chat. See the
 [tool loop model](tool_use.md#loop-model) for limits and producer outcomes.
 
@@ -40,7 +43,9 @@ has its own Tasker owner, and stopping one owner does not stop sibling responses
 Process exit alone is not completion: process and pipe cleanup, or an explicit
 startup abort, provide the evidence that releases the operation. A zero-match
 stop can still mean asynchronous readiness is pending. Tool producers likewise
-must report positive cleanup; an unknown effect prevents continuation.
+must report positive cleanup before their round continues. An unknown effect is
+written as an error result and the round goes on; once the tool's process has
+ended it holds nothing (see [tool execution](tool_execution.md)).
 
 Automatic topic generation uses a separate header grant and captured parent
 marker guards. It collects output without buffer writes, then replaces the

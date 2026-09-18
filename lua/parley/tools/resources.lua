@@ -159,7 +159,9 @@ function M.release(s,id,evidence)
     local record=s.records[id]
     if not record then return s,{status='missing'}end
     if record.status=='queued'then return s,{status='queued'}end
-    if type(evidence)~='table' or evidence.effect~='known' or not ref(evidence.evidence_ref)then
+    -- Release needs evidence: the effect is known, or (#266 M3) the tool's process
+    -- has ended — a crashed tool is a plain failure and holds nothing after it.
+    if type(evidence)~='table' or (evidence.effect~='known' and evidence.effect~='ended') or not ref(evidence.evidence_ref)then
         return s,{status='unresolved'}
     end
     local next_state=changed(s);next_state.records[id]=nil

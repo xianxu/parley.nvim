@@ -41,7 +41,7 @@ Exchange = {
 ## Lifecycle
 
 A command may build a temporary model from its captured parser snapshot. It does
-not survive as a live write registry. Provider chunks, tool result slots and
+not survive as a live write registry. Provider chunks, tool blocks and
 prompt insertion use document grants through the [response session](lifecycle.md#response-parleychatrespond--m-cr--c-gc-g).
 Pending progress remains independent decoration. A callback must resolve current
 scoped authority; accumulated block sizes cannot authorize a future write.
