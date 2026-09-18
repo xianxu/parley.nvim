@@ -61,10 +61,10 @@ So: **`M.transition` notifies whenever the turn value differs before and after**
 |------|----------|--------|
 | `write_turn` — WriteTurn: `holder` | `lua/parley/document/write_turn.lua` | new |
 | `sequence` — ToolSequence *(M2)* | `lua/parley/tools/sequence.lua` | new |
-| `state` — DocumentState: the `turn` | `lua/parley/document/state.lua` | modified |
+| `state` — DocumentState: the `turn`, `waits_for_turn` | `lua/parley/document/state.lua` | modified |
 | `generation` — GenerationMachine | `lua/parley/generation.lua` | modified |
 | `init` — DocumentCoordinatorStatus: `turn`, the `'waiting'` status | `lua/parley/document/init.lua` | modified |
-| `chat_presentation` — the waiting note: `waiting_message` | `lua/parley/chat_presentation.lua` | modified |
+| `chat_presentation` — the waiting note and overflow report: `waiting_message`, `overflow_message` | `lua/parley/chat_presentation.lua` | modified |
 
 *Name cells lead with the module file, which the arch table sweep
 (`tests/arch/single_source_sweeps_spec.lua`) resolves; the concept name follows,
@@ -517,7 +517,7 @@ The invariant to assert is the issue's own: **no undo entry mixes two generation
 - [x] Rewrite `atlas/chat/ownership.md:8-9` — "Disjoint generations may write separate answers" is now false. Also `atlas/providers/architecture.md:29`. **Not** `atlas/chat/lifecycle.md:267` or `atlas/chat/inline_branch_links.md:76` — both describe *human* edits, which stay legal under `apply_user`; and not `atlas/chat/response_progress.md:56`, which is a test-file description. Only pages asserting concurrent *generated* writes change.
 - [x] Confirm every spec added in Chunk 1 is routed and every new `lua/` file is in the right `code:` list.
 - [x] `make test` → exit 0 (lint runs first). `make test JOBS=4`: lint 0/0, 376/376 spec files; two `JOBS=8` runs each lost one file to the known parallel-load abort, each passing alone.
-- [x] `sdlc milestone-close --issue 266 --milestone M1`
+- [x] ~~`sdlc milestone-close --issue 266 --milestone M1`~~ — superseded: the boundaries merged, so M1 closes once, at Chunk 2 Task 2.3
 
 ---
 
@@ -901,4 +901,61 @@ every event O(n).
   chunk re-reported `cancelled` through `cb.failed` and overwrote the cause — a
   failure reported while already stopping is now treated as an echo, not a
   reason.
+
+### 2026-09-17 — M1 boundary review round 1 (REWORK): the response
+
+Review sidecar: `workshop/plans/000266-…-m1-review.md`. Each finding fixed at its
+class, with a test that fails without the fix unless noted.
+
+- **C1 — a release queued behind a parked effect.** A stale-input
+  `continue_round` pauses and then parks at the head of the runner's FIFO until
+  resumed; the `release_turn` its pause emitted queued behind it, so a paused
+  generation held the turn for good and every waiter's output piled up toward its
+  budget. *Class:* control effects (`revoke`, `request_turn`, `release_turn`)
+  waiting behind work. `generation_runner` `M.step` now runs any queued control
+  effect ahead of a parked one, keeping control effects in FIFO order among
+  themselves so `stop()`'s revoke still precedes its release. This **replaces**
+  Task 1.5 Step 3's "issue release synchronously from `sync`" — dropped when the
+  suspension rows went, while the pause row still parked. The resumed side is
+  fixed by the same rule: `request_turn` no longer queues behind a stale release.
+  Regression: `generation_turn_spec` "hands the turn on when the holder pauses on
+  a stale input" (red before), plus the unknown-outcome variant (runner-level
+  coverage of that row, which had none).
+- **I1 — plan/code drift, recorded here.** *Fail-closed reversed to joint
+  enforcement* (`99db5af2`): refusing every writer while nobody holds the turn
+  broke 96 document-layer tests (96 → 9 after the change). The invariant is (a)
+  every generated writer requests the turn before it writes — the machine's
+  `start`/`resume_validated`, and `response_topic` around its one write — and (b)
+  the coordinator refuses any owner that is not the holder. *Residual
+  assumption:* a new generated writer that forgets (a) is admitted whenever
+  nobody holds the turn; `State.waits_for_turn`'s comment names this.
+  *`turn_status` defaults `'held'`*: harmless under (a) because the coordinator
+  refuses, and `request_turn` — now a control effect — executes before any other
+  effect. Tasks 1.4 Step 3 and 1.5 Step 3 describe the superseded fail-closed
+  form; read them through this entry.
+- **I2 — the gap writer could return without settling.** `response_session`'s
+  writer now settles on every path: Preparation failing to start, failing, or
+  retiring `cancelled` without reporting (`done` is idempotent). Regression:
+  `response_session_spec` "settles the gap when preparation cannot start".
+- **I3 — a provider failure before the first byte could emit `write_gap`.** The
+  gap emission now sits after the provider-failure stop in `pump`. Regression:
+  `generation_spec` "never writes the gap when the provider fails before any
+  output".
+- **I4 — M2 obligations promoted** to the issue's `## Plan` M2 row: re-assert
+  cross-generation tool execution (restoring the two restated specs'
+  cross-generation cases) and revert `atlas/providers/tool_execution.md`'s turn
+  sentence.
+- **I5 + the predicate family.** Three spellings of "owns the grant, turn held
+  elsewhere" (one paid a full state copy per write chunk; one checked the turn
+  before ownership) are now one O(1) `State.waits_for_turn(doc,generation,grant)`
+  used by all five generated entry points. Unit-tested in `document_state_spec`,
+  including "a non-owner is an ownership failure, not a wait".
+- **Minors.** `overflow_reason` no longer re-derives the holder's line or owns
+  wording: the runner records `waited_for_line` (from `blocked.line`, derived once
+  in `blocker`) and `chat_presentation.overflow_message` words it. The waiting
+  note no longer loses its status slot to the held answer's own provider detail
+  (regression added). `tool_use.md` and README restate the serialized model. The
+  obfuscated assertion in `generation_turn_spec` is plain. *Not changed:*
+  `chat_presentation` has no `paused` reason — after C1 a paused generation gives
+  the turn up, so it is never the holder a waiter names.
 

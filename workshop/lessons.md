@@ -1,5 +1,38 @@
 # Lessons
 
+## 2026-09-17 (#266 M1 boundary review, REWORK — what the review caught)
+
+- **Removing plan rows can silently remove a mechanism a surviving row needs.**
+  The operator dropped the suspension release rows; the plan's "release must not
+  travel as a queued effect" prescription went with them, though the stale-input
+  pause row still parked an effect at the head of the FIFO. A paused generation
+  then held the turn forever. Rule: when a decision deletes rows from a
+  table-shaped design, re-read every surviving row against each mechanism the
+  deleted rows carried, and ask which of them still depend on it.
+
+- **A machine test that asserts an effect was *emitted* is not coverage of it
+  *executing*.** `generation_spec` pinned that pause emits `release_turn`; the bug
+  was that the runner never ran it. Rule: for an effect whose purpose is to reach
+  another component, assert the outcome at that component (here `D.turn`), with a
+  real runner in the loop.
+
+- **Every exit path of an async callback contract must settle.** The gap writer
+  had two paths that returned without calling `done`, which leaves a state
+  (`gap='writing'`) that blocks all further writes with no error. Rule: when you
+  hand a continuation to another module, enumerate its success, failure and
+  cancel paths and make each one settle; make the settle idempotent so the
+  enumeration can be generous.
+
+- **"Nothing is written if X" needs X checked before the write is emitted, in the
+  same pass.** `pump` emitted `write_gap` and then stopped on provider failure,
+  relying on a later runner check. Rule: when a guarantee is "no mutation when
+  …", put the guard ahead of the emission, not behind it downstream.
+
+- **A guard added at N entry points is a family on its first day.** Three
+  spellings of one predicate appeared across five sites in one milestone, one of
+  them paying a full state copy per write chunk. Rule: when the same condition is
+  needed at more than two sites, write it once on the owner of the state it reads.
+
 ## 2026-09-17 (#266 M1 — a budget, a vacuous test, a stash, and "one cause")
 
 - **A budget analysis must cover every limit on the path, at the real delivery
