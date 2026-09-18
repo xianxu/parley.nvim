@@ -750,3 +750,21 @@ making "in the order the reader sees them" precise; the plan's Core-concepts
 rows now name module files so the arch table sweep passes; Chunk 1's checklist
 reconciled (three steps struck as superseded, with reasons). Five lessons added.
 
+### 2026-09-17 — M1 boundary review: two rounds
+
+Round 1 **REWORK** (C1 + I1–I5): a paused generation's `release_turn` queued
+behind the very effect that paused it, so it held the turn for good — control
+effects now run ahead of parked work (`4e9ede49`). Also: the gap writer settles
+on every path, no gap on a pre-output provider failure, one O(1)
+`State.waits_for_turn` at all five entry points, M2 obligations promoted to the
+Plan, plan drift recorded.
+
+Round 2 **FIX-THEN-SHIP**, one blocking: the atlas and the target claimed a
+generation's writes are one contiguous run and one undo step — a pause splits the
+run, and undo groups per (generation, grant). Restated at every site, pinned by a
+pause-then-resume undo test. The Minors (snapshot-before-cheap-check in the
+runner — the same family round 1 fixed only at the coordinator; two plan rows
+missing their *(M2)* tag) are fixed too. Correction to my Task 1.6 entry above:
+"holding keeps each generation's writes one run" holds only while the turn is
+held uninterrupted.
+
