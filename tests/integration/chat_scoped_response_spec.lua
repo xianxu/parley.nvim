@@ -113,7 +113,7 @@ describe('public scoped response command',function()
         vim.notify=old_notify
         assert.equals('overflow',Respond.response_snapshot(session).generation.outcome)
         local found
-        for _,n in ipairs(notices)do if n.message:find('staging overflow',1,true)then found=n end end
+        for _,n in ipairs(notices)do if n.message:find('staging budget',1,true)then found=n end end
         assert.is_not_nil(found,vim.inspect(notices))
         assert.equals(vim.log.levels.WARN,found.level)
     end)

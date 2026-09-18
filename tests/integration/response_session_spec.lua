@@ -143,6 +143,25 @@ describe('production response session composition',function()
         local text=table.concat(lines(),'\n')
         assert.truthy(text:find('alpha',1,true));assert.truthy(text:find('🤖: fixture%s+beta'),text)
     end)
+    -- M1 review I2: the gap writer must settle on every path. A writer that
+    -- returns without reporting leaves the machine's gap 'writing' forever, and
+    -- then nothing — output, round or finalize — may ever write.
+    it('settles the gap when preparation cannot start at write time',function()
+        local original=Preparation.start
+        Preparation.start=function()return nil,'forced preparation failure'end
+        local before=lines()
+        local s=start(doc,spec(0),lone_opts(),sessions);pump(s)
+        local p=processes.processes[4242]
+        p:emit('stdout','data: {"choices":[{"delta":{"content":"fresh"}}]}\n\n')
+        pump(s);Preparation.start=original
+        status(p);p:finish();vim.wait(100,function()return #Tasker._handles==0 end,1);pump(s)
+        local generation=Session.snapshot(s).generation
+        assert.equals('terminal',generation.phase)
+        assert.equals('prepare_failed',generation.outcome)
+        assert.are_not.equal('writing',generation.gap,'the gap must be settled, not left writing')
+        assert.equals('forced preparation failure',generation.failure)
+        assert.same(before,lines(),'a gap that never landed leaves the transcript as it was')
+    end)
     it('tells a held answer what it waits for, without touching the transcript',function()
         local a=start(doc,spec(0),lone_opts(),sessions);local b=start(doc,spec(3),lone_opts(),sessions)
         pump(a);pump(b)
@@ -158,6 +177,11 @@ describe('production response session composition',function()
         assert.is_true(vim.wait(500,function()return notes():find('Waiting for the answer to line 1',1,true)~=nil end,5),notes())
         assert.truthy(notes():find('(streaming)',1,true),notes())
         assert.same(before,lines(),'the note is presentation, never transcript')
+        -- M1 review: the held answer's own provider detail shares the one status
+        -- slot; while it is held, the note must win or it is never shown again.
+        processes.processes[4243]:emit('stdout','data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\n\n')
+        vim.wait(100,function()return false end,5)
+        assert.truthy(notes():find('Waiting for',1,true),'provider detail must not bury the note: '..notes())
         local pa=processes.processes[4242]
         pa:emit('stdout','data: {"choices":[{"delta":{"content":"alpha"}}]}\n\n');status(pa);pa:finish()
         vim.wait(100,function()return #Tasker._handles==1 end,1);pump(a);pump(b)

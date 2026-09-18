@@ -50,9 +50,15 @@ M.bounded_message=bounded
 -- generation phase; either may be unknown.
 local waiting_reasons={preparing='preparing',requesting='streaming',executing_tools='running tools',
     draining='finishing',finalizing='finishing',stopping='stopping'}
+local function holder(line)return line and ('the answer to line '..line) or 'another answer' end
 function M.waiting_message(line,phase)
-    local where=line and ('the answer to line '..line) or 'another answer'
-    return 'Waiting for '..where..' ('..(waiting_reasons[phase] or 'writing')..'); :ParleyStop there stops it'
+    return 'Waiting for '..holder(line)..' ('..(waiting_reasons[phase] or 'writing')..'); :ParleyStop there stops it'
+end
+-- An overflow stops the response on purpose: dropping bytes would lose provider
+-- output. `line` is set when it overflowed while held behind another answer.
+function M.overflow_message(line)
+    return 'Response stopped: its output passed the staging budget'
+        ..(line and ' while waiting for '..holder(line) or '')
 end
 -- Accumulate one provider detail stream and derive its meaningful status text.
 M.progress_message = function(detail_state, event)

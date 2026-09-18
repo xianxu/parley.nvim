@@ -99,7 +99,9 @@ function M.start(doc,spec,opts)
             if opts.on_result then opts.on_result(ctx,qt,calls,failure)end
         end,
         on_activity=function()if s.pending then s.pending:activity()end end,
-        on_progress=function(_,event)if s.pending then s.pending:progress(event)end end})
+        -- While held behind the turn, the waiting note owns the one status slot:
+        -- provider detail would bury it and it would not be re-asserted (#266).
+        on_progress=function(_,event)if s.pending and not s.note then s.pending:progress(event)end end})
     local function prepare(ctx,cb)
         presentation(ctx)
         local r={kind='prepare',ctx=ctx,cb=cb,io_done=false,local_done=false}
@@ -134,14 +136,19 @@ function M.start(doc,spec,opts)
             -- first write — never, if it is cancelled first. This operation stays
             -- unresolved until Preparation retires, so cancellation reaches the
             -- writer through the ordinary cancel_operation path.
+            -- The writer settles `done` on every path (M1 review I2): an unsettled
+            -- gap stays 'writing' and nothing may ever write again. `done` is
+            -- idempotent, so the settle in `resolved` is a no-op after 'applied'
+            -- and covers a Preparation that retires 'cancelled' without reporting.
+            -- `failed` runs first so its reason is recorded before the stop.
             local function write_gap(done)
                 if r.retired or r.cancelled or ctx.cancelled()then return done('cancelled')end
                 local op,reason=Preparation.start(doc,prepared_ctx,{
                     prepared=function()return done('applied')end,
-                    failed=failed,
-                    resolved=function()r.local_done=true;resolve()end,
+                    failed=function(why)failed(why);done('failed')end,
+                    resolved=function()done('cancelled');r.local_done=true;resolve()end,
                 },replacement,{schedule=frozen.schedule})
-                if not op then failed(reason);return end
+                if not op then failed(reason);done('failed');return end
                 r.op=op
             end
             local ok,accepted=pcall(cb.prepared,r.input,write_gap)
@@ -195,11 +202,7 @@ function M.start(doc,spec,opts)
             -- #266: a generation held behind the write turn names what it waits
             -- for. Presentation only: the note is an extmark, never transcript.
             local note
-            if value.blocked then
-                local marker=value.blocked.entity and D.lookup(doc,value.blocked.entity)
-                local line=marker and not marker.opaque and marker.start_row+1 or nil
-                note=Presentation.waiting_message(line,value.blocked.phase)
-            end
+            if value.blocked then note=Presentation.waiting_message(value.blocked.line,value.blocked.phase) end
             if s.pending and note~=s.note then s.note=note;s.pending:progress({message=note or 'Working...'})end
             safe(opts.changed,value)
         end,

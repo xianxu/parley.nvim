@@ -210,6 +210,7 @@ describe('write turn matrix',function()
         end
         local fa,fb=FakeRunner.new(),FakeRunner.new()
         fakes[#fakes+1]=fa;fakes[#fakes+1]=fb
+        if opts and opts.setup then opts.setup(fa,doc) end
         if opts and opts.changed then fa.adapters.changed=opts.changed.a;fb.adapters.changed=opts.changed.b end
         local a=start(2,fa);local b=start(5,fb,opts and opts.limits)
         return doc,editor,{a=a,b=b},{a=fa,b=fb}
@@ -263,6 +264,38 @@ describe('write turn matrix',function()
         end
     end
 
+    -- M1 boundary review C1. A pause can come from an effect that then parks at
+    -- the head of the runner's FIFO (a stale-input continue_round waits there
+    -- until resumed). The release_turn that pause emits must not queue behind it,
+    -- or a paused generation holds the turn for good and every waiter's output
+    -- piles up toward its budget. Asserted at the document, not the machine: the
+    -- machine emitting release_turn is exactly what already passed.
+    for _,cause in ipairs({'stale input','unknown outcome'}) do
+        it('hands the turn on when the holder pauses on a '..cause,function()
+            local doc,editor,r,f=pair({setup=function(fa,d)
+                fa.adapters.reserve_round=function(ctx,done)
+                    local parent=D.snapshot(d).grants[ctx.grant]
+                    local result=D.transition(d,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
+                        regions={{entity=parent.entity,first=parent.last,last=parent.last,marker_revision=1,revision=1,confirmed=true}}})
+                    assert.is_true(result.ok);done(result.grants)
+                end
+                fa.adapters.start_child=function(_,cb)
+                    if cause=='unknown outcome' then cb.outcome('unknown','uncertain')
+                    else cb.outcome('known','result');cb.resolved() end
+                end
+                fa.adapters.continue_round=function()end
+            end})
+            f.a:prepare();f.b:prepare();pump(r,schedules[1])
+            f.b:output(1,'beta');f.b:complete(1)
+            if cause=='stale input' then editor:edit(0,0,0,0,{'x'});D.drain(doc,1000) end
+            local cb=f.a.requests[1].callbacks;cb.round({{call_id='one',arguments={}}});cb.resolved()
+            pump(r,schedules[1])
+            assert.equals('paused',Runner.snapshot(r.a).phase)
+            assert.equals('success',Runner.snapshot(r.b).outcome,'the waiter must get the turn and finish')
+            assert.truthy(table.concat(editor.lines,'\n'):find('beta',1,true))
+        end)
+    end
+
     -- #266 Task 1.7. Providers deliver one SSE delta per output callback, so a
     -- generation held behind the turn receives hundreds of tiny chunks. The held
     -- answer must be bounded by BYTES (the 1 MiB budget), not by how many chunks
@@ -294,7 +327,8 @@ describe('write turn matrix',function()
         pump(r,schedules[1])
         local snap=Runner.snapshot(r.b)
         assert.equals('overflow',snap.outcome)
-        assert.truthy(snap.failure:find('line '..holder_line,1,true),snap.failure)
+        assert.equals('staging overflow',snap.failure)
+        assert.equals(holder_line,snap.waited_for_line,'the report must name the answer it waited behind')
         assert.equals('requesting',Runner.snapshot(r.a).phase,'the holder is untouched')
     end)
 
@@ -331,7 +365,7 @@ describe('write turn matrix',function()
         for _,v in ipairs(seen.a) do assert.is_nil(v.blocked,'the holder is never blocked') end
         f.a:output(1,'alpha');f.a:complete(1);pump(r,schedules[1])
         assert.is_nil(seen.b[#seen.b].blocked,'the note must clear once the turn arrives')
-        assert.is_nil(D.turn(doc)==Runner.snapshot(r.a).generation or nil)
+        assert.are_not.equal(Runner.snapshot(r.a).generation,D.turn(doc))
     end)
 end)
 

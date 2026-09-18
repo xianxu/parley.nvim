@@ -45,7 +45,7 @@ local function present(s)
     local current=G.snapshot(s.machine)
     local b=s.blocked;current.blocked=b and copy(b)
     local key=current.phase..':'..tostring(current.stale_input)
-        ..(b and ':'..tostring(b.generation)..':'..tostring(b.entity)..':'..tostring(b.phase) or '')
+        ..(b and ':'..tostring(b.generation)..':'..tostring(b.entity)..':'..tostring(b.phase)..':'..tostring(b.line) or '')
     if key~=s.presentation_key then
         s.presentation_key=key
         local ok,err=pcall(s.adapters.changed,current)
@@ -67,16 +67,21 @@ end
 local function blocker(s,doc)
     local phase=G.snapshot(s.machine).phase
     if s.turn_status~='waiting' or doc.turn==nil or phase=='paused' or phase=='stopping' or phase=='terminal' then return nil end
+    -- The one place a holder's exchange becomes a line number; presentation and
+    -- the overflow report both read `line` rather than re-deriving it.
+    local function located(entity,holder_phase)
+        local marker=entity and D.lookup(s.doc,entity)
+        return {generation=doc.turn,entity=entity,phase=holder_phase,
+            line=marker and not marker.opaque and marker.start_row+1 or nil}
+    end
     for _,other in pairs(runners) do
         if other.generation==doc.turn and other.doc==s.doc and not other.terminal then
-            return {generation=doc.turn,entity=other.entity,phase=G.snapshot(other.machine).phase}
+            return located(other.entity,G.snapshot(other.machine).phase)
         end
     end
     -- Not a runner (an automatic topic writes through the coordinator directly).
     for _,grant in pairs(doc.grants) do
-        if grant.generation==doc.turn and grant.status~='revoked' then
-            return {generation=doc.turn,entity=grant.entity}
-        end
+        if grant.generation==doc.turn and grant.status~='revoked' then return located(grant.entity) end
     end
     return {generation=doc.turn}
 end
@@ -117,14 +122,13 @@ end
 --- a runaway response. The budget itself is unchanged — 1 MiB per generation,
 --- 16 MiB process-wide — and 16 runners x 1 MiB is exactly the process cap, so
 --- the per-generation limit always binds first.
-local function overflow_reason(s)
-    local b=s.blocked
-    local marker=b and b.entity and s.doc and D.lookup(s.doc,b.entity)
-    return 'staging overflow'..(marker and not marker.opaque
-        and ' while waiting for the answer to line '..(marker.start_row+1) or '')
+-- An overflow records which answer the generation was held behind, as data; the
+-- host words it (chat_presentation.overflow_message).
+local function note_overflow(s)
+    issue(s,'staging overflow');s.waited_for_line=s.blocked and s.blocked.line
 end
 local function overflowed(s)
-    issue(s,overflow_reason(s));dispatch(s,{type='cancel',reason='overflow'})
+    note_overflow(s);dispatch(s,{type='cancel',reason='overflow'})
 end
 local function stage(s,bytes)
     return type(bytes)=='string' and #bytes<=s.limit-s.staged and #bytes<=16777216-staged_total
@@ -229,7 +233,7 @@ local function callbacks(s,effect,after_writes)
         -- that is the same overflow and gets the same reason.
         local function refused(result)
             if result.accepted and result.admitted_bytes==0 and #bytes>0
-                and G.snapshot(s.machine).outcome=='overflow' and not s.failure then issue(s,overflow_reason(s)) end
+                and G.snapshot(s.machine).outcome=='overflow' and not s.failure then note_overflow(s) end
         end
         if op.tail and s.blobs[op.tail] and #bytes>0 then
             local result=dispatch(s,{type='output',operation=operation,seq=seq,blob_ref=op.tail,bytes=#bytes,extend=true})
@@ -537,17 +541,31 @@ local function execute(s,effect)
         s.operations={};s.doc=nil;s.grants={};s.preparation_grants={};s.detached=true;s.off=nil
         -- The failure reason travels with the terminal snapshot, so a host can say
         -- why a response stopped (an overflow names the answer it waited for).
-        local final=G.snapshot(s.machine);final.failure=s.failure
+        local final=G.snapshot(s.machine);final.failure=s.failure;final.waited_for_line=s.waited_for_line
         if terminal then pcall(terminal,final) end
     end
     return false
+end
+-- Control effects change authority, not text: they are never parked, so they
+-- must never wait behind a parked effect either. A stale-input continue_round
+-- pauses and then parks at the head of the FIFO until resumed; the release_turn
+-- that pause emits would otherwise queue behind it for good (#266 M1 review C1).
+-- They keep FIFO order among themselves, so stop()'s revoke still precedes its
+-- release_turn.
+local control={revoke=true,request_turn=true,release_turn=true}
+local function next_control(s)
+    for i,effect in ipairs(s.queue) do
+        if control[effect.type] then return table.remove(s.queue,i) end
+    end
 end
 function M.step(r)
     local s=state(r)
     if s.notifying then return {status='busy'} end
     sync(s)
     if s.terminal then return {status='terminal'} end
-    local effect=s.pending or table.remove(s.queue,1)
+    local effect=next_control(s)
+    if effect then execute(s,effect);return {status=s.terminal and 'terminal' or 'more'} end
+    effect=s.pending or table.remove(s.queue,1)
     if not effect then return {status='waiting'} end
     local again,waiting=execute(s,effect)
     s.pending=again and effect or nil
@@ -605,7 +623,8 @@ end
 function M.snapshot(r)
     local s=state(r);local out=G.snapshot(s.machine)
     out.retained_blobs=0;for _ in pairs(s.blobs) do out.retained_blobs=out.retained_blobs+1 end
-    out.retained_staged_bytes=s.staged;out.failure=s.failure;out.presentation_failure=s.presentation_failure;return out
+    out.retained_staged_bytes=s.staged;out.failure=s.failure;out.waited_for_line=s.waited_for_line
+    out.presentation_failure=s.presentation_failure;return out
 end
 function M.cancel(r,reason)local s=state(r);s.written=nil;if reason then issue(s,reason) end;return dispatch(s,{type='cancel'})end
 function M.resume(r,policy_ref)

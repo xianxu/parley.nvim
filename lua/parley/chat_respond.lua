@@ -1705,7 +1705,8 @@ local function start_scoped_response(frame)
             -- #266: an overflow stops a response on purpose (dropping bytes would
             -- lose provider output); say so, naming the answer it waited behind.
             if result.outcome == 'overflow' then
-                vim.notify('Response stopped: ' .. (result.failure or 'staging overflow'), vim.log.levels.WARN)
+                vim.notify(require('parley.chat_presentation').overflow_message(result.waited_for_line),
+                    vim.log.levels.WARN)
             end
             if recovery then require('parley.chat_recovery').finish(recovery, result.outcome) end
             if frame.terminal then frame.terminal(result) end
