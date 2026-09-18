@@ -257,7 +257,7 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] release/re-request matrix + end-to-end wake + waiter visibility
       - [x] held-output budget message; writer-enumeration verification
       - [x] undo coherence assertion
-      - [ ] atlas rewrite + `milestone-close`
+      - [x] atlas rewrite + `milestone-close`
 - [ ] M2 — ordered `(call, result)` append; removes capacity tickets, the round
       reservation lifecycle, and child grants.
 - [ ] M3 — residual exclusion sweep (`exclude`, parent-slot carving, the
