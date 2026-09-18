@@ -351,11 +351,11 @@ describe('pure generation lifecycle',function()
         assert.is_false(refused.accepted,'its result is already on its way to the transcript')
         assert.equals(s,held)
         s,r=insert(s,r) -- result 1, as unknown
-        _,refused=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='k1'})
+        held,refused=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='k1'})
         assert.is_false(refused.accepted,'an outcome is final once written')
         s,r=insert(s,r) -- call 2
         assert.equals('k2',effect(r,'insert_tool').result_ref,'the confirmation came in time, so it is what lands')
-        _,refused=send(s,{type='child_outcome',round=round,operation=children[2],outcome='known',result_ref='late'})
+        held,refused=send(s,{type='child_outcome',round=round,operation=children[2],outcome='known',result_ref='late'})
         assert.is_false(refused.accepted,'only unknown may be confirmed, and only once')
     end)
 

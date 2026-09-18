@@ -27,7 +27,7 @@ local failures={
     rejected='The tool call was rejected before it ran.',
     cancelled_before_effect='The tool call was cancelled before it ran.',
 }
-local function failure(outcome,value)
+local function failure_text(outcome,value)
     local detail=type(value)=='table' and (value.content or value.error) or nil
     detail=detail~=nil and tostring(detail) or ''
     return failures[outcome]..(detail~='' and '\n\n'..detail or '')
@@ -41,7 +41,7 @@ local function settled(c,r)
         assert(r.id==c.id and r.name==c.name and type(r.content)=='string','tool result identity')
         return r
     end
-    return {id=c.id,name=c.name,content=failure('unknown',r),is_error=true}
+    return {id=c.id,name=c.name,content=failure_text('unknown',r),is_error=true}
 end
 local function maybe_resolve(s,r)
     if r.retired or not r.producer_done then return end
@@ -60,7 +60,7 @@ local function tool_outcome(s,r,outcome,value)
         result=require('parley.tools.result_evidence').publish(value,s.result_limit)
         result.id=r.call.id;result.name=r.call.name;result.is_error=value.is_error==true
     else result=require('parley.tools.result_evidence').publish({id=r.call.id,name=r.call.name,
-        content=failure(outcome,value),is_error=true},s.result_limit)end
+        content=failure_text(outcome,value),is_error=true},s.result_limit)end
     -- The machine writes the result when its turn in the round comes. Observers
     -- may report cleanup reentrantly; `maybe_resolve` waits for the outcome to be
     -- recorded here first. A confirmation the machine refuses — its unknown
@@ -145,7 +145,7 @@ function M.new(doc,opts)
         declared(round_of(ctx),c)
         local grant=parent(doc,ctx)
         if not grant then
-            cb.outcome('cancelled_before_effect',{id=c.id,name=c.name,content=failure('cancelled_before_effect'),is_error=true})
+            cb.outcome('cancelled_before_effect',{id=c.id,name=c.name,content=failure_text('cancelled_before_effect'),is_error=true})
             cb.resolved();return {}
         end
         local handle={};local r={ctx=ctx,cb=cb,call=c,epoch=ctx.epoch,generation=ctx.generation,
