@@ -278,7 +278,7 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
             no pause (operator, 2026-09-18; supersedes Task 3.3's `⏳:` marker)
       - [x] capacity tickets removed from the document layer
       - [x] tool progress shown in presentation while pairs are held
-      - [ ] goldens/e2e unchanged in message shape; atlas `tool_use.md` rewritten;
+      - [x] goldens/e2e unchanged in message shape; atlas `tool_use.md` rewritten;
             `milestone-close`
 - [ ] M3 — residual exclusion sweep (`exclude`, parent-slot carving, the
       half-open seam flags, the ancestor walk).
@@ -853,6 +853,19 @@ call still running, or behind another generation's turn — has already run, and
 Stop drops pairs not yet written. The transcript never claims an effect that did
 not happen, but it can omit one that did.
 
-**Flake, not this change:** `tool_resources_spec` aborted under `make test JOBS=4`
-with no failing assertion; module and spec are identical to `main`; passes 3/3
-alone. Same class as the `document_fold_batches_spec` abort recorded above.
+**Flake, not this change — filed as parley#267:** `tool_resources_spec` dies
+under load in its JIT-off call-hook case (exit 1, no assertion). Module and spec
+are identical to `main`; it passes alone in ~1 s; 16-way parallel stress fails
+1–3/16 both here and at the M1 close commit `f6ebfd83`. Because `make test` runs
+its phases in sequence, it aborted the unit phase in two of four full runs, and
+integration was then run separately for evidence. `perf_document_spec` sits on
+Plenary's 50 s limit (same HEAD: 50.24 s timeout, then 34.39 s pass; M1 close
+35 s), and `document_append_extent_spec`/`document_fold_retirement_spec`
+aborted once under load and pass alone.
+
+**Actual hours for the M2 close:** `sdlc active-time --since` the M1 close
+commit measures 136.2 active minutes (2.27 h) in the window. The engine anchored
+the last 51.7 minutes to the #267 side-quest commit, the latest commit before the
+measurement; that stretch was M2's own close verification, so the whole window
+is M2's increment. The 07:39–09:10 gap is idle time, spent waiting on the
+operator's design answer.

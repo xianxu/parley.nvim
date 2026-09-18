@@ -3075,3 +3075,18 @@ download.
   closes is already whole, and the pull-back silently truncated whole-exchange
   deletes and stranded answer content. When adding a protective clamp, write
   the case where the clamp must NOT fire.
+
+- #266 M2: a test that waits for one event must not lean on another it used to
+  imply. Tests pressed `:ParleyStop` right after "the tool started", and that
+  worked only because a tool could not start until its reservation had been
+  written *and confirmed* by the structure, so the index was always settled.
+  Once tools started before any write, Stop-at-cursor saw an exchange mid-repair,
+  fell back to its picker, and aborted the headless run with no summary. Wait
+  for the condition the next step needs (here, an idle repair), not a proxy that
+  happens to precede it today.
+
+- #266 M2: a generation captures its input at submit, so submitting while an
+  exchange above it is still being written makes it stale by construction. When
+  a change makes a write land sooner or later than before (an unknown outcome now
+  written at once instead of pausing), re-check every test that submits right
+  after that write — it may now be racing it.
