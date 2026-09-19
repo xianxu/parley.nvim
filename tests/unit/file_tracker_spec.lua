@@ -14,8 +14,16 @@ describe("file_tracker", function()
     local file_tracker
     local tmpdir
     local original_stdpath
+    local original_test_mode
 
     before_each(function()
+        -- `load_data`/`save_data` short-circuit under g:parley_test_mode so a test
+        -- run never writes the operator's data directory. These cases exercise the
+        -- real persistence against a redirected stdpath, so they clear the flag
+        -- themselves instead of depending on the harness not setting it: since
+        -- #261 M5 every spec child loads tests/minimal_init.vim, which does.
+        original_test_mode = vim.g.parley_test_mode
+        vim.g.parley_test_mode = nil
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
         tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-tracker-" .. random_suffix
         vim.fn.mkdir(tmpdir .. "/parley", "p")
@@ -37,6 +45,7 @@ describe("file_tracker", function()
     end)
 
     after_each(function()
+        vim.g.parley_test_mode = original_test_mode
         vim.fn.stdpath = original_stdpath
         if tmpdir then
             vim.fn.delete(tmpdir, "rf")

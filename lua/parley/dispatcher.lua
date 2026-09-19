@@ -14,7 +14,10 @@ local providers = require("parley.providers")
 local D = {
 	config = {},
 	providers = {},
-	query_dir = vim.fn.stdpath("cache") .. "/parley/query",
+	-- Where curl's request bodies are staged. $PARLEY_QUERY_DIR overrides it, which
+	-- the test harness sets per process so parallel runs never share one directory
+	-- (#261 M5 review BR-71: the harness owns that, not a branch in here).
+	query_dir = vim.env.PARLEY_QUERY_DIR or (vim.fn.stdpath("cache") .. "/parley/query"),
 	-- How long an adapter that CLAIMED a failure via recover_query has to settle
 	-- it (#197). A backstop, not a design element: every recovery path is
 	-- expected to call retry()/give_up() itself. Overridable so specs can drive
@@ -670,14 +673,6 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 	local headers
 	headers, endpoint = adapter.format_headers(bearer, payload.model, payload, endpoint)
 
-	-- #261 M5 review BR-66: a spec that inherits the default query_dir writes
-	-- request bodies into the shared XDG cache, where a parallel spec prunes or
-	-- renames them; the body is then missing and the query aborts before curl.
-	-- The hazard is the value, not the spelling, so it is checked where it is used.
-	if vim.env.PARLEY_TEST_MODE == "1" and D.query_dir:find(vim.fn.stdpath("cache"), 1, true) == 1 then
-		error("dispatcher: query_dir is the shared cache (" .. D.query_dir
-			.. "); give this spec its own vim.fn.tempname() directory", 0)
-	end
 	local temp_file = D.query_dir ..
 		"/" .. logger.now() .. "." .. string.format("%x", math.random(0, 0xFFFFFF)) .. ".json"
 	-- curl posts this file (`-d @file`): a body that was not written must stop

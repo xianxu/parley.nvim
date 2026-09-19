@@ -82,6 +82,15 @@ or written by anything. It is safe to delete, and Parley leaves it where it is.
 
 Every refusal, and every ending other than success, reaches the user once, in
 words that name what to do. The words live in
-[refusal.lua](../../lua/parley/refusal.lua), and
-`tests/arch/refusal_vocabulary_spec.lua` fails on any producer reason that has
-none. A user's own Stop is silent. A refusal is never written into the file.
+[refusal.lua](../../lua/parley/refusal.lua), which is pure: it returns the
+message and says how it resolved, and the caller logs it. Two nets keep a
+refusal from reaching a user as a bare token:
+
+- `tests/arch/refusal_vocabulary_spec.lua` reads the producer files and fails on
+  a reason it finds there without words. It sees the call shapes it knows, so it
+  catches most at authoring time, not all.
+- The harness (`tests/minimal_init.vim`) watches what `describe` actually
+  resolves, across every spec in the suite, and fails the spec file that produces
+  a token with no words.
+
+A user's own Stop is silent. A refusal is never written into the file.

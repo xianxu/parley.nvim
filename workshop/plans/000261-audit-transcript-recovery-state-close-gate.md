@@ -1196,6 +1196,115 @@ rounds:
       boundary: M5
       recipe: milestone-review
       blocked: true
+    - "n": 19
+      timestamp: "2026-09-19T13:53:45-07:00"
+      agent: claude
+      dispose:
+        - id: BR-65
+          disposition: addressed
+          note: |-
+            Verified on the shipped module and by running the spec: the provider, prepare and
+            overflow endings now assert whole messages and the internal token no longer leaks.
+          round: 19
+        - id: BR-66
+          disposition: not-addressed
+          note: |-
+            The census never fails for the outcome-row fallback, which is exactly where
+            `issue(s,<lit>)` tokens land: R.describe('ended','provider_failed','brand new runner
+            token') returns "...the model's request failed (brand new runner token)..." with
+            unkeyed() empty. Where it can fire, the error is thrown inside the terminal callback
+            that generation_runner.lua:476 and response_session.lua:14 each pcall and discard.
+            Remaining: fail (or assert after each spec) on _detail_only too, report through a
+            channel the seam cannot swallow, and correct the atlas/target sentence crediting
+            refusal_vocabulary_spec with catching any wordless producer reason.
+          round: 19
+        - id: BR-67
+          disposition: addressed
+          note: |-
+            The named command genuinely unblocks: respond_all disposes a paused, settled batch
+            (chat_respond.lua:2008-2015) and batch.lua:93 leaves exactly that state.
+          round: 19
+        - id: BR-68
+          disposition: addressed
+          note: |-
+            Cause now outranks a stray failure (refusal.lua:252), asserted by equality in
+            refusal_spec.lua:80.
+          round: 19
+        - id: BR-69
+          disposition: addressed
+          note: init.lua:4174 forwards three arguments; every call site in lua/ and tests/ passes one.
+          round: 19
+        - id: BR-70
+          disposition: not-addressed
+          note: |-
+            The stale sentence was replaced by another inaccurate one: "respond and respond_all
+            both warn, and both still return `nil, reason`" — respond returns a bare `return` on
+            both ctx failures (chat_respond.lua:1813) and respond_all does on its not-a-chat path
+            (:2005); init's wrapper logs an ERROR, not a warning, for a broken header
+            (init.lua:4300). Rule: a comment about a collaborator cites it (file:line) or states
+            only what this module guarantees.
+          round: 19
+      findings:
+        - id: BR-71
+          severity: Important
+          title: Both new guards live in production code behind PARLEY_TEST_MODE; one makes the pure vocabulary stateful and grows unbounded in production, the other is swallowed by the calling seam
+          detail: |-
+            refusal.lua:230-235 and dispatcher.lua:677 put harness-only checks on production
+            paths. `describe` is declared pure (refusal.lua:3) and listed under the plan's Pure
+            entities, but now mutates M._unkeyed/M._detail_only and branches on vim.env
+            (ARCH-PURE). M._detail_only is written unconditionally, in production too — one entry
+            per distinct provider diagnosis, carrying up to ~500 chars of provider body, with
+            forget_unkeyed() called only from specs: a growing structure with no removal path and
+            no bound (ARCH-FUNERAL; ARCH-SECURE for the retained body text). The dispatcher's
+            error is caught by generation_runner.lua:365 / response_provider.lua:100, so an
+            integration spec sees "provider startup failed" instead of the guard's advice. The
+            rule: a harness-only check belongs in the harness — record at the boundary (the
+            `refuse` wrapper), assert from a spec hook, and default query_dir to $TMPDIR in
+            tests/minimal_init.vim so no spec can inherit the shared cache.
+          family: test-hook-in-production-path
+          round: 19
+        - id: BR-72
+          severity: Minor
+          title: The refusal spec's `one()` helper is a substring probe, so the batch-pause case still cannot see a second detail on the same provider_failed ending
+          detail: |-
+            chat_refusal_spec.lua:159 asserts find("Response stopped: the model's request failed")
+            on the ending BR-65 broke, and one() (:75) matches by substring for all 17 cases, so
+            appended text is invisible. This is the 6th finding in family
+            behavior-change-without-regression-test. Earlier rounds fixed instances. Do NOT fix
+            this line — the rule is that a case asserting a composed message compares the WHOLE
+            string; apply it by making one() take the full expected message and use assert.equals,
+            so every present and future case inherits it.
+          family: behavior-change-without-regression-test
+          round: 19
+        - id: BR-73
+          severity: Minor
+          title: '`revoked` has no TOKENS row, so an ending whose cause is not edit/reload/detach reads "unexpected (revoked)"'
+          detail: |-
+            refusal.lua:252 words a revocation only for a mapped cause; generation.lua:361 stops
+            with outcome 'revoked' on any grant_revoked, while generation_runner.lua:132 records a
+            cause only for EDIT_REASONS and epoch/detach — 'explicit revoke' and 'generation
+            finished' leave it nil. No spec covers a cause-less revocation, so reachability is
+            unverified either way. This is the 11th finding in family
+            enumeration-claims-completeness. Do NOT add one row — the rule is that the terminal
+            outcomes' rows are derived from the machine's outcome set, so an outcome without
+            words fails at load rather than at a user's screen.
+          family: enumeration-claims-completeness
+          round: 19
+        - id: BR-74
+          severity: Minor
+          title: refusal_spec sets the process-global _allow_unkeyed and restores it only on the success path
+          detail: |-
+            tests/unit/refusal_spec.lua:44 sets R._allow_unkeyed = true and :50 restores it after
+            the assertions; a failing assertion leaves the guard disabled for every later case in
+            the process (and :35's assignment is already a no-op). This is the 3rd finding in
+            family stub-restored-outside-finally. The rule: a spec that mutates a process-global
+            restores it from after_each or through the repo's Stub.with_stub, never on the happy
+            path.
+          family: stub-restored-outside-finally
+          round: 19
+      boundary: M5
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -1861,6 +1970,72 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   `docs-reflow-after-deletion` family: nothing was deleted from this doc — a
   behaviour moved out from under a comment that describes a collaborator.
 
+## Round 19 — 2026-09-19T13:53:45-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-65 — addressed — Verified on the shipped module and by running the spec: the provider, prepare and
+overflow endings now assert whole messages and the internal token no longer leaks.
+- BR-66 — not-addressed — The census never fails for the outcome-row fallback, which is exactly where
+`issue(s,<lit>)` tokens land: R.describe('ended','provider_failed','brand new runner
+token') returns "...the model's request failed (brand new runner token)..." with
+unkeyed() empty. Where it can fire, the error is thrown inside the terminal callback
+that generation_runner.lua:476 and response_session.lua:14 each pcall and discard.
+Remaining: fail (or assert after each spec) on _detail_only too, report through a
+channel the seam cannot swallow, and correct the atlas/target sentence crediting
+refusal_vocabulary_spec with catching any wordless producer reason.
+- BR-67 — addressed — The named command genuinely unblocks: respond_all disposes a paused, settled batch
+(chat_respond.lua:2008-2015) and batch.lua:93 leaves exactly that state.
+- BR-68 — addressed — Cause now outranks a stray failure (refusal.lua:252), asserted by equality in
+refusal_spec.lua:80.
+- BR-69 — addressed — init.lua:4174 forwards three arguments; every call site in lua/ and tests/ passes one.
+- BR-70 — not-addressed — The stale sentence was replaced by another inaccurate one: "respond and respond_all
+both warn, and both still return `nil, reason`" — respond returns a bare `return` on
+both ctx failures (chat_respond.lua:1813) and respond_all does on its not-a-chat path
+(:2005); init's wrapper logs an ERROR, not a warning, for a broken header
+(init.lua:4300). Rule: a comment about a collaborator cites it (file:line) or states
+only what this module guarantees.
+
+### Raised
+
+- **BR-71** [Important] `test-hook-in-production-path` Both new guards live in production code behind PARLEY_TEST_MODE; one makes the pure vocabulary stateful and grows unbounded in production, the other is swallowed by the calling seam
+  refusal.lua:230-235 and dispatcher.lua:677 put harness-only checks on production
+  paths. `describe` is declared pure (refusal.lua:3) and listed under the plan's Pure
+  entities, but now mutates M._unkeyed/M._detail_only and branches on vim.env
+  (ARCH-PURE). M._detail_only is written unconditionally, in production too — one entry
+  per distinct provider diagnosis, carrying up to ~500 chars of provider body, with
+  forget_unkeyed() called only from specs: a growing structure with no removal path and
+  no bound (ARCH-FUNERAL; ARCH-SECURE for the retained body text). The dispatcher's
+  error is caught by generation_runner.lua:365 / response_provider.lua:100, so an
+  integration spec sees "provider startup failed" instead of the guard's advice. The
+  rule: a harness-only check belongs in the harness — record at the boundary (the
+  `refuse` wrapper), assert from a spec hook, and default query_dir to $TMPDIR in
+  tests/minimal_init.vim so no spec can inherit the shared cache.
+- **BR-72** [Minor] `behavior-change-without-regression-test` The refusal spec's `one()` helper is a substring probe, so the batch-pause case still cannot see a second detail on the same provider_failed ending
+  chat_refusal_spec.lua:159 asserts find("Response stopped: the model's request failed")
+  on the ending BR-65 broke, and one() (:75) matches by substring for all 17 cases, so
+  appended text is invisible. This is the 6th finding in family
+  behavior-change-without-regression-test. Earlier rounds fixed instances. Do NOT fix
+  this line — the rule is that a case asserting a composed message compares the WHOLE
+  string; apply it by making one() take the full expected message and use assert.equals,
+  so every present and future case inherits it.
+- **BR-73** [Minor] `enumeration-claims-completeness` `revoked` has no TOKENS row, so an ending whose cause is not edit/reload/detach reads "unexpected (revoked)"
+  refusal.lua:252 words a revocation only for a mapped cause; generation.lua:361 stops
+  with outcome 'revoked' on any grant_revoked, while generation_runner.lua:132 records a
+  cause only for EDIT_REASONS and epoch/detach — 'explicit revoke' and 'generation
+  finished' leave it nil. No spec covers a cause-less revocation, so reachability is
+  unverified either way. This is the 11th finding in family
+  enumeration-claims-completeness. Do NOT add one row — the rule is that the terminal
+  outcomes' rows are derived from the machine's outcome set, so an outcome without
+  words fails at load rather than at a user's screen.
+- **BR-74** [Minor] `stub-restored-outside-finally` refusal_spec sets the process-global _allow_unkeyed and restores it only on the success path
+  tests/unit/refusal_spec.lua:44 sets R._allow_unkeyed = true and :50 restores it after
+  the assertions; a failing assertion leaves the guard disabled for every later case in
+  the process (and :35's assignment is already a no-op). This is the 3rd finding in
+  family stub-restored-outside-finally. The rule: a spec that mutates a process-global
+  restores it from after_each or through the repo's Stub.with_stub, never on the happy
+  path.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
@@ -1876,9 +2051,9 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-46** [Important] `enumeration-claims-completeness` The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
 - **BR-61** [Important] `seam-change-collateral` The dispatcher still documents a one-arg pre_query, naming copilot, after W6 made it two-arg
 - **BR-64** [Minor] `behavior-change-without-regression-test` cancel_through's throw exit and the direct site's refused-cancel exit fail nothing when reverted
-- **BR-65** [Important] `behavior-change-without-regression-test` The provider-detail suppression at chat_respond.lua:1763 is dead, so the diagnosis prints twice and `staging overflow` leaks
 - **BR-66** [Important] `enumeration-claims-completeness` The refusal census scans call shapes, not the values describe() keys on, so `issue(s,<lit>)` tokens have no words
-- **BR-67** [Minor] `action-does-not-unblock` `unknown effect` tells the user to run :ParleyToolOperations, which cannot let the batch resume
-- **BR-68** [Minor] `fallback-order-hides-known-cause` describe() consults REVOKED only when failure is nil, so a revocation carrying any failure reads "unexpected"
-- **BR-69** [Minor] `returned-handle-has-no-consumer` init.lua:4174 still forwards a 4th argument that chat_respond.respond does not accept
 - **BR-70** [Minor] `comment-outlives-its-behavior` chat_context.lua's header comment still describes the pre-M5 reporting it no longer owns
+- **BR-71** [Important] `test-hook-in-production-path` Both new guards live in production code behind PARLEY_TEST_MODE; one makes the pure vocabulary stateful and grows unbounded in production, the other is swallowed by the calling seam
+- **BR-72** [Minor] `behavior-change-without-regression-test` The refusal spec's `one()` helper is a substring probe, so the batch-pause case still cannot see a second detail on the same provider_failed ending
+- **BR-73** [Minor] `enumeration-claims-completeness` `revoked` has no TOKENS row, so an ending whose cause is not edit/reload/detach reads "unexpected (revoked)"
+- **BR-74** [Minor] `stub-restored-outside-finally` refusal_spec sets the process-global _allow_unkeyed and restores it only on the success path

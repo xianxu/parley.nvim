@@ -3490,3 +3490,20 @@ download.
   matched `:Parley%u`. For each refusal, ask what the named command changes; test
   that a class of refusal names the command that actually unblocks it, and that
   every command named exists.
+- #261 M5 review round 2 (a harness-only check belongs in the harness): the fix
+  for a missing census put the census inside a module the plan lists as PURE,
+  behind `$PARLEY_TEST_MODE`. That made it stateful, grew a table with no bound
+  and no removal in production (holding provider text), and threw where the
+  caller's `pcall` swallowed it. When a guard needs a value that only production
+  code sees, have production code REPORT it — return how it resolved, with no
+  state and no environment branch — and let the harness judge and fail. A test
+  hook compiled into production is a leak of the test into the product, and a
+  `pcall` between the check and the runner makes it silent anyway.
+- #261 M5 review round 2 (a harness flag that production reads is a behaviour
+  switch): `tests/minimal_init.vim` set `g:parley_test_mode`, and plenary's spec
+  children never loaded it, so `file_tracker`'s short-circuit on that flag was
+  dead under the suite. The moment children loaded the init, two specs failed —
+  they had been exercising the real persistence by accident. If production code
+  branches on a harness flag, the specs that depend on either branch set it
+  themselves; and know which processes actually load your init before relying on
+  what it sets.

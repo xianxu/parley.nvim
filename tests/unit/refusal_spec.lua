@@ -1,5 +1,8 @@
 -- #261 M5: one vocabulary for every refusal a user can meet.
 local R = require("parley.refusal")
+-- This spec describes tokens that have no words on purpose; the harness watch
+-- in tests/minimal_init.vim fails any other spec that produces one.
+vim.g.parley_expected_unkeyed = { "never heard of it" }
 
 describe("refusal vocabulary", function()
     local ACTION = { "^:Parley%u", "submit again", "try again in a moment", "wait for", "edit" }
@@ -25,29 +28,54 @@ describe("refusal vocabulary", function()
         assert.truthy(R.describe("ended", "revoked", nil, { cause = "reload" }):find("reloaded", 1, true))
         assert.is_nil(R.describe("ended", "revoked", nil, { cause = "detach" }))
     end)
-    -- An unknown token is a defect, so `describe` records it and, under the
-    -- harness, fails where it is produced. A spec that means to pass one says so
-    -- (#261 M5 review BR-66).
-    it("records a token that has no words, and fails the harness unless allowed", function()
-        R.forget_unkeyed()
-        assert.has_error(function() R.describe("start", nil, "never heard of it") end)
-        assert.same({ "never heard of it" }, R.unkeyed(), "recorded before it throws")
-        R._allow_unkeyed = false
-        -- Free text under a known outcome is that outcome's detail, not a
-        -- missing row: recorded, and never a failure.
-        R.describe("ended", "provider_failed", "provider request failed (HTTP 503)")
-        assert.same({ "never heard of it" }, R.unkeyed())
-        assert.same({ "provider request failed (HTTP 503)" }, R.detail_tokens())
-        R.forget_unkeyed()
+    -- `describe` stays pure and keeps no state: it says how it resolved, and the
+    -- harness judges that (tests/minimal_init.vim fails a spec that produces an
+    -- `unkeyed` one). #261 M5 review BR-66/BR-71.
+    it("says how it resolved, so a caller can judge the words", function()
+        local function class(...) local _, resolution = R.describe(...); return resolution end
+        assert.equals("keyed", class("start", nil, "generation limit"))
+        assert.equals("cause", class("ended", "revoked", nil, { cause = "edit" }))
+        assert.equals("silent", class("ended", "cancelled", R.USER_STOP))
+        assert.equals("silent", class("ended", "revoked", nil, { cause = "detach" }))
+        assert.equals("internal", class("start", nil, "invalid specification"))
+        assert.equals("internal", class("ended", "finalize_failed", "invalid completion"))
+        -- Free text under a known outcome is that outcome's detail, not a missing row.
+        assert.equals("detail", class("ended", "provider_failed", "provider request failed (HTTP 503)"))
+        assert.equals("unkeyed", class("start", nil, "never heard of it"))
+    end)
+    -- Round 2: the harness watch caught `interrupted` from the drill-in. The
+    -- class is every status a user edit can end with, not that one token.
+    it("has words for every status a user edit ends with", function()
+        for _, status in ipairs({ "stale", "refused", "interrupted", "busy", "chunkneeded" }) do
+            assert.is_not_nil(R.TOKENS[status], status)
+        end
+        local statuses = {}
+        for _, file in ipairs({ "lua/parley/document/editor.lua", "lua/parley/document/user_edits.lua" }) do
+            for _, line in ipairs(vim.fn.readfile(file)) do
+                for status in line:gmatch("status%s*=%s*'([%a_]+)'") do statuses[status] = true end
+            end
+        end
+        local missing = {}
+        for status in pairs(statuses) do
+            if status ~= "applied" and not (R.TOKENS[status] or R.INTERNAL[status]) then
+                missing[#missing + 1] = status
+            end
+        end
+        table.sort(missing)
+        assert.same({}, missing, "a status a caller can report needs words")
+    end)
+    -- BR-74: an outcome the machine can stop with has words, checked at load.
+    it("has words for every outcome the generation machine stops with", function()
+        for outcome in pairs(require("parley.generation").OUTCOMES) do
+            assert.is_true(outcome == "success" or R.TOKENS[outcome] ~= nil, outcome)
+        end
     end)
     it("calls an internal token and an unknown one unexpected, showing the token and the log", function()
-        R._allow_unkeyed = true
         local internal = R.describe("start", nil, "invalid specification", { log_file = "/x/parley.log" })
         assert.truthy(internal:find("unexpected", 1, true)); assert.truthy(internal:find("invalid specification", 1, true))
         assert.truthy(internal:find("/x/parley.log", 1, true))
         local unknown = R.describe("start", nil, "never heard of it")
         assert.truthy(unknown:find("unexpected", 1, true)); assert.truthy(unknown:find("never heard of it", 1, true))
-        R._allow_unkeyed = false; R.forget_unkeyed()
     end)
     -- BR-67: naming a command that cannot clear the condition is worse than
     -- naming none. Nothing clears a batch's `unknown`, and a batch whose

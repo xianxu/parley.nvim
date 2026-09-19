@@ -72,22 +72,26 @@ describe("refusals reach the user once, in words", function()
     local function capture(body)
         Stub.with_stub(parley.logger, "warning", function(message) warnings[#warnings + 1] = tostring(message) end, body)
     end
-    local function one(needle)
+    -- The WHOLE message, never a probe: a substring holds either side of a
+    -- detail appended, suppressed or composed wrongly (#261 M5 review BR-65/73).
+    local function one(expected)
         local got = refusals()
         assert.equals(1, #got, "expected exactly one refusal, got: " .. vim.inspect(got))
-        assert.truthy(got[1]:find(needle, 1, true), got[1])
+        assert.equals(expected, got[1])
         return got[1]
     end
 
     it("says so when the batch selection holds no question", function()
         capture(function() cursor("# topic: Fixture"); Respond.respond_all() end)
-        one("select the 💬: questions")
+        one("Batch not started: no question is in the selection;"
+            .. " edit: select the 💬: questions to answer, then submit again")
     end)
 
     it("says so when the cursor is not on a question", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "# topic: Fixture", "- file: fixture.md", "---", "", "just text" })
         capture(function() cursor("just text"); Respond.respond({ range = 0 }) end)
-        one("put the cursor on a 💬: question")
+        one("Response not started: the cursor is not on a question;"
+            .. " edit: put the cursor on a 💬: question, then submit again")
     end)
 
     it("says an edit revoked the answer, keeping the partial text", function()
@@ -97,7 +101,8 @@ describe("refusals reach the user once, in words", function()
             vim.api.nvim_buf_set_text(buf, row - 1, 0, row - 1, 0, { "human " })
             terminal(session)
         end)
-        one("you edited the answer")
+        one("Response stopped: you edited the answer while it was being written;"
+            .. " the partial answer is kept; submit again to regenerate")
     end)
 
     -- `:e!` detaches the document just as closing the chat does (measured: the
@@ -108,7 +113,7 @@ describe("refusals reach the user once, in words", function()
             vim.cmd("silent write!"); vim.cmd("edit!")
             terminal(session)
         end)
-        one("the chat was reloaded")
+        one("Response stopped: the chat was reloaded while the answer was being written; submit again")
     end)
 
     it("says nothing when the chat is closed", function()
@@ -139,7 +144,8 @@ describe("refusals reach the user once, in words", function()
             vim.cmd("silent write!"); vim.cmd("edit!")
             vim.wait(50)
         end)
-        one("Batch stopped: the chat was reloaded; :ParleyChatRespondAll to start again")
+        one("Batch stopped: the chat was reloaded; :ParleyChatRespondAll to start again"
+            .. " — 0 of 1 questions answered")
     end)
 
     -- The response says why it stopped; the batch says only that it paused and
@@ -180,7 +186,8 @@ describe("refusals reach the user once, in words", function()
             Respond.resume_batch({})
             vim.wait(200)
         end)
-        one("Batch not resumed: a question in the batch was replaced; :ParleyChatRespondAll to start a new batch")
+        one("Batch not resumed: a question in the batch was replaced;"
+            .. " :ParleyChatRespondAll to start a new batch")
         warnings = {}
         capture(function()
             cursor("💬: first, reworded"); assert(Respond.respond_all(), "the paused batch still blocks")
@@ -195,7 +202,8 @@ describe("refusals reach the user once, in words", function()
             wait(function() return #calls == 1 end)
             Respond.respond_all()
         end)
-        one("a batch is already running in this chat; wait for it to finish, or stop it with :ParleyStop")
+        one("Batch not started: a batch is already running in this chat;"
+            .. " wait for it to finish, or stop it with :ParleyStop")
     end)
 
     it("says the model's request failed, with the provider's detail", function()
@@ -207,8 +215,8 @@ describe("refusals reach the user once, in words", function()
         end)
         -- The whole message, not a probe: a substring holds either side of a
         -- suppression that never ran (#261 M5 review BR-65).
-        assert.equals("Response stopped: the model's request failed; submit again"
-            .. " — parley: provider request failed (HTTP 503): upstream down", one("the model's request failed"))
+        one("Response stopped: the model's request failed; submit again"
+            .. " — parley: provider request failed (HTTP 503): upstream down")
     end)
 
     it("says the request could not be built, and why", function()
@@ -217,8 +225,7 @@ describe("refusals reach the user once, in words", function()
                 cursor("💬: first"); terminal(assert(Respond.respond({ range = 0 })))
             end)
         end)
-        assert.equals("Response not started: the request could not be built (builder exploded); submit again",
-            one("the request could not be built"))
+        one("Response not started: the request could not be built (builder exploded); submit again")
     end)
 
     -- A submission waits behind first-use model setup; closing it is not a
@@ -241,8 +248,8 @@ describe("refusals reach the user once, in words", function()
             output(calls[1], string.rep("x", 1048577))
             terminal(session)
         end)
-        assert.equals("Response stopped: the response was stopped to keep its output from being dropped;"
-            .. " submit again — its output passed the staging budget", one("staging budget"))
+        one("Response stopped: the response was stopped to keep its output from being dropped; submit again"
+            .. " — its output passed the staging budget")
     end)
 
     it("names :ParleyStop when the answer is already being written", function()
@@ -252,7 +259,8 @@ describe("refusals reach the user once, in words", function()
             cursor("💬: first"); Respond.respond({ range = 0 })
             vim.wait(50)
         end)
-        one(":ParleyStop")
+        one("Response not started: another response is already writing this answer;"
+            .. " wait for it to finish, or stop it with :ParleyStop, then submit again")
     end)
 
     it("says nothing when the user stops it", function()
@@ -276,6 +284,7 @@ describe("refusals reach the user once, in words", function()
                 vim.wait(50)
             end)
         end)
-        one("still running after Stop: pid 4242")
+        one("Response not started: four responses are already running in this chat;"
+            .. " wait for one to finish, or stop one with :ParleyStop; still running after Stop: pid 4242")
     end)
 end)

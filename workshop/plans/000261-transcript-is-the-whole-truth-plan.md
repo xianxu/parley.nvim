@@ -2509,3 +2509,66 @@ Counterfactuals for this round, each red:
 | an action naming `:ParleyNoSuchThing` | "names only commands that exist" |
 | the spec's `query_dir` back to the shared cache | 67 cases of `dispatcher_query_spec` |
 
+### 2026-09-19 — M5 boundary review round 2 (FIX-THEN-SHIP): the guards leave production
+
+Round 1 disposed six findings; two of its own fixes were wrong in the same way,
+and the round's rule is the one it names: **a harness-only check belongs in the
+harness.**
+
+- **BR-71 (Important, `test-hook-in-production-path`).** Correct on both counts.
+  Round 1 put the value census inside `describe` behind `$PARLEY_TEST_MODE`,
+  which made a module the plan lists as PURE stateful (ARCH-PURE), grew
+  `_detail_only` without bound or removal in production — holding up to ~500
+  characters of provider body (ARCH-FUNERAL, ARCH-SECURE) — and threw where the
+  runner's `pcall` swallowed it. The dispatcher's guard had the same shape.
+  - `describe` is pure again and keeps nothing. It returns the message **and how
+    it resolved**: `keyed`, `detail`, `internal`, `cause`, `silent`, `unkeyed`.
+  - `tests/minimal_init.vim` wraps `describe`, and any spec that produces an
+    `unkeyed` token fails the file through `cquit`, which no `pcall` can swallow.
+    A spec that means to pass one names it in `g:parley_expected_unkeyed`, at
+    file scope: nothing to restore (this also answers BR-72).
+  - `tests/helpers/spec_runner.lua` now passes `minimal_init` to plenary, so
+    every spec child loads it. Before this, children ran with no `-u` at all.
+  - The query directory is a plain override, `$PARLEY_QUERY_DIR`, which the
+    harness sets per process. No branch on the environment is left in the
+    dispatcher.
+- **BR-66 (Important, carried).** The census now keys on what `describe`
+  resolves, across every spec in the suite, rather than on producer syntax. The
+  atlas and target sentences that credited the static spec with catching any
+  wordless reason are corrected: it reads the producer files for the call shapes
+  it knows, at authoring time, and the harness covers the values.
+- **BR-73 (Minor).** `one()` in `chat_refusal_spec` now takes the whole expected
+  message and compares with equality, so all 17 cases inherit the rule rather
+  than the three that were fixed by hand.
+- **BR-74 (Minor).** `generation.lua` declares `M.OUTCOMES` next to the only
+  function that sets one and asserts membership there; `refusal.lua` checks at
+  **load** that every outcome has words. `revoked` (a revocation with no recorded
+  cause) had none and now does.
+- **BR-70 (Minor, carried).** The replacement sentence was inaccurate too. The
+  comment now states only what this module guarantees — it returns a typed error
+  and never speaks — and describes no collaborator.
+
+**What the harness change surfaced.** With children loading `minimal_init.vim`,
+`g:parley_test_mode` reaches specs for the first time, and `file_tracker`
+short-circuits its persistence on that flag. `file_tracker_spec`, which
+exercises the real read and write against a redirected `stdpath`, was passing
+only because the flag never arrived. It now clears the flag itself and restores
+it. `file_tracker` is the only reader.
+
+Counterfactuals for this round:
+
+| Change | Fails |
+|---|---|
+| a spec that produces a wordless token | that spec file, through the harness watch (verified: `refusal_spec` before its exemption) |
+| an outcome added to `OUTCOMES` with no row | `refusal.lua` at load, in every spec that requires it |
+| a detail appended to any refusal | its case, by whole-message equality |
+
+**The watch earned its place on its first full run.** `drill_in_transaction_spec`
+failed with "these reached a user with no words: interrupted" — a real refusal
+the user met as `Drill-in stopped: unexpected (interrupted)`, which the static
+census could not see (the value comes from a document status, not a producer
+literal). Fixed as its class: every status a user edit can end with
+(`applied` aside) now has words, and a spec derives the list from
+`document/editor.lua` and `document/user_edits.lua` rather than trusting the
+five that exist today.
+

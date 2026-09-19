@@ -897,6 +897,35 @@ Six findings, two blocking, all fixed as rules (plan Revisions).
   failure, a deleted parameter still forwarded, a comment describing behaviour
   that moved.
 
+### 2026-09-19 — M5 boundary review round 2 (FIX-THEN-SHIP) and dispositions
+
+Round 1's own fixes were the finding: both guards sat in production behind
+`$PARLEY_TEST_MODE`, which made the pure vocabulary stateful and unbounded, and
+threw where a `pcall` seam swallowed it.
+
+- **BR-71:** `describe` is pure again and returns how it resolved. The watch
+  lives in `tests/minimal_init.vim`, which every spec child now loads, and fails
+  the file through `cquit`. The query directory is a plain `$PARLEY_QUERY_DIR`
+  override the harness sets per process.
+- **BR-66 (carried):** the census now keys on what `describe` resolves across
+  the suite; the atlas and target sentences no longer over-credit the static
+  spec.
+- **BR-73:** every refusal case compares the whole message.
+- **BR-74:** the machine declares its outcome set, and `refusal.lua` fails at
+  load if one has no words. `revoked` had none.
+- **BR-70/72 (carried):** the comment states only this module's guarantee, and
+  the spec-level exemption is file-scoped with nothing to restore.
+
+On its first full run the watch caught a real one: the drill-in reported
+`Drill-in stopped: unexpected (interrupted)`. The static census could not see it
+— the value is a document status, not a producer literal. Every status a user
+edit can end with now has words, checked against the two producer files.
+
+Loading the init in children also let `g:parley_test_mode` reach specs for the
+first time. `file_tracker` skips its persistence on that flag, so
+`file_tracker_spec` (which exercises the real read and write) now clears it
+itself. It is the flag's only reader.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

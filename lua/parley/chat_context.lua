@@ -1,12 +1,10 @@
 -- The sequence every chat entry point runs before it can act: is this buffer a
 -- chat, where does its header end, and what does the body parse to.
 --
--- ONE owner for the sequence; the CALLER owns the reporting. This returns a
--- typed error and never speaks. init.lua's keystroke commands log a warning
--- naming the command and abort. chat_respond's entry points pass the reason to
--- `refuse`, which words it through parley.refusal (#261 M5): `respond` and
--- `respond_all` both warn, and both still return `nil, reason` to their
--- callers.
+-- ONE owner for the sequence; the CALLER owns the reporting. This module never
+-- speaks to the user and never logs: it returns a typed error (`kind`, `reason`)
+-- and each caller decides what to say and whether to return the reason onward.
+-- What any given caller does is that caller's to state, not this comment's.
 --
 -- TWO PHASES, because respond_all interleaves its own precondition (is a batch
 -- already running?) between the chat check and the parse. A single monolithic

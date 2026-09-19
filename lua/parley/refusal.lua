@@ -107,8 +107,14 @@ M.TOKENS = {
     ["LLM setup is unavailable in headless mode"] = { what = "model setup needs an interactive Neovim",
         action = ":ParleyAgent in an interactive session" },
     ["not a chat"] = { what = "this buffer is not a chat", action = ":ParleyChatNew to start one" },
+    -- Every status a user edit can end with (document/editor.lua,
+    -- document/user_edits.lua), not only the ones seen so far: `applied` is the
+    -- success, and these are what a caller reports (#261 M5 review round 2).
     ["stale"] = { what = "the chat changed while it was being edited", action = MOMENT },
     ["refused"] = { what = "the edit could not be applied", action = MOMENT },
+    ["interrupted"] = { what = "the chat changed while Parley was writing into it", action = MOMENT },
+    ["busy"] = { what = "another edit is being applied to the chat", action = MOMENT },
+    ["chunkneeded"] = { what = "the edit was too large to apply in one step", action = MOMENT },
     -- Resume.
     ["no stale continuation ready"] = { what = "the response is not paused on a changed input",
         action = ":ParleyChatRespond to start a new one" },
@@ -143,6 +149,8 @@ M.TOKENS = {
     -- Terminal outcomes. `revoked` depends on the cause (see `describe`).
     ["cancelled"] = { what = "the response was cancelled", action = AGAIN },
     ["overflow"] = { what = "the response was stopped to keep its output from being dropped", action = AGAIN },
+    -- A revocation whose cause was not recorded (REVOKED words the ones that were).
+    ["revoked"] = { what = "the answer's claim on the chat was withdrawn", action = AGAIN },
     ["staging overflow"] = { what = "the response was stopped to keep its output from being dropped", action = AGAIN },
     ["provider_failed"] = { what = "the model's request failed", action = AGAIN },
     ["prepare_failed"] = { what = "the request could not be built", action = AGAIN },
@@ -206,34 +214,6 @@ local function internal(token)
     return false
 end
 
--- Tokens that reached `describe` with no words at all (#261 M5 review BR-66).
--- A census of call shapes misses whatever producer form it has not met; this
--- records the VALUE that arrives, so every producer is covered, now and later.
--- Under the test harness an unkeyed token is a defect, and fails where it is
--- produced; a spec that means to pass one sets `_allow_unkeyed`.
-M._unkeyed = {}
-M._detail_only = {}
-M._allow_unkeyed = false
-local function sorted(set)
-    local tokens = {}
-    for token in pairs(set) do tokens[#tokens + 1] = token end
-    table.sort(tokens)
-    return tokens
-end
---- Tokens that reached `describe` with no words at all.
-function M.unkeyed() return sorted(M._unkeyed) end
---- What was shown as a known outcome's detail: a provider's diagnosis, a build
---- error. Free text belongs here; a short producer token appearing here wants a
---- row of its own, which the whole-message assertions make visible.
-function M.detail_tokens() return sorted(M._detail_only) end
-function M.forget_unkeyed() M._unkeyed = {}; M._detail_only = {} end
-local function unkeyed(token)
-    M._unkeyed[tostring(token)] = true
-    if vim.env.PARLEY_TEST_MODE == "1" and not M._allow_unkeyed then
-        error("refusal: no words for token '" .. tostring(token) .. "' — add a row to TOKENS or INTERNAL", 0)
-    end
-end
-
 ---@param kind string # a PREFIX key
 ---@param outcome string|nil # a terminal outcome, when the refusal is an ending
 ---@param failure string|nil # the producer's token
@@ -241,34 +221,35 @@ end
 ---  log_file = the Parley log's path, named when the token is unexpected, action = what to do instead of
 ---  the row's own (a batch's, which continues rather than submits)}
 ---@return string|nil # the message, or nil when there is nothing to say
+---@return string # how it resolved: silent, cause, keyed, detail, internal, unkeyed. Pure,
+---  so a caller (the harness) can judge the words without this module keeping state.
 function M.describe(kind, outcome, failure, detail)
     detail = detail or {}
-    if SILENT[failure] then return nil end
+    if SILENT[failure] then return nil, "silent" end
     local prefix = M.PREFIX[kind] or tostring(kind)
     local log = "the details are in " .. (detail.log_file or "the Parley log")
-    local text
+    local text, resolution
     -- A revocation says why the grant went, whatever failure the stop recorded
     -- on the way (BR-68): the cause is the more specific fact.
     if outcome == "revoked" and (detail.cause == "detach" or M.REVOKED[detail.cause]) then
-        if detail.cause == "detach" then return nil end
+        if detail.cause == "detach" then return nil, "silent" end
         local row = M.REVOKED[detail.cause]
         text = row.what .. "; " .. (detail.action or row.action)
+        resolution = "cause"
     end
     if not text then
         local token = failure or outcome
         local row, extra = row_of(token)
         local pointer
+        resolution = row and "keyed" or nil
         if not row and failure and outcome then
             -- A failure with no row of its own never erases the outcome's words.
             -- A token the user can read becomes its detail; an internal one
             -- becomes the pointer to the log (BR-65).
             row = row_of(outcome)
             if row then
-                if internal(failure) then pointer = log
-                else
-                    extra = tostring(failure):match("^[^\n]+")
-                    M._detail_only[tostring(extra)] = true
-                end
+                resolution = internal(failure) and "internal" or "detail"
+                if internal(failure) then pointer = log else extra = tostring(failure):match("^[^\n]+") end
             end
         end
         if row then
@@ -281,13 +262,22 @@ function M.describe(kind, outcome, failure, detail)
             if pointer then text = text .. "; " .. pointer end
         elseif internal(token) then
             text = "an unexpected internal error (" .. tostring(token) .. "); " .. log
+            resolution = "internal"
         else
             text = "unexpected (" .. tostring(token) .. "); " .. log
-            unkeyed(token)
+            resolution = "unkeyed"
         end
     end
     if type(detail.notice) == "string" and detail.notice ~= "" then text = text .. " — " .. detail.notice end
-    return prefix .. ": " .. text
+    return prefix .. ": " .. text, resolution
+end
+
+-- An outcome the machine can stop with must have words, or it reaches a user as
+-- "unexpected" (#261 M5 review BR-74). Checked here, at load, against the set
+-- the machine declares, so adding an outcome without a row fails at once.
+for outcome in pairs(require("parley.generation").OUTCOMES) do
+    assert(outcome == "success" or M.TOKENS[outcome],
+        "parley.refusal: no words for the generation outcome '" .. outcome .. "'")
 end
 
 return M

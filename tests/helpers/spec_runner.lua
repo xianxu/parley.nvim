@@ -13,10 +13,12 @@ local extended={
 function M.options(path)
     if extended[absolute(path)] then return {timeout=180000,sequential=true} end
 end
+-- Every child loads tests/minimal_init.vim, so the harness-only guards there
+-- (a per-process query dir, the wordless-refusal watch) cover every spec rather
+-- than the ones that remember to ask (#261 M5 review BR-71).
+local INIT='tests/minimal_init.vim'
 function M.run(path)
     local harness=require('plenary.test_harness')
-    local options=M.options(path)
-    if options then return harness.test_directory(path,options) end
-    return harness.test_file(path)
+    return harness.test_directory(path,vim.tbl_extend('force',{minimal_init=INIT},M.options(path) or {}))
 end
 return M
