@@ -13,6 +13,9 @@ local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 cliproxy._set_data_dir(vim.fn.tempname())
 
+-- A query outside any generation names its end (#261 M3).
+local UNOWNED = { deadline_ms = 60000 }
+
 describe("cliproxy recovery end to end", function()
     local saved_config, saved_providers, saved_path, started
 
@@ -75,7 +78,7 @@ describe("cliproxy recovery end to end", function()
                 out.failure = failure
                 out.notice = chat_respond._failure_notice(failure)
                 out.done = true
-            end)
+            end, UNOWNED)
         vim.wait(20000, function() return out.done end, 25)
         return out
     end
@@ -188,7 +191,7 @@ describe("cliproxy recovery end to end", function()
             nil,
             function() out.done = true end,
             nil, nil, nil,
-            function(_qid, failure) out.failure = failure; out.done = true end)
+            function(_qid, failure) out.failure = failure; out.done = true end, UNOWNED)
 
         vim.wait(20000, function() return out.done end, 25)
 
@@ -217,7 +220,7 @@ describe("cliproxy recovery end to end", function()
         local out = { done = false }
         dispatcher.query(nil, "openai", { model = "gpt-4", messages = {}, stream = false },
             function() end, nil, nil, nil, nil, nil,
-            function(_qid, failure) out.failure = failure; out.done = true end)
+            function(_qid, failure) out.failure = failure; out.done = true end, UNOWNED)
         vim.wait(15000, function() return out.done end, 25)
         assert.is_truthy(out.failure)
         assert.is_nil(out.failure.message) -- no diagnosis: nothing claimed it

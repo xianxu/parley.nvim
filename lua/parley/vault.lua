@@ -149,7 +149,7 @@ V.resolve_secret = function(name, secret, callback, on_error)
 			end
 		end, nil, nil, function(message)
 			fail("vault resolver for " .. name .. " launch failed: " .. tostring(message))
-		end)
+		end, { deadline_ms = tasker.deadline.prompt })
 	else
 		secrets[name] = secret
 		post_process()
@@ -233,7 +233,7 @@ V.refresh_copilot_bearer = function(callback)
 
 		logger.debug("vault refresh_copilot_bearer: token resolved, running callback", true)
 		callback()
-	end, nil, nil)
+	end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
 ---@param name string # secret name

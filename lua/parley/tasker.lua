@@ -17,6 +17,15 @@ M._cache_metrics = { creation = 0, read = 0, input = 0 }
 local records, admissions, queries = {}, {}, {}
 local sequence = 0
 
+-- How long a process outside any generation may run (#261 M3): nobody stops
+-- it, so it names its own end. Past it, TERM, then KILL 2 s later.
+M.deadline = {
+    prompt = 600000, -- a human may be answering: keychain dialog, pinentry, biometrics
+    http = 120000, -- one request and its response
+    convert = 60000, -- pandoc or textutil on one document
+    stream = 900000, -- an LLM stream with no owner: long reasoning output
+}
+
 local DEFAULT_LIMITS={provider_attempts=16,tool_attempts=16,total_attempts=32,
     document_generations=4,document_tools=8,generation_tools=4,retained_bytes=16*1024*1024}
 local limits=vim.deepcopy(DEFAULT_LIMITS)
@@ -84,6 +93,18 @@ end
 local function collected(buffer)
     if #buffer.pieces>0 then buffer.chunks[#buffer.chunks+1]=table.concat(buffer.pieces)end
     return table.concat(buffer.chunks)
+end
+
+local function call_safely(label, fn, ...)
+    if not fn then return end
+    local call_args = { ... }
+    local arg_count = select("#", ...)
+    local ok = xpcall(function()
+        fn(unpack(call_args, 1, arg_count))
+    end, function() return nil end)
+    if not ok then
+        logger.error(label .. " callback failed")
+    end
 end
 
 local function snapshot()
@@ -163,8 +184,13 @@ function M.get_active_query_by_buf(buf)
     return best
 end
 
+local function close_timer(timer)
+    if timer then pcall(function()timer:stop()end);pcall(function()if not timer:is_closing()then timer:close()end end)end
+end
+
 local function retire(record)
     close_reconcile(record)
+    close_timer(record.deadline);record.deadline=nil
     retained_bytes=math.max(0,retained_bytes-(record.retained or 0));record.retained=0
     local state = record.state
     if admissions[state.admission_key] == state.attempt_id then
@@ -179,9 +205,30 @@ local function event(record, observation)
     record.state = attempt.transition(record.state, observation)
 end
 
+-- Where a signal goes (#261 M3): a scoped run's whole group, so a grandchild
+-- holding the pipe dies with it; an unscoped run's pid, only while it has not
+-- exited, since a reaped pid can be reused. A group id is not reused while any
+-- member lives.
+local function target(state)
+    if not state.pid then return nil end
+    if state.group then return -state.pid end
+    if not state.exited then return state.pid end
+end
+
+-- Sends `signal` (0 probes) and returns the observation. ESRCH is `missing`, an
+-- answer rather than a failure; only a throw or another errno is `unknown`.
+local function send(record, signal)
+    local to = target(record.state)
+    if not to then return "missing" end
+    local ok, result, detail, code = pcall(record.runtime.kill, to, signal)
+    if ok and result == 0 then return signal == 0 and "alive" or "accepted" end
+    if ok and (code == "ESRCH" or tostring(detail):find("ESRCH", 1, true)) then return "missing" end
+    return "unknown"
+end
+
 close_reconcile=function(record)
     local timer=record.timer;record.timer=nil
-    if timer then pcall(function()timer:stop()end);pcall(function()if not timer:is_closing()then timer:close()end end)end
+    close_timer(timer)
 end
 schedule_reconcile=function(record)
     if not record.state.reconcile_due or not attempt.is_unresolved(record.state)then close_reconcile(record);return end
@@ -197,22 +244,24 @@ schedule_reconcile=function(record)
     end)end)
     if not ok then record.state.timer_error=true;close_reconcile(record)end
 end
--- Reconciliation observes liveness only. After five seconds the timer retires,
--- while the unresolved attempt and its admission slot remain until positive drain.
+-- Reconciliation probes liveness, and sends SIGKILL once a stop's grace has run
+-- out (#261 M3). After five seconds the timer retires, while the unresolved
+-- attempt and its admission slot remain until positive drain.
 function M.reconcile_step(now)
     now=now or clock()
     for _,record in pairs(records)do
         if attempt.is_unresolved(record.state)then
             local effects;record.state,effects=attempt.transition(record.state,{type='reconcile_tick',now=now})
-            if effects.probe and not record.state.exited and record.state.pid then
-                local ok,result,detail,code=pcall(record.runtime.kill,record.state.pid,0)
-                local observation=ok and result==0 and 'alive' or 'unknown'
-                if ok and (code=='ESRCH' or tostring(detail):find('ESRCH',1,true))then observation='missing'end
-                event(record,{type='observation',observation=observation})
+            if effects.escalate then
+                event(record,{type='signal_observation',observation=send(record,9),signal=9})
+            end
+            if effects.probe and target(record.state)then
+                event(record,{type='observation',observation=send(record,0)})
             end
             if effects.unresolved then
                 close_reconcile(record)
-                logger.warning('Parley process remains unresolved after cancellation/exit; resource ownership retained')
+                logger.warning('Parley process ['..tostring(record.state.pid)
+                    ..'] remains unresolved after cancellation/exit; resource ownership retained')
                 if record.on_unresolved then pcall(record.on_unresolved,vim.deepcopy(record.state))end
             else schedule_reconcile(record)end
         else close_reconcile(record)end
@@ -246,39 +295,27 @@ end
 function M.cleanup_stale_handles()
     for _, record in pairs(records) do
         local state = record.state
-        if not state.exited and state.pid then
-            local ok, result, detail, code = pcall(record.runtime.kill, state.pid, 0)
-            local observation = "unknown"
-            if ok and result == 0 then
-                observation = "alive"
-            elseif ok and (code == "ESRCH" or tostring(detail):find("ESRCH", 1, true)) then
-                observation = "missing"
-            end
-            event(record, { type = "observation", observation = observation })
-        end
+        if target(state) then event(record, { type = "observation", observation = send(record, 0) }) end
     end
     snapshot()
 end
 
-local function stop_matching(matches, signal)
+-- Stops every unresolved record that matches: the signal now, SIGKILL at +2 s
+-- while it stays unresolved (attempt.lua). A repeated stop inside one window
+-- sends nothing new unless the signal differs. `failed` means a signal could not
+-- be delivered for a reason other than the process being gone.
+local function stop_matching(matches, signal, cause)
     local count, failed = 0, false
     signal = signal or 15
     for _, record in pairs(records) do
-        local state = record.state
-        if matches(state) and attempt.is_unresolved(state) then
+        if matches(record.state) and attempt.is_unresolved(record.state) then
             count = count + 1
-            event(record, { type = 'stop_requested', now=clock() })
-            if not state.exited and state.accepted_signal ~= signal then
-                local ok, result, detail, code = pcall(record.runtime.kill, state.pid, signal)
-                local observation = "unknown"
-                if ok and result == 0 then
-                    observation = "accepted"
-                else
-                    failed = true
-                    if ok and (code == "ESRCH" or tostring(detail):find("ESRCH", 1, true)) then
-                        observation = "missing"
-                    end
-                end
+            local accepted = record.state.accepted_signal
+            local effects
+            record.state, effects = attempt.transition(record.state, { type = "stop_requested", now = clock(), cause = cause })
+            if effects.opened or accepted ~= signal then
+                local observation = send(record, signal)
+                if observation == "unknown" then failed = true end
                 event(record, { type = "signal_observation", observation = observation, signal = signal })
             end
             schedule_reconcile(record)
@@ -292,6 +329,30 @@ function M.stop(signal)
     return stop_matching(function() return true end, signal)
 end
 
+-- The one spelling of a generation's process scope (#261 M3).
+function M.scope_key(epoch, generation)
+    return tostring(epoch) .. ":" .. tostring(generation)
+end
+
+-- Records still held after their stop window: a process the kernel keeps.
+function M.held()
+    local out = {}
+    for _, record in pairs(records) do
+        local state = record.state
+        if state.unresolved_visible then
+            out[#out + 1] = { pid = state.pid, kind = state.kind, since = state.reconcile_started,
+                scope = state.group and state.logical_generation or nil }
+        end
+    end
+    table.sort(out, function(a, b) return (a.pid or 0) < (b.pid or 0) end)
+    return out
+end
+
+-- Leaving Neovim: SIGKILL to everything still live.
+function M.leave()
+    return stop_matching(function() return true end, 9, "leave")
+end
+
 local function scoped_stop(matches, signal)
     local count, failed = stop_matching(matches, signal)
     if failed then error("task transport stop failed", 0) end
@@ -300,6 +361,11 @@ end
 
 function M.stop_buf(buf, signal)
     return scoped_stop(function(state) return state.buf == buf end, signal)
+end
+
+function M.stop_scope(key, signal)
+    if key == nil then return 0 end
+    return scoped_stop(function(state) return state.group and state.logical_generation == key end, signal)
 end
 
 function M.stop_owner(owner, signal)
@@ -388,7 +454,10 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
         else
             M.reject_query(opts.query_id)
         end
-        if on_start_error then vim.schedule(function() on_start_error(message) end) end
+        -- Every run settles (#261 M3): without a start-error handler, the exit
+        -- callback hears the refusal.
+        if on_start_error then vim.schedule(function() on_start_error(message) end)
+        else vim.schedule(function() call_safely("task refusal", callback, nil, nil, nil, nil, message) end) end
     end
     if records[id] or admissions[key] then
         reject("task start rejected: owner is busy")
@@ -398,8 +467,13 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
     if not integer(stdout_limit,16*1024*1024) or not integer(stderr_limit,1048576)
         or opts.collect_stdout~=nil and type(opts.collect_stdout)~='boolean'
         or opts.cwd~=nil and (type(opts.cwd)~='string' or opts.cwd=='')
-        or record.state.kind~='provider' and record.state.kind~='tool' and record.state.kind~='utility' then
+        or record.state.kind~='provider' and record.state.kind~='tool' and record.state.kind~='utility'
+        or opts.deadline_ms~=nil and not integer(opts.deadline_ms,3600000) then
         reject('task start rejected: invalid process options');return nil
+    end
+    -- Nobody stops an unscoped run, so it names its own end (#261 M3).
+    if not group and opts.deadline_ms==nil then
+        reject('task start rejected: a process outside a generation needs deadline_ms');return nil
     end
     if not capacity(record.state)then reject('task start rejected: process admission capacity');return nil end
     records[id], admissions[key] = record, id
@@ -420,26 +494,16 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
     local stdout_buffer,stderr_buffer=collection(),collection()
     local io_error
 
-    local function call_safely(label, fn, ...)
-        if not fn then return end
-        local call_args = { ... }
-        local arg_count = select("#", ...)
-        local ok = xpcall(function()
-            fn(unpack(call_args, 1, arg_count))
-        end, function() return nil end)
-        if not ok then
-            logger.error(label .. " callback failed")
-        end
-    end
-
     local finish = M.once(function()
         vim.schedule(function()
             local stdout_data,stderr_data=collected(stdout_buffer),collected(stderr_buffer)
             stdout_buffer,stderr_buffer=nil,nil
             event(record, { type = "delivered" })
             retire(record)
-            call_safely("task terminal", callback,
-                record.state.code, record.state.signal, stdout_data, stderr_data, io_error)
+            -- A kill Parley caused is a failure, whatever the exit code says.
+            local killed = attempt.kill_cause(record.state)
+            call_safely("task terminal", callback, not killed and record.state.code or nil, record.state.signal,
+                stdout_data, stderr_data, io_error or (killed and "killed: " .. killed))
             local ok, message = pcall(vim.cmd, "doautocmd User ParleyQueryFinished")
             if not ok then logger.error("ParleyQueryFinished failed: " .. tostring(message)) end
         end)
@@ -492,6 +556,15 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
     record.handle = handle
     event(record, { type = "spawned", pid = pid })
     if record.state.exited and not handle:is_closing() then handle:close() end
+    if opts.deadline_ms and attempt.is_unresolved(record.state) then
+        local ok,timer=pcall(record.runtime.new_timer)
+        if ok and timer and pcall(function()timer:start(opts.deadline_ms,0,function()
+            vim.schedule(function()
+                if records[id]==record then stop_matching(function(state)return state.attempt_id==id end,15,'deadline')end
+            end)
+        end)end)then record.deadline=timer
+        elseif ok and timer then close_timer(timer)end
+    end
     snapshot()
 
     local function deliver(stream,buffer,limit,reader,err,data,collecting)

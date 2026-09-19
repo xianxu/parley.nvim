@@ -18,14 +18,14 @@ end
 
 local KILL_AFTER, VISIBLE_AFTER = 2000, 5000
 
--- A stop (or a deadline) opens its own window unless one is already running:
--- TERM now, KILL at `kill_due` while unresolved, visible at +5000. A window an
--- exit opened only probes, so a later stop replaces it; so does a stop after a
--- window went visible (#261 M3).
+-- A stop opens its own window unless one is already running: TERM now, KILL at
+-- `kill_due` while unresolved, visible at +5000. Its cause is `stop`, `deadline`
+-- or `leave`. A window an exit opened only probes, so a later stop replaces it;
+-- so does a stop after a window went visible (#261 M3).
 local function open_stop_window(state, now, cause)
     state.stop_requested = true
     if not now or (state.kill_due and not state.unresolved_visible) then return end
-    state.stop_cause = cause
+    state.stop_cause, state.stop_window = cause, (state.stop_window or 0) + 1
     state.kill_due, state.escalated, state.unresolved_visible = now + KILL_AFTER, nil, nil
     state.reconcile_started, state.reconcile_due, state.reconcile_delay = now, now + 50, 50
 end
@@ -36,8 +36,8 @@ function M.transition(previous, event)
         state.pid = event.pid
     elseif event.type == "spawn_failed" then
         state.spawn_failed = true
-    elseif event.type == "stop_requested" or event.type == "deadline" then
-        open_stop_window(state, event.now, event.cause or (event.type == "deadline" and "deadline" or "stop"))
+    elseif event.type == "stop_requested" then
+        open_stop_window(state, event.now, event.cause or "stop")
     elseif event.type == "reconcile_requested" then
         if event.now and not state.reconcile_started then
             state.reconcile_started=event.now;state.reconcile_due=event.now+50;state.reconcile_delay=50
@@ -57,10 +57,7 @@ function M.transition(previous, event)
         state.observation = event.observation
     elseif event.type == "signal_observation" then
         state.signal_observation = event.observation
-        if event.observation == "accepted" then
-            state.accepted_signal = event.signal
-            if not state.exited then state.signalled = true end
-        end
+        if event.observation == "accepted" then state.accepted_signal, state.signalled = event.signal, true end
     elseif event.type == "exit" then
         state.exited = true
         state.code = event.code
@@ -76,12 +73,15 @@ function M.transition(previous, event)
     if not M.is_unresolved(state) then state.reconcile_due = nil end
     return state, { terminal_ready = M.can_deliver_terminal(state),
         probe=(state.reconcile_probes or 0)>(previous.reconcile_probes or 0),
+        opened=state.stop_window ~= previous.stop_window,
         escalate=state.escalated == true and not previous.escalated,
         unresolved=state.unresolved_visible and not previous.unresolved_visible or false }
 end
 
--- Why Parley killed this process, when it did: a signal it sent was accepted
--- before the exit. Nil for a process that ended on its own.
+-- Why Parley killed this attempt, when it did: a signal it sent was accepted
+-- while the attempt was unresolved, so its output may be cut — even when the
+-- parent had exited and the signal reached a grandchild holding the pipe. Nil
+-- for an attempt that ended on its own.
 function M.kill_cause(state)
     return state.signalled and state.stop_cause or nil
 end

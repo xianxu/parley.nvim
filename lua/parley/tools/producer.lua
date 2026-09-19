@@ -117,7 +117,7 @@ function M.new(opts)
         local prepared,why=Dispatch.prepare(profile,call);if not prepared then return refuse(call,events,why)end
         service=service or shared()
         if not generation then
-            generation,why=service:generation({document=buf..':'..epoch,logical_generation=epoch..':'..logical,
+            generation,why=service:generation({document=buf..':'..epoch,logical_generation=Tasker.scope_key(epoch,logical),
                 context=Dispatch.context(profile),capabilities=Dispatch.capabilities(profile)})
             if not generation then return refuse(call,events,why)end
             identity=current

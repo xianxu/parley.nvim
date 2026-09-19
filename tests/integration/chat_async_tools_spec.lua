@@ -249,11 +249,13 @@ describe('public asynchronous chat tools',function()
         vim.fn.writefile({'NATIVE_FILE_BYTES'},root..'/one/input.txt')
         local native_spawns,heartbeat=0,false
         Tasker.run=function(...)
-            local args={...};local options=args[8]
+            -- unpack(args) alone stops at the first nil hole and would drop the
+            -- options (#261 M3: an unscoped run is refused, which surfaced it).
+            local count,args=select('#',...),{...};local options=args[8]
             if options and options.kind=='tool'then
                 native_spawns=native_spawns+1
                 local previous=Tasker._uv;Tasker._uv=nil
-                local result={pcall(old_tasker_run,unpack(args))};Tasker._uv=previous
+                local result={pcall(old_tasker_run,unpack(args,1,count))};Tasker._uv=previous
                 assert.is_true(result[1]);vim.schedule(function()heartbeat=true end)
                 return unpack(result,2)
             end

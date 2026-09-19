@@ -1046,6 +1046,8 @@ function M._conversation_after_lead(messages, lead)
 end
 
 M.generate_topic = function(messages, provider, model, callback, spinner, transport_opts)
+    -- Outside a generation nobody stops the stream, so it names its end (#261 M3).
+    transport_opts = transport_opts or { deadline_ms = require("parley.tasker").deadline.stream }
     -- Build a clean copy: strip whitespace, drop empty messages and cache_control.
     -- Messages carrying content-block arrays (Anthropic tool-use shape, M2
     -- Task 2.6 of #81) are flattened to a plain-text excerpt for topic

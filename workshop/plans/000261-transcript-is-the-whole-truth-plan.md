@@ -68,7 +68,7 @@ must *not* be. So:
 | `traversal_policy` — private-path exclusion for tool commands | `lua/parley/tools/traversal_policy.lua` | deleted |
 | `state` — `holds`: does a generation still hold a live grant on an entity | `lua/parley/document/state.lua` | modified |
 | `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
-| `attempt` — the `escalate` effect and the `deadline` event | `lua/parley/attempt.lua` | modified |
+| `attempt` — `open_stop_window`: TERM, then the escalate effect at +2 s, for a stop whose cause is stop, deadline or leave; `kill_cause` | `lua/parley/attempt.lua` | modified |
 | M5 · `refusal` — `describe`, `TOKENS`, `INTERNAL`, `PREFIX` | `lua/parley/refusal.lua` | new |
 
 - **`State.holds(handle, generation, entity)`** (M2) is true when the
@@ -110,7 +110,7 @@ must *not* be. So:
 | `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view; `source` accepts a preloaded view so a loop reads once; writes report whether they happened | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
 | `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
 | `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any; `buffer_for`: the buffer named exactly `name` | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
-| `tasker` — `scope_key`, `stop_scope`, `held`, `leave` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
+| `tasker` — `scope_key`, `stop_scope`, `held`, `leave`, `deadline` (the per-kind table) | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
 | M4 · `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
 | M4 · `deferred_work` — `new(step, on_error)` | `lua/parley/deferred_work.lua` | modified | timer turns |
 
@@ -1143,7 +1143,7 @@ so every call is unscoped and has no deadline. Once the refusal lands, each one
 needs `{deadline_ms = …}`. Sweep them in this task, and re-run the grep for any
 other spec that calls `tasker.run` directly: `grep -rln "tasker.run(" tests`.
 
-- [ ] **Step 1: Failing sequence tests** on the fake. Each ends with the record
+- [x] **Step 1: Failing sequence tests** on the fake. Each ends with the record
   gone (or held, where stated) and `tasker.stats().active` back at its baseline.
   1. A scoped process ignores TERM. Stop → SIGKILL to the group at 2 s →
      resolved.
@@ -1164,7 +1164,7 @@ other spec that calls `tasker.run` directly: `grep -rln "tasker.run(" tests`.
   11. A process that ignores KILL goes unresolved-visible at 5 s. It is logged
       with its pid, listed by `tasker.held()` as `{pid, kind, since, scope}`,
       and still counted.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [x] **Step 2:** FAIL. **Step 3: Implement.**
   - `M.scope_key(epoch, generation)` returns
     `tostring(epoch)..':'..tostring(generation)`. Replace both spellings with it.
   - `stop_matching`:
@@ -1182,9 +1182,9 @@ other spec that calls `tasker.run` directly: `grep -rln "tasker.run(" tests`.
     `callback(nil,nil,nil,nil,message)` through `call_safely`.
   - On exit after a signal Parley sent, pass `code=nil` and
     `io_error='killed: '..cause`.
-- [ ] **Step 4:** PASS. **Counterfactual:** target `state.pid` instead of the
+- [x] **Step 4:** PASS. **Counterfactual:** target `state.pid` instead of the
   group; tests 2 and 3 fail. Restore.
-- [ ] **Step 5:** Commit (`#261 M3: stop kills a scope as groups, escalating to SIGKILL`).
+- [x] **Step 5:** Commit (`#261 M3: stop kills a scope as groups, escalating to SIGKILL`).
 
 ### Task 3.4: Every unscoped run declares its end; callbacks read kills as failure
 
@@ -1884,3 +1884,39 @@ documents that it checks by spelling.
 - `DROPPED` must match the calls it excuses exactly, so a declaration cannot
   outlive its call.
 - Counterfactuals: the two planted forms, and the stale entry, are all caught.
+
+### 2026-09-19 — M3 Tasks 3.1–3.3, as built
+
+**Delta.**
+- **Deadlines land in 3.3, not 3.4.** The refusal of an unscoped run without
+  `deadline_ms` would otherwise make the 3.3 commit refuse every vault, OAuth,
+  topic and memory-preference spawn. So 3.3 also passes `tasker.deadline.<kind>`
+  at all 18 `tasker.run(nil, …)` sites, and gives both streams
+  (`generate_topic`, `memory_prefs`) `transport_opts = {deadline_ms = …stream}`.
+  The per-kind values are one table, `tasker.deadline` (ARCH-DRY). 3.4 keeps the
+  callback sweep and its tests.
+- **"Scoped" means `logical_generation` or `generation_id` is present**, since
+  `state.logical_generation` defaults to the generation id.
+- **No `deadline` event.** A deadline is `stop_requested` with
+  `cause = 'deadline'`. One event opens every stop window, whatever its cause:
+  `stop`, `deadline` or `leave`. `stop_requested` also reports `opened`, so a
+  repeated stop inside one window sends nothing new unless its signal differs.
+- **What counts as a kill.** `kill_cause` names the cause when any signal Parley
+  sent was accepted while the attempt was unresolved. That includes a group
+  signal that reached only a grandchild after the parent exited, because the
+  output may then be cut. An attempt whose group had already gone (ESRCH) is
+  not a kill, and neither is one that ended on its own.
+- **A resolved attempt closes its window** (`reconcile_due = nil`), so no late
+  tick can escalate it.
+- **Test sweep.**
+  - `tasker_run_spec` routes its calls through one local `run` that adds
+    `deadline_ms`.
+  - The pid-result test now uses an unscoped attempt: a scoped one is signalled
+    by group.
+  - The `dispatcher.query` callers in `query_cache_spec` and
+    `cliproxy_recovery_e2e_spec` pass `{deadline_ms = 60000}`.
+  - The `async_builtin_spec` contexts carry `logical_generation`, as the
+    scheduler always does.
+- **Counterfactual.** When the target is the pid rather than the group, 8 of the
+  12 new sequence tests fail, including 2 and 3.
+

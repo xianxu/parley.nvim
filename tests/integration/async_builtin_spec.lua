@@ -30,7 +30,7 @@ describe('asynchronous builtins',function()
     end)
     it('retains cancellation ownership until exit and both EOFs',function()
         local result;local def=require('parley.tools.builtin.ls')
-        local handle=def.execute_async({path='/tmp'}, {tasker=T,cwd='/tmp',operation_id='cancel'},function(v)result=v end)
+        local handle=def.execute_async({path='/tmp'}, {tasker=T,cwd='/tmp',logical_generation='g',operation_id='cancel'},function(v)result=v end)
         wait(function()return processes.spawn_calls==1 end);handle:cancel()
         assert.is_false(handle:snapshot().physical_resolved)
         assert.is_nil(result)
@@ -104,7 +104,7 @@ describe('asynchronous builtins',function()
         vim.fn.writefile({'PUBLIC_NEEDLE'},dir..'/public.txt')
         vim.fn.writefile({'NESTED_NEEDLE'},dir..'/nested/public.txt')
         local results={}
-        local context={tasker=T,cwd=dir,operation_id='native-grep'}
+        local context={tasker=T,cwd=dir,logical_generation='g',operation_id='native-grep'}
         require('parley.tools.builtin.grep').execute_async({pattern='NEEDLE',path=dir},context,
             function(value)results.grep=value end)
         context.operation_id='native-find'
@@ -141,7 +141,7 @@ describe('asynchronous builtins',function()
     end)
     it('captures history roots and stops before a second root after cancellation',function()
         local result
-        local context={tasker=T,cwd='/root',operation_id='history',chat_roots={{dir='/root/one'},{dir='/root/two'}}}
+        local context={tasker=T,cwd='/root',logical_generation='g',operation_id='history',chat_roots={{dir='/root/one'},{dir='/root/two'}}}
         local handle=require('parley.tools.builtin.chat_history_search').execute_async({pattern='hello'},context,
             function(v)result=v end)
         context.chat_roots[1].dir='/changed'
@@ -224,7 +224,7 @@ describe('asynchronous builtins',function()
             context.run({'ls','/tmp'});error('formatter private data')
         end})
         local result
-        definition.execute_async({}, {tasker=T,cwd='/tmp',operation_id='format'},function(v)result=v end)
+        definition.execute_async({}, {tasker=T,cwd='/tmp',logical_generation='g',operation_id='format'},function(v)result=v end)
         wait(function()return processes.spawn_calls==1 end);processes.processes[4242]:finish()
         wait(function()return result~=nil end)
         assert.equals('known',result.certainty);assert.equals('applied',result.effect)

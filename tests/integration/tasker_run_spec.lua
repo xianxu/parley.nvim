@@ -9,6 +9,12 @@
 local tasker = require("parley.tasker")
 local logger = require("parley.logger")
 
+-- These runs belong to no generation, so each names its end (#261 M3).
+local function run(buf, cmd, args, callback, out_reader, err_reader, on_start_error, opts)
+    return tasker.run(buf, cmd, args, callback, out_reader, err_reader, on_start_error,
+        vim.tbl_extend("keep", opts or {}, { deadline_ms = 60000 }))
+end
+
 describe("tasker.run integration", function()
     before_each(function()
         -- Clean up any stale handles before each test
@@ -28,7 +34,7 @@ describe("tasker.run integration", function()
             local stdout_captured = nil
             local exit_called = false
 
-            tasker.run(
+            run(
                 nil, -- buf
                 "echo", -- cmd
                 {"hello world"}, -- args
@@ -56,7 +62,7 @@ describe("tasker.run integration", function()
 
             -- Use a command that writes to stderr
             -- sh -c 'echo error >&2' redirects to stderr
-            tasker.run(
+            run(
                 nil,
                 "sh",
                 {"-c", "echo error >&2"},
@@ -82,7 +88,7 @@ describe("tasker.run integration", function()
             local exit_called = false
 
             -- Use 'false' command which exits with code 1
-            tasker.run(
+            run(
                 nil,
                 "sh",
                 {"-c", "exit 42"},
@@ -108,7 +114,7 @@ describe("tasker.run integration", function()
             local chunks = {}
             local exit_called = false
 
-            tasker.run(
+            run(
                 nil,
                 "echo",
                 {"test output"},
@@ -137,7 +143,7 @@ describe("tasker.run integration", function()
             local err_chunks = {}
             local exit_called = false
 
-            tasker.run(
+            run(
                 nil,
                 "sh",
                 {"-c", "echo 'stderr test' >&2"},
@@ -165,7 +171,7 @@ describe("tasker.run integration", function()
             local got_nil = false
             local exit_called = false
 
-            tasker.run(
+            run(
                 nil,
                 "echo",
                 {"test"},
@@ -193,7 +199,7 @@ describe("tasker.run integration", function()
             local initial_count = #tasker._handles
             local exit_called = false
 
-            tasker.run(
+            run(
                 nil,
                 "sleep",
                 {"0.1"},
@@ -221,7 +227,7 @@ describe("tasker.run integration", function()
         it("C2: removes handle from _handles on exit", function()
             local exit_called = false
 
-            tasker.run(
+            run(
                 nil,
                 "echo",
                 {"quick"},
@@ -246,7 +252,7 @@ describe("tasker.run integration", function()
             local test_buf = vim.api.nvim_create_buf(false, true)
             local exit_called = false
 
-            tasker.run(
+            run(
                 test_buf,
                 "echo",
                 {"test"},
@@ -293,7 +299,7 @@ describe("tasker.run integration", function()
             local second_started = false
 
             -- Start first process (long-running)
-            tasker.run(
+            run(
                 test_buf,
                 "sleep",
                 {"0.5"},
@@ -308,7 +314,7 @@ describe("tasker.run integration", function()
             vim.wait(100, function() return false end, 10)
 
             -- Try to start second process for same buffer
-            tasker.run(
+            run(
                 test_buf,
                 "echo",
                 {"should not run"},
@@ -337,7 +343,7 @@ describe("tasker.run integration", function()
             local second_exit = false
 
             -- Start and wait for first process
-            tasker.run(
+            run(
                 test_buf,
                 "echo",
                 {"first"},
@@ -355,7 +361,7 @@ describe("tasker.run integration", function()
             assert.is_true(first_exit, "First process should complete")
 
             -- Now start second process
-            tasker.run(
+            run(
                 test_buf,
                 "echo",
                 {"second"},
@@ -383,7 +389,7 @@ describe("tasker.run integration", function()
             local exit_called = false
 
             -- Output multiple lines to generate multiple chunks
-            tasker.run(
+            run(
                 nil,
                 "sh",
                 {"-c", "echo line1; echo line2; echo line3"},
@@ -410,7 +416,7 @@ describe("tasker.run integration", function()
             local exit_called = false
 
             -- Write to both stdout and stderr
-            tasker.run(
+            run(
                 nil,
                 "sh",
                 {"-c", "echo 'to stdout'; echo 'to stderr' >&2"},
@@ -440,7 +446,7 @@ describe("tasker.run integration", function()
             -- This is tested implicitly by cleanup_stale_handles being called
             -- Just verify the function doesn't error
             local success = pcall(function()
-                tasker.run(
+                run(
                     nil,
                     "echo",
                     {"test"},
@@ -462,7 +468,7 @@ describe("tasker.run integration", function()
             local completed = false
 
             -- No callback provided
-            tasker.run(
+            run(
                 nil,
                 "echo",
                 {"no callback"},
@@ -484,7 +490,7 @@ describe("tasker.run integration", function()
         it("F3: handles nil out_reader and err_reader gracefully", function()
             local exit_called = false
 
-            tasker.run(
+            run(
                 nil,
                 "echo",
                 {"test"},
@@ -515,7 +521,7 @@ describe("tasker.run integration", function()
                 tasker._uv = runtime
                 local events = {}
                 local terminal
-                tasker.run(nil, "fake", {}, function(code, signal, stdout, stderr, io_error)
+                run(nil, "fake", {}, function(code, signal, stdout, stderr, io_error)
                     table.insert(events, "terminal")
                     terminal = { code, signal, stdout, stderr, io_error }
                 end, function(err, data)
@@ -558,7 +564,7 @@ describe("tasker.run integration", function()
             tasker._uv = runtime
             local stdout_events = {}
             local terminal
-            tasker.run(nil, "fake", {}, function(_code, _signal, stdout, _stderr, io_error)
+            run(nil, "fake", {}, function(_code, _signal, stdout, _stderr, io_error)
                 terminal = { stdout = stdout, io_error = io_error }
             end, function(err, data)
                 table.insert(stdout_events, { err = err, data = data })
@@ -585,7 +591,7 @@ describe("tasker.run integration", function()
             local stdout_calls = 0
             local stderr_calls = 0
             local terminals = 0
-            tasker.run(nil, "fake", {}, function()
+            run(nil, "fake", {}, function()
                 terminals = terminals + 1
             end, function()
                 stdout_calls = stdout_calls + 1
@@ -617,7 +623,7 @@ describe("tasker.run integration", function()
                 pattern = "ParleyQueryFinished",
                 callback = function() finished = finished + 1 end,
             })
-            tasker.run(nil, "fake", {}, function()
+            run(nil, "fake", {}, function()
                 terminals = terminals + 1
                 error("terminal exploded")
             end)
@@ -641,7 +647,7 @@ describe("tasker.run integration", function()
             local logs = {}
             local original_error = logger.error
             logger.error = function(message) table.insert(logs, tostring(message)) end
-            tasker.run(nil, "fake", {}, function()
+            run(nil, "fake", {}, function()
                 error(marker .. string.rep("x", 2000))
             end, function()
                 error(marker .. string.rep("y", 2000))
@@ -672,7 +678,7 @@ describe("tasker.run integration", function()
                 tasker._uv = runtime
                 local terminals = 0
                 local terminal_error
-                tasker.run(nil, "fake", {}, function(_code, _signal, _stdout, _stderr, io_error)
+                run(nil, "fake", {}, function(_code, _signal, _stdout, _stderr, io_error)
                     terminals = terminals + 1
                     terminal_error = io_error
                 end)
@@ -690,10 +696,10 @@ describe("tasker.run integration", function()
         it("rejects busy work before allocating pipes", function()
             local runtime, state = fake_uv()
             tasker._uv = runtime
-            tasker.run(9, "fake", {})
+            run(9, "fake", {})
             local starts = 0
             local terminals = 0
-            tasker.run(9, "fake", {}, function() terminals = terminals + 1 end,
+            run(9, "fake", {}, function() terminals = terminals + 1 end,
                 nil, nil, function() starts = starts + 1 end)
             assert.is_true(vim.wait(100, function() return starts == 1 end, 5))
             assert.equals(2, #state.pipes)
@@ -707,7 +713,7 @@ describe("tasker.run integration", function()
             tasker._uv = runtime
             local starts = 0
             local terminals = 0
-            tasker.run(nil, "fake", {}, function() terminals = terminals + 1 end,
+            run(nil, "fake", {}, function() terminals = terminals + 1 end,
                 nil, nil, function() starts = starts + 1 end)
             assert.is_true(vim.wait(100, function() return starts == 1 end, 5))
             assert.equals(2, #state.pipes)
@@ -722,7 +728,7 @@ describe("tasker.run integration", function()
             local stdout
             local stderr
 
-            tasker.run(nil, "sh", { "-c", "printf out; printf err >&2" },
+            run(nil, "sh", { "-c", "printf out; printf err >&2" },
                 function(code, signal, stdout_data, stderr_data, io_error)
                     table.insert(events, "terminal")
                     stdout = stdout_data
@@ -753,7 +759,7 @@ describe("tasker.run integration", function()
         it("G2: schedules spawn rejection once and never calls terminal", function()
             local start_errors = 0
             local terminals = 0
-            tasker.run(nil, "parley-command-that-does-not-exist", {}, function()
+            run(nil, "parley-command-that-does-not-exist", {}, function()
                 terminals = terminals + 1
             end, nil, nil, function(message)
                 start_errors = start_errors + 1
@@ -771,7 +777,7 @@ describe("tasker.run integration", function()
                 local runtime, state = fake_uv()
                 tasker._uv = runtime
                 local captured
-                tasker.run(nil, "fake", {}, function(_code, _signal, _stdout, stderr)
+                run(nil, "fake", {}, function(_code, _signal, _stdout, stderr)
                     captured = stderr
                 end)
                 state.pipes[1].reader(nil, nil)
@@ -791,7 +797,7 @@ describe("tasker.run integration", function()
             local runtime, state = fake.new()
             runtime.kill = function() return nil, "EPERM", "EPERM" end
             tasker._uv = runtime
-            tasker.run(11, "fake", {}, nil, nil, nil, nil, {generation_id="g"})
+            run(11, "fake", {}, nil, nil, nil, nil, {generation_id="g"})
             assert.is_function(tasker.stop_owner)
             assert.is_false(pcall(tasker.stop_owner, "g"))
             tasker._handles = {}
@@ -808,8 +814,8 @@ describe("tasker.run integration", function()
             local runtime, state = fake.new({reuse_pid=true})
             tasker._uv = runtime
             local retry
-            tasker.run(11, "fake", {}, function()
-                retry = tasker.run(11, "fake", {})
+            run(11, "fake", {}, function()
+                retry = run(11, "fake", {})
             end)
             state.on_exit(0, 0)
             state.pipes[1].reader(nil, nil)
@@ -821,8 +827,8 @@ describe("tasker.run integration", function()
         it("allows explicit owners on the same buffer", function()
             local runtime, state = fake.new()
             tasker._uv = runtime
-            local a = tasker.run(11, "fake", {}, nil,nil,nil,nil,{admission_key="a"})
-            local b = tasker.run(11, "fake", {}, nil,nil,nil,nil,{admission_key="b"})
+            local a = run(11, "fake", {}, nil,nil,nil,nil,{admission_key="a"})
+            local b = run(11, "fake", {}, nil,nil,nil,nil,{admission_key="b"})
             assert.is_not_nil(a)
             assert.is_not.equal(a,b)
             assert.equals(2,state.spawn_calls)
@@ -831,8 +837,8 @@ describe("tasker.run integration", function()
             local runtime,state=fake.new()
             tasker._uv=runtime
             local done=0
-            tasker.run(11,"fake",{},function() done=done+1 end,nil,nil,nil,{generation_id="a"})
-            tasker.run(11,"fake",{},nil,nil,nil,nil,{generation_id="b",admission_key="b"})
+            run(11,"fake",{},function() done=done+1 end,nil,nil,nil,{generation_id="a"})
+            run(11,"fake",{},nil,nil,nil,nil,{generation_id="b",admission_key="b"})
             assert.equals(1,tasker.stop_owner("a"))
             assert.equals(1,#state.signals)
             assert.equals(4242,state.signals[1].pid)
@@ -848,7 +854,7 @@ describe("tasker.run integration", function()
             local runtime,state=fake.new()
             tasker._uv=runtime
             tasker.set_query("q",{buf=11})
-            tasker.run(11,"fake",{},nil,nil,nil,nil,{query_id="q"})
+            run(11,"fake",{},nil,nil,nil,nil,{query_id="q"})
             assert.is_false(tasker.reject_query("q"))
             tasker.get_query("q").terminal=true
             tasker.get_query("q").timestamp=0
@@ -869,7 +875,7 @@ describe("tasker.run integration", function()
                 tasker._uv=runtime
                 local rejected=0
                 tasker.set_query("q",{buf=11})
-                tasker.run(11,"fake",{},nil,nil,nil,function() rejected=rejected+1 end,{query_id="q"})
+                run(11,"fake",{},nil,nil,nil,function() rejected=rejected+1 end,{query_id="q"})
                 assert.is_true(vim.wait(100,function() return rejected==1 end,5))
                 for _,pipe in ipairs(state.pipes) do assert.equals(1,pipe.close_calls) end
                 assert.is_false(tasker.is_busy(11,true))
@@ -881,7 +887,7 @@ describe("tasker.run integration", function()
             local runtime,state=fake.new({exit_during_spawn=true,eof_during_read_start=true})
             tasker._uv=runtime
             local done=0
-            tasker.run(11,"fake",{},function() done=done+1 end)
+            run(11,"fake",{},function() done=done+1 end)
             assert.is_true(vim.wait(100,function() return done==1 end,5))
             assert.is_false(tasker.is_busy(11,true))
             assert.is_true(state.handle.closing)
@@ -890,7 +896,7 @@ describe("tasker.run integration", function()
             local runtime,state=fake.new()
             tasker._uv=runtime
             local buf=vim.api.nvim_create_buf(false,true)
-            local id=tasker.run(buf,"fake",{})
+            local id=run(buf,"fake",{})
             vim.api.nvim_buf_delete(buf,{force=true})
             state.processes[4242].probe="missing"
             tasker.cleanup_stale_handles()
@@ -904,19 +910,20 @@ describe("tasker.run integration", function()
         it("successful signals are idempotent but failed signals can retry",function()
             local runtime,state=fake.new()
             tasker._uv=runtime
-            local id=tasker.run(11,"fake",{},nil,nil,nil,nil,{generation_id="a"})
+            -- An unscoped attempt, signalled by pid: the fake's per-pid result.
+            local id=run(11,"fake",{})
             state.processes[4242].signal_result="unknown"
-            assert.is_false(pcall(tasker.stop_owner,"a"))
+            assert.is_false(pcall(tasker.stop_attempt,id))
             assert.equals("unknown",tasker.get_attempt(id).signal_observation)
             state.processes[4242].signal_result="alive"
-            assert.equals(1,tasker.stop_owner("a"))
-            assert.equals(1,tasker.stop_owner("a"))
+            assert.equals(1,tasker.stop_attempt(id))
+            assert.equals(1,tasker.stop_attempt(id))
             assert.equals(2,#state.signals)
         end)
         it("an absent owner cannot signal unscoped utility attempts",function()
             local runtime,state=fake.new()
             tasker._uv=runtime
-            tasker.run(nil,"fake",{})
+            run(nil,"fake",{})
             assert.equals(0,tasker.stop_owner(nil))
             assert.equals(0,#state.signals)
         end)

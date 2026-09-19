@@ -697,6 +697,27 @@ header now states its static-check limit.
 - **Recorded for the close:** the path-canonicalisation idiom has about ten
   copies (ARCH-DRY Minor), which is beyond #261's surface.
 
+### 2026-09-19 — M3 Tasks 3.1–3.3: groups, escalation, scopes, deadlines
+
+- **The spawn key.** `detach` became `detached`, set for scoped runs only
+  (ARCH-SECURE). The fake now models groups, ignored signals and grandchildren.
+- **Escalation lives in the pure reducer.** A stop opens a window: TERM, KILL at
+  +2 s while unresolved, visible at +5 s. `kill_cause` names why Parley killed a
+  run, and the callback then gets `code=nil, io_error='killed: <cause>'`.
+- **The refusal of an unscoped run without `deadline_ms`** landed together with
+  the deadlines at every production site (`tasker.deadline`, one table,
+  ARCH-DRY), so no commit refuses a real spawn (plan Revisions).
+- **The refusal found a latent test bug.** `chat_async_tools_spec`'s native
+  wrapper forwarded `unpack(args)`, which stops at the first nil hole. It had
+  been dropping `on_start_error` and the options, so its "native tool" ran
+  unscoped. It now forwards with `select('#', ...)`.
+- **Flakes under `make test JOBS=4`, pass alone** (#267 family):
+  - `response_target_spec`, "cancels pending native targets", a weak-table GC
+    count: 3 of 3 pass alone;
+  - `perf_document_spec`, which died silently after 3 tests: passes alone.
+
+  Neither touches tasker.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

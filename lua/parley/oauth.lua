@@ -833,14 +833,14 @@ M.save_account_store = function(store, callback)
                 logger.warning("Failed to save Google OAuth account store to keychain")
             end
             callback()
-        end)
+        end, nil, nil, nil, { deadline_ms = tasker.deadline.prompt })
     else
         tasker.run(nil, cmd, cmd_args, function(code)
             if code ~= 0 then
                 logger.warning("Failed to save Google OAuth account store to keychain")
             end
             callback()
-        end)
+        end, nil, nil, nil, { deadline_ms = tasker.deadline.prompt })
     end
 end
 
@@ -866,7 +866,7 @@ M.load_account_store = function(callback)
         local ok, decoded = pcall(vim.json.decode, stdout_data:match("^%s*(.-)%s*$"))
         cached_account_store = ok and M._normalize_account_store(decoded) or M._new_account_store()
         callback(cached_account_store)
-    end)
+    end, nil, nil, nil, { deadline_ms = tasker.deadline.prompt })
 end
 
 -- Backward-compatible token save wrapper.
@@ -908,7 +908,7 @@ M.logout = function(callback)
             logger.warning("No Google OAuth accounts found to remove (or removal failed)")
             callback(false)
         end
-    end)
+    end, nil, nil, nil, { deadline_ms = tasker.deadline.prompt })
 end
 
 -- Refresh one stored account using its refresh token.
@@ -953,7 +953,7 @@ M._refresh_account = function(config, provider, store, account, callback)
         else
             callback(nil)
         end
-    end)
+    end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
 -- Refresh an expired access token using the refresh token.
@@ -1004,7 +1004,7 @@ end
 M._run_auth_code_exchange = function(config, code, port, callback, provider)
     local provider_config = M._get_provider_config(config, provider)
     local args = M.build_token_exchange_args(provider_config or config, code, port, provider)
-    tasker.run(nil, "curl", args, callback)
+    tasker.run(nil, "curl", args, callback, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
 -- Exchange an OAuth authorization code and persist the resulting account.
@@ -1343,8 +1343,8 @@ M._convert_office_to_text = function(binary_data, extension, callback)
             end
 
             callback(nil, "cannot convert ." .. extension .. " to text. Install pandoc: https://pandoc.org/installing.html")
-        end)
-    end)
+        end, nil, nil, nil, { deadline_ms = tasker.deadline.convert })
+    end, nil, nil, nil, { deadline_ms = tasker.deadline.convert })
 end
 
 ---@param status_code number|nil
@@ -1438,7 +1438,7 @@ M._fetch_public_content = function(url, callback)
                 .. " for "
                 .. (parsed.effective_url ~= "" and parsed.effective_url or url),
         })
-    end)
+    end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
 ---@param url string
@@ -1705,7 +1705,7 @@ M._fetch_google_api_once = function(url, info, access_token, callback)
                             kind = "success",
                             content = M.format_google_content(file_name, info.file_type, fb_data, url),
                         })
-                    end)
+                    end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
                     return
                 end
 
@@ -1717,8 +1717,8 @@ M._fetch_google_api_once = function(url, info, access_token, callback)
                 kind = "success",
                 content = M.format_google_content(file_name, info.file_type, content_data, url),
             })
-        end)
-    end)
+        end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
+    end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
 ---@param error_code number|nil
@@ -1774,7 +1774,7 @@ M._run_dropbox_metadata_request = function(access_token, info, callback)
         "-H", "Content-Type: application/json",
         "--data", vim.json.encode({ url = info.shared_link }),
     }
-    tasker.run(nil, "curl", args, callback)
+    tasker.run(nil, "curl", args, callback, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
 ---@param access_token string
@@ -1792,7 +1792,7 @@ M._run_dropbox_file_request = function(access_token, info, callback)
         "-H", "Authorization: Bearer " .. access_token,
         "-H", "Dropbox-API-Arg: " .. vim.json.encode({ url = info.shared_link }),
     }
-    tasker.run(nil, "curl", args, callback)
+    tasker.run(nil, "curl", args, callback, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
 ---@param url string
@@ -1907,7 +1907,7 @@ M._run_microsoft_metadata_request = function(access_token, encoded_share, callba
         "-H", "Authorization: Bearer " .. access_token,
         "https://graph.microsoft.com/v1.0/shares/" .. encoded_share .. "/driveItem",
     }
-    tasker.run(nil, "curl", args, callback)
+    tasker.run(nil, "curl", args, callback, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
 ---@param access_token string
@@ -1924,7 +1924,7 @@ M._run_microsoft_content_request = function(access_token, encoded_share, callbac
         "-H", "Authorization: Bearer " .. access_token,
         "https://graph.microsoft.com/v1.0/shares/" .. encoded_share .. "/driveItem/content",
     }
-    tasker.run(nil, "curl", args, callback)
+    tasker.run(nil, "curl", args, callback, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
 ---@param url string
