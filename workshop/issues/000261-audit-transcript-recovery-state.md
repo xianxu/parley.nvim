@@ -500,6 +500,42 @@ enumerations and the queries that produce them.
   response…" message is false. `init.lua:4171` calls a
   `chat_respond.resubmit_questions_recursively` that no longer exists.
 
+### 2026-09-18 — M1 implementation notes (before milestone-close)
+
+- **Red, then green.**
+  - Task 1.1's four #261 cases (further edit, reload, close and reopen, legacy
+    directory) failed on the unchanged code with exactly the reported
+    refusals: three with `retained recovery requires inspection or explicit
+    restore`, one with `recovery directory must be private (0700)`. The
+    immediate-retry characterization passed on it.
+  - All pass after the deletion (`chat_respond_spec` 31/31).
+- **Deviation: `file_to_table` gained an optional schema, and a `conform`
+  helper.** The degrade spec's wrongly typed bodies showed the class goes
+  one step past syntax:
+  - `refresh_state` compared `updated` as a number;
+  - vault compared `expires_at` and indexed the bearer;
+  - custom prompts passed a numeric `system_prompt` through;
+  - the remote cache indexed `cache.chats[...]` as a table.
+
+  Each reader now declares the fields it takes, one nested level deep where it
+  indexes them. The type check sits at the read, per ARCH-SECURE: parse at the
+  boundary.
+- **Deviation: the `file_to_table` tests live in `tests/unit/helper_io_spec.lua`,
+  not `helper_spec.lua`,** because that is where they already were. A JSON array
+  is accepted, since it decodes to a table and rejecting it would also reject
+  `{}`.
+- **Counterfactuals.**
+  - An unguarded decode fails 4 degrade cases.
+  - An undeclared `state_dir` reader fails the census.
+  - Both were restored clean.
+- **Suite.** At `make test JOBS=4`, 372 spec files pass.
+  `tests/integration/perf_ownership_spec.lua` dies at the harness's ~50 s
+  per-file cap under load, on the base commit and on this branch alike.
+  Alternating A/B runs alone gave base 50.24/50.23/25.74 s and branch
+  32.84/26.00/26.10 s; the base died twice. At JOBS=8 a different spec
+  (`document_dependencies_spec`) died once the same way, and passes alone.
+  This is recorded on #267 as the same family. It is not M1's.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit
