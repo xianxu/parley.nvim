@@ -195,8 +195,11 @@ local function execute(definition,input,context,done)
                 local id=tostring(context.operation_id)..':process:'..sequence
                 local launched=tasker.run(context.buf,command[1],args,function(code,signal,out,err,io_error)
                     if marker~=''then
+                        -- io_error is tasker's diagnosis (a kill, a pipe error) and
+                        -- is kept: a process killed before its bootstrap wrote the
+                        -- marker was killed, not a failed bootstrap (#261 M3 review).
                         if err:sub(1,#marker)~=marker then
-                            io_error='scoped process bootstrap failed'
+                            io_error=io_error or 'scoped process bootstrap failed'
                         else err=err:sub(#marker+1)end
                     end
                     process_bytes=process_bytes+#out+#err

@@ -111,6 +111,7 @@ must *not* be. So:
 | `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
 | `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any; `buffer_for`: the buffer named exactly `name` | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
 | `tasker` — `scope_key`, `is_scoped`, `stop_scope`, `held`, `leave`, `deadline` (the per-kind table), `exit_reason` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
+| `oauth` — `_token_body_summary`: what a token endpoint's body may show in a log, its OAuth error only | `lua/parley/oauth.lua` | modified | the OAuth token endpoint |
 | M4 · `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
 | M4 · `deferred_work` — `new(step, on_error)` | `lua/parley/deferred_work.lua` | modified | timer turns |
 
@@ -2050,3 +2051,53 @@ and three untested Minors came back.
   `phase` tag on `attempt`, and threading `cause` through `scoped_stop` so a
   reload-caused kill differs from a user Stop. Both belong to M4/M5, and the
   earlier Revisions entry already records the second.
+
+### 2026-09-19 — M3 boundary review round 3 (FIX-THEN-SHIP, finalized at the round cap): dispositions
+
+The close finalized at the gate's round cap. Round 3 disposed round 2's five
+findings as addressed, and raised one Critical, two Importants and four
+Minors, fixed below and bundled into the close commit (#174: no re-run).
+- **Critical — the vault log line** (Task 3.4). Round 1 fixed a `%d`-on-nil
+  throw by rewriting the Copilot failure log to include stderr. The request ran
+  `curl -v`, whose stderr carries `authorization: token <secret>`, and the
+  base's `string.format` had silently dropped that argument, so the leak was
+  new. The class, swept:
+  - `-v` removed; neither output is logged for that request.
+  - A failed secret command shows its bounded stderr, never its stdout, which
+    is the secret.
+  - The token exchange logs its OAuth `error`/`error_description` through
+    `_token_body_summary`, never the body.
+  - A guard forbids a verbose or traced argv anywhere in `lua/`.
+  - Three regression tests plant the secret where each process puts it. Each
+    fails against the pre-fix code.
+- **Important — the exit value's non-rendering consumers** (Task 3.4). The
+  census covered the 18 unscoped `tasker.run(nil, …)` sites, but never the
+  scoped callbacks, and the defect was there: `async_builtin` overwrote an
+  inherited `io_error`, so an early Stop of a shell tool read "scoped process
+  bootstrap failed".
+  - It now writes `io_error = io_error or …`.
+  - A guard forbids an overwrite in any module where tasker's callbacks land.
+  - The live conformance case asserts the tool's result is `killed: stop`: red
+    3/3 on revert.
+- **Important — `scope_key`'s producers** (Task 3.3). "One function" held for
+  the two spellings named here and missed `skill_invoke`'s hand-built
+  `skill:<buf>:<gen>`.
+  - It is now `tasker.scope_key("skill:"..buf, gen)`, the same string from the
+    one function.
+  - A census guard classifies every production `logical_generation`
+    assignment as built with scope_key, forwarded from one, or a failure. It
+    is red on the old line.
+  - The atlas now says that a chat generation's scope kill (M4 Task 4.1) does
+    not reach a skill's processes. **M4 must keep that in mind when wiring the
+    kill:** a skill stops its own.
+- **Minors.**
+  - `failure.io_error` is retired from the dispatcher's table, which already
+    carries it inside `exit`, so the field and its guard entry agree.
+  - The conformance spec pins the exemption's negative live: an unscoped run
+    leads no group (red when everything is detached). `gone()` means ESRCH.
+  - The atlas's out-of-seam summary follows the guard's derived classes.
+  - `join_code` records the invariant that keeps a nil code from reaching it.
+- **Also, from the review's M4/M5 notes.** The README's custom-tool paragraph
+  says a custom `execute_async` forwards `context.logical_generation` to
+  `context.tasker.run`, or is refused.
+

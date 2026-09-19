@@ -132,19 +132,17 @@ V.resolve_secret = function(name, secret, callback, on_error)
 				secrets[name] = content
 				post_process()
 			else
+				-- stdout is where a secret command prints the secret, so it is never
+				-- shown; stderr is its diagnosis, bounded (#261 M3 review, ARCH-SECURE).
 				fail(
 					"vault resolver for "
 						.. name
-						.. "secret command "
+						.. " secret command "
 						.. vim.inspect(secret)
-						.. " failed:\ncode: "
-						.. code
-						.. ", signal: "
-						.. signal
-						.. "\nstdout: "
-						.. stdout_data
-						.. "\nstderr: "
-						.. stderr_data
+						.. " failed ("
+						.. tasker.exit_reason(code, signal, io_error)
+						.. "): "
+						.. vim.trim(tostring(stderr_data)):sub(1, 500)
 				)
 			end
 		end, nil, nil, function(message)
@@ -191,7 +189,6 @@ V.refresh_copilot_bearer = function(callback)
 	local curl_params = vim.deepcopy(V.config.curl_params or {})
 	local args = {
 		"-s",
-		"-v",
 		"https://api.github.com/copilot_internal/v2/token",
 		"-H",
 		"Content-Type: application/json",
@@ -211,11 +208,11 @@ V.refresh_copilot_bearer = function(callback)
 		table.insert(curl_params, arg)
 	end
 
-	tasker.run(nil, "curl", curl_params, function(code, signal, stdout, stderr, io_error)
+	tasker.run(nil, "curl", curl_params, function(code, signal, stdout, _stderr, io_error)
 		-- A kill reports code nil (#261 M3); every failure is reported, never thrown.
+		-- Neither output is shown: this request carries the Copilot token.
 		if code ~= 0 then
-			logger.error("copilot bearer resolve failed (" .. tasker.exit_reason(code, signal, io_error) .. "): "
-				.. tostring(stderr))
+			logger.error("copilot bearer resolve failed (" .. tasker.exit_reason(code, signal, io_error) .. ")")
 			return
 		end
 

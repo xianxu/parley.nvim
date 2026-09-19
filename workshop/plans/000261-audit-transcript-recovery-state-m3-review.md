@@ -386,3 +386,104 @@ findings:
       bounded ⇔ the call carries `timeout =` or `--max-time`) and keep free text
       only for genuine exceptions such as the managed proxy.
 ```
+
+---
+
+## Re-review — 2026-09-19T08:39:37-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 261 — Audit transcript as the complete recovery state |
+| repo | parley.nvim |
+| issue file | workshop/issues/000261-audit-transcript-recovery-state.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 8a753815ca9754084a75902f1f1c368ed5e54371..68f095be8e18b897725f06976b072e4d3129dc45 |
+| command | sdlc milestone-close --issue 261 --milestone M3 |
+| reviewer | claude |
+| timestamp | 2026-09-19T08:39:37-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+M3's core is genuinely delivered and genuinely verified: I reverted `detached` to main's misspelled `detach` in a scratch edit and all three live-kernel conformance cases went red, so the process-group claim is load-bearing rather than asserted. All five prior findings are `addressed` with counterfactuals I ran myself (BR-41, BR-43, BR-44 each turn their new test red on revert; BR-45 reddens four specs including the value-anchored guard; BR-46's classification is now derived from the call form and I hand-verified all 15 cliproxy spawns and the two previously-wrong entries against the source). The full suite is 380 files green plus `perf_document_spec`, which dies under load and passes 5/5 alone — the recorded #267 flake family, not M3's. What blocks SHIP is one new Critical that this window introduced: the copilot bearer failure log now appends the whole `curl -v` stderr, and `-v` puts `authorization: token <copilot OAuth secret>` on stderr — I confirmed that with a real curl against a local listener, and confirmed the base's `string.format` silently dropped the argument, so the leak is new. Two Importants follow: the tool layer overwrites the inherited `io_error`, so a Stop of a scoped shell tool reports `scoped process bootstrap failed` (measured on M3's own conformance case), and the atlas's scoped-process claim about `scope_key` is false for skill processes with nothing enumerating the producers.
+
+## 1. Strengths
+
+- **The live conformance spec is real evidence, not ceremony** (`tests/integration/process_group_conformance_spec.lua:28-69`). Restoring `detach = true` in `tasker.lua:562` fails all three cases. It avoids `ps`, uses `kill -0 -- -$$` for group leadership, and case 3 drives the actual tool spawn path through `process_bootstrap`.
+- **The ARCH-ORDER reducer testing is the strongest thing in the diff** (`tests/unit/attempt_spec.lua:54-77`). `drive()` is an explicit ordering seam: it feeds sorted external events interleaved with the reducer's own requested ticks and returns the *time* of each effect, so "KILL at exactly stop+2000" and the grandchild case (exit-opened window, later stop reopens, escalate at +5000) are pinned rather than sampled. Pure, no IO.
+- **ARCH-DRY at the root cause, not the sites.** The `code == nil ⟺ io_error` rule lives once in `tasker.lua:520-527` instead of `or io_error` at 16 call sites; `target()`/`send()` (`tasker.lua:212-228`) collapsed three copies of the kill/errno idiom; `tasker.deadline` is one table with a guard against literals.
+- **The BR-45 fix is anchored correctly**: the dispatcher stops *exporting* `code`/`signal` rather than asking consumers to be careful (`dispatcher.lua:759-766`). Removing the field is a stronger guard than any pattern, and the arch check is on the value (`spawn_seam_spec.lua:270`), not on `tasker.run(` callers.
+- **BR-46's derivation is sound.** `classify()` (`spawn_seam_spec.lua:111-120`) plus the two "bound one call away" checks (`:173-211`) hold up: I verified all 15 cliproxy spawns independently and got exactly `sync=9, bounded=3, delegated=1, open=2`, and `git_markdown_source`'s new reason matches `git_markdown_source.lua:135-143` and `request_kill` at `:37-43`.
+
+## 2. Critical findings
+
+**`lua/parley/vault.lua:216-218` — the copilot bearer failure log leaks the Copilot OAuth token.**
+
+```lua
+local curl_params = ... "-s", "-v", ... "authorization: token " .. secret, ...
+tasker.run(nil, "curl", curl_params, function(code, signal, stdout, stderr, io_error)
+    if code ~= 0 then
+        logger.error("copilot bearer resolve failed (" .. tasker.exit_reason(code, signal, io_error) .. "): "
+            .. tostring(stderr))
+```
+
+`-v` (`vault.lua:193`) makes curl write its full trace to stderr, including `> authorization: token <secret>`. I verified this against a local listener: `curl -s -v -H 'authorization: token SECRET123'` puts `SECRET123` on stderr. `logger.error` with no `sensitive` flag writes the message verbatim to the log file (`logger.lua:89-92`) **and** `vim.notify`s it (`logger.lua:99-100`) — so the token lands in a plaintext log and flashes on screen, up to the 64 KiB stderr cap. This contradicts the contract the same atlas page states ("Vault debug messages are marked sensitive and follow `log_sensitive`", `atlas/infra/vault.md:23`).
+
+This is new in this window. The base read `string.format("copilot bearer resolve failed: %d, %d", code, signal, stderr)` — two specifiers, three arguments, so Lua dropped `stderr` entirely (verified). M3 rewrote the line to fix the `%d`-on-nil throw and appended the trace on the way.
+
+Fix sketch: drop `-v` from `args` (nothing reads the trace — the token is parsed from `stdout` at `:224-231`), then the log line is harmless. If the trace is wanted, pass `sensitive = true` **and** bound it, or strip `^[<>*] .*authorization` lines before logging. Add the regression: a killed/failed copilot fetch whose scripted stderr contains `authorization: token …` must not produce a log line containing the secret. ARCH-SECURE.
+
+## 3. Important findings
+
+**`lua/parley/tools/async_builtin.lua:197-200` — the tool layer overwrites the `io_error` it was handed, so every Stop of a scoped shell tool misnames its cause.**
+
+```lua
+if marker~=''then
+    if err:sub(1,#marker)~=marker then
+        io_error='scoped process bootstrap failed'
+    else err=err:sub(#marker+1)end
+end
+```
+
+The bootstrap writes its marker to stderr immediately before `execvp` (`scripts/tool_process.lua:51`), after a whole headless-nvim startup. A kill that lands before that point leaves stderr without the marker, and this line replaces `killed: stop` with a diagnosis blaming the bootstrap. Measured on M3's own conformance case: I added a temporary print to `process_group_conformance_spec.lua:67` and the stopped `find /` returns `error_code = "scoped process bootstrap failed", code = nil`. So the manual step Task 3.7 added (`tests/manual/chat-concurrency.md:48`) walks an operator straight into a wrong explanation, and the live test asserts only `physical_resolved`.
+
+**This is the 7th finding in family `seam-change-collateral`.** Earlier rounds fixed instances. Do NOT fix this instance alone. Round 1 anchored the sweep on callers of `tasker.run(`; round 2 re-anchored it on the value's *renderers* and the table it is copied onto. The class still uncovered is the value's **other kinds of consumer**: code that *overwrites* `io_error`, or *computes* on `code`. State the rule — in a tasker exit callback, `io_error` is an inherited diagnosis, so a local reason is added with `io_error = io_error or '<reason>'`, never assigned over — and note that `tasker.lua:604` and `dispatcher.lua:754` already use that idiom, so `async_builtin.lua:199` is the single deviation. Extend `spawn_seam_spec`'s value-anchored describe block with a third check over the same file set: an assignment to a callback's `io_error` parameter that is not of the form `io_error or` fails, and list it in the header's "what the matchers cannot see". Assert the conformance case's `error_code == 'killed: stop'` so the path has an oracle.
+
+**`atlas/providers/tool_execution.md:76-82` with `lua/parley/skill_invoke.lua:595` — the scoped-process claim asserts a key shape that one of its three named producers does not use.**
+
+The atlas says: "**Scoped** processes belong to a generation: provider streams, tool processes, skill processes. They carry `logical_generation`, keyed by `tasker.scope_key(epoch, generation)`." Two producers derive from it (`response_provider.lua:105`, `tools/producer.lua:120` → `scheduler.lua:130`, validated at `scheduler.lua:150`). The third hand-builds a different namespace: `skill_invoke.lua:152` `local process_owner="skill:"..tostring(buf)..":"..tostring(gen)`, passed as `logical_generation` at `:595`, where `gen` is `_gen[buf]`, not the document epoch/generation. Nothing today breaks (the record is still `group=true` and `stop_owner(process_owner)` still group-kills it), but the documented key shape is false, and M4 Task 4.1's single scope kill — `tasker.stop_scope(tasker.scope_key(ctx.epoch, ctx.generation))`, plan line 1314 — will silently skip every skill process.
+
+**This is the 9th finding in family `enumeration-claims-completeness`.** Do NOT fix this instance. The rule is the one BR-40/BR-46 already established and it simply was not applied to the second single-source value this milestone introduced: a doc sentence that quantifies over a set needs an executable enumeration of that set. `scope_key` is a single source with exactly one guard-less consumer class. Add to `spawn_seam_spec` (or beside it) a producer census over `grep -rn "logical_generation\s*=" lua/`: every production assignment either calls `tasker.scope_key`, or forwards a value that did, or is declared in a table with its reason and an exact count — the same `OUTSIDE`-table shape, with the same dead-entry check. Then either route `skill_invoke` through `scope_key` or declare it, and correct the atlas sentence to say what the enumeration proves.
+
+## 4. Minor findings
+
+- `dispatcher.lua:770` still exports `io_error` on the failure table while `spawn_seam_spec.lua:270` forbids every production read of `failure.io_error`, so the field is now unreachable from `lua/` by construction — its only readers are `dispatcher_query_spec.lua:692,740,784,792`. **5th in family `returned-handle-has-no-consumer`**; the rule: a guard that forbids every production read of a field retires that field, so the field and the guard entry go in the same change — drop one of the two.
+- `process_group_conformance_spec.lua` pins the scoped side against the kernel but never the exemption the operator decision rests on (an unscoped child stays in Neovim's group so a prompting secret command works); only the fake pins it, as `assert.is_nil(processes.spawn_options[2].detached)`. A live check is two lines: for an unscoped `sleep`, `uv.kill(-pid, 0)` must fail (no group has that id), where the scoped case succeeds. **2nd in family `exemption-boundary-untested`** — rule: a conformance case that pins a rule against the real dependency pins the exemption's negative in the same file.
+- `atlas/providers/tool_execution.md` "Processes outside tasker" summary bullets drift from the list they defer to: cliproxy's login helper (the second `open` entry, `spawn_seam_spec.lua:47-48`) is not mentioned, and "clipboard … lookups" is grouped under "user commands report their own exit" though `clipboard_image.lua` is classified `bounded`.
+- `tests/integration/process_group_conformance_spec.lua:9-11` — `gone(pid)` treats any non-zero `uv.kill` return as gone, so an EPERM would read as gone; `ESRCH` specifically would be tighter.
+
+## 5. Test coverage notes
+
+- Full suite: 380 spec files pass, `make lint` clean (it runs first in the `test` target). Only `perf_document_spec.lua` fails under `JOBS=4` and passes 5/5 alone — the #267 flake family already recorded for the M1 and M2 closes, and it touches nothing in M3.
+- Counterfactuals I ran, all red as claimed: `detached`→`detach` (3 conformance cases), `target()`'s `pid <= 0` guard and the fire-time timer close (2 supervision cases), the `transport_opts` merge (topic_gen), and the BR-45 render sweep (`failure_notice`, `dispatcher_query` I9, `response_provider`, `spawn_seam`).
+- Real gap: the tool layer's consumption of the exit tuple has no test at all. The conformance case that exercises it asserts `physical_resolved` but not `error_code`, which is why the `scoped process bootstrap failed` misdiagnosis survived two review rounds.
+- I chased two further consumers and cleared them — `process_scope.join_code(0, nil)` does throw (`attempt to compare number with nil`) and the builtins compare `exit_code >= 2` / concatenate it, but `await` (`async_builtin.lua:10-14`) raises on any outcome carrying `error_code`, and `code == nil` always implies `error_code` is set, so neither is reachable. Worth a one-line comment at `join_code` recording that invariant, since it is the only thing holding them up.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY** pass. **ARCH-PURE** pass — `attempt` stays a pure reducer and the escalation policy moved *into* it rather than into the timer callback. **ARCH-MOCK** pass and notably strong: fake, sequence tests over the fake, and a live conformance check against the kernel all share one seam. **ARCH-CONSTRAINTS** pass — the tick clamp keeps KILL at 2 s instead of the next back-off, `leave()` is a bounded synchronous loop at `VimLeavePre`, deadlines are validated ≤ 1 h. **ARCH-ORDER** pass, with the reservation that `scoped_stop` drops `cause` so every scoped stop reads `killed: stop` (already recorded in the plan for M5). **ARCH-FUNERAL** pass — the deadline timer closes as it fires *and* at retire, `unread_stores` is weak-keyed, the `ParleyLeave` augroup uses `clear = true` and has a double-`setup` test. **ARCH-PURPOSE** and **ARCH-SECURE** are where the three findings above land.
+- For M4: `tasker.stop_scope` and `tasker.held` still have no production consumer. That is a legitimate deferral — the plan names both consumers with line-level specificity (Task 4.1 for the scope kill, Task 5.2/5.3 for `held()` in the capacity refusals) — but the `logical_generation` producer census above needs to land *before* the scope kill is wired, or the kill will pass its tests and miss skills.
+- For M4/M5: `M.run`'s refusal of an unscoped run without `deadline_ms` reaches third-party tools through `context.tasker`. A custom `execute_async` that calls `context.tasker.run` without forwarding `context.logical_generation` is now refused. Worth one line in the README's custom-tool paragraph when M4 touches that surface.
+
+## 7. Plan revision recommendations
+
+- **`## Revisions`, M3 review round 3 — the exit tuple's non-rendering consumers.** Record that the value-anchored sweep covered branches and renders but not *overwrites*: `async_builtin.lua:199` replaces an inherited `io_error`, so the tool layer misnames every early kill. State the `io_error = io_error or …` rule, the guard that enforces it, and the conformance assertion added.
+- **`## Revisions` — `scope_key`'s producers.** Task 3.3 claims "M3 makes it one function, `tasker.scope_key`" and the Core-concepts table lists `scope_key` as the single source. That holds for the two spellings the plan named and misses `skill_invoke.lua:152`. Record the corrected producer census and the guard, and correct the atlas sentence the same round.
+- **`## Revisions` — Task 3.4's callback sweep was not only about rendering.** Its "as built" entry says "The sweep is that one rule in `tasker`, not `or io_error` added at 16 sites (ARCH-DRY)." That is true for the 18 `tasker.run(nil, …)` sites but the census never covered the *scoped* callbacks, and the one defect is there. Note that the census's scope was unscoped-only and say what covers the scoped side now.
+- **`## Revisions` — the vault log line.** Task 3.4 records "The vault copilot fetch formatted `code` with `%d`, and now uses `%s`". Record that the same edit began logging `curl -v` stderr, that `-v` carries the authorization header, and what the fix was — so the next `exit_reason` adoption does not repeat it.

@@ -759,15 +759,15 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		if failed then
 			local failure = {
 				-- How the transport ended when it did not end cleanly, rendered
-				-- once here: a kill, a pipe error or a curl exit. The raw exit
-				-- code is not re-exported — it is nil whenever io_error says
-				-- why, so a consumer rendering it would print "nil" (#261 M3
-				-- review BR-45). The log below keeps it.
+				-- once here: a kill, a pipe error or a curl exit. The raw fields
+				-- are not re-exported — code is nil whenever io_error says why,
+				-- so a consumer rendering it would print "nil" (#261 M3 review
+				-- BR-45), and io_error is already inside `exit`. The log below
+				-- keeps both.
 				exit = (io_error ~= nil or code ~= 0) and tasker.exit_reason(code, signal, io_error) or nil,
 				http_status = http_status,
 				body = qt.raw_response,
 				stderr = clean_stderr,
-				io_error = io_error,
 				-- The request's model: the only path by which a failure body
 				-- that names neither provider nor model (cliproxy's expired-token
 				-- 401) can still be resolved to a credential channel (#197).

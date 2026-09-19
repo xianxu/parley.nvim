@@ -25,7 +25,8 @@
 -- What the matchers cannot see (the `single_source_sweeps_spec` convention):
 -- a spawn behind a variable (`local spawn = uv.spawn`), a bound passed as a
 -- computed value, a code rendered under another name or through
--- `string.format`, and a `.code` read off a table this file does not name.
+-- `string.format`, a `.code` read off a table this file does not name, and an
+-- inherited `io_error` renamed before it is overwritten.
 local arch = require("tests.arch.arch_helper")
 
 local SPAWN = { "uv%.spawn[%s%(,]", "vim%.system%(", "jobstart%(", "vim%.fn%.system%(", "vim%.fn%.systemlist%(",
@@ -254,6 +255,74 @@ describe("arch: a deadline is a tasker.deadline kind", function()
     end)
 end)
 
+describe("arch: every process scope is spelled by tasker.scope_key", function()
+    -- #261 M3 review round 3: the atlas says a scoped process carries a key
+    -- built by `tasker.scope_key`. This census makes that executable: each
+    -- production assignment to `logical_generation` either calls scope_key,
+    -- forwards a field that already holds a scope, or names a local this file
+    -- built with scope_key. Anything else fails.
+    local FORWARD = { "[%w_%.]*logical_generation%s*[,}]", "[%w_%.]*logical_generation%s*$", "[%w_%.]+%.logical%s*[,}]",
+        "[%w_%.]+%.logical%s*$" }
+    local function rhs_of(line)
+        if line:match("^%s*%-%-") then return nil end
+        return line:match("logical_generation%s*=%s*([^=].*)$")
+    end
+    local function derived(text, rhs)
+        if rhs:find("scope_key%(") then return true end
+        for _, pattern in ipairs(FORWARD) do if rhs:find("^" .. pattern) then return true end end
+        local name = rhs:match("^([%a_][%w_]*)")
+        return name ~= nil and text:find("local%s+" .. name .. "%s*=%s*[%w_%.]*scope_key%(") ~= nil
+    end
+    it("finds every producer, and each derives from scope_key", function()
+        local problems, producers = {}, 0
+        for _, file in ipairs(arch.worktree_files({ "lua/**/*.lua" })) do
+            if file ~= SEAM then
+                local lines = vim.fn.readfile(file)
+                local text = table.concat(lines, "\n")
+                for i, line in ipairs(lines) do
+                    local rhs = rhs_of(line)
+                    if rhs then
+                        producers = producers + 1
+                        if not derived(text, rhs) then problems[#problems + 1] = file .. ":" .. i .. ": " .. rhs end
+                    end
+                end
+            end
+        end
+        assert.same({}, problems, "build a scope with tasker.scope_key, or forward one that was")
+        -- A floor, so a matcher that stopped matching cannot pass vacuously.
+        assert.is_true(producers >= 6, "found only " .. producers .. " producers")
+    end)
+    it("and would catch a hand-built one (counterfactual)", function()
+        local text = 'local owner = "skill:" .. buf'
+        assert.is_false(derived(text, '"skill:"..tostring(buf),alive=f}'))
+        assert.is_false(derived(text, "owner,alive=f}"))
+        assert.is_true(derived("local owner = tasker.scope_key(a, b)", "owner,alive=f}"))
+        assert.is_true(derived("", "context.logical_generation,"))
+    end)
+end)
+
+describe("arch: no process writes its request headers to stderr", function()
+    -- #261 M3 review round 3 (ARCH-SECURE): curl's verbose and trace modes copy
+    -- every request header — an Authorization bearer included — to stderr, and
+    -- a failure message that shows stderr then shows the secret.
+    local VERBOSE = { '"%-v"', '"%-%-verbose"', '"%-%-trace', '"%-%-trace%-ascii"' }
+    local function verbose(line)
+        if line:match("^%s*%-%-") then return false end
+        for _, pattern in ipairs(VERBOSE) do if line:find(pattern) then return true end end
+        return false
+    end
+    it("no argv in lua/ asks for a verbose or traced process", function()
+        local found = {}
+        for _, file in ipairs(arch.worktree_files({ "lua/**/*.lua" })) do
+            for i, line in ipairs(vim.fn.readfile(file)) do
+                if verbose(line) then found[#found + 1] = file .. ":" .. i end
+            end
+        end
+        assert.same({}, found)
+        assert.is_true(verbose('    "-v",'), "counterfactual")
+    end)
+end)
+
 describe("arch: how a run ended is rendered once", function()
     -- Anchored on the value, not on one function's callers (BR-45): a raw exit
     -- code reaches a module either as a tasker callback argument, or on the
@@ -294,6 +363,31 @@ describe("arch: how a run ended is rendered once", function()
         end
         table.sort(problems)
         assert.same({}, problems)
+    end)
+
+    -- In a tasker exit callback, `io_error` is an inherited diagnosis (a kill, a
+    -- pipe error): a local reason is added beside it, never assigned over it.
+    local function overwrites(line)
+        if line:match("^%s*%-%-") or line:match("local%s+io_error") then return false end
+        line = line:gsub('"[^"]*"', '""'):gsub("'[^']*'", "''") -- not inside a string literal
+        local rhs = line:match("[^%w_%.]io_error%s*=%s*([^=].*)$") or line:match("^io_error%s*=%s*([^=].*)$")
+        return rhs ~= nil and not rhs:match("^io_error%s+or%s")
+    end
+    it("no callback overwrites the io_error it inherited", function()
+        local found = {}
+        for _, file in ipairs(arch.worktree_files({ "lua/**/*.lua" })) do
+            local lines = vim.fn.readfile(file)
+            local text = table.concat(lines, "\n")
+            if file ~= SEAM and (text:find("tasker.run(", 1, true) or text:find("Tasker.run(", 1, true)) then
+                for i, line in ipairs(lines) do
+                    if overwrites(line) then found[#found + 1] = file .. ":" .. i end
+                end
+            end
+        end
+        assert.same({}, found, "write `io_error = io_error or '<reason>'`")
+        assert.is_true(overwrites("                            io_error='scoped process bootstrap failed'"))
+        assert.is_false(overwrites("        io_error = io_error or 'missing trailer'"))
+        assert.is_false(overwrites("    local io_error"))
     end)
 
     it("and would catch either form (counterfactual)", function()

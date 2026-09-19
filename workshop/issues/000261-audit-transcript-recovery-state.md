@@ -251,7 +251,7 @@ Reconciliation: Σdesign 10.66 × 1.15 = 12.26, plus Σimpl 14.84 × 1.2 = 17.81
   `state_dir` reader declares why it cannot block.
 - [x] M2 — `prev_answer` on the document coordinator (#255): same-chat and
   sub-chat context substitution; ancestors read the parent's live buffer.
-- [ ] M3 — processes die for certain: children lead their own process group
+- [x] M3 — processes die for certain: children lead their own process group
   (`detached`), Stop kills a generation's scope TERM→KILL, unscoped helpers get
   a deadline, every spawn settles, leaving Neovim kills every group.
 - [ ] M4 — every wait a generation holds settles (W1–W16); a stopped response
@@ -537,6 +537,7 @@ enumerations and the queries that produce them.
   This is recorded on #267 as the same family. It is not M1's.
 
 ### 2026-09-19 — M1 boundary review, round 1: FIX-THEN-SHIP, and how each finding was disposed
+- 2026-09-19: closed M3 — make test JOBS=4: 381 files PASS, exit 0. make lint clean (637 files). Counterfactuals all red on revert: main detach key (3 live conformance cases), group target (8/12 sequence tests), kill code (content fetch), old oauth render, response_provider exit branch, topic merge, pid-0 guard, held deadline timer. Round 2: BR-45 failure.exit rendered once at the dispatcher + value-anchored guard; BR-46 derived spawn classification (sync/bounded/delegated/open) with per-class counts, helper and wrapper bounds checked; 3 untested Minors now tested.; review verdict: FIX-THEN-SHIP
 - 2026-09-19: closed M2 — make test JOBS=4: 377 files pass + perf_document_spec which dies under load and passes alone 5/5 (#267). Rounds 1-3 disposed: buffer_for + guard; tree-move rewrite and ENOENT abort on #270 (contract updated); exemption boundary pinned (red on raw-owner counterfactual); did-it-happen rule enforced by ---@nodiscard guard (red on a planted bare call).; review verdict: FIX-THEN-SHIP
 - 2026-09-19: closed M1 — make test JOBS=4: 372 files pass + 2 fold specs that die under load and pass alone (#267 family, logged). Rounds 1-3 fixed as classes with guards (census, worktree listing, write-result, json_decode, per-action warning bound, one atomic writer); every fix red on revert.; review verdict: FIX-THEN-SHIP
 
@@ -756,6 +757,23 @@ about how far a rule was carried:
   answer exists.
 - Round 1's three untested Minors have tests, each red on revert; the process
   fake gained a `spawn_pid` seam.
+
+### 2026-09-19 — M3 closed at the round cap; review round 3's findings fixed in the close
+
+The gate finalized M3 after four rounds, at its round cap. Round 3's findings
+are fixed in the close commit (FIX-THEN-SHIP, no re-run):
+- **Critical (ARCH-SECURE), introduced by round 1.** The Copilot failure log
+  began printing a `curl -v` stderr carrying the token. The class is swept:
+  `-v` is gone, secret-bearing stdout and bodies are never shown, a
+  verbose-argv guard is added, and there are three planted-secret regression
+  tests.
+- **Important.** `async_builtin` overwrote an inherited `io_error`, so an early
+  Stop read "bootstrap failed". Fixed, with an overwrite guard and a live
+  oracle (`killed: stop`).
+- **Important.** Skill processes hand-built their scope key. They now use
+  `scope_key`, with a producer census guard, and the atlas says a chat scope
+  kill does not reach them.
+- **Four Minors fixed**; lessons added.
 
 ## Revisions
 

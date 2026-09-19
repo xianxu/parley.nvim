@@ -739,6 +739,13 @@ rounds:
       boundary: M3
       recipe: milestone-review
       blocked: true
+    - "n": 13
+      timestamp: "2026-09-19T08:39:37-07:00"
+      agent: claude
+      boundary: M3
+      recipe: milestone-review
+      blocked: false
+      protocol_error: no valid findings block
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -1133,6 +1140,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   a classification derived from the call form (sync ⇔ :wait()/vim.fn.system*;
   bounded ⇔ the call carries `timeout =` or `--max-time`) and keep free text
   only for genuine exceptions such as the managed proxy.
+
+## Round 13 — 2026-09-19T08:39:37-07:00 (claude) — passed
+
+**Protocol error:** no valid findings block — this round contributed no findings.
 
 ## Open findings
 

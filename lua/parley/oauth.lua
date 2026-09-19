@@ -1024,6 +1024,20 @@ M._run_auth_code_exchange = function(config, code, port, callback, provider)
     tasker.run(nil, "curl", args, callback, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
+-- What a token endpoint's body may show in a log: its OAuth error fields, when
+-- it is JSON carrying them; otherwise only its size. The body is where tokens
+-- are, so it is never shown whole (#261 M3 review, ARCH-SECURE).
+---@param body string|nil
+---@return string
+M._token_body_summary = function(body)
+    local ok, decoded = pcall(vim.json.decode, body or "")
+    if ok and type(decoded) == "table" and type(decoded.error) == "string" then
+        local description = type(decoded.error_description) == "string" and (": " .. decoded.error_description) or ""
+        return (decoded.error .. description):sub(1, 300)
+    end
+    return ("%d bytes, not shown"):format(#(body or ""))
+end
+
 -- Exchange an OAuth authorization code and persist the resulting account.
 ---@param config table
 ---@param code string
@@ -1033,16 +1047,19 @@ end
 M._exchange_auth_code = function(config, code, port, callback, provider)
     provider = provider or "google"
     M._run_auth_code_exchange(config, code, port, function(exit_code, signal, stdout_data, _, io_error)
+        -- The token endpoint's body carries tokens, even cut short by a kill, so
+        -- it is summarised, never shown (#261 M3 review, ARCH-SECURE).
         if exit_code ~= 0 then
             logger.warning(M._get_provider_display_name(provider) .. ": token exchange curl failed ("
-                .. tasker.exit_reason(exit_code, signal, io_error) .. "): " .. tostring(stdout_data))
+                .. tasker.exit_reason(exit_code, signal, io_error) .. ")")
             callback(nil)
             return
         end
 
         local tokens = M.parse_token_response(stdout_data)
         if not tokens then
-            logger.warning(M._get_provider_display_name(provider) .. ": failed to parse token response: " .. tostring(stdout_data))
+            logger.warning(M._get_provider_display_name(provider) .. ": failed to parse token response: "
+                .. M._token_body_summary(stdout_data))
             callback(nil)
             return
         end

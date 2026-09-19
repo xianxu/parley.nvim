@@ -149,7 +149,9 @@ function M.invoke(buf, manifest, args, opts)
         source_pool,read_state,permissions=SourceRead.transition(source_pool,read_state,event)
         return permissions
     end
-    local process_owner="skill:"..tostring(buf)..":"..tostring(gen)
+    -- A skill run's own process scope, spelled by the one scope function
+    -- (#261 M3); a chat generation's scope kill does not reach it.
+    local process_owner=tasker.scope_key("skill:"..tostring(buf),gen)
     local detached_progress = opts.detached_progress ~= false
     local progress_started = false
     local finish

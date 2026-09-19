@@ -74,11 +74,16 @@ Every process started through `tasker.run` (`lua/parley/tasker.lua`, #261) is
 scoped or unscoped. A process started any other way is on one list with how it
 ends ([below](#processes-outside-tasker)).
 
-- **Scoped** processes belong to a generation: provider streams, tool processes,
-  skill processes. They carry `logical_generation`, keyed by
-  `tasker.scope_key(epoch, generation)`. Each is spawned `detached`, so it leads
-  its own process group and is signalled as a group. A grandchild holding its
-  pipe dies with it, even after the parent has exited.
+- **Scoped** processes carry `logical_generation`, a key always built by
+  `tasker.scope_key`:
+  - a chat generation's key, `(epoch, generation)`, for provider streams and
+    tool processes;
+  - a skill run's own key, `("skill:<buf>", run)`, for skill processes.
+
+  A chat generation's scope kill therefore does not reach a skill's processes;
+  the skill stops its own. Each scoped process is spawned `detached`, so it
+  leads its own process group and is signalled as a group. A grandchild holding
+  its pipe dies with it, even after the parent has exited.
 - **Unscoped** processes are shared helpers: the vault's secret command, OAuth
   keychain and token calls, content fetches, and the automatic topic and
   memory-preference streams. They stay in Neovim's session, so a
@@ -125,18 +130,29 @@ keychain read is neither cached nor saved over the keychain.
 ### Processes outside tasker
 
 A few processes are started directly, not through `tasker.run`, so none of the
-above applies to them. `tests/arch/spawn_seam_spec.lua` lists each of them,
-file by file, with how it ends. A new direct spawn fails that test until it is
-routed through tasker or listed with its reason.
+above applies to them. `tests/arch/spawn_seam_spec.lua` is their list. It
+classifies each one from its own call, and declares how many of each class
+every file may hold. A new direct spawn fails that test until it is routed
+through tasker or declared.
 
-- **Synchronous calls** wait for their process, so it cannot outlive the call.
-- **The managed proxy** is spawned so that it outlives Neovim, by design.
-- **A few user commands** report their own exit: git reads, issue creation,
-  export, opening the browser for an OAuth login, and clipboard and artifact
-  lookups.
+- **Synchronous:** the call waits for the process, so it cannot outlive the
+  call.
+- **Bounded:** the call carries a timeout or curl's `--max-time`, directly or
+  through an argv helper the test checks.
+- **Open:** neither, each with its reason in the test.
+  - The managed proxy is spawned so that it outlives Neovim, by design.
+  - The proxy's login helper is stopped when its window closes.
+  - The markdown finder's git listing is cancelled by its caller.
+  - A few user commands report their own exit: issue creation, export,
+    opening the browser for an OAuth login, and artifact lookups.
 
-The same test also checks two rules: no `deadline_ms` is a literal, and no exit
-callback prints a raw code.
+The same file checks the neighbouring rules too:
+- every scope key is built by `tasker.scope_key`;
+- no `deadline_ms` is a literal;
+- how a run ended is rendered once, and an inherited `io_error` is never
+  overwritten;
+- no argv asks curl for a verbose trace, which would copy an Authorization
+  header to stderr.
 
 Coverage:
 - the fake: `tests/helpers/fake_process.lua`, which models groups, ignored

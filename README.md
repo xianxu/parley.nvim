@@ -110,7 +110,10 @@ been extensively redesigned. See [LICENSE](LICENSE).
 
 Builtin tools run asynchronously. Independent resources can proceed together;
 conflicting file operations wait for earlier work. Capabilities, roots and tool
-configuration are captured for the response. Custom tools need an `execute_async`
+configuration are captured for the response. A custom `execute_async` that
+starts a process through `context.tasker.run` passes `context.logical_generation`
+along, so the process is stopped with the response; a process with neither that
+nor a `deadline_ms` is refused. Custom tools need an `execute_async`
 implementation to run in this workflow; a synchronous handler alone is refused.
 
 Reload prevents further chat writes, and so does Stop once it has written out a

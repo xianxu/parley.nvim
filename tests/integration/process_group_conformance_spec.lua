@@ -5,9 +5,10 @@
 local T = require("parley.tasker")
 local uv = vim.uv or vim.loop
 
+-- Gone means ESRCH: no such process. EPERM would mean it lives, unsignallable.
 local function gone(pid)
-    local ok = uv.kill(pid, 0)
-    return ok ~= 0
+    local _, _, name = uv.kill(pid, 0)
+    return name == "ESRCH"
 end
 
 describe("process groups, live", function()
@@ -31,6 +32,21 @@ describe("process groups, live", function()
         assert.is_true(vim.wait(5000, function() return result() ~= nil end, 10))
         assert.equals(0, result().code, result().err)
         assert.equals("leader", vim.trim(result().out))
+    end)
+
+    -- The exemption the operator decision rests on: a run outside any generation
+    -- stays in Neovim's group, so a secret command can still prompt on the
+    -- terminal. No group carries its pid.
+    it("an unscoped run does not lead a group", function()
+        if vim.fn.executable("sleep") == 0 then return pending("sleep is not executable") end
+        T.run(nil, "sleep", { "30" }, nil, nil, nil, nil, { attempt_id = "unscoped", deadline_ms = T.deadline.http })
+        local pid
+        assert.is_true(vim.wait(5000, function()
+            local state = T.get_attempt("unscoped"); pid = state and state.pid; return pid ~= nil
+        end, 10))
+        local _, _, name = uv.kill(-pid, 0)
+        assert.equals("ESRCH", name, "an unscoped process leads its own group")
+        assert.is_false(T.get_attempt("unscoped").group)
     end)
 
     it("a stop reaches a grandchild that ignores TERM and holds the pipe", function()
@@ -65,6 +81,8 @@ describe("process groups, live", function()
         assert.equals(1, T.stop_scope("e:3"))
         assert.is_true(vim.wait(4000, function() return result ~= nil end, 10), "the tool did not settle")
         assert.is_true(result.physical_resolved)
+        -- The tool names the kill, not a failed bootstrap (#261 M3 review round 3).
+        assert.equals("killed: stop", result.result.content)
         assert.is_true(vim.wait(1000, function() return gone(pid) end, 10))
     end)
 end)

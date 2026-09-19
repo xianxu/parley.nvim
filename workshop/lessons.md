@@ -1,5 +1,41 @@
 # Lessons
 
+## 2026-09-19 (#261 M3 review round 3 — a fix leaked a secret, and a consumer overwrote the value it was handed)
+
+- **A process that carries or returns a secret never has its raw output shown**
+  (Critical, ARCH-SECURE). Round 1 fixed a `%d`-on-nil throw in the Copilot
+  token fetch by rewriting its failure log, and appended the process's stderr.
+  That request ran curl with `-v`, which copies every request header to stderr,
+  including `authorization: token <secret>`. The old line had silently dropped
+  that argument, so the leak was new.
+  - When a change widens what a message includes, check what the newly
+    included data can contain.
+  - The class, swept in the same change: a secret command's stdout (it is the
+    secret), a token endpoint's body (it carries tokens, even when a kill cuts
+    it short), and a verbose curl's stderr.
+  - Now: stdout and bodies are summarised, never shown; a guard forbids a
+    verbose or traced argv anywhere in `lua/`; and a regression test plants the
+    secret where each process would put it.
+- **A value's consumers are not only branchers and renderers** (7th in
+  `seam-change-collateral`). The value is `io_error`, an inherited diagnosis
+  (a kill, a pipe error), and its consumer kinds are branch, render, overwrite
+  and compute.
+  - Round 1 swept one kind of consumer, round 2 a second; round 3 found a
+    third. The tool layer replaced it with "scoped process bootstrap failed"
+    whenever a kill landed before the bootstrap's marker, so every early Stop
+    of a shell tool named the wrong cause.
+  - Enumerate the consumer kinds of a changed value up front and guard each
+    one. For io_error: `io_error = io_error or '<reason>'`, never an assignment
+    over it.
+- **A single source needs a census of its producers, not just its consumers**
+  (9th in `enumeration-claims-completeness`). `scope_key` replaced the two
+  spellings the plan named, but a third producer, skill processes, still
+  hand-built a different key, and the atlas said every scope used scope_key.
+  - A census now classifies every production assignment: built with
+    scope_key, or forwarded from one that was.
+  - The atlas says what that proves: a chat generation's scope kill does not
+    reach a skill's processes.
+
 ## 2026-09-19 (#261 M3 review round 2 — a sweep anchored on call sites, and an enumeration whose entries were prose)
 
 - **Anchor a sweep on the VALUE, not on the callers of one function** (5th in

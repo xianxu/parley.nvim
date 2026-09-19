@@ -689,7 +689,7 @@ describe("dispatcher.query internals", function()
                 nil, nil, nil, nil, nil, function(_qid, value) failure = value end)
             captured_out_reader(nil, nil)
             captured_terminal(0, 0, "", "plain stderr", nil)
-            assert.is_truthy(failure.io_error)
+            assert.is_truthy(failure.exit)
 
             local exits = 0
             dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
@@ -737,7 +737,8 @@ describe("dispatcher.query internals", function()
             captured_terminal(9, 0, body, status_stderr("000"), "stdout: read boom")
             assert.same({ "content:partial", "failure" }, events)
             assert.equals(body, failure.body)
-            assert.is_truthy(failure.io_error)
+            assert.equals("stdout: read boom", failure.exit)
+            assert.is_nil(failure.io_error, "retired: `exit` carries it")
         end)
 
         it("I8: reports partial SSE plus HTTP 500 with byte-exact body", function()
@@ -781,7 +782,7 @@ describe("dispatcher.query internals", function()
             local malformed = status_stderr("200"):gsub("200\n$", "20x\n")
             captured_out_reader(nil, nil)
             captured_terminal(0, 0, "", malformed, nil)
-            assert.is_truthy(failures[1].io_error)
+            assert.is_truthy(failures[1].exit)
 
             dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
                 nil, nil, nil, nil, nil, function(_qid, value)
@@ -789,7 +790,7 @@ describe("dispatcher.query internals", function()
                 end)
             captured_out_reader(nil, nil)
             captured_terminal(0, 0, "", "", nil)
-            assert.is_truthy(failures[2].io_error)
+            assert.is_truthy(failures[2].exit)
         end)
 
         it("I11: legacy failure logging exposes only bounded metadata", function()
