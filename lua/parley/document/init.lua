@@ -348,6 +348,7 @@ end
 --- (which stores no transcript text) for request context only. Valid while the
 --- regenerating generation holds a live grant on the exchange; the lifecycle is
 --- the ARCH-ORDER table in workshop/plans/000261-transcript-is-the-whole-truth-plan.md.
+---@nodiscard
 function M.set_previous_answer(doc,spec)
     local s=state(doc)
     if s.dead or type(spec)~='table' or spec.epoch~=s.epoch or spec.value==nil

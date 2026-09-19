@@ -576,6 +576,7 @@ end
 --- used to report success over a truncated file). Returns true once written;
 --- nil and the reason otherwise, having warned, so a caller that tells the user
 --- something was saved can know whether it was (BR-14).
+---@nodiscard
 ---@return boolean|nil ok
 ---@return string|nil err
 _H.table_to_file = function(tbl, file_path)
@@ -592,6 +593,7 @@ end
 ---@param adapter table|nil # optional IO adapter for deterministic failure tests
 ---@return boolean ok
 ---@return string|nil err
+---@nodiscard
 _H.table_to_file_atomic = function(tbl, file_path, adapter)
 	adapter = adapter or {}
 	local encode = adapter.encode or vim.json.encode

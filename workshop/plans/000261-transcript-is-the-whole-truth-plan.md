@@ -1849,3 +1849,26 @@ passed only because its chat was a scratch buffer.
 real behaviour, a loaded chat's tree move aborting with ENOENT after a save
 triggers a slug rename, is recorded on parley#270. The buffer-lookup guard
 documents that it checks by spelling.
+
+### 2026-09-19 — M2 review round 3: the exemption's boundary, and the did-it-happen rule by annotation
+
+**Delta.**
+- **BR-32.** The staleness exemption is safe only because a write outside its
+  grant, or through a revoked grant, has no owner. Two unit cases pin that the
+  reader stays stale in both. Computing the exemption from the raw owner turns
+  both red.
+- **The `returned-handle-has-no-consumer` family is fixed as a rule.**
+  - Did-it-happen functions carry `---@nodiscard`: `table_to_file`,
+    `table_to_file_atomic`, `custom_prompts.save/set/remove/rename`, and
+    `D.set_previous_answer`.
+  - `tests/arch/nodiscard_spec.lua` fails any bare-statement call to them
+    unless it is declared with a count and a reason. It replaces the
+    name-listed check in `sidecar_authority_spec`.
+  - `set_previous_answer`'s false is declared: the generation has already lost
+    its grant, and the transcript is then the right context.
+- **Deferrals land in contracts.** parley#270's `## Done when` now carries the
+  file-backed fixture obligation.
+- **Recorded, not fixed.** `buffer_for`'s private path key is another copy of
+  the `resolve(fnamemodify(x, ':p'))` idiom, which has about ten copies in
+  `lua/`. Extracting one `canonical_path` is a sweep beyond #261's surface.
+  The close review will see it recorded.

@@ -683,6 +683,19 @@ characterization test stands in" no longer holds: Task 2.6's loaded-target
 bullet is withdrawn outright, and parley#270 owns it. The buffer-lookup guard's
 header now states its static-check limit.
 
+### 2026-09-19 — M2 boundary review round 3 (FIX-THEN-SHIP): dispositions
+
+- **BR-32.** Two boundary tests pin the staleness exemption's safety: a write
+  outside its grant, and a write through a revoked grant, both stale the
+  reader. The counterfactual turns both red.
+- **Did-it-happen family.**
+  - Fixed as a rule: `---@nodiscard` on the functions, and a guard that
+    selects by the annotation. The counterfactual flags a planted bare call.
+  - `set_previous_answer`'s drop is declared, with its reason.
+- **parley#270's contract** now carries the deferred fixture obligation.
+- **Recorded for the close:** the path-canonicalisation idiom has about ten
+  copies (ARCH-DRY Minor), which is beyond #261's surface.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

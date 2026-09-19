@@ -441,6 +441,46 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: true
+    - "n": 8
+      timestamp: "2026-09-19T02:40:57-07:00"
+      agent: claude
+      dispose:
+        - id: BR-30
+          disposition: addressed
+          note: Stand-in deleted (chat_move_spec is net-zero across the window); plan Revisions + issue Log record the withdrawal, and parley#270's Log carries the ENOENT repro and the 14-spec fixture prevalence.
+          round: 8
+        - id: BR-31
+          disposition: addressed
+          note: tests/arch/buffer_lookup_spec.lua:7-12 states the limit — checks by spelling, first call per line, single-line calls, and names the statically-uncheckable siblings.
+          round: 8
+      findings:
+        - id: BR-32
+          severity: Important
+          title: The new generated-write staleness exemption is pinned only on its positive side; a cross-generation write that escapes its grant has no test
+          detail: 'state.lua:294 computes `generated` from the `owner` that line 267 nils when the grant is revoked or does not contain the edit; that nil''ing is the whole safety of the exemption. Both new cases use a contained, valid grant, and the existing ''invalid owners'' case uses the reader''s OWN grant, where `generated` is false regardless. Probed against HEAD: writer grant 10..20, reader dep 0..30 — an observed_edit{first=9,last=10,owner_grant=writer} still stales the reader (true), as does a write whose grant was revoked first (true). Correct today, unpinned. Move `generated` above line 267 and captured input silently stops going stale with nothing red. Add two unit cases: writer''s owned edit outside its grant, and writer''s grant revoked, reader stale in both.'
+          family: exemption-boundary-untested
+          round: 8
+        - id: BR-33
+          severity: Minor
+          title: D.set_previous_answer returns a did-it-happen boolean that chat_respond.lua:1545 drops as a bare statement
+          detail: 'This is the 4th finding in family returned-handle-has-no-consumer. Earlier rounds fixed instances. Do NOT fix this instance. The rule is already written (workshop/lessons.md, M1 round 2: a "did it happen?" result must be consumed by whoever tells the user), but its guard, tests/arch/sidecar_authority_spec.lua:69-91, enumerates members by spelling — `table_to_file`, `table_to_file_atomic`, `custom_prompts.*` — so every new boolean-returning API is a fresh instance. Measured prevalence: the guard covers 3 named call shapes; this window added a 4th boolean-returning API outside them. Fix the rule, per BR-24: select guard members by the class property (a function annotated ---@return boolean meaning "did it happen") rather than by name, or drop the boolean and have set_previous_answer warn on refusal. A silent false here means the next request carries the buffer''s partial text as an earlier answer with no message.'
+          family: returned-handle-has-no-consumer
+          round: 8
+        - id: BR-34
+          severity: Minor
+          title: buffer_for's private key() adds an 11th copy of the resolve(fnamemodify(x,':p')) path-canonicalisation idiom
+          detail: 'helper.lua:694-697 hand-rolls the same canonicalisation that tools/file_refresh.lua:6 already names `canonical`, in the same file whose resolve_chat_path comment (helper.lua:337-341) records that four copies of path resolution drifted and shipped a bug (#225 C3). ARCH-DRY: extract one `helper.canonical_path(name)` and route buffer_for, file_refresh and the eight other `vim.fn.resolve(vim.fn.fnamemodify(...,":p"))` sites through it, so the ~-vs-$VAR and symlink semantics have one definition.'
+          family: canonical-form-not-shared
+          round: 8
+        - id: BR-35
+          severity: Minor
+          title: The fixture obligation BR-30 deferred to parley#270 lives only in its Log, not in its Done-when contract
+          detail: 'This is the 2nd finding in family plan-tracking-not-updated. Do NOT fix this instance alone — state the rule. parley#270''s Log says "Add to this issue''s Done-when: chat_move_spec builds its chats as file-backed buffers … and a tree move of a loaded chat succeeds", but `## Done when` still carries only its two original bullets. The rule that covers both instances: work deferred into a receiving artifact lands in that artifact''s CONTRACT section (`## Done when` / `## Plan`) in the same edit that writes the Log entry, because the Log is narrative and the close gate reads the contract. A deferral recorded only in prose is a deferral the gate cannot enforce.'
+          family: plan-tracking-not-updated
+          round: 8
+      boundary: M2
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -657,10 +697,30 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-31** [Minor] `enumeration-claims-completeness` buffer_lookup_spec matches only the first vim.fn.bufnr call on a line, and only when the call fits on one line
   There are no offenders today. The wider class of name-matching functions (bufwinnr, bufwinid, bufname, getbufvar) cannot be checked statically, because their number-argument forms are legitimate. The rule is the BR-24 one: a guard selects members by the class property. Here the property can only be checked by spelling, so record that limit in the guard's header comment.
 
+## Round 8 — 2026-09-19T02:40:57-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-30 — addressed — Stand-in deleted (chat_move_spec is net-zero across the window); plan Revisions + issue Log record the withdrawal, and parley#270's Log carries the ENOENT repro and the 14-spec fixture prevalence.
+- BR-31 — addressed — tests/arch/buffer_lookup_spec.lua:7-12 states the limit — checks by spelling, first call per line, single-line calls, and names the statically-uncheckable siblings.
+
+### Raised
+
+- **BR-32** [Important] `exemption-boundary-untested` The new generated-write staleness exemption is pinned only on its positive side; a cross-generation write that escapes its grant has no test
+  state.lua:294 computes `generated` from the `owner` that line 267 nils when the grant is revoked or does not contain the edit; that nil'ing is the whole safety of the exemption. Both new cases use a contained, valid grant, and the existing 'invalid owners' case uses the reader's OWN grant, where `generated` is false regardless. Probed against HEAD: writer grant 10..20, reader dep 0..30 — an observed_edit{first=9,last=10,owner_grant=writer} still stales the reader (true), as does a write whose grant was revoked first (true). Correct today, unpinned. Move `generated` above line 267 and captured input silently stops going stale with nothing red. Add two unit cases: writer's owned edit outside its grant, and writer's grant revoked, reader stale in both.
+- **BR-33** [Minor] `returned-handle-has-no-consumer` D.set_previous_answer returns a did-it-happen boolean that chat_respond.lua:1545 drops as a bare statement
+  This is the 4th finding in family returned-handle-has-no-consumer. Earlier rounds fixed instances. Do NOT fix this instance. The rule is already written (workshop/lessons.md, M1 round 2: a "did it happen?" result must be consumed by whoever tells the user), but its guard, tests/arch/sidecar_authority_spec.lua:69-91, enumerates members by spelling — `table_to_file`, `table_to_file_atomic`, `custom_prompts.*` — so every new boolean-returning API is a fresh instance. Measured prevalence: the guard covers 3 named call shapes; this window added a 4th boolean-returning API outside them. Fix the rule, per BR-24: select guard members by the class property (a function annotated ---@return boolean meaning "did it happen") rather than by name, or drop the boolean and have set_previous_answer warn on refusal. A silent false here means the next request carries the buffer's partial text as an earlier answer with no message.
+- **BR-34** [Minor] `canonical-form-not-shared` buffer_for's private key() adds an 11th copy of the resolve(fnamemodify(x,':p')) path-canonicalisation idiom
+  helper.lua:694-697 hand-rolls the same canonicalisation that tools/file_refresh.lua:6 already names `canonical`, in the same file whose resolve_chat_path comment (helper.lua:337-341) records that four copies of path resolution drifted and shipped a bug (#225 C3). ARCH-DRY: extract one `helper.canonical_path(name)` and route buffer_for, file_refresh and the eight other `vim.fn.resolve(vim.fn.fnamemodify(...,":p"))` sites through it, so the ~-vs-$VAR and symlink semantics have one definition.
+- **BR-35** [Minor] `plan-tracking-not-updated` The fixture obligation BR-30 deferred to parley#270 lives only in its Log, not in its Done-when contract
+  This is the 2nd finding in family plan-tracking-not-updated. Do NOT fix this instance alone — state the rule. parley#270's Log says "Add to this issue's Done-when: chat_move_spec builds its chats as file-backed buffers … and a tree move of a loaded chat succeeds", but `## Done when` still carries only its two original bullets. The rule that covers both instances: work deferred into a receiving artifact lands in that artifact's CONTRACT section (`## Done when` / `## Plan`) in the same edit that writes the Log entry, because the Log is narrative and the close gate reads the contract. A deferral recorded only in prose is a deferral the gate cannot enforce.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
 - **BR-23** [Minor] `seam-change-collateral` Routing table_to_file through the rename-based writer replaces symlinked sidecars, resets permissions, and leaves crash files the query cleanup never deletes
 - **BR-24** [Minor] `enumeration-claims-completeness` The sidecar census finds readers by the text state_dir, so file_access.json escapes it, and a wrongly typed entry makes opening a chat raise
-- **BR-30** [Important] `stateless-double-at-stateful-seam` The BR-25 stand-in test passes only because its chat is a nofile scratch buffer; with a real chat buffer the tree move saves it and aborts with ENOENT
-- **BR-31** [Minor] `enumeration-claims-completeness` buffer_lookup_spec matches only the first vim.fn.bufnr call on a line, and only when the call fits on one line
+- **BR-32** [Important] `exemption-boundary-untested` The new generated-write staleness exemption is pinned only on its positive side; a cross-generation write that escapes its grant has no test
+- **BR-33** [Minor] `returned-handle-has-no-consumer` D.set_previous_answer returns a did-it-happen boolean that chat_respond.lua:1545 drops as a bare statement
+- **BR-34** [Minor] `canonical-form-not-shared` buffer_for's private key() adds an 11th copy of the resolve(fnamemodify(x,':p')) path-canonicalisation idiom
+- **BR-35** [Minor] `plan-tracking-not-updated` The fixture obligation BR-30 deferred to parley#270 lives only in its Log, not in its Done-when contract

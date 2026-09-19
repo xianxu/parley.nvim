@@ -61,6 +61,7 @@ end
 ---@param prompts table<string, table>  map of name → { system_prompt = "...", ... }
 ---@return boolean|nil ok
 ---@return string|nil err
+---@nodiscard
 M.save = function(prompts)
 	return _helpers.table_to_file(prompts, M.file_path())
 end
@@ -79,6 +80,7 @@ end
 --- Returns whether the prompt reached the file — false when the file could not
 --- be read (it is never replaced) or written.
 ---@return boolean
+---@nodiscard
 M.set = function(name, prompt)
 	local all = M.read_authored()
 	if not all then return false end
@@ -89,6 +91,7 @@ end
 --- Remove a custom prompt by name and save. Returns true if it existed.
 ---@param name string
 ---@return boolean
+---@nodiscard
 M.remove = function(name)
 	local all = M.read_authored()
 	if all and all[name] then
@@ -102,6 +105,7 @@ end
 ---@param old_name string
 ---@param new_name string
 ---@return boolean
+---@nodiscard
 M.rename = function(old_name, new_name)
 	local all = M.read_authored()
 	if not all or not all[old_name] or all[new_name] then

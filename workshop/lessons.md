@@ -2,6 +2,17 @@
 
 ## 2026-09-19 (#261 M2 review — a missing test the Log called done, and a primitive fixed at one of five sites)
 
+- **Select a guard's members by an annotation, when the class has one.** The
+  "did it happen?" family recurred four times because each guard listed the
+  functions by name, so every new one was a fresh gap. `---@nodiscard` is
+  LuaLS's own annotation for exactly this class. `tests/arch/nodiscard_spec.lua`
+  selects by it, and resolves callers through their `require` aliases so
+  `table.remove` is never mistaken for `custom_prompts.remove`.
+- **Work deferred into another artifact lands in that artifact's contract**
+  (`## Done when` / `## Plan`), in the same edit as the Log entry. The close
+  gate reads the contract; a deferral that exists only in narrative is one
+  nothing enforces.
+
 - **A test stand-in must have every behaviour the code under test branches on.**
   The tree-move test used a scratch buffer as its chat. The code's save of that
   buffer failed silently, so the test certified "the file is left alone" — for
