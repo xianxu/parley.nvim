@@ -80,3 +80,10 @@ its first case, followed by a process exit.
 So the family is not specific to the JIT-off hook in `tool_resources_spec`: any
 spec near the per-file cap dies silently under load. The Done-when should cover
 the cap, not only the one case.
+
+### 2026-09-19 — two more silent deaths under JOBS=4 (from #261 M1 round 3)
+
+`tests/integration/document_fold_batches_spec.lua` stopped after 4 of its 5
+cases, and `document_fold_uncertainty_retirement_spec.lua` stopped before its
+first. Alone, both pass (5/5 and 1/1). #261's diff touches no fold code. That
+makes five specs in this family.
