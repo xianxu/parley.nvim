@@ -874,6 +874,13 @@ never ran. The spec now uses its own `tempname()` directory, like every other
 spec. A guard in `single_source_sweeps_spec` fails any spec that writes into the
 shared cache, and it goes red when the old line is restored.
 
+The second fresh-clone run failed `fresh_clone_spec` inside the clone. This
+predates #261: since main's `ee0c5f6d` (2026-09-18) `.gitignore` ignores
+`/construct/generated/`, and the full extraction's `git add .` then dropped the
+tracked `issue.json`. The nested `--worktree` snapshot read that as a deletion.
+The script now force-indexes the archive, which is exactly the tracked set
+(1438 of 1438), and fails if the index and the archive differ.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit
