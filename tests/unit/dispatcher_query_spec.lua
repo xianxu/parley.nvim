@@ -77,8 +77,10 @@ describe("dispatcher.query internals", function()
         dispatcher.providers["openai"] = dispatcher.providers["openai"] or {}
         dispatcher.providers["openai"].endpoint = "http://fake.test/v1/chat/completions"
 
-        -- Ensure dispatcher has a query_dir
-        dispatcher.query_dir = vim.fn.stdpath("cache") .. "/parley/query"
+        -- Its own query_dir, as every other spec has: the shared cache directory
+        -- is written and pruned by specs running in parallel, and since #261 M1 a
+        -- body that was not written aborts before curl starts (#261 M5).
+        dispatcher.query_dir = vim.fn.tempname() .. "-queries"
         helpers.prepare_dir(dispatcher.query_dir, "query test")
     end)
 

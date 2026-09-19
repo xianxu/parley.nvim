@@ -388,6 +388,21 @@ describe("arch: single-source sweeps stay swept", function()
                 .. "require('parley.cliproxy')._set_data_dir(vim.fn.tempname())")
     end)
 
+    it("no spec writes into Neovim's shared cache directory", function()
+        -- #261 M5. `make test` runs specs in parallel against one XDG cache, so a
+        -- file a spec writes there can be pruned or renamed away by another; a
+        -- request body lost that way aborts the query before curl starts. Each
+        -- spec gives its writers a vim.fn.tempname() directory instead.
+        local offenders = {}
+        for _, path in ipairs(repo_files("ls tests/integration/*.lua tests/unit/*.lua 2>/dev/null")) do
+            local text = read(path)
+            if text:find('stdpath("cache")', 1, true) or text:find("stdpath('cache')", 1, true) then
+                offenders[#offenders + 1] = path
+            end
+        end
+        assert.same({}, offenders, "these specs write into the shared stdpath('cache'); use vim.fn.tempname()")
+    end)
+
     -- #218. A triple-backtick predicate belongs in exactly two places: the prose
     -- grammar (highlight_structure.is_fence_delim) and the tool-body grammar
     -- (fence.lua). Hand-rolled copies drifted three separate times in this one

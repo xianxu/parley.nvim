@@ -92,3 +92,21 @@ makes five specs in this family.
   `perf_ownership_spec` died again in the same run. That makes six specs in
   the family, and a different one dies on each full run.
 - 2026-09-19 (#261 M2): `highlight_typing_spec` died silently after 4 cases under JOBS=4; passes alone 8/8 — a seventh spec.
+
+### 2026-09-19 — one member of the family explained (parley#261 M5)
+
+`dispatcher_query_spec`'s parallel-load flake was not a silent death. It was a
+shared directory. The spec wrote request bodies into `stdpath('cache')`, which
+all specs in one `make test` run share, and a parallel spec removed the file
+("rename failed: No such file"). parley#261 gave it its own `tempname()`
+directory and added a guard against writes to the shared cache
+(`single_source_sweeps_spec`).
+
+Two members still die silently after many passing cases, and both also die on
+a clean HEAD:
+- `response_tools_spec`: 2 of 17 runs on the #261 tree, and on the 2nd run of a
+  clean HEAD worktree, after 72 cases;
+- `perf_ownership_spec`, `perf_document_spec`, `perf_chat_typing_spec` and
+  `document_append_extent_spec`: under load only.
+
+Shared writable state is worth ruling out for each one before looking at the JIT.

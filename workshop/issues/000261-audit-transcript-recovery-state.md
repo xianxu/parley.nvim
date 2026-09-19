@@ -866,6 +866,14 @@ log only. First-use model setup's reasons now have words.
 `response_tools_spec`'s silent mid-run death also happens on a clean HEAD, so it
 belongs to the #267 family.
 
+`make check-fresh-clone` explained `dispatcher_query_spec`'s flaky I2. It was
+the only spec that wrote request bodies into the shared `stdpath('cache')`,
+where a parallel spec removed the file ("rename failed: No such file"). Since M1,
+an unwritten body aborts the query before curl starts, so the stubbed spawn
+never ran. The spec now uses its own `tempname()` directory, like every other
+spec. A guard in `single_source_sweeps_spec` fails any spec that writes into the
+shared cache, and it goes red when the old line is restored.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit
