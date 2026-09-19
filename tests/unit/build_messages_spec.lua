@@ -2367,3 +2367,40 @@ describe("question-owned prefaces", function()
         assert.equals("@@topic@@\nAsk", messages[#messages].content)
     end)
 end)
+
+-- #261/#255: a regenerating exchange's previous answer, substituted into the
+-- parsed chat, is what the next request's context carries — whole, and with
+-- its structured tool round intact.
+describe("_build_messages: previous answer substitution (#255)", function()
+    local P = require("parley.previous_answer")
+    local function build(pc)
+        return parley._build_messages({ parsed_chat = pc, start_index = 1, end_index = 100,
+            exchange_idx = 2, agent = agent(), config = parley.config,
+            helpers = stub_helpers, logger = stub_logger })
+    end
+
+    it("includes the substituted answer although its own lines lie past end_index", function()
+        local pc = parsed_chat({ exchange("Q1", "new partial"), exchange("Q2") })
+        pc.exchanges[2].question.line_start = 30
+        local value = { answer = { line_start = 500, line_end = 520, content = "old one" } }
+        local messages = build(P.substitute(pc, { { row = 9, value = value } }, 2))
+        assert.equals("assistant", messages[3].role)
+        assert.equals("old one", messages[3].content)
+    end)
+
+    it("carries a structured previous answer as tool_use and tool_result messages", function()
+        local blocks = {
+            { type = "tool_use", id = "toolu_1", name = "read_file", input = { path = "a.txt" } },
+            { type = "tool_result", id = "toolu_1", content = "hi", is_error = false },
+            { type = "text", text = "It says hi" },
+        }
+        local pc = parsed_chat({ exchange("Q1", "new partial"), exchange("Q2") })
+        pc.exchanges[2].question.line_start = 30
+        local value = P.capture(ex_with_blocks("Q1", blocks, "It says hi"))
+        local messages = build(P.substitute(pc, { { row = 9, value = value } }, 2))
+        assert.equals("tool_use", messages[3].content[1].type)
+        assert.equals("toolu_1", messages[3].content[1].id)
+        assert.equals("tool_result", messages[4].content[1].type)
+        assert.equals("hi", messages[4].content[1].content)
+    end)
+end)

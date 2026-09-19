@@ -151,6 +151,7 @@ atlas:
 
   chat/lifecycle:
     code:
+      - lua/parley/previous_answer.lua
       - lua/parley/new_question.lua
       - lua/parley/chat_context.lua
       - lua/parley/generation.lua
@@ -185,6 +186,7 @@ atlas:
       - lua/parley/tasker.lua
       - lua/parley/attempt.lua
     tests:
+      - tests/unit/previous_answer_spec.lua
       - tests/integration/sidecar_degrade_spec.lua
       - tests/arch/sidecar_authority_spec.lua
       - tests/arch/json_decode_spec.lua
