@@ -93,3 +93,22 @@ export for the blog but not whether the front matter needed converting. It does:
 see the table in Problem, derived from xianxu.dev's content schema and
 `blog.ts`. The operator's proposal: `<C-g>em` takes a destination path and writes
 the Astro format.
+
+### 2026-09-19 — hand conversion of a real tree
+
+Converted parli's "Parli debate prep format" tree (a root and two branches) by
+hand into xianxu.dev and built it with `npm run build`. The steps are a spec for
+the exporter:
+
+- **Styled branch links work in Astro.** The pattern is
+  `<div class="branch-nav child-link">`, a blank line, `[→ Topic](./slug.md)`, a
+  blank line, `</div>`. `relativePostLinksRemarkPlugin` rewrites the link to
+  `/2026/09/slug` and the div keeps its class. Drop kramdown's `markdown="0"`.
+- **Q4 in practice:** `hidden: true` on the branches keeps them off the home,
+  blog and tag pages, and the root's links to them still resolve.
+- **The exporter keeps `📝:` summary lines** in markdown output, although
+  `atlas/export/formats.md` says `📝:` is excluded. The one existing Parley post
+  on xianxu.dev keeps them too. Either the code or the atlas is wrong; decide
+  which.
+- **The exporter emits an empty trailing `## Question`** for the chat's open
+  `💬:` prompt. Drop it.
