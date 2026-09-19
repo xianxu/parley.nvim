@@ -76,6 +76,30 @@ describe('captured response onboarding',function()
             end)
         assert.equals('finalize_failed',Respond.response_snapshot(session).generation.outcome)
     end)
+    -- #261 M4 W15, the terminal handler's own site: a response that ends badly
+    -- while its automatic topic runs cancels the topic; if that cancel throws,
+    -- the handler must still run the rest of its ending cleanup.
+    it('finishes its ending cleanup when the topic cancel throws',function()
+        vim.api.nvim_buf_set_lines(buf,0,1,false,{'# topic: ?'})
+        local finalized=0
+        local Stub=require('tests.helpers.stub')
+        Stub.with_stub(require('parley.response_completion'),'start',function()return nil,'completion refused'end,function()
+            Stub.with_stub(require('parley.response_topic'),'cancel',function()error('topic cancel exploded')end,function()
+                Stub.with_stub(require('parley.buffer_lifecycle'),'finalize_mutated_api_leg',function(b)
+                    if b==buf then finalized=finalized+1 end
+                end,function()
+                    parley._state.agent='SelectedFixture'
+                    session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
+                    ready();wait(function()return #calls==1 end)
+                    calls[1].output(calls[1].id,'answer');calls[1].complete(calls[1].id)
+                    wait(function()return Respond.response_snapshot(session).status=='terminal'end)
+                    assert.equals(2,#calls,'the automatic topic never started')
+                    wait(function()return finalized>0 end)
+                end)
+            end)
+        end)
+        assert.equals('finalize_failed',Respond.response_snapshot(session).generation.outcome)
+    end)
     it('never recaptures a deleted origin when onboarding finishes',function()
         session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
         vim.api.nvim_buf_set_lines(buf,4,7,false,{})

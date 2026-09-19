@@ -826,6 +826,17 @@ the batch guard had no test. Both are fixed. Round 1's other production hunks
 were swept too: W16 gained a stop-during-request test, and the temp-dir change
 gained an assertion. The false claim that chat specs reach W5 is corrected.
 
+### 2026-09-19 — M4 boundary review round 3 (FIX-THEN-SHIP) and dispositions
+
+- **BR-48:** the W15 terminal site now has its own test, red with only that
+  site reverted.
+- **BR-61:** the two stale restatements are fixed: the dispatcher's `pre_query`
+  doc, and the recovery claim contract. A guard now requires every `pre_query`
+  to take its error callback. The per-row seam ledger is in the plan.
+- **Minors:** the topic's two cancel copies are one helper, `cancel_through`,
+  which retires on a throw or a refused cancel; the `tasker` row now carries
+  the refusal.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

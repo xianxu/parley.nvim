@@ -881,8 +881,9 @@ end
 ---   the dispatcher invokes on_abort(msg) INSTEAD of running the query — the
 ---   caller uses it to tear down qid-free pre-query state (spinner, inserted
 ---   blocks, in-flight guards) so the request fails fast instead of hanging.
----   Additive + backward compatible: a one-arg pre_query (e.g. copilot) simply
----   ignores the error callback the dispatcher passes it.
+---   An adapter's pre_query(start, on_error) must call exactly one of them on
+---   every path: one that ignores `on_error` leaves a failed request waiting
+---   forever (#261 M4 W6 — copilot's did, and now forwards it).
 D.query = function(buf, provider, payload, handler, on_exit, callback, on_progress, on_abort,
 	on_activity, on_error, transport_opts)
 	local abort_before_start = tasker.once(function(msg)

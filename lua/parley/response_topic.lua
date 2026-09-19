@@ -39,6 +39,17 @@ local function retire(s,status,reason)
     s.doc=nil;s.header=nil;s.parents=nil;s.input=nil;s.parts=nil;s.provider=nil;s.handle=nil;s.terminal=nil;s.reader=nil
     if terminal then pcall(terminal,{status=status,reason=reason})end
 end
+-- One way to cancel through the request's handle (#261 M4 review), used by a
+-- stop that has the handle and by one that landed while the request was being
+-- made. A cancel that throws, or that the provider did not accept (false), will
+-- never call back, so the topic retires failed rather than wait for it.
+local function cancel_through(s,handle)
+    local ok,accepted=pcall(s.provider.cancel_operation,{epoch=s.epoch,generation=s.generation,
+        operation=s.operation,handle=handle},function()
+        s.resolved=true;retire(s,s.failed and 'failed' or 'cancelled',s.reason)
+    end)
+    if not ok or accepted==false then retire(s,'failed',s.reason) end
+end
 local function stop(s,reason,failed)
     if s.finished or s.stopping then return false end
     s.stopping=true;s.reason=reason;s.failed=failed==true;s.status='stopping'
@@ -46,12 +57,7 @@ local function stop(s,reason,failed)
     -- retires now (#261 M4 W16). A stop arriving while the request is still
     -- being made (no handle yet) is answered once the request returns, below.
     if not s.started or s.resolved or s.start_threw then retire(s,s.failed and 'failed' or 'cancelled',reason)
-    elseif s.handle then
-        local ok=pcall(s.provider.cancel_operation,{epoch=s.epoch,generation=s.generation,operation=s.operation,
-            handle=s.handle},function()
-            s.resolved=true;retire(s,s.failed and 'failed' or 'cancelled',s.reason)
-        end)
-        if not ok then retire(s,'failed',s.reason) end
+    elseif s.handle then cancel_through(s,s.handle)
     end -- else the request is still being made: it cancels through its handle once it returns
     return true
 end
@@ -84,14 +90,17 @@ local function request(s)
     end
     local ok,handle=pcall(s.provider.request,{epoch=s.epoch,generation=s.generation,operation=s.operation,input=s.input,
         cancelled=function()return s.finished or s.stopping end},callbacks)
-    if not ok then s.start_threw=true;stop(s,'topic request failed: '..tostring(handle):sub(1,512),true);return end
+    if not ok then
+        s.start_threw=true
+        -- A stop that landed during the request is waiting on this return; with
+        -- no handle to cancel through, it retires now.
+        if s.stopping then retire(s,s.failed and 'failed' or 'cancelled',s.reason)
+        else stop(s,'topic request failed: '..tostring(handle):sub(1,512),true) end
+        return
+    end
     if s.finished then return end
     s.handle=handle
-    if s.stopping then
-        s.provider.cancel_operation({epoch=s.epoch,generation=s.generation,operation=s.operation,handle=handle},function()
-            s.resolved=true;retire(s,s.failed and 'failed' or 'cancelled',s.reason)
-        end)
-    end
+    if s.stopping then cancel_through(s,handle) end
 end
 function M.start(doc,spec,opts)
     opts=opts or {}

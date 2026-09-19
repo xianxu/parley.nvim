@@ -1,5 +1,23 @@
 # Lessons
 
+## 2026-09-19 (#261 M4 review round 3 — sweep from the change's own rows, and keep a ledger)
+
+- **The list of seams to sweep is the change's own rows, not the review's list**
+  (9th `seam-change-collateral`). Each round's lesson narrowed the rule:
+  "grep the seam", then "grep changed names across `atlas/`". Each time, the
+  sweep started from whatever the review had named.
+  - At the boundary, every change row whose fix alters a contract gets
+    `grep -rn <seam> lua/ atlas/ tests/ README.md`.
+  - The hits and their dispositions go into the as-built as a ledger (updated,
+    or unaffected). The fix rounds' rows join the same table.
+  - A missing row is then visible in the ledger itself.
+- **Each round's revision disposes every recommendation of the prior review**
+  (3rd `plan-tracking-not-updated`): applied, or declined with a reason. A
+  recommendation silently dropped (the `tasker` row) is then visible.
+- **A contract that says "every path reports" needs a guard, not a comment.** A
+  comment blessed one-arg `pre_query` adapters for months; `spawn_seam_spec`
+  now requires the error callback.
+
 ## 2026-09-19 (#261 M4 review round 2 — the fix round is part of the boundary diff)
 
 - **Apply the sweeps to the fix round's own changes, not only to the review's

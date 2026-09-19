@@ -975,6 +975,86 @@ rounds:
       boundary: M4
       recipe: milestone-review
       blocked: true
+    - "n": 16
+      timestamp: "2026-09-19T10:57:35-07:00"
+      agent: claude
+      dispose:
+        - id: BR-52
+          disposition: addressed
+          note: 'Measured: keying on `not s.handle`, or widening `elseif s.handle` back to `else`, each fails the new stop-during-request case.'
+          round: 16
+        - id: BR-57
+          disposition: addressed
+          note: tool_execution.md:103-109 documents the refusal, the 1024 bound and the evicted key; lifecycle.md:337 says the scope stays closed. Matches tasker.lua:389-393,500-502.
+          round: 16
+        - id: BR-58
+          disposition: addressed
+          note: Reverting chat_respond.lua:1357 fails batch_lifecycle_spec's new throwing-batch-cancel case.
+          round: 16
+        - id: BR-59
+          disposition: addressed
+          note: '`declares` strips the WAITS block and matches a real it(/describe( opener; renaming the W11 case now fails the check, and a counterfactual case pins both directions.'
+          round: 16
+        - id: BR-60
+          disposition: addressed
+          note: The claim is retracted in respond_fixture.lua:9-16 and plan Revisions; W5 stays pinned at response_provider_spec, which is where the branch lives.
+          round: 16
+        - id: BR-48
+          disposition: not-addressed
+          note: 'The W15 terminal-handler site (chat_respond.lua:1728) still reddens nothing: reverted to its base unguarded form, 12 related specs stay green. The WAITS W15 row cites a test of the shared helper, not of this site.'
+          round: 16
+      findings:
+        - id: BR-61
+          severity: Important
+          title: The dispatcher still documents a one-arg pre_query, naming copilot, after W6 made it two-arg
+          detail: |-
+            9th in family. Do not patch the sites. The rule was written twice and narrowed
+            each time (round 2's lesson limits the grep to atlas/, excluding comments), and
+            both rounds enumerated from the review's list of seams rather than the change's
+            own. The enumeration that covers all nine already exists: the W-table. Rule -
+            every change row whose fix alters a seam's contract gets its own
+            `grep -rn <seam name> lua/ atlas/ tests/`, and the as-built records the hit list
+            with each hit's disposition; fix-round rows are appended to the same table.
+            Measured instances, both from rows nobody re-grepped: dispatcher.lua:884-885
+            still says a one-arg pre_query "(e.g. copilot) simply ignores the error callback",
+            which is the hazard W6 closed and names the wrong example, since providers.lua:1079
+            is now two-arg and no production adapter is one-arg; and
+            atlas/providers/cliproxy-managed.md:257-266 enumerates the claim contract as
+            falsy/truthy/no-hook without W8's new precondition, the transport_alive check at
+            dispatcher.lua:808 that stops a dead owner reaching the hook at all.
+          family: seam-change-collateral
+          round: 16
+        - id: BR-62
+          severity: Minor
+          title: The topic's deferred cancel discharges only on the request's normal exit
+          detail: |-
+            2nd in family. Round 2 made a stop during the request wait for the handle
+            (response_topic.lua:49-55), but request() answers that obligation only when it
+            returns normally (:89-94). Probed with a fake whose request stops the topic
+            re-entrantly and then throws: stop() at :87 returns false because s.stopping is
+            already set, and the topic sits in `stopping` forever holding its generation and
+            two user captures. The deferred copy is also not pcall-ed while the inline copy
+            is, and neither copy reads cancel_operation's false return (ARCH-ORDER,
+            uncertainty collapsed into success). Unreachable through response_provider today,
+            hence Minor. One cancel_through(s, handle) helper covering throw, falsy return
+            and deferred resolve removes the divergence (ARCH-DRY).
+          family: partial-guard-window
+          round: 16
+        - id: BR-63
+          severity: Minor
+          title: The Core-concepts tasker row still omits the stopped-scope refusal the prior round asked for
+          detail: |-
+            3rd in family. plan:113 lists tasker's surface without stop_scope's recording or
+            run's refusal; the fact lives only in the Revisions prose (plan:2249, :2265), and
+            the greppable table the review cross-checks is what went stale. Round 2 applied
+            the prior review's other three plan-revision recommendations and dropped this one
+            silently. Rule: a round's revision entry enumerates the prior review's
+            plan-revision recommendations and marks each applied or declined-with-reason.
+          family: plan-tracking-not-updated
+          round: 16
+      boundary: M4
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -1501,6 +1581,53 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   seam the consumer branches on, and a claim that a test level takes a branch
   is measured, not inferred. plan:2215 claims otherwise.
 
+## Round 16 — 2026-09-19T10:57:35-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-52 — addressed — Measured: keying on `not s.handle`, or widening `elseif s.handle` back to `else`, each fails the new stop-during-request case.
+- BR-57 — addressed — tool_execution.md:103-109 documents the refusal, the 1024 bound and the evicted key; lifecycle.md:337 says the scope stays closed. Matches tasker.lua:389-393,500-502.
+- BR-58 — addressed — Reverting chat_respond.lua:1357 fails batch_lifecycle_spec's new throwing-batch-cancel case.
+- BR-59 — addressed — `declares` strips the WAITS block and matches a real it(/describe( opener; renaming the W11 case now fails the check, and a counterfactual case pins both directions.
+- BR-60 — addressed — The claim is retracted in respond_fixture.lua:9-16 and plan Revisions; W5 stays pinned at response_provider_spec, which is where the branch lives.
+- BR-48 — not-addressed — The W15 terminal-handler site (chat_respond.lua:1728) still reddens nothing: reverted to its base unguarded form, 12 related specs stay green. The WAITS W15 row cites a test of the shared helper, not of this site.
+
+### Raised
+
+- **BR-61** [Important] `seam-change-collateral` The dispatcher still documents a one-arg pre_query, naming copilot, after W6 made it two-arg
+  9th in family. Do not patch the sites. The rule was written twice and narrowed
+  each time (round 2's lesson limits the grep to atlas/, excluding comments), and
+  both rounds enumerated from the review's list of seams rather than the change's
+  own. The enumeration that covers all nine already exists: the W-table. Rule -
+  every change row whose fix alters a seam's contract gets its own
+  `grep -rn <seam name> lua/ atlas/ tests/`, and the as-built records the hit list
+  with each hit's disposition; fix-round rows are appended to the same table.
+  Measured instances, both from rows nobody re-grepped: dispatcher.lua:884-885
+  still says a one-arg pre_query "(e.g. copilot) simply ignores the error callback",
+  which is the hazard W6 closed and names the wrong example, since providers.lua:1079
+  is now two-arg and no production adapter is one-arg; and
+  atlas/providers/cliproxy-managed.md:257-266 enumerates the claim contract as
+  falsy/truthy/no-hook without W8's new precondition, the transport_alive check at
+  dispatcher.lua:808 that stops a dead owner reaching the hook at all.
+- **BR-62** [Minor] `partial-guard-window` The topic's deferred cancel discharges only on the request's normal exit
+  2nd in family. Round 2 made a stop during the request wait for the handle
+  (response_topic.lua:49-55), but request() answers that obligation only when it
+  returns normally (:89-94). Probed with a fake whose request stops the topic
+  re-entrantly and then throws: stop() at :87 returns false because s.stopping is
+  already set, and the topic sits in `stopping` forever holding its generation and
+  two user captures. The deferred copy is also not pcall-ed while the inline copy
+  is, and neither copy reads cancel_operation's false return (ARCH-ORDER,
+  uncertainty collapsed into success). Unreachable through response_provider today,
+  hence Minor. One cancel_through(s, handle) helper covering throw, falsy return
+  and deferred resolve removes the divergence (ARCH-DRY).
+- **BR-63** [Minor] `plan-tracking-not-updated` The Core-concepts tasker row still omits the stopped-scope refusal the prior round asked for
+  3rd in family. plan:113 lists tasker's surface without stop_scope's recording or
+  run's refusal; the fact lives only in the Revisions prose (plan:2249, :2265), and
+  the greppable table the review cross-checks is what went stale. Round 2 applied
+  the prior review's other three plan-revision recommendations and dropped this one
+  silently. Rule: a round's revision entry enumerates the prior review's
+  plan-revision recommendations and marks each applied or declined-with-reason.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
@@ -1514,8 +1641,7 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-44** [Minor] `residue-names-no-end` The one-shot deadline timer is closed only by retire, the one path a held record never takes
 - **BR-45** [Important] `seam-change-collateral` The dispatcher re-exports code/io_error on its failure table, and both of that table's renderers still drop io_error
 - **BR-46** [Important] `enumeration-claims-completeness` The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
-- **BR-52** [Minor] `canonical-form-not-shared` W16 keys on a missing handle, the condition Task 4.1 rejected for W1
-- **BR-57** [Important] `seam-change-collateral` stop_scope now closes a scope for good and tasker.run refuses into it, but the atlas says neither
-- **BR-58** [Important] `behavior-change-without-regression-test` The fix commit's own new cancel_responses batch guard reddens nothing when reverted
-- **BR-59** [Minor] `allowlist-without-dead-entry-check` The WAITS check always passes for the 7 citations that name generation_settles_spec itself
-- **BR-60** [Minor] `stateless-double-at-stateful-seam` No chat-level spec can reach W5's zero-match branch, though the plan says they now do
+- **BR-48** [Important] `behavior-change-without-regression-test` W15, the Copilot pre_query forward and 11 of 12 oauth scope sites redden nothing on revert
+- **BR-61** [Important] `seam-change-collateral` The dispatcher still documents a one-arg pre_query, naming copilot, after W6 made it two-arg
+- **BR-62** [Minor] `partial-guard-window` The topic's deferred cancel discharges only on the request's normal exit
+- **BR-63** [Minor] `plan-tracking-not-updated` The Core-concepts tasker row still omits the stopped-scope refusal the prior round asked for

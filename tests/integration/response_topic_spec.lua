@@ -86,6 +86,26 @@ describe('independent automatic topic ownership',function()
         cancels[1].done()
         assert.equals('cancelled',final.status)
     end)
+    -- #261 M4 review: the deferred cancel has the same exits as the direct one —
+    -- a request that throws after the stop landed, and a cancel not accepted.
+    for _,case in ipairs({
+        {name='the request throws after the stop landed',request=function(job)
+            Topic.cancel(job,'stopped mid-request');error('request exploded')end,accepted=true},
+        {name='the provider does not accept the cancel',request=function(job)
+            Topic.cancel(job,'stopped mid-request');return {handle=true}end,accepted=false},
+    })do
+        it('retires when '..case.name,function()
+            local job,final
+            local fake={request=function()return case.request(job)end,
+                cancel_operation=function()return case.accepted end}
+            require('tests.helpers.stub').with_stub(require('parley.response_provider'),'new',function()return fake end,function()
+                job=assert(Topic.start(doc,spec(),{terminal=function(result)final=result end}));jobs[#jobs+1]=job
+                pump(job)
+            end)
+            assert.is_not_nil(final,'the topic never retired')
+            assert.equals(0,D.user_guard_stats(doc).live)
+        end)
+    end
     it('writes only the final first line after positive process and pipe completion',function()
         local job=start(doc,spec(),jobs);pump(job)
         local p=processes.processes[4242];assert.is_not_nil(p)

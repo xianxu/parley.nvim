@@ -110,7 +110,7 @@ must *not* be. So:
 | `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view; `source` accepts a preloaded view so a loop reads once; writes report whether they happened | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
 | `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
 | `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any; `buffer_for`: the buffer named exactly `name` | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
-| `tasker` — `scope_key`, `is_scoped`, `stop_scope`, `held`, `leave`, `deadline` (the per-kind table), `exit_reason` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
+| `tasker` — `scope_key`, `is_scoped`, `stop_scope` (records the key; `run` then refuses a scoped run into it, 1024 keys, oldest evicted), `held`, `leave`, `deadline` (the per-kind table), `exit_reason` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
 | `oauth` — `_token_body_summary`: what a token endpoint's body may show in a log, its OAuth error only; the content tree takes the requesting generation's scope and spawns through `content_run`: `fetch_content`, `_fetch_public_content`, `_try_saved_accounts`, `_try_account_fetch`, `_fetch_google_api_once`, `_fetch_dropbox_api_once`, `_fetch_microsoft_api_once`, `_run_dropbox_metadata_request`, `_run_dropbox_file_request`, `_run_microsoft_metadata_request`, `_run_microsoft_content_request`, `_convert_office_to_text` | `lua/parley/oauth.lua` | modified | the OAuth token endpoint; remote content |
 | `vault` — `refresh_copilot_bearer` calls back on every path, success or its error callback | `lua/parley/vault.lua` | modified | the Copilot token endpoint |
 | `chat_respond` — `_cancel_entry` and `_cancel_topic`: a Stop's independent cleanups, each guarded so one that throws skips none after it | `lua/parley/chat_respond.lua` | modified | the chat's active responses |
@@ -2288,4 +2288,49 @@ rules, not applied to round 1's own changes.
     list out first, so it cannot vouch for itself; a counterfactual case
     checks this.
   - Five hand-rolled stub restores now use `with_stub`.
+
+### 2026-09-19 — M4 boundary review round 3 (FIX-THEN-SHIP): recommendations, and the per-row seam ledger
+
+**The prior reviews' plan recommendations, each disposed**:
+- *Round 2:*
+  - W5 correction: applied in round 2.
+  - The `tasker` row: missed in round 2, applied now (Core concepts).
+  - The W16 test naming: applied in round 2, and extended here (below).
+- *Round 3:*
+  - The `tasker` row: applied.
+  - The W16 exits:
+    - One helper, `cancel_through`, now serves both the direct cancel and the
+      deferred one. It retires on a throw, and on a cancel the provider did not
+      accept (`false`).
+    - A request that throws after a stop landed retires the topic.
+    - `response_topic_spec` covers both exits; they are red on the old code.
+  - W15's terminal site now has its own test. `chat_onboarding_capture_spec`,
+    "finishes its ending cleanup when the topic cancel throws", drives a
+    failed finalize while an automatic topic runs, with a throwing cancel. It
+    is red with that one site reverted to the raw call.
+  - The boundary sweep ledger: below.
+
+**The per-row seam ledger.** For each row whose fix changed a seam's contract,
+`grep -rn <seam> lua/ atlas/ tests/ README.md` was run over prose (comments and
+docs). Every hit that restates the contract is listed with its disposition.
+Call sites do not restate a contract, so they are not listed.
+
+| Row | Seam | Restating hits → disposition |
+|---|---|---|
+| W1, W9, W11 | `cancel_operation` | `response_session.lua` (ordinary cancel path), `generation.lua` (flush walk) → unaffected |
+| W2, W3 | the preparation's cancel | none |
+| W4 | content fetches, `fetch_content` | `tool_execution.md` (scoped vs unscoped), `lifecycle.md` (scope kill reach) → updated, round 1 |
+| W5 | `stop_owner` | `architecture.md` → updated, round 1; the fixture doubles → one double, round 1; its comment → corrected, round 2 |
+| W6 | `pre_query` | `dispatcher.lua` query doc ("a one-arg pre_query (e.g. copilot)") → **updated now**, with a guard that every adapter takes `on_error`; `cliproxy-managed.md`, `cliproxy.lua`, `providers.lua`, other `dispatcher.lua` comments → unaffected |
+| W7 | `start_query` | its own comment → current |
+| W8 | `recover_query` | `cliproxy-managed.md` claim contract → **updated now** (the `transport_alive` precondition); `dispatcher.lua`, `cliproxy.lua`, the specs → unaffected |
+| W12, W18 | the finalize adapter | `response_completion.lua`, `chat_respond.lua` → current |
+| W13 | `Deferred.new` | the `deferred_work.lua` header → updated, Task 4.1; other hits unrelated |
+| W14 | `Runner.start` | none |
+| W15 | `cancel_responses`, `cancel_topic` | none |
+| W16 | topic `stop` | `response_topic.lua` comments → current |
+| W17 | the skill in-flight guard | `cliproxy_caller_teardown_spec` (#131 abort path) → unaffected |
+| Round 1 | `stop_scope` refusal | `tool_execution.md`, `lifecycle.md` → updated, round 2 |
+| Round 1 | `exit_reason`, `failure.exit` | `tool_execution.md`, `spawn_seam_spec` → current |
+| Round 1 | `stats()` | `lifecycle.md`, the settles spec → current |
 

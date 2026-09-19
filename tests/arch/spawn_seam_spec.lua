@@ -436,3 +436,24 @@ describe("arch: one stop_owner double", function()
     end)
 end)
 
+describe("arch: every pre_query reports its failure", function()
+    -- #261 M4 W6: the dispatcher hands pre_query(start, on_error); one that
+    -- takes only `start` can never report a failure, and the request it gates
+    -- waits forever. Copilot's did.
+    it("each adapter's pre_query takes the error callback", function()
+        local found, problems = 0, {}
+        for _, file in ipairs(arch.worktree_files({ "lua/**/*.lua" })) do
+            for i, line in ipairs(vim.fn.readfile(file)) do
+                local params = line:match("pre_query%s*=%s*function%s*%(([^)]*)%)")
+                if params then
+                    found = found + 1
+                    local _, commas = params:gsub(",", "")
+                    if commas < 1 then problems[#problems + 1] = file .. ":" .. i .. ": pre_query(" .. params .. ")" end
+                end
+            end
+        end
+        assert.is_true(found >= 2, "found only " .. found .. " pre_query adapters")
+        assert.same({}, problems)
+    end)
+end)
+
