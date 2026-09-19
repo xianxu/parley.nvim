@@ -110,3 +110,7 @@ a clean HEAD:
   `document_append_extent_spec`: under load only.
 
 Shared writable state is worth ruling out for each one before looking at the JIT.
+- The native-fold specs belong to the family too. `document_fold_retirement_spec`
+  died on the 2nd run on #261's base tree (91f296b5). `document_fold_batches_spec`
+  hung there after 4 of its 5 cases. `document_fold_uncertainty_retirement_spec`
+  dies under load only. None of them touches #261's code.
