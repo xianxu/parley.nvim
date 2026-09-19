@@ -458,3 +458,33 @@ session.
      The one residual is a process in uninterruptible kernel sleep; it stays
      counted, and its refusal names it.
 5. **Unchanged:** the refusal-message class, now enumerated in the Log.
+
+### 2026-09-18 — plan review round 1: two more operator decisions
+
+**Reason.** Two fresh-context reviews of the durable plan (see its
+`## Revisions`) raised two questions the operator settled.
+
+**Delta.**
+
+1. **Own process groups only for generation-owned processes.**
+   - Why: `detached` implies `setsid()`, which would break terminal-prompting
+     secret commands.
+   - Generation-owned processes (provider, tools, per-request fetches, skill
+     processes) lead their own group and are killed with the generation's scope,
+     SIGTERM then SIGKILL.
+   - Shared helpers (the vault secret command, keychain, OAuth token calls) stay
+     attached to Neovim's terminal and are killed by pid at a deadline.
+   - This narrows the Done-when bullet "ends every process it started (the whole
+     process group…)". It holds as written for everything a *generation* starts.
+     A shared helper's grandchild can outlive its deadline kill.
+2. **Deadlines per kind** for processes nobody stops:
+   - 600 s where a human may be answering a prompt;
+   - 120 s for one HTTP call;
+   - 60 s for a local conversion;
+   - 900 s for a background LLM stream.
+
+   Each is declared at its call site, and the tasker refuses a spawn with no end.
+3. **Derived from the #255 Done-when ("an already captured request is
+   unaffected"):** a generation's own writes no longer mark another
+   generation's captured input stale; only human edits do. This reverses the
+   "other owners … stay stale" clause from #254 (`document/state.lua:272-284`).
