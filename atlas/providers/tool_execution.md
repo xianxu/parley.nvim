@@ -65,7 +65,67 @@ Scheduler and Tasker reconciliation probe at 50ms initially, double the interval
 up to 1000ms, and stop polling after five seconds with an unresolved diagnostic.
 This is a diagnostic deadline, not fabricated completion. Resources and admission
 capacity remain retained. Later original callbacks can still settle the work.
-Ordinary running processes have no five-second execution deadline.
+Ordinary running processes have no five-second execution deadline; after a stop,
+Tasker also escalates to SIGKILL ([Stopping a process](#stopping-a-process)).
+
+## Stopping a process
+
+Every process Parley starts is scoped or unscoped (`lua/parley/tasker.lua`, #261).
+
+- **Scoped** processes belong to a generation: provider streams, tool processes,
+  skill processes. They carry `logical_generation`, keyed by
+  `tasker.scope_key(epoch, generation)`. Each is spawned `detached`, so it leads
+  its own process group and is signalled as a group. A grandchild holding its
+  pipe dies with it, even after the parent has exited.
+- **Unscoped** processes are shared helpers: the vault's secret command, OAuth
+  keychain and token calls, content fetches, and the automatic topic and
+  memory-preference streams. They stay in Neovim's session, so a
+  [secret command](../infra/vault.md) can still prompt on the terminal, and they
+  are signalled by pid.
+  - Nobody stops them, so each names its end: `tasker.run` refuses an unscoped
+    run without `deadline_ms`.
+  - The values are one table, `tasker.deadline`: 600 s where a human may be
+    answering a prompt, 120 s for one HTTP call, 60 s for a document
+    conversion, and 900 s for an LLM stream with no owner.
+
+A stop sends SIGTERM. That stop is `:ParleyStop`, a deadline, or leaving
+Neovim, which sends SIGKILL at once. If the process has not exited and drained
+both pipes 2 s later, it gets SIGKILL. `tasker.stop_scope(key)` stops every
+process of one generation.
+
+The five-second observation window then follows. A process still held after it
+is logged with its pid and listed by `tasker.held()`, and it keeps its
+admission slot.
+
+**Leaving Neovim.** `setup` registers `VimLeavePre`, which calls
+`tasker.leave()`: SIGKILL to every live process.
+
+**A kill is a failure.** `code` is the exit code only of a process that ended on
+its own and whose output was read whole. Otherwise `code` is `nil` and
+`io_error` says why:
+- `killed: stop`, `killed: deadline` or `killed: leave` for a kill Parley caused;
+- the pipe error or overflow.
+
+A refused spawn with no start-error handler delivers
+`(nil, nil, nil, nil, reason)` to its callback. So no caller takes cut output for
+success, and a failure writes no cache or store. For example, an unfinished
+keychain read is neither cached nor saved over the keychain.
+
+**Residuals, stated once.**
+- A process the kernel holds (uninterruptible sleep) survives SIGKILL, and
+  `held()` keeps listing it.
+- A grandchild of a user-configured secret command can outlive it, because
+  unscoped processes are signalled by pid.
+- If Neovim itself crashes, no autocmd runs, and its orphans run to their own
+  end.
+
+Coverage:
+- the fake: `tests/helpers/fake_process.lua`, which models groups, ignored
+  signals and grandchildren;
+- sequences: `tests/integration/tasker_supervision_spec.lua` and
+  `unscoped_kill_spec.lua`;
+- a live check against the kernel:
+  `tests/integration/process_group_conformance_spec.lua`.
 
 For explicit effect reconciliation, the internal API is
 `service:reconcile(operation, {certainty='known', effect=..., result=...,

@@ -1240,7 +1240,7 @@ route it with the tasker specs in `atlas/traceability.yaml`. It runs on every
 
 ### Task 3.7: Documentation, and M3's boundary
 
-- [ ] `atlas/providers/tool_execution.md` (process bounds) and
+- [x] `atlas/providers/tool_execution.md` (process bounds) and
   `atlas/chat/lifecycle.md` (Stop). Cover:
   - scoped vs unscoped runs;
   - TERM, then KILL at 2 s;
@@ -1250,10 +1250,10 @@ route it with the tasker specs in `atlas/traceability.yaml`. It runs on every
 
   State the residuals once: a kernel hold; a grandchild of a user-configured
   secret command; Neovim crashing.
-- [ ] The `atlas/infra` page for the vault/secret command: a
+- [x] The `atlas/infra` page for the vault/secret command: a
   terminal-prompting secret command still works (unscoped runs stay attached),
   and it is killed at 600 s.
-- [ ] `tests/manual/chat-concurrency.md`: Stop during a long tool (`find /`),
+- [x] `tests/manual/chat-concurrency.md`: Stop during a long tool (`find /`),
   then submit again at once.
 - [ ] `make test`, `make lint`; `sdlc milestone-close --issue 261 --milestone M3`.
 

@@ -223,7 +223,9 @@ first answer, and a topic header.
 
 Pending progress is presentation only, described in [Response progress](response_progress.md).
 Stop cancels captured sessions for the current chat; cancellation does not release
-unresolved subprocesses or tool effects. Undo/redo stays native. Document edit
+unresolved subprocesses or tool effects. A generation's processes are stopped as
+process groups: SIGTERM, then SIGKILL 2 s later while one is still running
+([Stopping a process](../providers/tool_execution.md#stopping-a-process)). Undo/redo stays native. Document edit
 observation revokes affected grants; no pending confirmation or synthetic tool
 result can replace that evidence.
 

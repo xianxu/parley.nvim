@@ -717,6 +717,15 @@ header now states its static-check limit.
   - `perf_document_spec`, which died silently after 3 tests: passes alone.
 
   Neither touches tasker.
+- **Task 3.7's final runs.** More flakes of the same family: each died silently
+  under load and passes alone.
+  - `document_dependencies_spec`: 13 of 13 pass alone, 3 times.
+  - `tool_resources_spec`, the spec #267 is named for: 11 of 11.
+  - `perf_chat_typing_spec`: 16 of 16, 2 times.
+
+  A unit-stage death stops `make test` before its integration stage, so the
+  integration stage was also run on its own (`make test-integration JOBS=4`).
+  Every file passed there except `perf_chat_typing_spec`.
 
 ## Revisions
 

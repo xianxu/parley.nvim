@@ -45,6 +45,10 @@ transcript text ([tool use](../../atlas/providers/tool_use.md#loop-model)).
 Stop during tool activity: the round is written out in declared order, then the
 answer ends — what each call gets is listed once in
 [Stop during a tool round](../../atlas/providers/tool_use.md#stop-during-a-tool-round).
+Stop during a long tool: ask for `find /`, `:ParleyStop` while it runs, then submit
+again at once. The answer ends within about 2 s, `ps` shows no `find` left, and the
+new submission is admitted without waiting for the old process
+([Stopping a process](../../atlas/providers/tool_execution.md#stopping-a-process)).
 Reload during tool activity: already-started external effects may finish; late
 output cannot write into the reloaded chat. Inspect retained work with
 `:ParleyToolOperations`. An effect decision must not invent process or file

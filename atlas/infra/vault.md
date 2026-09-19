@@ -20,6 +20,14 @@ These credential stores have different owners:
 - Copilot bearer tokens are cached with expiry in `state_dir/vault_state.json`
   and refreshed when needed.
 
+Credential commands and OAuth keychain and token calls belong to no generation.
+They stay in Neovim's session, so a command that prompts still works: pinentry,
+a keychain dialog, or biometric unlock. Each has a deadline: 600 s for a
+command that may prompt, and 120 s for a token request. Past it, the command is
+killed and the request fails ([Stopping a
+process](../providers/tool_execution.md#stopping-a-process)). An unfinished
+keychain read is neither cached nor saved over the keychain.
+
 Vault debug messages are marked sensitive and follow `log_sensitive` (off by
 default). Separate [raw/exchange logs](raw_logging.md) capture conversation
 content; do not infer that all diagnostic output is sanitized by the vault.
