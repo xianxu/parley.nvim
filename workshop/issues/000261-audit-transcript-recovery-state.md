@@ -672,6 +672,17 @@ edit. The gate said the review was not converging.
 - **Minors fixed.** The staleness rule's wording, a two-entry substitution
   test, and the stub restored under `pcall`.
 
+### 2026-09-19 — M2 boundary review round 2 (BR-30): the stand-in is withdrawn
+
+The characterization test that stood in for Task 2.6's loaded-target bullet is
+deleted. It passed only because `chat_move_spec` builds chats as scratch
+buffers; with a real file-backed buffer the move saves, slug-renames and aborts
+with ENOENT. That is a pre-existing tree-move defect, reproduced by the review
+and recorded on parley#270 with the fixture gap. The earlier Log line saying "a
+characterization test stands in" no longer holds: Task 2.6's loaded-target
+bullet is withdrawn outright, and parley#270 owns it. The buffer-lookup guard's
+header now states its static-check limit.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

@@ -401,6 +401,46 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: true
+    - "n": 7
+      timestamp: "2026-09-19T02:12:56-07:00"
+      agent: claude
+      dispose:
+        - id: BR-25
+          disposition: addressed
+          note: Bullet withdrawn with a verified reason (a timestamped ref resolves to the moved file, so ref_abs==old_abs never matches), parley#270 filed, sub-chat seam deviation logged, lessons rule added. The stand-in test is raised separately.
+          round: 7
+        - id: BR-26
+          disposition: addressed
+          note: All 5 sites use helper.buffer_for. A grep for every bufname-style primitive finds no other offenders. Reverting the picker lookup turns P4 and the arch guard red.
+          round: 7
+        - id: BR-27
+          disposition: addressed
+          note: lifecycle.md now states the rule for every generated write and why an earlier capture is final. This matches state.lua, where owner must be a valid grant containing the edit.
+          round: 7
+        - id: BR-28
+          disposition: addressed
+          note: A pure two-entry substitute test with out-of-order entries now pins conversation order.
+          round: 7
+        - id: BR-29
+          disposition: addressed
+          note: The resolve_remote_references stub is restored after a pcall-wrapped wait. No other stub in this window's tests is restored outside a protected call.
+          round: 7
+      findings:
+        - id: BR-30
+          severity: Important
+          title: The BR-25 stand-in test passes only because its chat is a nofile scratch buffer; with a real chat buffer the tree move saves it and aborts with ENOENT
+          detail: 'chat_move_spec create_chat uses nvim_create_buf(false, true), so the silent! write in sync_moved_chat_buffers (init.lua:3146) fails silently and the file looks untouched. Reproduced with bufadd plus bufload: the write fires, the save hook slug-renames tree-root.md to move-test.md, and os.rename fails with No such file or directory, aborting move_chat_tree. That abort predates this window, but the new test asserts the opposite. Second in this family. Rule: a test stand-in must have every behavior the code under test branches on; build chat buffers the way production does, not as a named scratch buffer. Prevalence: 14 spec files name a scratch buffer as a chat, and 1 (chat_move_spec) also runs a writing path. Fix: use a file-backed buffer, record the ENOENT repro in parley#270 or a new issue, and either assert the real behavior or delete the stand-in. Also correct the Log line saying a characterization stands in.'
+          family: stateless-double-at-stateful-seam
+          round: 7
+        - id: BR-31
+          severity: Minor
+          title: buffer_lookup_spec matches only the first vim.fn.bufnr call on a line, and only when the call fits on one line
+          detail: 'There are no offenders today. The wider class of name-matching functions (bufwinnr, bufwinid, bufname, getbufvar) cannot be checked statically, because their number-argument forms are legitimate. The rule is the BR-24 one: a guard selects members by the class property. Here the property can only be checked by spelling, so record that limit in the guard''s header comment.'
+          family: enumeration-claims-completeness
+          round: 7
+      boundary: M2
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -600,13 +640,27 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-29** [Minor] `stub-restored-outside-finally` The capture-then-late-build test restores its resolve_remote_references stub outside a protected call
   A timeout in wait_for(held) leaks the stub into every later test in chat_respond_spec. with_json_yaml in the same file already restores through pcall.
 
+## Round 7 — 2026-09-19T02:12:56-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-25 — addressed — Bullet withdrawn with a verified reason (a timestamped ref resolves to the moved file, so ref_abs==old_abs never matches), parley#270 filed, sub-chat seam deviation logged, lessons rule added. The stand-in test is raised separately.
+- BR-26 — addressed — All 5 sites use helper.buffer_for. A grep for every bufname-style primitive finds no other offenders. Reverting the picker lookup turns P4 and the arch guard red.
+- BR-27 — addressed — lifecycle.md now states the rule for every generated write and why an earlier capture is final. This matches state.lua, where owner must be a valid grant containing the edit.
+- BR-28 — addressed — A pure two-entry substitute test with out-of-order entries now pins conversation order.
+- BR-29 — addressed — The resolve_remote_references stub is restored after a pcall-wrapped wait. No other stub in this window's tests is restored outside a protected call.
+
+### Raised
+
+- **BR-30** [Important] `stateless-double-at-stateful-seam` The BR-25 stand-in test passes only because its chat is a nofile scratch buffer; with a real chat buffer the tree move saves it and aborts with ENOENT
+  chat_move_spec create_chat uses nvim_create_buf(false, true), so the silent! write in sync_moved_chat_buffers (init.lua:3146) fails silently and the file looks untouched. Reproduced with bufadd plus bufload: the write fires, the save hook slug-renames tree-root.md to move-test.md, and os.rename fails with No such file or directory, aborting move_chat_tree. That abort predates this window, but the new test asserts the opposite. Second in this family. Rule: a test stand-in must have every behavior the code under test branches on; build chat buffers the way production does, not as a named scratch buffer. Prevalence: 14 spec files name a scratch buffer as a chat, and 1 (chat_move_spec) also runs a writing path. Fix: use a file-backed buffer, record the ENOENT repro in parley#270 or a new issue, and either assert the real behavior or delete the stand-in. Also correct the Log line saying a characterization stands in.
+- **BR-31** [Minor] `enumeration-claims-completeness` buffer_lookup_spec matches only the first vim.fn.bufnr call on a line, and only when the call fits on one line
+  There are no offenders today. The wider class of name-matching functions (bufwinnr, bufwinid, bufname, getbufvar) cannot be checked statically, because their number-argument forms are legitimate. The rule is the BR-24 one: a guard selects members by the class property. Here the property can only be checked by spelling, so record that limit in the guard's header comment.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
 - **BR-23** [Minor] `seam-change-collateral` Routing table_to_file through the rename-based writer replaces symlinked sidecars, resets permissions, and leaves crash files the query cleanup never deletes
 - **BR-24** [Minor] `enumeration-claims-completeness` The sidecar census finds readers by the text state_dir, so file_access.json escapes it, and a wrongly typed entry makes opening a chat raise
-- **BR-25** [Important] `plan-step-not-as-specified` Task 2.6's loaded-target move_chat_tree test is missing, and the Log claims the task landed as planned
-- **BR-26** [Important] `enumeration-claims-completeness` chat_lines fixes the bufnr(path) partial-match defect at 1 of 5 sites; 4 remain, one confirmed to destroy a buffer
-- **BR-27** [Minor] `rule-statement-scope-drift` lifecycle.md scopes the stale exemption to a regeneration; the code exempts every generation's owned writes
-- **BR-28** [Minor] `done-when-clause-untested` Several exchanges regenerating at once are pinned only at the coordinator, not in substitution or a request
-- **BR-29** [Minor] `stub-restored-outside-finally` The capture-then-late-build test restores its resolve_remote_references stub outside a protected call
+- **BR-30** [Important] `stateless-double-at-stateful-seam` The BR-25 stand-in test passes only because its chat is a nofile scratch buffer; with a real chat buffer the tree move saves it and aborts with ENOENT
+- **BR-31** [Minor] `enumeration-claims-completeness` buffer_lookup_spec matches only the first vim.fn.bufnr call on a line, and only when the call fits on one line

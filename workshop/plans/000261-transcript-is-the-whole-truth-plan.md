@@ -1839,3 +1839,13 @@ fixed before the close commit per the #174 protocol.
     and why an earlier capture is final.
   - A two-entry `substitute` test covers several exchanges regenerating at once.
   - The late-build stub is restored under `pcall`.
+
+### 2026-09-19 — M2 review round 2: the tree-move stand-in withdrawn
+
+**Reason.** BR-30: the stand-in test for Task 2.6's loaded-target bullet
+passed only because its chat was a scratch buffer.
+
+**Delta.** The stand-in is deleted and the bullet is withdrawn outright. The
+real behaviour, a loaded chat's tree move aborting with ENOENT after a save
+triggers a slug rename, is recorded on parley#270. The buffer-lookup guard
+documents that it checks by spelling.

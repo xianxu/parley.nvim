@@ -2,6 +2,14 @@
 
 ## 2026-09-19 (#261 M2 review — a missing test the Log called done, and a primitive fixed at one of five sites)
 
+- **A test stand-in must have every behaviour the code under test branches on.**
+  The tree-move test used a scratch buffer as its chat. The code's save of that
+  buffer failed silently, so the test certified "the file is left alone" — for
+  a buffer production never creates. A real chat buffer saves, slug-renames and
+  aborts the move (parley#270). Rule: build chat buffers the way production
+  opens them (file-backed, `bufadd` + `bufload`) whenever the code under test
+  writes, renames or reads the file.
+
 - **Before closing a milestone, match every test bullet in the plan to a named
   test or a logged deviation.** Task 2.6 asked for a loaded-target
   tree-move test. The Log said "landed as planned" and no such test existed.

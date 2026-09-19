@@ -4,6 +4,12 @@
 -- editor then force-deleted). Every lookup by name goes through
 -- helper.buffer_for, which compares exact names; bufnr() with no argument, or
 -- with '%' or '#', names no file and stays allowed.
+--
+-- The limit of this guard, stated so it is not mistaken for more: it checks by
+-- spelling. It sees the first `vim.fn.bufnr(...)` on a line, when the call fits
+-- on that line. The wider class — bufwinnr, bufwinid, bufname, getbufvar with a
+-- name — cannot be checked statically, because their number-argument forms are
+-- legitimate; those rely on review.
 local arch = require("tests.arch.arch_helper")
 
 describe("arch: buffers are looked up by exact name", function()
