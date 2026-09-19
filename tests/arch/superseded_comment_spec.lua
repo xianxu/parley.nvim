@@ -37,9 +37,7 @@
 local MIN_SHARED_WORDS = 6
 
 local function repo_files()
-    local out = vim.fn.systemlist("git ls-files 'lua/**/*.lua' 'tests/**/*.lua' 'scripts/**/*.lua'")
-    assert.equals(0, vim.v.shell_error, "git ls-files failed")
-    return out
+    return require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua", "tests/**/*.lua", "scripts/**/*.lua" })
 end
 
 --- Normalize a paragraph to comparable words. Punctuation that carries meaning

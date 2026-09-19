@@ -11,14 +11,23 @@ local PATH_ONLY = {
     ["lua/parley/starter_config.lua"] = "defines the starter path; reads nothing",
 }
 
+local function state_dir_readers()
+    local hits = {}
+    for _, file in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
+        local handle = assert(io.open(file, "r"))
+        local text = handle:read("*a"); handle:close()
+        if text:find("state_dir", 1, true) then hits[#hits + 1] = file end
+    end
+    return hits
+end
+
 describe("arch: every state-directory reader is exercised corrupt", function()
-    local hits = vim.fn.systemlist("git grep -l -e state_dir -- lua/")
+    local hits = state_dir_readers()
     local readers = {}
     for _, sidecar in ipairs(sidecars) do readers[sidecar.reader] = true end
 
     it("finds the readers it claims to check", function()
-        assert.equals(0, vim.v.shell_error)
-        assert.is_true(#hits >= #sidecars, "the query found fewer files than the declared readers")
+        assert.is_true(#hits >= #sidecars, "the scan found fewer files than the declared readers")
     end)
 
     it("declares every reader of the state directory", function()
@@ -28,6 +37,19 @@ describe("arch: every state-directory reader is exercised corrupt", function()
         end
         assert.same({}, undeclared,
             "a new state_dir reader: add its sidecar to tests/helpers/sidecars.lua so sidecar_degrade_spec corrupts it")
+    end)
+
+    -- #261 M1 review BR-5: a read that filters must not be persisted over a
+    -- file the user wrote. Each sidecar says which kind it is.
+    it("says what each sidecar's writes do with fields its read drops", function()
+        local undeclared = {}
+        for _, sidecar in ipairs(sidecars) do
+            local rewrites = sidecar.writes == "rewrite" and type(sidecar.why) == "string"
+            local preserves = sidecar.writes == "preserve" and type(sidecar.preserve) == "function"
+            if not (rewrites or preserves) then undeclared[#undeclared + 1] = sidecar.file end
+        end
+        assert.same({}, undeclared,
+            "declare writes = 'rewrite' with a why, or writes = 'preserve' with a preserve check")
     end)
 
     it("declares nothing that no longer reads it", function()

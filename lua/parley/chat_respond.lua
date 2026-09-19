@@ -259,16 +259,13 @@ M.load_remote_reference_cache = function()
     local cache_file = M.remote_reference_cache_file()
     local cache = {}
     if vim.fn.filereadable(cache_file) ~= 0 then
-        -- #261: each level is typed at the read — a chat's entries are tables,
-        -- a cached reference is text — so a malformed file degrades to a refetch.
-        cache = _parley.helpers.file_to_table(cache_file, { chats = "table" }) or {}
+        -- #261: typed at the read — a chat's entries are tables, a cached
+        -- reference is text. It is a cache, so what is pruned is fetched again.
+        cache = _parley.helpers.file_to_table(cache_file,
+            { chats = { ["*"] = { ["*"] = "string" } } }) or {}
     end
 
     cache.chats = cache.chats or {}
-    _parley.helpers.conform(cache.chats, { ["*"] = "table" }, cache_file)
-    for _, chat in pairs(cache.chats) do
-        _parley.helpers.conform(chat, { ["*"] = "string" }, cache_file)
-    end
     _parley._remote_reference_cache = cache
     return _parley._remote_reference_cache
 end

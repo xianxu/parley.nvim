@@ -1,5 +1,31 @@
 # Lessons
 
+## 2026-09-19 (#261 M1 review — three families, each swept as a class)
+
+- **A filter applied at read time is a view. If the same table is written
+  back, the filter becomes a deletion.** `custom_prompts.load()` dropped
+  malformed entries; `set`/`remove`/`rename` saved `load()`'s result, so a
+  user's hand-edited prompt disappeared on the next save. Rule: when a read
+  drops or normalizes data, decide per source whether the file is *authored*
+  (the writes must work on the file as written) or *derived* (a cache or
+  app-owned state, where rewriting the typed value is the recovery). Write that
+  decision next to the source's declaration, and test it:
+  `tests/helpers/sidecars.lua` `writes = "preserve" | "rewrite"`.
+
+- **A guard that lists files through the git index is blind to the file being
+  written.** `git grep` and `git ls-files` skip untracked files, and untracked
+  is the normal state of new code during the loop that adds it. The census
+  passed with a new reader present. Counterfactuals must also use a *new* file,
+  not an edit to a tracked one. Rule: file-set guards list through
+  `arch_helper.worktree_files`; `tests/unit/arch_helper_spec.lua` fails any arch
+  spec that lists another way.
+
+- **A diagnostic emitted per item over an unbounded collection is a storm.**
+  `conform` warned once per dropped field, over a cache that is never pruned: a
+  thousand bad leaves would have meant a thousand notifications, which is itself
+  a sidecar blocking work. Rule: a validator reports once per call, with a count
+  and a sample.
+
 ## 2026-09-17 (#266 M1 closed at review round 4)
 
 - **A rule about prose is enforced by a query, kept next to the rule.** Two doc

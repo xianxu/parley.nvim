@@ -263,6 +263,24 @@ describe("helper I/O functions", function()
                 local got = helper.conform({ a = {}, b = 3 }, { ["*"] = "table" }, "fixture")
                 assert.same({ a = {} }, got)
             end)
+            it("conforms a nested schema level by level", function()
+                local got, dropped = helper.conform(
+                    { chats = { one = { url = "text", bad = 3 }, two = 5 }, other = 1 },
+                    { chats = { ["*"] = { ["*"] = "string" } } }, "fixture")
+                assert.same({ chats = { one = { url = "text" } }, other = 1 }, got)
+                assert.same({ "chats.one.bad", "chats.two" }, dropped)
+            end)
+            -- #261 M1 review BR-7: a sidecar with a thousand bad leaves must not
+            -- become a thousand notifications.
+            it("emits one warning however many fields it drops", function()
+                local chats = {}
+                for i = 1, 300 do chats["c" .. i] = { url = i } end
+                local _, dropped = helper.conform({ chats = chats },
+                    { chats = { ["*"] = { ["*"] = "string" } } }, "fixture")
+                assert.equals(300, #dropped)
+                assert.equals(1, #warnings)
+                assert.truthy(warnings[1]:find("300 wrongly typed fields", 1, true))
+            end)
         end)
 
         it("F4: table_to_file with nested table serializes correctly", function()

@@ -536,6 +536,51 @@ enumerations and the queries that produce them.
   (`document_dependencies_spec`) died once the same way, and passes alone.
   This is recorded on #267 as the same family. It is not M1's.
 
+### 2026-09-19 — M1 boundary review, round 1: FIX-THEN-SHIP, and how each finding was disposed
+
+Each finding was swept as a class, not at the site it named (memory:
+fix the class, not the site).
+
+- **BR-5, `read-filter-destroys-source` (Important).** `custom_prompts.load()`
+  pruned the map that `set`/`remove`/`rename` wrote back.
+  - Class: every sidecar whose read filters and whose writes persist the
+    result.
+  - Fix: `custom_prompts` splits a filtered `load()` view from
+    `read_authored()`, which returns the file as the user wrote it. A write
+    refuses, with a warning, to replace a file it cannot read.
+  - Enforcement: every sidecar in `tests/helpers/sidecars.lua` now declares
+    `writes = "rewrite"` with a reason (app-owned state or a cache), or
+    `writes = "preserve"` with a check the degrade spec runs. The census fails an
+    entry that declares neither.
+  - Counterfactual: reverting `set` to write `load()` fails A2b and A2c.
+- **BR-6, `guard-scans-index-not-worktree` (Important).**
+  - Class: every arch spec that lists files through the git index. There were
+    six: the census, `superseded_comment_spec:40`, and
+    `single_source_sweeps_spec:410,531,562,594`.
+  - Fix: all six list through the new `arch_helper.worktree_files`, which uses
+    tracked plus untracked files, minus ignored and deleted ones.
+  - Enforcement: `tests/unit/arch_helper_spec.lua` fails any arch spec that uses
+    `git ls-files` without `--others`, or `git grep` without `--untracked`. It
+    also proves `worktree_files` lists an untracked file.
+- **BR-7, `per-item-diagnostic-unbounded` (Important).**
+  - Fix: `conform` takes nested schemas and emits one warning per call, with a
+    count and a sample of up to five paths. Each reader declares its shape in a
+    single call, which also removed the four hand-written nested levels the
+    review's architecture note flagged.
+  - Test: 300 bad leaves produce exactly one warning.
+- **Minors fixed:**
+  - the degrade spec reads the remote cache cold on the submission path;
+  - its cases run in a stable order;
+  - the vault exercise uses a fresh module instance and the stateful
+    `fake_process` seam, so nothing leaks;
+  - the census no longer depends on a stale shell exit code;
+  - three `tool_execution.md` paragraphs are reflowed.
+- **Minor deferred to M4:** the finalize adapter's `{cancel=…}` handle, which
+  the runner discards, is now plan row W18. It belongs to "every wait a
+  generation holds settles".
+- **Lessons:** three rules added to `workshop/lessons.md`.
+- **Suite:** `make test JOBS=4` passes, with 373 spec files and exit 0.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

@@ -407,7 +407,7 @@ describe("arch: single-source sweeps stay swept", function()
         }
         local ALLOWANCES = { ["lua/parley/chat_respond.lua"] = 1 }
         local offenders = {}
-        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+        for _, path in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
             if not OWNERS[path] then
                 local text = read(path)
                 -- MATCHING a fence is the invariant; EMITTING one is fine and
@@ -528,7 +528,7 @@ end)
 describe("arch: the branch-ref line has one formatter (#214)", function()
     it("no module hand-builds a 🌿: line", function()
         local offenders = {}
-        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+        for _, path in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
             if path ~= "lua/parley/branch_ref.lua" then
                 for _, line in ipairs(vim.split(read(path), "\n")) do
                     if not line:match("^%s*%-%-")
@@ -559,7 +559,7 @@ describe("arch: no runtime string is a gsub replacement (#214)", function()
         -- matching :sub( floods this with false positives.
         local pat = ":gsub%b()"
         local offenders = {}
-        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+        for _, path in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
             local lines = vim.split(read(path), "\n")
             for n, line in ipairs(lines) do
                 if not line:match("^%s*%-%-") then
@@ -591,7 +591,7 @@ end)
 describe("arch: every key derives from the keybinding registry (#214)", function()
     it("no module outside the registry reads a config `.shortcut` field", function()
         local offenders = {}
-        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+        for _, path in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
             if not path:match("keybinding_registry%.lua$") then
                 -- `[^\n]*` yields an empty match after every line, which doubles
                 -- every reported line number (a planted violation at :121 was

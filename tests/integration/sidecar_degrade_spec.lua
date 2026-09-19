@@ -47,22 +47,28 @@ describe("sidecars under the state directory degrade", function()
     end)
 
     local function submits()
+        -- Cold, so the submission's own resolve_remote_references reads the
+        -- cache file rather than what exercise() already loaded.
+        parley._remote_reference_cache = nil
         vim.cmd("ParleyChatRespond")
         assert.is_true(vim.wait(5000, function() return #calls > 0 end, 1),
             "the submission did not reach the provider")
     end
 
     for _, sidecar in ipairs(sidecars) do
-        local bodies = { ["invalid JSON"] = "{" }
+        local cases = { { label = "invalid JSON", body = "{" } }
         for i, shape in ipairs(sidecar.wrong_shapes) do
-            bodies["wrongly typed body " .. i] = vim.json.encode(shape)
+            cases[#cases + 1] = { label = "wrongly typed body " .. i, body = vim.json.encode(shape), typed = true }
         end
-        for label, body in pairs(bodies) do
-            it(sidecar.file .. " with " .. label .. " neither throws nor blocks a submission", function()
+        for _, case in ipairs(cases) do
+            it(sidecar.file .. " with " .. case.label .. " neither throws nor blocks a submission", function()
+                local path = state_dir .. "/" .. sidecar.file
                 vim.fn.mkdir(state_dir, "p")
-                vim.fn.writefile({ body }, state_dir .. "/" .. sidecar.file)
+                vim.fn.writefile({ case.body }, path)
                 local ok, err = pcall(sidecar.exercise, parley)
                 assert(ok, err)
+                -- An authored file's writes keep what the read filtered out.
+                if case.typed and sidecar.writes == "preserve" then sidecar.preserve(parley, path) end
                 submits()
             end)
         end

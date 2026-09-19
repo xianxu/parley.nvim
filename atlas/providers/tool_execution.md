@@ -9,14 +9,14 @@ the chat loop and [Chat Write Ownership](../chat/ownership.md) for buffer grants
 ## Captured authority and admission
 
 `tools/dispatcher.lua` captures selected definitions, root policy, cwd, and
-presentation limits in an opaque profile. Preparation
-copies validated input and resolves canonical resource claims before execution.
-Native JSON empty-object markers become plain argument tables. JSON null values
-are currently refused explicitly; preparation never silently drops them.
-The scheduler captures each actual `execute_async` function and its config;
-changing the registry, current buffer, cwd, or agent settings later does not
-replace an admitted capability. Preparation receipts bind result normalization
-to the captured call and paging policy.
+presentation limits in an opaque profile. Preparation copies validated input and
+resolves canonical resource claims before execution. Native JSON empty-object
+markers become plain argument tables. JSON null values are currently refused
+explicitly; preparation never silently drops them. The scheduler captures each
+actual `execute_async` function and its config; changing the registry, current
+buffer, cwd, or agent settings later does not replace an admitted capability.
+Preparation receipts bind result normalization to the captured call and paging
+policy.
 
 `tools/operation.lua` identifies a call by generation, attempt, round, and provider
 call ID. Acceptance records its copied arguments and capability before effects
@@ -139,9 +139,9 @@ stdout retention and delivers chunks of at most 64KiB. Overflow cancels only the
 owning attempt; capacity is freed after exit and both pipe EOF observations.
 Diagnostic logs omit command arguments and raw tool errors.
 
-Read roots do not widen write authority. Help uses a captured installed-document catalog rather than
-arbitrary model-supplied paths. See [Tool Use safety](tool_use.md#safety) for
-structured argv and result paging.
+Read roots do not widen write authority. Help uses a captured installed-document
+catalog rather than arbitrary model-supplied paths. See [Tool Use
+safety](tool_use.md#safety) for structured argv and result paging.
 
 ## Implementation and verification
 
@@ -194,17 +194,19 @@ requires LuaJIT plus POSIX descriptor-relative calls on macOS/Linux; unsupported
 builds refuse protected execution. Native conformance was run on macOS.
 
 Builtin traversal runs through `process_scope` and `process_bootstrap`: a clean
-Neovim child imports the bounded authority, pins one target, then replaces itself
-with the captured command. Directory targets become its pinned cwd; regular files
-remain inherited descriptors. Multiple search targets run sequentially inside
-one owned tool operation. No child-follow flags are accepted. Tasker owns the same process through
-bootstrap, exec, cancellation, exit and drain. A19-byte stderr handshake
-distinguishes successful bootstrap from a search returning no matches; Tasker
-accounts that bounded control metadata in addition to the body capture budget. This protects admitted path
+Neovim child imports the bounded authority, pins one target, then replaces
+itself with the captured command. Directory targets become its pinned cwd;
+regular files remain inherited descriptors. Multiple search targets run
+sequentially inside one owned tool operation. No child-follow flags are
+accepted. Tasker owns the same process through bootstrap, exec, cancellation,
+exit and drain. A19-byte stderr handshake distinguishes successful bootstrap
+from a search returning no matches; Tasker accounts that bounded control
+metadata in addition to the body capture budget. This protects admitted path
 identity; it does not serialize arbitrary external writers or sandbox custom
-programs. Authority payloads are limited to64KiB, path depth128, captured identity
-entries4096 and command targets32. Ambiguous intermediate descriptor closes stay
-quarantined until positive probe evidence; they are never blindly retried.
+programs. Authority payloads are limited to64KiB, path depth128, captured
+identity entries4096 and command targets32. Ambiguous intermediate descriptor
+closes stay quarantined until positive probe evidence; they are never blindly
+retried.
 
 `file_transform` owns pure edits, insertion and numbered-read policy for both
 async and compatibility handlers. `file_refresh` captures open-buffer identity

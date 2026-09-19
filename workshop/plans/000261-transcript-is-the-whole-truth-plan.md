@@ -106,6 +106,7 @@ must *not* be. So:
 |------|----------|--------|-------|
 | `chat_recovery` and `response_recovery` — recovery IO, pickers, guards | `lua/parley/chat_recovery.lua`, `lua/parley/response_recovery.lua` | deleted | state dir, pickers |
 | `helper` — `file_to_table` made total, with an optional per-reader schema; `conform` drops wrongly typed fields | `lua/parley/helper.lua` | modified | JSON sidecar files |
+| `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
 | M2 · `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
 | M2 · `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
 | M3 · `tasker` — `scope_key`, `stop_scope`, `held`, `leave` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
@@ -1293,6 +1294,7 @@ Queries:
 | W15 | topic cancel (`response_topic.lua:47`) | a raise skips `Session.cancel` (`chat_respond.lua:1313-1315`) | pcall it |
 | W16 | topic generation · `s.provider.request` threw (`response_topic.lua:80`, reached from `:154`; `s.started=true` at `:59`) | `s.started` set, `s.handle` nil; `stop()` (`:45-50`) takes neither branch, so it stays stopping forever, holding a `generation limit` slot and two user captures | `stop()` finishes directly when there is no handle |
 | W17 | `skill_invoke._in_flight[buf]` (`:23`, `:402`) | keyed by buffer number, which `:e!` and `:bd`+reopen reuse; released only when the physical read resolves; `stop_owner` unguarded (`:161`) | release on the document's detach/reload and on `BufUnload`; pcall `stop_owner` |
+| W18 | finalize · the adapter's returned `{cancel=…}` handle (`chat_respond.lua` finalize) | `generation_runner.lua:502` discards it, so cancellation mid-finalize relies only on `response_completion`'s own subscription and `ctx.cancelled` (M1 review, Minor) | the runner keeps the handle and calls its `cancel` on stop, or the adapter stops returning one — decide with W12, and test cancellation during finalize |
 
 **Runner fault and the scope kill.** Two runner additions close what the table
 cannot.

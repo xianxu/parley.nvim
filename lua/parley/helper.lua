@@ -642,12 +642,10 @@ end
 
 ---@param file_path string # the file path from where to read the json into a table
 ---@return table | nil # the table read from the file, or nil if an error occurred
---- A JSON sidecar as a table, or nil — never an error. `schema`, when given,
---- maps a key to the Lua type its value must have ('string', 'number',
---- 'boolean', 'table'); `['*']` is the type for every key it does not name.
---- A field of the wrong type is dropped with a warning, so a hand-edited or
---- older-version file degrades field by field instead of failing downstream
---- (#261: the sidecar is parsed into typed values at the boundary).
+--- A JSON sidecar as a table, or nil — never an error. `schema`, when given, is
+--- applied with `conform` (below), so a hand-edited or older-version file
+--- degrades field by field instead of failing downstream (#261: the sidecar is
+--- parsed into typed values at the boundary).
 ---@param file_path string
 ---@param schema table|nil
 _H.file_to_table = function(file_path, schema)
@@ -674,25 +672,49 @@ _H.file_to_table = function(file_path, schema)
 			.. (ok and "not a JSON table" or tostring(tbl)))
 		return nil
 	end
-	if schema then return _H.conform(tbl, schema, file_path) end
+	if schema then return (_H.conform(tbl, schema, file_path)) end
 	return tbl
 end
 
---- Drop every field of `tbl` whose type `schema` rules out (see file_to_table).
---- Mutates and returns `tbl`; `label` names the source in the warning.
----@param tbl table
----@param schema table
----@param label string
-_H.conform = function(tbl, schema, label)
+local function conform_into(tbl, schema, prefix, dropped)
 	for key, value in pairs(tbl) do
-		local want = schema[key] or schema["*"]
-		if want and type(value) ~= want then
-			logger.warning("Ignoring field " .. tostring(key) .. " of " .. tostring(label)
-				.. ": expected " .. want .. ", found " .. type(value))
-			tbl[key] = nil
+		local want = schema[key]
+		if want == nil then want = schema["*"] end
+		if type(want) == "table" then
+			if type(value) == "table" then
+				conform_into(value, want, prefix .. tostring(key) .. ".", dropped)
+			else
+				dropped[#dropped + 1] = prefix .. tostring(key); tbl[key] = nil
+			end
+		elseif want and type(value) ~= want then
+			dropped[#dropped + 1] = prefix .. tostring(key); tbl[key] = nil
 		end
 	end
-	return tbl
+end
+
+--- Drop every field of `tbl` whose type `schema` rules out. A schema maps a key
+--- to the Lua type its value must have ('string', 'number', 'boolean',
+--- 'table'), or to a nested schema — the value must then be a table, conformed
+--- in turn. `['*']` applies to every key the schema does not name. Mutates
+--- `tbl` and returns it with the list of dropped paths. Emits ONE warning per
+--- call however many fields go (#261 M1 review BR-7): a sidecar with a thousand
+--- bad leaves must not become a thousand notifications.
+---@param tbl table
+---@param schema table
+---@param label string # names the source in the warning
+---@return table tbl, string[] dropped
+_H.conform = function(tbl, schema, label)
+	local dropped = {}
+	conform_into(tbl, schema, "", dropped)
+	if #dropped > 0 then
+		table.sort(dropped)
+		local shown = {}
+		for i = 1, math.min(#dropped, 5) do shown[i] = dropped[i] end
+		logger.warning(("Ignoring %d wrongly typed field%s of %s: %s%s"):format(#dropped,
+			#dropped == 1 and "" or "s", tostring(label), table.concat(shown, ", "),
+			#dropped > 5 and ", …" or ""))
+	end
+	return tbl, dropped
 end
 
 _H.get_week_number_sunday_based = function(date_str)

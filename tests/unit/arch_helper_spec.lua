@@ -112,3 +112,33 @@ describe("arch_helper.assert_pattern_scoping (lua pattern + comments)", function
         assert.is_false(ok)
     end)
 end)
+
+-- #261 M1 review BR-6: a file-set guard that lists through the git index is
+-- blind to the untracked file being written right now, so a new offender
+-- passes until it is staged. Every arch spec lists through
+-- arch_helper.worktree_files, or names untracked files explicitly.
+describe("arch_helper.worktree_files", function()
+    it("lists untracked files, not only the index", function()
+        local probe = "lua/parley/zz_worktree_probe_" .. os.time() .. ".lua"
+        vim.fn.writefile({ "return {}" }, probe)
+        local ok, listed = pcall(arch.worktree_files, { "lua/**/*.lua" })
+        vim.fn.delete(probe)
+        assert(ok, listed)
+        assert.is_true(vim.tbl_contains(listed, probe), "an untracked file was not listed")
+    end)
+
+    it("is how every arch spec lists files", function()
+        local offenders = {}
+        for _, file in ipairs(arch.worktree_files({ "tests/arch/*.lua" })) do
+            if file ~= "tests/arch/arch_helper.lua" then
+                for n, line in ipairs(vim.fn.readfile(file)) do
+                    local index_ls = line:find("git ls-files", 1, true) and not line:find("--others", 1, true)
+                    local index_grep = line:find("git grep", 1, true) and not line:find("--untracked", 1, true)
+                    if index_ls or index_grep then offenders[#offenders + 1] = file .. ":" .. n end
+                end
+            end
+        end
+        assert.same({}, offenders,
+            "list files with arch_helper.worktree_files; the git index cannot see an untracked file")
+    end)
+end)
