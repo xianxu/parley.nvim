@@ -51,3 +51,19 @@ under it is not written.
 Filed from #261 M2's boundary review. #261 kept the lookup change (a loaded
 chat's buffer, via `helper.chat_lines`) behaviour-preserving, and pinned only
 that a tree move leaves a loaded chat's unsaved text and its file alone.
+
+### 2026-09-19 — a second defect, reproduced by #261 M2's review (BR-30)
+
+Tree-moving a chat that is loaded in a **real, file-backed** buffer aborts.
+`sync_moved_chat_buffers` (`init.lua`) runs `silent! write`, and the save hook
+slug-renames the file by its topic (e.g. `…_tree-root.md` → `…_move-test.md`).
+The following `os.rename` then fails with ENOENT, and `move_chat_tree` aborts.
+
+`tests/integration/chat_move_spec.lua` cannot see this: `create_chat` builds
+its chats as `nvim_create_buf(false, true)` scratch buffers, so the write fails
+silently and every move looks clean. The review counted 14 specs that use a
+scratch buffer as a chat; `chat_move_spec` is the one that runs a writing path.
+
+Add to this issue's Done-when: chat_move_spec builds its chats as file-backed
+buffers, the way production opens them, and a tree move of a loaded chat
+succeeds.
