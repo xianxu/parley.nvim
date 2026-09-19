@@ -54,6 +54,18 @@ and a reader has to scroll past machine bookkeeping to follow the conversation.
   `relativePostLinksRemarkPlugin` (`src/utils/frontmatter.ts:66`) rewrites those
   into permalinks. It works on markdown link nodes, so the raw `<a href>` anchors
   need checking.
+- **Hidden by default.** Every exported chat gets `hidden: true`, the root
+  included — a transcript should be reachable by link, not advertised in the blog
+  listing. `published: true` still goes with it: the post is public, just not on
+  a shelf. An operator who wants one listed deletes the line.
+  Caveat, and it is a site-side gap rather than an export one: on xianxu.dev
+  today `hidden` filters the home page, the blog list and tag pages, but
+  `src/pages/rss.xml.ts` calls `fetchPosts()` unfiltered and `@astrojs/sitemap`
+  takes every built page. Verified on a real build: all three parli transcripts
+  appear in `dist/rss.xml` and `dist/sitemap-0.xml`. So "hidden" currently means
+  unlisted, not undiscoverable — subscribers and crawlers still get them. If the
+  stronger meaning is wanted, that is an xianxu.dev change (filter hidden in the
+  RSS route, a `filter` on the sitemap integration, maybe `robots: noindex`).
 - **Folds survive the export.** What a chat folds, a post collapses. `📝:`
   summaries, `🧠:` reasoning and `🔧:`/`📎:` tool blocks are wrapped in
   `<details class="parley-aside"><summary>…</summary>`, with a blank line before
@@ -76,9 +88,10 @@ Open questions (settle at claim):
 3. On re-export over an existing `<slug>.md`: should fields added by hand
    (`excerpt`, `highlight`, `project`, `published`) be kept, or should it ask
    before overwriting?
-4. Tree export writes every chat in the tree as its own post, so each branch
-   would show up in the blog listing. Should non-root chats get `hidden: true`?
-   On xianxu.dev that removes them from listings and keeps their URLs.
+4. **Settled (2026-09-19, operator):** every exported chat is `hidden: true`,
+   not just the branches — see **Hidden by default** above. The follow-on
+   question is whether the site should also keep hidden posts out of RSS and the
+   sitemap; that belongs to xianxu.dev, not here.
 5. Assets: `assets.copy_into` copies `assets/<ts>/` beside the export, which
    would put it in `src/data/post/assets/`. Check that Astro resolves relative
    image links from there.
@@ -157,3 +170,19 @@ The probe was removed afterwards.
 
 Sequencing: the operator wants #261 finished first, then this. Not a blocking
 dependency — no `deps:` — just the order of work.
+
+### 2026-09-19 — hidden by default
+
+Operator: transcripts should publish with `hidden: true` by default — on the web,
+but not advertised. Folded into Spec; open question 4 is settled.
+
+Measured what `hidden` buys on xianxu.dev, rather than assuming. It keeps a post
+off the home page, the blog list and its tag pages. It does not keep it out of
+`rss.xml` (the route calls `fetchPosts()` with no filter) or `sitemap-0.xml` (the
+sitemap integration takes every built page); both were checked in `dist/` after a
+build with all three parli transcripts hidden. Unlisted, then, but not private:
+the feed still carries them and the sitemap still hands them to crawlers.
+
+The operator took the three hand-converted posts, added `hidden: true` to the
+root, and committed + pushed them (xianxu.dev `c2fc04e`). That commit is the
+reference output this issue's exporter has to reproduce without hand edits.
