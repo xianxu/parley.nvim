@@ -220,6 +220,23 @@ M.LIFECYCLE = {
     epoch = { what = "the chat was reloaded", action = AGAIN },
 }
 
+-- The floor: what a refusal of this KIND says when its reason has no row of its
+-- own. Without it a producer's unknown token became the whole message
+-- ("unexpected (...)"), which names no action (#261 close: BR-92).
+M.KIND = {
+    start = { what = "the response could not start", action = AGAIN },
+    resume = { what = "the response could not be resumed", action = ":ParleyChatRespond to start a new one" },
+    batch_start = { what = "the batch could not start", action = AGAIN },
+    batch_resume = { what = "the batch could not be resumed", action = ":ParleyChatRespondAll to start a new batch" },
+    batch_paused = { what = "the batch paused", action = ":ParleyChatResumeBatch to continue" },
+    batch_ended = { what = "the batch stopped", action = ":ParleyChatRespondAll to start again" },
+    ended = { what = "the response stopped", action = AGAIN },
+    paused = { what = "the response paused", action = ":ParleyStop cancels it" },
+    drill = { what = "the drill-in stopped", action = AGAIN },
+    topic = { what = "the topic could not be generated", action = AGAIN },
+    attachments = { what = "the images were not sent", action = AGAIN },
+}
+
 -- What a revocation means depends on why it happened.
 M.REVOKED = {
     edit = { what = "you edited the answer while it was being written; the partial answer is kept",
@@ -265,12 +282,24 @@ end
 
 --- The first line of a Lua error, bounded, with a fallback: `debug.traceback("")`
 --- starts with a newline, so the bare match returns nil and its caller throws
---- inside the failure handler (#261 M5 review round 4).
+--- inside the failure handler (#261 M5 review round 4). For a Lua error, where
+--- the first line is the message and the rest is the traceback.
 ---@param err any
 ---@return string
 function M.brief(err)
     local text = tostring(err)
     return (text:match("[^\n]+") or "unknown"):sub(1, 512)
+end
+
+--- Free text meant for a user: a provider's prose, a helper's sentence. Every
+--- line is kept (the last one often carries the action), folded onto one line
+--- and bounded — unlike `brief`, which drops a traceback on purpose (#261 close).
+---@param text any
+---@return string
+function M.prose(text)
+    local folded = tostring(text):gsub("%s*\n%s*", " ")
+    folded = vim.trim(folded)
+    return (folded ~= "" and folded or "unknown"):sub(1, 512)
 end
 
 ---@param kind string # a PREFIX key
@@ -289,6 +318,13 @@ function M.describe(kind, outcome, failure, detail)
     if SILENT[failure] then return nil, "silent" end
     local prefix = M.PREFIX[kind] or tostring(kind)
     local log = "the details are in " .. (detail.log_file or "the Parley log")
+    -- Every seam that supplies `failure` is gated by VALUE, and the gate is here
+    -- because this is where the value is read: a reason with no row is detail
+    -- beside the words, never the words themselves (#261 close: BR-92). The
+    -- caller still learns it was unworded, through the returned resolution.
+    local stray
+    if failure ~= nil and not M.is_token(failure) then stray = M.prose(failure); failure = nil end
+    local notice = detail.notice or stray
     local text, resolution
     -- A revocation says why the grant went, whatever failure the stop recorded
     -- on the way (BR-68): the cause is the more specific fact.
@@ -336,13 +372,17 @@ function M.describe(kind, outcome, failure, detail)
         elseif internal(token) then
             text = "an unexpected internal error (" .. tostring(token) .. "); " .. log
             resolution = "internal"
+        elseif token == nil and M.KIND[kind] then
+            local floor = M.KIND[kind]
+            text = floor.what .. "; " .. (detail.action or floor.action)
+            resolution = resolution or "kind"
         else
             text = "unexpected (" .. tostring(token) .. "); " .. log
             resolution = "unkeyed"
         end
     end
-    if type(detail.notice) == "string" and detail.notice ~= "" then text = text .. " — " .. detail.notice end
-    return prefix .. ": " .. text, resolution
+    if type(notice) == "string" and notice ~= "" then text = text .. " — " .. notice end
+    return prefix .. ": " .. text, stray and "unkeyed" or resolution
 end
 
 -- An outcome the machine can stop with must have words, or it reaches a user as

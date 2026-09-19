@@ -2,7 +2,8 @@
 local R = require("parley.refusal")
 -- This spec describes tokens that have no words on purpose; the harness watch
 -- in tests/minimal_init.vim fails any other spec that produces one.
-vim.g.parley_expected_unkeyed = { "never heard of it", "provider request failed (HTTP 503)" }
+vim.g.parley_expected_unkeyed = { "never heard of it", "provider request failed (HTTP 503)",
+    "preparation outside captured output", "brand new reason" }
 
 describe("refusal vocabulary", function()
     local ACTION = { "^:Parley%u", "submit again", "try again in a moment", "wait for", "edit" }
@@ -76,12 +77,32 @@ describe("refusal vocabulary", function()
             assert.is_true(outcome == "success" or R.TOKENS[outcome] ~= nil, outcome)
         end
     end)
-    it("calls an internal token and an unknown one unexpected, showing the token and the log", function()
+    it("calls an internal token unexpected, showing the token and the log", function()
         local internal = R.describe("start", nil, "invalid specification", { log_file = "/x/parley.log" })
         assert.truthy(internal:find("unexpected", 1, true)); assert.truthy(internal:find("invalid specification", 1, true))
         assert.truthy(internal:find("/x/parley.log", 1, true))
-        local unknown = R.describe("start", nil, "never heard of it")
-        assert.truthy(unknown:find("unexpected", 1, true)); assert.truthy(unknown:find("never heard of it", 1, true))
+    end)
+    -- BR-92: a reason nobody worded still leaves the user an action. It becomes
+    -- the detail beside the KIND's words, and the caller hears "unkeyed".
+    it("gives an unworded reason the kind's words, and keeps it as the detail", function()
+        local message, resolution = R.describe("start", nil, "preparation outside captured output")
+        assert.equals("Response not started: the response could not start; submit again"
+            .. " — preparation outside captured output", message)
+        assert.equals("unkeyed", resolution)
+        -- Every kind has that floor, so no prefix can reach a user bare.
+        for kind in pairs(R.PREFIX) do
+            assert.is_not_nil(R.KIND[kind], kind)
+            assert.truthy(R.describe(kind, nil, "brand new reason"):find("brand new reason", 1, true))
+        end
+    end)
+    -- Provider prose keeps its last line, which often carries the action;
+    -- `brief` drops a traceback on purpose, so the two are separate entry points.
+    it("folds free text onto one line without losing what follows", function()
+        assert.equals("cliproxy: not healthy within 30s — try :ParleyProxy status",
+            R.prose("cliproxy: not healthy within 30s\n — try :ParleyProxy status"))
+        assert.equals("boom", R.brief("boom\nstack traceback:\n\tfoo"))
+        assert.equals("unknown", R.brief(""))
+        assert.equals("unknown", R.prose("  \n  "))
     end)
     -- BR-67: naming a command that cannot clear the condition is worse than
     -- naming none. Nothing clears a batch's `unknown`, and a batch whose

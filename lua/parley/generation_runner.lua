@@ -156,13 +156,16 @@ end
 -- parley.refusal; a diagnosis (a Lua error, a provider's text) travels beside it
 -- and is shown as detail.
 function issue(s,reason,diagnosis)
-    -- Enforced where the value is STORED, not where it is shown: anything the
-    -- vocabulary cannot resolve is a diagnosis, whatever the caller meant. So a
-    -- producer that hands over a sentence (cliproxy's health message), a Lua
-    -- error, or a token nobody worded can never reach a user raw.
+    -- `failure` holds a token; anything the vocabulary cannot resolve is the
+    -- diagnosis beside it, whatever the caller meant. This keeps the snapshot's
+    -- own field honest for its readers. It is not the only gate: parley.refusal
+    -- gates again where the value is READ, because a host can supply a reason
+    -- that never passed through here (#261 close: BR-92).
     local Refusal=require('parley.refusal')
     if not diagnosis and not Refusal.is_token(reason) then diagnosis=true end
-    if diagnosis then s.diagnosis=Refusal.brief(reason):sub(1,4096) else s.failure=tostring(reason):sub(1,4096) end
+    -- Provider prose keeps every line (the last often carries the action); a Lua
+    -- error keeps its first, and drops the traceback.
+    if diagnosis then s.diagnosis=Refusal.prose(reason) else s.failure=tostring(reason):sub(1,4096) end
 end
 --- Why staged bytes overflowed. A generation held behind the write turn names the
 --- answer it waited for (#266): without that, an overflow while queued reads as

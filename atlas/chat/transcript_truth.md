@@ -83,14 +83,21 @@ or written by anything. It is safe to delete, and Parley leaves it where it is.
 Every refusal, and every ending other than success, reaches the user once, in
 words that name what to do. The words live in
 [refusal.lua](../../lua/parley/refusal.lua), which is pure: it returns the
-message and says how it resolved, and the caller logs it. Two nets keep a
-refusal from reaching a user as a bare token:
+message and says how it resolved, and the caller logs it.
+
+What keeps a reason from reaching a user as a bare token is the code, not a
+test: `describe` gates its `failure` **by value**. A reason it cannot resolve
+becomes the detail beside the words of that refusal's kind, so every refusal
+still names an action, and the caller is told the reason was unworded. The
+runner gates the same way where it STORES a failure, which keeps that field
+honest for the specs that read it.
+
+Two nets then find the gaps for a developer, and neither is the guarantee:
 
 - `tests/arch/refusal_vocabulary_spec.lua` reads the producer files and fails on
   a reason it finds there without words. It sees the call shapes it knows, so it
-  catches most at authoring time, not all.
-- The harness (`tests/minimal_init.vim`) watches what `describe` actually
-  resolves, across every spec in the suite, and fails the spec file that produces
-  a token with no words.
+  catches many at authoring time, not all.
+- The harness (`tests/minimal_init.vim`) watches what `describe` resolves, across
+  every spec in the suite, and fails the spec file that produced an unworded one.
 
 A user's own Stop is silent. A refusal is never written into the file.

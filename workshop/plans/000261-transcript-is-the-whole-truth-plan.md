@@ -70,7 +70,7 @@ must *not* be. So:
 | `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
 | `attempt` — `open_stop_window`: TERM, then the escalate effect at +2 s, for a stop whose cause is stop, deadline or leave; `kill_cause` | `lua/parley/attempt.lua` | modified |
 | `refusal` — `describe` (returns the message and how it resolved), `TOKENS`, `INTERNAL`, `LIFECYCLE` (a closed or reloaded chat, for every kind), `PREFIX`, `REVOKED` (words by revocation cause), `USER_STOP`, `BATCH_CONTINUE`, `BATCH_RESTART` | `lua/parley/refusal.lua` | new |
-| `is_token`, `brief` — what the vocabulary can resolve, and the first line of a Lua error: producers use them so `failure` never holds free text | `lua/parley/refusal.lua` | new |
+| `is_token`, `brief`, `prose`, `KIND` — what the vocabulary can resolve; the first line of a Lua error; free text folded onto one line; and the words a refusal of each kind falls back to, so an unworded reason still names an action | `lua/parley/refusal.lua` | new |
 | `OUTCOMES` — the set a generation can stop with, asserted in `stop` and checked for words at load | `lua/parley/generation.lua` | modified |
 | `cancel` — a batch cancel carries its cause (`user`, `lifecycle`, `fault`), validated in the transition and read off the snapshot | `lua/parley/batch.lua` | modified |
 
@@ -2744,4 +2744,38 @@ Four findings, all mine, all correct. The Critical is the one that matters most:
 Counterfactuals: reverting the routing reddens the new free-text case; the bare
 `describe(` call reddens the channel guard; a planted missing symbol reddens the
 narrowed Core-concepts guard.
+
+### 2026-09-19 — close review round 2 (FIX-THEN-SHIP): the gate moves to where the value is READ
+
+Four findings. The verdict improved to FIX-THEN-SHIP; two were blocking.
+
+- **BR-92 (Important).** BR-81's rule was "enforced where the value is STORED",
+  and I gated one store: the runner. The other is `refuse` itself, whose
+  `failure` argument is a variable at eleven call sites — and a live reason,
+  `preparation outside captured output` (response_submission → session →
+  `refuse('start','start refused', why)`), reached the user as
+  "unexpected (…)" with no action, which this issue's Done-when forbids.
+  - The gate now lives where the value is **read**, in `describe`, so every seam
+    inherits it rather than each one repeating it. A reason the vocabulary cannot
+    resolve becomes the detail, and the words come from `refusal.KIND` — the
+    floor for each kind, so no refusal can reach a user without an action.
+  - `describe` still returns `unkeyed` for it, so the harness watch keeps telling
+    the developer. The runner's store-level gate stays (it keeps the snapshot's
+    `failure` honest for the specs that read it), and its comment no longer
+    claims a raw value "can never" reach a user.
+- **BR-93 (Important).** The atlas page and the target both enumerated "two
+  nets", whose completeness equals spec coverage — the very thing BR-81
+  rejected. Both now say the guarantee is in the code (the by-value gate), with
+  the census and the watch as developer signal. The reviewer notes that nothing
+  mechanical will catch this class in `atlas/` or `workshop/targets/`, since
+  `superseded_comment_spec` globs only `lua/**`, `tests/**` and `scripts/**`.
+- **Minor.** `brief()` was documented for Lua errors (first line, 512) but was
+  applied to provider prose, dropping everything after line 1 — including a
+  trailing remedy — and its `:sub(1,4096)` was dead. Provider text now goes
+  through `prose()`, which folds every line onto one; `brief()` still drops a
+  traceback on purpose.
+- **Minor.** A guard whose selection is empty passes while checking nothing. The
+  fix is at the selection, not in one test: `repo_files` fails when its pattern
+  matches no file, so every corpus guard in the file inherits the check, and the
+  two row-based selections count their own rows.
 

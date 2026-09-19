@@ -268,11 +268,13 @@ every later batch until `:e!`.
 - The file carries no pending or error marker. An interrupted answer is partial
   text with no next `💬:` prompt. Why it stopped is said once, when it stops, in
   the words of `lua/parley/refusal.lua`, and is never stored.
-  Two nets keep a refusal from reaching a user as a bare token:
-  `tests/arch/refusal_vocabulary_spec.lua` reads the producer files for reasons
-  without words (the call shapes it knows, at authoring time), and the harness
-  watches what `refusal.describe` actually resolves across the suite, failing
-  the spec that produces a wordless one.
+  The guarantee is in the code: `refusal.describe` gates its `failure` by
+  value, so a reason with no words becomes the detail beside the words of that
+  refusal's kind, and every refusal still names an action. The runner gates the
+  same way where it stores a failure. Two nets then find the gaps for a
+  developer — `tests/arch/refusal_vocabulary_spec.lua` at authoring time, for
+  the call shapes it knows, and the harness watch over what `describe` resolves
+  across the suite — and neither is what makes the invariant true.
 - `:e!` reaches the document as a detach followed by a fresh attach, not an
   epoch change. Everything a detach releases, a reload releases too. The host
   tells the two apart only to choose its words.

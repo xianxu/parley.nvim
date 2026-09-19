@@ -1308,7 +1308,9 @@ M.resolve_remote_references = function(opts, callback)
     -- is free text, so it travels behind a token the vocabulary keys (#261 M5).
     local function failed(reason)
         if operation.failure or operation.finished then return end
-        operation.failure = 'remote content failed: ' .. require('parley.refusal').brief(reason)
+        -- Prose, not brief: a fetch reports a transport sentence as often as a
+        -- Lua error, and its later lines can carry the remedy.
+        operation.failure = 'remote content failed: ' .. require('parley.refusal').prose(reason)
         if on_failure then pcall(on_failure, operation.failure) end
     end
     function operation:cancel()

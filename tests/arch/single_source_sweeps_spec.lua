@@ -11,9 +11,14 @@
 --     rejecting their own bearer.
 -- so the guards are the deliverable, not a nicety.
 
+-- Every guard here selects a corpus and then asserts the offender list is
+-- empty, so an empty SELECTION passes while checking nothing (#261 close:
+-- BR-94). The check belongs to the selection, not to each guard: a pattern that
+-- matches no file is a broken guard, whatever it then asserts.
 local function repo_files(pattern)
     local out = vim.fn.systemlist(pattern)
     assert.equals(0, vim.v.shell_error, "listing failed: " .. pattern)
+    assert.is_true(#out > 0, "selected no files, so the guard would pass vacuously: " .. pattern)
     return out
 end
 
@@ -266,6 +271,7 @@ describe("arch: single-source sweeps stay swept", function()
         end
         local missing = {}
         local survived = {}
+        local rows = 0
         for _, doc in ipairs(docs) do
             if doc ~= "" then
                 local body = read(doc)
@@ -277,6 +283,7 @@ describe("arch: single-source sweeps stay swept", function()
                 -- specifies; anything but a row or a separator ends the region.
                 local in_concepts = false
                 for line in body:gmatch("[^\n]+") do
+                    if in_concepts and line:match("^| `") then rows = rows + 1 end
                     -- A separator row matches "^|" too, and carries no Status
                     -- cell, so it simply leaves the region as it is.
                     if line:match("^|") then
@@ -339,6 +346,7 @@ describe("arch: single-source sweeps stay swept", function()
                 end
             end
         end
+        assert.is_true(rows > 0, "no Core-concepts row was selected, so this guard checked nothing")
         assert.same({}, missing,
             "these are named in a Core-concepts table but exist nowhere in the tree")
         assert.same({}, survived,
@@ -404,12 +412,13 @@ describe("arch: single-source sweeps stay swept", function()
     it("every '-- test seam' export has a reader", function()
         -- #261 M5 review round 4. An export kept for tests, with no test using
         -- it, is dead surface that reads as covered.
-        local offenders = {}
+        local offenders, seams = {}, 0
         for _, path in ipairs(repo_files("ls lua/parley/*.lua lua/parley/**/*.lua 2>/dev/null")) do
             for line in read(path):gmatch("[^\n]+") do
                 local name = line:match("^%s*M%.(_[%w_]+)%s*=.*%-%-%s*test seam")
                     or line:match("^%s*function%s+M%.(_[%w_]+)%s*%(.*%-%-%s*test seam")
                 if name then
+                    seams = seams + 1
                     local module = path:match("lua/(.*)%.lua"):gsub("/", ".")
                     local short = module:match("([%w_]+)$")
                     local found = false
@@ -424,6 +433,7 @@ describe("arch: single-source sweeps stay swept", function()
             end
         end
         table.sort(offenders)
+        assert.is_true(seams > 0, "no '-- test seam' export was selected")
         assert.same({}, offenders, "delete the export, or give it the test it claims")
     end)
 

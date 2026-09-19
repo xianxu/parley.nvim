@@ -234,3 +234,199 @@ findings:
       old one, so the same two sentences appear twice above lifecycle_cause, the second
       copy differing only in "a chat still loaded by then". Delete :48-50.
 ```
+
+---
+
+## Re-review — 2026-09-19T16:38:32-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 261 — Audit transcript as the complete recovery state |
+| repo | parley.nvim |
+| issue file | workshop/issues/000261-audit-transcript-recovery-state.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | ff5ed804a7d58499a2964235f9897db53f2c85d3..c0479441e7c14f38b17dde7ab14dd26c81db6bb0 |
+| command | sdlc close --issue 261 |
+| reviewer | claude |
+| timestamp | 2026-09-19T16:38:32-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Round 1's blockers are genuinely closed and I verified each by measurement, not by reading the commit message: the suite is green at HEAD (lint 0/644, unit 214 pass, integration+arch pass — the two files that failed the parallel run, `packaging_launcher_spec` and `perf_ownership_spec`, both pass alone and are untouched by this diff, the known #267 load family); the two specs that read the changed `failure` field now read `generation.diagnosis`; the `is_token` routing finally has a counterfactual — I reverted it in a scratch worktree and `chat_refusal_spec` goes red with exactly the message the finding predicted (`Response stopped: unexpected (cliproxy: …)`); reverting the `describe` assignment reddens the channel guard; and the narrowed Core-concepts row selector still catches a symbol I planted that exists nowhere. What keeps this from SHIP is that BR-81's own rule — "`failure` must hold a value `refusal` can resolve, enforced where the value is STORED" — was implemented at one of the two seams that supply it. `generation_runner.issue` is gated; `chat_respond.refuse`'s `failure` argument is not, and I found a live value (`preparation outside captured output`) that reaches it and renders as `Response not started: unexpected (…)` with no action — the exact defect class four rounds chased, on the path the fix did not cover. Both new findings are cheap.
+
+## 1. Strengths
+
+- **The BR-81 remedy is now evidenced, not asserted.** `tests/integration/chat_refusal_spec.lua:252-262` drives cliproxy's health sentence through a real provider abort and asserts the *whole* message with the sentence as detail. Reverting only the `is_token`/`brief` lines turns that case red and leaves the other 17 green — measured. That is the counterfactual two rounds asked for.
+- **The channel guard was tightened in the right direction.** Dropping the `^Refusal%.describe%(` bless from `tests/arch/refusal_vocabulary_spec.lua:157,164` means the guard now refuses the very form that caused BR-90, rather than blessing it. Reverting `chat_respond.lua:445-449` to the bare call reddens it — measured. All three `describe` call sites in `lua/` assign first.
+- **The Core-concepts row selector now keys on the property that defines the class.** `single_source_sweeps_spec.lua:277-286` selects rows by the table's `Status` header instead of by row shape, and it still inspects 22 rows across 2 tables on this branch — I planted `M_totally_invented_symbol` in the Pure-entities table and it was caught.
+- **`refusal.lua` is genuinely pure.** It loads and renders under `nvim -u NONE` with no `setup()`, no IO, no state; the `unkeyed` watch lives in `tests/minimal_init.vim`, not in production (BR-71's rule held through this round).
+- **Deleted surface left no dangling references.** `answer_recovery`, `chat_recovery`, `response_recovery`, `recovery_paths`, `traversal_policy`, `fake_recovery_filesystem` and `atlas/chat/recovery.md` appear nowhere in `atlas/`, `README.md`, `lua/`, `tests/`, `scripts/` or `workshop/lessons.md`; `atlas/index.md` links every atlas file.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**I1 — `refuse()`'s `failure` argument bypasses the store-level `is_token` gate, and a live non-token reaches it.**
+`lua/parley/chat_respond.lua:59-66` and `:1770`. `generation_runner.lua:158-166` states "a producer that hands over a sentence…can never reach a user raw" — true only for producers routed through `issue`. `chat_respond.refuse` is the other supply point and has no gate: eleven of its call sites pass a *variable* as `failure`. One is confirmed live: `response_submission.lua:50` calls `cancelled(s,'preparation outside captured output')` → `reject` → `response_session.lua:233` `rejected` → `chat_respond.lua:1770` `refuse('start','start refused', why)`. Rendered: `Response not started: unexpected (preparation outside captured output); the details are in the Parley log` — no action, which is what the issue's own Done-when forbids. Neither net sees it: `refusal_vocabulary_spec`'s FORMS do not match the `cancelled(s, '…')` call shape, and the harness watch only fires when a spec drives the value (none does — the suite is green). Fix sketch: gate in `refuse` the way `issue` does — non-token `failure` becomes `detail.notice`, and assert under `$PARLEY_TEST_MODE`.
+
+**I2 — the atlas page and the target both still describe a two-net world; the store-level enforcement that closed BR-81 is in neither.**
+`atlas/chat/transcript_truth.md:86` and `workshop/targets/transcript-is-the-whole-truth.md:271` each say "Two nets keep a refusal from reaching a user as a bare token" and list the authoring-time census and the harness watch — the two mechanisms whose completeness equals spec coverage, which is precisely what BR-81 rejected. Both files were last touched at `a9b20b22`; `is_token`/`brief` landed at `ba79d86f`. A reader learning where to add the guarantee for a new producer is sent to the two weaker nets and not to `generation_runner.issue`. Docs gate: atlas update missing for the surface the plan's own Core-concepts table lists as new.
+
+## 4. Minor findings
+
+- `lua/parley/generation_runner.lua:165`: `Refusal.brief(reason):sub(1,4096)` — `brief` already caps at 512, so the outer cap is dead; and `brief` (documented as "the first line of a Lua error") is now applied to every diagnosis, so a multi-line provider message silently loses lines 2+.
+- `tests/arch/single_source_sweeps_spec.lua:277`: the narrowed selector can match zero rows and still assert `{}` offenders. The same file asserts non-vacuity twice (`count >= 100` at :106, `sites >= 4` at :170) and states the rule at :243-244; the new selector did not adopt it. Latent today (22 rows), live the first time a plan's header spells the column differently.
+- No test asserts the new `attachments` prefix. `build_messages_spec.lua:2077` matches only the embedded byte count, so "Images not sent: …" is unpinned wording.
+- The rendered attachment notice repeats itself: `Images not sent: … so no images were sent (retained text alone is N bytes; 3 images not sent); …`.
+
+## 5. Test coverage notes
+
+- Lint 0 warnings / 0 errors in 644 files. Unit: all pass (including `document_semantic_spec`, which flaked in round 1). Integration + arch: all pass except two load-sensitive files that pass alone and are outside the diff.
+- Counterfactuals I ran myself, each confirmed red: the `is_token` routing → `chat_refusal_spec`; the bare `describe(` call → `refusal_vocabulary_spec`; a planted absent symbol in a Core-concepts table → `single_source_sweeps_spec`.
+- Still unpinned behavior in this window: `refusal.brief`'s `or "unknown"` fallback (zero references to `brief` or `is_token` anywhere in `tests/`), `lifecycle_cause`'s buffer-reuse guard, and the four `init.lua` command refusals — see the dispositions for BR-84, BR-85, BR-86.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag (Minor).** `brief()` correctly collapsed six copies of "first line of a Lua error". Path canonicalisation still has ten hand-rolled `resolve(fnamemodify(x,':p'))` copies and no `helper.canonical_path` (BR-34, re-raised as a disposition).
+- **ARCH-PURE — pass.** Verified by loading `parley.refusal` under `-u NONE`: data plus two pure functions, no IO, no state. The `unkeyed` watch is harness-side.
+- **ARCH-PURPOSE — flag (I1).** The shadow-sweep for "a value the vocabulary must resolve" enumerated the runner's store and stopped there; `refuse()` is the second store and was left to the shape-based census. The instance was fixed; the class was not.
+- **ARCH-MOCK — pass.** `fake_process` models groups and pid signals behind `tasker._uv`; `process_group_conformance_spec` checks the model against the real kernel.
+- **ARCH-CONSTRAINTS — pass.** Deadlines are `tasker.deadline` kinds, TERM→KILL escalation bounded, `diagnosis` bounded at 512 (see the Minor about the redundant 4096).
+- **ARCH-SECURE — pass.** BR-90's redaction inversion is closed and every `describe` call site assigns; sidecars parse into typed values at the boundary; `spawn_seam_spec` forbids `curl -v`/`--trace` argv.
+- **ARCH-ORDER — pass.** `failure` and `diagnosis` are now distinct fields with `issue` setting exactly one per call; `(token, detail)` is a meaningful combination the renderer uses, not an undefined one.
+- **ARCH-FUNERAL — pass.** `$PARLEY_QUERY_DIR` is deleted on `VimLeavePre` beside its creation; `remove_stale_temps` has three call sites.
+
+## 7. Plan revision recommendations
+
+- **`## Revisions` — the Core-concepts row for `is_token`/`brief` overstates its reach.** The row reads "producers use them so `failure` never holds free text". True of producers routed through `generation_runner.issue`; false of the eleven `refuse()` sites that pass `failure` directly. Restate the scope, or widen the implementation (I1) and leave the row as written.
+- **`## Revisions` — the counterfactual table now has a true row.** Plan line 2700's claim about "the reload cases in `chat_refusal_spec`" was corrected in the close-round-1 entry; the entry at 2704-2747 should record the measured counterfactual (the new free-text case at `chat_refusal_spec.lua:252`) as the row rather than leaving the superseded line above it.
+
+```findings
+dispose:
+  - id: BR-34
+    disposition: not-addressed
+    note: |
+      No helper.canonical_path anywhere in lua/; helper.lua:696-698 and nine other sites still hand-roll resolve(fnamemodify(x,':p')).
+  - id: BR-80
+    disposition: addressed
+    note: |
+      Issue Log lines 911-917 now read BR-72 (one() helper), BR-73 (outcome set), BR-70/74 (file-scoped exemption), matching the ledger; the plan's round-2 entry at 2543-2554 already used those ids.
+  - id: BR-81
+    disposition: addressed
+    note: |
+      generation_runner.lua:158-166 gates the store, and chat_refusal_spec.lua:252-262 goes red when only the is_token/brief lines are reverted (measured in a scratch worktree); the other 17 cases stay green. The residual ungated seam is raised as a new finding, not this one.
+  - id: BR-84
+    disposition: not-addressed
+    note: |
+      brief() exists and seven sites route through it, but grep over tests/ finds zero references to brief or is_token; the newline-leading fallback the finding named is still pinned by nothing.
+  - id: BR-85
+    disposition: not-addressed
+    note: |
+      init.lua:4302 still passes kind "start" with the command name as notice. Rendered at HEAD: "Response not started: the chat has no header; edit: restore the chat's header, then submit again — ExchangeCut". No refuse() kind added, no test for the four commands.
+  - id: BR-86
+    disposition: not-addressed
+    note: |
+      The not_chat check is in place at chat_respond.lua:56, but chat_refusal_spec's 18 cases contain no :bd / buffer-number-reuse case; nothing in this round's commit touches it.
+  - id: BR-88
+    disposition: addressed
+    note: |
+      cliproxy_caller_teardown_spec.lua:161-164 and response_session_spec.lua:186-188 now assert generation.diagnosis with failure nil; full integration run green at HEAD, and the new free-text case reddens when the routing is reverted.
+  - id: BR-89
+    disposition: addressed
+    note: |
+      single_source_sweeps_spec.lua:277-286 scopes rows to a table whose header carries Status; the spec is green at HEAD and still catches a symbol I planted in the Pure-entities table that exists nowhere in the tree.
+  - id: BR-90
+    disposition: addressed
+    note: |
+      chat_respond.lua:445-449 assigns describe's result first; PREFIX gained "attachments" = "Images not sent"; the channel guard no longer blesses the bare call and goes red when the bare form is restored (measured). All three describe call sites in lua/ assign.
+  - id: BR-91
+    disposition: addressed
+    note: |
+      The duplicated paragraph is gone; chat_respond.lua:44-52 carries one statement of the reload/detach rule plus the buffer-reuse paragraph.
+findings:
+  - id: new
+    severity: Important
+    family: enumeration-claims-completeness
+    title: |
+      `refuse()`'s `failure` argument bypasses the store-level is_token gate, and a live non-token reaches a user as "unexpected (...)"
+    detail: |
+      This is the 15th finding in family `enumeration-claims-completeness`. Do NOT
+      fix the one value. BR-81's rule was "enforced where the value is STORED"; the
+      round gated ONE store (generation_runner.lua:158-166) and left the other —
+      chat_respond.refuse (chat_respond.lua:59-66), whose `failure` argument is a
+      variable at eleven call sites. Measured live instance:
+      response_submission.lua:50 `cancelled(s,'preparation outside captured
+      output')` -> reject -> response_session.lua:233 rejected ->
+      chat_respond.lua:1770 `refuse('start','start refused', why)`, which
+      `describe` resolves `unkeyed` and renders as "Response not started:
+      unexpected (preparation outside captured output); the details are in the
+      Parley log" — no action, which the issue's Done-when forbids.
+      refusal_vocabulary_spec's FORMS do not match the `cancelled(s, '...')` call
+      shape, and the harness watch only fires when a spec drives the value, so
+      coverage of the invariant is again coverage of the specs. The rule: EVERY
+      seam that supplies `failure` gates it by value, not one of them — give
+      `refuse` the same `is_token` routing (non-token -> detail.notice, assert
+      under $PARLEY_TEST_MODE), and correct the comment at
+      generation_runner.lua:159-162 which claims a raw value "can never" reach a
+      user.
+  - id: new
+    severity: Important
+    family: comment-outlives-its-behavior
+    title: |
+      The atlas page and the target both still say "Two nets" and omit the store-level enforcement that closed BR-81
+    detail: |
+      This is the 4th finding in family `comment-outlives-its-behavior`. Do NOT fix
+      only the sentence. atlas/chat/transcript_truth.md:86 and
+      workshop/targets/transcript-is-the-whole-truth.md:271 each enumerate two
+      mechanisms — the authoring-time census and the harness watch — whose
+      completeness equals spec coverage, which is exactly what BR-81 rejected. Both
+      files were last written at a9b20b22; `is_token`/`brief` and the routing landed
+      at ba79d86f, and the plan's Core-concepts table lists them as new PURE
+      surface. A reader sent to those two nets will add the next producer's guard in
+      the wrong place. The rule the family keeps re-finding: a doc that ENUMERATES
+      the mechanisms behind an invariant is a consumer of that invariant and is
+      swept in the same commit that changes the set — neither atlas/ nor
+      workshop/targets/ is inside superseded_comment_spec's file globs
+      (lua/**, tests/**, scripts/**), so nothing mechanical will ever catch this
+      class there.
+  - id: new
+    severity: Minor
+    family: enumeration-claims-completeness
+    title: |
+      The narrowed Core-concepts row selector can match zero rows and still assert no offenders
+    detail: |
+      This is the 16th finding in family `enumeration-claims-completeness`. Do NOT
+      add a one-off count to this test. single_source_sweeps_spec.lua:277 now gates
+      rows on a header matching `|%s*Status%s*|`; a plan whose table spells the
+      column differently silently gets zero coverage. The same FILE already states
+      the rule twice ("finds the literals, so it cannot pass vacuously", :104-107;
+      `sites >= 4`, :170) and writes it out in prose at :243-244. The rule: every
+      selection-based guard in tests/arch asserts a non-zero selection count before
+      asserting an empty offender list — sweep the file's guards for the ones that
+      do not, rather than patching this one. Latent today: it inspects 22 rows
+      across 2 tables on this branch (measured).
+  - id: new
+    severity: Minor
+    family: rule-statement-scope-drift
+    title: |
+      `brief` is documented as "the first line of a Lua error" but now truncates every diagnosis, and its 4096 cap is dead
+    detail: |
+      This is the 2nd finding in family `rule-statement-scope-drift`. refusal.lua:268-273
+      documents and bounds brief() for Lua errors (512 chars, first line);
+      generation_runner.lua:165 applies it to every value routed to `diagnosis`,
+      including provider prose such as cliproxy_auth.diagnosis, so a multi-line
+      message loses everything after line 1 and the trailing action it carries. The
+      `:sub(1,4096)` after it is dead, since brief already caps at 512. The rule:
+      when a helper's callers widen beyond the case its doc-comment names, the
+      doc-comment and the bound move with them — or the helper gets a second entry
+      point for the wider case.
+```
