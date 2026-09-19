@@ -140,20 +140,68 @@ describe('chat_respond: scoped session integration',function()
         Recovery.deleted=old_deleted
         assert.is_true(ok);assert.equals(1,calls_deleted)
     end)
-    it('refuses answer replacement when recovery publication is unavailable',function()
-        open({'💬: question','','🤖: original','valuable answer',''})
-        local before=vim.api.nvim_buf_get_lines(buf,0,-1,false)
-        local Store=require('parley.answer_recovery');local original=Store.open
-        Store.open=function()return nil,'injected recovery IO failure'end
-        local ok,session=pcall(Respond.respond,{range=0})
-        if ok and session then
-            ok=vim.wait(5000,function()return Respond.response_snapshot(session).status=='terminal'end,1)
+    -- #261: the reported blocker. Regenerate, edit the answer while it streams
+    -- (the edit revokes the generation), then regenerate again. Before #261 the
+    -- retained on-disk snapshot said "original" while the buffer held the
+    -- partial answer; once the in-process retry cache was invalidated (a second
+    -- edit, a reload, a reopen) every retry was refused.
+    local function row_containing(needle)
+        for index,line in ipairs(vim.api.nvim_buf_get_lines(buf,0,-1,false))do
+            if line:find(needle,1,true) then return index end
         end
-        Store.open=original
-        assert.is_true(ok,tostring(session))
-        if session then assert.equals('prepare_failed',Respond.response_snapshot(session).generation.outcome)end
-        assert.equals(0,#calls)
-        assert.same(before,vim.api.nvim_buf_get_lines(buf,0,-1,false))
+    end
+    local function regenerate_then_revoke()
+        open({'💬: question','','🤖: original','valuable answer',''})
+        local first=submit()
+        output(calls[1],'partial new text')
+        wait_for(function()return buffer_contains(buf,'partial new text')end)
+        -- Where the text lands relative to the answer header is the layout's
+        -- business; the edit only has to fall inside the granted output.
+        local row=assert(row_containing('partial new text'))
+        vim.api.nvim_buf_set_text(buf,row-1,0,row-1,0,{'edited '})
+        wait_for(function()return Respond.response_snapshot(first).status=='terminal'end)
+        assert.equals('revoked',Respond.response_snapshot(first).generation.outcome)
+        return row
+    end
+    local function submit_again()
+        vim.api.nvim_win_set_cursor(0,{5,0})
+        Respond.respond({range=0})
+        wait_for(function()return #calls==2 end)
+    end
+    -- Characterization: passes before #261 through the in-process retry cache.
+    -- Kept because deleting that cache must not break the immediate retry.
+    it('regenerates immediately after a revoked regeneration',function()
+        regenerate_then_revoke(); submit_again()
+    end)
+    it('regenerates after a revoked regeneration and a further edit (#261)',function()
+        local row=regenerate_then_revoke()
+        vim.api.nvim_buf_set_text(buf,row-1,0,row-1,0,{'again '})
+        submit_again()
+    end)
+    it('regenerates after a revoked regeneration and a reload (#261)',function()
+        regenerate_then_revoke()
+        local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
+        vim.cmd('silent write!');vim.cmd('edit!')
+        submit_again()
+    end)
+    it('regenerates after a revoked regeneration, closing and reopening the chat (#261)',function()
+        regenerate_then_revoke()
+        local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
+        vim.cmd('silent write!')
+        vim.api.nvim_buf_delete(buf,{force=true})
+        vim.cmd('edit '..vim.fn.fnameescape(path));buf=vim.api.nvim_get_current_buf()
+        submit_again()
+    end)
+    it('regenerates regardless of a legacy answer-recovery directory (#261)',function()
+        local legacy=parley.config.state_dir..'/answer-recovery'
+        vim.fn.mkdir(legacy,'p');vim.uv.fs_chmod(legacy,tonumber('755',8))
+        vim.fn.writefile({'not json'},legacy..'/0.1.json')
+        local ok,err=pcall(function()
+            open({'💬: question','','🤖: original','valuable answer',''})
+            submit()
+        end)
+        vim.fn.delete(legacy,'rf')
+        assert(ok,err)
     end)
     it('supports explicit edit adoption through the registered resume command',function()
         open({'💬: first','','🤖: old first','','💬: second',''})
