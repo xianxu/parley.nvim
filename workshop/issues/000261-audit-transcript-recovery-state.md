@@ -88,11 +88,25 @@ bytes, but make that relationship explicit and restart-safe.
 - [x] Reproduce the reported edited-during-generation stuck transcript and
   compare same-process recovery with quit/reopen recovery. *(By code trace, in
   the audit Log; the executable reproduction is the regression test M1 adds.)*
-- [ ] Define the transcript source-of-truth and explicit runtime/recovery state
-  contract; fix any state that violates it.
-- [ ] Add stateful integration coverage for interruption, edit conflicts,
-  reload/reopen and subsequent successful submission.
-- [ ] Update atlas documentation and run the relevant full verification suite.
+- [x] ~~Define the transcript source-of-truth and explicit runtime/recovery state
+  contract; fix any state that violates it.~~ *(superseded 2026-09-18 by M1–M5
+  below — durable plan `workshop/plans/000261-transcript-is-the-whole-truth-plan.md`)*
+- [x] ~~Add stateful integration coverage for interruption, edit conflicts,
+  reload/reopen and subsequent successful submission.~~ *(superseded — folded into M1–M5)*
+- [x] ~~Update atlas documentation and run the relevant full verification
+  suite.~~ *(superseded — per milestone; the inventory page in M5)*
+- [ ] M1 — delete the on-disk answer-recovery store, its commands and the tools
+  privacy carve-out; the #261 blocker as regression tests; guard: a
+  `state_dir` reader declares why it cannot block.
+- [ ] M2 — `prev_answer` on the document coordinator (#255): same-chat and
+  sub-chat context substitution; ancestors read the parent's live buffer.
+- [ ] M3 — processes die for certain: children lead their own process group
+  (`detached`), Stop kills a generation's scope TERM→KILL, unscoped helpers get
+  a deadline, every spawn settles, leaving Neovim kills every group.
+- [ ] M4 — every wait a generation holds settles (W1–W16); a stopped response
+  never holds an admission slot, including across `:bd`/reopen.
+- [ ] M5 — one refusal vocabulary: no silent refusal, no raw token; the
+  inventory and restart invariant in `atlas/chat/transcript_truth.md`.
 
 ## Log
 
