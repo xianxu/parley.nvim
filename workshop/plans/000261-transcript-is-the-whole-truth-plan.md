@@ -69,7 +69,7 @@ must *not* be. So:
 | `state` — `holds`: does a generation still hold a live grant on an entity | `lua/parley/document/state.lua` | modified |
 | `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
 | `attempt` — `open_stop_window`: TERM, then the escalate effect at +2 s, for a stop whose cause is stop, deadline or leave; `kill_cause` | `lua/parley/attempt.lua` | modified |
-| M5 · `refusal` — `describe`, `TOKENS`, `INTERNAL`, `PREFIX` | `lua/parley/refusal.lua` | new |
+| `refusal` — `describe`, `TOKENS`, `INTERNAL`, `PREFIX`, `REVOKED` (words by revocation cause), `USER_STOP` | `lua/parley/refusal.lua` | new |
 
 - **`State.holds(handle, generation, entity)`** (M2) is true when the
   document's state has a grant with that generation and entity whose status is
@@ -1489,7 +1489,7 @@ module owns the words.
 **Files:** Create `lua/parley/refusal.lua` and `tests/unit/refusal_spec.lua`
 (routed under `chat/lifecycle`).
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - Every `TOKENS` entry has a non-empty `what`, and an `action` that matches
     `:Parley%u` or one of `submit again`, `try again in a moment`, `wait for`,
     `edit`.
@@ -1501,7 +1501,7 @@ module owns the words.
     token.
   - With `tasker.held()` stubbed non-empty, the three capacity tokens carry the
     pid.
-- [ ] **Step 2:** FAIL. **Step 3:** Implement: one `TOKENS` or `INTERNAL` row per
+- [x] **Step 2:** FAIL. **Step 3:** Implement: one `TOKENS` or `INTERNAL` row per
   literal the Task 5.2 scan finds. **Step 4:** PASS. **Step 5:** Commit.
 
 ### Task 5.2: The guard — every producer literal has words
