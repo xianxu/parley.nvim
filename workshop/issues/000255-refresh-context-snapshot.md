@@ -69,3 +69,13 @@ Filed at the user's request after #254 reached codecomplete. Agreed policy:
 freeze each request's context, substituting an available previous completed
 answer for an earlier exchange whose refresh is still incomplete. Implementation
 is follow-up work, not part of #254's current live-testing build.
+
+### 2026-09-18 — folded into parley#261
+
+Operator decision: this work is delivered by parley#261 (see its Revisions,
+2026-09-18). #261 deletes the on-disk recovery store this plan meant to read
+from. The previous answer instead lives in an in-memory `prev_answer` slot on
+the document coordinator's exchange structure, from the moment regeneration
+removes it until that generation ends. Ancestor context in sub-chats is
+covered too. This issue's Spec and Done-when are carried into #261's Done-when,
+and it closes when #261 closes.
