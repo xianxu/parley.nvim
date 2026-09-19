@@ -671,7 +671,13 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 
 	local temp_file = D.query_dir ..
 		"/" .. logger.now() .. "." .. string.format("%x", math.random(0, 0xFFFFFF)) .. ".json"
-	helpers.table_to_file(payload, temp_file)
+	-- curl posts this file (`-d @file`): a body that was not written must stop
+	-- the request here, not fail later as an unexplained transport error.
+	local wrote, write_err = helpers.table_to_file(payload, temp_file)
+	if not wrote then
+		abort_before_start("request body not written: " .. tostring(write_err))
+		return
+	end
 
 	-- Transport-file lifecycle (#231 BR-7). The body above is what curl posts
 	-- (`-d @file`). A text-only body stays behind as a debug aid, bounded by the

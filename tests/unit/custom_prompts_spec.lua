@@ -176,3 +176,66 @@ describe("system_prompt_picker._build_items source tags", function()
         vim.fn.delete(tmpdir, "rf")
     end)
 end)
+
+-- #261 M1 review BR-14/BR-15: the picker tells the user a prompt was saved only
+-- when it was, and reads the prompt file once per build, not once per prompt.
+describe("system_prompt_picker writes and reads", function()
+    local picker = require("parley.system_prompt_picker")
+    local logger = require("parley.logger")
+    local tmpdir, notified, warnings, notify, warning
+    local function plugin(names)
+        local p = { _system_prompts = {}, system_prompts = {}, _builtin_system_prompts = {},
+            _state = { system_prompt = "default" }, logger = { info = function() end } }
+        for _, name in ipairs(names) do
+            p._system_prompts[#p._system_prompts + 1] = name
+            p.system_prompts[name] = { system_prompt = "text of " .. name }
+        end
+        return p
+    end
+    before_each(function()
+        tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-picker-writes-" .. string.format("%x", math.random(0, 0xFFFFFF))
+        vim.fn.mkdir(tmpdir, "p")
+        custom_prompts.setup(helper, tmpdir)
+        notified, warnings = {}, {}
+        notify, warning = vim.notify, logger.warning
+        vim.notify = function(msg, level) notified[#notified + 1] = { msg = msg, level = level } end
+        logger.warning = function(msg) warnings[#warnings + 1] = msg end
+    end)
+    after_each(function()
+        vim.notify, logger.warning = notify, warning
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("P1: a refused save keeps the edit and does not claim it was saved", function()
+        vim.fn.writefile({ "{ not json" }, custom_prompts.file_path())
+        local p = plugin({ "mine" })
+        picker.edit_prompt(p, "mine")
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "my careful edit" })
+        vim.cmd("write")
+        assert.is_true(vim.bo[buf].modified, "the edit was marked saved and would be wiped")
+        assert.same({ "{ not json" }, vim.fn.readfile(custom_prompts.file_path()))
+        for _, n in ipairs(notified) do
+            assert.is_nil(n.msg:find("System prompt saved", 1, true), "claimed a save that did not happen")
+        end
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("P2: a successful save clears modified and says so", function()
+        local p = plugin({ "mine" })
+        picker.edit_prompt(p, "mine")
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "saved text" })
+        vim.cmd("write")
+        assert.is_false(vim.bo[buf].modified)
+        assert.equals("saved text", custom_prompts.get("mine").system_prompt)
+        if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
+    end)
+
+    it("P3: building the list reads a malformed file once, however many prompts", function()
+        helper.table_to_file({ broken = { system_prompt = 3 } }, custom_prompts.file_path())
+        warnings = {}
+        picker._build_items(plugin({ "a", "b", "c", "d", "e", "f" }))
+        assert.equals(1, #warnings, table.concat(warnings, "\n"))
+    end)
+end)

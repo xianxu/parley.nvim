@@ -9,6 +9,9 @@ local custom_prompts = require("parley.custom_prompts")
 -- Build the sorted item list from a plugin state. Exposed for testing.
 function M._build_items(plugin)
     local items = {}
+    -- One read of the custom prompt file per build, not one per prompt: its
+    -- diagnostics belong to the user's action, never to a loop (#261 BR-15).
+    local loaded = custom_prompts.load()
     for _, prompt_name in ipairs(plugin._system_prompts) do
         local prompt = plugin.system_prompts[prompt_name]
 
@@ -17,7 +20,7 @@ function M._build_items(plugin)
             description = description:sub(1, 80) .. "..."
         end
 
-        local source = custom_prompts.source(prompt_name, plugin._builtin_system_prompts or {})
+        local source = custom_prompts.source(prompt_name, plugin._builtin_system_prompts or {}, loaded)
         local source_tag = source == "builtin" and "" or " [" .. source .. "]"
 
         local is_current = prompt_name == plugin._state.system_prompt
@@ -101,7 +104,13 @@ function M.edit_prompt(plugin, prompt_name, on_done)
         buffer = buf,
         callback = function()
             local content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-            custom_prompts.set(prompt_name, { system_prompt = content })
+            -- Say "saved" only when it was: a refused write keeps the buffer
+            -- modified, so the edit survives (#261 M1 review BR-14).
+            if not custom_prompts.set(prompt_name, { system_prompt = content }) then
+                vim.notify("System prompt NOT saved: " .. prompt_name
+                    .. " — the edit stays in this buffer", vim.log.levels.ERROR)
+                return
+            end
             refresh_prompts(plugin)
             vim.bo[buf].modified = false
             plugin.logger.info("System prompt saved: " .. prompt_name)
@@ -161,8 +170,12 @@ function M.system_prompt_picker(plugin)
                             context.focus_prompt()
                             return
                         end
+                        if not custom_prompts.set(name, { system_prompt = "" }) then
+                            vim.notify("System prompt NOT created: " .. name, vim.log.levels.ERROR)
+                            context.focus_prompt()
+                            return
+                        end
                         close_fn()
-                        custom_prompts.set(name, { system_prompt = "" })
                         refresh_prompts(plugin)
                         vim.schedule(function()
                             M.edit_prompt(plugin, name)
@@ -194,7 +207,11 @@ function M.system_prompt_picker(plugin)
                             context.focus_prompt()
                             return
                         end
-                        custom_prompts.remove(item.name)
+                        if not custom_prompts.remove(item.name) then
+                            vim.notify("System prompt NOT deleted: " .. item.name, vim.log.levels.ERROR)
+                            context.focus_prompt()
+                            return
+                        end
                         refresh_prompts(plugin)
                         -- If deleted prompt was active, fall back
                         if plugin._state.system_prompt == item.name and source == "custom" then

@@ -225,11 +225,12 @@ describe("helper I/O functions", function()
             -- A JSON array decodes to a Lua table and is returned: readers
             -- index fields on it and find nil, which already degrades. Refusing
             -- it would also refuse `{}`, which decodes to the same empty table.
-            for label, content in pairs({
-                ["invalid JSON"] = "{",
-                ["a JSON string"] = '"x"',
-                ["a JSON number"] = "3",
+            for _, case in ipairs({
+                { label = "invalid JSON", content = "{" },
+                { label = "a JSON string", content = '"x"' },
+                { label = "a JSON number", content = "3" },
             }) do
+                local label, content = case.label, case.content
                 it("returns nil for " .. label .. " and names the file", function()
                     local path = tmpdir .. "/corrupt.json"
                     local f = io.open(path, "w"); f:write(content); f:close()
@@ -281,6 +282,15 @@ describe("helper I/O functions", function()
                 assert.equals(1, #warnings)
                 assert.truthy(warnings[1]:find("300 wrongly typed fields", 1, true))
             end)
+        end)
+
+        -- #261 M1 review BR-14: a caller that tells the user something was
+        -- saved must be able to know whether it was.
+        it("F3d: table_to_file reports whether the file was written", function()
+            assert.is_true(helper.table_to_file({ a = 1 }, tmpdir .. "/ok.json"))
+            local ok, err = helper.table_to_file({ a = 1 }, tmpdir .. "/missing-dir/x.json")
+            assert.is_nil(ok)
+            assert.is_string(err)
         end)
 
         it("F4: table_to_file with nested table serializes correctly", function()

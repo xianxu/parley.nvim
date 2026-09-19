@@ -569,16 +569,23 @@ end
 
 ---@param tbl table # the table to be stored
 ---@param file_path string # the file path where the table will be stored as json
+--- Returns true once the file is written; nil and the reason otherwise, so a
+--- caller that tells the user something was saved can know whether it was
+--- (#261 M1 review BR-14).
+---@return boolean|nil ok
+---@return string|nil err
 _H.table_to_file = function(tbl, file_path)
 	local json = vim.json.encode(tbl)
 
-	local file = io.open(file_path, "w")
+	local file, open_err = io.open(file_path, "w")
 	if not file then
 		logger.warning("Failed to open file for writing: " .. file_path)
-		return
+		return nil, tostring(open_err)
 	end
-	file:write(json)
+	local wrote, write_err = file:write(json)
 	file:close()
+	if not wrote then return nil, tostring(write_err) end
+	return true
 end
 
 ---@param tbl table # table to encode as JSON

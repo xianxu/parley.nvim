@@ -65,8 +65,19 @@ describe("sidecars under the state directory degrade", function()
                 local path = state_dir .. "/" .. sidecar.file
                 vim.fn.mkdir(state_dir, "p")
                 vim.fn.writefile({ case.body }, path)
+                -- #261 M1 review BR-15: a file's diagnostics belong to its
+                -- parse, and a parse to the user's action — at most one
+                -- warning naming this file, however the reader loops.
+                local logger, warning = require("parley.logger"), require("parley.logger").warning
+                local about = 0
+                logger.warning = function(msg, ...)
+                    if tostring(msg):find(sidecar.file, 1, true) then about = about + 1 end
+                    return warning(msg, ...)
+                end
                 local ok, err = pcall(sidecar.exercise, parley)
+                logger.warning = warning
                 assert(ok, err)
+                assert.is_true(about <= 1, sidecar.file .. " warned " .. about .. " times in one read")
                 -- An authored file's writes keep what the read filtered out.
                 if case.typed and sidecar.writes == "preserve" then sidecar.preserve(parley, path) end
                 submits()

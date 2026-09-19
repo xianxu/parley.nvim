@@ -581,6 +581,27 @@ fix the class, not the site).
 - **Lessons:** three rules added to `workshop/lessons.md`.
 - **Suite:** `make test JOBS=4` passes, with 373 spec files and exit 0.
 
+### 2026-09-19 — M1 boundary review, round 2: REWORK, and how each finding was disposed
+
+Round 1's fix for BR-5 introduced a Critical, BR-14: the picker ignored
+`set`'s new `false` return, reported "System prompt saved", and wiped the
+edit. The gate said the review was not converging.
+- **BR-14.** Each class was swept, and each has a guard; see the plan's
+  Revisions (2026-09-19, round 2).
+  - `table_to_file` reports whether it wrote, through `save`, `set`, `remove`
+    and `rename`.
+  - The picker announces a save only on success, and keeps the edit otherwise.
+  - The dispatcher aborts a request whose body was not written.
+  - A guard fails any sidecar write called as a bare statement unless it is
+    declared.
+- **BR-15.** The picker reads the prompt file once per build. The degrade
+  spec now bounds warnings per user action.
+- **BR-16.** The vault token decode is guarded, and a new
+  `json_decode_spec` fails any unguarded `vim.json.decode`.
+- **Counterfactuals.** Each fix, when reverted, turns its guard red.
+- **Suite.** `make test JOBS=4` passes, with 373 files plus the table-row fix.
+- **Lessons.** Four rules added.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

@@ -52,6 +52,27 @@ describe("arch: every state-directory reader is exercised corrupt", function()
             "declare writes = 'rewrite' with a why, or writes = 'preserve' with a preserve check")
     end)
 
+    -- #261 M1 review BR-14: a write that reports whether it happened must be
+    -- consumed by whatever tells the user it happened. A write called as a bare
+    -- statement drops that report; each such site is declared, with why losing
+    -- the result is harmless.
+    it("consumes the result of every sidecar write, or says why not", function()
+        local DROPPED = {
+            ["lua/parley/vault.lua"] = "the copilot bearer cache; a failed write re-fetches and has already warned",
+            ["lua/parley/chat_respond.lua"] = "the remote-reference cache; a failed write re-fetches and has already warned",
+        }
+        local offenders = {}
+        for _, file in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
+            for n, line in ipairs(vim.fn.readfile(file)) do
+                local dropped = line:match("^%s*[%w_.]*table_to_file%(") or line:match("^%s*[%w_.]*table_to_file_atomic%(")
+                    or line:match("^%s*[%w_.]*custom_prompts%.[%a_]+%(") and not line:match("custom_prompts%.load%(")
+                        and not line:match("custom_prompts%.get%(") and not line:match("custom_prompts%.setup%(")
+                if dropped and not DROPPED[file] then offenders[#offenders + 1] = file .. ":" .. n end
+            end
+        end
+        assert.same({}, offenders, "consume the write's result, or declare the site in DROPPED with why")
+    end)
+
     it("declares nothing that no longer reads it", function()
         local found, stale = {}, {}
         for _, file in ipairs(hits) do found[file] = true end

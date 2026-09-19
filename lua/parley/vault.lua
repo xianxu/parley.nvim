@@ -212,8 +212,15 @@ V.refresh_copilot_bearer = function(callback)
 			return
 		end
 
-		V._state.copilot_bearer = vim.json.decode(stdout)
-		secrets.copilot_bearer = V._state.copilot_bearer.token
+		-- External output, parsed at the boundary (#261 M1 review BR-16): curl
+		-- exits 0 on an HTML proxy page or an empty body.
+		local decoded_ok, fetched = pcall(vim.json.decode, stdout)
+		if not decoded_ok or type(fetched) ~= "table" or type(fetched.token) ~= "string" then
+			logger.error("copilot bearer resolve failed: the token endpoint did not return a token")
+			return
+		end
+		V._state.copilot_bearer = fetched
+		secrets.copilot_bearer = fetched.token
 		helpers.table_to_file(V._state, state_file)
 
 		logger.debug("vault refresh_copilot_bearer: token resolved, running callback", true)

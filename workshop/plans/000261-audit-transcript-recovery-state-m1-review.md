@@ -178,3 +178,235 @@ findings:
       atlas/providers/tool_execution.md:12 is a two-word orphan line; :142 and :200 were joined
       into long single lines by the deletions. Reflow those three paragraphs.
 ```
+
+---
+
+## Re-review — 2026-09-19T00:36:19-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 261 — Audit transcript as the complete recovery state |
+| repo | parley.nvim |
+| issue file | workshop/issues/000261-audit-transcript-recovery-state.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | ff5ed804a7d58499a2964235f9897db53f2c85d3..55fe2cdef8d0c4c620ba1e0257d4ba527ef0bafc |
+| command | sdlc milestone-close --issue 261 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-19T00:36:19-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+M1 delivers its purpose: the four recovery modules, the two commands, the tools privacy carve-out and the atlas page are gone (the plan's removal query now returns exactly one hit, the legacy-directory test); the #261 blocker is pinned by four independent regression tests that pass 31/31; every state-directory sidecar is parsed once at one boundary; and the census that guards the class is now genuinely effective — I planted an untracked `lua/parley/zz_probe_reader.lua` returning `config.state_dir` and it went red, the exact counterfactual that passed green last round (BR-6 confirmed fixed, not merely claimed). All twelve prior findings are disposed below, eleven of them `addressed` with verified evidence. What blocks SHIP is a regression this round's own BR-5 fix introduced: `custom_prompts.set` now returns `false` instead of raising, and the system-prompt editor's `BufWriteCmd` never reads that return — I reproduced it live, the buffer is marked unmodified (`bufhidden=wipe` then discards the text), the file is untouched, and the user is told **"System prompt saved"**. Before this diff the same path raised and the edit survived. That is the second finding in the `returned-handle-has-no-consumer` family, so the fix owed is the rule and its enumeration, not the one call site.
+
+## 1. Strengths
+
+- **`tests/integration/chat_respond_spec.lua:118-181`** — the reported blocker is reproduced four ways (further edit, reload, close-and-reopen, legacy directory on disk) rather than once, and the "immediately" case is explicitly labelled a characterization test. Ran green here: 31/31.
+- **`tests/arch/arch_helper.lua:79-100` + `tests/unit/arch_helper_spec.lua:118-145`** — BR-6 was swept as a rule, not a site: six index-listing guards moved to `worktree_files`, and a unit test now fails any arch spec that reaches for `git ls-files` without `--others` or `git grep` without `--untracked`. Verified by planting an untracked reader (census failed with `*[1] = 'lua/parley/zz_probe_reader.lua'`).
+- **One parse boundary, provably** — `grep -rn "json.decode" lua/` shows no unguarded decode of any state-directory file, and `grep -rl state_dir lua/` returns exactly the four declared readers plus the two `PATH_ONLY` entries, so `tests/arch/sidecar_authority_spec.lua` is not trivially satisfiable (ARCH-DRY).
+- **`tests/unit/helper_io_spec.lua:270-280`** — BR-7's aggregation has a real oracle (300 bad leaves → exactly one warning naming the count), not a restatement of the implementation.
+- **Docs gate is clean** — atlas page deleted, `atlas/index.md` entry removed, traceability block and three stale file entries removed, `README.md:82` sentence removed, `tests/manual/chat-concurrency.md` rewritten to the undo story, and the target's open question answered in a Revisions entry.
+
+## 2. Critical findings
+
+**C1 — `lua/parley/system_prompt_picker.lua:104`: the write refusal BR-5 introduced has no consumer, so an edited system prompt is discarded under a "saved" message.**
+
+> **This is the 2nd finding in family `returned-handle-has-no-consumer`.** Earlier rounds fixed instances. Do NOT fix this instance — state the rule that covers all of them, and fix that.
+
+Live reproduction (headless, this HEAD): open `edit_prompt(parley, 'mine')`, corrupt `custom_system_prompts.json` behind the editor (a crash mid-`table_to_file` does this — `helper.lua:572-582` is not atomic), type a new prompt, `:w` →
+
+```
+modified before write = true
+modified after write  = false        <- bufhidden=wipe now discards the text
+file on disk          = { not json
+notify[1]: System prompt saved: mine
+```
+
+`custom_prompts.set` (`custom_prompts.lua:71-78`) returns `false`; `:104` ignores it, `:106` clears `modified`, `:107-108` claim success. Before this diff the same path *raised* from the unguarded `vim.json.decode`, so the write failed loudly and the text was preserved — this is a behavior regression, in the round whose commit subject is "writes keep authored data".
+
+**The rule to fix, not the site:** *a call that reports whether an effect happened must have its outcome consumed by whatever tells the user it happened.* The enumeration this rule implies, for the surface this window touched:
+
+| producer | outcome | consumer today |
+|---|---|---|
+| `custom_prompts.set` | `true/false` | `system_prompt_picker.lua:104` drops it; `:165` drops it (benign — `edit_prompt` re-checks) |
+| `custom_prompts.remove` | `true/false` | `:197` drops it |
+| `custom_prompts.rename` | `true/false` | `:237` reads it ✓ |
+| `custom_prompts.save` → `helper.table_to_file` (`helper.lua:576-579`) | returns nothing on open failure | `set` returns `true` even when nothing was written — same false "saved" on an unwritable state dir |
+| finalize adapter `{cancel=…}` | handle | `generation_runner.lua:502` discards it (BR-10, deferred to W18) |
+
+Sweep that table in one round: give `table_to_file` a boolean, propagate it through `save`/`set`/`remove`, and make `:104` keep `modified = true` and report the refusal instead of success. Then pin it — a test that writes a corrupt prompts file, drives the `BufWriteCmd`, and asserts `modified` is still `true` and no "saved" message was emitted. Without that test the disposition is `not-addressed` by this review's own rule.
+
+## 3. Important findings
+
+**I1 — `lua/parley/custom_prompts.lua:30`: the parse is per call and the call is per item, so the picker emits one warning per prompt.**
+
+> **This is the 2nd finding in family `per-item-diagnostic-unbounded`.** Earlier rounds fixed instances. Do NOT fix this instance — state the rule that covers all of them, and fix that.
+
+BR-7 made `conform` warn once per *call*; `load()` re-reads and re-conforms the file on *every* call, and `system_prompt_picker.lua:20` calls `source()` → `get()` → `load()` once per prompt. Measured on this HEAD:
+
+```
+one wrongly typed entry : items=5  warnings_on_build=5
+unreadable file         : items=5  warnings_on_build=10
+```
+
+Each warning opens/writes/closes the log file and schedules a `vim.notify` (`logger.lua:89-101`), so opening the system-prompt picker is a 5–10 notification storm that scales with the user's prompt count — the class M1 exists to remove, one level up from where BR-7 fixed it. The other three sidecars avoid this by memoizing (`chat_respond.lua:255`, `_parley._state`); `custom_prompts` alone re-reads.
+
+**The rule:** *a diagnostic about a file's contents belongs to that file's parse, and a parse belongs to a user action — never to a loop iteration.* Fix it at that level (memoize the authored read per action, or hoist the read out of `_build_items`), and make it self-enforcing the way BR-6 was: `sidecar_degrade_spec` already drives each reader through `exercise()`, so count `logger.warning` calls there and assert ≤1 per file per exercise. That assertion catches every future member of the family, including this one.
+
+**I2 — `lua/parley/vault.lua:215`: the token endpoint's body is decoded unguarded, forty lines below the read this diff just taught to parse at the boundary.**
+
+`V._state.copilot_bearer = vim.json.decode(stdout)` then `.token` is indexed. `curl -s` exits 0 on an HTML proxy/captive-portal page or an empty body, so a non-JSON 200 raises inside the tasker callback and `callback()` — the continuation that resumes the provider request — is never reached. This is the only unguarded decode of external process output left in `lua/`: all nine siblings in `oauth.lua` (`:543, :866, :1616, :1665, :1691, :1814, :1857, :1943, :1985`) are `pcall`ed, so the consistent form already exists (ARCH-SECURE: an external API body is untrusted; ARCH-DRY: match the siblings). The diff hardened this function's *file* input (`:174-176`) and left its *network* input, which is what writes that file. W6 (`plan:1285`) names only the `code~=0` and early-return paths that skip the callback — the raise is a third path and the row does not have it. Cheap disposition: `pcall` the decode, call back with the error, and add the raise path to W6.
+
+## 4. Minor findings
+
+- **`tests/unit/helper_io_spec.lua:228`** — the F3b cases are generated by `for label, content in pairs({…})`, so test order and names vary between runs. **This is the 2nd finding in family `nondeterministic-test-generation`** (BR-11 fixed `sidecar_degrade_spec` this round; this file introduced a new one in the same commit). Don't just convert this site: state the rule — *generated `it(` cases iterate an ordered list, never a keyed table* — add it to `workshop/lessons.md` alongside this round's three entries, since the family now has two instances one commit apart and no guard. A mechanical guard is possible but fragile (a `pairs(` loop whose body contains `it(` is grep-able but noisy across ~5 pre-existing arch specs); the lesson entry plus the two conversions is the proportionate class fix.
+- **`workshop/plans/000261-transcript-is-the-whole-truth-plan.md:277-598`** — every M1 step checkbox is still `- [ ]`, as is the `- [ ] M1` row in the issue's `## Plan`, although M1 is complete. The durable plan is the record of what landed (AGENTS.md §8); tick them at the close.
+- `helper.conform` (`helper.lua:706`) mutates its argument *and* returns it, and `file_to_table:674` has to wrap the call in parentheses to drop the second return. For a helper M2–M5 will consume, `(tbl, dropped)` from a copy, or a documented mutate-only contract, is the steadier surface.
+
+## 5. Test coverage notes
+
+- Verified green on this HEAD, individually: `sidecar_degrade_spec` (14), `sidecar_authority_spec` (4), `arch_helper_spec` (9), `custom_prompts_spec` (17), `helper_io_spec` (39), `chat_respond_spec` (31), `single_source_sweeps_spec` (23), `superseded_comment_spec` (9), `tool_process_scope_spec` (15), `async_builtin_spec` (18), `tool_dispatch_capture_spec` (14), `batch_lifecycle_spec` (7), `tool_process_scope_spec` unit (7).
+- BR-5's A2b/A2c are proper oracles: A2c asserts `set` returns `false` and the corrupt file is byte-identical afterwards, both of which the pre-fix `load()`-based write fails by construction.
+- The coverage gap is C1: the *refusal* half of BR-5's fix has a unit test (`set` returns false) but no test of what the refusal does to the user — which is where the data loss is. A picker-level test is the one this diff needed.
+- `sidecar_degrade_spec` asserts only "does not throw / reaches the provider". Adding the warning-count assertion (I1) turns it into the enforcement point for the diagnostics class too, at no extra fixture cost.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — pass.** One parse boundary for four sidecars; six index-listing guards collapsed into `worktree_files`; the sidecar list is a single source for both the census and the behaviour spec.
+- **ARCH-PURE — pass with a note.** `conform` is declared under Integration points, so embedding `logger.warning` in it is within its declared kind; but the transformation itself is pure and the tests must stub the logger to observe it. Returning `dropped` and letting `file_to_table` emit the single warning would make the "one warning per parse" property (I1) structural rather than conventional.
+- **ARCH-PURPOSE — pass.** Shadow-sweep run: no consumer of the deleted store remains (removal query returns only the legacy test), and the census derives from the same table the degrade spec drives. The one deferred item (naming the legacy directory) is a genuine separable extension, not the point of the issue.
+- **ARCH-MOCK — pass.** BR-9 fixed: the vault exercise now drives `fake_process` behind `tasker._uv` on a fresh module instance. Note for M3: that exercise leaves one unresolved fake record in the shared tasker for the rest of the file — harmless today, but M3/M4 will assert `stats().active`, so drain it when those assertions arrive.
+- **ARCH-CONSTRAINTS — flag, see I1.** The per-item diagnostic is the only envelope breach in the window; `conform`'s recursion is bounded by schema depth (≤3), so hostile nesting cannot blow the stack, and the remote cache is conformed once per session.
+- **ARCH-SECURE — flag, see I2.** Sidecar inputs are now typed at the boundary; the external body that feeds one of them is not. Also worth carrying forward: the census keys on the literal string `state_dir`, so a future reader that receives the path under another parameter name escapes it. All six current hits contain the literal, so there is no hole today — but M5's inventory page is the place to say that the census's reach is lexical.
+- **ARCH-ORDER — pass.** M1 adds no state carried between events; the read result's three legal values (`{}` / table / `nil`) are enumerated in the doc comment at `custom_prompts.lua:39-42`. C1 is the reminder that a tri-state read is only as good as the branch that consumes it.
+- **ARCH-FUNERAL — pass for this window.** Nothing durable is created; the legacy directory's end is named in Task 5.4 (BR-3). Keep an eye on the remote-reference cache: still unpruned, and now conformed on every load.
+
+## 7. Plan revision recommendations
+
+- **W6 (`plan:1285`)** — add the third non-calling path: `vim.json.decode(stdout)` at `vault.lua:215` raises inside the callback, so the continuation is skipped exactly as on `code~=0`. Today the row promises "call back with the error on both paths" and there are three.
+- **Task 1.4 Step 2 (`plan:472-490`)** — the embedded body shows `file_to_table` with no `schema` parameter and no `conform`; the code has both. The Core-concepts row was corrected but the body was not. Either fold the schema into the body or, if the operator's "the code is authoritative" rule (Revisions, 2026-09-18) is meant to cover this, add one line to Task 1.4 saying so, so a reader of the task does not implement the superseded shape.
+- **A `## Revisions` entry for M1's close** recording: (a) the degrade spec reads the remote cache cold rather than through a stubbed `oauth.fetch_content` (Step 3's stated method), and (b) the `custom_prompts` read/write split (`read_authored`) that Task 1.4 did not anticipate — the Core-concepts table gained the row, but no Revisions entry explains why the task grew a second modified module.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      W13 now names all ten Deferred owners with a scope reason each (verified: nine live owners plus the deleted chat_recovery:258); W16 corrected to response_topic.lua:80 from :154 with s.started at :59 — all three line references check out.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Task 3.3 now names tasker_run_spec.lua, its 43 option-less calls (grep -c confirms 43) and a re-grep that would also surface chat_async_tools_spec.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Task 5.4's inventory now names the legacy directory as safe to delete; the page it belongs to does not exist until M5, so deferring it there is the right home.
+  - id: BR-4
+    disposition: withdrawn
+    note: |
+      Operator decision recorded in the plan's Revisions with an explicit authority rule; the divergence it predicted has already appeared (Task 1.4's body lacks the schema arg) and that rule governs it — see the plan-revision recommendation rather than re-raising.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      read_authored/load split plus A2b/A2c pin the file-preservation half; the writes/preserve declaration is enforced by the census. The refusal half it introduced is now C1.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Verified by counterfactual: an untracked lua/parley/zz_probe_reader.lua returning config.state_dir turns the census red, and arch_helper_spec fails any arch spec that lists through the index.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      conform emits one warning per call with a count and a five-path sample; 300 bad leaves produce exactly one (helper_io_spec). The per-call-per-item level above it is I1.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      submits() nils parley._remote_reference_cache immediately before the command, so resolve_remote_references reads the corrupt file on the submission path (get_chat_remote_reference_cache is unconditional at chat_respond.lua:1200).
+  - id: BR-9
+    disposition: addressed
+    note: |
+      The vault exercise drives tests/helpers/fake_process.lua behind tasker._uv on a fresh module instance, restoring both; nothing leaks into the shared vault module.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      Carried into the plan as M4 row W18 with both options named and a cancellation-during-finalize test.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      sidecar_degrade_spec builds a `cases` list and iterates it with ipairs. A new instance appeared elsewhere in the same commit — see the Minor.
+  - id: BR-12
+    disposition: addressed
+    note: |
+      The exit-code assertion moved next to its systemlist call inside arch_helper.worktree_files; the census now asserts a floor on the hit count instead.
+  - id: BR-13
+    disposition: addressed
+    note: |
+      atlas/providers/tool_execution.md:11-19, :142-147 and :194-209 are reflowed; no orphan or over-joined line remains in the touched paragraphs.
+findings:
+  - id: new
+    severity: Critical
+    family: returned-handle-has-no-consumer
+    title: |
+      custom_prompts.set's new false return is dropped by the prompt editor, which clears `modified` and reports "System prompt saved"
+    detail: |
+      2nd in this family — fix the rule, not the site: every call reporting whether an effect
+      happened must be consumed by whatever tells the user it happened. Enumeration to sweep:
+      helper.table_to_file (returns nothing on open failure), custom_prompts.save/set/remove,
+      system_prompt_picker.lua:104 and :197, plus the W18 handle. Reproduced live: with an
+      unreadable custom_system_prompts.json, :w on an edited prompt leaves the file untouched,
+      sets modified=false (bufhidden=wipe then discards the text) and notifies "System prompt
+      saved: mine". Before this diff the same path raised and the edit survived. Needs a
+      picker-level regression test that fails without the fix.
+  - id: new
+    severity: Important
+    family: per-item-diagnostic-unbounded
+    title: |
+      custom_prompts.load re-reads and re-conforms the file on every call, and the picker calls it once per prompt
+    detail: |
+      2nd in this family — BR-7 fixed the per-field warning; the call itself is per item.
+      system_prompt_picker.lua:20 calls source() -> get() -> load() for every prompt. Measured on
+      this HEAD: one wrongly typed entry gives 5 warnings per picker build, an unreadable file
+      gives 10, scaling with the user's prompt count; each is a log-file open plus a vim.notify.
+      The rule: a diagnostic about a file's contents belongs to that file's parse, and a parse
+      belongs to a user action, never to a loop iteration. Enforce it where the family can be
+      caught wholesale — count logger.warning calls per exercise in sidecar_degrade_spec and
+      assert at most one per file.
+  - id: new
+    severity: Important
+    family: untrusted-input-unparsed
+    title: |
+      vault.lua:215 decodes the copilot token endpoint's body without a pcall, in the function whose file read this diff just hardened
+    detail: |
+      curl -s exits 0 on an HTML proxy page or an empty body, so a non-JSON 200 raises inside the
+      tasker callback and the continuation that resumes the provider request is never reached.
+      It is the only unguarded decode of external process output left in lua/ — all nine siblings
+      in oauth.lua are pcall'ed. W6 names the code~=0 and early-return paths that skip the
+      callback but not this third one; either pcall it now and call back with the error, or add
+      the raise path to W6.
+  - id: new
+    severity: Minor
+    family: nondeterministic-test-generation
+    title: |
+      helper_io_spec.lua:228 generates its F3b cases by iterating a keyed table with pairs
+    detail: |
+      2nd in this family, introduced in the same commit that fixed BR-11's instance, and there is
+      no guard to catch the next one. State the rule instead of converting only this site:
+      generated `it(` cases iterate an ordered list, never a keyed table — add it to
+      workshop/lessons.md beside this round's three entries. A mechanical guard is possible but
+      noisy against roughly five pre-existing pairs-driven arch specs, so the lesson plus the two
+      conversions is the proportionate class fix.
+  - id: new
+    severity: Minor
+    family: plan-tracking-not-updated
+    title: |
+      Every M1 step in the durable plan is still unticked, as is the M1 row in the issue's Plan
+    detail: |
+      workshop/plans/000261-transcript-is-the-whole-truth-plan.md:277-598 and the issue's
+      `- [ ] M1` row. The durable plan is the record of what landed (AGENTS.md section 8); with no
+      box ticked a reader cannot tell M1 from M2 by looking at it.
+```

@@ -64,13 +64,26 @@ return {
             { fixture = 3 },
             { fixture = { system_prompt = 3 } },
         },
+        -- One user action: building the prompt picker, the loop that once re-read
+        -- the file per prompt. The spy calls through, so the view it records is
+        -- the one the picker used.
         exercise = function()
             local prompts = require("parley.custom_prompts")
-            for name, prompt in pairs(prompts.load()) do
+            local load, views = prompts.load, {}
+            prompts.load = function() local view = load(); views[#views + 1] = view; return view end
+            local names = {}
+            for i = 1, 6 do names[i] = "p" .. i end
+            local plugin = { _system_prompts = names, system_prompts = {}, _builtin_system_prompts = {},
+                _state = { system_prompt = "p1" } }
+            for _, name in ipairs(names) do plugin.system_prompts[name] = { system_prompt = name } end
+            local ok, err = pcall(require("parley.system_prompt_picker")._build_items, plugin)
+            prompts.load = load
+            assert(ok, err)
+            assert(#views == 1, "the picker read the prompt file " .. #views .. " times")
+            for name, prompt in pairs(views[1]) do
                 assert(type(prompt) == "table" and type(prompt.system_prompt) == "string",
                     "custom prompt " .. tostring(name) .. " reached a caller malformed")
             end
-            prompts.source("fixture", {})
         end,
         -- A write through the module keeps the entry the view filtered out.
         preserve = function(_, path)

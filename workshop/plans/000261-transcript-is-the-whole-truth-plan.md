@@ -106,7 +106,7 @@ must *not* be. So:
 |------|----------|--------|-------|
 | `chat_recovery` and `response_recovery` — recovery IO, pickers, guards | `lua/parley/chat_recovery.lua`, `lua/parley/response_recovery.lua` | deleted | state dir, pickers |
 | `helper` — `file_to_table` made total, with an optional per-reader schema; `conform` drops wrongly typed fields | `lua/parley/helper.lua` | modified | JSON sidecar files |
-| `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
+| `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view; `source` accepts a preloaded view so a loop reads once; writes report whether they happened | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
 | M2 · `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
 | M2 · `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
 | M3 · `tasker` — `scope_key`, `stop_scope`, `held`, `leave` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
@@ -274,7 +274,7 @@ recovery tests at `:124-157`. The fixture is already in that `describe`
 (`:66-123`: `open`, `submit`, `output`, `complete`, and a stateful dispatcher
 double).
 
-- [ ] **Step 1: Write the tests.**
+- [x] **Step 1: Write the tests.**
 
 ```lua
     -- #261: the reported blocker. Regenerate, edit the answer while it streams
@@ -343,7 +343,7 @@ double).
     end)
 ```
 
-- [ ] **Step 2: Run on main, and confirm each red test fails for its named reason.**
+- [x] **Step 2: Run on main, and confirm each red test fails for its named reason.**
 
 Run: `make test-spec SPEC=chat/lifecycle`
 Expected:
@@ -357,7 +357,7 @@ Expected:
 If a red case passes, it does not reproduce the report. Fix the test before
 going on.
 
-- [ ] **Step 3: Commit** (`#261 M1: the reported blocker, as failing tests`).
+- [x] **Step 3: Commit** (`#261 M1: the reported blocker, as failing tests`).
 
 ### Task 1.2: Delete the subsystem and its hooks
 
@@ -395,9 +395,9 @@ does not match.
         end,
 ```
 
-- [ ] **Step 1:** Apply the table.
-- [ ] **Step 2:** Run the Task 1.1 tests. Expected: all PASS.
-- [ ] **Step 3: Commit** (`#261 M1: delete the on-disk answer-recovery store`).
+- [x] **Step 1:** Apply the table.
+- [x] **Step 2:** Run the Task 1.1 tests. Expected: all PASS.
+- [x] **Step 3: Commit** (`#261 M1: delete the on-disk answer-recovery store`).
   The body gives the why: a retained snapshot that disagreed with the buffer
   refused every retry, even across reopen; undo is the way back to a replaced
   answer.
@@ -417,8 +417,8 @@ does not match.
 | tools/filesystem.lua:317-319, 332-333 | drop the private-directory validation and its failure |
 | tools/traversal_policy.lua, tests/unit/tool_traversal_policy_spec.lua | delete |
 
-- [ ] **Step 1:** Apply the table.
-- [ ] **Step 2: Tests of the carve-out.** In each case below, delete what
+- [x] **Step 1:** Apply the table.
+- [x] **Step 2: Tests of the carve-out.** In each case below, delete what
   asserts the private exclusion. **Keep what pins other behaviour**, with the
   exclusion assertions removed.
   - `tests/integration/tool_process_scope_spec.lua`:
@@ -429,16 +429,16 @@ does not match.
   - Same rule for `tests/integration/async_builtin_spec.lua:101-120`,
     `tests/integration/tool_dispatch_capture_spec.lua:95-105` and
     `tests/unit/tool_process_scope_spec.lua:36-41`.
-- [ ] **Step 3:** Delete `tests/integration/{answer_recovery,chat_recovery,response_recovery,recovery_paths}_spec.lua`
+- [x] **Step 3:** Delete `tests/integration/{answer_recovery,chat_recovery,response_recovery,recovery_paths}_spec.lua`
   and `tests/helpers/fake_recovery_filesystem.lua`.
-- [ ] **Step 4:** In `tests/integration/batch_lifecycle_spec.lua`:
+- [x] **Step 4:** In `tests/integration/batch_lifecycle_spec.lua`:
   - remove `:30`, `:43-45` and `:60`;
   - in the three recovery cases (`:65-86`, `:88-95`, `:97-116`), remove the
     recovery lines but keep any batch assertions (retry after failure or cancel,
     early-save ordering).
-- [ ] **Step 5:** `make test-spec SPEC=providers/tool_execution` and
+- [x] **Step 5:** `make test-spec SPEC=providers/tool_execution` and
   `make test-spec SPEC=chat/batch`: PASS.
-- [ ] **Step 6: Commit** (`#261 M1: tools stop special-casing the recovery directory`).
+- [x] **Step 6: Commit** (`#261 M1: tools stop special-casing the recovery directory`).
 
 ### Task 1.4: Sidecars degrade, never throw — and a spec proves it for each
 
@@ -461,7 +461,7 @@ consequences:
   `tests/arch/sidecar_authority_spec.lua` (the reader census). Route both specs
   under `chat/lifecycle` in `atlas/traceability.yaml`.
 
-- [ ] **Step 1: Failing unit tests.** Call `file_to_table` on:
+- [x] **Step 1: Failing unit tests.** Call `file_to_table` on:
   - invalid JSON;
   - JSON that is not an object (`[1]`, `"x"`, `3`);
   - an empty file;
@@ -469,7 +469,7 @@ consequences:
 
   Each returns `nil` and does not throw. On invalid content it warns once,
   naming the file.
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
 
 ```lua
 --- A JSON sidecar as a table, or nil. Never throws: every sidecar under the
@@ -488,7 +488,7 @@ _H.file_to_table = function(file_path)
 end
 ```
 
-- [ ] **Step 3: The behavioural spec**, driven by one table that the census
+- [x] **Step 3: The behavioural spec**, driven by one table that the census
   shares:
 
 ```lua
@@ -513,7 +513,7 @@ return {
     stub `oauth.fetch_content` to return content;
   - **an unwritable state directory** (`chmod 500`, restored in a `finally`):
     submission still reaches the provider.
-- [ ] **Step 4: The census spec.**
+- [x] **Step 4: The census spec.**
 
 ```lua
 -- Target transcript-is-the-whole-truth (#261): a sidecar under the state
@@ -553,47 +553,47 @@ describe("arch: every state-directory reader is exercised corrupt", function()
 end)
 ```
 
-- [ ] **Step 5: Run.** Before Step 2's fix, the `state.json` and remote-cache
+- [x] **Step 5: Run.** Before Step 2's fix, the `state.json` and remote-cache
   cases fail (they throw). After it, all PASS.
-- [ ] **Step 6: Counterfactuals.** Edit, run, then restore with
+- [x] **Step 6: Counterfactuals.** Edit, run, then restore with
   `git checkout -- <file>` (`git stash` is banned; see lessons).
   - (a) Revert `file_to_table` to the unguarded decode: the degrade spec goes
     red.
   - (b) Add `local _ = config.state_dir` to a clean
     `lua/parley/chat_presentation.lua`: the census goes red.
-- [ ] **Step 7: Commit** (`#261 M1: sidecars degrade — every reader is exercised corrupt`).
+- [x] **Step 7: Commit** (`#261 M1: sidecars degrade — every reader is exercised corrupt`).
 
 ### Task 1.5: Documentation for M1
 
-- [ ] Delete `atlas/chat/recovery.md` and its `atlas/index.md:19` entry.
-- [ ] In `atlas/traceability.yaml`, delete the `chat/recovery:` block
+- [x] Delete `atlas/chat/recovery.md` and its `atlas/index.md:19` entry.
+- [x] In `atlas/traceability.yaml`, delete the `chat/recovery:` block
   (`:349-358`), and the entries for `recovery_paths.lua` (`:809`),
   `traversal_policy.lua` (`:818`) and `tool_traversal_policy_spec.lua` (`:843`).
-- [ ] In `atlas/providers/tool_execution.md`, delete only the sentences about
+- [x] In `atlas/providers/tool_execution.md`, delete only the sentences about
   the private/recovery subtree: `:11-12`, `:47`, `:203-204`, `:237-241`, and the
   private-subtree sentences within `:142-147`. Read that paragraph first; the
   rest of it stays.
-- [ ] `README.md:82-84`: remove the answer-recovery sentence.
-- [ ] `atlas/chat/lifecycle.md` (Response), a short paragraph saying:
+- [x] `README.md:82-84`: remove the answer-recovery sentence.
+- [x] `atlas/chat/lifecycle.md` (Response), a short paragraph saying:
   - regenerating replaces the answer in the buffer;
   - the previous text is reachable through native undo;
   - nothing is kept on disk.
 
   How generated writes group into undo steps is stated once, in
   [ownership.md "Undo grouping"](ownership.md). Link to it; do not restate it.
-- [ ] `tests/manual/chat-concurrency.md:61-73`: drop recovery items 3-5; the
+- [x] `tests/manual/chat-concurrency.md:61-73`: drop recovery items 3-5; the
   section becomes "Batch".
-- [ ] Target: append a Revisions entry answering the open question "What bounds
+- [x] Target: append a Revisions entry answering the open question "What bounds
   the in-session memory that replaces durable recovery?". The answer: none is
   kept. The only held copy is `prev_answer`, whose lifetime is one generation
   (M2).
-- [ ] **Removal query, final:** re-run Task 1.2's query. Expected: exactly one
+- [x] **Removal query, final:** re-run Task 1.2's query. Expected: exactly one
   hit, the string `answer-recovery` in the Task 1.1 legacy test.
-- [ ] Commit (`#261 M1: atlas — the recovery store is gone`).
+- [x] Commit (`#261 M1: atlas — the recovery store is gone`).
 
 ### Task 1.6: M1 boundary
 
-- [ ] `make test`, `make lint`. Compare any failure against `main` before
+- [x] `make test`, `make lint`. Compare any failure against `main` before
   touching it (lessons: "N failures, one cause is a hypothesis").
 - [ ] `sdlc milestone-close --issue 261 --milestone M1`. Fix Critical and
   Important findings, sweeping each finding's whole class (lessons, memory).
@@ -1282,7 +1282,7 @@ Queries:
 | W3 | prepare · readiness UI (`llm_readiness.lua:84-150`) | picker never calls back | W2; a late `on_select` fails `validate_source` |
 | W4 | prepare · remote content fetch (`chat_respond.lua:1185-1297`) | unowned curl; refused spawn → no callback; `fetch_content` throws → `pending` stuck | pass `logical_generation = scope_key(ctx.epoch, ctx.generation)` to `fetch_content`, and through its **content** tree only: public, Google, Dropbox, Microsoft and office conversion (not keychain or refresh, which are shared). Pcall the call at `:1289-1292`. On a throw, mark that child `done`; that is safe now because the scope kill ends anything it started (update the comment at `:1287-1288`) |
 | W5 | request · pre-spawn (`response_provider.lua:110-121`) | zero tasker match → waits | if `stop_owner` matched nothing, resolve at once. A late callback aborts via `transport_alive` (`dispatcher.lua:852,885`; covered by `response_provider_spec.lua:71-80`) |
-| W6 | request · copilot `pre_query` (`vault.lua:159-219`) | `code~=0` (`:207-209`) and the early return (`:161-162`) never call back | call back with the error on both paths |
+| W6 | request · copilot `pre_query` (`vault.lua:159-219`) | `code~=0` (`:207-209`), the early return (`:161-162`), and a token body that does not decode never call back (the decode itself was a raise until M1 review BR-16 guarded it) | call back with the error on all three paths |
 | W7 | request · async continuation (`dispatcher.lua:446-854`) | a throw → nothing aborts | pcall it; on error, `abort_before_start` |
 | W8 | request · `recover_query` (`dispatcher.lua:794-828`) | no liveness check | check `transport_alive` before acting |
 | W9 | child · `producer.start` threw | `producer.cancel(nil)` false | W1; its processes die with the scope |
@@ -1715,3 +1715,35 @@ findings for the close review.
 - Not changed: *plan-restates-the-diff*. The embedded bodies stay as written.
   Where a body and the code disagree, the code and its tests are
   authoritative.
+
+### 2026-09-19 — M1 boundary review round 2 (REWORK) — dispositions
+
+**Reason.** Round 2 found a Critical introduced by round 1's own fix, and two
+repeat families. The gate said "fix rules, not instances".
+
+**Delta.**
+- **BR-14 (`returned-handle-has-no-consumer`, Critical).** The picker ignored
+  `set`'s new `false` and announced a save that had not happened.
+  - `table_to_file` now reports whether it wrote, and `save`/`set`/`remove`/
+    `rename` pass that on.
+  - The picker says "saved" only on success; a refused save keeps the buffer
+    modified. The dispatcher aborts a request whose body was not written.
+  - Guard: `sidecar_authority_spec` fails a sidecar write called as a bare
+    statement, unless it is declared with a reason. The two cache writes are
+    declared.
+  - The finalize handle stays W18.
+- **BR-15 (`per-item-diagnostic-unbounded`, second in the family).** The
+  picker's build now reads the prompt file once, via `source(name, builtins,
+  loaded)`.
+  - Guard: `sidecar_degrade_spec` counts the warnings naming a sidecar during
+    one user action, and asserts at most one. The custom-prompt exercise is
+    that loop.
+- **BR-16 (`untrusted-input-unparsed`).** `vault.lua`'s token decode is under
+  `pcall`, and the token is typed at the boundary. W6 gains that path.
+  - Guard: `tests/arch/json_decode_spec.lua` fails any unguarded
+    `vim.json.decode` in `lua/`. It finds 33, with a floor of 30.
+- **Minors.**
+  - `helper_io_spec` F3b generates its cases from an ordered list.
+  - Chunk 1's steps are ticked.
+- **Counterfactuals.** Reverting each fix turns its guard red: decode (1),
+  write result (1), warning bound (3), picker P1 and P3.

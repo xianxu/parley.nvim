@@ -1,5 +1,32 @@
 # Lessons
 
+## 2026-09-19 (#261 M1 review round 2 — a fix created a Critical, and two families repeated)
+
+- **A new "did it happen?" result must be consumed by whoever tells the user
+  it happened.** Round 1 made `custom_prompts.set` refuse (return `false`) to
+  protect the user's file. The picker ignored the result, cleared `modified`,
+  and announced "System prompt saved", so the edit was wiped. Refusing without
+  telling the caller converted a raise into silent data loss. Rule: when you
+  add or change a function's success result, walk every caller up to the line
+  that reports success to the user in the same change. Enforce it for the
+  family: `sidecar_authority_spec` fails a sidecar write called as a bare
+  statement.
+
+- **Bound diagnostics per user action, not per call site.** Fixing one warning
+  per *field* (round 1) left one warning per *call*, and the picker called
+  `load()` once per prompt. Rule: a file's diagnostics belong to its parse, and
+  a parse belongs to a user action, never to a loop iteration. Test the action
+  with the loop in it, and count its warnings.
+
+- **When you harden one reader of external input, grep for its siblings in the
+  same function.** The vault's state-file read was typed while the token
+  body, three lines below, was decoded raw. `tests/arch/json_decode_spec.lua`
+  now fails any unguarded decode.
+
+- **Generated `it(` cases iterate an ordered list, never a keyed table.**
+  `pairs` makes their order vary from run to run, and the family recurred in
+  the commit that fixed its first instance.
+
 ## 2026-09-19 (#261 M1 review — three families, each swept as a class)
 
 - **A filter applied at read time is a view. If the same table is written
