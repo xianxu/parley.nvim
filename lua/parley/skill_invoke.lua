@@ -394,7 +394,7 @@ function M.invoke(buf, manifest, args, opts)
         or neighborhood.policy_from_roots(vim.fn.fnamemodify(artifact_path, ":h"), nil, {})
     local tool_error
     tool_producer,tool_error=require('parley.tools.producer').new({buf=buf,deferred_refresh_buf=buf,registry=tools_registry,
-        allowed_tools=inv.tools,root_policy=root_policy,state_dir=p.config.state_dir,
+        allowed_tools=inv.tools,root_policy=root_policy,
         page_limit=p.config.tool_result_page_lines,
         help_root=vim.fn.fnamemodify(debug.getinfo(1,'S').source:sub(2):match('^(.*)/lua/parley/skill_invoke%.lua$'),':p')})
     if not tool_producer then finish({ok=false,msg=tool_error},true);return end

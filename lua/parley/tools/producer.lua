@@ -95,7 +95,7 @@ function M.new(opts)
         end,cancel=function(h,done)if not refused[h]then return false end;invoke(done);return true end,close=function()end}
     end
     if not scalar(opts.buf)then return nil,'captured buffer required'end
-    local profile,err=Dispatch.capture(definitions,{root_policy=opts.root_policy,state_dir=opts.state_dir,buf=opts.buf,
+    local profile,err=Dispatch.capture(definitions,{root_policy=opts.root_policy,buf=opts.buf,
         chat_roots=opts.chat_roots,help_root=opts.help_root,page_limit=opts.page_limit,max_bytes=maximum,
         max_file_bytes=configured.max_file_bytes,deferred_refresh_buf=opts.deferred_refresh_buf})
     if not profile then return nil,err end

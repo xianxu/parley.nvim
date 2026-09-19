@@ -121,24 +121,17 @@ describe('chat_respond: scoped session integration',function()
         wait_for(function()return Respond.response_snapshot(session).status=='terminal'end)
         return Respond.response_snapshot(session).generation
     end
-    it('cleans recovery only after the chat deletion is confirmed',function()
+    it('reports a refused chat deletion and completes a confirmed one',function()
         open({'💬: question',''})
         local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
         vim.fn.writefile(vim.api.nvim_buf_get_lines(buf,0,-1,false),path)
-        local Recovery=require('parley.chat_recovery')
-        local old_deleted,old_delete=Recovery.deleted,parley.helpers.delete_file
-        local calls_deleted=0
-        Recovery.deleted=function(captured)
-            calls_deleted=calls_deleted+1;assert.equals(path,captured)
-            assert.equals(0,vim.fn.filereadable(path));return {ok=true}
-        end
+        local old_delete=parley.helpers.delete_file
         parley.helpers.delete_file=function()return nil,'injected deletion refusal'end
         local failed=parley.delete_chat_file(path)
         parley.helpers.delete_file=old_delete
-        assert.is_nil(failed);assert.equals(0,calls_deleted)
-        local ok=parley.delete_chat_file(path)
-        Recovery.deleted=old_deleted
-        assert.is_true(ok);assert.equals(1,calls_deleted)
+        assert.is_nil(failed);assert.equals(1,vim.fn.filereadable(path))
+        assert.is_true(parley.delete_chat_file(path))
+        assert.equals(0,vim.fn.filereadable(path))
     end)
     -- #261: the reported blocker. Regenerate, edit the answer while it streams
     -- (the edit revokes the generation), then regenerate again. Before #261 the

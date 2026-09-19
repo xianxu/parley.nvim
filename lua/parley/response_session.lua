@@ -89,7 +89,7 @@ function M.start(doc,spec,opts)
         -- an explicit onboarding choice has become the frozen request profile.
         local ok,adapter=pcall(Tools.new,doc,{producer=opts.producer,registry=opts.registry,
             root_policy=opts.root_policy,allowed_tools=profile.allowed_tools or opts.allowed_tools or {},
-            buf=opts.buf,state_dir=opts.state_dir,chat_roots=opts.chat_roots,help_root=opts.help_root,page_limit=opts.page_limit,
+            buf=opts.buf,chat_roots=opts.chat_roots,help_root=opts.help_root,page_limit=opts.page_limit,
             max_iterations=limit('max_iterations'),
             max_result_bytes=limit('max_result_bytes'),build_input=opts.build_input})
         if not ok then return false,tostring(adapter)end

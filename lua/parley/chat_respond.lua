@@ -1399,7 +1399,6 @@ local function start_scoped_response(frame)
     local exchange = parsed.exchanges[index]
     if not exchange or not exchange.question then return nil, 'no question selected' end
     local question = exchange.question
-    local replacing_answer = exchange.answer ~= nil
     local last = exchange.answer and exchange.answer.line_end or question.line_end
     local footer = trailing_footnote_boundary(frame.lines, question.line_end)
     if footer then last = math.max(question.line_end, math.min(last, footer)) end
@@ -1445,7 +1444,6 @@ local function start_scoped_response(frame)
     response_order = response_order + 1
     local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order, batch = frame.batch,
         label = (frame.lines[question.line_start] or 'Response'):sub(1, 256)}; group[entry] = true
-    local recovery
     local latest, messages, final_payload, topic_source, topic_parent, failure_notice
     local message_lead = 0
     local topic_attempted, main_finished, topic_finished = false, false, true
@@ -1532,7 +1530,6 @@ local function start_scoped_response(frame)
             self.cancelled = true
             if self.resolved then done() else self.cancel_done = done end
             if self.remote then self.remote:cancel() end
-            if self.unproved then self.unproved(); self.unproved = nil; resolve() end
         end
         local function logical_failure(reason)
             if operation.cancelled or operation.failed then return end
@@ -1548,20 +1545,6 @@ local function start_scoped_response(frame)
         local function build(remote, remote_error)
             if operation.cancelled or ctx.cancelled() then resolve(); return end
             if remote_error then fail(remote_error); return end
-            -- #266: another generation's first write (its preparation gap) can
-            -- leave this grant suspended until repair re-proves it, and the
-            -- recovery snapshot below reads the live answer. A suspended grant is
-            -- still ours, so wait for the proof instead of failing on it.
-            local grant = D.snapshot(doc).grants[ctx.grant]
-            if replacing_answer and grant and grant.status == 'suspended' then
-                operation.unproved = D.subscribe(doc, function()
-                    local current = D.snapshot(doc).grants[ctx.grant]
-                    if not operation.unproved or current and current.status == 'suspended' then return end
-                    operation.unproved(); operation.unproved = nil
-                    vim.schedule(function() build(remote, remote_error) end)
-                end)
-                return
-            end
             local ok, err = xpcall(function()
                 messages, message_lead = M.build_messages({parsed_chat = input_parsed, start_index = frame.start_index,
                     end_index = frame.end_index, exchange_idx = input_index, agent = agent, config = config,
@@ -1578,20 +1561,6 @@ local function start_scoped_response(frame)
                 if assets.has_image(final_payload) and assets.payload_size(final_payload) > assets.MAX_REQUEST_BYTES then
                     error(string.format('request refused: image payload exceeds the %d-byte limit',
                         assets.MAX_REQUEST_BYTES), 0)
-                end
-                if replacing_answer then
-                    local Recovery = require('parley.chat_recovery')
-                    Recovery.setup(_parley)
-                    if not recovery then
-                        local why
-                        recovery, why = Recovery.start(doc, {buf = buf, path = frame.file_name,
-                            root = root_policy.write_root, lines = frame.lines, parsed = frame.parsed,
-                            index = index, entity = ctx.entity, ctx = ctx,
-                            region = {first = point, last = spec.output.last}})
-                        if not recovery then error('Answer recovery unavailable: ' .. tostring(why), 0) end
-                    end
-                    local published = Recovery.publish(recovery, ctx)
-                    if not published.ok then error('Answer recovery unavailable: ' .. tostring(published.reason), 0) end
                 end
                 cb.prepared({buf = buf, provider = info.provider, model = info.model,
                     messages = messages, payload = final_payload, response_profile = {
@@ -1636,7 +1605,7 @@ local function start_scoped_response(frame)
     local last_cursor = frame.cursor
     local session, reason = Session.start(doc, spec, {buf = buf, agent = info.display_name,
         dispatcher = _parley.dispatcher, tasker = _parley.tasker,
-        state_dir = config.state_dir, page_limit = config.tool_result_page_lines,
+        page_limit = config.tool_result_page_lines,
         chat_roots = vim.deepcopy(_parley.get_chat_roots()),
         help_root = installed_root,
         root_policy = info.root_policy, max_iterations = info.max_tool_iterations or config.max_tool_iterations,
@@ -1673,23 +1642,15 @@ local function start_scoped_response(frame)
         finalize = function(ctx, done)
             capture_topic_parent(ctx)
             start_topic()
-            local completion,settlement
-            local cancelled=false
-            completion=require('parley.response_completion').start(doc, ctx, function(status)
-                if recovery and status=='applied' and not cancelled then
-                    settlement=require('parley.chat_recovery').settle(recovery,ctx,function()done(status)end)
-                else done(status)end
-            end, {user_prefix = config.chat_user_prefix})
-            return {cancel=function(_,resolved)
-                cancelled=true
-                if settlement then settlement:cancel()
-                elseif completion then completion:cancel()end
-                if resolved then resolved()end
+            local completion = require('parley.response_completion').start(doc, ctx, done,
+                {user_prefix = config.chat_user_prefix})
+            return {cancel = function(_, resolved)
+                if completion then completion:cancel() end
+                if resolved then resolved() end
             end}
         end,
         rejected = function(why)
             main_finished = true; release(); _parley.logger.warning('Response not started: ' .. tostring(why))
-            if recovery then require('parley.chat_recovery').finish(recovery, 'start refused') end
             if frame.terminal then frame.terminal({outcome = 'start refused'}) end
         end,
         terminal = function(result)
@@ -1708,7 +1669,6 @@ local function start_scoped_response(frame)
                 vim.notify(require('parley.chat_presentation').overflow_message(result.waited_for_line),
                     vim.log.levels.WARN)
             end
-            if recovery then require('parley.chat_recovery').finish(recovery, result.outcome) end
             if frame.terminal then frame.terminal(result) end
             if result.outcome == 'success' then
                 vim.cmd('doautocmd User ParleyDone')

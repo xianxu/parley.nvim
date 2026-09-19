@@ -1597,12 +1597,6 @@ M.cmd.ChatResumeResponse = function() chat_respond.cmd_resume_response() end
 
 M.cmd.ToolOperations = function() require("parley.tool_operations").open() end
 M.cmd.ChatResumeBatch = function(params) return chat_respond.resume_batch(params) end
-M.cmd.AnswerRecovery = function()
-    local recovery = require('parley.chat_recovery'); recovery.setup(M); return recovery.open()
-end
-M.cmd.AnswerRestore = function()
-    local recovery = require('parley.chat_recovery'); recovery.setup(M); return recovery.restore()
-end
 
 --------------------------------------------------------------------------------
 -- Keybinding help (driven by keybinding_registry)
@@ -3690,12 +3684,6 @@ M.delete_chat_file = function(path)
 	if not ok then
 		vim.notify("not deleted: " .. tostring(path) .. " (" .. tostring(err) .. ")", vim.log.levels.ERROR)
 		return nil, err
-	end
-	local recovery = require("parley.chat_recovery")
-	recovery.setup(M)
-	local cleaned = recovery.deleted(path)
-	if not cleaned.ok then
-		vim.notify("Deleted " .. path .. " but answer recovery cleanup failed: " .. tostring(cleaned.reason), vim.log.levels.WARN)
 	end
 	local fok, ferr = require("parley.assets").delete_with(path)
 	if not fok then
