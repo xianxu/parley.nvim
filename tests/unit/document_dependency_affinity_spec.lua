@@ -25,12 +25,16 @@ describe('generation input dependency endpoint affinity',function()
         assert.is_true(S.snapshot(doc).generations[gen].stale)
         assert.equals(30,S.snapshot(doc).generations[gen].dependencies[1].last)
     end)
-    it('does not extend the exemption to another generation or an interior grant boundary',function()
+    -- #261/#255 reversed the first half of this case: another generation's
+    -- write inside its own live grant used to mark `other` stale. The answer it
+    -- replaces stays the valid context until that generation ends (the
+    -- prev_answer slot), so it now moves `other`'s range without staling it.
+    it('moves another generation\'s input across an owned write without staling it, and keeps interior boundaries strict',function()
         local doc,gen,owner=setup({first=0,last=10},{first=10,last=10})
         local other=S.transition(doc,{kind='register_generation',dependencies={{first=0,last=10}}}).generation
         edit(doc,owner,10,10,1)
         assert.is_false(S.snapshot(doc).generations[gen].stale)
-        assert.is_true(S.snapshot(doc).generations[other].stale)
+        assert.is_false(S.snapshot(doc).generations[other].stale)
         local d,g,o=setup({first=0,last=10},{first=5,last=20})
         edit(d,o,10,10,1)
         assert.is_true(S.snapshot(d).generations[g].stale)

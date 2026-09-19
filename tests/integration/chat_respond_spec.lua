@@ -278,6 +278,24 @@ describe('chat_respond: scoped session integration',function()
         -- The typed request IS the payload, not text inside a built one.
         assert.equals('raw-fixture',calls[2].payload.model)
     end)end)
+    -- #261/#255: Q1's writes land inside Q2's captured input. They used to mark
+    -- Q2 stale, so Q2's tool round paused at its continuation; the answer being
+    -- replaced stays the valid context until Q1 ends, so Q2 now continues.
+    it('continues a later question\'s tool round while an earlier answer regenerates (#255)',function()
+        local path=tmp_dir..'/tool-fixture-255.txt';files[#files+1]=path
+        vim.fn.writefile({'fixture tool content'},path)
+        local first=regenerating_q1()
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        ask_q2()
+        local qt=parley.tasker.get_query(calls[2].id)
+        qt.raw_response=mk_read_file_sse_response('tool-255',path)
+        calls[2].running=false;calls[2].complete(calls[2].id)
+        output(calls[1],' and more')
+        complete(first,calls[1])
+        wait_for(function()return #calls==3 end)
+        assert.truthy(vim.inspect(calls[3].payload):find('fixture tool content',1,true))
+    end)
     -- The raw payload build_messages finds lives on the input the request was
     -- built from. A batch leg builds from a copy, so reading it back from this
     -- function's own table dropped a typed raw request in batch mode.

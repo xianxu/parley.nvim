@@ -360,3 +360,30 @@ describe('document authority state: holds', function()
         assert.is_true(State.holds(d,g,'E'))
     end)
 end)
+
+-- #261/#255: a generation's writes inside its own grant move another
+-- generation's captured input range but never mark it stale — the answer being
+-- replaced stays the valid context until that generation ends, and a request
+-- captured before it is unaffected by its completion. Human edits still do.
+describe('document authority state: who makes captured input stale', function()
+    if not ok then return end
+    local function scene()
+        local d=State.new()
+        local writer=generation(d)
+        local w=acquire(d,writer,{proof('q1',10,20)}); assert.is_true(w.ok,w.reason)
+        local reader=generation(d,{{first=0,last=30}})
+        return d,writer,w.grants[1],reader
+    end
+    local function stale(d,g) return State.snapshot(d).generations[g].stale end
+    it('ignores a generated write by another generation, and moves the range', function()
+        local d,_,grant,reader=scene()
+        State.transition(d,{kind='observed_edit',first=15,last=15,new_bytes=4,owner_grant=grant})
+        assert.is_false(stale(d,reader))
+        assert.equals(34,State.snapshot(d).generations[reader].dependencies[1].last)
+    end)
+    it('still marks a human edit inside the range stale', function()
+        local d,_,_,reader=scene()
+        State.transition(d,{kind='observed_edit',first=25,last=25,new_bytes=1})
+        assert.is_true(stale(d,reader))
+    end)
+end)
