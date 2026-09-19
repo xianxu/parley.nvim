@@ -25,12 +25,69 @@ describe("refusal vocabulary", function()
         assert.truthy(R.describe("ended", "revoked", nil, { cause = "reload" }):find("reloaded", 1, true))
         assert.is_nil(R.describe("ended", "revoked", nil, { cause = "detach" }))
     end)
+    -- An unknown token is a defect, so `describe` records it and, under the
+    -- harness, fails where it is produced. A spec that means to pass one says so
+    -- (#261 M5 review BR-66).
+    it("records a token that has no words, and fails the harness unless allowed", function()
+        R.forget_unkeyed()
+        assert.has_error(function() R.describe("start", nil, "never heard of it") end)
+        assert.same({ "never heard of it" }, R.unkeyed(), "recorded before it throws")
+        R._allow_unkeyed = false
+        -- Free text under a known outcome is that outcome's detail, not a
+        -- missing row: recorded, and never a failure.
+        R.describe("ended", "provider_failed", "provider request failed (HTTP 503)")
+        assert.same({ "never heard of it" }, R.unkeyed())
+        assert.same({ "provider request failed (HTTP 503)" }, R.detail_tokens())
+        R.forget_unkeyed()
+    end)
     it("calls an internal token and an unknown one unexpected, showing the token and the log", function()
+        R._allow_unkeyed = true
         local internal = R.describe("start", nil, "invalid specification", { log_file = "/x/parley.log" })
         assert.truthy(internal:find("unexpected", 1, true)); assert.truthy(internal:find("invalid specification", 1, true))
         assert.truthy(internal:find("/x/parley.log", 1, true))
         local unknown = R.describe("start", nil, "never heard of it")
         assert.truthy(unknown:find("unexpected", 1, true)); assert.truthy(unknown:find("never heard of it", 1, true))
+        R._allow_unkeyed = false; R.forget_unkeyed()
+    end)
+    -- BR-67: naming a command that cannot clear the condition is worse than
+    -- naming none. Nothing clears a batch's `unknown`, and a batch whose
+    -- captured question is gone can never resume, so both say: start a new one.
+    it("points a batch that cannot continue at a new batch", function()
+        for _, token in ipairs({ "unknown effect", "question obsolete", "question missing",
+            "context missing", "context obsolete", "captured batch context unavailable" }) do
+            local row = assert(R.TOKENS[token], token)
+            assert.truthy(row.action:find(":ParleyChatRespondAll", 1, true) or row.action:find("submit again", 1, true),
+                token .. " names " .. row.action)
+        end
+        assert.truthy(R.TOKENS["unknown effect"].action:find(":ParleyChatRespondAll", 1, true))
+    end)
+    it("names only commands that exist", function()
+        local init = table.concat(vim.fn.readfile("lua/parley/init.lua"), "\n")
+        local missing = {}
+        local function check(action, token)
+            for name in tostring(action):gmatch(":Parley(%u[%w_]*)") do
+                if not init:find("M.cmd." .. name, 1, true) then missing[#missing + 1] = token .. " -> :Parley" .. name end
+            end
+        end
+        for token, row in pairs(R.TOKENS) do check(row.action, token) end
+        for cause, row in pairs(R.REVOKED) do check(row.action, cause) end
+        check(R.BATCH_CONTINUE, "BATCH_CONTINUE"); check(R.BATCH_RESTART, "BATCH_RESTART")
+        table.sort(missing)
+        assert.same({}, missing)
+    end)
+    -- BR-68: the cause is the more specific fact, and outranks a failure the
+    -- stop recorded on its way to the terminal.
+    it("words a revocation by its cause even when a failure came with it", function()
+        assert.equals("Response stopped: you edited the answer while it was being written; the partial answer is kept;"
+            .. " submit again to regenerate",
+            R.describe("ended", "revoked", "cancel adapter missing; operation unresolved", { cause = "edit" }))
+        assert.is_nil(R.describe("ended", "revoked", "adapter failed", { cause = "detach" }))
+    end)
+    -- BR-65: an internal token never erases a known outcome's words; it adds the log.
+    it("keeps the outcome's words when its failure is internal", function()
+        assert.equals("Response stopped: the answer was written, but the next question prompt could not be added;"
+            .. " edit: add the 💬: prompt yourself; the details are in /x/parley.log",
+            R.describe("ended", "finalize_failed", "invalid completion", { log_file = "/x/parley.log" }))
     end)
     it("names the pid still held after Stop on the three capacity refusals", function()
         for _, token in ipairs({ "generation limit", "process generation limit",

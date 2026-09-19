@@ -121,8 +121,10 @@ M.TOKENS = {
     ["not ready"] = { what = "the batch is still starting", action = MOMENT },
     ["validation pending"] = { what = "the batch is still being checked", action = MOMENT },
     ["leg unresolved"] = { what = "the batch's current answer is still being cleaned up", action = MOMENT },
-    ["unknown effect"] = { what = "a tool's effect in the batch is unknown",
-        action = ":ParleyToolOperations to record what happened" },
+    -- Nothing clears `unknown`, so this batch cannot resume: the action that
+    -- works is a new batch (#261 M5 review BR-67).
+    ["unknown effect"] = { what = "a tool's effect in the batch is unknown, so it cannot continue",
+        action = ":ParleyChatRespondAll to start a new batch" },
     ["not cancellable"] = { what = "the batch has already finished", action = ":ParleyChatRespondAll to start one" },
     ["not running"] = { what = "the response has already ended", action = AGAIN },
     ["disposed"] = { what = "the batch has already ended", action = ":ParleyChatRespondAll to start one" },
@@ -141,6 +143,7 @@ M.TOKENS = {
     -- Terminal outcomes. `revoked` depends on the cause (see `describe`).
     ["cancelled"] = { what = "the response was cancelled", action = AGAIN },
     ["overflow"] = { what = "the response was stopped to keep its output from being dropped", action = AGAIN },
+    ["staging overflow"] = { what = "the response was stopped to keep its output from being dropped", action = AGAIN },
     ["provider_failed"] = { what = "the model's request failed", action = AGAIN },
     ["prepare_failed"] = { what = "the request could not be built", action = AGAIN },
     ["finalize_failed"] = { what = "the answer was written, but the next question prompt could not be added",
@@ -160,6 +163,7 @@ for _, token in ipairs({
     "invalid event", "invalid stale evidence", "invalid dependency", "invalid input snapshot", "generation",
     "invalid region", "invalid edit", "invalid uncertainty", "invalid proofs", "grant", "invalid epoch",
     "invalid submission", "prepare adapter required", "request adapter required", "finalize adapter required",
+    "adapter failed", "cancel adapter missing; operation unresolved", "invalid completion",
     "unknown event", "coordinator-owned event", "invalid released insertion", "row slice limit", "cannot narrow grant",
     "operation", "range", "anchor", "successor", "patch", "overlapping patches",
     "prepare/request/finalize adapters required", "invalid specification", "invalid staging limit",
@@ -202,6 +206,34 @@ local function internal(token)
     return false
 end
 
+-- Tokens that reached `describe` with no words at all (#261 M5 review BR-66).
+-- A census of call shapes misses whatever producer form it has not met; this
+-- records the VALUE that arrives, so every producer is covered, now and later.
+-- Under the test harness an unkeyed token is a defect, and fails where it is
+-- produced; a spec that means to pass one sets `_allow_unkeyed`.
+M._unkeyed = {}
+M._detail_only = {}
+M._allow_unkeyed = false
+local function sorted(set)
+    local tokens = {}
+    for token in pairs(set) do tokens[#tokens + 1] = token end
+    table.sort(tokens)
+    return tokens
+end
+--- Tokens that reached `describe` with no words at all.
+function M.unkeyed() return sorted(M._unkeyed) end
+--- What was shown as a known outcome's detail: a provider's diagnosis, a build
+--- error. Free text belongs here; a short producer token appearing here wants a
+--- row of its own, which the whole-message assertions make visible.
+function M.detail_tokens() return sorted(M._detail_only) end
+function M.forget_unkeyed() M._unkeyed = {}; M._detail_only = {} end
+local function unkeyed(token)
+    M._unkeyed[tostring(token)] = true
+    if vim.env.PARLEY_TEST_MODE == "1" and not M._allow_unkeyed then
+        error("refusal: no words for token '" .. tostring(token) .. "' — add a row to TOKENS or INTERNAL", 0)
+    end
+end
+
 ---@param kind string # a PREFIX key
 ---@param outcome string|nil # a terminal outcome, when the refusal is an ending
 ---@param failure string|nil # the producer's token
@@ -215,18 +247,29 @@ function M.describe(kind, outcome, failure, detail)
     local prefix = M.PREFIX[kind] or tostring(kind)
     local log = "the details are in " .. (detail.log_file or "the Parley log")
     local text
-    if outcome == "revoked" and failure == nil then
+    -- A revocation says why the grant went, whatever failure the stop recorded
+    -- on the way (BR-68): the cause is the more specific fact.
+    if outcome == "revoked" and (detail.cause == "detach" or M.REVOKED[detail.cause]) then
         if detail.cause == "detach" then return nil end
         local row = M.REVOKED[detail.cause]
-        text = row and (row.what .. "; " .. (detail.action or row.action))
+        text = row.what .. "; " .. (detail.action or row.action)
     end
     if not text then
         local token = failure or outcome
         local row, extra = row_of(token)
-        -- An unknown failure under a known outcome is that outcome's specific
-        -- reason (a provider's HTTP status, a build error): shown, not unexpected.
-        if not row and failure and outcome and not internal(failure) then
-            row = row_of(outcome); extra = row and tostring(failure):match("^[^\n]+") or nil
+        local pointer
+        if not row and failure and outcome then
+            -- A failure with no row of its own never erases the outcome's words.
+            -- A token the user can read becomes its detail; an internal one
+            -- becomes the pointer to the log (BR-65).
+            row = row_of(outcome)
+            if row then
+                if internal(failure) then pointer = log
+                else
+                    extra = tostring(failure):match("^[^\n]+")
+                    M._detail_only[tostring(extra)] = true
+                end
+            end
         end
         if row then
             text = row.what .. (extra and extra ~= "" and (" (" .. extra .. ")") or "") .. "; " .. (detail.action or row.action)
@@ -235,10 +278,12 @@ function M.describe(kind, outcome, failure, detail)
                 for _, held in ipairs(detail.held) do pids[#pids + 1] = tostring(held.pid) end
                 text = text .. "; still running after Stop: pid " .. table.concat(pids, ", ")
             end
+            if pointer then text = text .. "; " .. pointer end
         elseif internal(token) then
             text = "an unexpected internal error (" .. tostring(token) .. "); " .. log
         else
             text = "unexpected (" .. tostring(token) .. "); " .. log
+            unkeyed(token)
         end
     end
     if type(detail.notice) == "string" and detail.notice ~= "" then text = text .. " — " .. detail.notice end

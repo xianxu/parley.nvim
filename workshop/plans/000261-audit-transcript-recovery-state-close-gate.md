@@ -1095,6 +1095,107 @@ rounds:
       boundary: M4
       recipe: milestone-review
       blocked: false
+    - "n": 18
+      timestamp: "2026-09-19T13:32:03-07:00"
+      agent: claude
+      findings:
+        - id: BR-65
+          severity: Important
+          title: The provider-detail suppression at chat_respond.lua:1763 is dead, so the diagnosis prints twice and `staging overflow` leaks
+          detail: |-
+            `result.outcome == 'provider_failed' and failure_notice and nil or result.failure`
+            parses as `((A and B) and nil) or result.failure`, so `failure` is always
+            `result.failure`; the comment above it ("its reason is not repeated") describes
+            behaviour that never happens. Verified against the shipped module: the user gets
+            "the model's request failed (provider request failed (HTTP 503)); submit again —
+            parley: provider request failed (HTTP 503): upstream down". The same line also
+            passes `result.failure` for `overflow`, so the internal token "staging overflow"
+            is shown, against M5's "no raw token". **This is the 5th finding in family
+            `behavior-change-without-regression-test`.** Earlier rounds fixed instances. Do
+            NOT just fix this site — the rule is: a change to a user-visible message needs an
+            assertion on the WHOLE message (equality), not a substring probe. The existing
+            case asserts `find("HTTP 503")`, which is true before and after the intended
+            suppression, so it reports nothing; the two batch cases in the same file already
+            use equality and are the model. Apply the rule to every ending that composes
+            what + extra + action + notice (`provider_failed`, `overflow`, `prepare_failed`).
+          family: behavior-change-without-regression-test
+          round: 18
+        - id: BR-66
+          severity: Important
+          title: The refusal census scans call shapes, not the values describe() keys on, so `issue(s,<lit>)` tokens have no words
+          detail: |-
+            `describe`'s first lookup key is the `failure` string, written directly by
+            `issue(s,<lit>)` in generation_runner.lua:152 — a form absent from the spec's
+            FORMS list although generation_runner.lua is in FILES. Unkeyed as a result:
+            'staging overflow' (:163, user-visible today, see the other Important finding),
+            'adapter failed' (:301), 'cancel adapter missing; operation unresolved' (:542).
+            Two further blind spots of the same shape: a token that appears only as an
+            argument to `refuse(kind, outcome, <lit>)` (chat_respond.lua:1806 'not a chat',
+            :1421 'no stale continuation ready') is never scanned; and the new shared-cache
+            guard (single_source_sweeps_spec.lua:391) keys on the literal `stdpath('cache')`
+            while the hazard is a spec that inherits dispatcher.lua:17's default query_dir
+            and writes there without naming it. **This is the 10th finding in family
+            `enumeration-claims-completeness`.** Earlier rounds fixed instances (composed
+            reasons, `reject(owner,lit)`) — this round adds a third hole in the same guard.
+            Do NOT add another regex. The rule: a guard must key on the VALUE that reaches
+            the behaviour, not on the syntax that produces it. For the vocabulary, invert it
+            — have `describe` record every token that resolves to "unexpected" (or to an
+            outcome-row fallback) into a process-global set, and fail a spec that finds the
+            set non-empty after the suite; that covers every present and future producer
+            form. For the cache guard, assert at runtime that `dispatcher.query_dir` does not
+            resolve under `stdpath('cache')` during a spec run.
+          family: enumeration-claims-completeness
+          round: 18
+        - id: BR-67
+          severity: Minor
+          title: '`unknown effect` tells the user to run :ParleyToolOperations, which cannot let the batch resume'
+          detail: |-
+            batch.lua:93 sets `s.unknown` and :99 rejects every later resume; nothing ever
+            clears it, and tool_operations.lua reconciles producer records only. The action
+            that actually works after this round's give-way change is ":ParleyChatRespondAll
+            to start a new batch". The unit spec only checks that an action matches
+            `:Parley%u` — it cannot see that the named command does not clear the condition.
+          family: action-does-not-unblock
+          round: 18
+        - id: BR-68
+          severity: Minor
+          title: describe() consults REVOKED only when failure is nil, so a revocation carrying any failure reads "unexpected"
+          detail: |-
+            refusal.lua:230 gates the cause-specific wording on `failure == nil`, and
+            'revoked' has no TOKENS row, so `describe('ended','revoked',<any string>,
+            {cause='edit'})` returns "Response stopped: unexpected (...)". Reachable whenever
+            a cancel/insert path calls `issue()` before the terminal (generation_runner.lua:542,
+            :572, :598). Prefer the cause when one is recorded, and fall back to the failure.
+          family: fallback-order-hides-known-cause
+          round: 18
+        - id: BR-69
+          severity: Minor
+          title: init.lua:4174 still forwards a 4th argument that chat_respond.respond does not accept
+          detail: |-
+            The force flag it carried was deleted this round (cmd_respond), but
+            `M.chat_respond = function(p, cb, ofc, f) return chat_respond.respond(p, cb, ofc, f) end`
+            still passes it to a three-parameter function. **This is the 5th finding in
+            family `returned-handle-has-no-consumer`.** The rule, rather than this instance:
+            when a parameter or field loses its last reader, delete it at every hop of the
+            call chain in the same commit, and grep the symbol before closing the task —
+            the same grep Task 5.3 Step 3 already ran for `resubmit_questions_recursively`.
+          family: returned-handle-has-no-consumer
+          round: 18
+        - id: BR-70
+          severity: Minor
+          title: chat_context.lua's header comment still describes the pre-M5 reporting it no longer owns
+          detail: |-
+            Lines 4-9 say "chat_respond.respond names the file, and chat_respond.respond_all
+            returns `nil, reason` to its caller for the header case". After this round
+            respond routes through `refuse('start', nil, 'not a chat', {notice=reason})` and
+            no longer names the file, and respond_all warns as well as returning. Not the
+            `docs-reflow-after-deletion` family: nothing was deleted from this doc — a
+            behaviour moved out from under a comment that describes a collaborator.
+          family: comment-outlives-its-behavior
+          round: 18
+      boundary: M5
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -1691,6 +1792,75 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   old inline copy that ignores `false` leaves response_topic_spec 16/16 passing.
   Unreachable through response_provider today.
 
+## Round 18 — 2026-09-19T13:32:03-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-65** [Important] `behavior-change-without-regression-test` The provider-detail suppression at chat_respond.lua:1763 is dead, so the diagnosis prints twice and `staging overflow` leaks
+  `result.outcome == 'provider_failed' and failure_notice and nil or result.failure`
+  parses as `((A and B) and nil) or result.failure`, so `failure` is always
+  `result.failure`; the comment above it ("its reason is not repeated") describes
+  behaviour that never happens. Verified against the shipped module: the user gets
+  "the model's request failed (provider request failed (HTTP 503)); submit again —
+  parley: provider request failed (HTTP 503): upstream down". The same line also
+  passes `result.failure` for `overflow`, so the internal token "staging overflow"
+  is shown, against M5's "no raw token". **This is the 5th finding in family
+  `behavior-change-without-regression-test`.** Earlier rounds fixed instances. Do
+  NOT just fix this site — the rule is: a change to a user-visible message needs an
+  assertion on the WHOLE message (equality), not a substring probe. The existing
+  case asserts `find("HTTP 503")`, which is true before and after the intended
+  suppression, so it reports nothing; the two batch cases in the same file already
+  use equality and are the model. Apply the rule to every ending that composes
+  what + extra + action + notice (`provider_failed`, `overflow`, `prepare_failed`).
+- **BR-66** [Important] `enumeration-claims-completeness` The refusal census scans call shapes, not the values describe() keys on, so `issue(s,<lit>)` tokens have no words
+  `describe`'s first lookup key is the `failure` string, written directly by
+  `issue(s,<lit>)` in generation_runner.lua:152 — a form absent from the spec's
+  FORMS list although generation_runner.lua is in FILES. Unkeyed as a result:
+  'staging overflow' (:163, user-visible today, see the other Important finding),
+  'adapter failed' (:301), 'cancel adapter missing; operation unresolved' (:542).
+  Two further blind spots of the same shape: a token that appears only as an
+  argument to `refuse(kind, outcome, <lit>)` (chat_respond.lua:1806 'not a chat',
+  :1421 'no stale continuation ready') is never scanned; and the new shared-cache
+  guard (single_source_sweeps_spec.lua:391) keys on the literal `stdpath('cache')`
+  while the hazard is a spec that inherits dispatcher.lua:17's default query_dir
+  and writes there without naming it. **This is the 10th finding in family
+  `enumeration-claims-completeness`.** Earlier rounds fixed instances (composed
+  reasons, `reject(owner,lit)`) — this round adds a third hole in the same guard.
+  Do NOT add another regex. The rule: a guard must key on the VALUE that reaches
+  the behaviour, not on the syntax that produces it. For the vocabulary, invert it
+  — have `describe` record every token that resolves to "unexpected" (or to an
+  outcome-row fallback) into a process-global set, and fail a spec that finds the
+  set non-empty after the suite; that covers every present and future producer
+  form. For the cache guard, assert at runtime that `dispatcher.query_dir` does not
+  resolve under `stdpath('cache')` during a spec run.
+- **BR-67** [Minor] `action-does-not-unblock` `unknown effect` tells the user to run :ParleyToolOperations, which cannot let the batch resume
+  batch.lua:93 sets `s.unknown` and :99 rejects every later resume; nothing ever
+  clears it, and tool_operations.lua reconciles producer records only. The action
+  that actually works after this round's give-way change is ":ParleyChatRespondAll
+  to start a new batch". The unit spec only checks that an action matches
+  `:Parley%u` — it cannot see that the named command does not clear the condition.
+- **BR-68** [Minor] `fallback-order-hides-known-cause` describe() consults REVOKED only when failure is nil, so a revocation carrying any failure reads "unexpected"
+  refusal.lua:230 gates the cause-specific wording on `failure == nil`, and
+  'revoked' has no TOKENS row, so `describe('ended','revoked',<any string>,
+  {cause='edit'})` returns "Response stopped: unexpected (...)". Reachable whenever
+  a cancel/insert path calls `issue()` before the terminal (generation_runner.lua:542,
+  :572, :598). Prefer the cause when one is recorded, and fall back to the failure.
+- **BR-69** [Minor] `returned-handle-has-no-consumer` init.lua:4174 still forwards a 4th argument that chat_respond.respond does not accept
+  The force flag it carried was deleted this round (cmd_respond), but
+  `M.chat_respond = function(p, cb, ofc, f) return chat_respond.respond(p, cb, ofc, f) end`
+  still passes it to a three-parameter function. **This is the 5th finding in
+  family `returned-handle-has-no-consumer`.** The rule, rather than this instance:
+  when a parameter or field loses its last reader, delete it at every hop of the
+  call chain in the same commit, and grep the symbol before closing the task —
+  the same grep Task 5.3 Step 3 already ran for `resubmit_questions_recursively`.
+- **BR-70** [Minor] `comment-outlives-its-behavior` chat_context.lua's header comment still describes the pre-M5 reporting it no longer owns
+  Lines 4-9 say "chat_respond.respond names the file, and chat_respond.respond_all
+  returns `nil, reason` to its caller for the header case". After this round
+  respond routes through `refuse('start', nil, 'not a chat', {notice=reason})` and
+  no longer names the file, and respond_all warns as well as returning. Not the
+  `docs-reflow-after-deletion` family: nothing was deleted from this doc — a
+  behaviour moved out from under a comment that describes a collaborator.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
@@ -1706,3 +1876,9 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-46** [Important] `enumeration-claims-completeness` The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
 - **BR-61** [Important] `seam-change-collateral` The dispatcher still documents a one-arg pre_query, naming copilot, after W6 made it two-arg
 - **BR-64** [Minor] `behavior-change-without-regression-test` cancel_through's throw exit and the direct site's refused-cancel exit fail nothing when reverted
+- **BR-65** [Important] `behavior-change-without-regression-test` The provider-detail suppression at chat_respond.lua:1763 is dead, so the diagnosis prints twice and `staging overflow` leaks
+- **BR-66** [Important] `enumeration-claims-completeness` The refusal census scans call shapes, not the values describe() keys on, so `issue(s,<lit>)` tokens have no words
+- **BR-67** [Minor] `action-does-not-unblock` `unknown effect` tells the user to run :ParleyToolOperations, which cannot let the batch resume
+- **BR-68** [Minor] `fallback-order-hides-known-cause` describe() consults REVOKED only when failure is nil, so a revocation carrying any failure reads "unexpected"
+- **BR-69** [Minor] `returned-handle-has-no-consumer` init.lua:4174 still forwards a 4th argument that chat_respond.respond does not accept
+- **BR-70** [Minor] `comment-outlives-its-behavior` chat_context.lua's header comment still describes the pre-M5 reporting it no longer owns

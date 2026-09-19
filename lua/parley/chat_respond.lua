@@ -1755,12 +1755,16 @@ local function start_scoped_response(frame)
             -- anything was written is "not started"; the provider's HTTP detail,
             -- a completion's refusal and an overflow's hold are its detail.
             if result.outcome ~= 'success' then
-                local notice = failure_notice or completion_failure
-                if result.outcome == 'overflow' then
+                -- One detail, never two: the provider's diagnosis and an overflow's
+                -- hold are already words, so they are the notice and the ending's
+                -- own reason would repeat them. Anything else is a producer token,
+                -- which `describe` keys (#261 M5 review BR-65).
+                local notice
+                if result.outcome == 'provider_failed' then notice = failure_notice
+                elseif result.outcome == 'overflow' then
                     notice = require('parley.chat_presentation').overflow_message(result.waited_for_line)
                 end
-                -- The provider's diagnosis already says what failed; its reason is not repeated.
-                local failure = result.outcome == 'provider_failed' and failure_notice and nil or result.failure
+                local failure = notice == nil and (result.failure or completion_failure) or nil
                 -- `:e!` unloads and re-reads the chat, so its document detaches
                 -- exactly as a closed chat's does. The runner ends a generation on
                 -- a later timer turn, after the command returned: a chat loaded

@@ -881,6 +881,22 @@ tracked `issue.json`. The nested `--worktree` snapshot read that as a deletion.
 The script now force-indexes the archive, which is exactly the tracked set
 (1438 of 1438), and fails if the index and the archive differ.
 
+### 2026-09-19 — M5 boundary review round 1 (FIX-THEN-SHIP) and dispositions
+
+Six findings, two blocking, all fixed as rules (plan Revisions).
+
+- **BR-65:** `A and B and nil or C` is always `C`, so the provider's diagnosis
+  printed twice and `overflow` leaked its internal token. An ending now carries
+  at most one detail and never a raw token, and the composed endings are
+  asserted whole rather than probed.
+- **BR-66:** the census keyed on call shapes, so the runner's `issue(s, <lit>)`
+  tokens had no words. `describe` now records the values that reach it and fails
+  under the harness where an unkeyed token is produced. The same inversion
+  guards the shared query directory at runtime.
+- **BR-67/68/69/70:** an action that cannot unblock, a cause outranked by a
+  failure, a deleted parameter still forwarded, a comment describing behaviour
+  that moved.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

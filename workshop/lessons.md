@@ -3468,3 +3468,25 @@ download.
   batch both spoke. The host's per-state-change `changed` callback spoke three
   times on one Stop. Test a once-contract through the combined flow (a leg
   inside a batch, a Stop, a reload), counting what the user actually receives.
+- #261 M5 review (assert the composed message whole): `A and B and nil or C` is
+  always `C` in Lua, so a suppression never ran and a provider diagnosis printed
+  twice. The test did not see it because it probed `find("HTTP 503")`, which
+  holds on either side of the bug. When a message is composed from parts (what +
+  detail + action + notice), assert the WHOLE string with equality. A probe can
+  only prove a part survived, never that the parts were assembled as intended.
+- #261 M5 review (a census keys on values, not syntax): the refusal guard scanned
+  producer call shapes and missed `issue(s, <lit>)`, its third hole of the same
+  kind. A guard that enumerates syntax is only as complete as the forms its
+  author happened to know. Invert it: record the VALUE where it reaches the
+  behaviour — `describe` now registers every token that arrives without words and
+  fails under the harness at the producing site — and keep the static scan only
+  as the early, authoring-time warning. The same inversion applies to a path
+  guard: check what a directory resolves to when it is written, not how it is
+  spelled in a spec.
+- #261 M5 review (an action must clear the condition it names): a paused batch
+  was told to run `:ParleyToolOperations`, which reconciles tool records and
+  cannot clear the `unknown` flag that blocks resume, so the advice could not
+  work. The unit test could not see it, because it only checked that the action
+  matched `:Parley%u`. For each refusal, ask what the named command changes; test
+  that a class of refusal names the command that actually unblocks it, and that
+  every command named exists.

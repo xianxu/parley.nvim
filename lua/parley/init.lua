@@ -4171,7 +4171,7 @@ M._build_messages = function(opts) return chat_respond.build_messages(opts) end
 
 M._resolve_remote_references = function(opts, cb) return chat_respond.resolve_remote_references(opts, cb) end
 
-M.chat_respond = function(p, cb, ofc, f) return chat_respond.respond(p, cb, ofc, f) end
+M.chat_respond = function(p, cb, ofc) return chat_respond.respond(p, cb, ofc) end
 
 M.chat_respond_all = function() return chat_respond.respond_all() end
 

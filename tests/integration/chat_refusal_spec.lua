@@ -205,8 +205,10 @@ describe("refusals reach the user once, in words", function()
             calls[1].running = false; calls[1].failure(calls[1].id, { http_status = 503, body = "upstream down" })
             terminal(session)
         end)
-        local message = one("the model's request failed")
-        assert.truthy(message:find("HTTP 503", 1, true), message)
+        -- The whole message, not a probe: a substring holds either side of a
+        -- suppression that never ran (#261 M5 review BR-65).
+        assert.equals("Response stopped: the model's request failed; submit again"
+            .. " — parley: provider request failed (HTTP 503): upstream down", one("the model's request failed"))
     end)
 
     it("says the request could not be built, and why", function()
@@ -215,8 +217,8 @@ describe("refusals reach the user once, in words", function()
                 cursor("💬: first"); terminal(assert(Respond.respond({ range = 0 })))
             end)
         end)
-        local message = one("Response not started: the request could not be built")
-        assert.truthy(message:find("builder exploded", 1, true), message)
+        assert.equals("Response not started: the request could not be built (builder exploded); submit again",
+            one("the request could not be built"))
     end)
 
     -- A submission waits behind first-use model setup; closing it is not a
@@ -230,6 +232,17 @@ describe("refusals reach the user once, in words", function()
             end)
         end)
         one("Response not started: a model setup is already open; finish it, then submit again")
+    end)
+
+    it("says an overflow stopped the response, without its token", function()
+        capture(function()
+            cursor("💬: first"); local session = assert(Respond.respond({ range = 0 }))
+            wait(function() return #calls == 1 end)
+            output(calls[1], string.rep("x", 1048577))
+            terminal(session)
+        end)
+        assert.equals("Response stopped: the response was stopped to keep its output from being dropped;"
+            .. " submit again — its output passed the staging budget", one("staging budget"))
     end)
 
     it("names :ParleyStop when the answer is already being written", function()

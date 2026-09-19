@@ -2456,3 +2456,56 @@ out.
   mid-run, printing no summary. It did this 2 times in 17 runs on this tree,
   and on a clean HEAD worktree on the 2nd run (after 72 cases). So it predates
   this work. `perf_ownership_spec` passes when run alone.
+
+### 2026-09-19 — M5 boundary review round 1 (FIX-THEN-SHIP): dispositions
+
+Six findings, two blocking. Each is fixed as the rule it names, not the site.
+
+- **BR-65 (Important, `behavior-change-without-regression-test`).** Correct and
+  serious: `A and B and nil or C` is always `C` in Lua, so the provider-detail
+  suppression never ran — the diagnosis printed twice, and `overflow` passed its
+  internal token `staging overflow` into the words. The rule, applied: **an
+  ending carries at most one detail, and never a raw token.** The provider's
+  diagnosis and the overflow's hold are already words, so they are the notice;
+  everything else is a producer token, which `describe` keys. The second rule,
+  applied: **a user-visible message is asserted whole, not probed.** The provider,
+  prepare and overflow cases now assert equality (a `find("HTTP 503")` holds on
+  either side of the bug), and a new overflow case drives a 1 MiB output through
+  the session.
+- **BR-66 (Important, `enumeration-claims-completeness`).** Correct: the census
+  keyed on call shapes, and `issue(s, <lit>)` in the runner is not one of them.
+  The rule, applied: **key on the value that reaches the behaviour.**
+  `describe` now records every token that arrives with no words in
+  `refusal._unkeyed`, and under `$PARLEY_TEST_MODE` fails where it is produced;
+  a spec that means to pass one sets `_allow_unkeyed`. Free text under a known
+  outcome is that outcome's detail, recorded separately in `_detail_only` and
+  never a failure. The three runner tokens get rows. The static census stays: it
+  catches at authoring time, before any test drives the path.
+  - The same inversion for the cache guard: `dispatcher.query` now fails under
+    the harness when its `query_dir` resolves under `stdpath('cache')`, which
+    catches a spec that inherits the default without naming it.
+- **BR-67 (Minor, `action-does-not-unblock`).** Correct: nothing clears a
+  batch's `unknown`, so `:ParleyToolOperations` cannot resume it. It now says
+  `:ParleyChatRespondAll to start a new batch`. Two rules are now tested: every
+  batch-fatal token points at a new batch, and **every command an action names
+  exists** (checked against `M.cmd.<Name>` in `init.lua`).
+- **BR-68 (Minor, `fallback-order-hides-known-cause`).** Correct: `describe`
+  consulted `REVOKED` only when the failure was nil, so a revocation carrying a
+  stop's failure read "unexpected". The cause is the more specific fact and now
+  outranks the failure.
+- **BR-69 (Minor, `returned-handle-has-no-consumer`).** `init.lua`'s
+  `chat_respond` forwarded the deleted force flag to a three-parameter function.
+  Deleted at that hop too.
+- **BR-70 (Minor, `comment-outlives-its-behavior`).** `chat_context.lua`'s header
+  described the pre-M5 reporting. Rewritten: it returns a typed error and never
+  speaks; its callers word it through `refuse`.
+
+Counterfactuals for this round, each red:
+
+| Change | Fails |
+|---|---|
+| the `A and B and nil or C` line restored | "the model's request failed" (equality) |
+| the unkeyed-token failure removed | "records a token that has no words" |
+| an action naming `:ParleyNoSuchThing` | "names only commands that exist" |
+| the spec's `query_dir` back to the shared cache | 67 cases of `dispatcher_query_spec` |
+
