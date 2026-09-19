@@ -81,17 +81,20 @@ describe('production response provider adapter',function()
         assert.truthy(s.reason:find('killed: stop',1,true),s.reason)
         assert.is_nil(s.reason:find('unknown',1,true),s.reason)
     end)
-    it('prevents delayed pre-query startup after cancellation without claiming early resolution',function()
+    -- #261 M4 W5: a cancel that finds no process resolves at once — nothing else
+    -- would. The late pre_query callback finds the owner inactive and spawns
+    -- nothing, and never resolves a second time.
+    it('resolves a cancel during pre-query at once, and the late startup spawns nothing',function()
         local ready
         Providers.get=function(name)local p=vim.tbl_extend('force',{},old_get(name));p.pre_query=function(fn)ready=fn end;return p end
         local adapter=Provider.new();local cb,s=callbacks();local ctx=context(1)
         local handle=adapter.request(ctx,cb);local resolved=0
         adapter.cancel_operation({epoch=1,generation=1,operation=ctx.operation,handle=handle},function()resolved=resolved+1 end)
-        assert.equals(0,processes.spawn_calls);assert.equals(0,resolved)
+        assert.equals(0,processes.spawn_calls);assert.equals(1,resolved)
         ready();assert.equals(0,processes.spawn_calls);assert.equals(1,resolved);assert.equals(0,s.resolved)
         ready();assert.equals(1,resolved);assert.equals(0,s.resolved)
     end)
-    it('refuses a cancelled recovery retry and waits for its explicit settlement',function()
+    it('resolves a cancel during recovery at once, and refuses the late retry',function()
         local retry
         Providers.get=function(name)
             local p=vim.tbl_extend('force',{},old_get(name))
@@ -104,7 +107,7 @@ describe('production response provider adapter',function()
         assert.is_true(vim.wait(100,function()return retry~=nil end,1))
         local resolved=0
         adapter.cancel_operation({epoch=1,generation=1,operation=ctx.operation,handle=handle},function()resolved=resolved+1 end)
-        assert.equals(0,resolved);retry()
+        assert.equals(1,resolved);retry()
         assert.equals(1,resolved);assert.equals(1,processes.spawn_calls);assert.equals(0,s.failed)
         retry();assert.equals(1,resolved)
     end)

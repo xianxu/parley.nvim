@@ -107,7 +107,10 @@ function M.start(doc,spec,callbacks)
         callbacks={ready=callbacks.ready,cancelled=callbacks.cancelled},
         input_ref=spec.input_ref,dependencies_ref=spec.dependencies_ref,input_prefix=spec.input_prefix}
     states[target]=s;group[key]=true;pending[doc]=group
-    s.work=Deferred.new(function()return M.step(target).status=='waiting'end)
+    -- A step that throws cancels the target (#261 M4 W13): it holds a target slot
+    -- and two user captures until it settles.
+    s.work=Deferred.new(function()return M.step(target).status=='waiting'end,
+        function(err)retire(s,'cancelled','target step failed: '..tostring(err):sub(1,512))end)
     s.off=D.subscribe(doc,function(event)
         if s.status~='waiting'then return end
         if event.kind=='reload' or event.kind=='detach' then retire(s,'cancelled',event.kind);return end

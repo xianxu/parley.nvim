@@ -27,33 +27,31 @@ describe('remote preparation positive child completion',function()
         OAuth.fetch_content,p.dispatcher.query,R.save_remote_reference_cache=old_fetch,old_query,old_save
         vim.api.nvim_buf_delete(buf,{force=true});session=nil
     end)
-    it('holds both a launched sibling and an unknown throwing launch until their positive callbacks arrive',function()
+    -- #261 M4 W2: a failed launch fails the preparation, and the generation ends
+    -- without waiting on callbacks that may never come. Whatever a fetch spawned
+    -- is killed with the generation's scope (Task 4.3 puts fetches in it), so a
+    -- throw no longer needs a positive callback before the generation may end.
+    it('ends at a throwing launch without waiting for its siblings, and late results publish nothing',function()
         OAuth.fetch_content=function(url,_,done)
             children[#children+1]={url=url,done=done}
             if #children==2 then error('launch outcome unknown')end
         end
         session=assert(R.respond({range=0}));wait(function()return #children==2 end)
-        wait(function()return snapshot(session).generation.phase=='stopping' or snapshot(session).status=='terminal'end)
-        assert.equals('stopping',snapshot(session).generation.phase)
-        children[1].done('first result');children[1].done('duplicate result')
-        vim.wait(50,function()return snapshot(session).status=='terminal'end,1)
-        assert.equals('stopping',snapshot(session).generation.phase,'throw is not proof that second child never spawned')
-        assert.equals(2,#children,'third URL must not start after a failed launch')
-        children[2].done('late result after throw')
         wait(function()return snapshot(session).status=='terminal'end)
+        assert.equals(2,#children,'third URL must not start after a failed launch')
+        children[1].done('first result');children[1].done('duplicate result')
+        children[2].done('late result after throw');children[2].done('duplicate')
         assert.equals(0,requests);assert.equals(0,saves)
-        children[2].done('duplicate');assert.equals(0,saves)
     end)
-    it('does not publish remote cache results or start a provider after operator cancellation',function()
+    -- #261 M4 W2: Stop ends the generation at once; fetches still out publish
+    -- nothing when they finally answer, and start no provider.
+    it('ends at Stop without waiting on fetches, and late results publish nothing',function()
         OAuth.fetch_content=function(url,_,done)children[#children+1]={url=url,done=done}end
         session=assert(R.respond({range=0}));wait(function()return #children==3 end)
         R.cancel_responses(buf)
-        wait(function()return snapshot(session).generation.phase=='stopping'end)
-        children[1].done('cancelled first');children[1].done('duplicate')
-        children[2].done('cancelled second')
-        assert.equals('stopping',snapshot(session).generation.phase)
-        children[3].done('cancelled third')
         wait(function()return snapshot(session).status=='terminal'end)
+        children[1].done('cancelled first');children[1].done('duplicate')
+        children[2].done('cancelled second');children[3].done('cancelled third')
         assert.equals(0,requests);assert.equals(0,saves)
     end)
 end)

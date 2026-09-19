@@ -113,7 +113,7 @@ must *not* be. So:
 | `tasker` — `scope_key`, `is_scoped`, `stop_scope`, `held`, `leave`, `deadline` (the per-kind table), `exit_reason` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
 | `oauth` — `_token_body_summary`: what a token endpoint's body may show in a log, its OAuth error only | `lua/parley/oauth.lua` | modified | the OAuth token endpoint |
 | `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
-| `deferred_work` — `new(step, on_error)` | `lua/parley/deferred_work.lua` | modified | timer turns |
+| `deferred_work` — `new`, now taking an error callback | `lua/parley/deferred_work.lua` | modified | timer turns |
 
 - **`helper.file_to_table`** (M1) runs `pcall(vim.json.decode)` and requires a
   table. Otherwise it logs a warning naming the file and saying it was ignored,
@@ -1360,9 +1360,9 @@ test `tests/integration/generation_settles_spec.lua`.
 - `lua/parley/response_target.lua`, `lua/parley/response_completion.lua` and
   `lua/parley/response_preparation.lua`: W13.
 
-- [ ] **Step 1: Failing tests** for W2, W3, W5, W12, W13 (each owner), W15 and W16.
-- [ ] **Step 2: Implement** per the table. **Step 3:** PASS.
-- [ ] **Step 4:** Commit (`#261 M4: preparation, provider, completion and topics settle on cancel`).
+- [x] **Step 1: Failing tests** for W2, W3, W5, W12, W13 (each owner), W15 and W16.
+- [x] **Step 2: Implement** per the table. **Step 3:** PASS.
+- [x] **Step 4:** Commit (`#261 M4: preparation, provider, completion and topics settle on cancel`).
 
 ### Task 4.3: Helpers a generation calls
 
@@ -2121,4 +2121,33 @@ Minors, fixed below and bundled into the close commit (#174: no re-run).
 - **Tests:** `tests/integration/generation_settles_spec.lua` (9 cases). Each of
   four targeted mutations — the thrown-start resolve, the child resolve, the
   fault handler, the scope kill — turns it red.
+
+### 2026-09-19 — M4 Task 4.2, as built
+
+**Delta.**
+- **The session's `stopping` hook** calls
+  `tasker.stop_scope(tasker.scope_key(ctx.epoch, ctx.generation))`. The test
+  signals a process in the scope that no adapter tracks, and turns red without
+  the hook.
+- **W2 changes a pinned contract.** `chat_remote_preparation_spec` asserted that
+  a preparation holds until every content fetch calls back ("a throw is not
+  proof the child never spawned"). Cancel now resolves at once. Anything a
+  fetch spawned dies with the scope kill, once Task 4.3 puts fetches in the
+  scope; until that commit, an orphaned fetch ends at its 120 s deadline. Both
+  cases are rewritten: Stop, or a launch that throws, ends the generation, and
+  late results publish nothing.
+- **W3** is covered by W2 plus the existing `validate_source` check; its test
+  is a readiness picker that never answers.
+- **W5 changes two pinned contracts** in `response_provider_spec`: a cancel
+  during `pre_query` or during recovery resolves at once. The late callback
+  spawns nothing and resolves nothing twice.
+- **W12/W18.** A refused completion start is `done('failed')`. The finalize
+  adapter no longer returns a handle the runner discarded: completion settles
+  itself on `ctx.cancelled`, pinned by a completion-level test.
+- **W13.** All four owners pass an error callback to `Deferred.new`. Each test
+  makes the owner's own step throw, and turns red on revert.
+- **W15.** Batch and topic cancels are guarded, so the session's cancel always
+  runs; the topic cancel in the terminal handler too.
+- **W16.** A topic started without a handle retires in `stop()`, and a throwing
+  provider cancel retires it failed.
 

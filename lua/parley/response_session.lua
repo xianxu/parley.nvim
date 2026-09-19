@@ -225,7 +225,14 @@ function M.start(doc,spec,opts)
             end
             safe(opts.changed,value)
         end,
-        terminal=function(result)finish(result,false)end,rejected=function(reason)finish(reason,true)end}
+        terminal=function(result)finish(result,false)end,rejected=function(reason)finish(reason,true)end,
+        -- The scope kill (#261 M4): the runner calls it once, when this
+        -- generation first stops or ends. Every process started in its scope —
+        -- provider stream, tools, content fetches — is stopped as a group.
+        stopping=function(ctx)
+            local tasker=opts.tasker or require('parley.tasker')
+            tasker.stop_scope(tasker.scope_key(ctx.epoch,ctx.generation))
+        end}
     function hooks.cancel_operation(ctx,done)
         local handle=ctx.handle
         if type(handle)~='table'then return false end

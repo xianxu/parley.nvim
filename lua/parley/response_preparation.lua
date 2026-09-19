@@ -143,7 +143,10 @@ function M.start(doc,ctx,callbacks,spec,opts)
         grants=grants,spec={gaps=gaps},bootstrap=spec.bootstrap_newline==true,status='more',index=1,removed=0,accepted=0}
     operations[op]=s
     function op:cancel(done)return M.cancel(self,done)end
-    s.work=Deferred.new(function()return M.step(op).status=='more'end)
+    -- A step that throws settles the preparation failed (#261 M4 W13): its
+    -- generation is waiting on `resolved`, and holds its grants until then.
+    s.work=Deferred.new(function()return M.step(op).status=='more'end,
+        function(err)retire(s,'error','preparation step failed: '..tostring(err):sub(1,512))end)
     s.off=D.subscribe(doc,function(event)
         if s.status=='more' and (event.kind=='reload' or event.kind=='detach')then retire(s,'cancelled',event.kind)end
     end)

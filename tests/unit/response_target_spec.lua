@@ -24,6 +24,22 @@ describe('response target admission before IO',function()
     after_each(function()for _,doc in ipairs(docs)do D.detach(doc)end;docs={}end)
     it('provides the bounded target adapter',function()assert.is_true(ok,tostring(T))end)
     if not ok then return end
+    -- #261 M4 W13: a step that throws cancels the target and says why, so the
+    -- slot and the two user captures it holds are released.
+    it('cancels itself when its step throws',function()
+        local doc=fixture();local cancelled
+        local value=spec();value.schedule=true
+        local repair=D.repair_step
+        D.repair_step=function()error('target exploded')end
+        local ok_start,err=pcall(function()
+            assert(T.start(doc,value,{cancelled=function(reason)cancelled=reason end}))
+            assert(vim.wait(500,function()return cancelled~=nil end,5),'the target never settled')
+        end)
+        D.repair_step=repair
+        assert(ok_start,err)
+        assert.truthy(tostring(cancelled):find('target exploded',1,true))
+        assert.equals(0,D.user_guard_stats(doc).live)
+    end)
     it('captures immediately while opaque and calls readiness only after bounded confirmation',function()
         local doc,fake=fixture();local ready
         local target=assert(T.start(doc,spec(),{ready=function(value)ready=value end}))

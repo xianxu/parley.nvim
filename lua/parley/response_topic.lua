@@ -42,11 +42,15 @@ end
 local function stop(s,reason,failed)
     if s.finished or s.stopping then return false end
     s.stopping=true;s.reason=reason;s.failed=failed==true;s.status='stopping'
-    if not s.started or s.resolved then retire(s,s.failed and 'failed' or 'cancelled',reason)
-    elseif s.handle then
-        s.provider.cancel_operation({epoch=s.epoch,generation=s.generation,operation=s.operation,handle=s.handle},function()
+    -- Started with no handle: its request threw before returning one, so there
+    -- is nothing to cancel and it retires now (#261 M4 W16).
+    if not s.started or s.resolved or not s.handle then retire(s,s.failed and 'failed' or 'cancelled',reason)
+    else
+        local ok=pcall(s.provider.cancel_operation,{epoch=s.epoch,generation=s.generation,operation=s.operation,
+            handle=s.handle},function()
             s.resolved=true;retire(s,s.failed and 'failed' or 'cancelled',s.reason)
         end)
+        if not ok then retire(s,'failed',s.reason) end
     end
     return true
 end
@@ -103,7 +107,10 @@ function M.start(doc,spec,opts)
     states[job]=s
     if opts.buf then s.reader=Reader.for_buffer(opts.buf)end
     s.provider=Provider.new({dispatcher=opts.dispatcher,tasker=opts.tasker,wire=opts.wire})
-    s.work=Deferred.new(function()return M.step(job).status=='more'end)
+    -- A step that throws stops the topic, failed (#261 M4 W13): it holds a
+    -- generation slot and two user captures until it retires.
+    s.work=Deferred.new(function()return M.step(job).status=='more'end,
+        function(err)stop(s,'topic step failed: '..tostring(err):sub(1,512),true)end)
     s.off=D.subscribe(doc,function(event)
         if s.finished or s.writing then return end
         if event.kind=='reload' or event.kind=='detach' or not captured(s)then stop(s,'source changed')end

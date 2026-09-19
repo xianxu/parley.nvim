@@ -44,6 +44,25 @@ local function drain(op)
     error('completion did not settle')
 end
 describe('current indexed response completion',function()
+    -- #261 M4 W18: the runner keeps no handle to a finalize, so a completion
+    -- must settle on its own when its generation is cancelled mid-finalize.
+    it('settles failed on its own when cancelled before it writes',function()
+        local doc,_,ctx=setup({'💬: q','🤖: a','text'})
+        local cancelled=false
+        ctx.cancelled=function()return cancelled end
+        local _,calls=start(doc,ctx,{user_prefix='💬:',schedule=true})
+        cancelled=true
+        assert.is_true(vim.wait(500,function()return #calls==1 end,5))
+        assert.same({'failed'},calls)
+    end)
+    -- #261 M4 W13: a step that throws settles the finalize failed.
+    it('settles its finalize failed when its step throws',function()
+        local doc,_,ctx=setup({'💬: q','🤖: a','text'})
+        ctx.cancelled=function()error('completion exploded')end
+        local _,calls=start(doc,ctx,{user_prefix='💬:',schedule=true})
+        assert.is_true(vim.wait(500,function()return #calls==1 end,5))
+        assert.same({'failed'},calls)
+    end)
     after_each(function()
         for _,d in ipairs(docs)do D.detach(d)end;docs={}
         for _,b in ipairs(buffers)do if vim.api.nvim_buf_is_valid(b)then vim.api.nvim_buf_delete(b,{force=true})end end;buffers={}

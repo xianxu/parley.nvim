@@ -1330,8 +1330,10 @@ function M.response_snapshot(session)
     return require('parley.response_session').snapshot(session)
 end
 local function cancel_entry(entry)
-    if entry.batch then require('parley.batch_response').cancel(entry.batch) end
-    if entry.topic then require('parley.response_topic').cancel(entry.topic, 'operator stopped response') end
+    -- Independent cleanups: one that throws must not skip the session's own
+    -- cancel, which is what releases the generation (#261 M4 W15).
+    if entry.batch then pcall(require('parley.batch_response').cancel, entry.batch) end
+    if entry.topic then pcall(require('parley.response_topic').cancel, entry.topic, 'operator stopped response') end
     if entry.session then
         require('parley.response_session').cancel(entry.session, 'operator stopped response')
         return 1
@@ -1563,10 +1565,17 @@ local function start_scoped_response(frame)
             operation.cancel_done = nil
             done()
         end
+        -- Cancel resolves at once (#261 M4 W2, W3). `build` and `ready` no-op once
+        -- cancelled, a late readiness pick fails `validate_source`, and whatever
+        -- the remote fetch started dies with the generation's scope kill — so
+        -- nothing is left to wait for, and waiting held the generation when the
+        -- readiness picker or a fetch never called back.
         function operation:cancel(done)
             self.cancelled = true
-            if self.resolved then done() else self.cancel_done = done end
-            if self.remote then self.remote:cancel() end
+            if self.resolved then done(); return end
+            self.cancel_done = done
+            if self.remote then pcall(self.remote.cancel, self.remote) end
+            resolve()
         end
         local function logical_failure(reason)
             if operation.cancelled or operation.failed then return end
@@ -1682,12 +1691,16 @@ local function start_scoped_response(frame)
         finalize = function(ctx, done)
             capture_topic_parent(ctx)
             start_topic()
-            local completion = require('parley.response_completion').start(doc, ctx, done,
+            -- The completion settles `done` on every path, cancellation included:
+            -- it steps until it finishes and checks `ctx.cancelled` each time, so
+            -- the runner needs no handle (#261 M4 W18). A refused start is a
+            -- failed finalize, never a silent one (W12).
+            local completion, why = require('parley.response_completion').start(doc, ctx, done,
                 {user_prefix = config.chat_user_prefix})
-            return {cancel = function(_, resolved)
-                if completion then completion:cancel() end
-                if resolved then resolved() end
-            end}
+            if not completion then
+                _parley.logger.warning('Response completion not started: ' .. tostring(why))
+                done('failed')
+            end
         end,
         rejected = function(why)
             main_finished = true; release(); _parley.logger.warning('Response not started: ' .. tostring(why))
@@ -1696,7 +1709,7 @@ local function start_scoped_response(frame)
         terminal = function(result)
             main_finished = true
             if result.outcome ~= 'success' and entry.topic then
-                require('parley.response_topic').cancel(entry.topic, 'origin response stopped')
+                pcall(require('parley.response_topic').cancel, entry.topic, 'origin response stopped')
             end
             release()
             if vim.api.nvim_buf_is_valid(buf) then

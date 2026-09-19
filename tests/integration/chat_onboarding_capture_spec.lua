@@ -55,6 +55,33 @@ describe('captured response onboarding',function()
         -- #266: the answer header lands with the first output, not at request start.
         assert.truthy(text(buf):find('🤖:[SelectedFixture]',1,true))
     end)
+    -- #261 M4 W2, W3: a readiness picker that never answers must not hold the
+    -- generation. Stop ends it at once; a late pick starts nothing.
+    it('ends a response at Stop while its readiness picker never answers',function()
+        session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
+        Respond.cancel_responses(buf)
+        wait(function()return Respond.response_snapshot(session).status=='terminal'end)
+        parley._state.agent='SelectedFixture';ready();ready=nil
+        vim.wait(50,function()return #calls>0 end,5)
+        assert.equals(0,#calls,'a pick after Stop started a request')
+    end)
+    -- #261 M4 W12: a completion that refuses to start is a failed finalize, and
+    -- the generation ends rather than waiting on a `done` nothing will call.
+    it('ends a response whose completion refuses to start',function()
+        local Completion=require('parley.response_completion')
+        local original=Completion.start
+        Completion.start=function()return nil,'completion refused'end
+        local ok,err=pcall(function()
+            parley._state.agent='SelectedFixture'
+            session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
+            ready();wait(function()return #calls==1 end)
+            calls[1].output(calls[1].id,'answer');calls[1].complete(calls[1].id)
+            wait(function()return Respond.response_snapshot(session).status=='terminal'end)
+        end)
+        Completion.start=original
+        assert(ok,err)
+        assert.equals('finalize_failed',Respond.response_snapshot(session).generation.outcome)
+    end)
     it('never recaptures a deleted origin when onboarding finishes',function()
         session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
         vim.api.nvim_buf_set_lines(buf,4,7,false,{})

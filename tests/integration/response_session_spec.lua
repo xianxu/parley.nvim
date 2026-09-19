@@ -44,6 +44,21 @@ describe('production response session composition',function()
     local function start(doc,value,opts,sessions)
         local s=assert(Session.start(doc,value,opts));sessions[#sessions+1]=s;return s
     end
+    -- #261 M4: when the generation stops, every process in its scope is stopped
+    -- as a group — one no adapter knows about included (a content fetch, say).
+    it('kills its generation scope when it stops, reaching a process no adapter tracks',function()
+        local s=start(doc,spec(0),{buf=buf,agent='fixture',build_input=function(previous)return previous end,
+            prepare_input=function(_,cb)cb.prepared(input(buf));cb.resolved();return {}end},sessions)
+        pump(s);assert.equals(1,processes.spawn_calls)
+        local generation=Session.snapshot(s).generation
+        Tasker.run(nil,'fixture',{},nil,nil,nil,nil,{attempt_id='stray',
+            logical_generation=Tasker.scope_key(generation.epoch,generation.generation)})
+        local stray=processes.processes[4243]
+        Session.cancel(s);pump(s)
+        local signalled=false
+        for _,sig in ipairs(processes.signals)do if sig.pid==stray.pid and sig.group then signalled=true end end
+        assert.is_true(signalled,'the stray process in the scope was not signalled')
+    end)
     it('composes disjoint native writers and preserves the next human draft',function()
         local function opts()return {buf=buf,agent='fixture',build_input=function(previous)return previous end,
             prepare_input=function(_,cb)cb.prepared(input(buf));cb.resolved();return {}end}end

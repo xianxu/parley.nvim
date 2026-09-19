@@ -43,6 +43,39 @@ describe('independent automatic topic ownership',function()
     local function start(doc,value,jobs)
         local job=assert(Topic.start(doc,value,{}));jobs[#jobs+1]=job;return job
     end
+    -- #261 M4 W13: a step that throws stops the topic, failed, and releases it.
+    it('retires failed when its step throws',function()
+        local value=spec();value.schedule=true
+        local final
+        local repair=D.repair_step
+        D.repair_step=function()error('topic exploded')end
+        local ok_start,err=pcall(function()
+            local job=assert(Topic.start(doc,value,{terminal=function(result)final=result end}));jobs[#jobs+1]=job
+            assert(vim.wait(500,function()return final~=nil end,5),'the topic never retired')
+        end)
+        D.repair_step=repair
+        assert(ok_start,err)
+        assert.equals('failed',final.status)
+        assert.equals(0,D.user_guard_stats(doc).live)
+    end)
+    -- #261 M4 W16: a request that throws leaves the topic started with no
+    -- handle; it must still retire rather than stop forever.
+    it('retires when its provider request throws',function()
+        local Provider=require('parley.response_provider')
+        local new=Provider.new
+        Provider.new=function()return {request=function()error('request exploded')end,
+            cancel_operation=function()return false end}end
+        local value=spec();value.schedule=true
+        local final
+        local ok_start,err=pcall(function()
+            local job=assert(Topic.start(doc,value,{terminal=function(result)final=result end}));jobs[#jobs+1]=job
+            assert(vim.wait(500,function()return final~=nil end,5),'the topic never retired')
+        end)
+        Provider.new=new
+        assert(ok_start,err)
+        assert.equals('failed',final.status)
+        assert.equals(0,D.user_guard_stats(doc).live)
+    end)
     it('writes only the final first line after positive process and pipe completion',function()
         local job=start(doc,spec(),jobs);pump(job)
         local p=processes.processes[4242];assert.is_not_nil(p)

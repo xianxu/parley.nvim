@@ -117,9 +117,12 @@ function M.new(opts)
         r.cancelled=true;r.active=false
         if r.terminal then safe(resolved);return true end
         r.cancel_resolved=resolved
-        tasker.stop_owner(r.owner)
-        -- A zero match can mean asynchronous pre_query/recovery is outstanding.
-        -- Its guarded startup/abort callback, not this observation, resolves it.
+        -- A zero match means no process is running for this request: a pre_query
+        -- or a recovery is pending. Nothing would resolve it, so it resolves now;
+        -- its late callback finds the owner inactive and aborts (`transport_alive`,
+        -- #261 M4 W5). A signal that failed leaves the process to its exit.
+        local ok,matched=pcall(tasker.stop_owner,r.owner)
+        if ok and matched==0 then resolve(r) end
         return true
     end
     return adapter
