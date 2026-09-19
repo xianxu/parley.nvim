@@ -39,6 +39,10 @@ under it is not written.
   drives it for both a loaded and an unloaded chat.
 - No test's name claims a rewrite that its assertions cannot distinguish from
   a no-op.
+- *(deferred from parley#261 M2, BR-30)* `chat_move_spec` builds its chats as
+  file-backed buffers, the way production opens them, and a tree move of a
+  loaded chat succeeds instead of aborting with ENOENT after the save-triggered
+  slug rename.
 
 ## Plan
 
