@@ -27,7 +27,14 @@ M.load = function()
 	if vim.fn.filereadable(path) == 0 then
 		return {}
 	end
-	return _helpers.file_to_table(path) or {}
+	-- #261: an entry that is not a table carrying a string system_prompt is
+	-- dropped at the read; no caller sees it.
+	local prompts = _helpers.file_to_table(path, { ["*"] = "table" }) or {}
+	for name, prompt in pairs(prompts) do
+		_helpers.conform(prompt, { system_prompt = "string" }, path)
+		if prompt.system_prompt == nil then prompts[name] = nil end
+	end
+	return prompts
 end
 
 --- Save custom prompts to disk.

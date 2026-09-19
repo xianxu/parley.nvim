@@ -68,36 +68,20 @@ local function wait_for(predicate)
 end
 -- Native buffers with a stateful transport fixture: physical terminal callbacks
 -- are explicit, and each response exposes its actual session lifetime.
+local Fixture=require('tests.helpers.respond_fixture')
 describe('chat_respond: scoped session integration',function()
-    local old_query,old_stop,old_agent,buf,calls,files
+    local restore,old_agent,buf,calls,files
     before_each(function()
-        calls,files={},{};old_agent=parley._state.agent
-        old_query,old_stop=parley.dispatcher.query,parley.tasker.stop_owner
-        parley.dispatcher.query=function(b,provider,payload,output,complete,_,_,abort,model,failure,opts)
-            local id='session-fixture:'..#calls
-            local call={id=id,buf=b,provider=provider,model=model,payload=payload,output=output,
-                complete=complete,abort=abort,failure=failure,opts=opts,running=true}
-            calls[#calls+1]=call
-            parley.tasker.set_query(id,{buf=b,response='',raw_response='',
-                tool_wire=provider=='openai' and 'openai' or 'anthropic'})
-            return id
-        end
-        parley.tasker.stop_owner=function(owner)
-            for _,call in ipairs(calls)do
-                if call.running and call.opts.generation_id==owner then
-                    call.running=false;vim.schedule(function()call.abort('cancelled')end)
-                end
-            end
-        end
+        files={};old_agent=parley._state.agent
+        calls,restore=Fixture.install(parley)
         buf=vim.api.nvim_create_buf(true,false)
         vim.api.nvim_buf_set_name(buf,make_chat_filename())
         vim.api.nvim_set_current_buf(buf)
     end)
     after_each(function()
         Respond.cancel_responses(buf)
-        for _,call in ipairs(calls)do call.abort('fixture cleanup')end
+        restore()
         if vim.api.nvim_buf_is_valid(buf)then vim.api.nvim_buf_delete(buf,{force=true})end
-        parley.dispatcher.query,parley.tasker.stop_owner=old_query,old_stop
         for _,path in ipairs(files)do vim.fn.delete(path)end
         parley._state.agent=old_agent;parley.agents.OpenAiFamilyTest=nil
     end)

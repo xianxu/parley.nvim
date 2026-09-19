@@ -642,7 +642,15 @@ end
 
 ---@param file_path string # the file path from where to read the json into a table
 ---@return table | nil # the table read from the file, or nil if an error occurred
-_H.file_to_table = function(file_path)
+--- A JSON sidecar as a table, or nil — never an error. `schema`, when given,
+--- maps a key to the Lua type its value must have ('string', 'number',
+--- 'boolean', 'table'); `['*']` is the type for every key it does not name.
+--- A field of the wrong type is dropped with a warning, so a hand-edited or
+--- older-version file degrades field by field instead of failing downstream
+--- (#261: the sidecar is parsed into typed values at the boundary).
+---@param file_path string
+---@param schema table|nil
+_H.file_to_table = function(file_path, schema)
 	local file, err = io.open(file_path, "r")
 	if not file then
 		logger.warning("Failed to open file for reading: " .. file_path .. "\nError: " .. err)
@@ -656,7 +664,34 @@ _H.file_to_table = function(file_path)
 		return nil
 	end
 
-	local tbl = vim.json.decode(content)
+	-- #261: every sidecar under the state directory is input from another
+	-- process, version or crash, and none may stop someone working on a chat.
+	-- Content that does not decode to a table is ignored, never thrown and
+	-- never returned as a scalar a caller would index.
+	local ok, tbl = pcall(vim.json.decode, content)
+	if not ok or type(tbl) ~= "table" then
+		logger.warning("Ignoring unreadable state file " .. file_path .. ": "
+			.. (ok and "not a JSON table" or tostring(tbl)))
+		return nil
+	end
+	if schema then return _H.conform(tbl, schema, file_path) end
+	return tbl
+end
+
+--- Drop every field of `tbl` whose type `schema` rules out (see file_to_table).
+--- Mutates and returns `tbl`; `label` names the source in the warning.
+---@param tbl table
+---@param schema table
+---@param label string
+_H.conform = function(tbl, schema, label)
+	for key, value in pairs(tbl) do
+		local want = schema[key] or schema["*"]
+		if want and type(value) ~= want then
+			logger.warning("Ignoring field " .. tostring(key) .. " of " .. tostring(label)
+				.. ": expected " .. want .. ", found " .. type(value))
+			tbl[key] = nil
+		end
+	end
 	return tbl
 end
 

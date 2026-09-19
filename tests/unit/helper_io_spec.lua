@@ -211,6 +211,60 @@ describe("helper I/O functions", function()
             assert.is_nil(result)
         end)
 
+        -- #261: every JSON sidecar under the state directory is read through
+        -- file_to_table, and a corrupt one must never stop a submission.
+        describe("F3b: an unreadable sidecar is ignored, never thrown", function()
+            local logger = require("parley.logger")
+            local original, warnings
+            before_each(function()
+                warnings = {}
+                original = logger.warning
+                logger.warning = function(msg) warnings[#warnings + 1] = msg end
+            end)
+            after_each(function() logger.warning = original end)
+            -- A JSON array decodes to a Lua table and is returned: readers
+            -- index fields on it and find nil, which already degrades. Refusing
+            -- it would also refuse `{}`, which decodes to the same empty table.
+            for label, content in pairs({
+                ["invalid JSON"] = "{",
+                ["a JSON string"] = '"x"',
+                ["a JSON number"] = "3",
+            }) do
+                it("returns nil for " .. label .. " and names the file", function()
+                    local path = tmpdir .. "/corrupt.json"
+                    local f = io.open(path, "w"); f:write(content); f:close()
+                    local ok, result = pcall(helper.file_to_table, path)
+                    assert.is_true(ok, tostring(result))
+                    assert.is_nil(result)
+                    assert.equals(1, #warnings)
+                    assert.truthy(warnings[1]:find(path, 1, true))
+                end)
+            end
+        end)
+
+        describe("F3c: a schema drops wrongly typed fields", function()
+            local logger = require("parley.logger")
+            local original, warnings
+            before_each(function()
+                warnings = {}
+                original = logger.warning
+                logger.warning = function(msg) warnings[#warnings + 1] = msg end
+            end)
+            after_each(function() logger.warning = original end)
+            it("keeps fields of the declared type and drops the rest", function()
+                local path = tmpdir .. "/typed.json"
+                helper.table_to_file({ agent = 3, updated = 7, extra = "kept" }, path)
+                local got = helper.file_to_table(path, { agent = "string", updated = "number" })
+                assert.same({ updated = 7, extra = "kept" }, got)
+                assert.equals(1, #warnings)
+                assert.truthy(warnings[1]:find("agent", 1, true))
+            end)
+            it("applies the wildcard type to every undeclared key", function()
+                local got = helper.conform({ a = {}, b = 3 }, { ["*"] = "table" }, "fixture")
+                assert.same({ a = {} }, got)
+            end)
+        end)
+
         it("F4: table_to_file with nested table serializes correctly", function()
             local path = tmpdir .. "/nested.json"
             local original = {

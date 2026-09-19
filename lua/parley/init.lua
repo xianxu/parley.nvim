@@ -1442,6 +1442,17 @@ local function live_agent_options()
 end
 
 --- Reconcile in-memory state with what is on disk, apply `update`, persist.
+-- The fields state.json may carry, by type (#261). A field of another type —
+-- a hand edit, an older version — is dropped at the read, never compared or
+-- indexed downstream.
+local STATE_SCHEMA = {
+	agent = "string", system_prompt = "string", last_chat = "string",
+	web_search = "boolean", claude_web_search = "boolean", follow_cursor = "boolean",
+	interview_mode = "boolean", updated = "number", interview_start_time = "number",
+	live_agent = "table", note_dirs = "table", note_roots = "table",
+	chat_dirs = "table", chat_roots = "table", repo_modes = "table",
+}
+
 ---@param update table | nil # table with options
 M.refresh_state = function(update)
 	local state_file = M.config.state_dir .. "/state.json"
@@ -1451,7 +1462,7 @@ M.refresh_state = function(update)
 
 	local disk_state = {}
 	if vim.fn.filereadable(state_file) ~= 0 then
-		disk_state = M.helpers.file_to_table(state_file) or {}
+		disk_state = M.helpers.file_to_table(state_file, STATE_SCHEMA) or {}
 	end
 
 	if not disk_state.updated then

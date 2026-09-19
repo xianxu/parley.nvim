@@ -169,7 +169,11 @@ V.refresh_copilot_bearer = function(callback)
 
 	local state = {}
 	if vim.fn.filereadable(state_file) ~= 0 then
-		state = helpers.file_to_table(state_file) or {}
+		-- #261: a malformed bearer is dropped here, not compared below.
+		state = helpers.file_to_table(state_file, { copilot_bearer = "table" }) or {}
+		if state.copilot_bearer then
+			helpers.conform(state.copilot_bearer, { token = "string", expires_at = "number" }, state_file)
+		end
 	end
 
 	local bearer = V._state.copilot_bearer or state.copilot_bearer or {}
