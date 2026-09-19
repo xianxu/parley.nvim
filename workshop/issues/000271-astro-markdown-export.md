@@ -33,6 +33,11 @@ by hand when it was first committed there (xianxu.dev `f8d9ea1`).
 In addition, `<C-g>em` always writes to `export_markdown_dir`. The only way to
 choose a destination is to type `:ParleyExportMarkdown <dir>`.
 
+A third gap: in a chat, tool blocks and summary lines are folded by default
+because they are data rather than reading. The export flattens them, so a
+published transcript shows every `📝:` summary and tool result at full length,
+and a reader has to scroll past machine bookkeeping to follow the conversation.
+
 ## Spec
 
 - **Astro format.** The markdown export writes `<slug>.md` with front matter
@@ -49,6 +54,19 @@ choose a destination is to type `:ParleyExportMarkdown <dir>`.
   `relativePostLinksRemarkPlugin` (`src/utils/frontmatter.ts:66`) rewrites those
   into permalinks. It works on markdown link nodes, so the raw `<a href>` anchors
   need checking.
+- **Folds survive the export.** What a chat folds, a post collapses. `📝:`
+  summaries, `🧠:` reasoning and `🔧:`/`📎:` tool blocks are wrapped in
+  `<details class="parley-aside"><summary>…</summary>`, with a blank line before
+  the content and before `</details>` so the body still parses as markdown.
+  No JavaScript: the element is native, collapsed by default, and `open` makes
+  one start expanded.
+- **Styles move to the site.** The export stops writing the per-post `<style>`
+  block and emits class names only (`parley-aside`, `branch-nav`, …). The
+  stylesheet lives in the site — on xianxu.dev, `src/assets/styles/tailwind.css`.
+  This is also a bug fix: the block's colors are hardcoded light, and xianxu.dev
+  has class-based dark mode (`darkMode: 'class'`), so today's exported headings
+  and link boxes are wrong in dark mode. Ship the stylesheet fragment alongside,
+  so the site side is a paste, not a design exercise.
 
 Open questions (settle at claim):
 1. Does Jekyll output go away, or stay behind a config/format option? Nothing
@@ -64,6 +82,13 @@ Open questions (settle at claim):
 5. Assets: `assets.copy_into` copies `assets/<ts>/` beside the export, which
    would put it in `src/data/post/assets/`. Check that Astro resolves relative
    image links from there.
+6. Fold or drop? A folded aside is still in the page source, the RSS feed and
+   the page weight. If these lines are clutter, fold them; if they should not be
+   public at all, exclude them — which is what `atlas/export/formats.md` already
+   claims happens to `📝:`. Decide per marker, and say whether it is
+   configurable (e.g. `export_fold_prefixes`) or fixed.
+7. Do folds belong in the HTML export too? It has the same problem and the same
+   `<details>` answer, so the divergence would be arbitrary.
 
 Related: #211 (neutral export-dir defaults) and #243 (unescaped branch topics in
 export; its `post_url` check changes shape here).
@@ -77,6 +102,11 @@ export; its `post_url` check changes shape here).
   appears in production at `/YYYY/MM/<slug>` with the chat's date, with no hand
   edits.
 - A tree export's branch links resolve to the sibling posts on the built site.
+- On the built site, every folded marker is a collapsed disclosure that opens on
+  click, and its contents (emphasis, links, code blocks) still render as markdown
+  inside it.
+- Exported posts carry no `<style>` block, and the site stylesheet they rely on
+  is legible in both light and dark mode.
 - `tests/integration/export_spec.lua` and `tree_export_spec.lua` cover the new
   format and the destination prompt. `atlas/export/formats.md` describes it.
 
@@ -112,3 +142,18 @@ the exporter:
   which.
 - **The exporter emits an empty trailing `## Question`** for the chat's open
   `💬:` prompt. Drop it.
+
+### 2026-09-19 — folds, and sequencing
+
+Folded the published-transcript readability problem into this issue rather than
+filing a second one: it is the same export pass, and splitting it would mean
+touching the writer twice.
+
+`<details>` is verified on xianxu.dev, not assumed. A probe post carrying
+`<details class="parley-aside">` with a blank line around its body built and
+rendered as a collapsed disclosure, with emphasis, a cross-post link (rewritten
+to `/2025/10/how-to-parli`) and a syntax-highlighted code block intact inside it.
+The probe was removed afterwards.
+
+Sequencing: the operator wants #261 finished first, then this. Not a blocking
+dependency — no `deps:` — just the order of work.
