@@ -1115,14 +1115,14 @@ test `tests/unit/tasker_unit_spec.lua`.
 
 **Files:** `lua/parley/attempt.lua`; test `tests/unit/attempt_spec.lua`.
 
-- [ ] **Step 1: Failing tests**, one per table row, plus:
+- [x] **Step 1: Failing tests**, one per table row, plus:
   - KILL is due at exactly `stop+2000` (the reconcile tick is clamped to
     `kill_due`);
   - an exit at `+1000` with both EOFs: no `escalate`;
   - an exit at `+100` without EOF (the grandchild case), then `stop_requested`
     at `+3000`: the window reopens, and `escalate` fires at `+5000`;
   - a second `stop_requested` at `+1500` does not move `kill_due`.
-- [ ] **Step 2:** FAIL. **Step 3: Implement** the table:
+- [x] **Step 2:** FAIL. **Step 3: Implement** the table:
   - the `kill_due`, `escalated` and `stop_cause` fields, and the `deadline`
     event;
   - the tick clamp: `reconcile_due = math.min(reconcile_due, kill_due)` while
@@ -1130,7 +1130,7 @@ test `tests/unit/tasker_unit_spec.lua`.
   - a `stop_requested` after `unresolved_visible` opens a new window.
 
   Return `escalate` next to `probe` and `unresolved`.
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M3: the attempt lifecycle escalates`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M3: the attempt lifecycle escalates`).
 
 ### Task 3.3: Group kill, scopes, deadlines, settling spawns, kill reporting
 
