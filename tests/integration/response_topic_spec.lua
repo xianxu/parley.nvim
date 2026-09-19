@@ -106,6 +106,26 @@ describe('independent automatic topic ownership',function()
             assert.equals(0,D.user_guard_stats(doc).live)
         end)
     end
+    -- #261 M4 review round 4: the direct cancel (a stop that has the handle) has
+    -- the same two exits: a cancel that throws, and one the provider refuses.
+    for _,case in ipairs({
+        {name='its cancel throws',cancel=function()error('cancel exploded')end},
+        {name='its cancel is refused',cancel=function()return false end},
+    })do
+        it('retires a started topic whose '..case.name,function()
+            local job,final
+            local fake={request=function()return {handle=true}end,cancel_operation=case.cancel}
+            require('tests.helpers.stub').with_stub(require('parley.response_provider'),'new',function()return fake end,function()
+                job=assert(Topic.start(doc,spec(),{terminal=function(result)final=result end}));jobs[#jobs+1]=job
+                pump(job)
+                assert.is_nil(final)
+                Topic.cancel(job,'operator stopped')
+            end)
+            assert.is_not_nil(final,'the topic never retired')
+            assert.equals('failed',final.status)
+            assert.equals(0,D.user_guard_stats(doc).live)
+        end)
+    end
     it('writes only the final first line after positive process and pipe completion',function()
         local job=start(doc,spec(),jobs);pump(job)
         local p=processes.processes[4242];assert.is_not_nil(p)

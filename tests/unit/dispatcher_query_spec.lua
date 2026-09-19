@@ -599,12 +599,12 @@ describe("dispatcher.query internals", function()
             assert.equals(0, #on_exit_calls) -- and the normal teardown path didn't fire either
         end)
 
-        it("H2: pre_query success runs the query as before (backward compatible)", function()
+        it("H2: pre_query success runs the query", function()
             providers.get = function()
                 return {
-                    pre_query = function(on_success)
+                    pre_query = function(on_success, _on_error)
                         on_success()
-                    end, -- one-arg adapter ignores the error cb the dispatcher passes
+                    end,
                     format_headers = function(_secret, _model, _payload, endpoint)
                         return { "-H", "x: y" }, endpoint
                     end,

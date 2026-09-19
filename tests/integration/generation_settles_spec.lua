@@ -40,7 +40,8 @@ local WAITS = {
         { "tests/integration/batch_lifecycle_spec.lua", "still cancels the running responses when the batch cancel throws" } },
     { "W16", { "tests/integration/response_topic_spec.lua", "retires when its provider request throws" },
         { "tests/integration/response_topic_spec.lua", "answers a stop that arrives during its request once the request returns" },
-        { "tests/integration/response_topic_spec.lua", "retires when '" } },
+        { "tests/integration/response_topic_spec.lua", "retires when '" },
+        { "tests/integration/response_topic_spec.lua", "retires a started topic whose " } },
     { "W17", { "tests/integration/skill_invoke_spec.lua", "frees a stranded run when its buffer is unloaded" } },
     { "W18", { "tests/integration/response_completion_spec.lua", "settles failed on its own when cancelled before it writes" } },
 }

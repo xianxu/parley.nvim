@@ -1055,6 +1055,46 @@ rounds:
       boundary: M4
       recipe: milestone-review
       blocked: true
+    - "n": 17
+      timestamp: "2026-09-19T11:34:39-07:00"
+      agent: claude
+      dispose:
+        - id: BR-48
+          disposition: addressed
+          note: Reverting only chat_respond.lua:1728 to the raw response_topic.cancel call fails chat_onboarding_capture_spec "finishes its ending cleanup when the topic cancel throws"; round 2 confirmed the Copilot forward and oauth sites.
+          round: 17
+        - id: BR-61
+          disposition: not-addressed
+          note: Named sites fixed and ledger built, but the W6 row omits dispatcher_query_spec.lua:602-607 (H2 "backward compatible", one-arg double commented "one-arg adapter ignores the error cb") and response_provider_spec.lua:89; ledger scope excluded doubles, and the new guard scans lua/ only while the stop_owner guard (:426) scans tests/.
+          round: 17
+        - id: BR-62
+          disposition: addressed
+          note: cancel_through (response_topic.lua:46-52) serves both sites; reverting accepted==false (m62a) or the request-throw branch (m62b) each fails its new case. Untested throw exit raised separately.
+          round: 17
+        - id: BR-63
+          disposition: addressed
+          note: plan:113 tasker row now records stop_scope's key and run's refusal (1024, oldest evicted); plan:2294-2311 disposes each prior recommendation.
+          round: 17
+      findings:
+        - id: BR-64
+          severity: Minor
+          title: cancel_through's throw exit and the direct site's refused-cancel exit fail nothing when reverted
+          detail: |-
+            4th in family. Rule: record counterfactuals per hunk in a mutation ledger next
+            to the seam ledger (hunk -> mutation -> failing test, or "none, unreachable
+            because X"); a whole-file or whole-commit revert is not evidence for any single
+            hunk. plan:2306's "red on the old code" was a whole-file revert. Measured:
+            removing the pcall at response_topic.lua:47 leaves response_topic,
+            chat_onboarding_capture, topic_presentation, branch_topic_input,
+            chat_stop_generation and generation_settles passing (no test makes a topic's
+            cancel_operation throw; the pcall came in with a2ee8102). Reverting :60 to the
+            old inline copy that ignores `false` leaves response_topic_spec 16/16 passing.
+            Unreachable through response_provider today.
+          family: behavior-change-without-regression-test
+          round: 17
+      boundary: M4
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -1628,6 +1668,29 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   silently. Rule: a round's revision entry enumerates the prior review's
   plan-revision recommendations and marks each applied or declined-with-reason.
 
+## Round 17 — 2026-09-19T11:34:39-07:00 (claude) — passed
+
+### Disposed
+
+- BR-48 — addressed — Reverting only chat_respond.lua:1728 to the raw response_topic.cancel call fails chat_onboarding_capture_spec "finishes its ending cleanup when the topic cancel throws"; round 2 confirmed the Copilot forward and oauth sites.
+- BR-61 — not-addressed — Named sites fixed and ledger built, but the W6 row omits dispatcher_query_spec.lua:602-607 (H2 "backward compatible", one-arg double commented "one-arg adapter ignores the error cb") and response_provider_spec.lua:89; ledger scope excluded doubles, and the new guard scans lua/ only while the stop_owner guard (:426) scans tests/.
+- BR-62 — addressed — cancel_through (response_topic.lua:46-52) serves both sites; reverting accepted==false (m62a) or the request-throw branch (m62b) each fails its new case. Untested throw exit raised separately.
+- BR-63 — addressed — plan:113 tasker row now records stop_scope's key and run's refusal (1024, oldest evicted); plan:2294-2311 disposes each prior recommendation.
+
+### Raised
+
+- **BR-64** [Minor] `behavior-change-without-regression-test` cancel_through's throw exit and the direct site's refused-cancel exit fail nothing when reverted
+  4th in family. Rule: record counterfactuals per hunk in a mutation ledger next
+  to the seam ledger (hunk -> mutation -> failing test, or "none, unreachable
+  because X"); a whole-file or whole-commit revert is not evidence for any single
+  hunk. plan:2306's "red on the old code" was a whole-file revert. Measured:
+  removing the pcall at response_topic.lua:47 leaves response_topic,
+  chat_onboarding_capture, topic_presentation, branch_topic_input,
+  chat_stop_generation and generation_settles passing (no test makes a topic's
+  cancel_operation throw; the pcall came in with a2ee8102). Reverting :60 to the
+  old inline copy that ignores `false` leaves response_topic_spec 16/16 passing.
+  Unreachable through response_provider today.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
@@ -1641,7 +1704,5 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-44** [Minor] `residue-names-no-end` The one-shot deadline timer is closed only by retire, the one path a held record never takes
 - **BR-45** [Important] `seam-change-collateral` The dispatcher re-exports code/io_error on its failure table, and both of that table's renderers still drop io_error
 - **BR-46** [Important] `enumeration-claims-completeness` The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
-- **BR-48** [Important] `behavior-change-without-regression-test` W15, the Copilot pre_query forward and 11 of 12 oauth scope sites redden nothing on revert
 - **BR-61** [Important] `seam-change-collateral` The dispatcher still documents a one-arg pre_query, naming copilot, after W6 made it two-arg
-- **BR-62** [Minor] `partial-guard-window` The topic's deferred cancel discharges only on the request's normal exit
-- **BR-63** [Minor] `plan-tracking-not-updated` The Core-concepts tasker row still omits the stopped-scope refusal the prior round asked for
+- **BR-64** [Minor] `behavior-change-without-regression-test` cancel_through's throw exit and the direct site's refused-cancel exit fail nothing when reverted

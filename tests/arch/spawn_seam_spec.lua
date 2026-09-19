@@ -439,11 +439,14 @@ end)
 describe("arch: every pre_query reports its failure", function()
     -- #261 M4 W6: the dispatcher hands pre_query(start, on_error); one that
     -- takes only `start` can never report a failure, and the request it gates
-    -- waits forever. Copilot's did.
-    it("each adapter's pre_query takes the error callback", function()
+    -- waits forever. Copilot's did. Test doubles restate the contract too, so
+    -- they are held to it (#261 M4 review round 4).
+    it("each pre_query, adapter or double, takes the error callback", function()
         local found, problems = 0, {}
-        for _, file in ipairs(arch.worktree_files({ "lua/**/*.lua" })) do
-            for i, line in ipairs(vim.fn.readfile(file)) do
+        for _, file in ipairs(arch.worktree_files({ "lua/**/*.lua", "tests/**/*.lua" })) do
+            for i, raw in ipairs(vim.fn.readfile(file)) do
+                -- Not inside a string literal: a matcher's own test data is not a double.
+                local line = raw:gsub('"[^"]*"', '""'):gsub("'[^']*'", "''")
                 local params = line:match("pre_query%s*=%s*function%s*%(([^)]*)%)")
                 if params then
                     found = found + 1

@@ -2311,9 +2311,10 @@ rules, not applied to round 1's own changes.
   - The boundary sweep ledger: below.
 
 **The per-row seam ledger.** For each row whose fix changed a seam's contract,
-`grep -rn <seam> lua/ atlas/ tests/ README.md` was run over prose (comments and
-docs). Every hit that restates the contract is listed with its disposition.
-Call sites do not restate a contract, so they are not listed.
+`grep -rn <seam> lua/ atlas/ tests/ README.md` was run. Every hit that defines or
+describes the seam is listed with its disposition: prose, comments, and test
+doubles alike (a double restates the contract). Only pure call sites are left
+out.
 
 | Row | Seam | Restating hits → disposition |
 |---|---|---|
@@ -2321,7 +2322,7 @@ Call sites do not restate a contract, so they are not listed.
 | W2, W3 | the preparation's cancel | none |
 | W4 | content fetches, `fetch_content` | `tool_execution.md` (scoped vs unscoped), `lifecycle.md` (scope kill reach) → updated, round 1 |
 | W5 | `stop_owner` | `architecture.md` → updated, round 1; the fixture doubles → one double, round 1; its comment → corrected, round 2 |
-| W6 | `pre_query` | `dispatcher.lua` query doc ("a one-arg pre_query (e.g. copilot)") → **updated now**, with a guard that every adapter takes `on_error`; `cliproxy-managed.md`, `cliproxy.lua`, `providers.lua`, other `dispatcher.lua` comments → unaffected |
+| W6 | `pre_query` | `dispatcher.lua` query doc ("a one-arg pre_query (e.g. copilot)") → updated, round 3; the doubles `dispatcher_query_spec` H2 ("backward compatible", one-arg) and `response_provider_spec` (one-arg) → **updated at close**; the guard now scans `tests/` too; `cliproxy-managed.md`, `cliproxy.lua`, `providers.lua`, other `dispatcher.lua` comments → unaffected |
 | W7 | `start_query` | its own comment → current |
 | W8 | `recover_query` | `cliproxy-managed.md` claim contract → **updated now** (the `transport_alive` precondition); `dispatcher.lua`, `cliproxy.lua`, the specs → unaffected |
 | W12, W18 | the finalize adapter | `response_completion.lua`, `chat_respond.lua` → current |
@@ -2333,4 +2334,32 @@ Call sites do not restate a contract, so they are not listed.
 | Round 1 | `stop_scope` refusal | `tool_execution.md`, `lifecycle.md` → updated, round 2 |
 | Round 1 | `exit_reason`, `failure.exit` | `tool_execution.md`, `spawn_seam_spec` → current |
 | Round 1 | `stats()` | `lifecycle.md`, the settles spec → current |
+
+### 2026-09-19 — M4 closed (review round 4, FIX-THEN-SHIP at the round cap): the doubles, and a mutation ledger
+
+**Delta, bundled into the close commit (#174).**
+- **BR-61, the rule.** The seam ledger's scope now includes test doubles
+  (above). The `pre_query` guard scans `tests/`, with string literals
+  stripped so a matcher's own test data does not count. Two instances fell
+  out of that:
+  - `dispatcher_query_spec` H2 had a one-arg double titled
+    "backward compatible", commented "ignores the error cb";
+  - `response_provider_spec` had a one-arg double.
+
+  Both are two-arg now. The guard is red on the old H2.
+- **Per-hunk mutation ledger** (4th `behavior-change-without-regression-test`).
+  Round 3's "red on the old code" was a whole-file revert, which is evidence
+  for no single hunk. Each `response_topic.lua` cancel hunk was mutated alone:
+
+| Hunk | Mutation | Test that turned red |
+|---|---|---|
+| `cancel_through`'s pcall | call `cancel_operation` bare | "retires a started topic whose cancel throws" |
+| `cancel_through`'s refused-cancel exit | drop `accepted==false` | "retires a started topic whose cancel is refused"; "retires when the provider does not accept the cancel" |
+| direct site uses `cancel_through` | restore the old inline cancel | both "retires a started topic whose …" cases |
+| deferred site uses `cancel_through` | restore the old inline cancel | "retires when the provider does not accept the cancel" |
+| request throws after a stop landed | always `stop()` | "retires when the request throws after the stop landed" |
+
+  The two direct-site cases are new in `response_topic_spec`. All of these
+  exits are unreachable through `response_provider` today; the tests pin them
+  for the next adapter.
 

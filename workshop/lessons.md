@@ -1,5 +1,19 @@
 # Lessons
 
+## 2026-09-19 (#261 M4 close — a double is a restatement, and a whole-file revert proves no hunk)
+
+- **Test doubles are in a seam's ledger, and a guard over a seam scans
+  `tests/` too** (BR-61, 10th `seam-change-collateral`). The ledger scoped
+  itself to "prose", and a one-arg `pre_query` double titled "backward
+  compatible" survived. That is the same narrowing the rule was written to
+  stop.
+- **Evidence is per hunk** (4th `behavior-change-without-regression-test`).
+  "Red on the old code" from reverting a whole file shows that *some* hunk is
+  tested, not which one.
+  - Keep a mutation ledger: hunk → mutation → the test that failed, or "none,
+    unreachable because X".
+  - Build it by mutating one hunk at a time.
+
 ## 2026-09-19 (#261 M4 review round 3 — sweep from the change's own rows, and keep a ledger)
 
 - **The list of seams to sweep is the change's own rows, not the review's list**

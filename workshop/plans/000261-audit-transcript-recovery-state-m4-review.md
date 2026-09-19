@@ -556,3 +556,152 @@ findings:
       silently. Rule: a round's revision entry enumerates the prior review's
       plan-revision recommendations and marks each applied or declined-with-reason.
 ```
+
+---
+
+## Re-review — 2026-09-19T11:34:39-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 261 — Audit transcript as the complete recovery state |
+| repo | parley.nvim |
+| issue file | workshop/issues/000261-audit-transcript-recovery-state.md |
+| boundary | milestone M4 |
+| milestone | M4 |
+| window | 31ca6eb92e68d51572692e266d4801bc4524d9e0..ac958dc5525fa1c5c14b1a2379e4746a9e5a5fa1 |
+| command | sdlc milestone-close --issue 261 --milestone M4 |
+| reviewer | claude |
+| timestamp | 2026-09-19T11:34:39-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Round 3's code fixes hold up when each one is reverted. I exported HEAD to a scratch tree, confirmed lint is clean and every spec file passes except `fresh_clone_spec`, then reverted each claimed fix on its own:
+- **W15 terminal site (`chat_respond.lua:1728`):** fails the new onboarding case.
+- **`cancel_through`:** the refused-cancel check fails its case, and the request-throw branch fails its case. Restoring the whole round-2 `response_topic.lua` fails both new topic cases.
+- **Plan and atlas:** the `tasker` row and the `transport_alive` precondition are fixed as recommended.
+
+`fresh_clone_spec` failing is a scratch artifact: the real repo force-tracks `construct/generated/vocabulary/issue.json`, which my scratch `git add -A` skipped as ignored. The previous round found it passes in the real checkout.
+
+What keeps this from SHIP is BR-61. The seam ledger it asked for exists, but the W6 row leaves out a hit that its own `grep -rn pre_query … tests/` returns. The dispatcher's unit spec still has a case named "backward compatible" whose one-arg `pre_query` double is commented "one-arg adapter ignores the error cb the dispatcher passes". That is the exact contract W6 and this round's doc fix removed. There is also one new Minor: two exits of the new `cancel_through` helper have no test that fails when they are reverted.
+
+## 1. Strengths
+
+- **`cancel_through` fixes the class, not the instance** (`response_topic.lua:46-52`). One helper serves both the direct and the deferred cancel. It retires on a thrown or refused cancel. The deferred caller at `:103` and the request-throw branch at `:88` now answer the pending stop on every exit from the request.
+- **The W15 terminal-site test drives the real handler** (`chat_onboarding_capture_spec.lua:79-102`). A refused completion leads to a failed finalize while the topic is running. The topic cancel throws, and the test checks that the cleanup after it (`finalize_mutated_api_leg`) still runs. With only `:1728` reverted to the raw call, it fails.
+- **The round-3 revision records how each prior recommendation was handled** (`plan:2292-2311`). That is the BR-63 rule, applied.
+- **The atlas claim contract matches the code.** `cliproxy-managed.md:260-263` agrees with `dispatcher.lua:808-809`: the hook is skipped when `transport_alive` is false, and `deliver()` runs instead.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**BR-61, not addressed: the W6 ledger row misses a stale test double** (`tests/unit/dispatcher_query_spec.lua:602-607`, `tests/integration/response_provider_spec.lua:89`).
+- The H2 case is titled "pre_query success runs the query as before (backward compatible)". Its double is `pre_query = function(on_success)`, with the comment "one-arg adapter ignores the error cb the dispatcher passes".
+- The ledger's scope line (`plan:2313-2316`) covers only "prose (comments and docs)" and leaves out call sites. In practice it also left out **doubles**, which round 1's rule names explicitly ("prose, comments, and doubles alike"). That is the same narrowing BR-61 described.
+- The new guard (`spawn_seam_spec.lua:445`) scans only `lua/**`. The stop_owner double guard in the same file (`:426`) does scan `tests/**`.
+- **Rule-level fix, not a site patch:**
+  - A ledger row lists every grep hit that defines or describes the seam: prose, comments and doubles. Only pure call sites are excluded.
+  - The `pre_query` guard also scans `tests/**`, so a one-arg double fails it the way a stop_owner copy does.
+- The instances then fall out: make H2's double two-arg and drop "backward compatible" and the comment. `response_provider_spec.lua:89` also gets `(fn, _on_error)`.
+
+## 4. Minor findings
+
+**New: two exits of `cancel_through` fail no test when reverted** (`response_topic.lua:47`, `:60`).
+- **This is the 4th finding in family `behavior-change-without-regression-test`.** Earlier rounds wrote the rule twice: "red on revert per edited site", then "the sweep covers the fix round's own hunks". Round 3 met it for BR-48, but its own evidence was a whole-file revert. The plan says "they are red on the old code" (`plan:2306`), and that does not prove any single hunk is covered.
+- Measured:
+  - **Throw exit:** with the pcall removed, 6 specs stay green: `response_topic`, `chat_onboarding_capture`, `topic_presentation`, `branch_topic_input`, `chat_stop_generation` and `generation_settles`. No test makes a topic's `cancel_operation` throw. The pcall came in with a2ee8102 and has never had a test.
+  - **Direct site:** reverting `:60` to the old inline copy, which ignores a `false` return, leaves `response_topic_spec` passing 16/16.
+- Both exits are unreachable through `response_provider` today, hence Minor.
+- **Rule:** record counterfactuals per hunk in a mutation ledger next to the seam ledger. Each row is hunk → mutation → the test that failed, or "none, unreachable because X". A revert of a whole file or commit counts as evidence for no individual hunk.
+
+## 5. Test coverage notes
+
+- **Setup:** a `git archive` export of HEAD with isolated HOME, XDG and TMPDIR.
+  - Lint: 0 warnings and 0 errors across 640 files.
+  - Unit and integration: 382 spec files pass. The only failure is `fresh_clone_spec`, which is a scratch-tree artifact.
+- **Fails on revert (fix confirmed):**
+  - The W15 terminal site (m48).
+  - The `accepted==false` check (m62a).
+  - The request-throw branch (m62b).
+  - The whole pre-round-3 `response_topic.lua` (m62, 2 cases).
+- **Passes on revert (gap):**
+  - The `cancel_through` pcall (m62d).
+  - The direct-site refused-cancel exit (m62c).
+- The parametrized "retires when …" cases don't assert `final.status`. The refused case retires `failed` even after an operator stop. No consumer reads the status today (`chat_respond.lua:1554`), but the case pins nothing about it.
+
+## 6. Architectural notes
+
+- **ARCH-DRY: pass.** Two cancel copies became one.
+- **ARCH-PURE: pass.** The changes are thin glue code.
+- **ARCH-PURPOSE: flag (BR-61).** The shadow-sweep missed a test double.
+- **ARCH-MOCK: flag (BR-61).** Two `pre_query` doubles still model the retired one-arg contract, and the guard can't see them.
+- **ARCH-CONSTRAINTS: pass.** The guard is a line scan inside an arch test.
+- **ARCH-SECURE: pass.** No new parsing. Error text stays capped at 512 characters.
+- **ARCH-ORDER: pass, with one note.** After a refused or thrown cancel, the topic retires while its request may still be running. Nothing calls `stop_scope` for a topic's generation; `response_session.lua:234` is the only caller. The comment at `:42-45` should say the request runs until it ends on its own. That is reasonable while the path is unreachable.
+  - For M5: the topic is still a set of independent flags (`started`, `stopping`, `finished`, `resolved`, `start_threw`, `handle`). A tagged phase would replace them.
+- **ARCH-FUNERAL: pass.** Round 3 creates nothing that persists.
+
+## 7. Plan revision recommendations
+
+- **Seam ledger W6 row** (`plan:2324`): add `dispatcher_query_spec.lua:602-607` and `response_provider_spec.lua:89` with their dispositions. Change the scope line to "prose, comments and doubles; only pure call sites excluded".
+- **Round-3 W16 as-built** (`plan:2306`): replace "red on the old code" with the per-hunk result. Either name tests for the throw exit and the direct-site refused exit, or state that they are unreachable through `response_provider`.
+
+```findings
+dispose:
+  - id: BR-48
+    disposition: addressed
+    note: |
+      Reverting only chat_respond.lua:1728 to the raw response_topic.cancel call fails chat_onboarding_capture_spec "finishes its ending cleanup when the topic cancel throws"; round 2 confirmed the Copilot forward and oauth sites.
+  - id: BR-61
+    disposition: not-addressed
+    note: |
+      Named sites fixed and ledger built, but the W6 row omits dispatcher_query_spec.lua:602-607 (H2 "backward compatible", one-arg double commented "one-arg adapter ignores the error cb") and response_provider_spec.lua:89; ledger scope excluded doubles, and the new guard scans lua/ only while the stop_owner guard (:426) scans tests/.
+  - id: BR-62
+    disposition: addressed
+    note: |
+      cancel_through (response_topic.lua:46-52) serves both sites; reverting accepted==false (m62a) or the request-throw branch (m62b) each fails its new case. Untested throw exit raised separately.
+  - id: BR-63
+    disposition: addressed
+    note: |
+      plan:113 tasker row now records stop_scope's key and run's refusal (1024, oldest evicted); plan:2294-2311 disposes each prior recommendation.
+findings:
+  - id: new
+    severity: Minor
+    family: behavior-change-without-regression-test
+    title: |
+      cancel_through's throw exit and the direct site's refused-cancel exit fail nothing when reverted
+    detail: |
+      4th in family. Rule: record counterfactuals per hunk in a mutation ledger next
+      to the seam ledger (hunk -> mutation -> failing test, or "none, unreachable
+      because X"); a whole-file or whole-commit revert is not evidence for any single
+      hunk. plan:2306's "red on the old code" was a whole-file revert. Measured:
+      removing the pcall at response_topic.lua:47 leaves response_topic,
+      chat_onboarding_capture, topic_presentation, branch_topic_input,
+      chat_stop_generation and generation_settles passing (no test makes a topic's
+      cancel_operation throw; the pcall came in with a2ee8102). Reverting :60 to the
+      old inline copy that ignores `false` leaves response_topic_spec 16/16 passing.
+      Unreachable through response_provider today.
+```
+
+---
+
+**A side effect of this review:** my first scratch-setup command left files in your home Git repo.
+- **Cause:** `mktemp -d /tmp/...` failed, and the script kept going with an empty path. It ran `git init` and `git add -A` in your home directory, where a `~/.git` already existed.
+- **What I did:** I stopped it after about 1.5 minutes. Your home repo's index is unchanged (still the 5 Jul file), no commit was made, and nothing was sent anywhere.
+- **What it left:** it did write, all dated 11:24–11:25 today:
+  - about 12,455 unreferenced loose objects in `~/.git/objects/`;
+  - a ~210 MB `~/.git/objects/pack/tmp_pack_xeEUQI`.
+  - These blobs are compressed copies of files from your home directory, so they may include sensitive files. They are only in `~/.git`, with the same permissions.
+- **Already there before this session:** a ~2 GB `tmp_pack_sH6Lx7` from 01:11 and about 17.6k older loose objects. They look like an earlier incident of the same kind; I didn't touch them.
+- **Cleanup:** I haven't deleted anything. Whether to clean up is your call.
+  - `rm ~/.git/objects/pack/tmp_pack_xeEUQI` removes the stray pack from this session.
+  - `git -C ~ prune --expire=now` removes all unreferenced loose objects. That includes the older ones, so check first that you don't need anything from that repo.
+- **Stopping a repeat:** since then, every scratch path is checked before it's used. The scratch copies from this review have been removed.

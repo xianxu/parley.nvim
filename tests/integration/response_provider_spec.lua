@@ -86,7 +86,7 @@ describe('production response provider adapter',function()
     -- nothing, and never resolves a second time.
     it('resolves a cancel during pre-query at once, and the late startup spawns nothing',function()
         local ready
-        Providers.get=function(name)local p=vim.tbl_extend('force',{},old_get(name));p.pre_query=function(fn)ready=fn end;return p end
+        Providers.get=function(name)local p=vim.tbl_extend('force',{},old_get(name));p.pre_query=function(fn,_on_error)ready=fn end;return p end
         local adapter=Provider.new();local cb,s=callbacks();local ctx=context(1)
         local handle=adapter.request(ctx,cb);local resolved=0
         adapter.cancel_operation({epoch=1,generation=1,operation=ctx.operation,handle=handle},function()resolved=resolved+1 end)

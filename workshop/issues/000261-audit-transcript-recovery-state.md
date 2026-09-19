@@ -254,7 +254,7 @@ Reconciliation: Σdesign 10.66 × 1.15 = 12.26, plus Σimpl 14.84 × 1.2 = 17.81
 - [x] M3 — processes die for certain: children lead their own process group
   (`detached`), Stop kills a generation's scope TERM→KILL, unscoped helpers get
   a deadline, every spawn settles, leaving Neovim kills every group.
-- [ ] M4 — every wait a generation holds settles (W1–W16); a stopped response
+- [x] M4 — every wait a generation holds settles (W1–W16); a stopped response
   never holds an admission slot, including across `:bd`/reopen.
 - [ ] M5 — one refusal vocabulary: no silent refusal, no raw token; the
   inventory and restart invariant in `atlas/chat/transcript_truth.md`.
@@ -537,6 +537,7 @@ enumerations and the queries that produce them.
   This is recorded on #267 as the same family. It is not M1's.
 
 ### 2026-09-19 — M1 boundary review, round 1: FIX-THEN-SHIP, and how each finding was disposed
+- 2026-09-19: closed M4 — make test JOBS=4 unit stage 213/214 (document_semantic_spec passes 20/20 alone x2); make test-integration JOBS=4 168/169 (document_fold_uncertainty_retirement passes alone x2) - #267 family. make lint clean. Round 3: BR-48 W15 terminal-site test (red with only that site reverted); BR-61 dispatcher pre_query doc + recovery claim contract updated, guard that every pre_query takes on_error; topic cancel_through helper (throw / refused cancel / stop-then-throw), tests red on old code; tasker plan row; per-row seam ledger recorded in plan.; review verdict: FIX-THEN-SHIP
 - 2026-09-19: closed M3 — make test JOBS=4: 381 files PASS, exit 0. make lint clean (637 files). Counterfactuals all red on revert: main detach key (3 live conformance cases), group target (8/12 sequence tests), kill code (content fetch), old oauth render, response_provider exit branch, topic merge, pid-0 guard, held deadline timer. Round 2: BR-45 failure.exit rendered once at the dispatcher + value-anchored guard; BR-46 derived spawn classification (sync/bounded/delegated/open) with per-class counts, helper and wrapper bounds checked; 3 untested Minors now tested.; review verdict: FIX-THEN-SHIP
 - 2026-09-19: closed M2 — make test JOBS=4: 377 files pass + perf_document_spec which dies under load and passes alone 5/5 (#267). Rounds 1-3 disposed: buffer_for + guard; tree-move rewrite and ENOENT abort on #270 (contract updated); exemption boundary pinned (red on raw-owner counterfactual); did-it-happen rule enforced by ---@nodiscard guard (red on a planted bare call).; review verdict: FIX-THEN-SHIP
 - 2026-09-19: closed M1 — make test JOBS=4: 372 files pass + 2 fold specs that die under load and pass alone (#267 family, logged). Rounds 1-3 fixed as classes with guards (census, worktree listing, write-result, json_decode, per-action warning bound, one atomic writer); every fix red on revert.; review verdict: FIX-THEN-SHIP
