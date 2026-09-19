@@ -8,7 +8,7 @@ parley.setup({chat_dir=directory,state_dir=directory..'/state',providers={},api_
         {name='BatchFixture',provider='openai',model={model='fixture'},system_prompt='Fixture',tools={}}}})
 local function wait(predicate)assert.is_true(vim.wait(5000,predicate,1),'batch did not settle')end
 describe('public batch membership lifetime',function()
-    local buf,calls,old_query,old_stop,old_settle
+    local buf,calls,old_query,old_stop
     before_each(function()
         calls={};old_query,old_stop=parley.dispatcher.query,parley.tasker.stop_owner
         parley.dispatcher.query=function(b,_,payload,output,complete,_,_,abort,_,failure,opts)
@@ -27,7 +27,6 @@ describe('public batch membership lifetime',function()
         vim.fn.writefile(lines,vim.api.nvim_buf_get_name(buf));vim.api.nvim_win_set_cursor(0,{5,0})
     end)
     after_each(function()
-        if old_settle then require('parley.chat_recovery').settle=old_settle;old_settle=nil end
         Respond.cancel_responses(buf)
         for _,call in ipairs(calls)do call.abort('fixture cleanup')end
         if vim.api.nvim_buf_is_valid(buf)then vim.api.nvim_buf_delete(buf,{force=true})end
@@ -40,9 +39,8 @@ describe('public batch membership lifetime',function()
             if event=='detach' then D.detach(D.get(buf))else vim.api.nvim_buf_call(buf,function()vim.cmd('edit!')end)end
             assert.equals('paused',Respond.batch_snapshot(old).phase)
             assert.equals(0,Respond.batch_snapshot(old).completed)
-            -- New-epoch membership is independent of the old answer's retained
-            -- recovery record. A fresh unanswered question exercises admission
-            -- without requesting another replacement of that unresolved answer.
+            -- A fresh unanswered question exercises new-epoch admission without
+            -- requesting another replacement of the old, unresolved answer.
             vim.api.nvim_buf_set_lines(buf,4,-1,false,{'💬: fresh question','',''})
             vim.api.nvim_win_set_cursor(0,{5,0})
             local next_batch=Respond.respond_all();assert.is_not_nil(next_batch)
@@ -57,14 +55,15 @@ describe('public batch membership lifetime',function()
         calls[1].output(calls[1].id,'new answer');calls[1].complete(calls[1].id)
         wait(function()return Respond.batch_snapshot(batch).phase=='completed'end)
         vim.api.nvim_buf_call(buf,function()vim.cmd('silent write!')end)
-        assert.equals(0,#require('parley.chat_recovery').list(buf),'successful saved replacement must clean snapshot')
         vim.api.nvim_win_set_cursor(0,{5,0})
         assert.is_not_nil(Respond.respond_all());wait(function()return #calls==2 end)
         assert.equals(1,Respond.batch_snapshot(batch).completed)
     end)
     for _,mode in ipairs({'single','batch'})do
         for _,outcome in ipairs({'failure','cancel'})do
-            it('retains original across '..mode..' '..outcome..' retry',function()
+            -- #261: a retry after a failed or cancelled replacement starts, and
+            -- carries no hidden state from the interrupted attempt.
+            it('retries after a '..mode..' '..outcome,function()
                 local first=mode=='single' and Respond.respond({args='',range=0}) or Respond.respond_all()
                 assert.is_not_nil(first);wait(function()return #calls==1 end)
                 calls[1].output(calls[1].id,'partial replacement')
@@ -73,47 +72,11 @@ describe('public batch membership lifetime',function()
                 calls[1].abort('fixture failure')
                 wait(function()return mode=='batch' and Respond.batch_snapshot(first).phase=='paused' and not Respond.batch_snapshot(first).active
                     or mode=='single' and Respond.response_snapshot(first).generation.phase=='terminal' end)
-                local C=require('parley.chat_recovery')
-                local before=C.list(buf);assert.equals(1,#before)
                 vim.api.nvim_win_set_cursor(0,{5,0})
                 if mode=='batch'then assert.is_true(Respond.resume_batch({}).accepted)
                 else assert.is_not_nil(Respond.respond({args='',range=0}))end
                 wait(function()return #calls==2 end)
-                local after=C.list(buf);assert.equals(1,#after);assert.equals(before[1].id,after[1].id)
-                assert.is_truthy(C.inspect_record(after[1].id).bytes:find('🤖: old',1,true))
             end)
         end
     end
-
-    it('settles single response replacement before confirmed save',function()
-        local session=Respond.respond({args='',range=0});assert.is_not_nil(session)
-        wait(function()return #calls==1 end)
-        calls[1].output(calls[1].id,'new answer');calls[1].complete(calls[1].id)
-        wait(function()return Respond.response_snapshot(session).generation.phase=='terminal'end)
-        vim.api.nvim_buf_call(buf,function()vim.cmd('silent write!')end)
-        assert.equals(0,#require('parley.chat_recovery').list(buf))
-    end)
-
-    for _,mode in ipairs({'single','batch'})do
-        it('joins a real early save before '..mode..' terminal autosave',function()
-            local C=require('parley.chat_recovery');old_settle=C.settle
-            local observed
-            C.settle=function(job,context,done)
-                -- Completion's callback can run under an editor autocmd. A
-                -- scheduled write models the operator's next event turn and
-                -- emits a real BufWritePost before the settlement timer.
-                vim.schedule(function()vim.api.nvim_buf_call(buf,function()vim.cmd('silent write!')end)end)
-                local handle=old_settle(job,context,function(result)
-                    observed=#C.list(buf);done(result)
-                end)
-                return handle
-            end
-            local session=mode=='single' and Respond.respond({args='',range=0}) or Respond.respond_all()
-            assert.is_not_nil(session);wait(function()return #calls==1 end)
-            calls[1].output(calls[1].id,'replacement');calls[1].complete(calls[1].id)
-            wait(function()return observed~=nil end)
-            assert.equals(0,observed,'cleanup must precede terminal autosave')
-        end)
-    end
-
 end)

@@ -206,7 +206,6 @@ end
 -- Handler invocation
 --------------------------------------------------------------------------------
 
-local function inside(base,path)return base=='/' or path==base or path:sub(1,#base+1)==base..'/'end
 local function prepare_input(call,def,policy,opts)
     local input=vim.deepcopy(call.input or {})
     if policy then
@@ -216,7 +215,6 @@ local function prepare_input(call,def,policy,opts)
             if def.kind=='write'then abs,err=M.resolve_path_in_cwd(path,policy.write_root)
             else abs,err=M.resolve_read_path(path,policy.write_root,policy.read_roots or {})end
             if not abs then return nil,err end
-            if opts.private_directory and inside(opts.private_directory,abs)then return nil,'private answer recovery path is not a tool resource'end
             return abs
         end
         for _,key in ipairs({'path','file_path'})do
@@ -350,21 +348,19 @@ function M.capture(definitions,opts)
     for _,key in ipairs({'buf','chat_roots','help_root','help_catalog','max_file_bytes','max_bytes','deferred_refresh_buf'})do
         context[key]=vim.deepcopy(opts[key])
     end
-    local private=opts.private_directory or opts.state_dir and require('parley.recovery_paths').directory(opts.state_dir)
-    if private then context.private_directory=M.canonical_path(private);if not context.private_directory then return nil,'invalid private directory'end end
     if context.help_root then context.help_root=M.canonical_path(context.help_root);if not context.help_root then return nil,'invalid help root'end end
     if context.chat_roots then
         local filtered={}
         for _,entry in ipairs(context.chat_roots)do
             local path=type(entry)=='table' and entry.dir or entry
             local resolved=M.resolve_path_in_cwd(path,policy.write_root,policy.read_roots)
-            if resolved and not (context.private_directory and inside(context.private_directory,resolved))then
+            if resolved then
                 if type(entry)=='table'then entry.dir=resolved;filtered[#filtered+1]=entry else filtered[#filtered+1]=resolved end
             end
         end
         context.chat_roots=filtered
     end
-    local options={max_bytes=opts.max_bytes,page_limit=opts.page_limit,private_directory=context.private_directory}
+    local options={max_bytes=opts.max_bytes,page_limit=opts.page_limit}
     for _,key in ipairs({'max_bytes','page_limit'})do
         local value=options[key]
         if value~=nil and (type(value)~='number' or value<1 or value>=math.huge or value%1~=0)then return nil,'invalid '..key end
@@ -454,7 +450,6 @@ function M.prepare(profile,call)
                     path,err=M.resolve_path_in_cwd(claim.path,p.context.help_root)
                 end
                 if not path then return nil,err end
-                if p.context.private_directory and inside(p.context.private_directory,path)then return nil,'private answer recovery resource'end
                 claims[i]={scope=claim.scope,mode=claim.mode,path=path}
             end
         end

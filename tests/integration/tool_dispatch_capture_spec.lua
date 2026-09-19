@@ -92,18 +92,6 @@ describe('captured async tool dispatch',function()
         assert.is_not_nil(Dispatch.prepare(capture(definition(),{root_policy=policy}),call({path='alias/file'})))
         assert.is_nil(Dispatch.prepare(capture(definition('tool','write'),{root_policy=policy}),call({path='alias/file'})))
     end)
-    it('denies the private recovery subtree including aliases and missing descendants',function()
-        vim.fn.mkdir(root..'/state/answer-recovery','p');assert(uv.fs_symlink(root..'/state',root..'/alias'))
-        vim.fn.writefile({'secret'},root..'/state/answer-recovery/record')
-        for _,kind in ipairs({'read','write'})do
-            local profile=capture(definition('tool',kind),{state_dir=root..'/state'})
-            for _,input in ipairs({{path='alias/answer-recovery/record'},
-                {file_path='alias/answer-recovery/record'},{paths={'alias/answer-recovery/record'}}})do
-                assert.is_nil(Dispatch.prepare(profile,call(input)))
-            end
-            if kind=='write'then assert.is_nil(Dispatch.prepare(profile,call({path='alias/answer-recovery/new/file'})))end
-        end
-    end)
     it('uses exclusive fallback claims and rejects claims that exceed captured authority',function()
         local prepared=assert(Dispatch.prepare(capture(definition()),call()))
         assert.same({{scope='global',mode='write'}},prepared.claims)

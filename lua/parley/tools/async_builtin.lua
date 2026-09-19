@@ -25,8 +25,7 @@ local function file_body(name,input,context,refresh)
         if prior.revision.exists then prior=await('read',path)
         else
             await('ensure_dir',{path=path:match('^(.*)/[^/]+$'),
-                root=context.root_policy and context.root_policy.write_root or context.cwd,
-                private_directory=context.private_directory})
+                root=context.root_policy and context.root_policy.write_root or context.cwd})
         end
     else prior=await('read',path)end
     local content=prior.data or ''
@@ -126,11 +125,8 @@ local function execute(definition,input,context,done)
     end
     local execution={chat_roots=context.chat_roots or {},root_policy=context.root_policy}
     execution.run=function(command)
-        local policy=require('parley.tools.traversal_policy')
         if not context.authority then
-            local guarded,problem=policy.apply(command,context.private_directory)
-            if not guarded then error({message=problem},0)end
-            local observed=await('process',guarded)
+            local observed=await('process',command)
             return observed.data,observed.code
         end
         local scope=require('parley.tools.process_scope')
@@ -138,13 +134,10 @@ local function execute(definition,input,context,done)
         if not plans then error({message=problem},0)end
         local outputs,code={},nil
         for _,plan in ipairs(plans)do
-            local guarded,why=policy.apply(plan.command,context.private_directory,plan.path)
-            if not guarded then error({message=why},0)end
-            plan.command=guarded
-            -- Policy adds options before operands; the pinned target stays the
-            -- final search/ls operand, while find retains operand two.
-            plan.target_position=guarded[1]=='find' and 2 or #guarded
-            local observed=await('process',guarded,plan)
+            -- The pinned target is the final search/ls operand; find keeps it
+            -- as operand two.
+            plan.target_position=plan.command[1]=='find' and 2 or #plan.command
+            local observed=await('process',plan.command,plan)
             local remaining=math.max(0,(context.max_bytes or 1048576)-process_formatted_bytes)
             local separator=#outputs>0 and remaining>0 and '\n' or ''
             local rendered,truncated=scope.restore(observed.data or '',plan.path,plan.command[1],remaining-#separator)

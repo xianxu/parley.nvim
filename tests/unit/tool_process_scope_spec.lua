@@ -33,12 +33,6 @@ describe('captured subprocess target planning',function()
         assert.equals('',empty);assert.is_true(omitted)
     end)
 
-    it('keeps private rg exclusions relative to the pinned target',function()
-        local plan=assert(Scope.plan({'rg','--','secret','/allowed'}))[1]
-        local guarded=assert(require('parley.tools.traversal_policy').apply(plan.command,'/allowed/private',plan.path))
-        assert.equals('!**/private/**',guarded[3])
-    end)
-
     it('restores slash-root labels without duplicate separators',function()
         assert.equals('/file: text',Scope.restore('./file: text','/'))
     end)

@@ -98,14 +98,13 @@ describe('asynchronous builtins',function()
         assert.is_true(result.result.is_error);assert.equals('old',state.files['/root/file.parley-backup.1'].bytes)
     end)
 
-    it('excludes private recovery contents before native grep and find traversal',function()
+    it('traverses with native grep and find',function()
         T._uv=nil
-        local dir=vim.fn.tempname();vim.fn.mkdir(dir..'/answer-recovery','p');vim.fn.mkdir(dir..'/other/answer-recovery','p')
+        local dir=vim.fn.tempname();vim.fn.mkdir(dir..'/nested','p')
         vim.fn.writefile({'PUBLIC_NEEDLE'},dir..'/public.txt')
-        vim.fn.writefile({'UNRELATED_NEEDLE'},dir..'/other/answer-recovery/public.txt')
-        vim.fn.writefile({'PRIVATE_NEEDLE'},dir..'/answer-recovery/secret.txt')
+        vim.fn.writefile({'NESTED_NEEDLE'},dir..'/nested/public.txt')
         local results={}
-        local context={tasker=T,cwd=dir,private_directory=dir..'/answer-recovery',operation_id='native-grep'}
+        local context={tasker=T,cwd=dir,operation_id='native-grep'}
         require('parley.tools.builtin.grep').execute_async({pattern='NEEDLE',path=dir},context,
             function(value)results.grep=value end)
         context.operation_id='native-find'
@@ -113,9 +112,8 @@ describe('asynchronous builtins',function()
         wait(function()return results.grep and results.find end)
         assert.is_false(results.grep.result.is_error)
         assert.is_not_nil(results.grep.result.content:find('PUBLIC_NEEDLE',1,true))
-        assert.is_nil(results.grep.result.content:find('PRIVATE_NEEDLE',1,true))
-        if vim.fn.executable('rg')==1 then assert.is_not_nil(results.grep.result.content:find('UNRELATED_NEEDLE',1,true))end
-        assert.is_nil(results.find.result.content:find('secret.txt',1,true))
+        assert.is_not_nil(results.grep.result.content:find('NESTED_NEEDLE',1,true))
+        assert.is_not_nil(results.find.result.content:find('public.txt',1,true))
         vim.fn.delete(dir,'rf')
     end)
 

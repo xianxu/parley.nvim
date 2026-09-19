@@ -7,14 +7,6 @@ local logger = require("parley.logger")
 local _H = {}
 local LAST_CONTENT_LINE_CHUNK_SIZE = 256
 
-local function private_recovery_path(path)
-    -- Helper has no setup lifecycle. Consult the already-loaded configuration
-    -- at the IO boundary without introducing an init/helper require cycle.
-    local module = package.loaded.parley
-    local config = type(module) == "table" and module.config
-    return require("parley.recovery_paths").is_private(path, config and config.state_dir)
-end
-
 -- Pop a non-blocking as-you-type completion menu (no auto-insert, no auto-select),
 -- restoring the user's `completeopt` afterward. The shared idiom behind parley's
 -- typeahead completers (spell suggestions, vision YAML). `start` is the 1-indexed
@@ -368,7 +360,6 @@ _H.read_file_content = function(filepath)
         logger.warning("Refusing to expand a path containing a backtick: " .. tostring(filepath))
         return nil
     end
-    if private_recovery_path(expanded_path) then return nil end
     if vim.fn.filereadable(expanded_path) == 0 then
         logger.warning("File not found: " .. expanded_path)
         return nil
@@ -430,7 +421,6 @@ _H.find_files = function(dirpath, pattern, recursive)
         logger.warning("Refusing to expand a path containing a backtick: " .. tostring(dirpath))
         return {}
     end
-    if private_recovery_path(expanded_dir) then return {} end
     if vim.fn.isdirectory(expanded_dir) == 0 then
         logger.warning("Directory not found: " .. expanded_dir)
         return {}
@@ -468,7 +458,7 @@ _H.find_files = function(dirpath, pattern, recursive)
 
     -- Filter to include only files, not directories
     for _, match in ipairs(matches) do
-        if not private_recovery_path(match) and vim.fn.isdirectory(match) == 0 then
+        if vim.fn.isdirectory(match) == 0 then
             table.insert(files, match)
         end
     end
