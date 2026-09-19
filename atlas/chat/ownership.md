@@ -25,8 +25,10 @@ order, each call immediately before its own result, through the answer's own
 grant (#266 M2); a failed call is written as an error result and the round goes
 on. An edit intersecting owned output revokes the affected writer — inside a tool
 round that is the whole answer, since its blocks have no grants of their own;
-reload invalidates all grants from the former document epoch. Earlier context edits mark captured input
-stale without redirecting output.
+reload invalidates all grants from the former document epoch. A human edit to
+earlier context marks captured input stale without redirecting output; another
+generation's writes do not ([previous answer while
+regenerating](lifecycle.md), #261).
 
 **Undo grouping** — this page is the one statement of it; the
 [target](../../workshop/targets/transcript-is-the-whole-truth.md) and plans point

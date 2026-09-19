@@ -190,6 +190,32 @@ generated writes group into undo steps is stated once, in
 [Chat Write Ownership, "Undo grouping"](ownership.md). With `undofile` set, that
 history survives reopening the chat.
 
+### Previous answer while regenerating (#261, #255)
+
+While an answer is being regenerated, the rest of the chat still sees the
+answer it replaces.
+- A request whose context includes that exchange — a later question in the
+  same chat, or a sub-chat whose ancestors include it — carries the previous
+  answer, whole, rather than the header or partial text now in the buffer.
+- It is captured from the command-time parse and held on the document
+  coordinator (`D.set_previous_answer` / `D.previous_answers`) from the top of
+  `prepare_input`, before preparation removes a byte.
+- It is substituted in the tick the command reads the chat, because
+  `build()` runs later.
+
+It lives exactly as long as that generation holds its grant:
+- it ends when the generation ends, in success or failure, since both are
+  recorded in the transcript;
+- an edit that revokes it, reload, detach, or deleting the question also end
+  it;
+- the event list is the ARCH-ORDER table in
+  `workshop/plans/000261-transcript-is-the-whole-truth-plan.md`.
+
+A regeneration's writes move other generations' captured input ranges but never
+mark them stale; only human edits do (`document/state.lua`). The answer being
+replaced stays the valid context until the generation ends, and a request
+captured before it is unaffected by its completion.
+
 Pending progress is presentation only, described in [Response progress](response_progress.md).
 Stop cancels captured sessions for the current chat; cancellation does not release
 unresolved subprocesses or tool effects. Undo/redo stays native. Document edit
@@ -247,6 +273,11 @@ included (`branch.after_exchange`); exchanges after that branch point are not.
 If no matching forward reference is found, that ancestor contributes no
 exchanges. The question of each included exchange is retained; its answer uses
 the `📝:` summary when present, otherwise the full answer.
+
+A parent is read as the user sees it (`helper.chat_lines`): from its loaded
+buffer when one is open, which is ahead of the disk while an answer streams in
+or while edits are unsaved, else from the file. A parent exchange still being
+regenerated contributes its previous answer, as above.
 
 This ancestor-summary rule applies even when `chat_memory.enable=false`.
 Disabling memory preserves the current chat's ordinary message window; it does

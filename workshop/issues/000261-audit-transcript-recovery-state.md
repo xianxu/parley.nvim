@@ -636,6 +636,28 @@ edit. The gate said the review was not converging.
     (3.66 GiB), plus a 1.89 GiB abandoned `tmp_pack`, in `~/.git/objects`.
   - Nothing was deleted; the cleanup is the operator's call.
 
+### 2026-09-19 — M2 implementation notes (before milestone-close)
+
+- **Tasks 2.1–2.6 landed as planned.** Each fix has a counterfactual that
+  goes red: `holds`; the line_start rebase (2 tests); the finish-time removal;
+  no substitution (3); substitution moved to `build()` (1: capture-then-late-
+  build); the staleness rule (the tool-round continuation); a disk-only
+  ancestor read (2).
+- **Deviation: no `tests/helpers/parsed_chat.lua` lift.** The pure
+  `previous_answer` tests use small literal exchanges. The two checks that need
+  `build_messages` live in `build_messages_spec`, beside its existing
+  content-block fixtures.
+- **Deviation: the raw-payload read fixes a pre-existing batch-mode bug.** A
+  batch leg builds from a copy of the input, so reading `question.raw_payload`
+  dropped a typed raw request. Only the new batch-leg test pins this; the
+  single-mode raw test is a characterization. Both stub `log_emit.parse_yaml`,
+  because PyYAML is absent on this host and YAML parsing is not what they test.
+- **`document_dependency_affinity_spec` asserted the reversed rule** ("another
+  generation … stays stale"). It is updated, with the reason in the test.
+- **Atlas.** `lifecycle.md` gains "Previous answer while regenerating", the one
+  statement of the rule, and the ancestor paragraph. `document.md` and
+  `ownership.md` link to it.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit
