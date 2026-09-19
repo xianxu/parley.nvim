@@ -758,8 +758,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			or (http_status ~= 0 and (http_status < 200 or http_status > 299))
 		if failed then
 			local failure = {
-				code = code,
-				signal = signal,
+				-- How the transport ended when it did not end cleanly, rendered
+				-- once here: a kill, a pipe error or a curl exit. The raw exit
+				-- code is not re-exported — it is nil whenever io_error says
+				-- why, so a consumer rendering it would print "nil" (#261 M3
+				-- review BR-45). The log below keeps it.
+				exit = (io_error ~= nil or code ~= 0) and tasker.exit_reason(code, signal, io_error) or nil,
 				http_status = http_status,
 				body = qt.raw_response,
 				stderr = clean_stderr,

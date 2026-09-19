@@ -18,6 +18,8 @@
 --     pipes. With `opts.pipes_follow_holders`, a pipe's EOF arrives only when its
 --     last holder exits; without it, `exit()` sends no EOF, as before.
 --   * `state.spawn_options` records every spawn's options.
+--   * `opts.spawn_pid` makes the first spawn report that pid, for a record whose
+--     pid must never be signalled (0 is Neovim's own group).
 local M = {}
 function M.new(opts)
     opts = opts or {}
@@ -42,9 +44,9 @@ function M.new(opts)
         return pipe
     end
     local next_pid = 4241
-    local function add_process(spawn_opts, on_exit, pgid, stdout, stderr)
+    local function add_process(spawn_opts, on_exit, pgid, stdout, stderr, forced_pid)
         next_pid = next_pid + 1
-        local pid = opts.reuse_pid and 4242 or next_pid
+        local pid = forced_pid or (opts.reuse_pid and 4242 or next_pid)
         local handle = { closing = false }
         function handle:is_closing() return self.closing end
         function handle:close() self.closing = true end
@@ -84,7 +86,8 @@ function M.new(opts)
         if opts.spawn_error then return nil, opts.spawn_error end
         local stdout, stderr = spawn_opts.stdio[2], spawn_opts.stdio[3]
         stdout.stream, stderr.stream = "stdout", "stderr"
-        local process, handle = add_process(spawn_opts, on_exit, nil, stdout, stderr)
+        local process, handle = add_process(spawn_opts, on_exit, nil, stdout, stderr,
+            state.spawn_calls == 1 and opts.spawn_pid or nil)
         if spawn_opts.detached == true then process.pgid = process.pid end
         state.on_exit, state.handle = on_exit, handle -- original single-process fixture API
         if opts.exit_during_spawn then process:exit() end

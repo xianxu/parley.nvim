@@ -27,8 +27,14 @@ describe("_failure_notice", function()
         assert.matches("HTTP 503", notice({ http_status = 503, message = "x" }))
     end)
 
-    it("names the exit code when there is no HTTP status", function()
-        assert.matches("exit 22", notice({ code = 22, body = "x" }))
+    it("names how the transport ended when there is no HTTP status", function()
+        assert.matches("exit 22", notice({ exit = "exit 22" }))
+        -- #261 M3 review BR-45: a kill names its cause, and the partial body it
+        -- left is not shown as if it were a diagnosis.
+        local killed = notice({ exit = "killed: deadline", body = '{"choices":[{"delta":' })
+        assert.matches("killed: deadline", killed)
+        assert.is_nil(killed:find("choices", 1, true))
+        assert.is_nil(killed:find("nil", 1, true))
     end)
 
     it("bounds the detail so a huge body cannot flood the notice", function()

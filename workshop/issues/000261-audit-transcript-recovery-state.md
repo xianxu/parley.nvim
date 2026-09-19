@@ -742,6 +742,21 @@ Important finding is fixed as its rule, with a guard.
 - **All five Minors fixed** (plan Revisions). Lessons were added to
   `workshop/lessons.md`.
 
+### 2026-09-19 — M3 boundary review round 2 (FIX-THEN-SHIP) and dispositions
+
+Round 1's three Importants were disposed as addressed. Two new Importants, both
+about how far a rule was carried:
+- **BR-45**: the render sweep was anchored on `tasker.run(` call sites, not on
+  the value. The dispatcher's failure table carried the raw code one seam
+  further. It now carries only `failure.exit`, rendered once, and the guard
+  forbids reading the raw fields anywhere.
+- **BR-46**: once the atlas deferred to the spawn list, its prose reasons became
+  unchecked documentation, and two were wrong. Each entry's class is now derived
+  from the call form, with counts per class, and prose only where no mechanical
+  answer exists.
+- Round 1's three untested Minors have tests, each red on revert; the process
+  fake gained a `spawn_pid` seam.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

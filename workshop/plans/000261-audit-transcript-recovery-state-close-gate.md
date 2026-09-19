@@ -644,6 +644,101 @@ rounds:
       boundary: M3
       recipe: milestone-review
       blocked: true
+    - "n": 11
+      timestamp: "2026-09-19T04:11:34-07:00"
+      agent: claude
+      boundary: M3
+      recipe: milestone-review
+      blocked: true
+      protocol_error: no valid findings block
+    - "n": 12
+      timestamp: "2026-09-19T07:53:50-07:00"
+      agent: claude
+      dispose:
+        - id: BR-38
+          disposition: addressed
+          note: tasker.exit_reason plus the raw-render guard; verified red on revert in unscoped_kill_spec and spawn_seam_spec. Its stated four-callback enumeration is fully swept; the wider renderer class is raised anew below.
+          round: 12
+        - id: BR-39
+          disposition: addressed
+          note: README.md:115-120 now states TERM then SIGKILL at 2 s and scopes the claim-holding to "until the process has ended"; I re-ran the superseded-claim sweep and found no other stale statement.
+          round: 12
+        - id: BR-40
+          disposition: addressed
+          note: Atlas quantifiers scoped to tasker.run, and spawn_seam_spec is an executable per-file census with a dead-entry check; verified red on a planted spawn in logger.lua.
+          round: 12
+        - id: BR-41
+          disposition: not-addressed
+          note: The merge is correct but untested; I wrote the 8-line test and it goes red on the old `transport_opts or {…}` form.
+          round: 12
+        - id: BR-42
+          disposition: addressed
+          note: Both kill paths share one scripted() helper and the failed-signal-retry case is parameterised over pid and group; verified red when the group branch's scripted() call is removed.
+          round: 12
+        - id: BR-43
+          disposition: not-addressed
+          note: The guard is correct but has no test, and the fake has no seam to spawn a pid other than 4242 — add a spawn_pid option, then assert a pid-0 record records `missing` and signals nothing.
+          round: 12
+        - id: BR-44
+          disposition: not-addressed
+          note: The in-callback close is correct but untested; the existing supervision assertion at :232 passes via retire either way. I wrote the held-record test and it goes red without the fix.
+          round: 12
+      findings:
+        - id: BR-45
+          severity: Important
+          title: The dispatcher re-exports code/io_error on its failure table, and both of that table's renderers still drop io_error
+          detail: |-
+            This is the 5th finding in family `seam-change-collateral`. Do NOT fix
+            chat_respond.lua:24 and response_provider.lua:13 alone. The rule BR-38
+            stated was "sweep every consumer that RENDERS the value"; it was
+            implemented as "every file containing the literal tasker.run(", which is
+            a call-site anchor, not a value anchor. The value crosses one more seam:
+            dispatcher.lua:760-768 builds failure = {code, signal, io_error, …} and
+            hands it to on_error. chat_respond._failure_notice (chat_respond.lua:23-24)
+            renders tostring(failure.code) — now dead, since code is nil on every
+            kill — then up to 500 chars of raw partial body; response_provider
+            failure_reason (response_provider.lua:11-15) renders
+            "provider request failed (HTTP unknown)". Neither reads io_error, so a
+            deadline- or leave-killed stream never names its cause to the user, the
+            same Done-when clause BR-38 cited. Neither file is in the guard's scope,
+            and its pattern tostring%(%s*[%w_]*code%d*%s*%) cannot match
+            tostring(failure.code) because `.` is outside [%w_]. The rule-level fix:
+            render once at the seam that produces the value (failure.reason =
+            tasker.exit_reason(code, signal, io_error)), have both consumers read it,
+            widen the guard's scope predicate from "calls tasker.run(" to "reads a
+            .code off a table that also carries io_error", and list the forms the
+            matcher cannot see in its header, as single_source_sweeps_spec does.
+            M5 Task 5.3 plans to keep _failure_notice as `detail`, so it inherits this.
+          family: seam-change-collateral
+          round: 12
+        - id: BR-46
+          severity: Important
+          title: The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
+          detail: |-
+            This is the 8th finding in family `enumeration-claims-completeness`. Do
+            NOT fix the two entries alone. atlas/providers/tool_execution.md:125-128
+            now defers to tests/arch/spawn_seam_spec.lua as the list of each
+            out-of-seam spawn "with how it ends", which makes every `reason` string
+            load-bearing documentation — but the test asserts only that it is a
+            non-empty string. spawn_seam_spec.lua:33 calls git_markdown_source "a
+            bounded `git show` read with its own cancel": the command is `git ls-files
+            -z --cached --others --exclude-standard -- *.md`
+            (git_markdown_source.lua:135-143), markdown_finder arms no timer, and
+            request_kill (git_markdown_source.lua:37-43) sends one sigterm with no
+            escalation, only on caller cancel. spawn_seam_spec.lua:31-32 says
+            cliproxy's calls "carry curl or vim.system timeouts": false for lsof
+            (cliproxy.lua:842), `<bin> -h` (:1024), `ps ax` (:1066), sha256sum (:2027)
+            and tar (:2106) — all synchronous :wait() with no timeout, which is an
+            answer, but not the one given. The rule: an enumeration whose entries
+            justify a documented claim must make each justification checkable — assert
+            a classification derived from the call form (sync ⇔ :wait()/vim.fn.system*;
+            bounded ⇔ the call carries `timeout =` or `--max-time`) and keep free text
+            only for genuine exceptions such as the managed proxy.
+          family: enumeration-claims-completeness
+          round: 12
+      boundary: M3
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -978,6 +1073,67 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   by held records, but it is a handle whose only removal path is the one
   branch that by definition does not run.
 
+## Round 11 — 2026-09-19T04:11:34-07:00 (claude) — BLOCKED
+
+**Protocol error:** no valid findings block — this round contributed no findings.
+
+## Round 12 — 2026-09-19T07:53:50-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-38 — addressed — tasker.exit_reason plus the raw-render guard; verified red on revert in unscoped_kill_spec and spawn_seam_spec. Its stated four-callback enumeration is fully swept; the wider renderer class is raised anew below.
+- BR-39 — addressed — README.md:115-120 now states TERM then SIGKILL at 2 s and scopes the claim-holding to "until the process has ended"; I re-ran the superseded-claim sweep and found no other stale statement.
+- BR-40 — addressed — Atlas quantifiers scoped to tasker.run, and spawn_seam_spec is an executable per-file census with a dead-entry check; verified red on a planted spawn in logger.lua.
+- BR-41 — not-addressed — The merge is correct but untested; I wrote the 8-line test and it goes red on the old `transport_opts or {…}` form.
+- BR-42 — addressed — Both kill paths share one scripted() helper and the failed-signal-retry case is parameterised over pid and group; verified red when the group branch's scripted() call is removed.
+- BR-43 — not-addressed — The guard is correct but has no test, and the fake has no seam to spawn a pid other than 4242 — add a spawn_pid option, then assert a pid-0 record records `missing` and signals nothing.
+- BR-44 — not-addressed — The in-callback close is correct but untested; the existing supervision assertion at :232 passes via retire either way. I wrote the held-record test and it goes red without the fix.
+
+### Raised
+
+- **BR-45** [Important] `seam-change-collateral` The dispatcher re-exports code/io_error on its failure table, and both of that table's renderers still drop io_error
+  This is the 5th finding in family `seam-change-collateral`. Do NOT fix
+  chat_respond.lua:24 and response_provider.lua:13 alone. The rule BR-38
+  stated was "sweep every consumer that RENDERS the value"; it was
+  implemented as "every file containing the literal tasker.run(", which is
+  a call-site anchor, not a value anchor. The value crosses one more seam:
+  dispatcher.lua:760-768 builds failure = {code, signal, io_error, …} and
+  hands it to on_error. chat_respond._failure_notice (chat_respond.lua:23-24)
+  renders tostring(failure.code) — now dead, since code is nil on every
+  kill — then up to 500 chars of raw partial body; response_provider
+  failure_reason (response_provider.lua:11-15) renders
+  "provider request failed (HTTP unknown)". Neither reads io_error, so a
+  deadline- or leave-killed stream never names its cause to the user, the
+  same Done-when clause BR-38 cited. Neither file is in the guard's scope,
+  and its pattern tostring%(%s*[%w_]*code%d*%s*%) cannot match
+  tostring(failure.code) because `.` is outside [%w_]. The rule-level fix:
+  render once at the seam that produces the value (failure.reason =
+  tasker.exit_reason(code, signal, io_error)), have both consumers read it,
+  widen the guard's scope predicate from "calls tasker.run(" to "reads a
+  .code off a table that also carries io_error", and list the forms the
+  matcher cannot see in its header, as single_source_sweeps_spec does.
+  M5 Task 5.3 plans to keep _failure_notice as `detail`, so it inherits this.
+- **BR-46** [Important] `enumeration-claims-completeness` The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
+  This is the 8th finding in family `enumeration-claims-completeness`. Do
+  NOT fix the two entries alone. atlas/providers/tool_execution.md:125-128
+  now defers to tests/arch/spawn_seam_spec.lua as the list of each
+  out-of-seam spawn "with how it ends", which makes every `reason` string
+  load-bearing documentation — but the test asserts only that it is a
+  non-empty string. spawn_seam_spec.lua:33 calls git_markdown_source "a
+  bounded `git show` read with its own cancel": the command is `git ls-files
+  -z --cached --others --exclude-standard -- *.md`
+  (git_markdown_source.lua:135-143), markdown_finder arms no timer, and
+  request_kill (git_markdown_source.lua:37-43) sends one sigterm with no
+  escalation, only on caller cancel. spawn_seam_spec.lua:31-32 says
+  cliproxy's calls "carry curl or vim.system timeouts": false for lsof
+  (cliproxy.lua:842), `<bin> -h` (:1024), `ps ax` (:1066), sha256sum (:2027)
+  and tar (:2106) — all synchronous :wait() with no timeout, which is an
+  answer, but not the one given. The rule: an enumeration whose entries
+  justify a documented claim must make each justification checkable — assert
+  a classification derived from the call form (sync ⇔ :wait()/vim.fn.system*;
+  bounded ⇔ the call carries `timeout =` or `--max-time`) and keep free text
+  only for genuine exceptions such as the managed proxy.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
@@ -986,10 +1142,8 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-34** [Minor] `canonical-form-not-shared` buffer_for's private key() adds an 11th copy of the resolve(fnamemodify(x,':p')) path-canonicalisation idiom
 - **BR-36** [Minor] `enumeration-claims-completeness` nodiscard_spec only sees calls at the start of a line; three calling forms that drop the result pass green
 - **BR-37** [Minor] `allowlist-without-dead-entry-check` nodiscard_spec's DROPPED count is only a ceiling, so a declaration outlives the call it excuses
-- **BR-38** [Important] `seam-change-collateral` A killed content fetch writes "curl exited with code nil" into the transcript and drops the io_error that names the cause
-- **BR-39** [Important] `seam-change-collateral` README still says Stop keeps running tools and their claims, which M3 inverted
-- **BR-40** [Important] `enumeration-claims-completeness` The new atlas section quantifies over every process Parley starts, but five spawn families sit outside the tasker seam
 - **BR-41** [Minor] `seam-change-collateral` generate_topic replaces rather than merges transport_opts, so partial opts lose the deadline and are refused
-- **BR-42** [Minor] `stateless-double-at-stateful-seam` The process fake models group signals and pid signals with two different semantics
 - **BR-43** [Minor] `untrusted-input-unparsed` target() has no pid == 0 guard, and -0 == 0 would signal Neovim's own process group
 - **BR-44** [Minor] `residue-names-no-end` The one-shot deadline timer is closed only by retire, the one path a held record never takes
+- **BR-45** [Important] `seam-change-collateral` The dispatcher re-exports code/io_error on its failure table, and both of that table's renderers still drop io_error
+- **BR-46** [Important] `enumeration-claims-completeness` The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong

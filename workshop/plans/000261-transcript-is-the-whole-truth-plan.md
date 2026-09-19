@@ -2011,3 +2011,42 @@ gone. With main's `detach = true` restored, all three cases fail.
   cancellations warn, will need `cause` threaded through
   `stop_scope`/`stop_owner`/`stop_attempt`. That belongs to M5.
 
+### 2026-09-19 — M3 boundary review round 2 (FIX-THEN-SHIP): dispositions
+
+**Delta.** Round 1's three Importants were disposed as addressed; two new ones
+and three untested Minors came back.
+- **BR-45, the value's other seam.** The dispatcher now renders the transport's
+  end once, into `failure.exit` (`tasker.exit_reason`), and no longer exports
+  `code` or `signal` at all — so a consumer cannot render the nil code.
+  - `chat_respond._failure_notice` reads `failure.exit`, and no longer shows the
+    partial body as if it were a diagnosis when the transport itself failed.
+  - `response_provider.failure_reason` reads it too, instead of reporting
+    "(HTTP unknown)" for a killed stream.
+  - The guard is anchored on the value: no module may read `failure.code`,
+    `failure.signal` or `failure.io_error`, and the header lists the forms the
+    matchers cannot see.
+  - Tests: `failure_notice_spec` (a kill names its cause and hides the partial
+    body), `response_provider_spec` (a killed stream's reported reason),
+    `dispatcher_query_spec` I9 (the table carries `exit`, not `code`). Each red
+    on revert.
+- **BR-46, the enumeration's reasons.** `spawn_seam_spec` now derives each
+  out-of-seam spawn's class from its call form — `sync`, `bounded`,
+  `delegated`, `open` — and declares counts per class per file. Free text is
+  required only for `open`, and refused when there is none.
+  - `bounded` covers a declared argv helper (`api_argv`), and the test asserts
+    that helper's own body carries the bound.
+  - `delegated` covers cliproxy's `run(argv, cb)` wrapper, and the test asserts
+    every call site passes a bounded argv.
+  - The two wrong entries are gone: `git_markdown_source` is `git ls-files`
+    cancelled by one SIGTERM with no timer, and cliproxy's unbounded calls are
+    the 9 synchronous ones.
+- **The three untested Minors now have tests** (BR-41 merge, BR-43 pid 0,
+  BR-44 the held record's timer), each verified red on revert. The fake gained
+  one seam, `spawn_pid`, for BR-43.
+- **One guard caught another.** `arch_helper_spec`'s meta-guard flagged the word
+  `git ls-files` inside the new spec's prose. The reason now names the command's
+  real flags, which is both more precise and outside the meta-guard's pattern.
+- **Recorded, not fixed.** The reviewer's two M4/M5 notes stand: a derived
+  `phase` tag on `attempt`, and threading `cause` through `scoped_stop` so a
+  reload-caused kill differs from a user Stop. Both belong to M4/M5, and the
+  earlier Revisions entry already records the second.

@@ -68,6 +68,19 @@ describe('production response provider adapter',function()
         assert.is_true(vim.wait(100,function()return resolved==1 end,1))
         assert.equals(0,sa.complete);assert.equals(0,sa.resolved)
     end)
+    -- #261 M3 review BR-45: a killed stream has no HTTP status and a partial
+    -- body; what the host is told must name the kill, not "(HTTP unknown)".
+    it('names how a killed stream ended in the failure it reports',function()
+        local cb,s=callbacks();local adapter=Provider.new()
+        adapter.request(context(1),cb)
+        local p=processes.processes[4242]
+        p:emit('stdout','data: {"choices":[{"delta":{"content":"partial"}}]}\n\n')
+        assert.equals(1,Tasker.stop_scope(Tasker.scope_key(1,1)))
+        p:finish(0,15)
+        assert.is_true(vim.wait(100,function()return s.failed==1 end,1))
+        assert.truthy(s.reason:find('killed: stop',1,true),s.reason)
+        assert.is_nil(s.reason:find('unknown',1,true),s.reason)
+    end)
     it('prevents delayed pre-query startup after cancellation without claiming early resolution',function()
         local ready
         Providers.get=function(name)local p=vim.tbl_extend('force',{},old_get(name));p.pre_query=function(fn)ready=fn end;return p end

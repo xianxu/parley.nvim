@@ -281,6 +281,33 @@ describe('bounded process supervision',function()
             wait(function()return #calls==1 end)
             assert.is_nil(calls[1][1]);assert.equals('stdout: EIO',calls[1][5])
         end)
+        -- #261 M3 review BR-43: pid 0 is Neovim's own group, and -0 == 0. The
+        -- fake raises if it is ever signalled; tasker must not reach it.
+        it('never signals a record whose pid is 0',function()
+            T._uv,processes=Fake.new({spawn_pid=0})
+            T.run(nil,'fixture',{},nil,nil,nil,nil,{attempt_id='z',deadline_ms=60000})
+            assert.equals(0,T.get_attempt('z').pid)
+            assert.equals(1,T.stop_attempt('z'))
+            assert.equals('missing',T.get_attempt('z').signal_observation)
+            assert.same({},processes.signals)
+            now=2010;T.reconcile_step(now) -- the escalation would signal it too
+            assert.same({},processes.signals)
+        end)
+        -- #261 M3 review BR-44: a held record is never retired, so the deadline
+        -- timer must close as it fires rather than waiting for retire.
+        it('keeps no deadline handle on a record the kernel holds',function()
+            T._uv,processes=Fake.new({})
+            local unresolved=0
+            T.run(nil,'fixture',{},nil,nil,nil,nil,{attempt_id='h',deadline_ms=60000,
+                on_unresolved=function()unresolved=unresolved+1 end})
+            local p=processes.processes[4242];p.ignores={[15]=true,[9]=true}
+            local deadline=processes.timers[1];assert.equals(60000,deadline.delay)
+            now=10;deadline:fire()
+            wait(function()return T.get_attempt('h').stop_cause=='deadline' end)
+            now=2010;T.reconcile_step(now);now=5010;T.reconcile_step(now)
+            assert.equals(1,unresolved);assert.equals(1,#T.held())
+            assert.is_true(deadline.closing,'the fired deadline timer was not closed')
+        end)
         it('leave kills every live record: scoped by group, unscoped by pid',function()
             run()
             T.run(nil,'fixture',{},nil,nil,nil,nil,{attempt_id='u',deadline_ms=60000})

@@ -195,3 +195,194 @@ findings:
       by held records, but it is a handle whose only removal path is the one
       branch that by definition does not run.
 ```
+
+---
+
+## Re-review — 2026-09-19T04:11:34-07:00 (unknown)
+
+| field | value |
+|-------|-------|
+| issue | 261 — Audit transcript as the complete recovery state |
+| repo | parley.nvim |
+| issue file | workshop/issues/000261-audit-transcript-recovery-state.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 8a753815ca9754084a75902f1f1c368ed5e54371..4632ac8864f45ef91d25b6a453d1e70989a33152 |
+| command | sdlc milestone-close --issue 261 --milestone M3 |
+| reviewer | claude |
+| timestamp | 2026-09-19T04:11:34-07:00 |
+| verdict | unknown |
+
+## Review
+
+Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+
+---
+
+## Re-review — 2026-09-19T07:53:50-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 261 — Audit transcript as the complete recovery state |
+| repo | parley.nvim |
+| issue file | workshop/issues/000261-audit-transcript-recovery-state.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 8a753815ca9754084a75902f1f1c368ed5e54371..4632ac8864f45ef91d25b6a453d1e70989a33152 |
+| command | sdlc milestone-close --issue 261 --milestone M3 |
+| reviewer | claude |
+| timestamp | 2026-09-19T07:53:50-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+M3's round-1 dispositions hold up under independent verification: I re-ran the full suite (`make test JOBS=6` — 381 spec files PASS, `luacheck` 0 warnings / 0 errors over 637 files, exit 0), and confirmed by reverting each fix in a scratch copy that the BR-38 fix goes red in two places (`unscoped_kill_spec` and the new `spawn_seam_spec` raw-code guard) and the BR-42 fake symmetry goes red in the newly parameterised `tasker_run_spec` group case. The new `tests/arch/spawn_seam_spec.lua` is a real guard, not a decoration — I planted a `vim.system` call in `logger.lua` and it failed. What holds this back from SHIP is that the *class* rule BR-38 stated ("sweep every consumer that RENDERS the value") was implemented as "every file that calls `tasker.run(`", and the value crosses one more seam: the dispatcher re-exports `code`/`signal`/`io_error` on its `failure` table, and both of that table's renderers still drop `io_error`. Separately, the BR-40 remedy made the atlas defer to `spawn_seam_spec` as the authoritative list of "how each out-of-seam process ends", but the per-entry reasons are free prose that nothing checks, and two of eighteen are wrong. Three of the four Minors landed correct fixes with no regression test at all — I wrote the tests and confirmed they go red on revert, so the debt is exactly measured, not speculative.
+
+## 1. Strengths
+
+- `tests/arch/spawn_seam_spec.lua` is the right shape for this repo's "we swept the class" convention: exact per-file counts (so a removed spawn fails too), a dead-entry check that answers `allowlist-without-dead-entry-check`, a vacuity guard (`the census finds the seam`), and inline counterfactuals for the matcher itself. Verified red on a planted spawn.
+- `lua/parley/tasker.lua:344-350` — `exit_reason` as one renderer, with the guard at `spawn_seam_spec.lua:108-134` forbidding a raw `tostring(…code…)` in any module that hands callbacks to tasker, is the ARCH-DRY answer rather than four hand-edits. `unscoped_kill_spec.lua:127-130` pins the user-visible text (`killed: deadline`, "Resubmit the question", no `nil`) and I confirmed it reddens on the old message.
+- `tests/integration/process_group_conformance_spec.lua` — three live kernel checks on every `make test`, including one through the real `find` builtin and `process_bootstrap`, asserting the grandchild's pid is actually gone. Fake and production share the `M._uv` seam; this is ARCH-MOCK done properly.
+- `tests/helpers/fake_process.lua:104-141` — collapsing both kill paths onto one `scripted()` helper, and making `state.signals` mean "signals the kernel accepted" on both paths, is the correct fix for BR-42: the failed-signal-retry case is now parameterised over pid *and* group (`tasker_run_spec.lua:910-926`) instead of having been moved to keep working.
+- `lua/parley/attempt.lua:25-35` — `open_probe_window` extracted so the probe window has one definition, and the reducer stays pure with `drive`-style sequence tests. Still the strongest part of M3.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**A. `lua/parley/chat_respond.lua:23-24` and `lua/parley/response_provider.lua:11-15` — the `code`/`io_error` sweep stopped at tasker's direct callbacks; the dispatcher re-exports both fields and neither renderer reads `io_error`.**
+`dispatcher.lua:760-768` builds `failure = {code = code, signal = signal, io_error = io_error, …}` and hands it to `on_error`. Two consumers render it:
+- `chat_respond._failure_notice` prints `" (exit " .. tostring(failure.code) .. ")"` — now skipped entirely, because `failure.code` is nil on every kill — and then up to 500 chars of `failure.body` (the raw partial SSE/JSON). A deadline-killed topic generation surfaces `parley: provider request failed: <raw JSON fragment>`.
+- `response_provider.failure_reason` returns `'provider request failed (HTTP '..tostring(failure.http_status or 'unknown')..')'` — i.e. `(HTTP unknown)` for a killed or pipe-errored stream.
+
+Neither file contains the literal `tasker.run(`, so `spawn_seam_spec.lua:117-131` does not scan them; and its `raw` pattern (`tostring%(%s*[%w_]*code%d*%s*%)`) would not match `tostring(failure.code)` anyway, since `.` is outside `[%w_]`. Fix sketch (the rule, not the site): anchor the sweep and its guard to the **value**, not to the callers of one function — have the dispatcher render once at the seam that produces it (`failure.reason = tasker.exit_reason(code, signal, io_error)`), make both renderers read `failure.reason`, and widen the guard's scope predicate from "file calls `tasker.run(`" to "file reads a `.code` off a table that also carries `io_error`", plus list the forms the matcher cannot see in its header (the convention `single_source_sweeps_spec` already follows).
+
+**B. `tests/arch/spawn_seam_spec.lua:30-50` — the enumeration's per-entry reasons are unchecked prose, and the atlas now treats them as authoritative.**
+`atlas/providers/tool_execution.md:125-128` says the spec "lists each of them, file by file, **with how it ends**", so each `reason` string is now load-bearing documentation. The test only asserts `type(entry[2]) == "string" and #entry[2] > 0`. Two entries are wrong as written:
+- `:33` — `git_markdown_source.lua` is labelled "a bounded `git show` read with its own cancel". The command is `git ls-files -z --cached --others --exclude-standard -- *.md` (`git_markdown_source.lua:135-143`), and it is **not** bounded: `markdown_finder.lua` arms no timer, and `request_kill` (`git_markdown_source.lua:37-43`) sends `sigterm` once with no escalation, only when the caller cancels.
+- `:31-32` — cliproxy's "its admin calls, probes and downloads carry curl or `vim.system` timeouts" is false for `lsof` (`:842`), `<bin> -h` (`:1024`), `ps ax` (`:1066`), `sha256sum`/`shasum` (`:2027`) and `tar -xzf` (`:2106`), none of which pass a timeout. They are all synchronous `:wait()`, which *is* an answer — but it is not the one the entry gives.
+
+Fix sketch (the rule): make the justification checkable rather than narrative — give each entry a machine-verified classification the test asserts from the call form (e.g. `sync = true` ⇔ the line ends in `:wait()` / uses `vim.fn.system*`; `bounded = true` ⇔ the call carries `timeout =` or `--max-time`), and reserve free text for the genuine exceptions (the managed proxy). Then correct the two entries above.
+
+## 4. Minor findings
+
+- `atlas/chat/lifecycle.md:224-225` — "cancellation does not release unresolved subprocesses or tool effects" still leads the paragraph that the new M3 sentence immediately qualifies; it reads as the pre-M3 contract until the next sentence lands. Defensible as written ("unresolved" carries it), so recorded here only.
+- `README.md:115-120` — the inserted sentences leave "2 s later" and "A tool whose process has ended holds nothing," on short ragged lines; a reflow would read better.
+- `tests/helpers/fake_process.lua:45-52` — the fake has no option to spawn a pid other than `4242`/`next_pid`, which is why BR-43's guard has no test seam (see its disposition).
+
+## 5. Test coverage notes
+
+Full suite green: 381 spec files, lint 0/0 over 637 files. The counterfactual discipline on the *addressed* findings is real — I reproduced both. The gap this round is that three of the four Minors changed behaviour with no test, and all three are testable in under ten lines. I wrote and ran them, and confirmed each goes red on revert:
+
+- **BR-44** — arm a `deadline_ms` run on the fake, give the process `ignores = {[15]=true,[9]=true}`, fire the deadline, tick `reconcile_step` past 5 s; assert `#T.held() == 1` and `deadline.closing`. Red without the in-callback `close_timer`.
+- **BR-41** — stub `dispatcher.query`, call `generate_topic(..., {alive = fn})`, assert the captured `transport_opts` keeps `alive` **and** gains `tasker.deadline.stream`. Red on the old `transport_opts or {…}`.
+- **BR-43** — not writable today; needs a `spawn_pid` option on the fake, after which `stop_attempt` on a pid-0 record should record `missing` and add nothing to `state.signals` (the fake already raises if pid 0 is ever signalled).
+
+Also uncovered, and the hole finding A falls through: no test asserts what `_failure_notice` or `failure_reason` render for a failure whose only diagnostic is `io_error`.
+
+## 6. Architectural notes for upcoming work
+
+**ARCH-DRY** pass — `exit_reason`, `is_scoped`, `open_probe_window`, `scope_key`, `target`/`send`, `close_timer`, hoisted `call_safely`; I swept for survivors of the two hand-built scope-key spellings and found none. **ARCH-PURE** pass — `attempt.lua` and `target`/`exit_reason` stay pure; `send` is the IO edge. **ARCH-PURPOSE** flagged (finding A: the shadow sweep over `exit_reason`'s consumers stops one seam short; finding B: the enumeration's content is not derived). **ARCH-MOCK** pass — the fake's two kill paths now share one vocabulary, and live conformance runs every suite. **ARCH-CONSTRAINTS** pass — every deadline has a kind, a value and a basis; the reconcile clamp keeps KILL at exactly `kill_due`. **ARCH-SECURE** pass — the `pid <= 0` guard landed; the pgid-reuse window is narrow and stated. **ARCH-ORDER** pass — the reducer plus sequence tests cover the interrupting events, including a stop on a window an exit opened. **ARCH-FUNERAL** pass — the deadline timer now closes as it fires, the `ParleyLeave` augroup is `clear = true`, and `held()` bounds what is retained.
+
+For M4/M5:
+- The `attempt` state is still a boolean/nullable constellation (`stop_requested`, `kill_due`, `escalated`, `unresolved_visible`, `signalled`, `stop_cause`, `exited`, two EOFs, `spawn_failed`, `delivered`); `escalated = true, kill_due = nil` is representable and undefined. M4 adds `stopping`/`fault` on top. A derived `phase` tag (`live | stopping | escalated | held | resolved`) read by `held()` and `stop_matching` would bound the growth.
+- `scoped_stop` still drops `cause`, so `stop_buf`/`stop_scope`/`stop_owner`/`stop_attempt` can only ever produce `killed: stop`. M5's "a user Stop is silent, other `cancelled` paths warn" needs the distinction; threading `cause` now is two lines. The plan already records this.
+- Finding A is the same seam M5 Task 5.3 plans to keep (`failure_notice` as `detail`). If the dispatcher renders once into `failure.reason`, M5 inherits a value that already names the cause instead of re-deriving it.
+
+## 7. Plan revision recommendations
+
+- **`## Revisions` — M3 Task 3.4, renderer scope.** The round-1 delta records the enumeration as "every tasker exit callback that renders an outcome" (four sites). Record that the enumeration is one seam short: `dispatcher.query`'s `failure` table re-exports `code`/`signal`/`io_error`, and its two renderers (`chat_respond._failure_notice`, `response_provider.failure_reason`) are outside both the list and the guard's scope predicate.
+- **`## Revisions` — M3 Task 3.7, the out-of-seam list's reasons.** Record that `spawn_seam_spec`'s `OUTSIDE` reasons are asserted only as non-empty strings, that `git_markdown_source` is `git ls-files` with no bound (not a bounded `git show`), and that several cliproxy calls carry no timeout — and say which remedy was taken (machine-checked classification vs. corrected prose).
+- **`## Revisions` — M3 round-1 Minors, evidence.** Record that BR-41, BR-43 and BR-44 landed as correct code with no regression test, and name the three tests that close them (above), so M4 does not inherit them as "done".
+
+```findings
+dispose:
+  - id: BR-38
+    disposition: addressed
+    note: |
+      tasker.exit_reason plus the raw-render guard; verified red on revert in unscoped_kill_spec and spawn_seam_spec. Its stated four-callback enumeration is fully swept; the wider renderer class is raised anew below.
+  - id: BR-39
+    disposition: addressed
+    note: |
+      README.md:115-120 now states TERM then SIGKILL at 2 s and scopes the claim-holding to "until the process has ended"; I re-ran the superseded-claim sweep and found no other stale statement.
+  - id: BR-40
+    disposition: addressed
+    note: |
+      Atlas quantifiers scoped to tasker.run, and spawn_seam_spec is an executable per-file census with a dead-entry check; verified red on a planted spawn in logger.lua.
+  - id: BR-41
+    disposition: not-addressed
+    note: |
+      The merge is correct but untested; I wrote the 8-line test and it goes red on the old `transport_opts or {…}` form.
+  - id: BR-42
+    disposition: addressed
+    note: |
+      Both kill paths share one scripted() helper and the failed-signal-retry case is parameterised over pid and group; verified red when the group branch's scripted() call is removed.
+  - id: BR-43
+    disposition: not-addressed
+    note: |
+      The guard is correct but has no test, and the fake has no seam to spawn a pid other than 4242 — add a spawn_pid option, then assert a pid-0 record records `missing` and signals nothing.
+  - id: BR-44
+    disposition: not-addressed
+    note: |
+      The in-callback close is correct but untested; the existing supervision assertion at :232 passes via retire either way. I wrote the held-record test and it goes red without the fix.
+findings:
+  - id: new
+    severity: Important
+    family: seam-change-collateral
+    title: |
+      The dispatcher re-exports code/io_error on its failure table, and both of that table's renderers still drop io_error
+    detail: |
+      This is the 5th finding in family `seam-change-collateral`. Do NOT fix
+      chat_respond.lua:24 and response_provider.lua:13 alone. The rule BR-38
+      stated was "sweep every consumer that RENDERS the value"; it was
+      implemented as "every file containing the literal tasker.run(", which is
+      a call-site anchor, not a value anchor. The value crosses one more seam:
+      dispatcher.lua:760-768 builds failure = {code, signal, io_error, …} and
+      hands it to on_error. chat_respond._failure_notice (chat_respond.lua:23-24)
+      renders tostring(failure.code) — now dead, since code is nil on every
+      kill — then up to 500 chars of raw partial body; response_provider
+      failure_reason (response_provider.lua:11-15) renders
+      "provider request failed (HTTP unknown)". Neither reads io_error, so a
+      deadline- or leave-killed stream never names its cause to the user, the
+      same Done-when clause BR-38 cited. Neither file is in the guard's scope,
+      and its pattern tostring%(%s*[%w_]*code%d*%s*%) cannot match
+      tostring(failure.code) because `.` is outside [%w_]. The rule-level fix:
+      render once at the seam that produces the value (failure.reason =
+      tasker.exit_reason(code, signal, io_error)), have both consumers read it,
+      widen the guard's scope predicate from "calls tasker.run(" to "reads a
+      .code off a table that also carries io_error", and list the forms the
+      matcher cannot see in its header, as single_source_sweeps_spec does.
+      M5 Task 5.3 plans to keep _failure_notice as `detail`, so it inherits this.
+  - id: new
+    severity: Important
+    family: enumeration-claims-completeness
+    title: |
+      The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
+    detail: |
+      This is the 8th finding in family `enumeration-claims-completeness`. Do
+      NOT fix the two entries alone. atlas/providers/tool_execution.md:125-128
+      now defers to tests/arch/spawn_seam_spec.lua as the list of each
+      out-of-seam spawn "with how it ends", which makes every `reason` string
+      load-bearing documentation — but the test asserts only that it is a
+      non-empty string. spawn_seam_spec.lua:33 calls git_markdown_source "a
+      bounded `git show` read with its own cancel": the command is `git ls-files
+      -z --cached --others --exclude-standard -- *.md`
+      (git_markdown_source.lua:135-143), markdown_finder arms no timer, and
+      request_kill (git_markdown_source.lua:37-43) sends one sigterm with no
+      escalation, only on caller cancel. spawn_seam_spec.lua:31-32 says
+      cliproxy's calls "carry curl or vim.system timeouts": false for lsof
+      (cliproxy.lua:842), `<bin> -h` (:1024), `ps ax` (:1066), sha256sum (:2027)
+      and tar (:2106) — all synchronous :wait() with no timeout, which is an
+      answer, but not the one given. The rule: an enumeration whose entries
+      justify a documented claim must make each justification checkable — assert
+      a classification derived from the call form (sync ⇔ :wait()/vim.fn.system*;
+      bounded ⇔ the call carries `timeout =` or `--max-time`) and keep free text
+      only for genuine exceptions such as the managed proxy.
+```

@@ -16,12 +16,14 @@ installed_root = installed_root and vim.fn.fnamemodify(installed_root, ":p")
 ---@return string
 function M._failure_notice(failure)
     local status = failure and failure.http_status
-    local detail = (failure and failure.message) or (failure and failure.body)
+    -- A transport that ended badly (killed, cut, curl failed) left a partial
+    -- body, not a diagnosis: `exit` names what happened instead.
+    local detail = (failure and failure.message) or (failure and not failure.exit and failure.body)
     local message = "parley: provider request failed"
     if status and (status < 200 or status > 299) then
         message = message .. " (HTTP " .. tostring(status) .. ")"
-    elseif failure and failure.code then
-        message = message .. " (exit " .. tostring(failure.code) .. ")"
+    elseif failure and failure.exit then
+        message = message .. " (" .. failure.exit .. ")"
     end
     if type(detail) == "string" and detail:match("%S") then
         message = message .. ": " .. detail:sub(1, 500)

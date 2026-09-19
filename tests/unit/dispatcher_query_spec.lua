@@ -765,8 +765,10 @@ describe("dispatcher.query internals", function()
             captured_terminal(28, 9, "", status_stderr("000"), nil)
             captured_terminal(0, 0, "", status_stderr("200"), nil)
             assert.equals(1, #failures)
-            assert.equals(28, failures[1].code)
-            assert.equals(9, failures[1].signal)
+            -- The transport's end is rendered once, here (#261 M3 review BR-45);
+            -- the raw code is not re-exported, since it is nil on every kill.
+            assert.equals("exit 28, signal 9", failures[1].exit)
+            assert.is_nil(failures[1].code)
             assert.equals(0, failures[1].http_status)
         end)
 

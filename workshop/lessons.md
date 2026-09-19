@@ -1,5 +1,33 @@
 # Lessons
 
+## 2026-09-19 (#261 M3 review round 2 — a sweep anchored on call sites, and an enumeration whose entries were prose)
+
+- **Anchor a sweep on the VALUE, not on the callers of one function** (5th in
+  `seam-change-collateral`). Round 1 read "sweep every consumer that renders
+  this value" as "every file containing `tasker.run(`". The value crossed one
+  more seam: the dispatcher re-exported `code`/`signal`/`io_error` on its
+  failure table, and both of that table's renderers printed the nil code or
+  `(HTTP unknown)`.
+  - Follow the value to every table it is copied onto, and render it once at the
+    seam that produces it (`failure.exit`).
+  - Then stop exporting the raw field, so no consumer can render it again — a
+    stronger guard than any pattern.
+- **An enumeration that justifies a documented claim must justify it
+  mechanically** (8th in `enumeration-claims-completeness`). Once the atlas
+  deferred to a test as the list of "how each process ends", each entry's prose
+  became documentation that nothing checked — and two of eighteen were wrong.
+  - Derive the classification from the code (`:wait()` ⇒ synchronous,
+    `--max-time` ⇒ bounded), declare counts per class, and keep free text only
+    for the entries that genuinely have no mechanical answer.
+  - Where the bound lives one call away (an argv helper, or a wrapper spawning
+    its caller's argv), check THAT: the helper's body carries the bound, or
+    every call site of the wrapper does.
+- **A fix without a test is not done, even when it is right.** Three of round
+  1's Minors landed correct code with no test, and the reviewer had to write
+  them to show the debt. Each was under ten lines: a held record keeping no
+  timer handle, a merge preserving a caller's option, a pid that must never be
+  signalled (which needed one new seam on the fake).
+
 ## 2026-09-19 (#261 M3 review — a seam changed a value's meaning; its renderers, its statements and its quantifier were not swept)
 
 - **When a seam changes what a value means, sweep the consumers that RENDER it,
