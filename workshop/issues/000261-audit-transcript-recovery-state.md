@@ -6,7 +6,7 @@ github_issue:
 target: transcript-is-the-whole-truth
 created: 2026-09-15
 updated: 2026-09-17
-estimate_hours: 20.64
+estimate_hours: 30.07
 started: 2026-09-17T08:07:29-07:00
 flow: {kind: full, provenance: inferred}
 ---
@@ -86,8 +86,9 @@ bytes, but make that relationship explicit and restart-safe.
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
 
-Derived after the plan cleared plan-quality, against the durable plan's tasks,
-one `item:` per task that produces code.
+Derived after the plan cleared plan-quality, against the durable plan's tasks.
+Each task that produces code has at least one `item:`. Heavy tasks have two,
+and sunk design has its own rows.
 
 - **Design.** Every primitive is discounted ×0.2 (v2 Step 3), because the plan
   pre-resolves its decisions: each decision records the operator's answer, its
@@ -99,78 +100,137 @@ one `item:` per task that produces code.
   stays within the scaled range of its primitive.
 - **Review tail.** Two `milestone-review` rows per milestone, plus one for the
   issue close. That follows the 2026-09-16 lesson: work across a shared seam
-  budgets review as a multiple, not a single unit. #266, on the same seam, took
-  four boundary rounds.
-- **Familiarity 1.0.** The subsystems are mapped by the audit, but M3 and M4
-  touch process and callback lifecycles that no recent issue exercised.
+  budgets review as a multiple, not a single unit. #266, on the same seam, ran
+  11 or more boundary rounds across its milestones and close, so 11 review rows
+  match its count. At 0.2 h per round, including fixes, the tail is tight.
+- **Familiarity 1.2.** This was 1.0 before the estimate-quality judge's
+  2026-09-18 notes. M3 and M4 are novel-but-bounded (v2 Step 5: ×1.5): process
+  groups, `setsid`, TERM→KILL, and live conformance against the kernel.
+  Together they carry roughly 45% of the implementation hours. The grammar has
+  one field, so the blend is about 1.2.
+- **Sunk design is itemized.** `sdlc actual` read 4.13 h for the audit and
+  planning. That time is carried by `issue-spec` plus two `scope-pivot` rows
+  (the 09-17 withdrawal of the external-store bucket; the 09-18 reversal of the
+  affordance and the #255 fold) and two `ux-rename-iteration` rows (the 09-18
+  kill/group/deadline decisions; plan review round 1). With the buffer they
+  come to 4.72 h, reconciling with the measurement instead of undershooting it.
 
-**Expect the implementation side to land high.** Every task is strict TDD
-red→green with counterfactuals, which is near the worst case for v3.1's
-fan-out discount (`baseline-v3.1.md` open question #3).
+**Read the total as a floor.** Every task is strict TDD red→green with
+counterfactuals, which is near the worst case for v3.1's fan-out discount
+(`baseline-v3.1.md` open question #3). On this repo, same-shape rows landed at
+0.47–0.71 of actual: #266 0.67, #262 0.53, #263 0.47, #240 0.66, #206 0.71.
+Heavy tasks (3.3, 3.4, 4.2) are split into two items each, rather than capped
+at one feature ceiling.
 
 ```estimate
 model: estimate-logic-v3.1
-familiarity: 1.0
+familiarity: 1.2
 design-buffer: 0.15
-item: issue-spec                design=1.5  impl=0.12
-item: cross-cutting-refactor    design=0.1  impl=0.2
-item: cross-cutting-refactor    design=0.1  impl=0.2
-item: lua-neovim                design=0.2  impl=0.4
-item: lua-neovim                design=0.2  impl=0.3
-item: atlas-docs                design=0.04 impl=0.08
-item: milestone-review          design=0.0  impl=0.2
-item: milestone-review          design=0.0  impl=0.2
-item: lua-neovim                design=0.2  impl=0.3
-item: lua-neovim                design=0.2  impl=0.5
-item: lua-neovim                design=0.4  impl=0.6
-item: lua-neovim                design=0.4  impl=0.4
-item: lua-neovim                design=0.2  impl=0.4
-item: atlas-docs                design=0.04 impl=0.08
-item: milestone-review          design=0.0  impl=0.2
-item: milestone-review          design=0.0  impl=0.2
-item: lua-neovim                design=0.2  impl=0.5
-item: lua-neovim                design=0.2  impl=0.4
-item: lua-neovim                design=0.4  impl=0.6
-item: lua-neovim                design=0.2  impl=0.5
-item: cross-cutting-refactor    design=0.1  impl=0.2
-item: lua-neovim                design=0.2  impl=0.3
-item: atlas-docs                design=0.04 impl=0.08
-item: milestone-review          design=0.0  impl=0.2
-item: milestone-review          design=0.0  impl=0.2
-item: lua-neovim                design=0.4  impl=0.6
-item: lua-neovim                design=0.4  impl=0.6
-item: lua-neovim                design=0.2  impl=0.5
-item: lua-neovim                design=0.2  impl=0.5
-item: lua-neovim                design=0.2  impl=0.3
-item: atlas-docs                design=0.04 impl=0.08
-item: milestone-review          design=0.0  impl=0.2
-item: milestone-review          design=0.0  impl=0.2
-item: lua-neovim                design=0.2  impl=0.5
-item: lua-neovim                design=0.2  impl=0.4
-item: lua-neovim                design=0.2  impl=0.6
-item: atlas-docs                design=0.1  impl=0.08
-item: milestone-review          design=0.0  impl=0.2
-item: milestone-review          design=0.0  impl=0.2
-item: milestone-review          design=0.0  impl=0.2
-total: 20.64
+item: issue-spec               design=1.5  impl=0.12
+item: scope-pivot              design=0.5  impl=0.2
+item: scope-pivot              design=0.5  impl=0.2
+item: ux-rename-iteration      design=0.8  impl=0.04
+item: ux-rename-iteration      design=0.8  impl=0.04
+item: cross-cutting-refactor   design=0.1  impl=0.2
+item: cross-cutting-refactor   design=0.1  impl=0.2
+item: lua-neovim               design=0.2  impl=0.6
+item: lua-neovim               design=0.2  impl=0.3
+item: atlas-docs               design=0.04 impl=0.08
+item: milestone-review         design=0    impl=0.2
+item: milestone-review         design=0    impl=0.2
+item: lua-neovim               design=0.2  impl=0.3
+item: lua-neovim               design=0.2  impl=0.3
+item: lua-neovim               design=0.2  impl=0.5
+item: lua-neovim               design=0.4  impl=0.6
+item: lua-neovim               design=0.4  impl=0.4
+item: lua-neovim               design=0.2  impl=0.4
+item: atlas-docs               design=0.04 impl=0.08
+item: milestone-review         design=0    impl=0.2
+item: milestone-review         design=0    impl=0.2
+item: lua-neovim               design=0.2  impl=0.5
+item: lua-neovim               design=0.2  impl=0.4
+item: lua-neovim               design=0.4  impl=0.6
+item: lua-neovim               design=0.2  impl=0.5
+item: cross-cutting-refactor   design=0.2  impl=0.2
+item: lua-neovim               design=0.2  impl=0.4
+item: lua-neovim               design=0.2  impl=0.2
+item: lua-neovim               design=0.2  impl=0.3
+item: real-api-discovery       design=0    impl=0.24
+item: atlas-docs               design=0.04 impl=0.08
+item: milestone-review         design=0    impl=0.2
+item: milestone-review         design=0    impl=0.2
+item: lua-neovim               design=0.4  impl=0.6
+item: lua-neovim               design=0.4  impl=0.6
+item: lua-neovim               design=0.2  impl=0.5
+item: lua-neovim               design=0.2  impl=0.5
+item: lua-neovim               design=0.2  impl=0.5
+item: lua-neovim               design=0.2  impl=0.3
+item: atlas-docs               design=0.04 impl=0.08
+item: milestone-review         design=0    impl=0.2
+item: milestone-review         design=0    impl=0.2
+item: lua-neovim               design=0.2  impl=0.5
+item: lua-neovim               design=0.2  impl=0.4
+item: lua-neovim               design=0.2  impl=0.6
+item: atlas-docs               design=0.2  impl=0.08
+item: milestone-review         design=0    impl=0.2
+item: milestone-review         design=0    impl=0.2
+item: milestone-review         design=0    impl=0.2
+total: 30.07
 ```
 
-Item order follows the plan:
-- issue-spec;
-- M1: store deletion, tools carve-out, degrading sidecars, regression tests,
-  atlas, 2 reviews;
-- M2: `holds` + `previous_answer`, the coordinator slot, substitution, the
-  staleness reversal, live ancestors, atlas, 2 reviews;
-- M3: fake groups, escalation, the tasker kill/scope/deadline work (with the
-  `tasker_run_spec` sweep), the 20-site deadline and callback sweep,
-  `VimLeavePre`, live conformance, atlas, 2 reviews;
-- M4: runner, session/provider/preparation/completion/topic/target, helpers,
-  tools and skills, end to end, atlas, 2 reviews;
-- M5: vocabulary, the arch scan, routing, the inventory page, 2 reviews, and
-  the issue close.
+Item order, one line per item:
 
-Reconciliation: Σdesign 7.06 × 1.15 = 8.12, and Σimpl 12.52 × 1.0 = 12.52, so
-the total is 20.64.
+- issue-spec — the audit + spec
+- scope-pivot — 09-17: external-store bucket withdrawn
+- scope-pivot — 09-18: affordance reversed, #255 folded in
+- ux-rename-iteration — 09-18: kill certainty, groups, deadlines
+- ux-rename-iteration — plan review round 1 + dispositions
+- cross-cutting-refactor — M1 1.2 store deletion
+- cross-cutting-refactor — M1 1.3 tools carve-out
+- lua-neovim — M1 1.4 sidecars degrade + census
+- lua-neovim — M1 1.1 regression tests
+- atlas-docs — M1 1.5
+- milestone-review — M1
+- milestone-review — M1
+- lua-neovim — M2 2.1 State.holds
+- lua-neovim — M2 2.2 previous_answer
+- lua-neovim — M2 2.3 coordinator slot
+- lua-neovim — M2 2.4 substitution
+- lua-neovim — M2 2.5 staleness reversal
+- lua-neovim — M2 2.6 live ancestors
+- atlas-docs — M2 2.7
+- milestone-review — M2
+- milestone-review — M2
+- lua-neovim — M3 3.1 fake groups
+- lua-neovim — M3 3.2 escalation
+- lua-neovim — M3 3.3a group kill + scopes
+- lua-neovim — M3 3.3b deadlines, settling, kill report, tasker_run sweep
+- cross-cutting-refactor — M3 3.4a 20-site deadlines
+- lua-neovim — M3 3.4b callbacks read kills as failure
+- lua-neovim — M3 3.5 VimLeavePre
+- lua-neovim — M3 3.6 live conformance
+- real-api-discovery — M3 3.6 real process-group semantics
+- atlas-docs — M3 3.7
+- milestone-review — M3
+- milestone-review — M3
+- lua-neovim — M4 4.1 runner
+- lua-neovim — M4 4.2a session/provider/prep/completion
+- lua-neovim — M4 4.2b topic/target/Deferred owners
+- lua-neovim — M4 4.3 helpers
+- lua-neovim — M4 4.4 tools/skills
+- lua-neovim — M4 4.5 end to end
+- atlas-docs — M4 4.6
+- milestone-review — M4
+- milestone-review — M4
+- lua-neovim — M5 5.1 vocabulary
+- lua-neovim — M5 5.2 arch scan
+- lua-neovim — M5 5.3 routing
+- atlas-docs — M5 5.4 inventory page
+- milestone-review — M5
+- milestone-review — M5
+- milestone-review — issue close
+
+Reconciliation: Σdesign 10.66 × 1.15 = 12.26, plus Σimpl 14.84 × 1.2 = 17.81, gives 30.07.
 
 ## Plan
 
@@ -579,3 +639,27 @@ session.
    unaffected"):** a generation's own writes no longer mark another
    generation's captured input stale; only human edits do. This reverses the
    "other owners … stay stale" clause from #254 (`document/state.lua:272-284`).
+
+### 2026-09-18 — estimate revised after the estimate-quality judge (20.64 → 30.07)
+
+**Reason.** `sdlc change-code` passed. The plan-quality judge passed with four
+Minor findings, which are folded into the plan's Revisions. The estimate-quality
+judge returned INFO with substantive notes:
+- familiarity 1.0 contradicted the block's own "no recent issue exercised" line;
+- `issue-spec` at 1.5 h undershot the 4.13 h already measured;
+- heavy tasks were capped at one feature ceiling;
+- two labels were swapped;
+- there was no platform-discovery budget for the live conformance spec.
+
+**Delta.**
+- Familiarity 1.2.
+- Sunk design itemized: two `scope-pivot` rows and two `ux-rename-iteration`
+  rows.
+- Tasks 2.1/2.2, 3.3, 3.4 and 4.2 each split into two items.
+- `VimLeavePre` is now `lua-neovim`, and the 20-site sweep is
+  `cross-cutting-refactor` plus `lua-neovim`.
+- Added `real-api-discovery` for Task 3.6.
+- The inventory page's design is undiscounted (0.2).
+- The #266 review-round count is corrected to 11 or more.
+- The total remains a floor. The ledger's same-shape parley rows landed at
+  0.47–0.71 of actual.
