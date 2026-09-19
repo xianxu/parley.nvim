@@ -1521,7 +1521,7 @@ and testable.
   `fail(<lit>)`, `retire(s, <status>, <lit>)`, `start_error(<lit>)`, and
   tasker's `reject(<lit>)`.
 
-- [ ] **Step 1: Write the spec** with three assertions:
+- [x] **Step 1: Write the spec** with three assertions:
   1. The scan finds at least 100 literals. The floor means a broken pattern
      cannot pass vacuously; the 2026-09-18 count was about 150.
   2. Every literal is a key of `TOKENS` or `INTERNAL`, or of a `NOT_REFUSAL`
@@ -1529,18 +1529,18 @@ and testable.
      an effect annotation such as `'explicit revoke'`).
   3. The `PREFIX` strings appear as literals in no file under `lua/` except
      `refusal.lua`.
-- [ ] **Step 2: Counterfactuals.**
+- [x] **Step 2: Counterfactuals.**
   - Add `return nil,'brand new token'` to a clean `response_target.lua`:
     assertion 2 fails.
   - Add `logger.warning('Response not started: x')` to `chat_presentation.lua`:
     assertion 3 fails.
 
   Restore both with `git checkout --`.
-- [ ] **Step 3:** Commit (`#261 M5: every refusal token has words`).
+- [x] **Step 3:** Commit — with Task 5.3, since the guard went green only once the routing landed.
 
 ### Task 5.3: Route every refusal through it
 
-- [ ] **Step 1: Failing integration tests** in
+- [x] **Step 1: Failing integration tests** in
   `tests/integration/chat_respond_spec.lua`, capturing `vim.notify`:
   - each of the five silent returns → exactly one WARN, containing its action;
   - each terminal non-success outcome in single mode that the fixture can drive
@@ -1551,7 +1551,7 @@ and testable.
   - a user Stop → no WARN;
   - a kernel-held process (a fake that ignores KILL) → the `generation limit`
     refusal names its pid.
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
   - Replace every site under "What is broken today" with
     `_parley.logger.warning(Refusal.describe(kind, outcome, failure, detail))`.
   - Collapse the `:1542` channel into it.
@@ -1559,11 +1559,11 @@ and testable.
   - In `terminal`, warn for every non-success outcome. Keep `failure_notice`
     (the provider's HTTP detail) as `detail`, and keep the overflow text via
     `chat_presentation.overflow_message` in `overflow`'s row.
-- [ ] **Step 3:** Delete the force-flag parsing and its message in
+- [x] **Step 3:** Delete the force-flag parsing and its message in
   `cmd_respond`, delete `init.lua:4171`, and fix the header comment at
   `chat_respond.lua:3`. Then `grep -rn "resubmit_questions_recursively" lua tests`
   prints nothing.
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M5: no silent refusal, no raw token`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M5: no silent refusal, no raw token`).
 
 ### Task 5.4: The inventory, the restart invariant, the close
 
@@ -2363,3 +2363,96 @@ out.
   exits are unreachable through `response_provider` today; the tests pin them
   for the next adapter.
 
+### 2026-09-19 — M5 Tasks 5.2–5.3, as built: what the tests found
+
+- **The spec is `tests/integration/chat_refusal_spec.lua`,** a new file routed
+  under `chat/lifecycle`, not `chat_respond_spec`. It has 15 cases and captures
+  `logger.warning`, which is the one channel. A refusal counts when it starts
+  with a `refusal.PREFIX`. The kernel-hold case stubs `tasker.held` at the seam.
+  `tasker_supervision_spec` already pins `held()` against a fake that ignores
+  KILL.
+- **`:e!` is a detach, not an epoch change.** This corrects the M5 design above.
+  Measured: Neovim fires the buffer's `on_detach` (then BufUnload, BufReadPre,
+  BufReadPost), the document dies, and a new one attaches. So the runner recorded
+  `cause = 'detach'`, and a reload said nothing.
+  - The runner ends a generation only in a step on a later timer turn
+    (`deferred_work`), after the command has returned. At that point a chat that
+    is loaded again was reloaded, and a closed one is unloaded.
+  - `chat_respond`'s terminal turns `detach` into `reload` when the buffer is
+    loaded. A batch's `retired('detach')` makes the same check on a scheduled
+    turn.
+  - Pinned both ways: `:e!` says "reloaded"; `enew` plus unload says nothing.
+- **Batches spoke wrongly in three ways, and this adds two more changes:**
+  - **The user's own Stop warned, and warned three times.** `changed` reports
+    every state change, and main warned on each paused one. Now a batch the user
+    stopped (`stop_batch`, through both Stop paths) says nothing, until it runs
+    again.
+  - **A leg's failure was said twice:** once by the leg, and once by the pause
+    with the same reason. Now the leg's terminal hands its message to the batch
+    as `result.refusal`, and the pause then says only "its current response
+    stopped".
+  - **A pause's action said "submit again".** A pause continues, so the host
+    passes `detail.action = Refusal.BATCH_CONTINUE`
+    (`:ParleyChatResumeBatch to continue`).
+  - **A reload ends a batch.** Its leg was cancelled as `batch cancelled`, so the
+    leg says nothing. The batch now says so, under the new `batch_ended` prefix
+    ("Batch stopped"), with `BATCH_RESTART`.
+  - **A permanent blocker, removed.** `:ParleyChatRespondAll` refused whenever a
+    batch was paused. A paused batch whose question was reworded or deleted can
+    never resume (`question obsolete` / `missing`), so every later batch was
+    refused until `:e!`. Now a paused, settled batch (no active leg) gives way to
+    the new one. A running batch still refuses (`batch active`), and so does a
+    paused batch with an unresolved leg (`leg unresolved`).
+  - A once-per-pause gate was built and then removed (Simplicity First). Its
+    mutation survived: an edit made while the batch is paused does not re-notify
+    (pinned), and the one repeating path, the user's Stop, is silent.
+- **The guard had two holes, fixed as rules:**
+  - **Composed reasons.** `batch.lua` builds `question|context` ..
+    `missing|obsolete|changed`, which no literal scan keys, so "question
+    obsolete" reached the user as "unexpected". A fourth assertion now scans for
+    composition:
+    - a reason that starts with a literal must use a `": "` lead-in, which
+      `row_of` keys (the runner's `'missing '..type..' adapter'` became
+      `'missing adapter: '..type`);
+    - a reason that starts with a variable is declared in the spec's
+      `COMPOSED`, with every value it takes, and each expansion needs words.
+  - **`reject(x, <lit>)`.** `response_submission` passes the owner first, which
+    the one-argument form missed, so `invalid submission` had no row. The form
+    is added.
+  - Also added: `revision unavailable` moves from `INTERNAL` to `TOKENS` (a
+    deferred validation the user can meet), and the raw refusals left in
+    `cmd_resume_response`, `respond`'s not-a-chat and header paths, and
+    `respond_all`'s active-batch path now go through `refuse`.
+- **Counterfactuals.** Each one was applied to a backup copy and restored from
+  it, because the tree was uncommitted and `git checkout` would lose the work.
+  Each turns the named test red:
+
+  | Change | Fails |
+  |---|---|
+  | plan 5.2: `return nil,'brand new token'` | assertion 2 |
+  | plan 5.2: a raw `'Response not started: x'` | assertion 3 |
+  | `'missing '..type..' adapter'` | assertion 4 (and 2) |
+  | `question obsolete` renamed | assertion 4 |
+  | `invalid submission` unkeyed | assertion 2, via the new form |
+  | no reload mapping | "a reload stopped the answer" |
+  | no `leg_spoke` | "paused once, without repeating" |
+  | no retire message | "a reload ended the batch" |
+  | the paused batch kept | "lets a new batch start" |
+  | no `user_stopped` | "nothing when the user stops a batch" |
+  | `LLM setup is already in progress` renamed | assertion 2, via the new file |
+- **The full suite found one more double.** The dispatcher showed "query abort
+  before start" as an ERROR, but every caller's `on_abort` already speaks in
+  its own words: the chat's ending, a topic, a skill, and memory preferences.
+  `chat_progress_process_spec` already required exactly one notice, and it
+  failed. The dispatcher now logs this at `debug`, which writes the log file but
+  shows nothing. That spec's `owner is busy` case now looks for the words the
+  user meets.
+- **First-use model setup.** `llm_readiness` cancels a submission with its own
+  reasons, which read as "the request could not be built". It is added to the
+  guard's files, with its `cancel(opts, <lit>)` form. The three reasons a chat
+  can meet get rows. The two it cannot meet (a chat passes `validate_source`)
+  are listed as not refusals.
+- **The #267 family, measured.** `response_tools_spec` sometimes dies
+  mid-run, printing no summary. It did this 2 times in 17 runs on this tree,
+  and on a clean HEAD worktree on the 2nd run (after 72 cases). So it predates
+  this work. `perf_ownership_spec` passes when run alone.

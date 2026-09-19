@@ -4175,8 +4175,6 @@ M.chat_respond = function(p, cb, ofc, f) return chat_respond.respond(p, cb, ofc,
 
 M.chat_respond_all = function() return chat_respond.respond_all() end
 
-M.resubmit_questions_recursively = function(...) return chat_respond.resubmit_questions_recursively(...) end
-
 M.cmd.ChatRespond = function(p) chat_respond.cmd_respond(p) end
 
 -- Debug: print the exchange model structure of the current buffer.

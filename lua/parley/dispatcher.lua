@@ -886,8 +886,11 @@ end
 ---   forever (#261 M4 W6 — copilot's did, and now forwards it).
 D.query = function(buf, provider, payload, handler, on_exit, callback, on_progress, on_abort,
 	on_activity, on_error, transport_opts)
+	-- Logged, not shown: every caller's on_abort tells the user in its own words
+	-- (the chat's ending, a topic, a skill, memory preferences), so showing it
+	-- here too said one failure twice (#261 M5).
 	local abort_before_start = tasker.once(function(msg)
-		logger.error("query abort before start [" .. tostring(provider) .. "]: " .. tostring(msg))
+		logger.debug("query abort before start [" .. tostring(provider) .. "]: " .. tostring(msg))
 		if type(on_abort) == "function" then
 			on_abort(msg)
 		end

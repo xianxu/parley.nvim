@@ -40,6 +40,13 @@ describe("refusal vocabulary", function()
             assert.is_nil(R.describe("start", nil, token, { held = {} }):find("pid", 1, true))
         end
     end)
+    -- A batch continues or starts over rather than submitting: the host names that.
+    it("uses the host's action in place of the row's", function()
+        assert.equals("Batch paused: its current response stopped; " .. R.BATCH_CONTINUE .. " — 1 of 3 questions answered",
+            R.describe("batch_paused", nil, "leg stopped", { action = R.BATCH_CONTINUE, notice = "1 of 3 questions answered" }))
+        assert.equals("Batch stopped: the chat was reloaded; " .. R.BATCH_RESTART,
+            R.describe("batch_ended", nil, "epoch", { action = R.BATCH_RESTART }))
+    end)
     it("carries the detail after a token that ends in ': '", function()
         local message = R.describe("start", nil, "task start failed: ENOENT")
         assert.truthy(message:find("(ENOENT)", 1, true), message)

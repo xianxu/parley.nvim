@@ -15,15 +15,23 @@ M.PREFIX = {
     batch_start = "Batch not started",
     batch_resume = "Batch not resumed",
     batch_paused = "Batch paused",
+    batch_ended = "Batch stopped",
     ended = "Response stopped",
     drill = "Drill-in stopped",
 }
 
 -- The failure a user's own Stop carries: it is not a refusal, so no message.
 M.USER_STOP = "operator stopped response"
+-- Failures that are not the user's to hear about: their Stop, and a batch leg
+-- its batch cancelled (the batch speaks for itself).
+local SILENT = { [M.USER_STOP] = true, ["batch cancelled"] = true }
 
 local AGAIN = "submit again"
 local MOMENT = "try again in a moment"
+-- A paused batch continues where it stopped, whatever paused it; one that ended
+-- (its chat reloaded) starts over. The host passes these as `detail.action`.
+M.BATCH_CONTINUE = ":ParleyChatResumeBatch to continue"
+M.BATCH_RESTART = ":ParleyChatRespondAll to start again"
 
 -- token -> {what, action}. `what` says what happened; `action` says what to do,
 -- naming only commands that exist.
@@ -59,7 +67,7 @@ M.TOKENS = {
     ["context changed"] = { what = "an earlier question or answer changed", action = AGAIN },
     ["unconfirmed entity"] = { what = "the chat is still being read", action = MOMENT },
     ["unconfirmed line end"] = { what = "the chat is still being read", action = MOMENT },
-    ["uncertain"] = { what = "the chat is still being read", action = MOMENT },
+    ["uncertain"] = { what = "Parley could not confirm what it wrote into the chat", action = AGAIN },
     ["waiting"] = { what = "the chat is still being read", action = MOMENT },
     ["query owner inactive"] = { what = "the response was stopped before its request started", action = AGAIN },
     -- Nothing to submit.
@@ -74,8 +82,33 @@ M.TOKENS = {
         action = "edit: restore the chat's header, then submit again" },
     ["document structure unavailable"] = { what = "the chat is still being read", action = MOMENT },
     ["captured batch context unavailable"] = { what = "a question in the batch was deleted", action = AGAIN },
+    -- A paused batch re-checks what it captured before it resumes (batch.lua
+    -- composes these from `question` and `context`).
+    ["question obsolete"] = { what = "a question in the batch was replaced",
+        action = ":ParleyChatRespondAll to start a new batch" },
+    ["question changed"] = { what = "a question in the batch was edited",
+        action = ":ParleyChatResumeBatch! to continue with the edits" },
+    ["context missing"] = { what = "an earlier answer the batch used was deleted",
+        action = ":ParleyChatRespondAll to start a new batch" },
+    ["context obsolete"] = { what = "an earlier answer the batch used was replaced",
+        action = ":ParleyChatRespondAll to start a new batch" },
+    ["revision unavailable"] = { what = "the chat is still being read", action = MOMENT },
     ["no batch in this chat"] = { what = "there is no batch to resume", action = ":ParleyChatRespondAll to start one" },
+    ["batch active"] = { what = "a batch is already running in this chat",
+        action = "wait for it to finish, or stop it with :ParleyStop" },
+    -- A batch paused because its answering response ended badly, which already said why.
+    ["leg stopped"] = { what = "its current response stopped", action = AGAIN },
     ["Choose a model before submitting"] = { what = "no model is chosen", action = ":ParleyAgent to choose one" },
+    -- First-use model setup (llm_readiness), which a submission waits behind.
+    ["LLM setup is already in progress"] = { what = "a model setup is already open",
+        action = "finish it, then submit again" },
+    ["LLM setup was cancelled"] = { what = "the model setup was closed before a model was chosen",
+        action = ":ParleyAgent to choose one, then submit again" },
+    ["LLM setup is unavailable in headless mode"] = { what = "model setup needs an interactive Neovim",
+        action = ":ParleyAgent in an interactive session" },
+    ["not a chat"] = { what = "this buffer is not a chat", action = ":ParleyChatNew to start one" },
+    ["stale"] = { what = "the chat changed while it was being edited", action = MOMENT },
+    ["refused"] = { what = "the edit could not be applied", action = MOMENT },
     -- Resume.
     ["no stale continuation ready"] = { what = "the response is not paused on a changed input",
         action = ":ParleyChatRespond to start a new one" },
@@ -107,12 +140,15 @@ M.TOKENS = {
     ["target step failed: "] = { what = "the response could not find its answer", action = AGAIN },
     -- Terminal outcomes. `revoked` depends on the cause (see `describe`).
     ["cancelled"] = { what = "the response was cancelled", action = AGAIN },
-    ["overflow"] = { what = "the response produced output faster than the chat could take it", action = AGAIN },
+    ["overflow"] = { what = "the response was stopped to keep its output from being dropped", action = AGAIN },
     ["provider_failed"] = { what = "the model's request failed", action = AGAIN },
     ["prepare_failed"] = { what = "the request could not be built", action = AGAIN },
     ["finalize_failed"] = { what = "the answer was written, but the next question prompt could not be added",
         action = "edit: add the 💬: prompt yourself" },
     ["fault"] = { what = "an internal step failed, so the response was ended", action = AGAIN },
+    ["round_capacity"] = { what = "the model asked for more tools in one round than a round allows",
+        action = "submit again, asking for fewer tools at once" },
+    ["insert_failed"] = { what = "a tool call could not be written into the answer", action = AGAIN },
     ["start refused"] = { what = "the response could not start", action = AGAIN },
     ["completion refused"] = { what = "the next question prompt could not be added", action = "edit: add the 💬: prompt yourself" },
 }
@@ -123,14 +159,16 @@ M.INTERNAL = {}
 for _, token in ipairs({
     "invalid event", "invalid stale evidence", "invalid dependency", "invalid input snapshot", "generation",
     "invalid region", "invalid edit", "invalid uncertainty", "invalid proofs", "grant", "invalid epoch",
+    "invalid submission", "prepare adapter required", "request adapter required", "finalize adapter required",
     "unknown event", "coordinator-owned event", "invalid released insertion", "row slice limit", "cannot narrow grant",
     "operation", "range", "anchor", "successor", "patch", "overlapping patches",
     "prepare/request/finalize adapters required", "invalid specification", "invalid staging limit",
     "invalid queue limit", "invalid preparation region", "invalid target", "invalid callbacks",
-    "preparation and payload builders required", "revision unavailable", "wrong scope", "stale leg",
+    "preparation and payload builders required", "wrong scope", "stale leg",
     "missing outcome", "missing context revision", "invalid context status", "invalid process limits",
+    "missing adapter: ",
     "invalid process limit: ", "task start rejected: invalid process options",
-    "chat_path not supplied to build_messages", "chat path has no directory: ", "missing ",
+    "chat_path not supplied to build_messages", "chat path has no directory: ",
 }) do M.INTERNAL[token] = true end
 
 -- What a revocation means depends on why it happened.
@@ -168,25 +206,30 @@ end
 ---@param outcome string|nil # a terminal outcome, when the refusal is an ending
 ---@param failure string|nil # the producer's token
 ---@param detail table|nil # {cause = 'edit'|'reload'|'detach', held = tasker.held(), notice = string,
----  log_file = the Parley log's path, named when the token is unexpected}
+---  log_file = the Parley log's path, named when the token is unexpected, action = what to do instead of
+---  the row's own (a batch's, which continues rather than submits)}
 ---@return string|nil # the message, or nil when there is nothing to say
 function M.describe(kind, outcome, failure, detail)
     detail = detail or {}
-    if failure == M.USER_STOP then return nil end
+    if SILENT[failure] then return nil end
     local prefix = M.PREFIX[kind] or tostring(kind)
     local log = "the details are in " .. (detail.log_file or "the Parley log")
     local text
     if outcome == "revoked" and failure == nil then
         if detail.cause == "detach" then return nil end
         local row = M.REVOKED[detail.cause]
-        text = row and (row.what .. "; " .. row.action)
+        text = row and (row.what .. "; " .. (detail.action or row.action))
     end
     if not text then
         local token = failure or outcome
         local row, extra = row_of(token)
-        if not row and failure and outcome then row, extra = row_of(outcome) end
+        -- An unknown failure under a known outcome is that outcome's specific
+        -- reason (a provider's HTTP status, a build error): shown, not unexpected.
+        if not row and failure and outcome and not internal(failure) then
+            row = row_of(outcome); extra = row and tostring(failure):match("^[^\n]+") or nil
+        end
         if row then
-            text = row.what .. (extra and extra ~= "" and (" (" .. extra .. ")") or "") .. "; " .. row.action
+            text = row.what .. (extra and extra ~= "" and (" (" .. extra .. ")") or "") .. "; " .. (detail.action or row.action)
             if CAPACITY[token] and type(detail.held) == "table" and #detail.held > 0 then
                 local pids = {}
                 for _, held in ipairs(detail.held) do pids[#pids + 1] = tostring(held.pid) end

@@ -11,11 +11,22 @@ Completed answers stay completed. `:ParleyChatResumeBatch` retries after a known
 failure when the captured questions and context still match.
 `:ParleyChatResumeBatch!` explicitly accepts current edits before continuing.
 Deleted questions are never replaced by whichever question now occupies that
-position. Reload ends the old document's batch authority.
+position. Reload ends the old document's batch authority, and the batch says
+so ("Batch stopped: the chat was reloaded"). A new `:ParleyChatRespondAll`
+starts it over.
 
-Stop cancels the selected generation and pauses its batch. Cancellation may take
-time to finish; resume cannot start another attempt until completion is known.
+Stop cancels the selected generation and pauses its batch, without a warning:
+the pause was your own doing. Cancellation may take time to finish; resume
+cannot start another attempt until completion is known.
 An unknown tool effect cannot be retried automatically.
+
+A pause is said once, with how to continue (#261 M5). When the answering
+response failed, that response says why, and the pause adds only the count
+answered. A paused batch whose response has settled gives way to a new
+`:ParleyChatRespondAll`, so a batch that can never resume (for example, one
+whose question was reworded) does not block the chat. Only a running batch
+refuses a new one. The words come from
+[refusal.lua](../../lua/parley/refusal.lua).
 
 ## Implementation
 

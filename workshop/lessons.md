@@ -3448,3 +3448,23 @@ download.
   display: re-assert it on every clear and recreate, and test it in the composed
   session across the event that clears it. A test of the composer's strings
   cannot see this.
+- #261 M5 (census of literals): a guard that keys every literal a producer emits
+  must also cover how reasons are built. It has to catch reasons composed at run
+  time (`kind..' obsolete'`) and every call shape that carries a literal (the
+  owner-first `reject(owner, lit)`). Otherwise the literals it misses pass
+  quietly, and the user sees "unexpected". Two rules make the census complete:
+  - a reason that starts with a literal uses a keyable lead-in;
+  - a reason that starts with a variable is declared along with every value the
+    variable takes.
+  Test the census with one counterfactual per form.
+- #261 M5 (editor events are measured, not assumed): the plan said `:e!` was an
+  epoch change, but Neovim fires `on_detach` for it, the same as closing the
+  buffer, then BufUnload, BufReadPre and BufReadPost. Before a design keys on
+  which editor event a command produces, record that command's event sequence
+  in a test. Tell apart causes that share an event by what is true once the
+  command returns: whether the buffer is loaded again.
+- #261 M5 (test "once" where things combine): "exactly one message" held for
+  each producer on its own but failed where they combine. A batch leg and its
+  batch both spoke. The host's per-state-change `changed` callback spoke three
+  times on one Stop. Test a once-contract through the combined flow (a leg
+  inside a batch, a Stop, a reload), counting what the user actually receives.

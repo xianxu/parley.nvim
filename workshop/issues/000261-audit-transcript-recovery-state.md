@@ -838,6 +838,34 @@ gained an assertion. The false claim that chat specs reach W5 is corrected.
   which retires on a throw or a refused cancel; the `tasker` row now carries
   the refusal.
 
+### 2026-09-19 — M5 Tasks 5.1–5.3: every refusal in words, once
+
+`lua/parley/refusal.lua` owns the words. Every submit and generation path
+speaks through `chat_respond`'s `refuse`. `chat_refusal_spec` (15 cases)
+drives each refusal through the real session and checks that it reaches the
+user exactly once. Its first run found five defects the unit-level design had
+missed:
+
+- **`:e!` said nothing.** Neovim detaches the buffer on `:e!`, so the runner
+  recorded `detach`, which is silent. The host now treats it as a reload when
+  the chat is loaded again.
+- **A user-stopped batch warned three times.** This is inherited from main,
+  which warned on every paused `changed`.
+- **A batch leg's failure was said twice.**
+- **A reload ended a batch silently.**
+- **A permanent blocker.** A paused batch that can never resume (its question
+  was reworded) refused every later `:ParleyChatRespondAll`. It now gives way.
+
+The vocabulary guard missed composed reasons (`question obsolete`) and the
+`reject(owner, lit)` form. Both are now rules in the guard, and 11
+counterfactuals are recorded in the plan.
+
+The full suite then caught a sixth defect. The dispatcher's "query abort before
+start" notice doubled every caller's own message, so it is now written to the
+log only. First-use model setup's reasons now have words.
+`response_tools_spec`'s silent mid-run death also happens on a clean HEAD, so it
+belongs to the #267 family.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

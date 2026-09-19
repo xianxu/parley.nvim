@@ -185,10 +185,12 @@ atlas:
       - lua/parley/chat_pending.lua
       - lua/parley/tasker.lua
       - lua/parley/attempt.lua
+      - lua/parley/refusal.lua
     tests:
       - tests/integration/generation_settles_spec.lua
       - tests/unit/refusal_spec.lua
       - tests/arch/refusal_vocabulary_spec.lua
+      - tests/integration/chat_refusal_spec.lua
       - tests/unit/chat_cancel_entry_spec.lua
       - tests/unit/previous_answer_spec.lua
       - tests/integration/sidecar_degrade_spec.lua
@@ -349,6 +351,7 @@ atlas:
       - lua/parley/batch.lua
       - lua/parley/batch_response.lua
       - lua/parley/chat_respond.lua
+      - lua/parley/refusal.lua
       - lua/parley/document/structure.lua
     tests:
       - tests/unit/batch_spec.lua
@@ -358,6 +361,7 @@ atlas:
       - tests/integration/batch_lifecycle_spec.lua
       - tests/integration/batch_validation_budget_spec.lua
       - tests/integration/chat_respond_spec.lua
+      - tests/integration/chat_refusal_spec.lua
   chat/document:
     code:
       - lua/parley/line_reader.lua

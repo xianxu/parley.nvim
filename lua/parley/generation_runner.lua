@@ -111,10 +111,16 @@ local function blocker(s,doc)
     end
     return {generation=doc.turn}
 end
+-- Why a generation lost its grant, for the words its ending gets (#261 M5):
+-- the first cause wins. An edit to its output, a reload, or a detach, which is
+-- both the chat closing and `:e!` (Neovim detaches the buffer to re-read it);
+-- the host, which knows the buffer, tells those two apart.
+local EDIT_REASONS={['output edit']=true,identity=true}
 local function sync(s)
     if s.terminal then return end
     local doc=D.snapshot(s.doc)
     if doc.epoch~=s.epoch or not doc.attached then
+        s.cause=s.cause or (not doc.attached and 'detach' or 'reload')
         s.detached=true;s.written=nil
         dispatch(s,{type='grant_revoked',grant=s.grant})
         return
@@ -123,6 +129,7 @@ local function sync(s)
         local current=doc.grants[grant]
         local status=current and current.status or 'revoked'
         if status~=previous then
+            if status=='revoked' and current and EDIT_REASONS[current.reason] then s.cause=s.cause or 'edit' end
             s.grants[grant]=status
             dispatch(s,{type=status=='valid' and 'grant_resumed' or 'grant_'..status,grant=grant})
         end
@@ -354,7 +361,7 @@ local function start_operation(s,effect)
     local op={next_seq=1,kind=effect.type};s.operations[effect.operation]=op
     local cb=callbacks(s,effect,after_writes)
     local adapter=s.adapters[effect.type]
-    if not adapter then cb.failed('missing '..effect.type..' adapter');return end
+    if not adapter then cb.failed('missing adapter: '..effect.type);return end
     local ok,handle=pcall(adapter,ctx,cb)
     if not ok then
         op.start_threw=true
@@ -462,6 +469,7 @@ local function finish(s,outcome)
     -- The failure reason travels with the terminal snapshot, so a host can say
     -- why a response stopped (an overflow names the answer it waited for).
     local final=G.snapshot(s.machine);final.failure=s.failure;final.waited_for_line=s.waited_for_line
+    final.cause=s.cause
     -- A fault ends the generation outside the machine: `snapshot` reports what
     -- the host was handed, so there is one authority for "terminal".
     if outcome then final.outcome=outcome;final.phase='terminal';s.final_outcome=outcome end

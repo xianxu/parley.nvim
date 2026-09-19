@@ -1,6 +1,7 @@
 -- parley/chat_respond.lua — LLM response pipeline extracted from init.lua
 -- Owns: remote reference cache, _build_messages, _resolve_remote_references,
---       chat_respond, chat_respond_all, resubmit_questions_recursively, cmd.Stop/ChatRespond
+--       chat_respond, chat_respond_all, cmd.Stop/ChatRespond; refusals speak through
+--       parley.refusal
 local M = {}
 local installed_root = debug.getinfo(1, "S").source:sub(2):match("^(.*)/lua/parley/chat_respond%.lua$")
 installed_root = installed_root and vim.fn.fnamemodify(installed_root, ":p")
@@ -1343,8 +1344,27 @@ local function cancel_topic(topic, reason)
     return guarded('topic cancel', require('parley.response_topic').cancel, topic, reason)
 end
 M._cancel_topic = cancel_topic -- test seam
+-- Every refusal and every non-success ending reaches the user once, in words
+-- (#261 M5), through one channel: the logger, which also shows it. The words
+-- live in parley.refusal; this only fills in what the words may need.
+local Refusal = require('parley.refusal')
+local function refuse(kind, outcome, failure, detail)
+    detail = detail or {}
+    detail.log_file = detail.log_file or (_parley.config and _parley.config.log_file)
+    if detail.held == nil then detail.held = require('parley.tasker').held() end
+    local message = Refusal.describe(kind, outcome, failure, detail)
+    if message then _parley.logger.warning(message) end
+    return message
+end
+-- Batches the user stopped: their pause is the user's own doing, so it is not
+-- announced (#261 M5). Cleared when the batch runs again.
+local user_stopped = setmetatable({}, {__mode = 'k'})
+local function stop_batch(batch)
+    user_stopped[batch] = true
+    guarded('batch cancel', require('parley.batch_response').cancel, batch)
+end
 local function cancel_entry(entry)
-    if entry.batch then guarded('batch cancel', require('parley.batch_response').cancel, entry.batch) end
+    if entry.batch then stop_batch(entry.batch) end
     if entry.topic then cancel_topic(entry.topic, 'operator stopped response') end
     if entry.session then
         require('parley.response_session').cancel(entry.session, 'operator stopped response')
@@ -1354,7 +1374,7 @@ local function cancel_entry(entry)
 end
 M._cancel_entry = cancel_entry -- test seam
 function M.cancel_responses(buf)
-    if batches[buf] then guarded('batch cancel', require('parley.batch_response').cancel, batches[buf]) end
+    if batches[buf] then stop_batch(batches[buf]) end
     local group = responses[buf]
     if not group then return 0 end
     local copy = {}; for entry in pairs(group) do copy[#copy + 1] = entry end
@@ -1398,7 +1418,7 @@ function M.cmd_resume_response()
     local buf=vim.api.nvim_get_current_buf()
     local D=require('parley.document')
     local doc,group=D.get(buf),responses[buf]
-    if not doc or not group then _parley.logger.warning('No paused response in this chat');return end
+    if not doc or not group then refuse('resume', nil, 'no stale continuation ready');return end
     local epoch=D.snapshot(doc).epoch
     local selected=D.exchange(doc,vim.api.nvim_win_get_cursor(0)[1]-1)
     local choices={}
@@ -1410,17 +1430,17 @@ function M.cmd_resume_response()
             if selected.status=='ready' and value.exchange==selected.identity then choices={choice};break end
         end
     end
-    if #choices==0 then _parley.logger.warning('No stale response is paused; edited output requires a new response');return end
+    if #choices==0 then refuse('resume', nil, 'no stale continuation ready');return end
     table.sort(choices,function(a,b)return a.entry.order<b.entry.order end)
     local admitted={};for _,choice in ipairs(choices)do admitted[choice]=true end
     vim.ui.select(choices,{prompt='Continue with ORIGINAL input and confirmed tool results? (Esc cancels)',
         format_item=function(choice)return choice.entry.label end},function(choice)
         if not choice or not admitted[choice] then return end
         if D.get(buf)~=doc or D.snapshot(doc).epoch~=epoch or responses[buf]~=group or not group[choice.entry] then
-            _parley.logger.warning('Response changed; continuation cancelled');return
+            refuse('resume', nil, 'response changed');return
         end
         local result=require('parley.response_session').resume_original(choice.entry.session,choice.identity)
-        if not result.accepted then _parley.logger.warning('Response not resumed: '..tostring(result.reason))end
+        if not result.accepted then refuse('resume', nil, result.reason) end
     end)
 end
 
@@ -1433,7 +1453,9 @@ local function start_scoped_response(frame)
     local parsed = vim.deepcopy(frame.parsed)
     local index = frame.exchange_idx or #parsed.exchanges
     local exchange = parsed.exchanges[index]
-    if not exchange or not exchange.question then return nil, 'no question selected' end
+    if not exchange or not exchange.question then
+        refuse('start', nil, 'no question selected'); return nil, 'no question selected'
+    end
     local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(config)})
     -- #261/#255: an earlier exchange still being regenerated contributes its
     -- previous answer, not the header or partial text now in the buffer. Here,
@@ -1490,7 +1512,7 @@ local function start_scoped_response(frame)
     response_order = response_order + 1
     local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order, batch = frame.batch,
         label = (frame.lines[question.line_start] or 'Response'):sub(1, 256)}; group[entry] = true
-    local latest, messages, final_payload, topic_source, topic_parent, failure_notice
+    local latest, messages, final_payload, topic_source, topic_parent, failure_notice, completion_failure
     local message_lead = 0
     local topic_attempted, main_finished, topic_finished = false, false, true
     if parsed.headers.topic == '?' then
@@ -1594,9 +1616,8 @@ local function start_scoped_response(frame)
         local function logical_failure(reason)
             if operation.cancelled or operation.failed then return end
             operation.failed = true
+            -- The generation ends `prepare_failed` and its terminal says why, once.
             cb.failed(reason)
-            local message = tostring(reason):match('^[^\n]+') or 'unknown preparation failure'
-            pcall(vim.notify, 'Response not started: ' .. message, vim.log.levels.WARN)
         end
         local function fail(reason)
             logical_failure(reason)
@@ -1713,14 +1734,13 @@ local function start_scoped_response(frame)
             -- failed finalize, never a silent one (W12).
             local completion, why = require('parley.response_completion').start(doc, ctx, done,
                 {user_prefix = config.chat_user_prefix})
-            if not completion then
-                _parley.logger.warning('Response completion not started: ' .. tostring(why))
-                done('failed')
-            end
+            if not completion then completion_failure = tostring(why); done('failed') end
         end,
         rejected = function(why)
-            main_finished = true; release(); _parley.logger.warning('Response not started: ' .. tostring(why))
-            if frame.terminal then frame.terminal({outcome = 'start refused'}) end
+            main_finished = true; release()
+            -- `refusal` tells a batch its leg already spoke.
+            local refusal = refuse('start', 'start refused', why)
+            if frame.terminal then frame.terminal({outcome = 'start refused', refusal = refusal}) end
         end,
         terminal = function(result)
             main_finished = true
@@ -1731,13 +1751,26 @@ local function start_scoped_response(frame)
             if vim.api.nvim_buf_is_valid(buf) then
                 require('parley.buffer_lifecycle').finalize_mutated_api_leg(buf, true)
             end
-            if failure_notice then vim.notify(failure_notice, vim.log.levels.WARN); failure_notice = nil end
-            -- #266: an overflow stops a response on purpose (dropping bytes would
-            -- lose provider output); say so, naming the answer it waited behind.
-            if result.outcome == 'overflow' then
-                vim.notify(require('parley.chat_presentation').overflow_message(result.waited_for_line),
-                    vim.log.levels.WARN)
+            -- Every non-success ending says why, once (#261 M5). A failure before
+            -- anything was written is "not started"; the provider's HTTP detail,
+            -- a completion's refusal and an overflow's hold are its detail.
+            if result.outcome ~= 'success' then
+                local notice = failure_notice or completion_failure
+                if result.outcome == 'overflow' then
+                    notice = require('parley.chat_presentation').overflow_message(result.waited_for_line)
+                end
+                -- The provider's diagnosis already says what failed; its reason is not repeated.
+                local failure = result.outcome == 'provider_failed' and failure_notice and nil or result.failure
+                -- `:e!` unloads and re-reads the chat, so its document detaches
+                -- exactly as a closed chat's does. The runner ends a generation on
+                -- a later timer turn, after the command returned: a chat loaded
+                -- again by then was reloaded, not closed.
+                local cause = result.cause
+                if cause == 'detach' and vim.api.nvim_buf_is_loaded(buf) then cause = 'reload' end
+                result.refusal = refuse(result.outcome == 'prepare_failed' and 'start' or 'ended', result.outcome,
+                    failure, {cause = cause, notice = notice})
             end
+            failure_notice = nil
             if frame.terminal then frame.terminal(result) end
             if result.outcome == 'success' then
                 vim.cmd('doautocmd User ParleyDone')
@@ -1771,12 +1804,8 @@ M.respond = function(params, callback, override_free_cursor)
     -- it; the wording stays here, #263 close round 3).
     local ctx, ctx_reason, ctx_kind = require("parley.chat_context").resolve({ buf = buf, win = win })
     if not ctx then
-        if ctx_kind == "not_chat" then
-            _parley.logger.warning("File " .. vim.inspect(vim.api.nvim_buf_get_name(buf))
-                .. " does not look like a chat file: " .. vim.inspect(ctx_reason))
-        else
-            _parley.logger.error("Error while parsing headers: --- not found. Check your chat template.")
-        end
+        if ctx_kind == "not_chat" then refuse('start', nil, 'not a chat', {notice = tostring(ctx_reason)})
+        else refuse('start', nil, 'chat header unavailable') end
         return
     end
     local file_name = ctx.file_name
@@ -1835,7 +1864,7 @@ M.respond = function(params, callback, override_free_cursor)
                 first = {row = exch_start - 1, col = 0},
                 last = {row = exch_end - 1, col = #lines[exch_end]},
             }})
-            if not capture then _parley.logger.warning('Drill-in stopped: ' .. tostring(why)); return end
+            if not capture then refuse('drill', nil, why); return end
             local after = {}
             for i = 1, exch_start - 1 do after[#after + 1] = lines[i] end
             for _, line in ipairs(vim.split(transformed, '\n', {plain = true})) do after[#after + 1] = line end
@@ -1846,7 +1875,7 @@ M.respond = function(params, callback, override_free_cursor)
             for i = exch_end + 1, #lines do after[#after + 1] = lines[i] end
             local result = buffer_edit.apply_user_line_hunks(capture, lines, after)
             if result.status ~= 'applied' then
-                _parley.logger.warning('Drill-in stopped: ' .. tostring(result.reason or result.status)); return
+                refuse('drill', nil, result.reason or result.status); return
             end
             _parley.logger.info(string.format(
                 "Drill-in branch: %d marker(s) → new turn after exchange #%d",
@@ -1891,14 +1920,14 @@ M.respond = function(params, callback, override_free_cursor)
             local capture, why = buffer_edit.capture_user(buf, 'drill-in-gather', {{
                 first = {row = 0, col = 0}, last = {row = #lines - 1, col = #lines[#lines]},
             }})
-            if not capture then _parley.logger.warning('Drill-in stopped: ' .. tostring(why)); return end
+            if not capture then refuse('drill', nil, why); return end
             local after = vim.split(transformed, '\n', {plain = true})
             while #after > 0 and after[#after] == '' do after[#after] = nil end
             if #after > 0 then after[#after + 1] = '' end
             for _, line in ipairs(drill_in.format_blocks(di_blocks)) do after[#after + 1] = line end
             local result = buffer_edit.apply_user_line_hunks(capture, lines, after)
             if result.status ~= 'applied' then
-                _parley.logger.warning('Drill-in stopped: ' .. tostring(result.reason or result.status)); return
+                refuse('drill', nil, result.reason or result.status); return
             end
             _parley.logger.info(string.format(
                 "Drill-in: gathered %d marker(s) into next turn", #di_blocks
@@ -1969,28 +1998,48 @@ M.respond_all = function()
     -- this reports an active batch (parley.chat_context, #263 close round 3).
     local Ctx = require('parley.chat_context')
     local handle, reason = Ctx.chat_buffer({ buf = buf, win = win })
-    if not handle then _parley.logger.warning('Batch not started: ' .. tostring(reason)); return end
-    if batches[buf] and Batch.snapshot(batches[buf]).phase ~= 'completed' then
-        _parley.logger.warning('A batch is already active or paused in this chat'); return
+    if not handle then refuse('batch_start', nil, 'not a chat', {notice = reason}); return end
+    local existing = batches[buf] and Batch.snapshot(batches[buf])
+    if existing and existing.phase ~= 'completed' then
+        -- A paused, settled batch gives way to a new one: it may never resume
+        -- (a question it holds was deleted), and kept, it would refuse every
+        -- later batch in this chat (#261 M5).
+        if existing.phase ~= 'paused' or existing.active then
+            refuse('batch_start', nil, existing.active and existing.phase == 'paused' and 'leg unresolved' or 'batch active')
+            return
+        end
+        Batch.dispose(batches[buf]); batches[buf] = nil
     end
     local ctx = Ctx.parse(handle)
-    if not ctx then return nil, 'chat header unavailable' end
+    if not ctx then refuse('batch_start', nil, 'chat header unavailable'); return nil, 'chat header unavailable' end
     local file_name, parsed = handle.file_name, ctx.parsed_chat
     local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(_parley.config)})
-    if D.drain(doc, 10000).status ~= 'idle' then return nil, 'document structure unavailable' end
+    if D.drain(doc, 10000).status ~= 'idle' then
+        refuse('batch_start', nil, 'document structure unavailable'); return nil, 'document structure unavailable'
+    end
     local selection = {}
     for _, exchange in ipairs(parsed.exchanges) do
         if exchange.question and exchange.question.line_start <= cursor[1] then
             local found = D.exchange(doc, exchange.question.line_start - 1)
-            if found.status ~= 'ready' then return nil, 'question identity unavailable' end
+            if found.status ~= 'ready' then
+                refuse('batch_start', nil, 'question identity unavailable'); return nil, 'question identity unavailable'
+            end
             selection[#selection + 1] = found.identity
         end
     end
-    if #selection == 0 then return nil, 'no questions selected' end
+    if #selection == 0 then refuse('batch_start', nil, 'no questions selected'); return nil, 'no questions selected' end
     local root_policy = require('parley.neighborhood').policy_for_buf(buf)
     local batch, retired
+    -- A pause does not repeat what the batch's answering response already said.
+    local leg_spoke = false
+    local function answered(state) return state.completed .. ' of ' .. #state.selection .. ' questions answered' end
     batch, reason = Batch.start(doc, {selection = selection,
-        start = function(entity, done)
+        start = function(entity, finished)
+            leg_spoke = false
+            local function done(result)
+                leg_spoke = type(result) == 'table' and result.refusal ~= nil
+                finished(result)
+            end
             if not vim.api.nvim_buf_is_valid(buf) or D.get(buf) ~= doc then return nil, 'document changed' end
             local marker = D.lookup(doc, entity)
             if not marker then return nil, 'question missing' end
@@ -2018,26 +2067,38 @@ M.respond_all = function()
         end,
         changed = function(state, validation)
             if validation and not validation.accepted then
-                _parley.logger.warning('Batch not resumed: ' .. tostring(validation.reason))
-            elseif state.phase == 'paused' then
-                _parley.logger.warning('Batch paused after ' .. state.completed .. '/' .. #state.selection
-                    .. ' questions: ' .. tostring(state.reason))
+                refuse('batch_resume', nil, validation.reason)
+            elseif state.phase ~= 'paused' then
+                if batch then user_stopped[batch] = nil end
+            elseif not (batch and user_stopped[batch]) then
+                refuse('batch_paused', nil, leg_spoke and 'leg stopped' or state.reason,
+                    {action = Refusal.BATCH_CONTINUE, notice = answered(state)})
             end
         end,
-        retired = function()
+        retired = function(why)
             retired = true
             if batches[buf] == batch then batches[buf] = nil end
+            -- A reload ends the batch, and its answering response (cancelled by
+            -- the batch) says nothing. `:e!` detaches as closing does; once the
+            -- command has returned, a chat loaded again was reloaded.
+            if why ~= 'reload' and why ~= 'detach' then return end
+            local state = batch and Batch.snapshot(batch)
+            vim.schedule(function()
+                if why == 'detach' and not vim.api.nvim_buf_is_loaded(buf) then return end
+                refuse('batch_ended', nil, 'epoch', {action = Refusal.BATCH_RESTART,
+                    notice = state and answered(state) or nil})
+            end)
         end,
     })
     if batch and not retired then batches[buf] = batch
-    elseif not batch then _parley.logger.warning('Batch not started: ' .. tostring(reason)) end
+    elseif not batch then refuse('batch_start', nil, reason) end
     return batch, reason
 end
 function M.resume_batch(params)
     local batch = batches[vim.api.nvim_get_current_buf()]
-    if not batch then _parley.logger.warning('No paused batch in this chat'); return nil, 'no batch in this chat' end
+    if not batch then refuse('batch_resume', nil, 'no batch in this chat'); return nil, 'no batch in this chat' end
     local result = require('parley.batch_response').resume(batch, {accept_changes = params and params.bang == true})
-    if not result.accepted then _parley.logger.warning('Batch not resumed: ' .. tostring(result.reason))
+    if not result.accepted then refuse('batch_resume', nil, result.reason)
     elseif result.pending then _parley.logger.info('Validating batch questions before resuming') end
     return result
 end
@@ -2047,17 +2108,7 @@ end
 --------------------------------------------------------------------------------
 
 M.cmd_respond = function(params)
-    local force = false
-
-    -- Check for force flag
-    if params.args and params.args:match("!$") then
-        force = true
-        params.args = params.args:gsub("!$", "")
-        _parley.logger.info("Forcing response even if another process is running")
-    end
-
-    -- Simply call chat_respond with the current parameters
-    _parley.chat_respond(params, nil, nil, force)
+    _parley.chat_respond(params)
 end
 
 return M
