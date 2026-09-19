@@ -43,8 +43,8 @@ and a reader has to scroll past machine bookkeeping to follow the conversation.
 - **Astro format.** The markdown export writes `<slug>.md` with front matter
   `title`, `publishDate`, `published`, `tags` (YAML list), `comments`, plus
   `hidden` and `excerpt` when the chat header sets them. It drops `layout` and
-  `date`. The body keeps what it has now: the `<style>` block, the parley.nvim
-  watermark and `## Question` headings.
+  `date`. The body keeps the parley.nvim watermark and the `## Question`
+  headings; the `<style>` block leaves, per **Styles move to the site** below.
 - **Destination.** `<C-g>em` asks for a destination path, pre-filled with
   `export_markdown_dir` (or the last one used), so a post can go straight into
   `xianxu.dev/src/data/post/`. `:ParleyExportMarkdown [dir]` keeps working
