@@ -62,13 +62,32 @@ bytes, but make that relationship explicit and restart-safe.
   unexplained permanent blocker.
 - Atlas documents the transcript/runtime/recovery boundary and the restart
   invariant.
+- *(added 2026-09-18, see Revisions)* No on-disk store takes part in
+  submission: the answer-recovery subsystem and its commands are deleted, and
+  nothing reads `<state_dir>/answer-recovery/`.
+- *(added 2026-09-18 — parley#255 folded in)* A request that captures context
+  while an earlier exchange's regeneration is incomplete receives that
+  exchange's previous complete answer, whole and never mixed with replacement
+  fragments — in the same chat, and from a sub-chat whose ancestor chain
+  includes it (read from the parent's live buffer when it is loaded). Several
+  exchanges regenerating at once each use their own previous answer, in
+  conversation order. Once that generation ends, later requests see what the
+  transcript says; a request already captured is unaffected. An edit, deletion
+  or reload that changes an exchange's identity never lets its previous answer
+  reach another exchange.
+- *(added 2026-09-18)* Stopping a generation — Stop, an edit that revokes it,
+  reload or detach — ends every process it started (the whole process group,
+  escalating to SIGKILL) and confirms every in-process wait on cancel, so no
+  admission slot outlives it. A process that survives SIGKILL is named, with its
+  pid, in the refusal it causes.
 
 ## Plan
 
-- [ ] Trace the recent document/generation refactor and inventory hidden state,
+- [x] Trace the recent document/generation refactor and inventory hidden state,
   ownership, invalidation and persistence paths.
-- [ ] Reproduce the reported edited-during-generation stuck transcript and
-  compare same-process recovery with quit/reopen recovery.
+- [x] Reproduce the reported edited-during-generation stuck transcript and
+  compare same-process recovery with quit/reopen recovery. *(By code trace, in
+  the audit Log; the executable reproduction is the regression test M1 adds.)*
 - [ ] Define the transcript source-of-truth and explicit runtime/recovery state
   contract; fix any state that violates it.
 - [ ] Add stateful integration coverage for interruption, edit conflicts,
@@ -252,6 +271,70 @@ resubmitted context at any model-authored `[^1]:` line (`define.lua:167-169`);
 `highlighter.lua:753-773,858-894` rewrites `🌿:` topics in the buffer on open and
 `chat_parser.lua:673` doesn't strip the appended `⚠️`, so it leaks into exports.
 
+### 2026-09-18 — audit re-verified on main after #266 merged
+
+Three fresh-context explorations re-ran the audit against `ee0c5f6d`. Line
+numbers above are pre-#266; these supersede them. The durable plan
+(`workshop/plans/000261-transcript-is-the-whole-truth-plan.md`) carries the full
+enumerations and the queries that produce them.
+
+**Recovery subsystem — the removal map is larger than the audit said.**
+- Four modules (`answer_recovery` 312, `chat_recovery` 553, `response_recovery`
+  170, `recovery_paths` 31), four specs (not five —
+  `cliproxy_recovery_e2e_spec.lua` is the unrelated #197 auth retry) plus
+  `tests/helpers/fake_recovery_filesystem.lua`, and `atlas/chat/recovery.md`.
+- The privacy carve-out spans the tools layer: `tools/traversal_policy.lua` (42)
+  and its spec exist only for it, and `private_directory`/`state_dir` are
+  threaded through `tools/dispatcher.lua`, `tools/async_builtin.lua`,
+  `tools/filesystem.lua`, `response_session.lua:92`, `response_tools.lua:111`,
+  `tools/producer.lua:98` and `skill_invoke.lua:397` for nothing else.
+- `chat_respond.lua:1551-1564` (plus the `unproved` cancel at :1535) is a
+  suspended-grant wait added only because the snapshot read the live answer.
+- `init.lua:3694-3699` cleans the store on chat deletion.
+
+**Runtime state — three corrections.**
+- `tasker.is_busy` no longer gates submission. Its remaining readers are the
+  jump-to-response, slug rename (a stuck record silently skips the rename after
+  save), reference repair and lualine.
+- `chat_respond.responses` refuses nothing. It keeps stuck runners reachable,
+  and Stop/Resume filter it by the current epoch, so a pre-reload runner can
+  never be selected again.
+- Reload/detach reaches every runner, but only *stops* it. `active`
+  (`generation_runner.lua:8`, refusal `:574`) drops only at `terminal`, which
+  waits for every operation to confirm.
+- **Root cause, verified:** `tasker.stop_matching` (`tasker.lua:262-285`) sends
+  signal 15 to the direct pid only. `reconcile_step` (`:200-222`) probes with
+  signal 0 and never escalates. There is no SIGKILL and no group kill, although
+  every process is spawned `detach = true` (`:470-476`, so pgid == pid).
+  Resolution requires exit plus both EOFs (`attempt.lua:12-16`), so a child
+  ignoring TERM, or a grandchild holding the pipe, pins its slot forever.
+  In-process waits (`pre_query`/vault callbacks, remote fetch, the
+  preparation wait at `chat_respond.lua:1531-1536`) resolve only when a
+  callback arrives.
+- Buffer numbers are reused by `:e!` and by `:bd` + reopen (probed on nvim
+  0.11.7), so tasker's per-buffer capacity and `skill_invoke._in_flight` carry
+  over into the reopened buffer.
+- `generation_runner.M.start` increments `active` at `:605`, before
+  `G.new`/`sync`/`dispatch`, which can throw.
+
+**Refusals — current inventory.**
+- Silent returns (the caller drops `nil, reason`): `chat_respond.lua:1400`,
+  `:1948`, `:1951`, `:1956`, `:1960` (`no questions selected` — the most common:
+  the cursor is in the header). `response_session.lua:33-34` is unreachable.
+- Silent non-success endings: the single-response `terminal` handler
+  (`:1695-1717`) reports only a provider `failure_notice` and `overflow`.
+  `revoked`, `uncertain`, `insert_failed`, `finalize_failed`, `round_capacity`,
+  gap-write `prepare_failed` and `provider_failed` end with no message.
+- Opaque tokens reach `Response not started: <reason>` through two channels
+  with different behaviour: `:1691` (`logger.warning`) and `:1542`
+  (`pcall(vim.notify)`, first line only, not logged). No refusal-to-message
+  mapping exists anywhere. #265 owns `buffer_edit.replace_user_lines`, which is
+  not on these paths, and should reuse whatever vocabulary this issue builds.
+- Also on this path: the `!` force flag is passed as a 4th argument that
+  `M.respond` never reads (`chat_respond.lua:2027-2031`), so its "Forcing
+  response…" message is false. `init.lua:4171` calls a
+  `chat_respond.resubmit_questions_recursively` that no longer exists.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit
@@ -317,3 +400,47 @@ header its own parser rejects, `(timestamp, dir)` sidecar cross-contamination on
 copy, and the absence of any external-change detection. Same target, different
 axis: that is about handing the file to someone else and getting the same
 answers, not about being blocked.
+
+### 2026-09-18 — operator decisions after the post-#266 re-verification
+
+**Reason.** The re-verification (Log, 2026-09-18) changed two findings (runtime
+state, recovery removal map). The operator settled the open design points in
+session.
+
+**Delta.**
+
+1. **No replaced-answer affordance.** This supersedes delta 2 of 2026-09-17
+   ("keep replaced answers in memory for the life of the nvim session, available
+   across buffers"). There is no picker and no restore command:
+   `:ParleyAnswerRecovery` and `:ParleyAnswerRestore` go with the store. Native
+   undo is the only way back to a replaced answer.
+2. **`prev_answer` — parley#255 folded in.** Operator: *"while generation is
+   going on, if user navigate to another chat, maybe subchat, and request
+   generation from there, there is a chance answer in parent chat's not
+   generated yet, and only in that case we should use cached answer … for each
+   exchange, we should keep a slot called prev_answer, and prev_answer is set to
+   nil when current answer finish generating."*
+   - **Where it lives:** the slot belongs to the in-memory exchange structure,
+     i.e. the per-buffer document coordinator. It is a table beside the index,
+     because the index stores no transcript payload.
+   - **Lifetime:** set when a regeneration removes the old answer from the
+     buffer; cleared when that generation ends. Reload, detach and deleting the
+     exchange also clear it.
+   - **"Ends" means any outcome.** Operator: *"new answer will either success or
+     fail, both are recorded on the transcript, and that's all."*
+   - **Only consumer:** request context. Ancestor context reads a parent from its
+     live buffer when loaded, not from disk, because the 1 s autosave means disk
+     already holds the partial answer.
+   - #255 closes with this issue; its Spec and Done-when are carried into ours.
+3. **Legacy `<state_dir>/answer-recovery/` is left untouched.** No migration and
+   no health check; nothing reads it.
+4. **Runtime leaks: kill what we started, with certainty.** A proposed 5 s
+   deadline hand-off to a residue list was withdrawn. Operator: *"we need to have
+   100% confidence we can kill what we started."*
+   - Processes: stop signals the whole process group and escalates SIGTERM to
+     SIGKILL after a grace period.
+   - In-process waits: confirmed on cancel; late callbacks are ignored.
+   - The admission counters then drain as a consequence rather than by policy.
+     The one residual is a process in uninterruptible kernel sleep; it stays
+     counted, and its refusal names it.
+5. **Unchanged:** the refusal-message class, now enumerated in the Log.
