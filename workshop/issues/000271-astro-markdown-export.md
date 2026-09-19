@@ -66,6 +66,11 @@ and a reader has to scroll past machine bookkeeping to follow the conversation.
   unlisted, not undiscoverable — subscribers and crawlers still get them. If the
   stronger meaning is wanted, that is an xianxu.dev change (filter hidden in the
   RSS route, a `filter` on the sitemap integration, maybe `robots: noindex`).
+- **Escape `$`.** xianxu.dev runs `remark-math`, so a bare dollar amount opens
+  inline math and swallows everything up to the next `$` — links included. The
+  export escapes every unescaped `$` as `\$`, skipping code spans and fenced
+  blocks, where `$` is literal and a backslash would corrupt the code. Chats that
+  really do contain math are the open question in 8 below.
 - **Folds survive the export.** What a chat folds, a post collapses. `📝:`
   summaries, `🧠:` reasoning and `🔧:`/`📎:` tool blocks are wrapped in
   `<details class="parley-aside"><summary>…</summary>`, with a blank line before
@@ -102,6 +107,10 @@ Open questions (settle at claim):
    configurable (e.g. `export_fold_prefixes`) or fixed.
 7. Do folds belong in the HTML export too? It has the same problem and the same
    `<details>` answer, so the divergence would be arbitrary.
+8. Escaping `$` unconditionally breaks a chat that contains real LaTeX, which
+   xianxu.dev supports and its `AGENTS.local.md` asks for. Options: always escape
+   (math in a transcript is rare), a chat-header opt-out, or detect `$$…$$` and
+   leave that chat alone. Whatever the rule, `\$` must not leak into code blocks.
 
 Related: #211 (neutral export-dir defaults) and #243 (unescaped branch topics in
 export; its `post_url` check changes shape here).
@@ -186,3 +195,25 @@ the feed still carries them and the sitemap still hands them to crawlers.
 The operator took the three hand-converted posts, added `hidden: true` to the
 root, and committed + pushed them (xianxu.dev `c2fc04e`). That commit is the
 reference output this issue's exporter has to reproduce without hand edits.
+
+### 2026-09-19 — `$` eats the page, and a stale branch label
+
+Republished the tree with a third branch ("Student debt debate prep"). Two new
+defects, both caught on the built and then the live page:
+
+- **Dollar amounts became math.** The student-debt transcript quotes figures like
+  `$65,000 with $50,000 canceled would owe roughly $10,850 more ([Money](...))`.
+  `remark-math` read the first `$` as an opening delimiter, so the text between
+  amounts rendered in KaTeX italics and the Money link was swallowed whole.
+  Seven KaTeX spans on one page; the other three transcripts had none, because a
+  lone `$` in a paragraph has nothing to pair with. Escaping every `$` as `\$`
+  and rebuilding brought it to zero. Now in Spec, with question 8 for chats that
+  contain real math. Live evidence before the fix:
+  https://xianxu.dev/2026/09/student-debt-debate-prep/
+- **The parent's branch label was stale.** The root still carried
+  `🌿: 2026-09-19.13-30-49.269.md: ?` — the pre-rename filename and a placeholder
+  topic — so the export published a link reading "→ ?". The *reference* still
+  resolved (the timestamp glob from #224 found the renamed file), so this is the
+  label half of #270, not the path half. Worth folding into #270: a tree export
+  should either rewrite the label or read the topic from the target's header
+  instead of trusting the `🌿:` line.
