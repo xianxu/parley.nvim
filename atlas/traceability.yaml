@@ -346,6 +346,18 @@ atlas:
       - tests/unit/stream_output_spec.lua
       - tests/unit/user_buffer_edit_spec.lua
 
+  chat/transcript_truth:
+    code:
+      - lua/parley/refusal.lua
+      - lua/parley/response_completion.lua
+      - lua/parley/document/state.lua
+      - lua/parley/generation_runner.lua
+      - lua/parley/tasker.lua
+    tests:
+      - tests/integration/chat_respond_spec.lua
+      - tests/integration/generation_settles_spec.lua
+      - tests/integration/sidecar_degrade_spec.lua
+      - tests/integration/chat_refusal_spec.lua
   chat/batch:
     code:
       - lua/parley/batch.lua

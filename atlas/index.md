@@ -25,6 +25,7 @@ its feature pages, and the three tutorials without reading personal files.
 - [Delete Entity at Cursor](chat/entity_delete.md): Section, paragraph, or exchange as a text object.
 - [Incremental Document Structure](chat/document.md): Shared index and bounded structural repair.
 - [Chat Write Ownership](chat/ownership.md): Captured sources, scoped write grants, and cancellation evidence.
+- [The Transcript Is the Whole Truth](chat/transcript_truth.md): The restart invariant, and every state that can refuse a submission, with what releases it.
 - [Exchange Model](chat/exchange_model.md)
 - [Inline Branch Links](chat/inline_branch_links.md): Create a sub-chat and follow a standalone or inline branch.
 - [Drill-In Markers](chat/drill_in.md)

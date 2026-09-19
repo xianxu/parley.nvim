@@ -80,3 +80,15 @@ pcall.
 
 Filed from #263's boundary review (`workshop/plans/000263-quick-key-insert-chat-prefix-close-review.md`,
 minor findings "inconsistent-refusal-ux" and "stubbed-verdict-not-seam").
+
+### 2026-09-19 — refusal words now have one home (parley#261 M5)
+
+parley#261 M5 added `lua/parley/refusal.lua`, which holds the words for every
+submit and generation refusal: what happened, and what to do. Chat commands
+speak through `chat_respond`'s `refuse`. `tests/arch/refusal_vocabulary_spec.lua`
+fails on a producer reason that has no words, including reasons built at run
+time. When this issue settles its `replace_user_lines` policy, the readable
+warning should take its words from there too: add rows for `User edit
+unavailable` and `User edit refused`, rather than a second phrasebook. Its
+`capacity`, `stale` and `refused` rows already cover the document's user-edit
+guard.

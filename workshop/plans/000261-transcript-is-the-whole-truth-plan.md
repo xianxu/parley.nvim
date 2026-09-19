@@ -1570,7 +1570,7 @@ and testable.
 This covers Done-when #1 and #6: the audit's inventory becomes a maintained
 atlas page.
 
-- [ ] **Create `atlas/chat/transcript_truth.md`**, linked from `atlas/index.md`,
+- [x] **Create `atlas/chat/transcript_truth.md`**, linked from `atlas/index.md`,
   with two sections:
   - **Restart invariant:** quitting and reopening a chat rebuilds every
     submission-relevant fact from the file. Nothing else survives; say why.
@@ -1594,11 +1594,11 @@ atlas page.
 
     Each row points at code and tests, and states no rule the code owns. The
     Stop invariant links to `lifecycle.md`, and undo grouping to `ownership.md`.
-- [ ] Target: a Revisions entry recording what #261 delivered, linking the page.
+- [x] Target: a Revisions entry recording what #261 delivered, linking the page.
 - [ ] **#255:** after #261's close gate passes, move it through
   `working → codecomplete → done` with `sdlc issue set-status`, and add a Log
   line pointing at #261.
-- [ ] **#265:** a Log line saying its refusal words come from
+- [x] **#265:** a Log line saying its refusal words come from
   `lua/parley/refusal.lua`.
 - [ ] `make test`, `make lint`, `make check-fresh-clone PLENARY=…` (TOOLING.md).
 - [ ] `sdlc milestone-close --issue 261 --milestone M5`, then
