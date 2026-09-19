@@ -2257,3 +2257,35 @@ Minors, fixed below and bundled into the close commit (#174: no re-run).
   `Response completion not started: <reason>` warning from the W12 finalize
   path. Task 5.3 must cover both.
 
+### 2026-09-19 — M4 boundary review round 2 (FIX-THEN-SHIP): the fix round's own hunks
+
+**Delta.** Ten findings were disposed. The two new Importants are the round-1
+rules, not applied to round 1's own changes.
+- **The stopped-scope refusal is in the atlas** (8th `seam-change-collateral`).
+  - `tool_execution.md`: a stopped scope stays closed; the bound is 1024 keys,
+    and a forgotten key is admitted again, bounded by its deadline.
+  - `lifecycle.md`: nothing new may start in a stopped scope.
+- **The `cancel_responses` batch guard has its test** (3rd
+  `behavior-change-without-regression-test`). `batch_lifecycle_spec` makes a
+  real batch's cancel throw, asserts the running response is still cancelled,
+  and is red with the guard reverted.
+- **Round 1's other production hunks, swept.**
+  - The stopped-scope refusal, the fault snapshot, W14's first dispatch and the
+    cleanup guards already had red tests.
+  - **W16:** `response_topic_spec` now stops a topic *during* its request. It
+    must cancel through the handle once the request returns, not retire first,
+    and it is red when keyed on having no handle. `stop()` no longer sends a
+    handle-less cancel while the request is in flight.
+  - **The office temp file:** the scope table asserts that pandoc's input
+    lives in Neovim's private temp dir.
+- **Corrected claim.** Round 1 said chat specs now take W5's branch. They do
+  not: the fixture registers calls synchronously, so there is no pre-query
+  window, and the branch was measured at 0 hits. W5 is pinned in
+  `response_provider_spec`. The double returns a count for fidelity only, and
+  its comment now says so.
+- **Minors.**
+  - The `WAITS` check matches a real `it(`/`describe(` declaration and cuts the
+    list out first, so it cannot vouch for itself; a counterfactual case
+    checks this.
+  - Five hand-rolled stub restores now use `with_stub`.
+

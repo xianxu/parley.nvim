@@ -334,7 +334,8 @@ confirms. What makes that certain:
 - **Its processes die.** The first time a generation stops or ends, the runner
   kills its process scope once, through the session's `stopping` hook. That
   reaches every process started for it: the provider stream, tools, and the
-  content fetches its preparation made. See
+  content fetches its preparation made. The scope then stays closed: nothing
+  new may start in it. See
   [Stopping a process](../providers/tool_execution.md#stopping-a-process).
 - **Nothing waits on a callback that cannot come.**
   - An operation whose start threw is confirmed by the runner itself.

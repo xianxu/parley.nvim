@@ -1,5 +1,19 @@
 # Lessons
 
+## 2026-09-19 (#261 M4 review round 2 — the fix round is part of the boundary diff)
+
+- **Apply the sweeps to the fix round's own changes, not only to the review's
+  list** (8th `seam-change-collateral`, 3rd
+  `behavior-change-without-regression-test`). Round 1 fixed each listed site,
+  then added a stopped-scope refusal the atlas never mentioned and a batch
+  guard no test exercised.
+  - Before a fix round's commit, list its own production hunks.
+  - Grep each changed public function's name across `atlas/`.
+  - Mutate each behaviour-changing hunk and require a red test.
+- **Measure a claim about which tests reach a branch.** "Chat specs now take
+  W5's branch" was written from how the double looked. Instrumenting the
+  branch showed 0 hits.
+
 ## 2026-09-19 (#261 M4 review — the contract changed; its doubles, its per-site tests and its alternatives had to follow)
 
 - **A test double is a restatement of the contract too** (7th in

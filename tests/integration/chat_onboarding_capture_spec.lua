@@ -66,18 +66,14 @@ describe('captured response onboarding',function()
     -- #261 M4 W12: a completion that refuses to start is a failed finalize, and
     -- the generation ends rather than waiting on a `done` nothing will call.
     it('ends a response whose completion refuses to start',function()
-        local Completion=require('parley.response_completion')
-        local original=Completion.start
-        Completion.start=function()return nil,'completion refused'end
-        local ok,err=pcall(function()
-            parley._state.agent='SelectedFixture'
-            session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
-            ready();wait(function()return #calls==1 end)
-            calls[1].output(calls[1].id,'answer');calls[1].complete(calls[1].id)
-            wait(function()return Respond.response_snapshot(session).status=='terminal'end)
-        end)
-        Completion.start=original
-        assert(ok,err)
+        require('tests.helpers.stub').with_stub(require('parley.response_completion'),'start',
+            function()return nil,'completion refused'end,function()
+                parley._state.agent='SelectedFixture'
+                session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
+                ready();wait(function()return #calls==1 end)
+                calls[1].output(calls[1].id,'answer');calls[1].complete(calls[1].id)
+                wait(function()return Respond.response_snapshot(session).status=='terminal'end)
+            end)
         assert.equals('finalize_failed',Respond.response_snapshot(session).generation.outcome)
     end)
     it('never recaptures a deleted origin when onboarding finishes',function()

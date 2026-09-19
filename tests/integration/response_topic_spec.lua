@@ -47,34 +47,44 @@ describe('independent automatic topic ownership',function()
     it('retires failed when its step throws',function()
         local value=spec();value.schedule=true
         local final
-        local repair=D.repair_step
-        D.repair_step=function()error('topic exploded')end
-        local ok_start,err=pcall(function()
+        require('tests.helpers.stub').with_stub(D,'repair_step',function()error('topic exploded')end,function()
             local job=assert(Topic.start(doc,value,{terminal=function(result)final=result end}));jobs[#jobs+1]=job
             assert(vim.wait(500,function()return final~=nil end,5),'the topic never retired')
         end)
-        D.repair_step=repair
-        assert(ok_start,err)
         assert.equals('failed',final.status)
         assert.equals(0,D.user_guard_stats(doc).live)
     end)
     -- #261 M4 W16: a request that throws leaves the topic started with no
     -- handle; it must still retire rather than stop forever.
     it('retires when its provider request throws',function()
-        local Provider=require('parley.response_provider')
-        local new=Provider.new
-        Provider.new=function()return {request=function()error('request exploded')end,
-            cancel_operation=function()return false end}end
         local value=spec();value.schedule=true
         local final
-        local ok_start,err=pcall(function()
+        require('tests.helpers.stub').with_stub(require('parley.response_provider'),'new',function()
+            return {request=function()error('request exploded')end,cancel_operation=function()return false end}
+        end,function()
             local job=assert(Topic.start(doc,value,{terminal=function(result)final=result end}));jobs[#jobs+1]=job
             assert(vim.wait(500,function()return final~=nil end,5),'the topic never retired')
         end)
-        Provider.new=new
-        assert(ok_start,err)
         assert.equals('failed',final.status)
         assert.equals(0,D.user_guard_stats(doc).live)
+    end)
+    -- #261 M4 review BR-52: a Stop that lands while the request is still being
+    -- made has no handle yet. That is not a request that threw: the topic
+    -- waits for the request to return, then cancels through its handle.
+    it('answers a stop that arrives during its request once the request returns',function()
+        local job,cancels,final
+        local fake={request=function()Topic.cancel(job,'stopped mid-request');return {handle=true}end,
+            cancel_operation=function(ctx,done)cancels[#cancels+1]={ctx=ctx,done=done};return true end}
+        cancels={}
+        require('tests.helpers.stub').with_stub(require('parley.response_provider'),'new',function()return fake end,function()
+            job=assert(Topic.start(doc,spec(),{terminal=function(result)final=result end}));jobs[#jobs+1]=job
+            pump(job)
+        end)
+        assert.equals(1,#cancels,'the stop was never sent through the handle')
+        assert.is_not_nil(cancels[1].ctx.handle)
+        assert.is_nil(final,'retired before the request it stopped was confirmed')
+        cancels[1].done()
+        assert.equals('cancelled',final.status)
     end)
     it('writes only the final first line after positive process and pipe completion',function()
         local job=start(doc,spec(),jobs);pump(job)

@@ -9,10 +9,11 @@
 local M = {}
 
 --- The one `tasker.stop_owner` double (#261 M4 review I1). Like the real one it
---- returns how many running calls it stopped: the provider adapter resolves a
---- cancel at once when that is 0 (nothing is running, W5), so a double that
---- returned nothing would hide that branch from every chat-level test. The
---- abort arrives on the next turn, as the real transport's does.
+--- returns how many running calls it stopped, which the provider adapter reads
+--- (a cancel that stopped nothing resolves at once, W5). This fixture registers
+--- calls synchronously, so no chat spec reaches that branch — it is pinned in
+--- response_provider_spec; the count keeps the double faithful. The abort
+--- arrives on the next turn, as the real transport's does.
 ---@param calls table # the recorded calls; each has `opts.generation_id`, `running`, `abort`
 function M.stop_owner(calls)
     return function(owner)

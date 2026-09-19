@@ -305,7 +305,13 @@ describe("every content-fetch spawn runs in the scope it is handed", function()
                     p:finish(0, 0)
                 end } },
         { name = "office conversion: pandoc, then textutil", scoped = { true, true },
-            start = function(o) o._convert_office_to_text("binary", "docx", function() end, scope) end,
+            start = function(o)
+                o._convert_office_to_text("binary", "docx", function() end, scope)
+                -- The document is written to Neovim's private temp dir, not /tmp.
+                local dir = vim.fn.fnamemodify(vim.fn.tempname(), ":h")
+                local file = processes.spawn_options[1].args[#processes.spawn_options[1].args]
+                assert.equals(dir, vim.fn.fnamemodify(file, ":h"))
+            end,
             steps = { function(p) p:finish(1, 0) end } },
         { name = "an account fetch forwards its scope through the provider", scoped = { true },
             start = function(o) o._try_account_fetch({ google = { client_id = "c" } }, o._normalize_account_store(vim.json.decode(store(o))),

@@ -879,6 +879,102 @@ rounds:
       boundary: M4
       recipe: milestone-review
       blocked: true
+    - "n": 15
+      timestamp: "2026-09-19T10:25:53-07:00"
+      agent: claude
+      dispose:
+        - id: BR-47
+          disposition: addressed
+          note: Atlas passages a-c corrected; one returning stop_owner double plus an arch guard. Chat-level reachability of W5 raised separately (Minor).
+          round: 15
+        - id: BR-48
+          disposition: addressed
+          note: Reverting the cancel_entry guard, the Copilot forward, or any of 7 of 7 sampled oauth sites (1393,1756,1926,2059,2143,2371,2505) turns a test red.
+          round: 15
+        - id: BR-49
+          disposition: addressed
+          note: With SIGKILL escalation disabled, all four stop-cause cases (stop, edit, reload, detach) and the 3 other end-to-end cases go red.
+          round: 15
+        - id: BR-50
+          disposition: addressed
+          note: WAITS list accurate (29/29 citations resolve); atlas points at it; plan revision supersedes Chunk 4. The check's self-match raised as a new Minor.
+          round: 15
+        - id: BR-51
+          disposition: addressed
+          note: Removing the final_outcome line from M.snapshot reddens the fault case.
+          round: 15
+        - id: BR-52
+          disposition: not-addressed
+          note: Code now keys on start_threw, but reverting to `not s.handle` leaves response_topic_spec 13/13 green; no test drives a stop arriving during provider.request.
+          round: 15
+        - id: BR-53
+          disposition: addressed
+          note: tasker refuses a run into a stopped scope; removing the refusal reddens tasker_supervision_spec.
+          round: 15
+        - id: BR-54
+          disposition: addressed
+          note: generation_runner.lua:362-365 now states the residual (a process spawned before the throw runs until the scope kill).
+          round: 15
+        - id: BR-55
+          disposition: addressed
+          note: Moving sync and dispatch back outside the pcall errors the W14 dispatch case.
+          round: 15
+        - id: BR-56
+          disposition: addressed
+          note: Both named sites use with_stub, which restores on every path.
+          round: 15
+      findings:
+        - id: BR-57
+          severity: Important
+          title: stop_scope now closes a scope for good and tasker.run refuses into it, but the atlas says neither
+          detail: |-
+            8th in family. The rule already exists (grep the seam's name); the fix round
+            applied it to the review's list, not to the seams it changed itself.
+            tool_execution.md:100 still says only that stop_scope stops every process
+            of one generation, and lifecycle.md:334-337 omits the refusal. Rule-level
+            fix: each round's close greps every public function whose body the round
+            changed across atlas/, fix rounds included. Instance: document the refusal,
+            the 1024-key bound, and what happens to an evicted key.
+          family: seam-change-collateral
+          round: 15
+        - id: BR-58
+          severity: Important
+          title: The fix commit's own new cancel_responses batch guard reddens nothing when reverted
+          detail: |-
+            3rd in family. The commit claims every edited site has a red-on-revert test,
+            but the sweep covered the prior review's list, not the commit's own new
+            hunks. Reverting chat_respond.lua:1357 leaves chat_cancel_entry,
+            batch_lifecycle, batch_respond, batch_validation_budget, chat_stop_generation
+            and generation_settles green. Rule: the mutation sweep runs over every
+            behavior-changing hunk of the whole boundary diff, including the fix round's.
+          family: behavior-change-without-regression-test
+          round: 15
+        - id: BR-59
+          severity: Minor
+          title: The WAITS check always passes for the 7 citations that name generation_settles_spec itself
+          detail: |-
+            generation_settles_spec.lua:379 does a raw-text find over the named file, and
+            that file contains the WAITS list with every case name in it. Renaming the W11
+            case left the check green. Fix: match `it(` followed by the case name, and
+            strip the WAITS block before searching.
+          family: allowlist-without-dead-entry-check
+          round: 15
+        - id: BR-60
+          severity: Minor
+          title: No chat-level spec can reach W5's zero-match branch, though the plan says they now do
+          detail: |-
+            4th in family. Instrumenting response_provider.lua:125 gave 0 hits across the
+            six chat specs and generation_settles; the only hits came from
+            response_provider_spec. The dispatcher.query doubles register calls
+            synchronously (no pre_query window), and the stop_owner double only marks a
+            call stopped through its own stop. Rule: a double models every phase of the
+            seam the consumer branches on, and a claim that a test level takes a branch
+            is measured, not inferred. plan:2215 claims otherwise.
+          family: stateless-double-at-stateful-seam
+          round: 15
+      boundary: M4
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -1359,6 +1455,52 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   generation_settles_spec.lua:56-59 (D.subscribe) and
   skill_invoke_spec.lua:250-256 (FS.new).
 
+## Round 15 — 2026-09-19T10:25:53-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-47 — addressed — Atlas passages a-c corrected; one returning stop_owner double plus an arch guard. Chat-level reachability of W5 raised separately (Minor).
+- BR-48 — addressed — Reverting the cancel_entry guard, the Copilot forward, or any of 7 of 7 sampled oauth sites (1393,1756,1926,2059,2143,2371,2505) turns a test red.
+- BR-49 — addressed — With SIGKILL escalation disabled, all four stop-cause cases (stop, edit, reload, detach) and the 3 other end-to-end cases go red.
+- BR-50 — addressed — WAITS list accurate (29/29 citations resolve); atlas points at it; plan revision supersedes Chunk 4. The check's self-match raised as a new Minor.
+- BR-51 — addressed — Removing the final_outcome line from M.snapshot reddens the fault case.
+- BR-52 — not-addressed — Code now keys on start_threw, but reverting to `not s.handle` leaves response_topic_spec 13/13 green; no test drives a stop arriving during provider.request.
+- BR-53 — addressed — tasker refuses a run into a stopped scope; removing the refusal reddens tasker_supervision_spec.
+- BR-54 — addressed — generation_runner.lua:362-365 now states the residual (a process spawned before the throw runs until the scope kill).
+- BR-55 — addressed — Moving sync and dispatch back outside the pcall errors the W14 dispatch case.
+- BR-56 — addressed — Both named sites use with_stub, which restores on every path.
+
+### Raised
+
+- **BR-57** [Important] `seam-change-collateral` stop_scope now closes a scope for good and tasker.run refuses into it, but the atlas says neither
+  8th in family. The rule already exists (grep the seam's name); the fix round
+  applied it to the review's list, not to the seams it changed itself.
+  tool_execution.md:100 still says only that stop_scope stops every process
+  of one generation, and lifecycle.md:334-337 omits the refusal. Rule-level
+  fix: each round's close greps every public function whose body the round
+  changed across atlas/, fix rounds included. Instance: document the refusal,
+  the 1024-key bound, and what happens to an evicted key.
+- **BR-58** [Important] `behavior-change-without-regression-test` The fix commit's own new cancel_responses batch guard reddens nothing when reverted
+  3rd in family. The commit claims every edited site has a red-on-revert test,
+  but the sweep covered the prior review's list, not the commit's own new
+  hunks. Reverting chat_respond.lua:1357 leaves chat_cancel_entry,
+  batch_lifecycle, batch_respond, batch_validation_budget, chat_stop_generation
+  and generation_settles green. Rule: the mutation sweep runs over every
+  behavior-changing hunk of the whole boundary diff, including the fix round's.
+- **BR-59** [Minor] `allowlist-without-dead-entry-check` The WAITS check always passes for the 7 citations that name generation_settles_spec itself
+  generation_settles_spec.lua:379 does a raw-text find over the named file, and
+  that file contains the WAITS list with every case name in it. Renaming the W11
+  case left the check green. Fix: match `it(` followed by the case name, and
+  strip the WAITS block before searching.
+- **BR-60** [Minor] `stateless-double-at-stateful-seam` No chat-level spec can reach W5's zero-match branch, though the plan says they now do
+  4th in family. Instrumenting response_provider.lua:125 gave 0 hits across the
+  six chat specs and generation_settles; the only hits came from
+  response_provider_spec. The dispatcher.query doubles register calls
+  synchronously (no pre_query window), and the stop_owner double only marks a
+  call stopped through its own stop. Rule: a double models every phase of the
+  seam the consumer branches on, and a claim that a test level takes a branch
+  is measured, not inferred. plan:2215 claims otherwise.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
@@ -1372,13 +1514,8 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-44** [Minor] `residue-names-no-end` The one-shot deadline timer is closed only by retire, the one path a held record never takes
 - **BR-45** [Important] `seam-change-collateral` The dispatcher re-exports code/io_error on its failure table, and both of that table's renderers still drop io_error
 - **BR-46** [Important] `enumeration-claims-completeness` The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
-- **BR-47** [Important] `seam-change-collateral` Three atlas passages and six stop_owner doubles still state the contract M4 replaced
-- **BR-48** [Important] `behavior-change-without-regression-test` W15, the Copilot pre_query forward and 11 of 12 oauth scope sites redden nothing on revert
-- **BR-49** [Important] `done-when-clause-untested` Only Stop drives the settle and scope kill; edit, reload and detach are untested
-- **BR-50** [Important] `enumeration-claims-completeness` Atlas says the settles spec holds one case per wait; it holds 7 of 18
-- **BR-51** [Minor] `state-change-bypasses-model` After a fault the runner's snapshot reports the machine's non-terminal phase
 - **BR-52** [Minor] `canonical-form-not-shared` W16 keys on a missing handle, the condition Task 4.1 rejected for W1
-- **BR-53** [Minor] `one-shot-cleanup-not-a-gate` A fetch chain resuming after the scope kill spawns into a dead scope
-- **BR-54** [Minor] `absence-inferred-from-throw` A thrown start_child is resolved as "nothing was started"
-- **BR-55** [Minor] `partial-guard-window` W14's pcall stops one statement short of the admission increment
-- **BR-56** [Minor] `stub-restored-outside-finally` D.subscribe and FS.new stubs are restored outside a pcall
+- **BR-57** [Important] `seam-change-collateral` stop_scope now closes a scope for good and tasker.run refuses into it, but the atlas says neither
+- **BR-58** [Important] `behavior-change-without-regression-test` The fix commit's own new cancel_responses batch guard reddens nothing when reverted
+- **BR-59** [Minor] `allowlist-without-dead-entry-check` The WAITS check always passes for the 7 citations that name generation_settles_spec itself
+- **BR-60** [Minor] `stateless-double-at-stateful-seam` No chat-level spec can reach W5's zero-match branch, though the plan says they now do

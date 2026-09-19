@@ -100,6 +100,13 @@ Neovim, which sends SIGKILL at once. If the process has not exited and drained
 both pipes 2 s later, it gets SIGKILL. `tasker.stop_scope(key)` stops every
 process of one generation.
 
+**A stopped scope stays closed.** After `stop_scope`, tasker refuses any new
+scoped run into that key, so a helper chain that resumes after the kill cannot
+spawn into it: a keychain read or a login finishing late, then a content fetch.
+A generation's key is never live again, so nothing legitimate is refused. The
+set of closed keys is bounded at 1024, oldest forgotten first. A forgotten key
+would be admitted again, but only as a run bounded by its deadline.
+
 The five-second observation window then follows. A process still held after it
 is logged with its pid and listed by `tasker.held()`, and it keeps its
 admission slot.

@@ -56,6 +56,19 @@ describe('public batch membership lifetime',function()
             assert.equals(0,Respond.batch_snapshot(next_batch).completed)
         end)
     end
+    -- #261 M4 review BR-58: Stop's batch cancel is one cleanup among several.
+    -- One that throws must not skip cancelling the responses themselves.
+    it('still cancels the running responses when the batch cancel throws',function()
+        local batch=Respond.respond_all();assert.is_not_nil(batch);wait(function()return #calls==1 end)
+        local ok,err=true,nil
+        require('tests.helpers.stub').with_stub(require('parley.batch_response'),'cancel',
+            function()error('batch cancel exploded')end,function()
+                ok,err=pcall(Respond.cancel_responses,buf)
+            end)
+        assert(ok,err)
+        -- The session's cancel reaches the transport on the runner's next step.
+        wait(function()return calls[1].cancelled==1 end)
+    end)
     it('allows a new batch after positive completion',function()
         local batch=Respond.respond_all();assert.is_not_nil(batch);wait(function()return #calls==1 end)
         calls[1].output(calls[1].id,'new answer');calls[1].complete(calls[1].id)

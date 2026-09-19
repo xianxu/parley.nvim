@@ -214,14 +214,10 @@ describe("every wait a generation holds settles", function()
         assert.is_true(vim.wait(500, function() return #fake.requests == 1 end, 5))
         -- Only the scheduled step writes, so a throw here escapes nothing but the
         -- step itself: the Deferred's error path.
-        local append = D.append
-        D.append = function() error("step exploded") end
-        local ok, err = pcall(function()
+        require("tests.helpers.stub").with_stub(D, "append", function() error("step exploded") end, function()
             fake:output(1, "answer")
             assert.is_true(vim.wait(500, function() return final ~= nil end, 5), "the runner never reached terminal")
         end)
-        D.append = append
-        assert(ok, err)
         assert.equals("fault", final.outcome)
         assert.truthy(tostring(final.failure):find("step exploded", 1, true))
         -- One authority for "terminal": the snapshot reports what the host got.
@@ -363,6 +359,21 @@ describe("a stopped response never holds a slot", function()
     end)
 end)
 
+-- Whether `file` declares a case or block whose name starts with `case`. The
+-- WAITS list itself is cut out first, so it cannot vouch for its own entries.
+local function declares(file, case)
+    local text = table.concat(vim.fn.readfile(file), "\n")
+    text = text:gsub("local WAITS = %b{}", "")
+    for _, opener in ipairs({ "it(", "describe(" }) do
+        for _, quote in ipairs({ '"', "'" }) do
+            if text:find(opener .. quote .. case, 1, true) or text:find(opener .. " " .. quote .. case, 1, true) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 describe("the waits list", function()
     it("names W1 to W18, each with a test that exists, or the reason it was dropped", function()
         local problems = {}
@@ -376,7 +387,7 @@ describe("the waits list", function()
                 local file, case = row[j][1], row[j][2]
                 if vim.fn.filereadable(file) == 0 then
                     problems[#problems + 1] = row[1] .. ": " .. file .. " does not exist"
-                elseif not table.concat(vim.fn.readfile(file), "\n"):find(case, 1, true) then
+                elseif not declares(file, case) then
                     problems[#problems + 1] = row[1] .. ": " .. file .. " has no case '" .. case .. "'"
                 end
             end
@@ -384,5 +395,9 @@ describe("the waits list", function()
         assert.equals(18, #WAITS)
         assert.same({}, problems)
     end)
+    it("cannot be satisfied by a case name it does not declare (counterfactual)", function()
+        assert.is_false(declares("tests/integration/generation_settles_spec.lua", "W1: a preparation whose start threw!"))
+        assert.is_false(declares("tests/integration/generation_settles_spec.lua", "no such case"))
+        assert.is_true(declares("tests/integration/generation_settles_spec.lua", "W1: a preparation whose start threw"))
+    end)
 end)
-

@@ -199,3 +199,205 @@ findings:
       generation_settles_spec.lua:56-59 (D.subscribe) and
       skill_invoke_spec.lua:250-256 (FS.new).
 ```
+
+---
+
+## Re-review — 2026-09-19T10:25:53-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 261 — Audit transcript as the complete recovery state |
+| repo | parley.nvim |
+| issue file | workshop/issues/000261-audit-transcript-recovery-state.md |
+| boundary | milestone M4 |
+| milestone | M4 |
+| window | 31ca6eb92e68d51572692e266d4801bc4524d9e0..7945b796c50ab10fbf857f1eff51e32d84abb5df |
+| command | sdlc milestone-close --issue 261 --milestone M4 |
+| reviewer | claude |
+| timestamp | 2026-09-19T10:25:53-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Round 1's fixes mostly hold, and I checked each one by reverting it. I exported HEAD to a scratch tree and ran 20 specs: all green (`generation_settles_spec` 18/18, `spawn_seam_spec` 13/13 once the tree had a git index). Then I reverted each claimed fix on its own and re-ran its specs:
+
+- **Red on revert:** the W15 `cancel_entry` guards, the Copilot forward, 7 of 7 sampled oauth scope sites, the `fault` snapshot, W14's widened pcall, and the stopped-scope refusal.
+- **All four stop causes:** with SIGKILL escalation disabled, the stop, edit, reload and detach cases all go red.
+
+Nothing blocks the gate, but four things fall short:
+
+- **Atlas missing the refusal.** The fix commit changed `tasker.stop_scope`'s contract (a stopped key is closed for good, up to 1024 keys) and added a refusal to `tasker.run`. No atlas page says so.
+- **W16 has no test that pins it.** Reverting its condition to `not s.handle` leaves `response_topic_spec` green (BR-52).
+- **One new guard is untested.** Reverting the batch-cancel guard this commit added to `cancel_responses` reddens nothing.
+- **The WAITS check can't fail for some rows.** It searches the raw text of each named file. For the 7 citations that point at `generation_settles_spec.lua` itself, the WAITS list contains the case name, so the check always matches. Renaming the W11 case left it green.
+
+## 1. Strengths
+
+- **The stop-cause test drives the real paths.** `CAUSES` in `generation_settles_spec.lua` covers Stop, an in-answer edit, `:e!` and `:bd`, each run twice against a stream that ignores SIGTERM. With escalation disabled, all four cause cases and the 3 other end-to-end cases go red.
+- **The oauth table test really catches every site.** Each of the 7 hops I sampled (`oauth.lua` lines 1393, 1756, 1926, 2059, 2143, 2371, 2505) reddened at least one row when its scope was dropped.
+- **The stopped-scope refusal is sound.** The epoch is a process-wide counter (`document/init.lua:15-16`), so a chat generation's `(epoch, generation)` key really is never reused. Skill keys go through `stop_owner`, never `stop_scope`, so they are never recorded. The set is bounded at 1024 with oldest-first eviction.
+- **W14 is safe to widen.** `dispatch` only queues effects; they run later in `step`. So moving `sync` and the first `dispatch` inside the pcall cannot orphan started IO.
+- **The WAITS list is accurate today.** All 29 citations resolve to a real `it`/`describe` name.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**Atlas missing the stopped-scope refusal** (`lua/parley/tasker.lua:387-393, 500-502`).
+- *This is the 8th finding in family `seam-change-collateral`.* The rule already exists in the lessons ("grep the seam's name…"). This time it was applied to the review's list, not to the seams the fix round itself changed.
+- What is stale: `atlas/providers/tool_execution.md:100` still says only that "`tasker.stop_scope(key)` stops every process of one generation". `atlas/chat/lifecycle.md:334-337` says the scope kill reaches the fetches but not that the scope stays closed afterwards.
+- Rule-level fix: each round's close greps the name of every public function whose body the round changed across `atlas/`, and the fix round is not exempt.
+- Instance fix: one bullet in `tool_execution.md` covering the refusal, the 1024-key bound, and what happens to an evicted key (it is admitted again, bounded by its deadline).
+
+**The new `cancel_responses` batch guard has no red-on-revert test** (`lua/parley/chat_respond.lua:1357`).
+- *This is the 3rd finding in family `behavior-change-without-regression-test`.*
+- The commit says "Every edited site now has a test that fails when that site alone is reverted". The per-site sweep covered the prior review's list (the 39 oauth sites), not the sites the fix commit itself added.
+- Measured: with the guard reverted, 6 specs stay green: `chat_cancel_entry_spec`, `batch_lifecycle_spec`, `batch_respond_spec`, `batch_validation_budget_spec`, `chat_stop_generation_spec` and `generation_settles_spec`.
+- Rule: the mutation sweep runs over every behavior-changing hunk in the whole boundary diff, including the fix round's own hunks.
+- Instance fix: add a case with a throwing `batch_response.cancel` and a pending `batches[buf]`, asserting the entry sessions are still cancelled.
+
+## 4. Minor findings
+
+- **W16 (BR-52, re-raised as not addressed):** see the dispose block.
+- **The WAITS check can't fail for some rows** (`generation_settles_spec.lua:379`).
+  - It uses a raw-text `find` over the whole named file. For the 7 citations of the spec itself (W1×3, W9, W11, the W13 fault row, W14), the list satisfies its own check.
+  - Fix: match `it%(%s*["']` followed by the case name, and strip the `WAITS` block before searching.
+- **W5's branch is unreachable from chat-level specs.**
+  - I instrumented `response_provider.lua:125`: the branch was hit 0 times across the six chat specs and the end-to-end spec. The only hits came from `response_provider_spec`.
+  - The `dispatcher.query` doubles register a call synchronously, so there is no pre_query window for a Stop to land in.
+  - The `stop_owner` double only marks a call stopped through its own stop, so it cannot return 0 for a pending request.
+  - `plan:2215` and the comment in `respond_fixture.lua` both claim chat specs now take the branch.
+- Five in-window specs still hand-roll a pcall-and-restore instead of using `with_stub`. They are correct, but it is duplicated code, and the lesson's "only through `with_stub`" rule is not enforced anywhere.
+- The office conversion now uses `vim.fn.tempname()`. On a normal machine, reverting it fails nothing. It is also a small security improvement: the temp file moves from `/tmp` to Neovim's private per-session directory.
+
+## 5. Test coverage notes
+
+- **Commands:** everything ran in a `git archive` copy of HEAD with isolated HOME/XDG/TMPDIR. Each fix was reverted in its own copy.
+- **Went red:**
+  - `providers_pre_query_spec` (Copilot forward)
+  - `chat_cancel_entry_spec` (`cancel_entry` guards)
+  - `tasker_supervision_spec` (stopped-scope refusal)
+  - `generation_settles_spec` (`fault` snapshot, W14, escalation)
+  - `unscoped_kill_spec` (7/7 oauth sites)
+  - `response_session_spec` (the `stopping` hook)
+- **Stayed green:** W16's condition, the `cancel_responses` batch guard, and a renamed W11 case.
+- **Worth knowing:** disabling the scope kill leaves the end-to-end describe green. The provider's own `stop_owner` does that work there, so the scope kill is pinned only at the session level.
+
+## 6. Architectural notes
+
+- **ARCH-DRY: pass.** Six doubles became one (plus one declared variant, guarded), there is a single `guarded` helper, and `with_stub` exists.
+- **ARCH-PURE: pass.**
+- **ARCH-PURPOSE: pass.** Every stop cause the Done-when names is driven end to end.
+- **ARCH-MOCK: flag (Minor).** The chat-level doubles can't reach W5's branch.
+- **ARCH-CONSTRAINTS: pass.** Stopped-scope lookup is O(1), with a 1024-key bound.
+- **ARCH-SECURE: pass.** No credential reaches the new log lines, and temp files are now private.
+- **ARCH-ORDER: pass, with BR-52 open.** `fault` now has one authority for "terminal", but W16's reordering has no test for the order it changed.
+- **ARCH-FUNERAL: pass.** The stopped-scope set is bounded, and office temp files are removed on both paths.
+
+**For M5:** add the stopped-scope refusal text (`task start rejected: its generation has already stopped`) to the M5 message inventory (Chunk 5), alongside `fault` and `Response completion not started`.
+
+## 7. Plan revision recommendations
+
+- **Round-1 disposition (`plan:2215`):** replace "so chat specs take W5's branch" with "W5 is pinned at the adapter (`response_provider_spec`); chat-level doubles have no pre_query window".
+- **Core concepts, `tasker` row:** add that `stop_scope` records the key and that `run` refuses a scoped run into a recorded key (bounded at 1024).
+- **W16 as-built:** name the test that tells `start_threw` apart from "no handle yet" (a stop arriving while the request is still running).
+
+```findings
+dispose:
+  - id: BR-47
+    disposition: addressed
+    note: |
+      Atlas passages a-c corrected; one returning stop_owner double plus an arch guard. Chat-level reachability of W5 raised separately (Minor).
+  - id: BR-48
+    disposition: addressed
+    note: |
+      Reverting the cancel_entry guard, the Copilot forward, or any of 7 of 7 sampled oauth sites (1393,1756,1926,2059,2143,2371,2505) turns a test red.
+  - id: BR-49
+    disposition: addressed
+    note: |
+      With SIGKILL escalation disabled, all four stop-cause cases (stop, edit, reload, detach) and the 3 other end-to-end cases go red.
+  - id: BR-50
+    disposition: addressed
+    note: |
+      WAITS list accurate (29/29 citations resolve); atlas points at it; plan revision supersedes Chunk 4. The check's self-match raised as a new Minor.
+  - id: BR-51
+    disposition: addressed
+    note: |
+      Removing the final_outcome line from M.snapshot reddens the fault case.
+  - id: BR-52
+    disposition: not-addressed
+    note: |
+      Code now keys on start_threw, but reverting to `not s.handle` leaves response_topic_spec 13/13 green; no test drives a stop arriving during provider.request.
+  - id: BR-53
+    disposition: addressed
+    note: |
+      tasker refuses a run into a stopped scope; removing the refusal reddens tasker_supervision_spec.
+  - id: BR-54
+    disposition: addressed
+    note: |
+      generation_runner.lua:362-365 now states the residual (a process spawned before the throw runs until the scope kill).
+  - id: BR-55
+    disposition: addressed
+    note: |
+      Moving sync and dispatch back outside the pcall errors the W14 dispatch case.
+  - id: BR-56
+    disposition: addressed
+    note: |
+      Both named sites use with_stub, which restores on every path.
+findings:
+  - id: new
+    severity: Important
+    family: seam-change-collateral
+    title: |
+      stop_scope now closes a scope for good and tasker.run refuses into it, but the atlas says neither
+    detail: |
+      8th in family. The rule already exists (grep the seam's name); the fix round
+      applied it to the review's list, not to the seams it changed itself.
+      tool_execution.md:100 still says only that stop_scope stops every process
+      of one generation, and lifecycle.md:334-337 omits the refusal. Rule-level
+      fix: each round's close greps every public function whose body the round
+      changed across atlas/, fix rounds included. Instance: document the refusal,
+      the 1024-key bound, and what happens to an evicted key.
+  - id: new
+    severity: Important
+    family: behavior-change-without-regression-test
+    title: |
+      The fix commit's own new cancel_responses batch guard reddens nothing when reverted
+    detail: |
+      3rd in family. The commit claims every edited site has a red-on-revert test,
+      but the sweep covered the prior review's list, not the commit's own new
+      hunks. Reverting chat_respond.lua:1357 leaves chat_cancel_entry,
+      batch_lifecycle, batch_respond, batch_validation_budget, chat_stop_generation
+      and generation_settles green. Rule: the mutation sweep runs over every
+      behavior-changing hunk of the whole boundary diff, including the fix round's.
+  - id: new
+    severity: Minor
+    family: allowlist-without-dead-entry-check
+    title: |
+      The WAITS check always passes for the 7 citations that name generation_settles_spec itself
+    detail: |
+      generation_settles_spec.lua:379 does a raw-text find over the named file, and
+      that file contains the WAITS list with every case name in it. Renaming the W11
+      case left the check green. Fix: match `it(` followed by the case name, and
+      strip the WAITS block before searching.
+  - id: new
+    severity: Minor
+    family: stateless-double-at-stateful-seam
+    title: |
+      No chat-level spec can reach W5's zero-match branch, though the plan says they now do
+    detail: |
+      4th in family. Instrumenting response_provider.lua:125 gave 0 hits across the
+      six chat specs and generation_settles; the only hits came from
+      response_provider_spec. The dispatcher.query doubles register calls
+      synchronously (no pre_query window), and the stop_owner double only marks a
+      call stopped through its own stop. Rule: a double models every phase of the
+      seam the consumer branches on, and a claim that a test level takes a branch
+      is measured, not inferred. plan:2215 claims otherwise.
+```

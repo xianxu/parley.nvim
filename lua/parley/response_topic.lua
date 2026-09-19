@@ -46,13 +46,13 @@ local function stop(s,reason,failed)
     -- retires now (#261 M4 W16). A stop arriving while the request is still
     -- being made (no handle yet) is answered once the request returns, below.
     if not s.started or s.resolved or s.start_threw then retire(s,s.failed and 'failed' or 'cancelled',reason)
-    else
+    elseif s.handle then
         local ok=pcall(s.provider.cancel_operation,{epoch=s.epoch,generation=s.generation,operation=s.operation,
             handle=s.handle},function()
             s.resolved=true;retire(s,s.failed and 'failed' or 'cancelled',s.reason)
         end)
         if not ok then retire(s,'failed',s.reason) end
-    end
+    end -- else the request is still being made: it cancels through its handle once it returns
     return true
 end
 local function captured(s)

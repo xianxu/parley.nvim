@@ -818,6 +818,14 @@ Four Importants, each fixed as its rule:
 The six Minors are fixed as well (plan Revisions). Two items are carried into
 M5's inventory: `fault`, and the completion-not-started warning.
 
+### 2026-09-19 — M4 boundary review round 2 (FIX-THEN-SHIP) and dispositions
+
+Ten findings were disposed. The two new Importants were round 1's own changes,
+missed by round 1's sweeps: the stopped-scope refusal had no atlas mention, and
+the batch guard had no test. Both are fixed. Round 1's other production hunks
+were swept too: W16 gained a stop-during-request test, and the temp-dir change
+gained an assertion. The false claim that chat specs reach W5 is corrected.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

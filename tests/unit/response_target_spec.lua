@@ -29,14 +29,10 @@ describe('response target admission before IO',function()
     it('cancels itself when its step throws',function()
         local doc=fixture();local cancelled
         local value=spec();value.schedule=true
-        local repair=D.repair_step
-        D.repair_step=function()error('target exploded')end
-        local ok_start,err=pcall(function()
+        require('tests.helpers.stub').with_stub(D,'repair_step',function()error('target exploded')end,function()
             assert(T.start(doc,value,{cancelled=function(reason)cancelled=reason end}))
             assert(vim.wait(500,function()return cancelled~=nil end,5),'the target never settled')
         end)
-        D.repair_step=repair
-        assert(ok_start,err)
         assert.truthy(tostring(cancelled):find('target exploded',1,true))
         assert.equals(0,D.user_guard_stats(doc).live)
     end)
