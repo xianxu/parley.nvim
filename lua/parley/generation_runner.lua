@@ -359,8 +359,10 @@ local function start_operation(s,effect)
     if not ok then
         op.start_threw=true
         cb.failed(handle)
-        -- A tool that never started has nothing to clean up: its unknown outcome
-        -- is recorded above, and it resolves now so the round goes on (#261 M4 W1).
+        -- A tool whose start threw: its outcome is `unknown` (recorded above) and
+        -- it resolves now so the round goes on (#261 M4 W1). A throw is not proof
+        -- nothing started — a process spawned before the throw is in the
+        -- generation's scope and runs until the scope kill at its terminal.
         if effect.type=='start_child' then cb.resolved() end
     elseif s.operations[effect.operation]==op then op.handle=handle end
 end
@@ -460,7 +462,9 @@ local function finish(s,outcome)
     -- The failure reason travels with the terminal snapshot, so a host can say
     -- why a response stopped (an overflow names the answer it waited for).
     local final=G.snapshot(s.machine);final.failure=s.failure;final.waited_for_line=s.waited_for_line
-    if outcome then final.outcome=outcome;final.phase='terminal' end
+    -- A fault ends the generation outside the machine: `snapshot` reports what
+    -- the host was handed, so there is one authority for "terminal".
+    if outcome then final.outcome=outcome;final.phase='terminal';s.final_outcome=outcome end
     if terminal then pcall(terminal,final) end
 end
 --- The runner's own step threw (#261 M4). Nothing can be trusted to call back
@@ -663,6 +667,8 @@ function M.start(doc,spec,adapters)
             sync(s)
             if s.schedule then s.work:request() end
         end)
+        sync(s) -- carry pre-admission stale input evidence before any preparation effect
+        dispatch(s,{type='start'})
     end)
     if not started then
         if s.off then pcall(s.off) end
@@ -673,8 +679,6 @@ function M.start(doc,spec,adapters)
         return nil,tostring(reason):sub(1,4096)
     end
     active=active+1
-    sync(s) -- carry pre-admission stale input evidence before any preparation effect
-    dispatch(s,{type='start'})
     return r
 end
 --- The runners not yet terminal (#261 M4): a generation that stops must reach
@@ -684,6 +688,7 @@ function M.stats()
 end
 function M.snapshot(r)
     local s=state(r);local out=G.snapshot(s.machine)
+    if s.final_outcome then out.phase='terminal';out.outcome=s.final_outcome end
     out.retained_blobs=0;for _ in pairs(s.blobs) do out.retained_blobs=out.retained_blobs+1 end
     out.retained_staged_bytes=s.staged;out.failure=s.failure;out.waited_for_line=s.waited_for_line
     out.presentation_failure=s.presentation_failure;return out

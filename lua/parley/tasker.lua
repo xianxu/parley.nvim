@@ -15,6 +15,10 @@ M._debug = {
 M._cache_metrics = { creation = 0, read = 0, input = 0 }
 
 local records, admissions, queries = {}, {}, {}
+-- Scopes already stopped (#261 M4 review): a generation's key is never live
+-- again, so a helper chain resuming after the scope kill (a keychain read, a
+-- login) cannot spawn into it. Bounded: the oldest key is forgotten first.
+local stopped_scopes, stopped_order, STOPPED_LIMIT = {}, {}, 1024
 local sequence = 0
 
 -- How long a process outside any generation may run (#261 M3): nobody stops
@@ -120,6 +124,7 @@ function M._reset()
     for _,record in pairs(records)do if close_reconcile then close_reconcile(record)end end
     limits=vim.deepcopy(DEFAULT_LIMITS);retained_bytes=0
     records, admissions, queries = {}, {}, {}
+    stopped_scopes, stopped_order = {}, {}
     M._handles, M._queries = {}, {}
 end
 
@@ -381,6 +386,10 @@ end
 
 function M.stop_scope(key, signal)
     if key == nil then return 0 end
+    if not stopped_scopes[key] then
+        stopped_scopes[key] = true; stopped_order[#stopped_order + 1] = key
+        if #stopped_order > STOPPED_LIMIT then stopped_scopes[table.remove(stopped_order, 1)] = nil end
+    end
     return scoped_stop(function(state) return state.group and state.logical_generation == key end, signal)
 end
 
@@ -487,6 +496,9 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
         or record.state.kind~='provider' and record.state.kind~='tool' and record.state.kind~='utility'
         or opts.deadline_ms~=nil and not integer(opts.deadline_ms,3600000) then
         reject('task start rejected: invalid process options');return nil
+    end
+    if group and stopped_scopes[record.state.logical_generation] then
+        reject('task start rejected: its generation has already stopped');return nil
     end
     -- Nobody stops an unscoped run, so it names its own end (#261 M3).
     if not group and opts.deadline_ms==nil then

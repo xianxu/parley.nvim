@@ -344,10 +344,14 @@ confirms. What makes that certain:
   - A step of the runner's own that throws ends the generation with outcome
     `fault`.
 
-The proof is `tests/integration/generation_settles_spec.lua`. It holds one case
-per wait, plus the reported shape end to end: a provider stream that ignores
-SIGTERM, stopped 5 times in a buffer, 17 times across reloads, and after
-`:bd`. Each Stop is admitted.
+The evidence is `tests/integration/generation_settles_spec.lua`.
+- **Each wait.** Its `WAITS` list names each wait with the spec and case that
+  pin it, or the reason it was dropped. The spec checks that list against the
+  specs it names.
+- **The reported shape, end to end.** A provider stream that ignores SIGTERM is
+  stopped by each cause: Stop, an edit to its answer, `:e!`, and `:bd`. It is
+  also stopped 5 times in one buffer and 17 times across reloads. Each next
+  submission is admitted.
 
 ## Implementation and checks
 

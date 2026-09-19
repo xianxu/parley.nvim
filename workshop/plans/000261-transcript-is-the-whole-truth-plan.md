@@ -113,6 +113,7 @@ must *not* be. So:
 | `tasker` — `scope_key`, `is_scoped`, `stop_scope`, `held`, `leave`, `deadline` (the per-kind table), `exit_reason` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
 | `oauth` — `_token_body_summary`: what a token endpoint's body may show in a log, its OAuth error only; the content tree takes the requesting generation's scope and spawns through `content_run`: `fetch_content`, `_fetch_public_content`, `_try_saved_accounts`, `_try_account_fetch`, `_fetch_google_api_once`, `_fetch_dropbox_api_once`, `_fetch_microsoft_api_once`, `_run_dropbox_metadata_request`, `_run_dropbox_file_request`, `_run_microsoft_metadata_request`, `_run_microsoft_content_request`, `_convert_office_to_text` | `lua/parley/oauth.lua` | modified | the OAuth token endpoint; remote content |
 | `vault` — `refresh_copilot_bearer` calls back on every path, success or its error callback | `lua/parley/vault.lua` | modified | the Copilot token endpoint |
+| `chat_respond` — `_cancel_entry` and `_cancel_topic`: a Stop's independent cleanups, each guarded so one that throws skips none after it | `lua/parley/chat_respond.lua` | modified | the chat's active responses |
 | `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
 | `deferred_work` — `new`, now taking an error callback | `lua/parley/deferred_work.lua` | modified | timer turns |
 
@@ -2200,4 +2201,59 @@ Minors, fixed below and bundled into the close commit (#174: no re-run).
   - The new tests strand a read, then `:bd` + reopen or `:e!`; they assert the
     buffer number is reused and a new run is admitted. All three are red on
     revert.
+
+### 2026-09-19 — M4 boundary review round 1 (FIX-THEN-SHIP): dispositions
+
+**Delta.**
+- **I1, restatements of the changed contract** (7th `seam-change-collateral`).
+  The seam's name and its old claims were grepped, not recalled.
+  - `tool_execution.md`: content fetches for a generation are scoped; only those
+    made outside one are unscoped.
+  - `architecture.md`: a stop that matches no process resolves at once.
+  - `ownership.md`: what never started, or whose start threw, resolves at once.
+  - The six `stop_owner` doubles are now one, `respond_fixture.stop_owner`. It
+    returns the count it stopped, as the real one does, so chat specs take W5's
+    branch. `batch_lifecycle_spec` keeps a declared variant that counts
+    without aborting. A guard (`spawn_seam_spec`) refuses an undeclared copy.
+- **I2, a red test per edited site** (2nd
+  `behavior-change-without-regression-test`).
+  - W15: one guarded helper (`cancel_topic`), plus `M._cancel_entry`. The
+    `cancel_responses` batch cancel is guarded as well. `chat_cancel_entry_spec`
+    makes each callee throw and is red with the guard removed.
+  - The Copilot forward: `providers_pre_query_spec`, red with the forward
+    dropped.
+  - The oauth scope tree: a table-driven test in `unscoped_kill_spec` reaches
+    every spawn: public; Google meta, content and fallback; both Dropbox and
+    both Microsoft requests; office conversion; the three provider closures;
+    and `fetch_content`'s saved-account and fresh-login paths. It also asserts
+    that the shared keychain calls stay unscoped. Mutating each of the 39 scope
+    sites in turn, every one turns a row red.
+  - `chat_remote_preparation_spec` pins that `chat_respond` hands the fetches
+    its scope.
+- **I3, each stop cause** (2nd `done-when-clause-untested`). The end-to-end
+  helper takes the cause: Stop, an edit inside the streamed answer, `:e!`
+  mid-stream, and `:bd` mid-stream. Each runs twice against a SIGTERM-ignoring
+  stream, and all are red with escalation disabled.
+- **I4, the completeness claim** (9th `enumeration-claims-completeness`). The
+  test column this review asked for lives with the tests. The `WAITS` list at
+  the top of `generation_settles_spec` names, for each of W1–W18, its spec and
+  case, or the drop reason for W10. A case checks every named spec and case
+  exists. The atlas points at the list and claims no count. This supersedes
+  Chunk 4's "one case per row, W1–W17" and its `after_each` sentence: the
+  runner describe asserts `Runner.stats`, and the end-to-end describe asserts
+  `tasker.stats` after each cycle.
+- **Minors.**
+  - `fault` leaves `snapshot()` reporting what the host was handed.
+  - W16 is keyed on the request having thrown (`start_threw`), not on having
+    no handle.
+  - tasker refuses a scoped run into a scope already stopped, bounded at 1024
+    keys, so a fetch chain resuming after the kill cannot spawn into it.
+  - The thrown-tool residual is stated.
+  - W14's pcall covers `sync` and the first `dispatch`, with a test.
+  - `tests/helpers/stub.lua` `with_stub` restores on every path; the flagged
+    specs use it.
+- **For M5 (Chunk 5's inventory).** Two new producers need words: the `fault`
+  terminal outcome (the runner's own step threw), and the
+  `Response completion not started: <reason>` warning from the W12 finalize
+  path. Task 5.3 must cover both.
 

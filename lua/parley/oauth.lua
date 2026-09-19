@@ -1362,7 +1362,9 @@ end
 ---@param extension string # file extension (docx, xlsx, etc.)
 ---@param callback function # callback(text_content, error_message)
 M._convert_office_to_text = function(binary_data, extension, callback, scope)
-    local tmp_path = os.tmpname() .. "." .. extension
+    -- Neovim's session temp dir: os.tmpname() raises where /tmp is not usable,
+    -- and a raise here would escape the fetch's callback chain.
+    local tmp_path = vim.fn.tempname() .. "." .. extension
     local f = io.open(tmp_path, "wb")
     if not f then
         callback(nil, "failed to create temp file for Office conversion")

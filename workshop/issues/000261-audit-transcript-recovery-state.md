@@ -805,6 +805,19 @@ Every fix has a test that turns red on revert.
     each side: 0/10 before W17, 0/10 after. It also failed under load in M3
     round 1, before W17 existed.
 
+### 2026-09-19 — M4 boundary review round 1 (FIX-THEN-SHIP) and dispositions
+
+Four Importants, each fixed as its rule:
+- **I1:** the changed contract's restatements, prose and doubles alike. There is
+  now one returning `stop_owner` double, guarded.
+- **I2:** a red test per edited site. W15 (throwing callees), the Copilot
+  forward, and the oauth scope tree, where each of 39 sites was mutated.
+- **I3:** the end-to-end run over each stop cause: Stop, edit, `:e!`, `:bd`.
+- **I4:** a `WAITS` evidence list checked against the specs it names.
+
+The six Minors are fixed as well (plan Revisions). Two items are carried into
+M5's inventory: `fault`, and the completion-not-started warning.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

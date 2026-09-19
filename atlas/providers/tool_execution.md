@@ -76,8 +76,8 @@ ends ([below](#processes-outside-tasker)).
 
 - **Scoped** processes carry `logical_generation`, a key always built by
   `tasker.scope_key`:
-  - a chat generation's key, `(epoch, generation)`, for provider streams and
-    tool processes;
+  - a chat generation's key, `(epoch, generation)`, for provider streams, tool
+    processes, and the content fetches its preparation makes;
   - a skill run's own key, `("skill:<buf>", run)`, for skill processes.
 
   A chat generation's scope kill therefore does not reach a skill's processes;
@@ -85,8 +85,8 @@ ends ([below](#processes-outside-tasker)).
   leads its own process group and is signalled as a group. A grandchild holding
   its pipe dies with it, even after the parent has exited.
 - **Unscoped** processes are shared helpers: the vault's secret command, OAuth
-  keychain and token calls, content fetches, and the automatic topic and
-  memory-preference streams. They stay in Neovim's session, so a
+  keychain and token calls, content fetches made outside a generation, and the
+  automatic topic and memory-preference streams. They stay in Neovim's session, so a
   [secret command](../infra/vault.md) can still prompt on the terminal, and they
   are signalled by pid.
   - Nobody stops them, so each names its end: `tasker.run` refuses an unscoped

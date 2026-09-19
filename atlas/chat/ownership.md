@@ -69,8 +69,11 @@ a tool round, which first writes the round out and only then stops
 A stopped generation always reaches terminal and frees its slot
 ([A stopped response always ends](lifecycle.md#a-stopped-response-always-ends-261)).
 Provider and tool cleanup
-remain tracked until positive completion evidence arrives; a cancellation request
-alone does not prove an effect stopped. Stop selects one generation, while
+remain tracked until positive completion evidence arrives — a process's exit and
+drain, or a tool's supervision handoff; a cancellation request alone does not prove
+an effect stopped. What a generation never started, or whose start threw, has
+nothing to wait for and resolves at once; anything it spawned dies with the scope
+kill (#261 M4). Stop selects one generation, while
 StopDocument explicitly selects every generation in the current chat.
 
 See [response progress](response_progress.md) for the presentation lifecycle and

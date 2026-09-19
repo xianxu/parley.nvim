@@ -414,3 +414,25 @@ describe("arch: how a run ended is rendered once", function()
         assert.is_truthy(('m = m .. " (exit " .. tostring(failure.code) .. ")"'):find(FIELDS[1]))
     end)
 end)
+
+describe("arch: one stop_owner double", function()
+    -- #261 M4 review I1: stop_owner's return value is load-bearing (a cancel that
+    -- stops nothing resolves at once), and five inline copies returned nothing,
+    -- hiding that branch from every chat test. The shared double lives in
+    -- tests/helpers/respond_fixture.lua; a spec that needs another declares it.
+    local DECLARED = { ["tests/integration/batch_lifecycle_spec.lua"] = "counts cancellations without aborting" }
+    it("no spec defines its own unless declared", function()
+        local found = {}
+        for _, file in ipairs(arch.worktree_files({ "tests/**/*_spec.lua" })) do
+            for i, line in ipairs(vim.fn.readfile(file)) do
+                if line:find("stop_owner%s*=%s*function") and not DECLARED[file] then found[#found + 1] = file .. ":" .. i end
+            end
+        end
+        assert.same({}, found, "use require('tests.helpers.respond_fixture').stop_owner(calls)")
+        for file in pairs(DECLARED) do
+            assert.truthy(table.concat(vim.fn.readfile(file), "\n"):find("stop_owner%s*=%s*function"),
+                file .. " is declared but defines no double now")
+        end
+    end)
+end)
+

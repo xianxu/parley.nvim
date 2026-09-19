@@ -248,18 +248,17 @@ describe("skill_invoke.invoke", function()
     -- resolves must not refuse the reopened buffer as 'already running'.
     for _,how in ipairs({'bdelete','edit!'})do
         it('frees a stranded run when its buffer is unloaded ('..how..')',function()
-            local FS=require('parley.tools.filesystem');local native_new=FS.new
+            local FS=require('parley.tools.filesystem')
             local done
-            FS.new=function()
-                FS.new=native_new
+            require('tests.helpers.stub').with_stub(FS,'new',function()
                 return {authorized=function()return {read=function(_,_,callback)
                     done=callback
                     return {cancel=function()end,reconcile=function()return true end,
                         snapshot=function()return {physical_resolved=false}end}
                 end}end}
-            end
-            skill_invoke.invoke(buf,manifest(),{},{on_terminal=function(r)done_result=r end})
-            FS.new=native_new
+            end,function()
+                skill_invoke.invoke(buf,manifest(),{},{on_terminal=function(r)done_result=r end})
+            end)
             assert.is_true(vim.wait(5000,function()return done~=nil end,1))
             skill_invoke.cancel(buf)
             assert.is_true(skill_invoke.is_in_flight(buf),'the stranded read holds the guard')

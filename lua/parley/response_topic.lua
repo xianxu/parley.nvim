@@ -42,9 +42,10 @@ end
 local function stop(s,reason,failed)
     if s.finished or s.stopping then return false end
     s.stopping=true;s.reason=reason;s.failed=failed==true;s.status='stopping'
-    -- Started with no handle: its request threw before returning one, so there
-    -- is nothing to cancel and it retires now (#261 M4 W16).
-    if not s.started or s.resolved or not s.handle then retire(s,s.failed and 'failed' or 'cancelled',reason)
+    -- Its request threw, so nothing holds it and there is nothing to cancel: it
+    -- retires now (#261 M4 W16). A stop arriving while the request is still
+    -- being made (no handle yet) is answered once the request returns, below.
+    if not s.started or s.resolved or s.start_threw then retire(s,s.failed and 'failed' or 'cancelled',reason)
     else
         local ok=pcall(s.provider.cancel_operation,{epoch=s.epoch,generation=s.generation,operation=s.operation,
             handle=s.handle},function()
@@ -81,8 +82,9 @@ local function request(s)
         if s.stopping then retire(s,s.failed and 'failed' or 'cancelled',s.reason)
         elseif s.work and s.schedule then s.work:request()end
     end
-    local handle=s.provider.request({epoch=s.epoch,generation=s.generation,operation=s.operation,input=s.input,
+    local ok,handle=pcall(s.provider.request,{epoch=s.epoch,generation=s.generation,operation=s.operation,input=s.input,
         cancelled=function()return s.finished or s.stopping end},callbacks)
+    if not ok then s.start_threw=true;stop(s,'topic request failed: '..tostring(handle):sub(1,512),true);return end
     if s.finished then return end
     s.handle=handle
     if s.stopping then

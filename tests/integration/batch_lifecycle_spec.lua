@@ -17,8 +17,14 @@ describe('public batch membership lifetime',function()
             parley.tasker.set_query(id,{buf=b,response='',raw_response='',tool_wire='openai'})
             return id
         end
+        -- Counts cancellations without aborting (these tests read the count);
+        -- returns how many it stopped, as the real stop_owner does (#261 M4).
         parley.tasker.stop_owner=function(owner)
-            for _,call in ipairs(calls)do if call.opts.generation_id==owner then call.cancelled=call.cancelled+1 end end
+            local stopped=0
+            for _,call in ipairs(calls)do if call.opts.generation_id==owner then
+                call.cancelled=call.cancelled+1;stopped=stopped+1
+            end end
+            return stopped
         end
         buf=vim.api.nvim_create_buf(true,false);vim.api.nvim_set_current_buf(buf)
         vim.api.nvim_buf_set_name(buf,directory..'/2026-09-15.12-00-00.'..string.format('%03d',buf)..'_fixture.md')

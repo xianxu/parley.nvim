@@ -1331,19 +1331,30 @@ local response_order = 0
 function M.response_snapshot(session)
     return require('parley.response_session').snapshot(session)
 end
+-- Independent cleanups: one that throws is logged, and must not skip the ones
+-- after it — the session's own cancel is what releases the generation (#261 M4
+-- W15). Every topic cancel goes through `cancel_topic`, so the guard is one.
+local function guarded(label, fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then _parley.logger.warning(label .. ' failed: ' .. tostring(err)) end
+    return ok
+end
+local function cancel_topic(topic, reason)
+    return guarded('topic cancel', require('parley.response_topic').cancel, topic, reason)
+end
+M._cancel_topic = cancel_topic -- test seam
 local function cancel_entry(entry)
-    -- Independent cleanups: one that throws must not skip the session's own
-    -- cancel, which is what releases the generation (#261 M4 W15).
-    if entry.batch then pcall(require('parley.batch_response').cancel, entry.batch) end
-    if entry.topic then pcall(require('parley.response_topic').cancel, entry.topic, 'operator stopped response') end
+    if entry.batch then guarded('batch cancel', require('parley.batch_response').cancel, entry.batch) end
+    if entry.topic then cancel_topic(entry.topic, 'operator stopped response') end
     if entry.session then
         require('parley.response_session').cancel(entry.session, 'operator stopped response')
         return 1
     end
     return 0
 end
+M._cancel_entry = cancel_entry -- test seam
 function M.cancel_responses(buf)
-    if batches[buf] then require('parley.batch_response').cancel(batches[buf]) end
+    if batches[buf] then guarded('batch cancel', require('parley.batch_response').cancel, batches[buf]) end
     local group = responses[buf]
     if not group then return 0 end
     local copy = {}; for entry in pairs(group) do copy[#copy + 1] = entry end
@@ -1569,9 +1580,10 @@ local function start_scoped_response(frame)
         end
         -- Cancel resolves at once (#261 M4 W2, W3). `build` and `ready` no-op once
         -- cancelled, a late readiness pick fails `validate_source`, and whatever
-        -- the remote fetch started dies with the generation's scope kill — so
-        -- nothing is left to wait for, and waiting held the generation when the
-        -- readiness picker or a fetch never called back.
+        -- the remote fetch started dies with the generation's scope kill; a fetch
+        -- chain that resumes afterwards (from a keychain read or a login) is
+        -- refused a process in the stopped scope. Nothing is left to wait for,
+        -- and waiting held the generation when a picker or fetch never answered.
         function operation:cancel(done)
             self.cancelled = true
             if self.resolved then done(); return end
@@ -1713,7 +1725,7 @@ local function start_scoped_response(frame)
         terminal = function(result)
             main_finished = true
             if result.outcome ~= 'success' and entry.topic then
-                pcall(require('parley.response_topic').cancel, entry.topic, 'origin response stopped')
+                cancel_topic(entry.topic, 'origin response stopped')
             end
             release()
             if vim.api.nvim_buf_is_valid(buf) then

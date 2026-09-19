@@ -41,8 +41,10 @@ reparse the live buffer or recursively submit a new chat. See the
 Cancellation stops admission before cleanup completes. Each provider operation
 has its own Tasker owner, and stopping one owner does not stop sibling responses.
 Process exit alone is not completion: process and pipe cleanup, or an explicit
-startup abort, provide the evidence that releases the operation. A zero-match
-stop can still mean asynchronous readiness is pending. Tool producers likewise
+startup abort, provide the evidence that releases the operation. A stop that
+matches no process resolves the operation at once: nothing is running, and a
+pending pre-query or recovery that answers later finds its owner inactive and
+aborts (#261 M4). Tool producers likewise
 must report positive cleanup before their round continues. An unknown effect is
 written as an error result and the round goes on; once the tool's process has
 ended it holds nothing (see [tool execution](tool_execution.md)).

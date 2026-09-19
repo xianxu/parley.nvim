@@ -23,9 +23,7 @@ describe('branch topic input boundaries',function()
             parley.tasker.set_query(id,{buf=b,response='',raw_response='',tool_wire='openai'})
             return id
         end
-        parley.tasker.stop_owner=function(owner)
-            for _,call in ipairs(calls)do if call.opts.generation_id==owner then call.abort('cancelled')end end
-        end
+        parley.tasker.stop_owner=require('tests.helpers.respond_fixture').stop_owner(calls)
         buf=vim.api.nvim_create_buf(true,false)
         local parent_name='2026-09-15.12-00-00.001_parent-'..buf..'.md'
         local child_name='2026-09-15.12-00-00.002_child-'..buf..'.md'

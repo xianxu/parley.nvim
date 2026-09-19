@@ -240,3 +240,121 @@ describe("a killed unscoped process is a failure", function()
         vim.fn.delete(root, "rf")
     end)
 end)
+
+-- #261 M4 review I2: every spawn in the content-fetch tree runs in the scope it
+-- was handed, so reverting any one site's `scope` fails its row. The shared
+-- keychain read stays unscoped. Each row starts one content function with a
+-- scope and answers each spawn to reach the next.
+describe("every content-fetch spawn runs in the scope it is handed", function()
+    local processes, fresh
+    local scope = T.scope_key(9, 4)
+    before_each(function()
+        T._reset(); T._uv, processes = Fake.new({ finish_on_signal = true }); fresh = nil
+    end)
+    after_each(function()
+        for _, p in pairs(processes.processes) do p:finish() end
+        vim.wait(100, function() return T.stats().active == 0 end, 1)
+        T._reset(); T._uv = nil
+        if fresh then package.loaded["parley.oauth"] = fresh end
+    end)
+    local function oauth()
+        fresh = package.loaded["parley.oauth"]; package.loaded["parley.oauth"] = nil
+        return require("parley.oauth")
+    end
+    local function latest() return processes.processes[4241 + processes.spawn_calls] end
+    local function answer(body) return function(p) p:emit("stdout", body); p:finish(0, 0) end end
+    -- curl's write-out trailer on a fetch that asks for one.
+    local function meta(status, content_type)
+        return "__PARLEY_REMOTE_FETCH_META__\nHTTP_STATUS:" .. status .. "\nCONTENT_TYPE:" .. content_type
+            .. "\nEFFECTIVE_URL:https://example.com/x\n"
+    end
+    local store = function(o)
+        return vim.json.encode({ version = 3, preferred_account_ids = { google = "a" }, accounts = {
+            { account_id = "a", provider = "google", access_token = "t", refresh_token = "r", expires_at = os.time() + 3600 } } })
+    end
+    local share = "https://1drv.ms/w/s!fixture"
+    local rows = {
+        { name = "public fetch", scoped = { true },
+            start = function(o) o._fetch_public_content("https://example.com/x", function() end, scope) end },
+        { name = "google metadata, content and markdown fallback", scoped = { true, true, true },
+            start = function(o) o._fetch_google_api_once("https://docs.google.com/document/d/F/edit",
+                { file_id = "F", file_type = "document" }, "tok", function() end, scope) end,
+            steps = { answer('{"name":"Doc","mimeType":"application/vnd.google-apps.document"}'),
+                answer('{"error":{"code":400,"message":"no markdown"}}') } },
+        { name = "dropbox metadata request", scoped = { true },
+            start = function(o) o._run_dropbox_metadata_request("tok", { shared_link = "https://www.dropbox.com/s/x/a.txt" },
+                function() end, scope) end },
+        { name = "dropbox file request", scoped = { true },
+            start = function(o) o._run_dropbox_file_request("tok", { shared_link = "https://www.dropbox.com/s/x/a.txt" },
+                function() end, scope) end },
+        { name = "dropbox api forwards its scope to both requests", scoped = { true, true },
+            start = function(o) o._fetch_dropbox_api_once("https://www.dropbox.com/s/x/a.txt",
+                { shared_link = "https://www.dropbox.com/s/x/a.txt" }, "tok", function() end, scope) end,
+            steps = { answer('{".tag":"file","name":"a.txt","id":"id:x"}') } },
+        { name = "microsoft metadata request", scoped = { true },
+            start = function(o) o._run_microsoft_metadata_request("tok", "u!x", function() end, scope) end },
+        { name = "microsoft content request", scoped = { true },
+            start = function(o) o._run_microsoft_content_request("tok", "u!x", function() end, scope) end },
+        { name = "microsoft api forwards its scope to content and office conversion", scoped = { true, true, true },
+            start = function(o)
+                o._fetch_microsoft_api_once(share, { shared_url = share }, "tok", function() end, scope)
+            end,
+            steps = { answer('{"name":"a.docx","file":{"mimeType":"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}}'),
+                function(p)
+                    p:emit("stdout", "DOCX\n" .. meta(200, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+                    p:finish(0, 0)
+                end } },
+        { name = "office conversion: pandoc, then textutil", scoped = { true, true },
+            start = function(o) o._convert_office_to_text("binary", "docx", function() end, scope) end,
+            steps = { function(p) p:finish(1, 0) end } },
+        { name = "an account fetch forwards its scope through the provider", scoped = { true },
+            start = function(o) o._try_account_fetch({ google = { client_id = "c" } }, o._normalize_account_store(vim.json.decode(store(o))),
+                "https://docs.google.com/document/d/F/edit", { file_id = "F", file_type = "document" },
+                { account_id = "a", provider = "google", access_token = "t", refresh_token = "r", expires_at = os.time() + 3600 },
+                function() end, "google", scope) end },
+        { name = "a dropbox account fetch forwards its scope through the provider", scoped = { true },
+            start = function(o) o._try_account_fetch({ dropbox = { client_id = "c" } }, o._new_account_store(),
+                "https://www.dropbox.com/s/x/a.txt", { shared_link = "https://www.dropbox.com/s/x/a.txt" },
+                { account_id = "d", provider = "dropbox", access_token = "t", refresh_token = "r", expires_at = os.time() + 3600 },
+                function() end, "dropbox", scope) end },
+        { name = "a microsoft account fetch forwards its scope through the provider", scoped = { true },
+            start = function(o) o._try_account_fetch({ microsoft = { client_id = "c" } }, o._new_account_store(),
+                share, { shared_url = share },
+                { account_id = "m", provider = "microsoft", access_token = "t", refresh_token = "r", expires_at = os.time() + 3600 },
+                function() end, "microsoft", scope) end },
+        { name = "fetch_content: a public 403 falls to saved accounts, still scoped", scoped = { true, false, true },
+            start = function(o) o.fetch_content("https://docs.google.com/document/d/F/edit",
+                { client_id = "c", client_secret = "s" }, function() end, scope) end,
+            steps = { function(p) p:emit("stdout", "denied\n" .. meta(403, "text/html")); p:finish(0, 0) end,
+                function(p, o) p:emit("stdout", store(o)); p:finish(0, 0) end } },
+        { name = "fetch_content: after a fresh login the fetch is scoped", scoped = { true, false, false, true },
+            start = function(o)
+                o._prompt_auth = function(_, _, done)
+                    done({ account_id = "n", provider = "google", access_token = "t2", refresh_token = "r2",
+                        expires_at = os.time() + 3600 })
+                end
+                o.fetch_content("https://docs.google.com/document/d/F/edit",
+                    { client_id = "c", client_secret = "s" }, function() end, scope)
+            end,
+            steps = { function(p) p:emit("stdout", "denied\n" .. meta(403, "text/html")); p:finish(0, 0) end,
+                function(p) p:finish(44, 0) end, -- no saved accounts
+                function(p) p:finish(0, 0) end } }, -- the keychain write
+        { name = "saved accounts: the shared keychain read is unscoped, the fetch scoped", scoped = { false, true },
+            start = function(o) o._try_saved_accounts({ google = { client_id = "c" } }, "https://docs.google.com/document/d/F/edit",
+                { file_id = "F", file_type = "document" }, function() end, "google", scope) end,
+            steps = { function(p, o) p:emit("stdout", store(o)); p:finish(0, 0) end } },
+    }
+    for _, row in ipairs(rows) do
+        it(row.name, function()
+            local o = oauth()
+            row.start(o)
+            for i, expected in ipairs(row.scoped) do
+                assert.equals(i, processes.spawn_calls, row.name .. ": spawn " .. i .. " never happened")
+                local detached = processes.spawn_options[i].detached == true
+                assert.equals(expected, detached, row.name .. ": spawn " .. i .. (expected and " is not scoped" or " is scoped"))
+                local step = row.steps and row.steps[i]
+                if step then step(latest(), o); vim.wait(200, function() return processes.spawn_calls > i end, 5) end
+            end
+        end)
+    end
+end)

@@ -46,8 +46,13 @@ describe('remote preparation positive child completion',function()
     -- #261 M4 W2: Stop ends the generation at once; fetches still out publish
     -- nothing when they finally answer, and start no provider.
     it('ends at Stop without waiting on fetches, and late results publish nothing',function()
-        OAuth.fetch_content=function(url,_,done)children[#children+1]={url=url,done=done}end
+        OAuth.fetch_content=function(url,_,done,scope)children[#children+1]={url=url,done=done,scope=scope}end
         session=assert(R.respond({range=0}));wait(function()return #children==3 end)
+        -- #261 M4 W4: the fetches run in the generation's process scope.
+        local generation=snapshot(session).generation
+        for _,child in ipairs(children)do
+            assert.equals(require('parley.tasker').scope_key(generation.epoch,generation.generation),child.scope)
+        end
         R.cancel_responses(buf)
         wait(function()return snapshot(session).status=='terminal'end)
         children[1].done('cancelled first');children[1].done('duplicate')

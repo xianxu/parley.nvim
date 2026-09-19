@@ -1,5 +1,31 @@
 # Lessons
 
+## 2026-09-19 (#261 M4 review — the contract changed; its doubles, its per-site tests and its alternatives had to follow)
+
+- **A test double is a restatement of the contract too** (7th in
+  `seam-change-collateral`). W5 made `stop_owner`'s return value load-bearing.
+  Six doubles returned nothing, so no chat-level test ever took the new branch.
+  - Grep the seam's name across `tests/` as well as `lua/`, `atlas/` and
+    `README.md`, and fix the doubles with the prose.
+  - Keep one double, and guard against copies.
+- **"Red on revert" is per edited site, not per W-row** (2nd in
+  `behavior-change-without-regression-test`). A pcall only changes behaviour if
+  a test makes its callee throw. A threaded argument is only tested at the hops
+  a test reaches.
+  - Check it mechanically: mutate each site in turn and require a red test.
+  - Here, 39 scope sites were mutated one by one.
+- **A Done-when that lists alternatives is tested per alternative** (2nd in
+  `done-when-clause-untested`). "Stop, an edit, reload or detach" was tested
+  only through Stop. Parametrize over the list, so a missing cause shows up in
+  a test name.
+- **Put the evidence column in the enumeration, beside the tests** (9th in
+  `enumeration-claims-completeness`). A `WAITS` list in the spec, naming each
+  wait's spec and case and checked against those files, cannot claim a test
+  that does not exist. Prose then points at it and claims no count.
+- **Replace a module field only through `with_stub`** (2nd in
+  `stub-restored-outside-finally`). A stub restored after its assertions leaks
+  into every later case once one fails.
+
 ## 2026-09-19 (#261 M3 review round 3 — a fix leaked a secret, and a consumer overwrote the value it was handed)
 
 - **A process that carries or returns a secret never has its raw output shown**

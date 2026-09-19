@@ -308,6 +308,19 @@ describe('bounded process supervision',function()
             assert.equals(1,unresolved);assert.equals(1,#T.held())
             assert.is_true(deadline.closing,'the fired deadline timer was not closed')
         end)
+        -- #261 M4 review: a generation's key is never live again, so a helper
+        -- chain resuming after the scope kill is refused a process in it.
+        it('refuses a run into a scope that has already stopped',function()
+            run({attempt_id='first'});T.stop_scope('e:1')
+            local refused
+            assert.is_nil(T.run(1,'fixture',{},nil,nil,nil,function(reason)refused=reason end,
+                {attempt_id='late',admission_key='late',generation_id='g',logical_generation='e:1'}))
+            wait(function()return refused~=nil end)
+            assert.truthy(refused:find('already stopped',1,true))
+            assert.is_not_nil(T.run(1,'fixture',{},nil,nil,nil,nil,
+                {attempt_id='other',admission_key='other',generation_id='g2',logical_generation='e:2'}),
+                'a different scope is still admitted')
+        end)
         it('leave kills every live record: scoped by group, unscoped by pid',function()
             run()
             T.run(nil,'fixture',{},nil,nil,nil,nil,{attempt_id='u',deadline_ms=60000})

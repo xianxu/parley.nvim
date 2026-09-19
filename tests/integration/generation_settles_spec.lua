@@ -4,6 +4,43 @@
 -- Each case arranges for one leaf never to call back, or to throw, then stops
 -- the generation and asserts `terminal`. `after_each` asserts the count is back
 -- at zero, so a leak fails the next case too.
+-- Every wait M4 settles, and the test that pins each (#261 M4 review I4). The
+-- list carries its evidence: the last case below checks that every spec and
+-- case named here exists, so it cannot claim a test that is not there.
+local WAITS = {
+    { "W1", { "tests/integration/generation_settles_spec.lua", "W1: a preparation whose start threw" },
+        { "tests/integration/generation_settles_spec.lua", "W1: a request whose start threw" },
+        { "tests/integration/generation_settles_spec.lua", "W1: a tool whose start threw" } },
+    { "W2", { "tests/integration/chat_onboarding_capture_spec.lua", "ends a response at Stop while its readiness picker never answers" },
+        { "tests/integration/chat_remote_preparation_spec.lua", "ends at Stop without waiting on fetches" } },
+    { "W3", { "tests/integration/chat_onboarding_capture_spec.lua", "ends a response at Stop while its readiness picker never answers" } },
+    { "W4", { "tests/integration/unscoped_kill_spec.lua", "a content fetch for a generation runs in its scope" },
+        { "tests/integration/unscoped_kill_spec.lua", "every content-fetch spawn runs in the scope it is handed" },
+        { "tests/integration/chat_remote_preparation_spec.lua", "ends at Stop without waiting on fetches" } },
+    { "W5", { "tests/integration/response_provider_spec.lua", "resolves a cancel during pre-query at once" },
+        { "tests/integration/response_provider_spec.lua", "resolves a cancel during recovery at once" } },
+    { "W6", { "tests/unit/vault_spec.lua", "V2: every failed refresh calls on_error" },
+        { "tests/unit/providers_pre_query_spec.lua", "forwards the dispatcher's error callback to the bearer refresh" } },
+    { "W7", { "tests/unit/dispatcher_query_spec.lua", "J0c: a throw while setting up the request aborts it" } },
+    { "W8", { "tests/unit/dispatcher_query_spec.lua", "J0b: a recovery is not started once the owner stops mid-request" } },
+    { "W9", { "tests/integration/generation_settles_spec.lua", "W1: a tool whose start threw" } },
+    { "W10", dropped = "unreachable through public events: the machine refuses a first tool outcome only for a"
+        .. " tool the tool layer never recorded, or one already supervised or final (plan Revisions)" },
+    { "W11", { "tests/integration/generation_settles_spec.lua", "W11: a continuation whose start threw" } },
+    { "W12", { "tests/integration/chat_onboarding_capture_spec.lua", "ends a response whose completion refuses to start" } },
+    { "W13", { "tests/integration/response_completion_spec.lua", "settles its finalize failed when its step throws" },
+        { "tests/unit/response_preparation_spec.lua", "settles failed when its step throws" },
+        { "tests/unit/response_target_spec.lua", "cancels itself when its step throws" },
+        { "tests/integration/response_topic_spec.lua", "retires failed when its step throws" },
+        { "tests/integration/generation_settles_spec.lua", "fault: a runner step that throws" } },
+    { "W14", { "tests/integration/generation_settles_spec.lua", "W14: a start that throws after registration" } },
+    { "W15", { "tests/unit/chat_cancel_entry_spec.lua", "still cancel the session when the topic cancel throws" },
+        { "tests/unit/chat_cancel_entry_spec.lua", "guard the topic cancel the terminal handler shares" } },
+    { "W16", { "tests/integration/response_topic_spec.lua", "retires when its provider request throws" } },
+    { "W17", { "tests/integration/skill_invoke_spec.lua", "frees a stranded run when its buffer is unloaded" } },
+    { "W18", { "tests/integration/response_completion_spec.lua", "settles failed on its own when cancelled before it writes" } },
+}
+
 local Runner = require("parley.generation_runner")
 local D = require("parley.document")
 local FakeEditor = require("tests.helpers.fake_document_editor")
@@ -52,16 +89,31 @@ describe("every wait a generation holds settles", function()
     -- W14: a start that throws after registering the generation.
     it("W14: a start that throws after registration releases everything it took", function()
         local doc = document(); local fake = Fake.new()
-        local subscribe = D.subscribe
-        D.subscribe = function() error("subscribe exploded") end
-        local runner, reason = Runner.start(doc, spec(doc, 2), fake.adapters)
-        D.subscribe = subscribe
+        local runner, reason
+        require("tests.helpers.stub").with_stub(D, "subscribe", function() error("subscribe exploded") end, function()
+            runner, reason = Runner.start(doc, spec(doc, 2), fake.adapters)
+        end)
         assert.is_nil(runner)
         assert.truthy(tostring(reason):find("subscribe exploded", 1, true))
         assert.equals(0, Runner.stats().active)
         -- The region, the generation and the turn are free: the same start is admitted.
         local again = start(doc, fake.adapters)
         assert.equals(1, Runner.stats().active)
+        Runner.cancel(again); Runner.drain(again, 1000)
+        fake.preparations[1].callbacks.resolved(); Runner.drain(again, 1000)
+    end)
+
+    it("W14: a start whose first dispatch throws releases everything too", function()
+        local doc = document(); local fake = Fake.new()
+        local runner, reason
+        require("tests.helpers.stub").with_stub(require("parley.generation"), "transition",
+            function() error("dispatch exploded") end, function()
+                runner, reason = Runner.start(doc, spec(doc, 2), fake.adapters)
+            end)
+        assert.is_nil(runner)
+        assert.truthy(tostring(reason):find("dispatch exploded", 1, true))
+        assert.equals(0, Runner.stats().active)
+        local again = start(doc, fake.adapters)
         Runner.cancel(again); Runner.drain(again, 1000)
         fake.preparations[1].callbacks.resolved(); Runner.drain(again, 1000)
     end)
@@ -172,6 +224,9 @@ describe("every wait a generation holds settles", function()
         assert(ok, err)
         assert.equals("fault", final.outcome)
         assert.truthy(tostring(final.failure):find("step exploded", 1, true))
+        -- One authority for "terminal": the snapshot reports what the host got.
+        assert.equals("terminal", Runner.snapshot(r).phase)
+        assert.equals("fault", Runner.snapshot(r).outcome)
         assert.equals(1, kills)
         assert.equals(0, Runner.stats().active)
     end)
@@ -231,8 +286,30 @@ describe("a stopped response never holds a slot", function()
         end
         error("question missing")
     end
-    -- Submit, let the stream start, Stop, and drive the kill escalation to its end.
-    local function submit_and_stop(label)
+    -- How a generation can be stopped from outside (#261 M4 review I3): the
+    -- Done-when names them all, so each is driven against a live stream.
+    local CAUSES = {
+        stop = function() Respond.cancel_responses(buf) end,
+        -- An edit inside the answer the stream is writing revokes its writer.
+        edit = function(stream)
+            stream:emit("stdout", 'data: {"choices":[{"delta":{"content":"partial answer"}}]}\n\n')
+            local row
+            wait(function()
+                for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+                    if line:find("partial answer", 1, true) then row = i - 1; return true end
+                end
+            end, "the stream's output never landed")
+            vim.api.nvim_buf_set_text(buf, row, 0, row, 0, { "human " })
+        end,
+        reload = function() vim.cmd("silent write"); vim.cmd("edit!") end,
+        detach = function()
+            vim.cmd("silent write"); vim.cmd("bdelete!")
+            vim.cmd("edit " .. vim.fn.fnameescape(path)); buf = vim.api.nvim_get_current_buf()
+        end,
+    }
+    -- Submit, let the stream start, stop it by `how`, and drive the kill
+    -- escalation to its end.
+    local function submit_and_stop(label, how)
         local D = require("parley.document")
         wait(function() return D.repair_step(D.get(buf)).status == "idle" end)
         cursor_on_first()
@@ -242,7 +319,7 @@ describe("a stopped response never holds a slot", function()
         wait(function() return #providers() > count end, label .. ": no provider stream started")
         local stream = providers()[#providers()]
         stream.ignores = { [15] = true } -- the stream ignores SIGTERM
-        Respond.cancel_responses(buf)
+        CAUSES[how or "stop"](stream)
         -- The kill escalates at 2 s: advance the clock and fire the reconcile timers.
         wait(function()
             now = now + 500
@@ -254,6 +331,13 @@ describe("a stopped response never holds a slot", function()
         local killed = false
         for _, sig in ipairs(processes.signals) do if sig.pid == stream.pid and sig.signal == 9 then killed = true end end
         assert.is_true(killed, label .. ": the stream was not killed")
+    end
+
+    for _, how in ipairs({ "stop", "edit", "reload", "detach" }) do
+        it("ends a stream stopped by " .. how .. ", and admits the next submission", function()
+            submit_and_stop(how .. " 1", how)
+            submit_and_stop(how .. " 2", how)
+        end)
     end
 
     it("admits the 5th Stop-and-resubmit in one buffer", function()
@@ -278,3 +362,27 @@ describe("a stopped response never holds a slot", function()
         submit_and_stop("after reopening")
     end)
 end)
+
+describe("the waits list", function()
+    it("names W1 to W18, each with a test that exists, or the reason it was dropped", function()
+        local problems = {}
+        for i, row in ipairs(WAITS) do
+            if row[1] ~= "W" .. i then problems[#problems + 1] = "row " .. i .. " is " .. tostring(row[1]) end
+            if row.dropped then
+                if #row > 1 then problems[#problems + 1] = row[1] .. " is dropped but names tests" end
+            elseif #row < 2 then problems[#problems + 1] = row[1] .. " names no test"
+            end
+            for j = 2, #row do
+                local file, case = row[j][1], row[j][2]
+                if vim.fn.filereadable(file) == 0 then
+                    problems[#problems + 1] = row[1] .. ": " .. file .. " does not exist"
+                elseif not table.concat(vim.fn.readfile(file), "\n"):find(case, 1, true) then
+                    problems[#problems + 1] = row[1] .. ": " .. file .. " has no case '" .. case .. "'"
+                end
+            end
+        end
+        assert.equals(18, #WAITS)
+        assert.same({}, problems)
+    end)
+end)
+

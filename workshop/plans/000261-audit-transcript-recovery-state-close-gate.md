@@ -746,6 +746,139 @@ rounds:
       recipe: milestone-review
       blocked: false
       protocol_error: no valid findings block
+    - "n": 14
+      timestamp: "2026-09-19T09:54:45-07:00"
+      agent: claude
+      findings:
+        - id: BR-47
+          severity: Important
+          title: Three atlas passages and six stop_owner doubles still state the contract M4 replaced
+          detail: |-
+            7th in this family: do not patch the sites. Rule — a change to how a seam
+            behaves, or that makes a previously-ignored part of its contract
+            load-bearing, updates every restatement of it (prose, comments, doubles)
+            in the same commit, enumerated by grepping the seam name and the old
+            claim. Instances: tool_execution.md:88 still lists content fetches as
+            unscoped while lifecycle.md:337 links there claiming the scope kill reaches
+            them; architecture.md:44 keeps "a zero-match stop can still mean
+            asynchronous readiness is pending" (reversed by W5); ownership.md:71-73
+            keeps "a cancellation request alone does not prove an effect stopped" two
+            lines under the new sentence that contradicts it; stop_owner's count is now
+            load-bearing at response_provider.lua:124 but respond_fixture.lua:23 and
+            five inline copies return nil, so no chat-level test takes the branch
+            (ARCH-MOCK, and ARCH-DRY for the six copies).
+          family: seam-change-collateral
+          round: 14
+        - id: BR-48
+          severity: Important
+          title: W15, the Copilot pre_query forward and 11 of 12 oauth scope sites redden nothing on revert
+          detail: |-
+            2nd in this family. Rule — every behavior-changing edit site has a test
+            that goes red when that site alone is reverted, and the as-built
+            "red on revert" line is written per edited site, not per W-row; a pcall
+            guard is a behavior change only once a test makes its callee throw.
+            Measured: W15's three guards (chat_respond.lua:1337, 1338, 1716) have no
+            test, yet Task 4.2 Step 1 is ticked as covering W15; removing on_error from
+            providers.lua:1081 in a scratch export left vault, dispatcher_query,
+            providers_pre_query, cliproxy_catalog, cliproxy_dispatch, response_provider
+            and unscoped_kill all passing; only the public hop of the oauth content
+            tree asserts its scope (unscoped_kill_spec.lua:201).
+          family: behavior-change-without-regression-test
+          round: 14
+        - id: BR-49
+          severity: Important
+          title: Only Stop drives the settle and scope kill; edit, reload and detach are untested
+          detail: |-
+            2nd in this family. Rule — a Done-when clause that enumerates alternatives
+            is tested per alternative, parametrized over the list so a missing one is
+            visible in the test name. Every M4 case stops via Runner.cancel or
+            cancel_responses; the plan's own strategy (plan:1329-1333) required each
+            applicable stop cause per case, and the Done-when names "Stop, an edit that
+            revokes it, reload or detach". The E2E only reloads after terminal, so the
+            shape #261 was filed from — an edit during generation — never drives the
+            kill path. submit_and_stop already has the harness.
+          family: done-when-clause-untested
+          round: 14
+        - id: BR-50
+          severity: Important
+          title: Atlas says the settles spec holds one case per wait; it holds 7 of 18
+          detail: |-
+            9th in this family. Rule — prose never asserts a count or completeness over
+            an enumeration it does not carry: give the W-table a `test:` column naming
+            the spec and case for each row (including "none"), and have the prose point
+            at the table. atlas/chat/lifecycle.md:347 claims one case per wait, while
+            W2-W8, W12, W13 and W15-W18 live in seven other specs and W10 was dropped;
+            plan:1329 and plan:1335 still state the superseded strategy, including an
+            after_each assertion on tasker.stats().active that was not built.
+          family: enumeration-claims-completeness
+          round: 14
+        - id: BR-51
+          severity: Minor
+          title: After a fault the runner's snapshot reports the machine's non-terminal phase
+          detail: |-
+            generation_runner.lua:470-474 ends the generation outside the pure machine,
+            so M.snapshot (:685) reports e.g. phase='streaming' while the host was given
+            phase='terminal', outcome='fault' (ARCH-ORDER: two authorities for the same
+            fact). Make fault a machine event, or have M.snapshot report the final it
+            delivered.
+          family: state-change-bypasses-model
+          round: 14
+        - id: BR-52
+          severity: Minor
+          title: W16 keys on a missing handle, the condition Task 4.1 rejected for W1
+          detail: |-
+            response_topic.lua:45-46 infers "the request threw" from `not s.handle`,
+            while the runner marks `start_threw` because a nil handle is not the same
+            thing. It makes response_topic.lua:88-92 unreachable and retires the topic
+            while a process spawned during a re-entrant stop is still unconfirmed.
+          family: canonical-form-not-shared
+          round: 14
+        - id: BR-53
+          severity: Minor
+          title: A fetch chain resuming after the scope kill spawns into a dead scope
+          detail: |-
+            chat_respond.lua:1577-1580 says whatever the fetch started dies with the
+            scope kill. A chain paused at an unscoped hop (keychain, refresh, auth
+            prompt) resumes after the kill and spawns fresh scoped processes nothing
+            will signal, bounded only by their 120 s/60 s deadline. State the residual,
+            or refuse a scoped run whose scope has already been stopped.
+          family: one-shot-cleanup-not-a-gate
+          round: 14
+        - id: BR-54
+          severity: Minor
+          title: A thrown start_child is resolved as "nothing was started"
+          detail: |-
+            generation_runner.lua:360-364 resolves the child at once on the rationale
+            that nothing started; a throw is not proof of that — the same assumption the
+            remote-preparation spec used to pin against. The `unknown` outcome is
+            honest, but the residual (a tool process started before its adapter threw
+            runs into the next round and dies only at the generation's terminal kill)
+            should be stated rather than denied.
+          family: absence-inferred-from-throw
+          round: 14
+        - id: BR-55
+          severity: Minor
+          title: W14's pcall stops one statement short of the admission increment
+          detail: |-
+            generation_runner.lua:675-678 increments `active` before `sync(s)` and
+            `dispatch(s,{type='start'})`, both outside the guard that W14 added; a throw
+            there reopens the same leak in narrower form.
+          family: partial-guard-window
+          round: 14
+        - id: BR-56
+          severity: Minor
+          title: D.subscribe and FS.new stubs are restored outside a pcall
+          detail: |-
+            2nd in this family. Rule — a spec replaces a module field only through a
+            with_stub(tbl, key, value, body) helper that restores on every path, so a
+            regression fails one case instead of cascading. Instances:
+            generation_settles_spec.lua:56-59 (D.subscribe) and
+            skill_invoke_spec.lua:250-256 (FS.new).
+          family: stub-restored-outside-finally
+          round: 14
+      boundary: M4
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -1145,6 +1278,87 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 **Protocol error:** no valid findings block — this round contributed no findings.
 
+## Round 14 — 2026-09-19T09:54:45-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-47** [Important] `seam-change-collateral` Three atlas passages and six stop_owner doubles still state the contract M4 replaced
+  7th in this family: do not patch the sites. Rule — a change to how a seam
+  behaves, or that makes a previously-ignored part of its contract
+  load-bearing, updates every restatement of it (prose, comments, doubles)
+  in the same commit, enumerated by grepping the seam name and the old
+  claim. Instances: tool_execution.md:88 still lists content fetches as
+  unscoped while lifecycle.md:337 links there claiming the scope kill reaches
+  them; architecture.md:44 keeps "a zero-match stop can still mean
+  asynchronous readiness is pending" (reversed by W5); ownership.md:71-73
+  keeps "a cancellation request alone does not prove an effect stopped" two
+  lines under the new sentence that contradicts it; stop_owner's count is now
+  load-bearing at response_provider.lua:124 but respond_fixture.lua:23 and
+  five inline copies return nil, so no chat-level test takes the branch
+  (ARCH-MOCK, and ARCH-DRY for the six copies).
+- **BR-48** [Important] `behavior-change-without-regression-test` W15, the Copilot pre_query forward and 11 of 12 oauth scope sites redden nothing on revert
+  2nd in this family. Rule — every behavior-changing edit site has a test
+  that goes red when that site alone is reverted, and the as-built
+  "red on revert" line is written per edited site, not per W-row; a pcall
+  guard is a behavior change only once a test makes its callee throw.
+  Measured: W15's three guards (chat_respond.lua:1337, 1338, 1716) have no
+  test, yet Task 4.2 Step 1 is ticked as covering W15; removing on_error from
+  providers.lua:1081 in a scratch export left vault, dispatcher_query,
+  providers_pre_query, cliproxy_catalog, cliproxy_dispatch, response_provider
+  and unscoped_kill all passing; only the public hop of the oauth content
+  tree asserts its scope (unscoped_kill_spec.lua:201).
+- **BR-49** [Important] `done-when-clause-untested` Only Stop drives the settle and scope kill; edit, reload and detach are untested
+  2nd in this family. Rule — a Done-when clause that enumerates alternatives
+  is tested per alternative, parametrized over the list so a missing one is
+  visible in the test name. Every M4 case stops via Runner.cancel or
+  cancel_responses; the plan's own strategy (plan:1329-1333) required each
+  applicable stop cause per case, and the Done-when names "Stop, an edit that
+  revokes it, reload or detach". The E2E only reloads after terminal, so the
+  shape #261 was filed from — an edit during generation — never drives the
+  kill path. submit_and_stop already has the harness.
+- **BR-50** [Important] `enumeration-claims-completeness` Atlas says the settles spec holds one case per wait; it holds 7 of 18
+  9th in this family. Rule — prose never asserts a count or completeness over
+  an enumeration it does not carry: give the W-table a `test:` column naming
+  the spec and case for each row (including "none"), and have the prose point
+  at the table. atlas/chat/lifecycle.md:347 claims one case per wait, while
+  W2-W8, W12, W13 and W15-W18 live in seven other specs and W10 was dropped;
+  plan:1329 and plan:1335 still state the superseded strategy, including an
+  after_each assertion on tasker.stats().active that was not built.
+- **BR-51** [Minor] `state-change-bypasses-model` After a fault the runner's snapshot reports the machine's non-terminal phase
+  generation_runner.lua:470-474 ends the generation outside the pure machine,
+  so M.snapshot (:685) reports e.g. phase='streaming' while the host was given
+  phase='terminal', outcome='fault' (ARCH-ORDER: two authorities for the same
+  fact). Make fault a machine event, or have M.snapshot report the final it
+  delivered.
+- **BR-52** [Minor] `canonical-form-not-shared` W16 keys on a missing handle, the condition Task 4.1 rejected for W1
+  response_topic.lua:45-46 infers "the request threw" from `not s.handle`,
+  while the runner marks `start_threw` because a nil handle is not the same
+  thing. It makes response_topic.lua:88-92 unreachable and retires the topic
+  while a process spawned during a re-entrant stop is still unconfirmed.
+- **BR-53** [Minor] `one-shot-cleanup-not-a-gate` A fetch chain resuming after the scope kill spawns into a dead scope
+  chat_respond.lua:1577-1580 says whatever the fetch started dies with the
+  scope kill. A chain paused at an unscoped hop (keychain, refresh, auth
+  prompt) resumes after the kill and spawns fresh scoped processes nothing
+  will signal, bounded only by their 120 s/60 s deadline. State the residual,
+  or refuse a scoped run whose scope has already been stopped.
+- **BR-54** [Minor] `absence-inferred-from-throw` A thrown start_child is resolved as "nothing was started"
+  generation_runner.lua:360-364 resolves the child at once on the rationale
+  that nothing started; a throw is not proof of that — the same assumption the
+  remote-preparation spec used to pin against. The `unknown` outcome is
+  honest, but the residual (a tool process started before its adapter threw
+  runs into the next round and dies only at the generation's terminal kill)
+  should be stated rather than denied.
+- **BR-55** [Minor] `partial-guard-window` W14's pcall stops one statement short of the admission increment
+  generation_runner.lua:675-678 increments `active` before `sync(s)` and
+  `dispatch(s,{type='start'})`, both outside the guard that W14 added; a throw
+  there reopens the same leak in narrower form.
+- **BR-56** [Minor] `stub-restored-outside-finally` D.subscribe and FS.new stubs are restored outside a pcall
+  2nd in this family. Rule — a spec replaces a module field only through a
+  with_stub(tbl, key, value, body) helper that restores on every path, so a
+  regression fails one case instead of cascading. Instances:
+  generation_settles_spec.lua:56-59 (D.subscribe) and
+  skill_invoke_spec.lua:250-256 (FS.new).
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
@@ -1158,3 +1372,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-44** [Minor] `residue-names-no-end` The one-shot deadline timer is closed only by retire, the one path a held record never takes
 - **BR-45** [Important] `seam-change-collateral` The dispatcher re-exports code/io_error on its failure table, and both of that table's renderers still drop io_error
 - **BR-46** [Important] `enumeration-claims-completeness` The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
+- **BR-47** [Important] `seam-change-collateral` Three atlas passages and six stop_owner doubles still state the contract M4 replaced
+- **BR-48** [Important] `behavior-change-without-regression-test` W15, the Copilot pre_query forward and 11 of 12 oauth scope sites redden nothing on revert
+- **BR-49** [Important] `done-when-clause-untested` Only Stop drives the settle and scope kill; edit, reload and detach are untested
+- **BR-50** [Important] `enumeration-claims-completeness` Atlas says the settles spec holds one case per wait; it holds 7 of 18
+- **BR-51** [Minor] `state-change-bypasses-model` After a fault the runner's snapshot reports the machine's non-terminal phase
+- **BR-52** [Minor] `canonical-form-not-shared` W16 keys on a missing handle, the condition Task 4.1 rejected for W1
+- **BR-53** [Minor] `one-shot-cleanup-not-a-gate` A fetch chain resuming after the scope kill spawns into a dead scope
+- **BR-54** [Minor] `absence-inferred-from-throw` A thrown start_child is resolved as "nothing was started"
+- **BR-55** [Minor] `partial-guard-window` W14's pcall stops one statement short of the admission increment
+- **BR-56** [Minor] `stub-restored-outside-finally` D.subscribe and FS.new stubs are restored outside a pcall

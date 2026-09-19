@@ -21,9 +21,7 @@ describe('captured response onboarding',function()
             calls[#calls+1]={buf=b,id=id,provider=provider,payload=vim.deepcopy(payload),output=output,complete=complete,abort=abort,opts=opts}
             parley.tasker.set_query(id,{buf=b,response='',raw_response='',tool_wire='openai'})
         end
-        parley.tasker.stop_owner=function(owner)
-            for _,call in ipairs(calls)do if call.opts.generation_id==owner then call.abort('cancelled')end end
-        end
+        parley.tasker.stop_owner=require('tests.helpers.respond_fixture').stop_owner(calls)
         buf=vim.api.nvim_create_buf(true,false);vim.api.nvim_set_current_buf(buf)
         vim.api.nvim_buf_set_name(buf,root..string.format('/2026-09-15.12-%02d-%02d.%03d_fixture.md',
             math.floor(buf/60000)%60,math.floor(buf/1000)%60,buf%1000))
