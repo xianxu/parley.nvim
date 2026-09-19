@@ -58,6 +58,12 @@ Open questions (settle at claim):
 3. On re-export over an existing `<slug>.md`: should fields added by hand
    (`excerpt`, `highlight`, `project`, `published`) be kept, or should it ask
    before overwriting?
+4. Tree export writes every chat in the tree as its own post, so each branch
+   would show up in the blog listing. Should non-root chats get `hidden: true`?
+   On xianxu.dev that removes them from listings and keeps their URLs.
+5. Assets: `assets.copy_into` copies `assets/<ts>/` beside the export, which
+   would put it in `src/data/post/assets/`. Check that Astro resolves relative
+   image links from there.
 
 Related: #211 (neutral export-dir defaults) and #243 (unescaped branch topics in
 export; its `post_url` check changes shape here).
