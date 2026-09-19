@@ -64,3 +64,19 @@ in ~1 s. Under 16 concurrent runs it fails 8/64 at #266's M3 close `e48362ab` an
 the unit phase of two full `make test` runs, once at JOBS=4. A cause in
 the harness or runtime, not in either module, now looks more likely than one
 specific to the call-hook case.
+
+### 2026-09-18 — a second spec in the same family (observed from #261 M1)
+
+`tests/integration/perf_ownership_spec.lua` dies the same way: no output after
+its first case, followed by a process exit.
+- **Alone, it runs 18–50 s on both the base commit and the #261 branch.**
+  Alternating A/B timings (base / branch, in seconds): 50.24 / 32.84,
+  50.23 / 26.00, 25.74 / 26.10, with a load average around 3.2. The two base
+  runs at 50.2 s died at the harness's ~50 s cap.
+- **Under `make test` it died twice, at JOBS=8 and JOBS=4.**
+- **`tests/unit/document_dependencies_spec.lua` also died silently once** at
+  JOBS=8. It passes alone.
+
+So the family is not specific to the JIT-off hook in `tool_resources_spec`: any
+spec near the per-file cap dies silently under load. The Done-when should cover
+the cap, not only the one case.
