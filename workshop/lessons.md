@@ -3507,3 +3507,24 @@ download.
   branches on a harness flag, the specs that depend on either branch set it
   themselves; and know which processes actually load your init before relying on
   what it sets.
+- #261 M5 review round 4 (put the invariant where the value is stored): three
+  rounds of fixing producers one at a time still left free text reaching users,
+  because "every producer passes a token" is only as true as the list of
+  producers you happened to enumerate. The fix that held was moving the check to
+  the single place the value is STORED — the runner's `issue` routes anything
+  `refusal.is_token` cannot resolve into the diagnosis — so every present and
+  future producer is covered by construction and no census has to be complete.
+  When an invariant keeps leaking, stop listing the sites and find the one
+  chokepoint every value passes through.
+- #261 M5 review round 4 (a guard that matches a literal misses the variable):
+  the channel guard grepped `logger.warning('...')`, so two live warnings whose
+  argument was a variable sat inside a file it already scanned — one of them
+  printing a traceback on the Stop path — while the test asserted the opposite.
+  Match the CALL and judge its argument, rather than matching only the shape of
+  the argument you expect.
+- #261 M5 review round 4 (identity is not the name): checking that a buffer
+  still held the captured file name looked like the right way to defend against
+  buffer-number reuse, but a parley chat renames its own file from its `- file:`
+  header while a response runs, so the check misfired on every reload. When you
+  need "is this still the same thing", pick a property the product does not
+  change on its own — here, that the buffer still holds a chat at all.

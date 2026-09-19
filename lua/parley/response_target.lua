@@ -110,7 +110,7 @@ function M.start(doc,spec,callbacks)
     -- A step that throws cancels the target (#261 M4 W13): it holds a target slot
     -- and two user captures until it settles.
     s.work=Deferred.new(function()return M.step(target).status=='waiting'end,
-        function(err)retire(s,'cancelled','target step failed: '..tostring(err):sub(1,512))end)
+        function(err)retire(s,'cancelled','target step failed: '..require('parley.refusal').brief(err))end)
     s.off=D.subscribe(doc,function(event)
         if s.status~='waiting'then return end
         if event.kind=='reload' or event.kind=='detach' then retire(s,'cancelled',event.kind);return end

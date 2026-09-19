@@ -70,7 +70,7 @@ must *not* be. So:
 | `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
 | `attempt` — `open_stop_window`: TERM, then the escalate effect at +2 s, for a stop whose cause is stop, deadline or leave; `kill_cause` | `lua/parley/attempt.lua` | modified |
 | `refusal` — `describe` (returns the message and how it resolved), `TOKENS`, `INTERNAL`, `LIFECYCLE` (a closed or reloaded chat, for every kind), `PREFIX`, `REVOKED` (words by revocation cause), `USER_STOP`, `BATCH_CONTINUE`, `BATCH_RESTART` | `lua/parley/refusal.lua` | new |
-| `_lifecycle_cause` — one statement of `:e!` detaching as a close does, for every path that reports a lifecycle cause | `lua/parley/chat_respond.lua` | new |
+| `is_token`, `brief` — what the vocabulary can resolve, and the first line of a Lua error: producers use them so `failure` never holds free text | `lua/parley/refusal.lua` | new |
 | `OUTCOMES` — the set a generation can stop with, asserted in `stop` and checked for words at load | `lua/parley/generation.lua` | modified |
 | `cancel` — a batch cancel carries its cause (`user`, `lifecycle`, `fault`), validated in the transition and read off the snapshot | `lua/parley/batch.lua` | modified |
 
@@ -2644,4 +2644,60 @@ in `g:parley_expected_unkeyed` — one line, at file scope.
 
 Two pinned assertions changed with the contract: a Lua error from a throwing
 adapter is the snapshot's `diagnosis`, not its `failure`.
+
+### 2026-09-19 — M5 closed (boundary review round 4, FIX-THEN-SHIP): the invariant moves to where the value is stored
+
+Round 4 finalized the boundary: no open blocking findings. Its seven findings
+are fixed here, in the close commit, as the rules they name.
+
+- **`failure` must hold a value the vocabulary can resolve — enforced where it
+  is STORED.** The reviewer measured three producers still passing free text
+  (cliproxy's health sentence through `failure_reason`'s string branch, and the
+  raw Lua errors in `fault` and `kill_scope`), and pointed out that the `fault`
+  row therefore had no reachable consumer. Chasing producers is the
+  syntax-vs-value mistake again, so the invariant now lives in
+  `generation_runner.issue`: anything `refusal.is_token` does not recognise
+  becomes the `diagnosis`, whatever the caller meant. `fault`, `kill_scope` and
+  every adapter string are covered by construction, and the census no longer
+  needs a complete FILES list. `is_token` counts a row, an `INTERNAL` entry, a
+  `": "` lead-in, a `LIFECYCLE` key and a deliberately silent token.
+- **The channel guard matches the CALL, not its first token.** Matching only a
+  string-literal argument let two live channels hide inside a file the guard
+  already scanned: the attachment-budget notice (`logger.warning(plan.warning)`)
+  and `guarded()`'s `label .. ' failed: '`, which printed a traceback on the
+  Stop path. Both are routed now (`attachments dropped: `, and an internal
+  `cleanup failed: ` whose traceback goes to the log), and every
+  `logger.warning(`/`vim.notify(` site in the submit path must be `refuse`'s
+  return or a declared non-refusal, keyed by the argument as written.
+- **A handle added without a reader.** `M._lifecycle_cause` (labelled a test
+  seam, used by no test) and `result.refusal` (written twice, read nowhere —
+  the batch derives `leg_stopped` from the model) are deleted. A new arch
+  assertion fails any `-- test seam` export with no test referencing it.
+- **One `brief(err)`.** Six hand-written copies of "first line of a Lua error",
+  three of which would throw inside the failure handler on
+  `debug.traceback("")`, are one helper with the fallback and cap built in.
+- **One wording per condition, for every entry point.** `init.lua`'s
+  chat-context wrapper hand-worded "not a chat" and the missing header for four
+  commands; it calls `refusal.describe` now, with the command as the notice.
+  The attachment-budget notice keeps the builder's **injected** logger as its
+  channel (that seam is what `build_messages_spec` tests through) and takes only
+  its words from the vocabulary; the channel guard accepts a
+  `Refusal.describe(...)` argument as routed.
+- **Buffer numbers are reused.** `lifecycle_cause` took a loaded buffer as proof
+  of a reload; it now requires the buffer to still hold a chat, so a closed chat
+  whose number an ordinary file took is silent rather than "reloaded". The name
+  is deliberately not the test: a chat renames itself from its `- file:` header
+  while a response runs, which the first attempt (comparing the captured
+  `file_name`) broke — `chat_refusal_spec`'s two reload cases caught it.
+- **The harness removes what it creates.** The per-process query directory is
+  deleted on `VimLeavePre`, beside its creation, rather than relying on a target
+  the operator must remember.
+
+Counterfactuals, each red:
+
+| Change | Fails |
+|---|---|
+| `issue` keeps free text in `failure` | the reload cases in `chat_refusal_spec` |
+| a `logger.warning(<variable>)` in the submit path | "routes every user notice … through refuse" |
+| a `-- test seam` export with no test | "every '-- test seam' export has a reader" |
 

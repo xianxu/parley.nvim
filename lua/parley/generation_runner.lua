@@ -60,13 +60,14 @@ end
 --- `terminal` (a successful generation never stops). It ends every process the
 --- generation started — the ones an adapter could not cancel included — so
 --- nothing it spawned outlives it. O(1) phase check: this runs on every dispatch.
+local issue -- defined below; kill_scope and fault both record through it
 local function kill_scope(s)
     if s.scope_killed then return end
     s.scope_killed=true
     local stopping=s.adapters.stopping
     if stopping then
         local ok,err=pcall(stopping,{epoch=s.epoch,generation=s.generation})
-        if not ok then s.failure=s.failure or tostring(err):sub(1,4096) end
+        if not ok then issue(s,err,true) end
     end
 end
 local function scope_kill(s)
@@ -154,8 +155,14 @@ end
 -- round 3, BR-66). Typed here, at the producer: a token is keyed by
 -- parley.refusal; a diagnosis (a Lua error, a provider's text) travels beside it
 -- and is shown as detail.
-local function issue(s,reason,diagnosis)
-    if diagnosis then s.diagnosis=tostring(reason):sub(1,4096) else s.failure=tostring(reason):sub(1,4096) end
+function issue(s,reason,diagnosis)
+    -- Enforced where the value is STORED, not where it is shown: anything the
+    -- vocabulary cannot resolve is a diagnosis, whatever the caller meant. So a
+    -- producer that hands over a sentence (cliproxy's health message), a Lua
+    -- error, or a token nobody worded can never reach a user raw.
+    local Refusal=require('parley.refusal')
+    if not diagnosis and not Refusal.is_token(reason) then diagnosis=true end
+    if diagnosis then s.diagnosis=Refusal.brief(reason):sub(1,4096) else s.failure=tostring(reason):sub(1,4096) end
 end
 --- Why staged bytes overflowed. A generation held behind the write turn names the
 --- answer it waited for (#266): without that, an overflow while queued reads as
@@ -489,7 +496,7 @@ end
 --- The one way a generation reaches terminal with operations outstanding.
 local function fault(s,err)
     if s.terminal then return end
-    s.failure=s.failure or tostring(err):sub(1,4096)
+    issue(s,err,true)
     kill_scope(s)
     finish(s,'fault')
 end

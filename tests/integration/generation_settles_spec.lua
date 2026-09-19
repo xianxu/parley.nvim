@@ -225,7 +225,10 @@ describe("every wait a generation holds settles", function()
             assert.is_true(vim.wait(500, function() return final ~= nil end, 5), "the runner never reached terminal")
         end)
         assert.equals("fault", final.outcome)
-        assert.truthy(tostring(final.failure):find("step exploded", 1, true))
+        -- The Lua error is the diagnosis; `fault`'s own words come from the
+        -- outcome, so the row has a reachable consumer (#261 M5 review round 4).
+        assert.is_nil(final.failure)
+        assert.truthy(tostring(final.diagnosis):find("step exploded", 1, true))
         -- One authority for "terminal": the snapshot reports what the host got.
         assert.equals("terminal", Runner.snapshot(r).phase)
         assert.equals("fault", Runner.snapshot(r).outcome)

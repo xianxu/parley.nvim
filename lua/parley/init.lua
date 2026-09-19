@@ -4294,11 +4294,14 @@ end
 local function chat_context(what)
 	local ctx, reason, kind = require("parley.chat_context").resolve()
 	if ctx then return ctx end
-	if kind == "not_chat" then
-		M.logger.warning(what .. " is only available in chat files: " .. reason)
-	else
-		M.logger.error(what .. ": could not find header separator ---")
-	end
+	-- One wording per condition, whatever the entry point: parley.refusal owns
+	-- both facts, and chat_respond.respond already reports them this way
+	-- (#261 M5 review round 4). `reason` stays in the log, not in the sentence.
+	M.logger.debug(what .. ": " .. tostring(reason))
+	local Refusal = require("parley.refusal")
+	local message = Refusal.describe("start", nil, kind == "not_chat" and "not a chat" or "chat header unavailable",
+		{ notice = what, log_file = M.config and M.config.log_file })
+	if message then M.logger.warning(message) end
 	return nil
 end
 

@@ -47,6 +47,12 @@ lua << EOF
 local tmp = (vim.env.TMPDIR or "/tmp"):gsub("/$", "")
 vim.env.PARLEY_QUERY_DIR = tmp .. "/parley-query-" .. vim.fn.getpid()
 vim.fn.mkdir(vim.env.PARLEY_QUERY_DIR, "p")
+-- The removal lives beside the creation: `make test` cleans its env, but
+-- test-spec, test-changed and a direct PlenaryBustedFile run do not, and one
+-- directory per spec process would simply accumulate (#261 M5 review round 4).
+vim.api.nvim_create_autocmd("VimLeavePre", { callback = function()
+    pcall(vim.fn.delete, vim.env.PARLEY_QUERY_DIR, "rf")
+end })
 
 -- A spec that exercises a wordless token on purpose names it in
 -- g:parley_expected_unkeyed, at file scope: nothing to restore, and the

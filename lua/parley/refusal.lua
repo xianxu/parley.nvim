@@ -173,6 +173,8 @@ M.TOKENS = {
     ["request build failed: "] = { what = "the request could not be built", action = AGAIN },
     ["remote content failed: "] = { what = "a linked reference could not be fetched", action = AGAIN },
     ["tool setup failed: "] = { what = "the chat's tools could not be prepared", action = AGAIN },
+    ["attachments dropped: "] = { what = "the chat's text alone fills the request, so no images were sent",
+        action = "edit the chat down, or branch it, then submit again" },
     ["prepare_failed"] = { what = "the request could not be built", action = AGAIN },
     ["finalize_failed"] = { what = "the answer was written, but the next question prompt could not be added",
         action = "edit: add the 💬: prompt yourself" },
@@ -201,7 +203,7 @@ for _, token in ipairs({
     "invalid queue limit", "invalid preparation region", "invalid target", "invalid callbacks",
     "preparation and payload builders required", "wrong scope", "stale leg",
     "missing outcome", "missing context revision", "invalid context status", "invalid process limits",
-    "invalid cancel cause",
+    "invalid cancel cause", "cleanup failed: ",
     "missing adapter: ",
     "invalid process limit: ", "task start rejected: invalid process options",
     "chat_path not supplied to build_messages", "chat path has no directory: ",
@@ -246,6 +248,28 @@ local function internal(token)
         if key:sub(-2) == ": " and token:sub(1, #key) == key then return true end
     end
     return false
+end
+
+--- Can `describe` resolve this value to words? A row, an INTERNAL entry, a ": "
+--- lead-in, or a lifecycle token. Producers use it to decide whether a value is
+--- a token at all, so free text never reaches `failure` (#261 M5 review round 4).
+---@param value any
+---@return boolean
+function M.is_token(value)
+    if type(value) ~= "string" then return false end
+    -- A token the vocabulary deliberately says nothing for is still a token.
+    if SILENT[value] or M.LIFECYCLE[value] ~= nil then return true end
+    return row_of(value) ~= nil or internal(value)
+end
+
+--- The first line of a Lua error, bounded, with a fallback: `debug.traceback("")`
+--- starts with a newline, so the bare match returns nil and its caller throws
+--- inside the failure handler (#261 M5 review round 4).
+---@param err any
+---@return string
+function M.brief(err)
+    local text = tostring(err)
+    return (text:match("[^\n]+") or "unknown"):sub(1, 512)
 end
 
 ---@param kind string # a PREFIX key

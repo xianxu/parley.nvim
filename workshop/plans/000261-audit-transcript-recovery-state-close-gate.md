@@ -1425,6 +1425,100 @@ rounds:
       boundary: M5
       recipe: milestone-review
       blocked: true
+    - "n": 21
+      timestamp: "2026-09-19T15:09:22-07:00"
+      agent: claude
+      dispose:
+        - id: BR-66
+          disposition: addressed
+          note: The value-keyed inversion is built (describe returns a resolution; minimal_init.vim:59-79 fails the file via cquit) and the cache hazard is removed by construction via $PARLEY_QUERY_DIR rather than a runtime assert; all three named runner tokens now have rows. The residual gap — the watch only sees values a spec drives — is raised separately.
+          round: 21
+        - id: BR-72
+          disposition: addressed
+          note: chat_refusal_spec.lua:78-86 — refusals_are uses assert.same on the whole list and one() delegates to it, so all 17 cases compare full messages, including the two-message batch case.
+          round: 21
+        - id: BR-75
+          disposition: addressed
+          note: refusal.LIFECYCLE (refusal.lua:198-203) is consulted before the token lookup for every kind; response_target.lua:116's raw event.kind now resolves silent/reload, and chat_respond.lua:48-51 is the single detach-to-reload mapping used by both call sites.
+          round: 21
+        - id: BR-76
+          disposition: addressed
+          note: tests/minimal_init.vim:3,26-32 and atlas/infra/test_harness.md:43-56 both now describe what spec_runner does and name the specs that set g:parley_test_mode themselves; grep over atlas/TOOLING/Makefile finds no surviving stale claim.
+          round: 21
+        - id: BR-77
+          disposition: addressed
+          note: chat_respond.lua:1716 and :1188 go through refuse('paused'/'topic'), and refusal_vocabulary_spec.lua:138-152 keys on the channel. The guard's literal-only match is a new finding, not this one.
+          round: 21
+        - id: BR-78
+          disposition: addressed
+          note: refusal_vocabulary_spec.lua:124-136 asserts NOT_REFUSAL is disjoint from TOKENS/INTERNAL/LIFECYCLE and that every entry is still produced by the scan; busy/refused/revoked/stale are gone from the allowlist.
+          round: 21
+        - id: BR-79
+          disposition: addressed
+          note: batch.lua:76-81 validates the cause in the transition, :113 clears it on resume, snapshot copies it, and chat_respond.lua:2074 reads it off the model; user_stopped and leg_spoke no longer exist anywhere in lua/ or tests/.
+          round: 21
+        - id: BR-80
+          disposition: not-addressed
+          note: The plan's round-2 entry was renumbered but the issue Log was not — at HEAD it still reads BR-73 for the one() helper (ledger BR-72), BR-74 for the outcome set (ledger BR-73), and BR-70/72 for the exemption (ledger BR-70/74).
+          round: 21
+      findings:
+        - id: BR-81
+          severity: Important
+          title: '`failure` still carries free text on three producers, so a cliproxy start failure and every `fault` reach the user as "unexpected (...)"'
+          detail: |-
+            Measured: describe("ended","provider_failed","cliproxy: proxy did not become healthy within 30s — try :ParleyProxy status") resolves `unkeyed`. Chain: cliproxy.ensure_running's on_error (cliproxy.lua:731,736,777) or vault.run_with_secret's (vault.lua:251,267) -> dispatcher.lua:926 abort_before_start -> D.query on_abort -> response_provider.lua:99 abort -> failure_reason's string branch (:21) passes any string verbatim -> cb.failed(reason) with no diagnosis -> s.failure -> chat_respond.lua:1781. generation_runner.lua:492 (fault) and :69 (kill_scope) assign a raw Lua error to s.failure, which generation_settles_spec.lua:228 pins, leaving the `fault` TOKENS row (refusal.lua:179) with zero reachable consumers. Neither net sees any of it: the census FILES list omits cliproxy.lua, vault.lua, response_completion.lua, response_preparation.lua and response_topic.lua, and no spec drives these paths through the host.
+            This is the 12th finding in family enumeration-claims-completeness. Earlier rounds fixed instances. Do NOT fix these three sites. The rule: `failure` must hold a value `refusal` can resolve, enforced where the value is STORED, not where it is displayed — otherwise coverage of the invariant equals coverage of the specs, which is the syntax-vs-value mistake again. Export refusal.is_token(value) (a row, an INTERNAL entry, a ": " lead-in, or a LIFECYCLE key) and have generation_runner.issue route anything failing it into `diagnosis`, asserting under $PARLEY_TEST_MODE. fault, kill_scope and failure_reason are then covered by construction, and the FILES enumeration stops needing to be complete.
+          family: enumeration-claims-completeness
+          round: 21
+        - id: BR-82
+          severity: Important
+          title: The channel guard matches only a string-literal first argument, so two live warning channels inside the file it scans are neither routed nor declared
+          detail: |-
+            tests/arch/refusal_vocabulary_spec.lua:138-152 greps logger%.warning%(%s*(['"]) and vim%.notify%(%s*(['"]). A warning whose argument is a variable is invisible, and two are in chat_respond.lua, which is in CHANNEL_FILES: :437 logger.warning(plan.warning) — the attachment-budget notice, no prefix, no action; and :1364 _parley.logger.warning(label .. ' failed: ' .. tostring(err)) — the guarded() helper behind cancel_topic and stop_batch, so a throwing batch cancel prints a raw traceback on the Stop path. The test "routes every user notice in the submit path through refuse" therefore passes while asserting something untrue, and NOT_A_REFUSAL_NOTICE claims a completeness it does not have.
+            Same rule as the finding above, applied to the channel: match on the CALL, not on its first token — scan logger.warning( / vim.notify( regardless of argument shape and require every site to be refuse()'s return or an explicitly declared non-refusal. Then route plan.warning and guarded through the vocabulary.
+          family: enumeration-claims-completeness
+          round: 21
+        - id: BR-83
+          severity: Minor
+          title: 'Two handles added this round have no reader: the `_lifecycle_cause` test seam and `result.refusal`'
+          detail: |-
+            chat_respond.lua:52 exports M._lifecycle_cause labelled "-- test seam" with no test referencing it — the only one of the repo's five such exports without a consumer. result.refusal is written at chat_respond.lua:1754 and :1781 and read nowhere in lua/ or tests/, while the plan's round-3 revision claims the batch consumes it; the batch actually derives leg_stopped from generation.OUTCOMES[state.reason] at :2078.
+            This is the 6th finding in family returned-handle-has-no-consumer. Do NOT fix the two sites — the rule is that an M._* export labelled a test seam, and a field added to a snapshot or result table, must have a reader in the same commit. A cheap arch assertion over "-- test seam" exports in lua/ would pin the first half permanently.
+          family: returned-handle-has-no-consumer
+          round: 21
+        - id: BR-84
+          severity: Minor
+          title: Six hand-written variants of "first line of a Lua error", three of which throw on an empty message
+          detail: |-
+            tostring(x):match('^[^\n]+') appears at chat_respond.lua:1670, :1693, :1297, response_session.lua:95, :164; response_target.lua:113 uses :sub(1,512) instead. Only two carry the `or 'unknown'` fallback. Verified: debug.traceback("") begins with a newline, so the match returns nil and the three unguarded sites raise "attempt to concatenate a nil value" inside the failure handler itself.
+            This is the 5th finding in family canonical-form-not-shared. Do NOT fix the individual sites — one helper (refusal.brief(err)) with the fallback and the cap built in, used by all six.
+          family: canonical-form-not-shared
+          round: 21
+        - id: BR-85
+          severity: Minor
+          title: init.lua's chat_context wrapper still hand-words "not a chat" and the missing header for four commands
+          detail: |-
+            init.lua:4294-4303 composes its own sentences ("Prune is only available in chat files: <raw reason>", "could not find header separator ---") for ChatPrune, ExchangeCut, ExchangePaste and NewQuestion, in a different voice and with no action, while refusal.lua now owns both facts and chat_respond.respond was converted to refuse('start', nil, 'not a chat'|'chat header unavailable'). Out of M5's declared submit-path scope, but it is the remaining hand-maintained restatement the ARCH-PURPOSE shadow-sweep asks for.
+            This is the 6th finding in family canonical-form-not-shared. The rule: a condition the vocabulary keys has one wording for every entry point — give chat_context's reporting wrapper a refuse() kind rather than four sentences.
+          family: canonical-form-not-shared
+          round: 21
+        - id: BR-86
+          severity: Minor
+          title: lifecycle_cause maps detach to reload on a buffer number alone, and buffer numbers are reused after :bd
+          detail: chat_respond.lua:48-51 returns 'reload' whenever nvim_buf_is_valid(buf) and nvim_buf_is_loaded(buf), without checking the buffer is still the same chat. Buffer-number reuse after :bd is the hazard this issue's own audit named, so a closed chat whose number was taken by another file reports "the chat was reloaded while the answer was being written; submit again". The window is narrow (the terminal fires on the next deferred turn) and the fix is one comparison against D.get(buf) or the buffer name.
+          family: untrusted-input-unparsed
+          round: 21
+        - id: BR-87
+          severity: Minor
+          title: The per-process query directory the harness creates has no removal path, and replaced a bounded artifact
+          detail: |-
+            tests/minimal_init.vim:56-58 creates $TMPDIR/parley-query-<pid> in every nvim process and nothing removes it; request bodies accumulate inside, one directory per spec file per run. `make test` is bounded by its leading test-clean-env, but `make test-spec`, `make test-changed` and the direct PlenaryBustedFile invocation TOOLING.md documents all leave them. Note also that this replaced an artifact with a writer-side bound (the shared query_dir's >200->100 prune) with an unbounded per-process one.
+            This is the 3rd finding in family residue-names-no-end. The removal belongs beside the creation (a VimLeavePre delete of the directory), not in a target the operator must remember to run.
+          family: residue-names-no-end
+          round: 21
+      boundary: M5
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -2222,6 +2316,42 @@ file-scoped vim.g.parley_expected_unkeyed in refusal_spec.lua:5, with nothing to
   "BR-70/72" is BR-70/74 (the file-scoped exemption). 4th finding in family plan-tracking-not-updated.
   The rule: a disposition quotes the ledger id verbatim, so a later round can verify what was claimed.
 
+## Round 21 — 2026-09-19T15:09:22-07:00 (claude) — passed
+
+### Disposed
+
+- BR-66 — addressed — The value-keyed inversion is built (describe returns a resolution; minimal_init.vim:59-79 fails the file via cquit) and the cache hazard is removed by construction via $PARLEY_QUERY_DIR rather than a runtime assert; all three named runner tokens now have rows. The residual gap — the watch only sees values a spec drives — is raised separately.
+- BR-72 — addressed — chat_refusal_spec.lua:78-86 — refusals_are uses assert.same on the whole list and one() delegates to it, so all 17 cases compare full messages, including the two-message batch case.
+- BR-75 — addressed — refusal.LIFECYCLE (refusal.lua:198-203) is consulted before the token lookup for every kind; response_target.lua:116's raw event.kind now resolves silent/reload, and chat_respond.lua:48-51 is the single detach-to-reload mapping used by both call sites.
+- BR-76 — addressed — tests/minimal_init.vim:3,26-32 and atlas/infra/test_harness.md:43-56 both now describe what spec_runner does and name the specs that set g:parley_test_mode themselves; grep over atlas/TOOLING/Makefile finds no surviving stale claim.
+- BR-77 — addressed — chat_respond.lua:1716 and :1188 go through refuse('paused'/'topic'), and refusal_vocabulary_spec.lua:138-152 keys on the channel. The guard's literal-only match is a new finding, not this one.
+- BR-78 — addressed — refusal_vocabulary_spec.lua:124-136 asserts NOT_REFUSAL is disjoint from TOKENS/INTERNAL/LIFECYCLE and that every entry is still produced by the scan; busy/refused/revoked/stale are gone from the allowlist.
+- BR-79 — addressed — batch.lua:76-81 validates the cause in the transition, :113 clears it on resume, snapshot copies it, and chat_respond.lua:2074 reads it off the model; user_stopped and leg_spoke no longer exist anywhere in lua/ or tests/.
+- BR-80 — not-addressed — The plan's round-2 entry was renumbered but the issue Log was not — at HEAD it still reads BR-73 for the one() helper (ledger BR-72), BR-74 for the outcome set (ledger BR-73), and BR-70/72 for the exemption (ledger BR-70/74).
+
+### Raised
+
+- **BR-81** [Important] `enumeration-claims-completeness` `failure` still carries free text on three producers, so a cliproxy start failure and every `fault` reach the user as "unexpected (...)"
+  Measured: describe("ended","provider_failed","cliproxy: proxy did not become healthy within 30s — try :ParleyProxy status") resolves `unkeyed`. Chain: cliproxy.ensure_running's on_error (cliproxy.lua:731,736,777) or vault.run_with_secret's (vault.lua:251,267) -> dispatcher.lua:926 abort_before_start -> D.query on_abort -> response_provider.lua:99 abort -> failure_reason's string branch (:21) passes any string verbatim -> cb.failed(reason) with no diagnosis -> s.failure -> chat_respond.lua:1781. generation_runner.lua:492 (fault) and :69 (kill_scope) assign a raw Lua error to s.failure, which generation_settles_spec.lua:228 pins, leaving the `fault` TOKENS row (refusal.lua:179) with zero reachable consumers. Neither net sees any of it: the census FILES list omits cliproxy.lua, vault.lua, response_completion.lua, response_preparation.lua and response_topic.lua, and no spec drives these paths through the host.
+  This is the 12th finding in family enumeration-claims-completeness. Earlier rounds fixed instances. Do NOT fix these three sites. The rule: `failure` must hold a value `refusal` can resolve, enforced where the value is STORED, not where it is displayed — otherwise coverage of the invariant equals coverage of the specs, which is the syntax-vs-value mistake again. Export refusal.is_token(value) (a row, an INTERNAL entry, a ": " lead-in, or a LIFECYCLE key) and have generation_runner.issue route anything failing it into `diagnosis`, asserting under $PARLEY_TEST_MODE. fault, kill_scope and failure_reason are then covered by construction, and the FILES enumeration stops needing to be complete.
+- **BR-82** [Important] `enumeration-claims-completeness` The channel guard matches only a string-literal first argument, so two live warning channels inside the file it scans are neither routed nor declared
+  tests/arch/refusal_vocabulary_spec.lua:138-152 greps logger%.warning%(%s*(['"]) and vim%.notify%(%s*(['"]). A warning whose argument is a variable is invisible, and two are in chat_respond.lua, which is in CHANNEL_FILES: :437 logger.warning(plan.warning) — the attachment-budget notice, no prefix, no action; and :1364 _parley.logger.warning(label .. ' failed: ' .. tostring(err)) — the guarded() helper behind cancel_topic and stop_batch, so a throwing batch cancel prints a raw traceback on the Stop path. The test "routes every user notice in the submit path through refuse" therefore passes while asserting something untrue, and NOT_A_REFUSAL_NOTICE claims a completeness it does not have.
+  Same rule as the finding above, applied to the channel: match on the CALL, not on its first token — scan logger.warning( / vim.notify( regardless of argument shape and require every site to be refuse()'s return or an explicitly declared non-refusal. Then route plan.warning and guarded through the vocabulary.
+- **BR-83** [Minor] `returned-handle-has-no-consumer` Two handles added this round have no reader: the `_lifecycle_cause` test seam and `result.refusal`
+  chat_respond.lua:52 exports M._lifecycle_cause labelled "-- test seam" with no test referencing it — the only one of the repo's five such exports without a consumer. result.refusal is written at chat_respond.lua:1754 and :1781 and read nowhere in lua/ or tests/, while the plan's round-3 revision claims the batch consumes it; the batch actually derives leg_stopped from generation.OUTCOMES[state.reason] at :2078.
+  This is the 6th finding in family returned-handle-has-no-consumer. Do NOT fix the two sites — the rule is that an M._* export labelled a test seam, and a field added to a snapshot or result table, must have a reader in the same commit. A cheap arch assertion over "-- test seam" exports in lua/ would pin the first half permanently.
+- **BR-84** [Minor] `canonical-form-not-shared` Six hand-written variants of "first line of a Lua error", three of which throw on an empty message
+  tostring(x):match('^[^\n]+') appears at chat_respond.lua:1670, :1693, :1297, response_session.lua:95, :164; response_target.lua:113 uses :sub(1,512) instead. Only two carry the `or 'unknown'` fallback. Verified: debug.traceback("") begins with a newline, so the match returns nil and the three unguarded sites raise "attempt to concatenate a nil value" inside the failure handler itself.
+  This is the 5th finding in family canonical-form-not-shared. Do NOT fix the individual sites — one helper (refusal.brief(err)) with the fallback and the cap built in, used by all six.
+- **BR-85** [Minor] `canonical-form-not-shared` init.lua's chat_context wrapper still hand-words "not a chat" and the missing header for four commands
+  init.lua:4294-4303 composes its own sentences ("Prune is only available in chat files: <raw reason>", "could not find header separator ---") for ChatPrune, ExchangeCut, ExchangePaste and NewQuestion, in a different voice and with no action, while refusal.lua now owns both facts and chat_respond.respond was converted to refuse('start', nil, 'not a chat'|'chat header unavailable'). Out of M5's declared submit-path scope, but it is the remaining hand-maintained restatement the ARCH-PURPOSE shadow-sweep asks for.
+  This is the 6th finding in family canonical-form-not-shared. The rule: a condition the vocabulary keys has one wording for every entry point — give chat_context's reporting wrapper a refuse() kind rather than four sentences.
+- **BR-86** [Minor] `untrusted-input-unparsed` lifecycle_cause maps detach to reload on a buffer number alone, and buffer numbers are reused after :bd
+  chat_respond.lua:48-51 returns 'reload' whenever nvim_buf_is_valid(buf) and nvim_buf_is_loaded(buf), without checking the buffer is still the same chat. Buffer-number reuse after :bd is the hazard this issue's own audit named, so a closed chat whose number was taken by another file reports "the chat was reloaded while the answer was being written; submit again". The window is narrow (the terminal fires on the next deferred turn) and the fix is one comparison against D.get(buf) or the buffer name.
+- **BR-87** [Minor] `residue-names-no-end` The per-process query directory the harness creates has no removal path, and replaced a bounded artifact
+  tests/minimal_init.vim:56-58 creates $TMPDIR/parley-query-<pid> in every nvim process and nothing removes it; request bodies accumulate inside, one directory per spec file per run. `make test` is bounded by its leading test-clean-env, but `make test-spec`, `make test-changed` and the direct PlenaryBustedFile invocation TOOLING.md documents all leave them. Note also that this replaced an artifact with a writer-side bound (the shared query_dir's >200->100 prune) with an unbounded per-process one.
+  This is the 3rd finding in family residue-names-no-end. The removal belongs beside the creation (a VimLeavePre delete of the directory), not in a target the operator must remember to run.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
@@ -2237,11 +2367,11 @@ file-scoped vim.g.parley_expected_unkeyed in refusal_spec.lua:5, with nothing to
 - **BR-46** [Important] `enumeration-claims-completeness` The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
 - **BR-61** [Important] `seam-change-collateral` The dispatcher still documents a one-arg pre_query, naming copilot, after W6 made it two-arg
 - **BR-64** [Minor] `behavior-change-without-regression-test` cancel_through's throw exit and the direct site's refused-cancel exit fail nothing when reverted
-- **BR-66** [Important] `enumeration-claims-completeness` The refusal census scans call shapes, not the values describe() keys on, so `issue(s,<lit>)` tokens have no words
-- **BR-72** [Minor] `behavior-change-without-regression-test` The refusal spec's `one()` helper is a substring probe, so the batch-pause case still cannot see a second detail on the same provider_failed ending
-- **BR-75** [Important] `canonical-form-not-shared` The document-lifecycle cause has no single home: 'detach' reaches the user raw on the start path, and the detach-to-reload mapping is written twice
-- **BR-76** [Important] `comment-outlives-its-behavior` The harness docs still say spec children start without tests/minimal_init.vim, which this milestone changed
-- **BR-77** [Minor] `canonical-form-not-shared` The response pause and the topic abort are still hand-written user notices the vocabulary guard cannot see
-- **BR-78** [Minor] `allowlist-without-dead-entry-check` NOT_REFUSAL still claims busy, refused, revoked and stale reach no user, while TOKENS words all four
-- **BR-79** [Minor] `state-change-bypasses-model` A batch pause's cause lives in host-side flags outside the batch machine
 - **BR-80** [Minor] `plan-tracking-not-updated` Round 2's dispositions are recorded one finding id off the ledger in both the issue Log and the plan
+- **BR-81** [Important] `enumeration-claims-completeness` `failure` still carries free text on three producers, so a cliproxy start failure and every `fault` reach the user as "unexpected (...)"
+- **BR-82** [Important] `enumeration-claims-completeness` The channel guard matches only a string-literal first argument, so two live warning channels inside the file it scans are neither routed nor declared
+- **BR-83** [Minor] `returned-handle-has-no-consumer` Two handles added this round have no reader: the `_lifecycle_cause` test seam and `result.refusal`
+- **BR-84** [Minor] `canonical-form-not-shared` Six hand-written variants of "first line of a Lua error", three of which throw on an empty message
+- **BR-85** [Minor] `canonical-form-not-shared` init.lua's chat_context wrapper still hand-words "not a chat" and the missing header for four commands
+- **BR-86** [Minor] `untrusted-input-unparsed` lifecycle_cause maps detach to reload on a buffer number alone, and buffer numbers are reused after :bd
+- **BR-87** [Minor] `residue-names-no-end` The per-process query directory the harness creates has no removal path, and replaced a bounded artifact

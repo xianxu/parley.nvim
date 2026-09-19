@@ -38,11 +38,15 @@ local CHANNEL_FILES = { "lua/parley/chat_respond.lua", "lua/parley/response_sess
     "lua/parley/response_submission.lua", "lua/parley/response_target.lua",
     "lua/parley/response_topic.lua", "lua/parley/response_completion.lua",
     "lua/parley/batch_response.lua", "lua/parley/generation_runner.lua" }
+-- Keyed by the ARGUMENT as written, whatever its shape: a warning whose argument
+-- is a variable is a channel too, and matching only string literals let two live
+-- ones hide (#261 M5 review round 4).
 local NOT_A_REFUSAL_NOTICE = {
-    ["collect_ancestor_chain: max depth reached, stopping"] = "a log line about context assembly, not a refusal",
-    ["collect_ancestor_chain: parent file not readable: "] = "same: the ancestor is skipped, the request proceeds",
-    ["Failed to parse YAML in raw request mode: "] = "raw-mode diagnostics; the request proceeds",
-    ["Failed to fetch remote content: "] = "the reference falls back to placeholder text; the request proceeds",
+    ['"collect_ancestor_chain: max depth reached, stopping"'] = "a log line about context assembly, not a refusal",
+    ['"collect_ancestor_chain: parent file not readable: " .. abs_parent'] = "same: the ancestor is skipped",
+    ['"Failed to parse YAML in raw request mode: " .. tostring(err)'] = "raw-mode diagnostics; the request proceeds",
+    ["'Failed to fetch remote content: ' .. (err or 'unknown error')"] = "the reference falls back to placeholder text",
+    ["message"] = "refuse()'s own return, which is the one channel",
 }
 
 -- A reason composed at run time has no literal to key. One that starts with a
@@ -139,19 +143,28 @@ describe("arch: every refusal token has words", function()
         assert.same({}, dead, "the scan no longer finds these; delete the entry")
     end)
     it("routes every user notice in the submit path through refuse", function()
-        local offenders = {}
+        local offenders, sites = {}, 0
         for _, file in ipairs(CHANNEL_FILES) do
             for n, line in ipairs(vim.fn.readfile(file)) do
                 if not line:match("^%s*%-%-") then
-                    for _, literal in line:gmatch("logger%.warning%(%s*(['\"])(.-)%1") do
-                        if not NOT_A_REFUSAL_NOTICE[literal] then offenders[#offenders + 1] = file .. ":" .. n .. ": " .. literal end
+                    for call in line:gmatch("logger%.warning%((.*)") do
+                        sites = sites + 1
+                        local argument = vim.trim((call:gsub("%)%s*end%s*$", ""):gsub("%)%s*$", "")))
+                        if not (NOT_A_REFUSAL_NOTICE[argument] or argument:match("^Refusal%.describe%(")) then
+                            offenders[#offenders + 1] = file .. ":" .. n .. ": " .. argument
+                        end
                     end
-                    for _, literal in line:gmatch("vim%.notify%(%s*(['\"])(.-)%1") do
-                        if not NOT_A_REFUSAL_NOTICE[literal] then offenders[#offenders + 1] = file .. ":" .. n .. ": " .. literal end
+                    for call in line:gmatch("vim%.notify%((.*)") do
+                        sites = sites + 1
+                        local argument = vim.trim((call:gsub("%)%s*end%s*$", ""):gsub("%)%s*$", "")))
+                        if not (NOT_A_REFUSAL_NOTICE[argument] or argument:match("^Refusal%.describe%(")) then
+                            offenders[#offenders + 1] = file .. ":" .. n .. ": " .. argument
+                        end
                     end
                 end
             end
         end
+        assert.is_true(sites >= 4, "the channel scan found too little")
         table.sort(offenders)
         assert.same({}, offenders, "say it through refuse(), so parley.refusal owns the words")
     end)

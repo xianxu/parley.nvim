@@ -45,11 +45,20 @@ local Refusal = require('parley.refusal')
 -- closed chat's does. A generation ends on a later turn, after the command has
 -- returned: a chat loaded again by then was reloaded, not closed. One statement
 -- of it, for every path that reports a lifecycle cause (#261 M5 review BR-75).
+-- `:e!` unloads and re-reads the chat, so its document detaches exactly as a
+-- closed chat's does. A generation ends on a later turn, after the command has
+-- returned: a chat still loaded by then was reloaded, not closed.
+--
+-- Buffer numbers are reused after `:bd`, so the buffer must still hold a chat —
+-- otherwise a closed chat whose number an ordinary file took would report a
+-- reload (#261 M5 review round 4). The name is NOT the test: a chat renames
+-- itself from its `- file:` header while a response runs.
 local function lifecycle_cause(buf, cause)
-    if cause == 'detach' and vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then return 'reload' end
-    return cause
+    if cause ~= 'detach' then return cause end
+    if not (vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf)) then return cause end
+    if _parley.not_chat(buf, vim.api.nvim_buf_get_name(buf)) ~= nil then return cause end
+    return 'reload'
 end
-M._lifecycle_cause = lifecycle_cause -- test seam
 local function refuse(kind, outcome, failure, detail)
     detail = detail or {}
     detail.log_file = detail.log_file or (_parley.config and _parley.config.log_file)
@@ -434,7 +443,9 @@ local function attach_question_images(messages, slots, chat_path, logger)
         block_overhead = assets.BLOCK_OVERHEAD,
     })
     if plan.warning then
-        logger.warning(plan.warning)
+        -- The builder's own logger is the channel (it is injected, and tested
+        -- through); parley.refusal still owns the words (#261 M5 review round 4).
+        logger.warning(Refusal.describe('start', nil, 'attachments dropped: ' .. plan.warning))
     end
     local function read(rel)
         if chat_path == nil or chat_path == "" then
@@ -1296,7 +1307,7 @@ M.resolve_remote_references = function(opts, callback)
     -- is free text, so it travels behind a token the vocabulary keys (#261 M5).
     local function failed(reason)
         if operation.failure or operation.finished then return end
-        operation.failure = 'remote content failed: ' .. (tostring(reason):match('^[^\n]+') or 'unknown')
+        operation.failure = 'remote content failed: ' .. require('parley.refusal').brief(reason)
         if on_failure then pcall(on_failure, operation.failure) end
     end
     function operation:cancel()
@@ -1361,7 +1372,12 @@ end
 -- W15). Every topic cancel goes through `cancel_topic`, so the guard is one.
 local function guarded(label, fn, ...)
     local ok, err = pcall(fn, ...)
-    if not ok then _parley.logger.warning(label .. ' failed: ' .. tostring(err)) end
+    if not ok then
+        -- A cleanup that threw is a programming error: the user is told that
+        -- much, and the traceback goes to the log, not to their screen.
+        _parley.logger.debug(label .. ' failed: ' .. tostring(err))
+        refuse('ended', nil, 'cleanup failed: ' .. label)
+    end
     return ok
 end
 local function cancel_topic(topic, reason)
@@ -1667,7 +1683,7 @@ local function start_scoped_response(frame)
             end, debug.traceback)
             -- A Lua error is free text, so it rides behind a token the vocabulary
             -- keys, rather than reaching the user raw (#261 M5 review round 3).
-            if not ok then fail('request build failed: '..tostring(err):match('^[^\n]+')) else resolve() end
+            if not ok then fail('request build failed: '..Refusal.brief(err)) else resolve() end
         end
         local function ready()
             if operation.cancelled or ctx.cancelled() then resolve(); return end
@@ -1690,7 +1706,7 @@ local function start_scoped_response(frame)
                 -- The fetches run in this generation's process scope (#261 M4 W4).
                 scope = require('parley.tasker').scope_key(ctx.epoch, ctx.generation),
                 on_failure = logical_failure}, build)
-            if not ok then fail('remote content failed: ' .. tostring(remote):match('^[^\n]+'))
+            if not ok then fail('remote content failed: ' .. Refusal.brief(remote))
             else
                 operation.remote = remote
                 if operation.cancelled and remote then remote:cancel() end
@@ -1750,9 +1766,8 @@ local function start_scoped_response(frame)
         end,
         rejected = function(why)
             main_finished = true; release()
-            -- `refusal` tells a batch its leg already spoke.
-            local refusal = refuse('start', 'start refused', why)
-            if frame.terminal then frame.terminal({outcome = 'start refused', refusal = refusal}) end
+            refuse('start', 'start refused', why)
+            if frame.terminal then frame.terminal({outcome = 'start refused'}) end
         end,
         terminal = function(result)
             main_finished = true
@@ -1778,7 +1793,7 @@ local function start_scoped_response(frame)
                     notice = require('parley.chat_presentation').overflow_message(result.waited_for_line)
                 end
                 local failure = result.failure or (notice == nil and completion_failure or nil)
-                result.refusal = refuse(result.outcome == 'prepare_failed' and 'start' or 'ended', result.outcome,
+                refuse(result.outcome == 'prepare_failed' and 'start' or 'ended', result.outcome,
                     failure, {cause = lifecycle_cause(buf, result.cause), notice = notice})
             end
             failure_notice = nil

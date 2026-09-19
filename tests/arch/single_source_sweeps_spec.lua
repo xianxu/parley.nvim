@@ -388,6 +388,32 @@ describe("arch: single-source sweeps stay swept", function()
                 .. "require('parley.cliproxy')._set_data_dir(vim.fn.tempname())")
     end)
 
+    it("every '-- test seam' export has a reader", function()
+        -- #261 M5 review round 4. An export kept for tests, with no test using
+        -- it, is dead surface that reads as covered.
+        local offenders = {}
+        for _, path in ipairs(repo_files("ls lua/parley/*.lua lua/parley/**/*.lua 2>/dev/null")) do
+            for line in read(path):gmatch("[^\n]+") do
+                local name = line:match("^%s*M%.(_[%w_]+)%s*=.*%-%-%s*test seam")
+                    or line:match("^%s*function%s+M%.(_[%w_]+)%s*%(.*%-%-%s*test seam")
+                if name then
+                    local module = path:match("lua/(.*)%.lua"):gsub("/", ".")
+                    local short = module:match("([%w_]+)$")
+                    local found = false
+                    for _, spec in ipairs(repo_files("ls tests/*/*.lua 2>/dev/null")) do
+                        local text = read(spec)
+                        if text:find("%." .. name .. "[^%w_]") and (text:find(module, 1, true) or text:find(short, 1, true)) then
+                            found = true; break
+                        end
+                    end
+                    if not found then offenders[#offenders + 1] = path .. ": M." .. name end
+                end
+            end
+        end
+        table.sort(offenders)
+        assert.same({}, offenders, "delete the export, or give it the test it claims")
+    end)
+
     it("no spec writes into Neovim's shared cache directory", function()
         -- #261 M5. `make test` runs specs in parallel against one XDG cache, so a
         -- file a spec writes there can be pruned or renamed away by another; a
