@@ -1401,6 +1401,17 @@ local function start_scoped_response(frame)
     local index = frame.exchange_idx or #parsed.exchanges
     local exchange = parsed.exchanges[index]
     if not exchange or not exchange.question then return nil, 'no question selected' end
+    local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(config)})
+    -- #261/#255: an earlier exchange still being regenerated contributes its
+    -- previous answer, not the header or partial text now in the buffer. Here,
+    -- in the tick the command read the lines — build() runs later, after
+    -- readiness and remote fetches, when that generation may have ended.
+    local PrevAnswer = require('parley.previous_answer')
+    parsed = PrevAnswer.substitute(parsed, D.previous_answers(doc), index)
+    exchange = parsed.exchanges[index]
+    -- This exchange's own answer, from the command-time parse: the grant this
+    -- response acquires guarantees it is exactly what preparation will remove.
+    local replaced_answer = exchange.answer and PrevAnswer.capture(frame.parsed.exchanges[index]) or nil
     local question = exchange.question
     local last = exchange.answer and exchange.answer.line_end or question.line_end
     local footer = trailing_footnote_boundary(frame.lines, question.line_end)
@@ -1442,7 +1453,6 @@ local function start_scoped_response(frame)
             end
         end
     end
-    local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(config)})
     local group = responses[buf] or {}; responses[buf] = group
     response_order = response_order + 1
     local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order, batch = frame.batch,
@@ -1521,6 +1531,12 @@ local function start_scoped_response(frame)
         D.cancel_user(doc, topic_parent); topic_parent = nil
     end
     local function prepare_input(ctx, cb)
+        -- Before anything can write: preparation removes the old answer only
+        -- after its input is ready, so the slot is in place first (#261/#255).
+        if replaced_answer then
+            D.set_previous_answer(doc, {epoch = ctx.epoch, entity = ctx.entity,
+                generation = ctx.generation, value = replaced_answer})
+        end
         local operation = {cancelled = false, resolved = false}
         local function resolve()
             if operation.resolved then return end
@@ -1558,7 +1574,10 @@ local function start_scoped_response(frame)
                     for i = #ancestors, 1, -1 do table.insert(messages, message_lead + 1, ancestors[i]) end
                     message_lead = message_lead + #ancestors
                 end
-                final_payload = question.raw_payload or _parley.dispatcher.prepare_payload(
+                -- The raw payload build_messages found lives on the input the
+                -- request was built from, not on this function's copy of it.
+                final_payload = input_parsed.exchanges[input_index].question.raw_payload
+                    or _parley.dispatcher.prepare_payload(
                     messages, info.model, info.provider, info.tools)
                 local assets = require('parley.assets')
                 if assets.has_image(final_payload) and assets.payload_size(final_payload) > assets.MAX_REQUEST_BYTES then

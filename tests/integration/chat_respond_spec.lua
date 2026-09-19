@@ -180,6 +180,118 @@ describe('chat_respond: scoped session integration',function()
         vim.fn.delete(legacy,'rf')
         assert(ok,err)
     end)
+    -- Raw request mode parses its fence with PyYAML (log_emit.parse_yaml), which
+    -- a test host need not have. What these tests pin is where the parsed
+    -- payload is read from, so the parse is stubbed at that seam.
+    local function with_json_yaml(fn)
+        local LogEmit=require('parley.log_emit');local parse=LogEmit.parse_yaml
+        LogEmit.parse_yaml=function(text)return vim.json.decode(text)end
+        local ok,err=pcall(fn);LogEmit.parse_yaml=parse
+        assert(ok,err)
+    end
+    -- #261/#255: while Q1 is being regenerated, a request that includes Q1 in
+    -- its context carries Q1's previous answer — not the header or partial text
+    -- in the buffer — until Q1's generation ends.
+    local function regenerating_q1(q2)
+        open({'💬: first','','🤖: agent','old one','',q2 or '💬: second',''})
+        local first=submit()
+        return first
+    end
+    local function ask_q2(text)
+        local row=assert(row_containing(text or '💬: second'))
+        vim.api.nvim_win_set_cursor(0,{row,0})
+        local session=Respond.respond({range=0})
+        wait_for(function()return #calls==2 end)
+        return session,vim.json.encode(calls[2].payload)
+    end
+    it('gives a later question the previous answer before the regeneration writes (#255)',function()
+        regenerating_q1()
+        local _,payload=ask_q2()
+        assert.truthy(payload:find('old one',1,true))
+    end)
+    it('gives a later question the previous answer while the regeneration streams (#255)',function()
+        regenerating_q1()
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        local _,payload=ask_q2()
+        assert.truthy(payload:find('old one',1,true))
+        assert.is_nil(payload:find('new partial',1,true))
+    end)
+    it('gives a later question the new answer once the regeneration completes (#255)',function()
+        local first=regenerating_q1()
+        output(calls[1],'new one');complete(first,calls[1])
+        local _,payload=ask_q2()
+        assert.truthy(payload:find('new one',1,true))
+        assert.is_nil(payload:find('old one',1,true))
+    end)
+    it('gives a later question the transcript once an edit revokes the regeneration (#255)',function()
+        local first=regenerating_q1()
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        local row=assert(row_containing('new partial'))
+        vim.api.nvim_buf_set_text(buf,row-1,0,row-1,0,{'edited '})
+        wait_for(function()return Respond.response_snapshot(first).status=='terminal'end)
+        local _,payload=ask_q2()
+        assert.truthy(payload:find('edited new partial',1,true))
+        assert.is_nil(payload:find('old one',1,true))
+    end)
+    it('leaves a request captured mid-stream unchanged by the regeneration completing (#255)',function()
+        local first=regenerating_q1()
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        ask_q2()
+        output(calls[1],' and more');complete(first,calls[1])
+        local payload=vim.json.encode(calls[2].payload)
+        assert.truthy(payload:find('old one',1,true))
+        assert.is_nil(payload:find('and more',1,true))
+    end)
+    -- The event the plan names as most likely mishandled: the lines are read
+    -- while Q1 streams, but Q2's build() runs only after Q1 has ended. The
+    -- substitution belongs to the tick the lines were read.
+    it('substitutes at capture, not when the request is built later (#255)',function()
+        local first=regenerating_q1()
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        local resolve,held=Respond.resolve_remote_references,nil
+        Respond.resolve_remote_references=function(_,build) held=build end
+        local row=assert(row_containing('💬: second'))
+        vim.api.nvim_win_set_cursor(0,{row,0})
+        Respond.respond({range=0})
+        wait_for(function()return held~=nil end)
+        Respond.resolve_remote_references=resolve
+        complete(first,calls[1])
+        held(nil)
+        wait_for(function()return #calls==2 end)
+        local payload=vim.json.encode(calls[2].payload)
+        assert.truthy(payload:find('old one',1,true))
+        assert.is_nil(payload:find('new partial',1,true))
+    end)
+    it('keeps a typed raw request while an earlier answer regenerates (#255)',function()with_json_yaml(function()
+        local raw='```yaml {"type": "request"}'
+        regenerating_q1('💬: second')
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        local row=assert(row_containing('💬: second'))
+        vim.api.nvim_buf_set_lines(buf,row,row,false,{raw,
+            '{"model": "raw-fixture", "messages": [{"role": "user", "content": "custom"}]}','```'})
+        ask_q2()
+        -- The typed request IS the payload, not text inside a built one.
+        assert.equals('raw-fixture',calls[2].payload.model)
+    end)end)
+    -- The raw payload build_messages finds lives on the input the request was
+    -- built from. A batch leg builds from a copy, so reading it back from this
+    -- function's own table dropped a typed raw request in batch mode.
+    it('keeps a typed raw request in a batch leg',function()with_json_yaml(function()
+        open({'💬: first','','💬: second','```yaml {"type": "request"}',
+            '{"model": "raw-fixture", "messages": [{"role": "user", "content": "custom"}]}','```',''})
+        vim.api.nvim_win_set_cursor(0,{assert(row_containing('💬: second')),0})
+        assert.is_not_nil(Respond.respond_all())
+        wait_for(function()return #calls==1 end)
+        output(calls[1],'answer one');calls[1].complete(calls[1].id)
+        wait_for(function()return #calls==2 end)
+        -- The typed request IS the payload, not text inside a built one.
+        assert.equals('raw-fixture',calls[2].payload.model)
+    end)end)
     it('supports explicit edit adoption through the registered resume command',function()
         open({'💬: first','','🤖: old first','','💬: second',''})
         vim.api.nvim_win_set_cursor(0,{9,0})
