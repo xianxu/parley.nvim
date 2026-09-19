@@ -69,6 +69,15 @@ function M.snapshot(doc) return copy(state(doc)) end
 --- before and after every transition to decide whether to wake subscribers, and
 --- a full M.snapshot on that path would double an already-expensive copy.
 function M.turn(doc) return state(doc).turn end
+--- Does `generation` still hold a live grant on `entity`? Suspended counts: the
+--- region is still its own, pending re-proof. The one question a prev_answer
+--- slot asks of authority (#261, #255).
+function M.holds(doc,generation,entity)
+    for _,g in pairs(state(doc).grants) do
+        if g.generation==generation and g.entity==entity and g.status~='revoked' then return true end
+    end
+    return false
+end
 
 --- True when `generation` owns `grant` but another generation holds the write
 --- turn (#266): the writer could write, just not now, so its caller parks with

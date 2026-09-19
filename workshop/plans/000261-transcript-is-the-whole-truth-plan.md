@@ -66,8 +66,8 @@ must *not* be. So:
 | `answer_recovery` — the on-disk snapshot store | `lua/parley/answer_recovery.lua` | deleted |
 | `recovery_paths` — the private-directory predicate | `lua/parley/recovery_paths.lua` | deleted |
 | `traversal_policy` — private-path exclusion for tool commands | `lua/parley/tools/traversal_policy.lua` | deleted |
-| M2 · `state` — `holds`: does a generation still hold a live grant on an entity | `lua/parley/document/state.lua` | modified |
-| M2 · `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
+| `state` — `holds`: does a generation still hold a live grant on an entity | `lua/parley/document/state.lua` | modified |
+| `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
 | M3 · `attempt` — the `escalate` effect and the `deadline` event | `lua/parley/attempt.lua` | modified |
 | M5 · `refusal` — `describe`, `TOKENS`, `INTERNAL`, `PREFIX` | `lua/parley/refusal.lua` | new |
 
@@ -108,8 +108,8 @@ must *not* be. So:
 | `helper` — `file_to_table` made total, with an optional per-reader schema; `conform` drops wrongly typed fields; `table_to_file` is the atomic writer; `remove_stale_temps` sweeps its crash leftovers at setup | `lua/parley/helper.lua` | modified | JSON sidecar files |
 | `file_tracker` — `file_path`: `file_access.json` is a profile sidecar, read with a schema and written through the one writer | `lua/parley/file_tracker.lua` | modified | the file access history |
 | `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view; `source` accepts a preloaded view so a loop reads once; writes report whether they happened | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
-| M2 · `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
-| M2 · `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
+| `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
+| `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
 | M3 · `tasker` — `scope_key`, `stop_scope`, `held`, `leave` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
 | M4 · `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
 | M4 · `deferred_work` — `new(step, on_error)` | `lua/parley/deferred_work.lua` | modified | timer turns |
