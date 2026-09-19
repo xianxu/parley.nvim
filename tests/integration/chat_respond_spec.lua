@@ -254,11 +254,15 @@ describe('chat_respond: scoped session integration',function()
         wait_for(function()return buffer_contains(buf,'new partial')end)
         local resolve,held=Respond.resolve_remote_references,nil
         Respond.resolve_remote_references=function(_,build) held=build end
-        local row=assert(row_containing('💬: second'))
-        vim.api.nvim_win_set_cursor(0,{row,0})
-        Respond.respond({range=0})
-        wait_for(function()return held~=nil end)
+        -- Restored however the wait ends, so a timeout cannot leak the stub.
+        local ok,err=pcall(function()
+            local row=assert(row_containing('💬: second'))
+            vim.api.nvim_win_set_cursor(0,{row,0})
+            Respond.respond({range=0})
+            wait_for(function()return held~=nil end)
+        end)
         Respond.resolve_remote_references=resolve
+        assert(ok,err)
         complete(first,calls[1])
         held(nil)
         wait_for(function()return #calls==2 end)

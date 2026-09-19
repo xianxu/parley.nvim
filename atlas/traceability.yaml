@@ -190,6 +190,7 @@ atlas:
       - tests/integration/sidecar_degrade_spec.lua
       - tests/arch/sidecar_authority_spec.lua
       - tests/arch/json_decode_spec.lua
+      - tests/arch/buffer_lookup_spec.lua
       - tests/unit/new_question_spec.lua
       - tests/integration/new_question_spec.lua
       - tests/unit/chat_context_spec.lua

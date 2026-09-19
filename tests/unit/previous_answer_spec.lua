@@ -34,6 +34,16 @@ describe("previous_answer.substitute", function()
         assert.is_true(rawequal(parsed, P.substitute(parsed, {})))
         assert.is_true(rawequal(parsed, P.substitute(parsed, nil)))
     end)
+    it("substitutes several regenerating exchanges, each with its own answer, in order", function()
+        local parsed = { headers = {}, exchanges = { ex(5, "Q1", "partial one"), ex(9, "Q2", "partial two"), ex(13, "Q3") } }
+        local out = P.substitute(parsed, {
+            { row = 8, value = { answer = { content = "old two" } } },
+            { row = 4, value = { answer = { content = "old one" } } },
+        }, 3)
+        assert.equals("old one", out.exchanges[1].answer.content)
+        assert.equals("old two", out.exchanges[2].answer.content)
+        assert.is_nil(out.exchanges[3].answer)
+    end)
     it("does not mutate its input", function()
         local parsed = chat(); local before = vim.deepcopy(parsed)
         P.substitute(parsed, { { row = 4, value = old } })

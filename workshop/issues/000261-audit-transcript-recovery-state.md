@@ -658,6 +658,20 @@ edit. The gate said the review was not converging.
   statement of the rule, and the ancestor paragraph. `document.md` and
   `ownership.md` link to it.
 
+### 2026-09-19 — M2 boundary review round 1 (FIX-THEN-SHIP) and dispositions
+
+- **BR-26.** `helper.buffer_for` now serves every `vim.fn.bufnr(<name>)`
+  site, five of them, and a guard fails a new one. P4 pins the prompt-editor
+  data loss the review reproduced.
+- **BR-25.** The loaded-target tree-move bullet cannot be met: the rewrite
+  branch never fires. That is filed as parley#270; a characterization test
+  stands in.
+- **The Log's earlier "Tasks 2.1–2.6 landed as planned" was wrong on two
+  counts,** and both are now recorded in the plan's Revisions: the seam the
+  sub-chat tests use, and this bullet.
+- **Minors fixed.** The staleness rule's wording, a two-entry substitution
+  test, and the stub restored under `pcall`.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

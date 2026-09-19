@@ -211,10 +211,15 @@ It lives exactly as long as that generation holds its grant:
 - the event list is the ARCH-ORDER table in
   `workshop/plans/000261-transcript-is-the-whole-truth-plan.md`.
 
-A regeneration's writes move other generations' captured input ranges but never
-mark them stale; only human edits do (`document/state.lua`). The answer being
-replaced stays the valid context until the generation ends, and a request
-captured before it is unaffected by its completion.
+A generation's writes inside its own grant move other generations' captured
+input ranges but never mark them stale; only human edits do
+(`document/state.lua`). That covers every generated write: a regeneration, a
+first answer, and a topic header.
+- For a regeneration, the answer being replaced stays the valid context until
+  the generation ends.
+- For any generated write, a request captured before it is final: it carries
+  the transcript as it was when its command ran. A later generated write
+  changes what later requests read, not what an earlier one already sent.
 
 Pending progress is presentation only, described in [Response progress](response_progress.md).
 Stop cancels captured sessions for the current chat; cancellation does not release

@@ -674,16 +674,34 @@ end
 ---@return string[]|nil lines
 ---@return integer|nil buf # the loaded buffer the lines came from
 _H.chat_lines = function(path)
-	local want = vim.fn.resolve(vim.fn.fnamemodify(path, ":p"))
+	local buf = _H.buffer_for(path, true)
+	if buf then return vim.api.nvim_buf_get_lines(buf, 0, -1, false), buf end
+	if vim.fn.filereadable(path) == 1 then return vim.fn.readfile(path), nil end
+	return nil
+end
+
+--- The buffer named exactly `name`, or nil. `vim.fn.bufnr(name)` is a
+--- file-pattern match: `bufnr('/x/chat.md')` can return a loaded
+--- `/x/chat.md.bak`, and `bufnr('parley://system_prompt/foo')` returns the
+--- `…/foobar` buffer, which the prompt editor then force-deleted (#261 M2
+--- review BR-26). A file path is compared resolved and absolute; a scheme name
+--- (`parley://…`) is compared as written. tests/arch/buffer_lookup_spec.lua
+--- fails any other `vim.fn.bufnr(<name>)` in lua/.
+---@param name string
+---@param loaded_only boolean|nil # only a loaded buffer
+---@return integer|nil
+_H.buffer_for = function(name, loaded_only)
+	local function key(n)
+		if n:match("^%a[%w+.-]*://") then return n end
+		return vim.fn.resolve(vim.fn.fnamemodify(n, ":p"))
+	end
+	local want = key(name)
 	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-		if vim.api.nvim_buf_is_loaded(buf) then
-			local name = vim.api.nvim_buf_get_name(buf)
-			if name ~= "" and vim.fn.resolve(vim.fn.fnamemodify(name, ":p")) == want then
-				return vim.api.nvim_buf_get_lines(buf, 0, -1, false), buf
-			end
+		local bname = vim.api.nvim_buf_get_name(buf)
+		if bname ~= "" and (not loaded_only or vim.api.nvim_buf_is_loaded(buf)) and key(bname) == want then
+			return buf
 		end
 	end
-	if vim.fn.filereadable(path) == 1 then return vim.fn.readfile(path), nil end
 	return nil
 end
 

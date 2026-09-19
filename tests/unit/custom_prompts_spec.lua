@@ -232,6 +232,26 @@ describe("system_prompt_picker writes and reads", function()
         if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
     end)
 
+    -- The prompt editor wipes when hidden, so a modified one stays in its
+    -- window; opening another prompt happens from a different window. The old
+    -- lookup, bufnr('parley://system_prompt/foo'), matched the foobar buffer and
+    -- force-deleted it — unsaved edits and all.
+    it("P4: opening one prompt's editor leaves another prompt's unsaved editor alone", function()
+        local p = plugin({ "foo", "foobar" })
+        picker.edit_prompt(p, "foobar")
+        local foobar = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(foobar, 0, -1, false, { "unsaved foobar edit" })
+        vim.cmd("new")
+        picker.edit_prompt(p, "foo")
+        local foo = vim.api.nvim_get_current_buf()
+        assert.is_true(vim.api.nvim_buf_is_valid(foobar), "the foobar editor was deleted")
+        assert.same({ "unsaved foobar edit" }, vim.api.nvim_buf_get_lines(foobar, 0, -1, false))
+        vim.cmd("only!")
+        for _, b in ipairs({ foobar, foo }) do
+            if vim.api.nvim_buf_is_valid(b) then vim.api.nvim_buf_delete(b, { force = true }) end
+        end
+    end)
+
     it("P3: building the list reads a malformed file once, however many prompts", function()
         helper.table_to_file({ broken = { system_prompt = 3 } }, custom_prompts.file_path())
         warnings = {}

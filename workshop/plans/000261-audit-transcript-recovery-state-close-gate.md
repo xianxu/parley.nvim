@@ -364,6 +364,43 @@ rounds:
       boundary: M1
       recipe: milestone-review
       blocked: false
+    - "n": 6
+      timestamp: "2026-09-19T01:56:43-07:00"
+      agent: claude
+      findings:
+        - id: BR-25
+          severity: Important
+          title: Task 2.6's loaded-target move_chat_tree test is missing, and the Log claims the task landed as planned
+          detail: 'The plan requires a test that the branch-link rewrite at init.lua:3798, with the target loaded, rewrites the buffer and does not write the file under it. No such test exists. Counterfactual: forcing live=false plus readfile in move_chat_tree (write the file under the live buffer, never update the buffer) leaves all 10 specs reaching move_chat_tree green. The sub-chat cases also call _collect_ancestor_messages instead of submitting in C, and neither gap is in the Log''s deviation list. Second finding in this family. Rule: before milestone-close, every Step-1 test bullet maps to a named test in the diff or to a logged deviation, and a bullet with neither blocks the close. Add the test and put the rule in workshop/lessons.md.'
+          family: plan-step-not-as-specified
+          round: 6
+        - id: BR-26
+          severity: Important
+          title: chat_lines fixes the bufnr(path) partial-match defect at 1 of 5 sites; 4 remain, one confirmed to destroy a buffer
+          detail: 'Still using bufnr(<name>): init.lua:4405 and 4428 (child topic after a prune), outline.lua:407 and system_prompt_picker.lua:83. Verified on nvim 0.11.7: bufnr of parley://system_prompt/foo returns the foobar buffer, which line 85 force-deletes, discarding its unsaved edits. The plan''s consumer list for chat_lines carries no query, against its own header rule. Fourth finding in this family. Rule: a site list comes from a recorded query, and a primitive-class query becomes an arch guard. Split the exact-name lookup out of chat_lines, route all four sites through it, and add a guard failing any vim.fn.bufnr(arg) outside the helper.'
+          family: enumeration-claims-completeness
+          round: 6
+        - id: BR-27
+          severity: Minor
+          title: lifecycle.md scopes the stale exemption to a regeneration; the code exempts every generation's owned writes
+          detail: state.lua exempts any other generation's write inside its own live grant, including a first answer and topic header writes, as ownership.md and document.md say. A request captured mid-stream of a first answer took partial text, and its tool rounds now continue without the stale pause. lifecycle.md's rationale (the previous answer stays valid) does not cover that case; state the broader rule and why that capture is final.
+          family: rule-statement-scope-drift
+          round: 6
+        - id: BR-28
+          severity: Minor
+          title: Several exchanges regenerating at once are pinned only at the coordinator, not in substitution or a request
+          detail: document_previous_answer_spec lists two slots, but no test runs previous_answer.substitute with two entries, or a request carrying both old answers. The behavior is correct when probed; add one pure two-entry case.
+          family: done-when-clause-untested
+          round: 6
+        - id: BR-29
+          severity: Minor
+          title: The capture-then-late-build test restores its resolve_remote_references stub outside a protected call
+          detail: A timeout in wait_for(held) leaks the stub into every later test in chat_respond_spec. with_json_yaml in the same file already restores through pcall.
+          family: stub-restored-outside-finally
+          round: 6
+      boundary: M2
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -548,8 +585,28 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-24** [Minor] `enumeration-claims-completeness` The sidecar census finds readers by the text state_dir, so file_access.json escapes it, and a wrongly typed entry makes opening a chat raise
   3rd in this family. Rule: a guard that claims to cover a class selects members by the property that defines the class, not by how one member happens to be spelled. Here the class is files persisted across sessions and read back by a chat action. file_tracker.lua:23 builds its own path under stdpath("data")/parley. open_buf (init.lua:3112) then calls track_file_access, which raises "attempt to index a number value" (:92, reproduced) on {"/a.md": 3}. Quit and reopen does not clear it. The same module has a second, non-atomic JSON writer (:70) that returns true regardless of the write result. Measured: grepping for stdpath( in lua/ finds one more session-persisted JSON reader on the chat path, this one. Fix the rule: derive every profile sidecar's path from one helper (or from state_dir), have the census select on that, add file_access.json to tests/helpers/sidecars.lua with a schema, and write it through table_to_file.
 
+## Round 6 — 2026-09-19T01:56:43-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-25** [Important] `plan-step-not-as-specified` Task 2.6's loaded-target move_chat_tree test is missing, and the Log claims the task landed as planned
+  The plan requires a test that the branch-link rewrite at init.lua:3798, with the target loaded, rewrites the buffer and does not write the file under it. No such test exists. Counterfactual: forcing live=false plus readfile in move_chat_tree (write the file under the live buffer, never update the buffer) leaves all 10 specs reaching move_chat_tree green. The sub-chat cases also call _collect_ancestor_messages instead of submitting in C, and neither gap is in the Log's deviation list. Second finding in this family. Rule: before milestone-close, every Step-1 test bullet maps to a named test in the diff or to a logged deviation, and a bullet with neither blocks the close. Add the test and put the rule in workshop/lessons.md.
+- **BR-26** [Important] `enumeration-claims-completeness` chat_lines fixes the bufnr(path) partial-match defect at 1 of 5 sites; 4 remain, one confirmed to destroy a buffer
+  Still using bufnr(<name>): init.lua:4405 and 4428 (child topic after a prune), outline.lua:407 and system_prompt_picker.lua:83. Verified on nvim 0.11.7: bufnr of parley://system_prompt/foo returns the foobar buffer, which line 85 force-deletes, discarding its unsaved edits. The plan's consumer list for chat_lines carries no query, against its own header rule. Fourth finding in this family. Rule: a site list comes from a recorded query, and a primitive-class query becomes an arch guard. Split the exact-name lookup out of chat_lines, route all four sites through it, and add a guard failing any vim.fn.bufnr(arg) outside the helper.
+- **BR-27** [Minor] `rule-statement-scope-drift` lifecycle.md scopes the stale exemption to a regeneration; the code exempts every generation's owned writes
+  state.lua exempts any other generation's write inside its own live grant, including a first answer and topic header writes, as ownership.md and document.md say. A request captured mid-stream of a first answer took partial text, and its tool rounds now continue without the stale pause. lifecycle.md's rationale (the previous answer stays valid) does not cover that case; state the broader rule and why that capture is final.
+- **BR-28** [Minor] `done-when-clause-untested` Several exchanges regenerating at once are pinned only at the coordinator, not in substitution or a request
+  document_previous_answer_spec lists two slots, but no test runs previous_answer.substitute with two entries, or a request carrying both old answers. The behavior is correct when probed; add one pure two-entry case.
+- **BR-29** [Minor] `stub-restored-outside-finally` The capture-then-late-build test restores its resolve_remote_references stub outside a protected call
+  A timeout in wait_for(held) leaks the stub into every later test in chat_respond_spec. with_json_yaml in the same file already restores through pcall.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
 - **BR-23** [Minor] `seam-change-collateral` Routing table_to_file through the rename-based writer replaces symlinked sidecars, resets permissions, and leaves crash files the query cleanup never deletes
 - **BR-24** [Minor] `enumeration-claims-completeness` The sidecar census finds readers by the text state_dir, so file_access.json escapes it, and a wrongly typed entry makes opening a chat raise
+- **BR-25** [Important] `plan-step-not-as-specified` Task 2.6's loaded-target move_chat_tree test is missing, and the Log claims the task landed as planned
+- **BR-26** [Important] `enumeration-claims-completeness` chat_lines fixes the bufnr(path) partial-match defect at 1 of 5 sites; 4 remain, one confirmed to destroy a buffer
+- **BR-27** [Minor] `rule-statement-scope-drift` lifecycle.md scopes the stale exemption to a regeneration; the code exempts every generation's owned writes
+- **BR-28** [Minor] `done-when-clause-untested` Several exchanges regenerating at once are pinned only at the coordinator, not in substitution or a request
+- **BR-29** [Minor] `stub-restored-outside-finally` The capture-then-late-build test restores its resolve_remote_references stub outside a protected call

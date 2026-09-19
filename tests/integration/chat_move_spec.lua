@@ -118,6 +118,22 @@ describe("chat move", function()
         return root_path, child_path
     end
 
+    -- #261 M2 review BR-25: a tree move must not write a file under a chat
+    -- loaded in a buffer, nor lose that buffer's unsaved text. (The 🌿 rewrite
+    -- branch in move_chat_tree did not fire in any configuration tried — a
+    -- timestamped reference resolves by glob to the moved file since #224 — so
+    -- its live-buffer arm could not be driven; recorded in #261's Log.)
+    it("a tree move leaves a loaded chat's unsaved text and its file alone", function()
+        local root_path = create_tree()
+        local root_buf = assert(require("parley.helper").buffer_for(root_path))
+        vim.api.nvim_buf_set_lines(root_buf, -1, -1, false, { "UNSAVED" })
+        local disk_before = vim.fn.readfile(root_path)
+        local new_root, err = parley.move_chat_tree(root_path, secondary_dir)
+        assert.is_not_nil(new_root, err)
+        assert.equals("UNSAVED", vim.api.nvim_buf_get_lines(root_buf, -2, -1, false)[1])
+        assert.same(disk_before, vim.fn.readfile(new_root), "the file was written under the loaded buffer")
+    end)
+
     it("ChatMove carries the tree's assets folder and the link still resolves", function()
         local _, old_path = create_chat(TS .. "_move-assets.md")
         vim.fn.writefile({ "![](" .. REL .. ")" }, old_path, "a")

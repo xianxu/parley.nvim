@@ -4402,9 +4402,9 @@ M.cmd.ChatPrune = function()
 		local agent = M.get_agent()
 		local agent_info = M.get_agent_info(parsed_chat.headers, agent)
 		-- The child is now the active buffer — animate its topic line
-		local child_buf = vim.fn.bufnr(new_file)
+		local child_buf = M.helpers.buffer_for(new_file)
 		local spinner_opts = nil
-		if child_buf ~= -1 then
+		if child_buf then
 			spinner_opts = { buf = child_buf, find_line = function()
 				return chat_respond.find_topic_line(child_buf)
 			end }
@@ -4414,7 +4414,7 @@ M.cmd.ChatPrune = function()
 			{first={row=prune_start,col=0},last={row=prune_start,col=#branch_line}},
 		})
 		local child_capture,topic_prefix,topic_suffix
-		if child_buf~=-1 and vim.api.nvim_buf_is_loaded(child_buf) then
+		if child_buf and vim.api.nvim_buf_is_loaded(child_buf) then
 			child_capture,topic_prefix,topic_suffix=capture_chat_topic(child_buf,
 				vim.api.nvim_buf_get_lines(child_buf,0,-1,false))
 		end
@@ -4425,7 +4425,7 @@ M.cmd.ChatPrune = function()
 			if child_capture then
 				edits.apply_user(child_capture,{{region=1,text=topic_prefix..topic..topic_suffix}})
 			elseif disk_source and vim.fn.filereadable(new_file)==1
-				and not vim.api.nvim_buf_is_loaded(vim.fn.bufnr(new_file)) then
+				and not M.helpers.buffer_for(new_file, true) then
 				local file_lines=vim.fn.readfile(new_file)
 				local version=vim.uv.fs_stat(new_file)
 				if version and disk_version and version.ino==disk_version.ino and version.dev==disk_version.dev

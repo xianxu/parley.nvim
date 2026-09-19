@@ -80,8 +80,8 @@ function M.edit_prompt(plugin, prompt_name, on_done)
     local buf_name = "parley://system_prompt/" .. prompt_name
 
     -- Reuse existing buffer if it's still around, otherwise create new
-    local buf = vim.fn.bufnr(buf_name)
-    if buf ~= -1 and vim.api.nvim_buf_is_valid(buf) then
+    local buf = require("parley.helper").buffer_for(buf_name)
+    if buf and vim.api.nvim_buf_is_valid(buf) then
         -- Wipe the stale buffer so we start fresh
         vim.api.nvim_buf_delete(buf, { force = true })
     end

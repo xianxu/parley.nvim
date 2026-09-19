@@ -1,5 +1,20 @@
 # Lessons
 
+## 2026-09-19 (#261 M2 review — a missing test the Log called done, and a primitive fixed at one of five sites)
+
+- **Before closing a milestone, match every test bullet in the plan to a named
+  test or a logged deviation.** Task 2.6 asked for a loaded-target
+  tree-move test. The Log said "landed as planned" and no such test existed.
+  When I wrote it, the branch it targets turned out never to fire. Rule: walk
+  each task's Step-1 bullets against the diff before `milestone-close`. A
+  bullet with neither a test nor a logged deviation blocks the close.
+- **A list of sites a change must cover comes from a query recorded next to
+  it; when the defect is a primitive, the query becomes a guard.** `chat_lines`
+  documented that `bufnr(path)` matches file patterns, and was applied at one
+  of five call sites. One of the others force-deleted another prompt's
+  unsaved editor. `helper.buffer_for` now serves all five, and
+  `tests/arch/buffer_lookup_spec.lua` fails any new `vim.fn.bufnr(<name>)`.
+
 ## 2026-09-19 (#261 M1 review round 2 — a fix created a Critical, and two families repeated)
 
 - **A new "did it happen?" result must be consumed by whoever tells the user

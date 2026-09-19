@@ -109,7 +109,7 @@ must *not* be. So:
 | `file_tracker` — `file_path`: `file_access.json` is a profile sidecar, read with a schema and written through the one writer | `lua/parley/file_tracker.lua` | modified | the file access history |
 | `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view; `source` accepts a preloaded view so a loop reads once; writes report whether they happened | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
 | `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
-| `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
+| `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any; `buffer_for`: the buffer named exactly `name` | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
 | M3 · `tasker` — `scope_key`, `stop_scope`, `held`, `leave` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
 | M4 · `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
 | M4 · `deferred_work` — `new(step, on_error)` | `lua/parley/deferred_work.lua` | modified | timer turns |
@@ -612,7 +612,7 @@ marked M2.
 **Files:** `lua/parley/document/state.lua` (next to `M.turn`); test
 `tests/unit/document_state_spec.lua`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
 
 ```lua
     describe('holds',function()
@@ -650,7 +650,7 @@ marked M2.
 
   Match the region fields to what `state.lua`'s `proof()` requires. The shape
   above is the one `generation_runner.lua:583-586` builds.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [x] **Step 2:** FAIL. **Step 3: Implement.**
 
 ```lua
 --- Does `generation` still hold a live grant on `entity`? Suspended counts: the
@@ -664,7 +664,7 @@ function M.holds(doc,generation,entity)
 end
 ```
 
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: State.holds`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: State.holds`).
 
 ### Task 2.2: `previous_answer.capture` / `substitute`
 
@@ -677,7 +677,7 @@ end
 - Route the spec under `chat/lifecycle`, and add `previous_answer.lua` to
   `chat/lifecycle`'s code list.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - An entry at Q1's row replaces Q1's answer, summary and reasoning. Q2 is
     unchanged (deep-equal to the input's Q2).
   - `skip_index` is never substituted, even with a matching entry.
@@ -690,7 +690,7 @@ end
     over the substituted chat emits the `tool_use`/`tool_result` messages.
   - The input `parsed` is not mutated. `capture` of an exchange without an answer
     is `nil`. Mutating a `capture` result leaves the source intact.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [x] **Step 2:** FAIL. **Step 3: Implement.**
 
 ```lua
 -- The previous answer of an exchange being regenerated (#261, #255), and its
@@ -732,7 +732,7 @@ end
 return M
 ```
 
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: previous_answer capture and substitute`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: previous_answer capture and substitute`).
 
 ### Task 2.3: The coordinator slot
 
@@ -747,7 +747,7 @@ return M
 `chat/document`. Set it up as in `tests/integration/document_turn_wake_spec.lua:11-26`
 (`Fake.new`, `D.attach(nextbuf,{driver=…,schedule=false})`, `D.drain`).
 
-- [ ] **Step 1: Failing tests**, one per coordinator-owned row of the ARCH-ORDER
+- [x] **Step 1: Failing tests**, one per coordinator-owned row of the ARCH-ORDER
   table:
   - Set with a live grant: listed as `{row, generation, value}` for E's `💬:`
     row.
@@ -759,7 +759,7 @@ return M
   - An edit deleting E's `💬:` marker: nothing listed.
   - Reload or detach: `_previous_count` is 0.
   - Two generations on two entities: both listed, each with its own value.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [x] **Step 2:** FAIL. **Step 3: Implement.**
 
 ```lua
 --- #261/#255: the answer a regeneration is replacing, kept beside the index
@@ -806,7 +806,7 @@ end
   Revocation has no coordinator hook, so `previous_answers` removes a revoked
   slot lazily. The revoke test therefore calls `previous_answers` before it
   asserts `_previous_count`.
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: the coordinator's prev_answer slot`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: the coordinator's prev_answer slot`).
 
 ### Task 2.4: Set the slot; substitute it in the same chat
 
@@ -814,7 +814,7 @@ end
 Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
 `describe`; the payload is on `calls[i].payload`.
 
-- [ ] **Step 1: Tests.**
+- [x] **Step 1: Tests.**
   - *Characterization (passes on main, because the gap is written only just
     before the first write):* regenerate Q1 (answered `old one`), then submit Q2
     before Q1 emits. Q2's payload contains `old one`.
@@ -839,8 +839,8 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
   - **Raw-request mode:** with a live slot, Q2 carries a typed raw payload
     (`question.raw_payload`, set by `build_messages` at `:831`). The payload
     sent is the raw one. The same holds in a batch leg (`frame.input_rows`).
-- [ ] **Step 2:** The non-characterization tests FAIL.
-- [ ] **Step 3: Implement.**
+- [x] **Step 2:** The non-characterization tests FAIL.
+- [x] **Step 3: Implement.**
   1. Move `local doc = D.get(buf) or D.attach(…)` (`:1443`) above the
      `exchange.answer = nil` line (`:1432`).
   2. Right after it, in this same tick:
@@ -872,9 +872,9 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
         end
 ```
 
-- [ ] **Step 4:** PASS. **Counterfactual:** move the `substitute` call into
+- [x] **Step 4:** PASS. **Counterfactual:** move the `substitute` call into
   `build()`; the capture-then-late-build test fails. Restore.
-- [ ] **Step 5:** Commit (`#261 M2: a regenerating answer's predecessor feeds context`).
+- [x] **Step 5:** Commit (`#261 M2: a regenerating answer's predecessor feeds context`).
 
 ### Task 2.5: Generated writes never make another generation's input stale
 
@@ -882,7 +882,7 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
 `tests/unit/document_state_spec.lua`, and one integration case in
 `tests/integration/chat_respond_spec.lua`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - Unit: generation A has a prefix dependency.
     - Generation B's granted write (an `observed_edit` whose `owner_grant` is
       B's grant) lands inside A's range: A is **not** stale, and A's range moved
@@ -891,15 +891,15 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
       before.
   - Integration: Q1 is regenerating and streaming, and Q2 is submitted with a
     tool call. Q2's tool round continues without a stale-input pause.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.** In the dependency loop, when
+- [x] **Step 2:** FAIL. **Step 3: Implement.** In the dependency loop, when
   `owner` is non-nil and `owner.generation ~= gen.id`, call `move(dep,event)`
   without marking stale. Replace the comment's "other owners" clause with the
   #255 rationale (see ARCH-ORDER, Consumer side).
-- [ ] **Step 4:** PASS. Run `make test-spec SPEC=chat/document`, and the
+- [x] **Step 4:** PASS. Run `make test-spec SPEC=chat/document`, and the
   `generation_input_affinity_spec` and `generation_turn_spec` suites. Any test
   that asserts another owner's write marks input stale is **asserting the
   reversed rule**: update it, and say so in the commit body.
-- [ ] **Step 5:** Commit (`#261 M2: only human edits make captured input stale`).
+- [x] **Step 5:** Commit (`#261 M2: only human edits make captured input stale`).
 
 ### Task 2.6: Ancestors from the live buffer
 
@@ -911,7 +911,7 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
   `grep -rln "3798\|branch.*rename\|chat_move" tests/integration`; the reviewer
   names `chat_move_spec`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `chat_lines`:
     - A loaded buffer whose unsaved text differs from disk returns the buffer's
       lines and its number.
@@ -929,7 +929,7 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
     answer, and no generation is running. C's payload holds the edited text.
   - The branch-link rewrite at `init.lua:3798`, with the target loaded: the
     buffer is rewritten, and the file is not written under it.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [x] **Step 2:** FAIL. **Step 3: Implement.**
 
 ```lua
 --- A chat's current text: its loaded buffer if one is open under this path,
@@ -967,13 +967,13 @@ end
   At `init.lua:3798-3800`, use
   `local lines, live_buf = M.helpers.chat_lines(new_path); local live = live_buf ~= nil`.
   `live_buf` and `live` are still used at `:3815` and `:3824`.
-- [ ] **Step 4:** PASS. **Counterfactual:** make `chat_lines` read the file
+- [x] **Step 4:** PASS. **Counterfactual:** make `chat_lines` read the file
   only; the unsaved-parent test fails. Restore.
-- [ ] **Step 5:** Commit (`#261 M2: ancestors read the parent's live buffer`).
+- [x] **Step 5:** Commit (`#261 M2: ancestors read the parent's live buffer`).
 
 ### Task 2.7: Documentation, and M2's boundary
 
-- [ ] `atlas/chat/lifecycle.md` (Response): a "Previous answer while
+- [x] `atlas/chat/lifecycle.md` (Response): a "Previous answer while
   regenerating" paragraph covering:
   - the slot's lifetime;
   - same-chat and ancestor substitution;
@@ -982,9 +982,9 @@ end
 
   Link this plan's ARCH-ORDER table for the event list. `ownership.md` links
   here and does not restate it.
-- [ ] `atlas/chat/document.md` "Ownership and data flow": the coordinator holds
+- [x] `atlas/chat/document.md` "Ownership and data flow": the coordinator holds
   `prev_answer` beside the index, which still stores no transcript text.
-- [ ] The atlas page that documents ancestor context (`grep -rln "ancestor" atlas/`):
+- [x] The atlas page that documents ancestor context (`grep -rln "ancestor" atlas/`):
   a loaded parent is read from its buffer.
 - [ ] `make test`, `make lint`; `sdlc milestone-close --issue 261 --milestone M2`;
   log the verdict.
@@ -1804,3 +1804,38 @@ fixed before the close commit per the #174 protocol.
   fetches again. Removing the response `conform` turns V1 red.
 - **Counterfactuals.** Reverting each fix turns its test red: vault V1;
   file_access (2 degrade cases); writer (F3g, F3h).
+
+### 2026-09-19 — M2 boundary review (FIX-THEN-SHIP) — the lookup primitive, and a test that could not be written as planned
+
+**Reason.** The review found two blocking families.
+- `enumeration-claims-completeness`, fourth in the family: `bufnr(path)`'s
+  partial match was fixed at 1 of 5 sites. The `chat_lines` consumer list had
+  no query.
+- `plan-step-not-as-specified`, second: Task 2.6's loaded-target move test
+  was missing, and the Log said "as planned".
+
+**Delta.**
+- **`helper.buffer_for(name, loaded_only)` is the one exact-name lookup.**
+  File paths are compared resolved; `parley://` names are compared as written.
+  - `chat_lines`, `init.lua` (child topic after a prune, twice), `outline.lua`
+    and `system_prompt_picker.lua` use it.
+  - Query: `grep -rn "vim.fn.bufnr(" lua/parley | grep -v "vim.fn.bufnr()"`.
+  - Guard: `tests/arch/buffer_lookup_spec.lua`.
+  - Regression: P4, where opening prompt `foo` from another window no longer
+    force-deletes `foobar`'s unsaved editor. It goes red with the old lookup.
+- **Task 2.6's loaded-target bullet is withdrawn as specified.** The
+  `move_chat_tree` rewrite branch did not fire in any configuration tried:
+  timestamped references resolve by glob to the moved file since #224, and a
+  stable-named tree produced no rewrite. Filed as parley#270. What remains is a
+  characterization: a tree move leaves a loaded chat's unsaved text and its
+  file alone.
+- **Task 2.2 did not lift `parsed_chat` into a shared helper.** The pure tests
+  use literals, and the `build_messages` checks live beside that spec's
+  fixtures.
+- **Task 2.6's sub-chat tests use the `_collect_ancestor_messages` seam**
+  rather than submitting in the child.
+- **Minors.**
+  - `lifecycle.md` states the broader staleness rule: every generated write,
+    and why an earlier capture is final.
+  - A two-entry `substitute` test covers several exchanges regenerating at once.
+  - The late-build stub is restored under `pcall`.
