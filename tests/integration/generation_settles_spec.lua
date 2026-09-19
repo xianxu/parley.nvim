@@ -176,3 +176,105 @@ describe("every wait a generation holds settles", function()
         assert.equals(0, Runner.stats().active)
     end)
 end)
+
+-- #261 M4 Task 4.5: the reported shape, end to end. A provider stream that
+-- ignores SIGTERM is stopped, again and again: each Stop must reach terminal
+-- through the SIGKILL escalation, so no slot is ever held. Before M3/M4 the 5th
+-- submission in one buffer was refused with `generation limit`, the 17th across
+-- reloads with `process generation limit`.
+describe("a stopped response never holds a slot", function()
+    local parley = require("parley")
+    local Respond = require("parley.chat_respond")
+    local Tasker = require("parley.tasker")
+    local Vault = require("parley.vault")
+    local FakeProcess = require("tests.helpers.fake_process")
+    local root, path, buf, processes, now, old_secret, old_run, baseline
+    local function wait(fn, what) assert.is_true(vim.wait(5000, fn, 1), what or "the response did not settle") end
+    local function providers()
+        local out = {}
+        for _, p in pairs(processes.processes) do
+            for _, arg in ipairs(p.args) do if arg == "--write-out" then out[#out + 1] = p end end
+        end
+        table.sort(out, function(a, b) return a.pid < b.pid end)
+        return out
+    end
+    before_each(function()
+        root = vim.fn.tempname() .. "-settles"; vim.fn.mkdir(root, "p")
+        root = (vim.uv or vim.loop).fs_realpath(root)
+        parley.setup({ chat_dir = root, state_dir = root .. "/state",
+            providers = { openai = { endpoint = "http://127.0.0.1:9/fixture" } }, api_keys = {},
+            default_agent = "SettleFixture", agents = { { name = "Choose a model", disable = true },
+                { name = "SettleFixture", provider = "openai", model = { model = "fixture" }, system_prompt = "Fixture", tools = {} } } })
+        old_secret, old_run = Vault.get_secret, Vault.run_with_secret
+        Vault.get_secret = function() return "fixture-secret" end
+        Vault.run_with_secret = function(_, fn) fn() end
+        Tasker._reset(); Tasker._uv, processes = FakeProcess.new({ pipes_follow_holders = true })
+        now = 0; Tasker._clock = function() return now end
+        path = root .. "/2026-09-19.10-00-00.001_settles.md"
+        vim.fn.writefile({ "# topic: Settles", "- file: settles.md", "---", "", "💬: first", "🤖: old", "old one", "",
+            "💬: next", "draft" }, path)
+        vim.cmd("edit " .. vim.fn.fnameescape(path)); buf = vim.api.nvim_get_current_buf()
+        baseline = require("parley.generation_runner").stats().active
+    end)
+    after_each(function()
+        Respond.cancel_responses(buf)
+        for _, p in pairs(processes.processes) do p.ignores = {}; p:finish() end
+        vim.wait(200, function() return Tasker.stats().active == 0 end, 5)
+        Vault.get_secret, Vault.run_with_secret = old_secret, old_run
+        Tasker._reset(); Tasker._uv = nil; Tasker._clock = nil
+        if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
+        vim.fn.delete(root, "rf")
+    end)
+    local function cursor_on_first()
+        for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if line == "💬: first" then vim.api.nvim_win_set_cursor(0, { i, 0 }); return end
+        end
+        error("question missing")
+    end
+    -- Submit, let the stream start, Stop, and drive the kill escalation to its end.
+    local function submit_and_stop(label)
+        local D = require("parley.document")
+        wait(function() return D.repair_step(D.get(buf)).status == "idle" end)
+        cursor_on_first()
+        local count = #providers()
+        local session, reason = Respond.respond({ range = 0 })
+        assert.is_not_nil(session, label .. ": refused: " .. tostring(reason))
+        wait(function() return #providers() > count end, label .. ": no provider stream started")
+        local stream = providers()[#providers()]
+        stream.ignores = { [15] = true } -- the stream ignores SIGTERM
+        Respond.cancel_responses(buf)
+        -- The kill escalates at 2 s: advance the clock and fire the reconcile timers.
+        wait(function()
+            now = now + 500
+            for _, timer in ipairs(processes.timers) do if timer.callback then timer:fire() end end
+            return Respond.response_snapshot(session).status == "terminal"
+        end, label .. ": a stopped response never reached terminal")
+        wait(function() return Tasker.stats().active == 0 end, label .. ": its process was never released")
+        assert.equals(baseline, require("parley.generation_runner").stats().active, label .. ": a slot is still held")
+        local killed = false
+        for _, sig in ipairs(processes.signals) do if sig.pid == stream.pid and sig.signal == 9 then killed = true end end
+        assert.is_true(killed, label .. ": the stream was not killed")
+    end
+
+    it("admits the 5th Stop-and-resubmit in one buffer", function()
+        for i = 1, 5 do submit_and_stop("submission " .. i) end
+    end)
+
+    it("admits the 17th Stop-and-resubmit across :e! reloads", function()
+        for i = 1, 17 do
+            submit_and_stop("submission " .. i)
+            vim.cmd("silent write")
+            vim.cmd("edit!")
+        end
+    end)
+
+    it("admits a submission after :bd and reopening the same file", function()
+        submit_and_stop("before :bd")
+        local before = buf
+        vim.cmd("silent write")
+        vim.cmd("bdelete!")
+        vim.cmd("edit " .. vim.fn.fnameescape(path)); buf = vim.api.nvim_get_current_buf()
+        assert.equals(before, buf, "the buffer number is reused")
+        submit_and_stop("after reopening")
+    end)
+end)

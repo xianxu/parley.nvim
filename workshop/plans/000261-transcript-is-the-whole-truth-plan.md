@@ -1393,13 +1393,13 @@ tree), `lua/parley/chat_respond.lua:1185-1297`, `lua/parley/vault.lua:159-219`,
 In `tests/integration/generation_settles_spec.lua`, on the fake runtime, with a
 provider curl that ignores TERM:
 
-- [ ] Submit, Stop, and fire the fake timers past 2 s → `terminal`, and `active`
+- [x] Submit, Stop, and fire the fake timers past 2 s → `terminal`, and `active`
   is back at its baseline. Repeat 5 times in one buffer: the 5th submission is
   admitted. Before M3/M4 it is refused with `generation limit` (`state.lua:205`).
-- [ ] Repeat 17 times across `:e!` reloads: the 17th is admitted. Before M3/M4
+- [x] Repeat 17 times across `:e!` reloads: the 17th is admitted. Before M3/M4
   it is refused with `process generation limit` (`generation_runner.lua:574`).
-- [ ] `:bd`, reopen the same file (same buffer number), submit → admitted.
-- [ ] Commit (`#261 M4: a stopped response never holds a slot`).
+- [x] `:bd`, reopen the same file (same buffer number), submit → admitted.
+- [x] Commit (`#261 M4: a stopped response never holds a slot`).
 
 ### Task 4.6: Documentation, and M4's boundary
 
