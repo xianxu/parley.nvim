@@ -105,7 +105,7 @@ must *not* be. So:
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `chat_recovery` and `response_recovery` — recovery IO, pickers, guards | `lua/parley/chat_recovery.lua`, `lua/parley/response_recovery.lua` | deleted | state dir, pickers |
-| `helper` — `file_to_table` made total: never throws, never returns a non-table | `lua/parley/helper.lua` | modified | JSON sidecar files |
+| `helper` — `file_to_table` made total, with an optional per-reader schema; `conform` drops wrongly typed fields | `lua/parley/helper.lua` | modified | JSON sidecar files |
 | M2 · `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
 | M2 · `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
 | M3 · `tasker` — `scope_key`, `stop_scope`, `held`, `leave` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
