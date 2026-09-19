@@ -79,9 +79,7 @@ The stale note clears when a fresh response starts or the file is reloaded.
 
 These controls apply to concurrent work in one Neovim instance.
 
-[Question batches](atlas/chat/batch.md) keep a fixed selection, and
-[answer recovery](atlas/chat/recovery.md) preserves previous answers before
-regeneration.
+[Question batches](atlas/chat/batch.md) keep a fixed selection.
 
 ## Learn by chatting
 

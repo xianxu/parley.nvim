@@ -8,8 +8,8 @@ the chat loop and [Chat Write Ownership](../chat/ownership.md) for buffer grants
 
 ## Captured authority and admission
 
-`tools/dispatcher.lua` captures selected definitions, root policy, cwd, private
-recovery directory, and presentation limits in an opaque profile. Preparation
+`tools/dispatcher.lua` captures selected definitions, root policy, cwd, and
+presentation limits in an opaque profile. Preparation
 copies validated input and resolves canonical resource claims before execution.
 Native JSON empty-object markers become plain argument tables. JSON null values
 are currently refused explicitly; preparation never silently drops them.
@@ -44,7 +44,7 @@ Builtin claim declarations live in `tools/async_builtin.lua`: reads use file or
 subtree claims; edits claim the parent subtree for target and numbered backup;
 `write_file` claims the write-root subtree because it may create missing parents.
 Undeclared custom effects receive a conservative global claim. Canonicalization
-and private-path checks belong to the dispatcher, not the pure overlap service.
+belongs to the dispatcher, not the pure overlap service.
 
 ## Effect evidence and physical completion
 
@@ -117,7 +117,7 @@ cannot be distinguished safely and remains quarantined. Missing callbacks keep
 the original request pending. Descriptor cleanup alone cannot resolve uncertain
 target-write effects.
 
-## Bounds and private data
+## Bounds
 
 The shared producer owns the `tool_execution` setup defaults below. Configuration
 validates finite positive values and permits lowering these ceilings. It refuses
@@ -139,10 +139,7 @@ stdout retention and delivers chunks of at most 64KiB. Overflow cancels only the
 owning attempt; capacity is freed after exit and both pipe EOF observations.
 Diagnostic logs omit command arguments and raw tool errors.
 
-Captured policy denies explicit access to the private answer-recovery subtree,
-including aliases. Search adapters exclude that subtree before traversal;
-recursive `ls` refuses an overlapping private subtree. Read roots do not widen
-write authority. Help uses a captured installed-document catalog rather than
+Read roots do not widen write authority. Help uses a captured installed-document catalog rather than
 arbitrary model-supplied paths. See [Tool Use safety](tool_use.md#safety) for
 structured argv and result paging.
 
@@ -200,8 +197,7 @@ Builtin traversal runs through `process_scope` and `process_bootstrap`: a clean
 Neovim child imports the bounded authority, pins one target, then replaces itself
 with the captured command. Directory targets become its pinned cwd; regular files
 remain inherited descriptors. Multiple search targets run sequentially inside
-one owned tool operation. No child-follow flags are accepted, and private-path
-exclusions are translated before traversal. Tasker owns the same process through
+one owned tool operation. No child-follow flags are accepted. Tasker owns the same process through
 bootstrap, exec, cancellation, exit and drain. A19-byte stderr handshake
 distinguishes successful bootstrap from a search returning no matches; Tasker
 accounts that bounded control metadata in addition to the body capture budget. This protects admitted path
@@ -233,12 +229,6 @@ and identity after directory sync; native truncation revalidates its revision.
 Substituted temporary/backup leaves are not certified or deleted. Dynamic created
 identities are bounded to256 entries/64KiB per authority. Uncertain artifact
 obligations remain visible separately from unresolved descriptors.
-
-`traversal_policy` applies mandatory exclusions after each target is expanded and
-after optional filters. Literal-safe rg/grep/find patterns and exact ack directory
-exclusion prevent globs, hidden/ignore flags or metacharacter names from widening
-private access. Recursive ls still refuses overlap. Chat-history search shares
-the same policy; there is no independent exclusion-string implementation.
 
 Skills defer intermediate refresh only for their captured source buffer, leaving
 other open buffers on the shared tool-refresh path. The skill owns the original

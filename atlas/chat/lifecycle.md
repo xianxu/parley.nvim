@@ -184,6 +184,12 @@ footnotes. `response_topic` separately owns the captured `?` header suffix and
 origin markers; normal answer completion permits it to finish, while origin
 edits and reload invalidate it.
 
+Regenerating an answer replaces it in the buffer, and nothing is kept outside
+the transcript (#261). The previous text is reachable through native undo; how
+generated writes group into undo steps is stated once, in
+[Chat Write Ownership, "Undo grouping"](ownership.md). With `undofile` set, that
+history survives reopening the chat.
+
 Pending progress is presentation only, described in [Response progress](response_progress.md).
 Stop cancels captured sessions for the current chat; cancellation does not release
 unresolved subprocesses or tool effects. Undo/redo stays native. Document edit

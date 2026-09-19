@@ -58,20 +58,16 @@ your newer buffer text must survive and the result should request reconciliation
 Cancel a skill while its tools are active, then inspect disk and buffer separately;
 unfinished I/O must not permit a new conflicting run or apply a late source refresh.
 
-## Batch and answer recovery
+## Batch
 
 1. Start `:ParleyChatRespondAll` through a chosen question. Insert a new question,
    move the cursor and switch windows. The original membership stays fixed.
 2. Edit or delete a remaining question. The batch pauses without repeating a
    completed answer or substituting a neighbor. Try normal resume and the explicit
    edit-adopting `:ParleyChatResumeBatch!` separately.
-3. Regenerate an existing answer, then stop midway. Use `:ParleyAnswerRecovery`
-   to inspect/export the original and `:ParleyAnswerRestore` to restore it.
-4. Edit the replacement before restoring; verify the preview and confirmation.
-   Edit again while a picker is open; stale selection must not overwrite it.
-5. Save while streaming, then save the completed replacement. Cleanup requires
-   the saved file to match the completed answer; an earlier partial save must
-   retain the original. Closing a buffer alone must not delete a needed copy.
+3. Regenerate an existing answer, edit it while it streams, then regenerate it
+   again — also after `:e!`, and after closing and reopening the chat. Each
+   regeneration starts; `u` walks back to the earlier answers (#261).
 
 ## Rendering and long chats
 

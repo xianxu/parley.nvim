@@ -228,3 +228,24 @@ a tool round", derived from every `stop()` reachable from `flushing`. This
 target defends only the property: a Stop during a tool round leaves every call
 of that round in the file with what is known of its outcome, unless one of the
 listed hard stops intervenes.
+
+### 2026-09-18 — the on-disk store is gone; no replaced answer is kept (parley#261 M1)
+
+**Reason.** #261 M1 deleted the answer-recovery store. The operator decided
+that nothing replaces it as a user-facing affordance.
+
+**Delta.**
+
+- The open question "What bounds the in-session memory that replaces durable
+  recovery?" is answered: none is kept. Native undo is the way back to a
+  replaced answer.
+- The only held copy is `prev_answer`. It lives on the document coordinator for
+  as long as one generation runs, and feeds request context only (parley#255,
+  folded into #261 M2).
+- Every remaining sidecar under the state directory now degrades instead of
+  throwing, whether the file is invalid JSON or has wrongly typed fields.
+  - `tests/helpers/sidecars.lua` lists them.
+  - `tests/integration/sidecar_degrade_spec.lua` corrupts each one and then
+    submits.
+  - `tests/arch/sidecar_authority_spec.lua` fails any new reader that is not
+    listed.

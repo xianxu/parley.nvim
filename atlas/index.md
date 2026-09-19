@@ -16,7 +16,6 @@ its feature pages, and the three tutorials without reading personal files.
 ## 1. Core Chat System
 - [Chat Format](chat/format.md): Transcript markers, header syntax, and tags.
 - [Chat Lifecycle](chat/lifecycle.md): Create, rename, respond, stop, and delete conversations.
-- [Answer Recovery](chat/recovery.md): Previous-answer snapshots and guarded restore.
 - [Question Batches](chat/batch.md): Fixed selection, progress, and explicit resume.
 - [Chat Response Progress](chat/response_progress.md)
 - [Chat Attachments](chat/attachments.md): Image syntax, limits, and file ownership.
