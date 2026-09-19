@@ -111,7 +111,8 @@ must *not* be. So:
 | `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
 | `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any; `buffer_for`: the buffer named exactly `name` | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
 | `tasker` — `scope_key`, `is_scoped`, `stop_scope`, `held`, `leave`, `deadline` (the per-kind table), `exit_reason` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
-| `oauth` — `_token_body_summary`: what a token endpoint's body may show in a log, its OAuth error only | `lua/parley/oauth.lua` | modified | the OAuth token endpoint |
+| `oauth` — `_token_body_summary`: what a token endpoint's body may show in a log, its OAuth error only; the content tree takes the requesting generation's scope and spawns through `content_run`: `fetch_content`, `_fetch_public_content`, `_try_saved_accounts`, `_try_account_fetch`, `_fetch_google_api_once`, `_fetch_dropbox_api_once`, `_fetch_microsoft_api_once`, `_run_dropbox_metadata_request`, `_run_dropbox_file_request`, `_run_microsoft_metadata_request`, `_run_microsoft_content_request`, `_convert_office_to_text` | `lua/parley/oauth.lua` | modified | the OAuth token endpoint; remote content |
+| `vault` — `refresh_copilot_bearer` calls back on every path, success or its error callback | `lua/parley/vault.lua` | modified | the Copilot token endpoint |
 | `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
 | `deferred_work` — `new`, now taking an error callback | `lua/parley/deferred_work.lua` | modified | timer turns |
 
@@ -1370,12 +1371,12 @@ test `tests/integration/generation_settles_spec.lua`.
 tree), `lua/parley/chat_respond.lua:1185-1297`, `lua/parley/vault.lua:159-219`,
 `lua/parley/dispatcher.lua`.
 
-- [ ] **Step 1: Failing tests** for:
+- [x] **Step 1: Failing tests** for:
   - W4: a fetch that never exits. Stop → its group is signalled through the
     scope.
   - W6, W7 and W8.
-- [ ] **Step 2: Implement.** **Step 3:** PASS.
-- [ ] **Step 4:** Commit (`#261 M4: helpers a generation starts share its scope or settle`).
+- [x] **Step 2: Implement.** **Step 3:** PASS.
+- [x] **Step 4:** Commit (`#261 M4: helpers a generation starts share its scope or settle`).
 
 ### Task 4.4: Tools and skills
 
@@ -2150,4 +2151,25 @@ Minors, fixed below and bundled into the close commit (#174: no re-run).
   runs; the topic cancel in the terminal handler too.
 - **W16.** A topic started without a handle retires in `stop()`, and a throwing
   provider cancel retires it failed.
+
+### 2026-09-19 — M4 Task 4.3, as built
+
+**Delta.**
+- **W4.** The scope is one explicit trailing argument, `scope`, threaded through
+  the content tree: public fetch, Google, Dropbox, Microsoft and office
+  conversion. The provider definitions' `fetch_with_access_token` carry it too.
+  Each content spawn takes `content_run(scope, kind)`, which is scoped when
+  there is a scope and keeps its kind's deadline either way. Keychain, refresh
+  and the auth-code exchange stay unscoped (shared).
+  - `chat_respond` passes `tasker.scope_key(ctx.epoch, ctx.generation)`.
+  - A fetch launch that throws now marks its child done.
+  - The producer census declares oauth's forwarded `scope` parameter, with an
+    exact count.
+- **W6.** `refresh_copilot_bearer(callback, on_error)` reports all three failure
+  paths, and Copilot's `pre_query` forwards the dispatcher's error callback,
+  which it had dropped.
+- **W7.** `start_query` guards `query`; a setup throw aborts the request.
+- **W8.** A recovery runs only while `transport_alive`. A stopped owner gets the
+  failure, which it ignores.
+- Each test turns red on revert: W4 (oauth and chat_respond), W6, W7, W8.
 

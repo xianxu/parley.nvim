@@ -802,8 +802,11 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			-- on_error and puts the adapter in debt for exactly one of
 			-- retry()/give_up(); a falsy claim (and every adapter without the
 			-- hook) leaves today's behavior untouched.
+			-- A recovery acts — it reads credentials and may prompt — so it runs
+			-- only for an owner still waiting on this request (#261 M4 W8). A
+			-- stopped one gets the failure, which it ignores.
 			if type(adapter.recover_query) == "function" and attempt == 0
-				and type(restart) == "function" then
+				and type(restart) == "function" and transport_alive(transport_opts) then
 				local settle = tasker.once(function(action, msg)
 					if action == "retry" then
 						restart(attempt + 1)
@@ -899,8 +902,13 @@ D.query = function(buf, provider, payload, handler, on_exit, callback, on_progre
 		-- a retry that reused the same table would re-issue a materially
 		-- different request — an anthropic-routed claude call would retry against
 		-- the OpenAI-shaped endpoint with OpenAI headers.
-		query(buf, provider, vim.deepcopy(payload), handler, on_exit, callback, on_progress,
+		-- This runs inside a vault or pre_query callback, so a throw would escape
+		-- to whoever called that and abort nothing: the request would wait
+		-- forever. It aborts instead (#261 M4 W7). A process it may already have
+		-- spawned is its generation's, so the scope kill ends it.
+		local ok, err = pcall(query, buf, provider, vim.deepcopy(payload), handler, on_exit, callback, on_progress,
 			on_activity, on_error, abort_before_start, start_query, attempt or 0, transport_opts)
+		if not ok then abort_before_start("query setup failed: " .. tostring(err)) end
 	end
 	local adapter = providers.get(provider)
 	if adapter.pre_query then

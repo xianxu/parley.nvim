@@ -181,6 +181,36 @@ describe("a killed unscoped process is a failure", function()
         end)
     end)
 
+    -- #261 M4 W4: a fetch made for a generation runs in its process scope, so
+    -- the generation's scope kill ends it; one made outside any generation keeps
+    -- its deadline.
+    it("a content fetch for a generation runs in its scope, and its Stop reaches it", function()
+        local root = vim.fn.tempname()
+        local parley = require("parley")
+        parley.setup({ chat_dir = root, state_dir = root .. "/state", providers = {}, api_keys = {} })
+        parley._remote_reference_cache = nil
+        local url = "https://example.com/doc.txt"
+        local scope = T.scope_key(7, 3)
+        local before = processes.spawn_calls
+        local resolved
+        parley._resolve_remote_references({
+            parsed_chat = { exchanges = { { question = { content = "q", file_references = { { path = url } } } } } },
+            config = parley.config, chat_file = root .. "/chat.md", exchange_idx = 1, scope = scope,
+        }, function(value) resolved = value end)
+        assert.equals(before + 1, processes.spawn_calls)
+        assert.is_true(processes.spawn_options[processes.spawn_calls].detached, "the fetch leads its own group")
+        local curl = processes.processes[4241 + processes.spawn_calls]
+        assert.equals(1, T.stop_scope(scope))
+        local signalled = false
+        for _, sig in ipairs(processes.signals) do if sig.pid == curl.pid and sig.group then signalled = true end end
+        assert.is_true(signalled, "the scope kill did not reach the fetch")
+        curl:emit("stdout", nil); curl:emit("stderr", nil) -- its pipes close as it dies
+        wait(function() return resolved ~= nil end)
+        assert.truthy(resolved[url]:find("killed: stop", 1, true), resolved[url])
+        parley._remote_reference_cache = nil
+        vim.fn.delete(root, "rf")
+    end)
+
     it("a killed content fetch is never content, even when its output looked whole", function()
         local root = vim.fn.tempname()
         local parley = require("parley")

@@ -372,6 +372,25 @@ describe("vault copilot bearer from the token endpoint", function()
         process:finish(0)
     end
 
+    -- #261 M4 W6: every failure path reports, so a request waiting on the
+    -- bearer (the copilot pre_query) is never left waiting.
+    it("V2: every failed refresh calls on_error, and never the success callback", function()
+        local errors, successes = {}, 0
+        local function refresh() vault.refresh_copilot_bearer(function() successes = successes + 1 end,
+            function(message) errors[#errors + 1] = message end) end
+        refresh()
+        local p = processes.processes[4242]; p:finish(22, 0)
+        assert.is_true(vim.wait(1000, function() return #errors == 1 end, 5), "a failed curl never reported")
+        refresh()
+        answer("<html>proxy error</html>")
+        assert.is_true(vim.wait(1000, function() return #errors == 2 end, 5), "an undecodable body never reported")
+        -- A vault with no copilot secret resolved returns early: it must report too.
+        package.loaded["parley.vault"] = nil
+        vault = require("parley.vault"); vault.setup({ state_dir = dir })
+        refresh()
+        assert.equals(3, #errors, "an unresolved secret never reported")
+        assert.equals(0, successes)
+    end)
     it("V1: drops a non-numeric expires_at and fetches again on the next request", function()
         local refreshed = 0
         vault.refresh_copilot_bearer(function() refreshed = refreshed + 1 end)

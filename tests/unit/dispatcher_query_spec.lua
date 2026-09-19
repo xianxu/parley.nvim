@@ -964,6 +964,39 @@ describe("dispatcher.query internals", function()
             return errors
         end
 
+        -- #261 M4 W8: a recovery acts (credentials, prompts), so it runs only
+        -- for an owner still waiting; a stopped one just gets the failure.
+        it("J0b: a recovery is not started once the owner stops mid-request", function()
+            local recovered, errors, alive = 0, {}, true
+            with_adapter(function() recovered = recovered + 1; return true end, function()
+                dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                    nil, nil, nil, nil, nil, function(_qid, failure) table.insert(errors, failure) end,
+                    { alive = function() return alive end, deadline_ms = 60000 })
+                alive = false
+                captured_out_reader(nil, "")
+                captured_out_reader(nil, nil)
+                captured_terminal(0, 0, "", status_stderr("503"), nil)
+            end)
+            assert.equals(0, recovered, "a recovery ran for a stopped owner")
+            assert.equals(1, #errors, "the failure still reaches the owner")
+        end)
+        -- #261 M4 W7: the request is set up inside a vault or pre_query callback;
+        -- a throw there aborts the request instead of escaping and waiting forever.
+        it("J0c: a throw while setting up the request aborts it", function()
+            local aborted
+            local providers_mod = require("parley.providers")
+            local get = providers_mod.get
+            providers_mod.get = function(name)
+                local adapter = vim.tbl_extend("force", {}, get(name))
+                adapter.format_headers = function() error("headers exploded") end
+                return adapter
+            end
+            local ok, err = pcall(dispatcher.query, nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, nil, nil, function(msg) aborted = msg end)
+            providers_mod.get = get
+            assert(ok, err)
+            assert.truthy(tostring(aborted):find("headers exploded", 1, true), tostring(aborted))
+        end)
         it("J1: an adapter without recover_query behaves exactly as before", function()
             local errors = fail_query()
             assert.equals(1, #errors)

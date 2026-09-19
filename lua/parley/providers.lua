@@ -1076,9 +1076,9 @@ copilot.parse_sse_progress_event = openai.parse_sse_progress_event
 copilot.parse_usage = openai.parse_usage
 
 -- Copilot needs a pre-query step to refresh its bearer token
-copilot.pre_query = function(callback)
+copilot.pre_query = function(callback, on_error)
     local vault = require("parley.vault")
-    vault.refresh_copilot_bearer(callback)
+    vault.refresh_copilot_bearer(callback, on_error)
 end
 
 -- Copilot uses a different secret name

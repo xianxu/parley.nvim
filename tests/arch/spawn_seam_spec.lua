@@ -267,14 +267,22 @@ describe("arch: every process scope is spelled by tasker.scope_key", function()
         if line:match("^%s*%-%-") then return nil end
         return line:match("logical_generation%s*=%s*([^=].*)$")
     end
-    local function derived(text, rhs)
+    -- A scope forwarded as a parameter the census cannot follow, declared with
+    -- where it comes from and an exact count (a dead entry fails too).
+    local PARAMETERS = {
+        ["lua/parley/oauth.lua"] = { name = "scope", count = 1,
+            why = "content_run's scope: fetch_content's caller passes tasker.scope_key(epoch, generation)" },
+    }
+    local function derived(text, rhs, file)
         if rhs:find("scope_key%(") then return true end
+        local declared = file and PARAMETERS[file]
+        if declared and rhs:match("^" .. declared.name .. "%s*[,}]") then return true end
         for _, pattern in ipairs(FORWARD) do if rhs:find("^" .. pattern) then return true end end
         local name = rhs:match("^([%a_][%w_]*)")
         return name ~= nil and text:find("local%s+" .. name .. "%s*=%s*[%w_%.]*scope_key%(") ~= nil
     end
     it("finds every producer, and each derives from scope_key", function()
-        local problems, producers = {}, 0
+        local problems, producers, forwarded = {}, 0, {}
         for _, file in ipairs(arch.worktree_files({ "lua/**/*.lua" })) do
             if file ~= SEAM then
                 local lines = vim.fn.readfile(file)
@@ -283,9 +291,19 @@ describe("arch: every process scope is spelled by tasker.scope_key", function()
                     local rhs = rhs_of(line)
                     if rhs then
                         producers = producers + 1
-                        if not derived(text, rhs) then problems[#problems + 1] = file .. ":" .. i .. ": " .. rhs end
+                        if not derived(text, rhs, file) then
+                            problems[#problems + 1] = file .. ":" .. i .. ": " .. rhs
+                        elseif PARAMETERS[file] and rhs:match("^" .. PARAMETERS[file].name .. "%s*[,}]") then
+                            forwarded[file] = (forwarded[file] or 0) + 1
+                        end
                     end
                 end
+            end
+        end
+        for file, declared in pairs(PARAMETERS) do
+            if (forwarded[file] or 0) ~= declared.count then
+                problems[#problems + 1] = ("%s: %d forwarded scope parameter(s), declared %d"):format(
+                    file, forwarded[file] or 0, declared.count)
             end
         end
         assert.same({}, problems, "build a scope with tasker.scope_key, or forward one that was")

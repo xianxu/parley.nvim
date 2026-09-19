@@ -160,14 +160,20 @@ end
 -- anything but a number.
 local BEARER_SCHEMA = { token = "string", expires_at = "number" }
 
-V.refresh_copilot_bearer = function(callback)
+-- Every path calls back (#261 M4 W6): `callback()` once the bearer is ready,
+-- or `on_error(message)` — a request waiting on it must never be left waiting.
+V.refresh_copilot_bearer = function(callback, on_error)
+	callback = callback or function() end
+	local function failed(message)
+		logger.error(message)
+		if on_error then on_error(message) end
+	end
 	local secret = secrets.copilot
 	if not secret or type(secret) == "table" then
+		failed("copilot bearer resolve failed: the copilot secret is not resolved")
 		return
 	end
 	logger.debug("vault refresh_copilot_bearer: started", true)
-
-	callback = callback or function() end
 
 	local state_file = V.config.state_dir .. "/vault_state.json"
 
@@ -212,7 +218,7 @@ V.refresh_copilot_bearer = function(callback)
 		-- A kill reports code nil (#261 M3); every failure is reported, never thrown.
 		-- Neither output is shown: this request carries the Copilot token.
 		if code ~= 0 then
-			logger.error("copilot bearer resolve failed (" .. tasker.exit_reason(code, signal, io_error) .. ")")
+			failed("copilot bearer resolve failed (" .. tasker.exit_reason(code, signal, io_error) .. ")")
 			return
 		end
 
@@ -223,7 +229,7 @@ V.refresh_copilot_bearer = function(callback)
 			helpers.conform(fetched, BEARER_SCHEMA, "the copilot token response")
 		end
 		if not decoded_ok or type(fetched) ~= "table" or type(fetched.token) ~= "string" then
-			logger.error("copilot bearer resolve failed: the token endpoint did not return a token")
+			failed("copilot bearer resolve failed: the token endpoint did not return a token")
 			return
 		end
 		V._state.copilot_bearer = fetched

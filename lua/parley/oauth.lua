@@ -1347,11 +1347,21 @@ M._get_office_extension = function(mime_type)
     return office_binary_mimes[mime_type:lower():match("^%s*(.-)%s*$")]
 end
 
+-- A content fetch's process (#261 M4 W4): inside the requesting generation's
+-- scope when there is one, so its Stop ends the fetch and anything it spawned;
+-- bounded by its kind's deadline either way. Keychain reads, token refresh and
+-- the auth-code exchange are shared across generations, so they stay unscoped.
+---@param scope string|nil # tasker.scope_key of the generation, when fetching for one
+---@param kind string|nil # a tasker.deadline kind; default "http"
+local function content_run(scope, kind)
+    return { deadline_ms = tasker.deadline[kind or "http"], logical_generation = scope }
+end
+
 -- Convert binary Office content to plain text using pandoc or textutil
 ---@param binary_data string # raw binary content
 ---@param extension string # file extension (docx, xlsx, etc.)
 ---@param callback function # callback(text_content, error_message)
-M._convert_office_to_text = function(binary_data, extension, callback)
+M._convert_office_to_text = function(binary_data, extension, callback, scope)
     local tmp_path = os.tmpname() .. "." .. extension
     local f = io.open(tmp_path, "wb")
     if not f then
@@ -1378,8 +1388,8 @@ M._convert_office_to_text = function(binary_data, extension, callback)
             end
 
             callback(nil, "cannot convert ." .. extension .. " to text. Install pandoc: https://pandoc.org/installing.html")
-        end, nil, nil, nil, { deadline_ms = tasker.deadline.convert })
-    end, nil, nil, nil, { deadline_ms = tasker.deadline.convert })
+        end, nil, nil, nil, content_run(scope, "convert"))
+    end, nil, nil, nil, content_run(scope, "convert"))
 end
 
 ---@param status_code number|nil
@@ -1423,7 +1433,7 @@ end
 
 ---@param url string
 ---@param callback function
-M._fetch_public_content = function(url, callback)
+M._fetch_public_content = function(url, callback, scope)
     local args = {
         "-L",
         "-s",
@@ -1474,7 +1484,7 @@ M._fetch_public_content = function(url, callback)
                 .. " for "
                 .. (parsed.effective_url ~= "" and parsed.effective_url or url),
         })
-    end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
+    end, nil, nil, nil, content_run(scope))
 end
 
 ---@param url string
@@ -1635,7 +1645,7 @@ end
 ---@param info table
 ---@param access_token string
 ---@param callback function
-M._fetch_google_api_once = function(url, info, access_token, callback)
+M._fetch_google_api_once = function(url, info, access_token, callback, scope)
     local meta_url = M.build_metadata_url(info.file_id)
     local meta_args = {
         "-s",
@@ -1741,7 +1751,7 @@ M._fetch_google_api_once = function(url, info, access_token, callback)
                             kind = "success",
                             content = M.format_google_content(file_name, info.file_type, fb_data, url),
                         })
-                    end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
+                    end, nil, nil, nil, content_run(scope))
                     return
                 end
 
@@ -1753,8 +1763,8 @@ M._fetch_google_api_once = function(url, info, access_token, callback)
                 kind = "success",
                 content = M.format_google_content(file_name, info.file_type, content_data, url),
             })
-        end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
-    end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
+        end, nil, nil, nil, content_run(scope))
+    end, nil, nil, nil, content_run(scope))
 end
 
 ---@param error_code number|nil
@@ -1801,7 +1811,7 @@ end
 ---@param access_token string
 ---@param info table
 ---@param callback function
-M._run_dropbox_metadata_request = function(access_token, info, callback)
+M._run_dropbox_metadata_request = function(access_token, info, callback, scope)
     local args = {
         "-s",
         "-X", "POST",
@@ -1810,13 +1820,13 @@ M._run_dropbox_metadata_request = function(access_token, info, callback)
         "-H", "Content-Type: application/json",
         "--data", vim.json.encode({ url = info.shared_link }),
     }
-    tasker.run(nil, "curl", args, callback, nil, nil, nil, { deadline_ms = tasker.deadline.http })
+    tasker.run(nil, "curl", args, callback, nil, nil, nil, content_run(scope))
 end
 
 ---@param access_token string
 ---@param info table
 ---@param callback function
-M._run_dropbox_file_request = function(access_token, info, callback)
+M._run_dropbox_file_request = function(access_token, info, callback, scope)
     local args = {
         "-s",
         "-X", "POST",
@@ -1828,14 +1838,14 @@ M._run_dropbox_file_request = function(access_token, info, callback)
         "-H", "Authorization: Bearer " .. access_token,
         "-H", "Dropbox-API-Arg: " .. vim.json.encode({ url = info.shared_link }),
     }
-    tasker.run(nil, "curl", args, callback, nil, nil, nil, { deadline_ms = tasker.deadline.http })
+    tasker.run(nil, "curl", args, callback, nil, nil, nil, content_run(scope))
 end
 
 ---@param url string
 ---@param info table
 ---@param access_token string
 ---@param callback function
-M._fetch_dropbox_api_once = function(url, info, access_token, callback)
+M._fetch_dropbox_api_once = function(url, info, access_token, callback, scope)
     if info and info.file_name and info.file_name:lower():match("%.paper$") then
         callback({ kind = "other", error = "Dropbox API: Dropbox Paper shared links are not supported yet." })
         return
@@ -1911,8 +1921,8 @@ M._fetch_dropbox_api_once = function(url, info, access_token, callback)
                 kind = "success",
                 content = M.format_remote_content(file_name, parsed.body, url, parsed.content_type, url),
             })
-        end)
-    end)
+        end, scope)
+    end, scope)
 end
 
 ---@param error_code number|nil
@@ -1937,19 +1947,19 @@ end
 ---@param access_token string
 ---@param encoded_share string
 ---@param callback function
-M._run_microsoft_metadata_request = function(access_token, encoded_share, callback)
+M._run_microsoft_metadata_request = function(access_token, encoded_share, callback, scope)
     local args = {
         "-s",
         "-H", "Authorization: Bearer " .. access_token,
         "https://graph.microsoft.com/v1.0/shares/" .. encoded_share .. "/driveItem",
     }
-    tasker.run(nil, "curl", args, callback, nil, nil, nil, { deadline_ms = tasker.deadline.http })
+    tasker.run(nil, "curl", args, callback, nil, nil, nil, content_run(scope))
 end
 
 ---@param access_token string
 ---@param encoded_share string
 ---@param callback function
-M._run_microsoft_content_request = function(access_token, encoded_share, callback)
+M._run_microsoft_content_request = function(access_token, encoded_share, callback, scope)
     local args = {
         "-s",
         "-L",
@@ -1960,14 +1970,14 @@ M._run_microsoft_content_request = function(access_token, encoded_share, callbac
         "-H", "Authorization: Bearer " .. access_token,
         "https://graph.microsoft.com/v1.0/shares/" .. encoded_share .. "/driveItem/content",
     }
-    tasker.run(nil, "curl", args, callback, nil, nil, nil, { deadline_ms = tasker.deadline.http })
+    tasker.run(nil, "curl", args, callback, nil, nil, nil, content_run(scope))
 end
 
 ---@param url string
 ---@param info table
 ---@param access_token string
 ---@param callback function
-M._fetch_microsoft_api_once = function(url, info, access_token, callback)
+M._fetch_microsoft_api_once = function(url, info, access_token, callback, scope)
     local encoded_share = M._encode_sharing_url(info.shared_url or url)
 
     M._run_microsoft_metadata_request(access_token, encoded_share, function(code, _, stdout_data)
@@ -2044,7 +2054,7 @@ M._fetch_microsoft_api_once = function(url, info, access_token, callback)
                     else
                         callback({ kind = "other", error = "OneDrive API: " .. (err or "failed to convert Office document") })
                     end
-                end)
+                end, scope)
                 return
             end
 
@@ -2052,8 +2062,8 @@ M._fetch_microsoft_api_once = function(url, info, access_token, callback)
                 kind = "success",
                 content = M.format_remote_content(file_name, parsed.body, url, parsed.content_type, url),
             })
-        end)
-    end)
+        end, scope)
+    end, scope)
 end
 
 provider_definitions = {
@@ -2084,8 +2094,8 @@ provider_definitions = {
         format_api_error = function(error)
             return M._format_dropbox_api_error_message(error)
         end,
-        fetch_with_access_token = function(url, info, access_token, callback)
-            return M._fetch_dropbox_api_once(url, info, access_token, callback)
+        fetch_with_access_token = function(url, info, access_token, callback, scope)
+            return M._fetch_dropbox_api_once(url, info, access_token, callback, scope)
         end,
         missing_url_message = function(url)
             return "Public access failed and Dropbox OAuth does not support this URL format: " .. url
@@ -2127,8 +2137,8 @@ provider_definitions = {
         format_api_error = function(error)
             return M._format_api_error_message(error)
         end,
-        fetch_with_access_token = function(url, info, access_token, callback)
-            return M._fetch_google_api_once(url, info, access_token, callback)
+        fetch_with_access_token = function(url, info, access_token, callback, scope)
+            return M._fetch_google_api_once(url, info, access_token, callback, scope)
         end,
         missing_url_message = function(url)
             return "Public access failed and Google OAuth does not support this URL format: " .. url
@@ -2171,8 +2181,8 @@ provider_definitions = {
         format_api_error = function(error)
             return M._format_microsoft_api_error_message(error)
         end,
-        fetch_with_access_token = function(url, info, access_token, callback)
-            return M._fetch_microsoft_api_once(url, info, access_token, callback)
+        fetch_with_access_token = function(url, info, access_token, callback, scope)
+            return M._fetch_microsoft_api_once(url, info, access_token, callback, scope)
         end,
         missing_url_message = function(url)
             return "Public access failed and OneDrive OAuth does not support this URL format: " .. url
@@ -2306,7 +2316,7 @@ end
 ---@param account table
 ---@param callback function
 ---@param provider string|nil
-M._try_account_fetch = function(config, store, url, info, account, callback, provider)
+M._try_account_fetch = function(config, store, url, info, account, callback, provider, scope)
     provider = provider or (account and account.provider) or "google"
     local provider_definition = M._get_provider_definition(provider)
     if not provider_definition or not provider_definition.fetch_with_access_token then
@@ -2356,7 +2366,7 @@ M._try_account_fetch = function(config, store, url, info, account, callback, pro
             end
 
             callback(result)
-        end)
+        end, scope)
     end
 
     attempt(account, true)
@@ -2367,7 +2377,7 @@ end
 ---@param info table
 ---@param callback function
 ---@param provider string|nil
-M._try_saved_accounts = function(config, url, info, callback, provider)
+M._try_saved_accounts = function(config, url, info, callback, provider, scope)
     provider = provider or "google"
     M.load_account_store(function(store)
         local candidates = M._get_candidate_accounts(store, provider)
@@ -2407,7 +2417,7 @@ M._try_saved_accounts = function(config, url, info, callback, provider)
                 else
                     callback(result)
                 end
-            end, provider)
+            end, provider, scope)
         end
 
         try_next()
@@ -2419,7 +2429,7 @@ end
 ---@param url string # Google Drive/Docs URL
 ---@param config table # OAuth provider config or provider config map
 ---@param callback function # called with (formatted_content_string, error_string)
-M.fetch_content = function(url, config, callback)
+M.fetch_content = function(url, config, callback, scope)
     local provider = M._detect_provider_for_url(url)
     local info = M._parse_provider_url(provider, url)
     local provider_definition = M._get_provider_definition(provider)
@@ -2490,12 +2500,12 @@ M.fetch_content = function(url, config, callback)
                                 callback(nil, auth_result.error or (provider_definition and provider_definition.prompt_reason("cancelled")
                                     or "OAuth: authentication cancelled or failed."))
                             end
-                        end, provider)
+                        end, provider, scope)
                     end)
                 end)
             end, url)
-        end, provider)
-    end)
+        end, provider, scope)
+    end, scope)
 end
 
 return M

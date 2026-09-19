@@ -1201,7 +1201,8 @@ end
 
 -- Resolve all remote (URL-based) file references asynchronously before building messages
 -- Calls callback with resolved_remote_content map when all fetches complete
----@param opts table # { parsed_chat, config, chat_file, exchange_idx }
+---@param opts table # { parsed_chat, config, chat_file, exchange_idx, scope? }; `scope` is the
+---  requesting generation's `tasker.scope_key`, so its fetch processes stop with it
 ---@param callback function # called with resolved_remote_content table
 M.resolve_remote_references = function(opts, callback)
     local helpers = require("parley.helper")
@@ -1305,12 +1306,13 @@ M.resolve_remote_references = function(opts, callback)
             operation.pending = operation.pending - 1
             finish()
         end
-        -- Register before invoking IO. A throw may happen after a process or
-        -- picker starts; retain this child until complete positively settles it.
+        -- Register before invoking IO. A throw may happen after a fetch process
+        -- starts; that process is in the generation's scope, so the scope kill
+        -- ends it, and the child is done here (#261 M4 W4).
         local ok, reason = pcall(function()
-            oauth.fetch_content(url, opts_config.oauth or opts_config.google_drive, complete)
+            oauth.fetch_content(url, opts_config.oauth or opts_config.google_drive, complete, opts.scope)
         end)
-        if not ok then failed(reason) end
+        if not ok then failed(reason); complete(nil, reason) end
     end
     operation.launching = false
     finish()
@@ -1638,6 +1640,8 @@ local function start_scoped_response(frame)
             local ok, remote = pcall(M.resolve_remote_references, {parsed_chat = input_parsed, config = config,
                 chat_file = frame.file_name, exchange_idx = input_index,
                 cancelled = function()return operation.cancelled or ctx.cancelled()end,
+                -- The fetches run in this generation's process scope (#261 M4 W4).
+                scope = require('parley.tasker').scope_key(ctx.epoch, ctx.generation),
                 on_failure = logical_failure}, build)
             if not ok then fail(remote)
             else
