@@ -369,6 +369,7 @@ atlas:
       - lua/parley/document/write_turn.lua
       - lua/parley/document/projection.lua
     tests:
+      - tests/integration/document_previous_answer_spec.lua
       - tests/unit/document_write_turn_spec.lua
       - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/unit/document_sequence_spec.lua
