@@ -517,6 +517,133 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: false
+    - "n": 10
+      timestamp: "2026-09-19T03:51:20-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          round: 10
+        - id: BR-2
+          disposition: addressed
+          round: 10
+        - id: BR-3
+          disposition: addressed
+          round: 10
+        - id: BR-4
+          disposition: withdrawn
+          round: 10
+      findings:
+        - id: BR-38
+          severity: Important
+          title: A killed content fetch writes "curl exited with code nil" into the transcript and drops the io_error that names the cause
+          detail: |-
+            This is the 3rd finding in family `seam-change-collateral`. Do NOT fix
+            oauth.lua:1424 alone. The rule: when a seam's contract changes the meaning
+            of a value it hands out, sweep every consumer that RENDERS the value, not
+            only those that BRANCH on it. Tasker now sets `code = nil` whenever
+            `io_error` is set (tasker.lua:504-510); the branchers were swept by
+            construction, the renderers were not. The enumeration over tasker exit
+            callbacks is four: vault.lua:218 (fixed this round), dispatcher.lua:786
+            (already prints io_error), dispatcher.lua:740 (log-only, now reads
+            "exit code=nil signal=15"), and oauth.lua:1424 — the only user-visible
+            one, which formats tostring(code) into transcript text that is then cached
+            as that URL's error. The Done-when clause "User-visible errors identify
+            the recoverable action" fails there. unscoped_kill_spec.lua:103 asserts
+            only that the body is not used, so it stays green on the bad message.
+          family: seam-change-collateral
+          round: 10
+        - id: BR-39
+          severity: Important
+          title: README still says Stop keeps running tools and their claims, which M3 inverted
+          detail: |-
+            This is the 4th finding in family `seam-change-collateral`, and the second
+            this round — which is the ledger reporting the enumeration was never
+            written. Same rule as above, applied to prose consumers: a contract change
+            must sweep every STATEMENT of the old contract, not only the code. The Stop
+            contract changed (TERM to the group, SIGKILL at 2 s, claim released on
+            resolution). atlas/chat/lifecycle.md and atlas/providers/tool_execution.md
+            were updated in this range, tests/manual/chat-concurrency.md was updated,
+            README.md:115-117 was not: "while the process supervisor keeps tools that
+            are still running and their resource claims". The enumeration a boundary
+            needs is "every file that states this contract", produced once, not per
+            finding.
+          family: seam-change-collateral
+          round: 10
+        - id: BR-40
+          severity: Important
+          title: The new atlas section quantifies over every process Parley starts, but five spawn families sit outside the tasker seam
+          detail: |-
+            This is the 7th finding in family `enumeration-claims-completeness`.
+            Earlier rounds fixed instances. Do NOT fix this instance — state the rule
+            and fix that. The rule: a statement quantified over a whole category
+            ("every process", "all N sites") must either be produced by an executable
+            enumeration over that category, or be scoped in words to the seam it
+            actually covers. atlas/providers/tool_execution.md:71 says "Every process
+            Parley starts is scoped or unscoped" and :113 says tasker.leave() sends
+            "SIGKILL to every live process"; its own "Residuals, stated once" list
+            names only a kernel hold, a secret command's grandchild, and an nvim
+            crash. Measured exceptions: cliproxy.lua:665 (uv.spawn, detached,
+            uv.unref, whose docstring says it is spawned to OUTLIVE nvim — a
+            deliberate counterexample), cliproxy.lua:1380 (jobstart), ~13 vim.system
+            calls in cliproxy.lua, git_markdown_source.lua:140 (uv.spawn with its own
+            TERM-only cancel, no group, no deadline), and the vim.fn.system fallbacks
+            in tools/builtin/{ls,grep,find,ack,chat_history_search}.lua plus
+            init.lua:4740. The class fix that matches this repo's own convention is an
+            arch guard over the spawn seam (tests/arch/), which also makes the atlas
+            quantifier true by construction; if it carries an allowlist, note family
+            `allowlist-without-dead-entry-check` already fired once on this issue.
+          family: enumeration-claims-completeness
+          round: 10
+        - id: BR-41
+          severity: Minor
+          title: generate_topic replaces rather than merges transport_opts, so partial opts lose the deadline and are refused
+          detail: |-
+            chat_respond.lua:1049 uses `transport_opts or { deadline_ms = ... }`. One
+            production caller today (init.lua:4429, passes nothing), so no defect
+            ships. M4's W16 touches topic generation and is the likely trigger: a
+            caller passing `{alive = fn}` with no generation gets refused at spawn.
+            Set deadline_ms into the table when unscoped and unset instead.
+          family: seam-change-collateral
+          round: 10
+        - id: BR-42
+          severity: Minor
+          title: The process fake models group signals and pid signals with two different semantics
+          detail: |-
+            fake_process.lua:95-113: the group branch always delivers the signal and
+            ignores process.probe and process.signal_result; the pid branch honours
+            probe, signal_result and opts.finish_on_signal. A scoped record therefore
+            cannot be made to observe unknown/EPERM at all — which is why
+            tasker_run_spec.lua:913 had to move its failed-signal-retry case from a
+            scoped attempt to an unscoped one, losing that coverage for groups rather
+            than extending it.
+          family: stateless-double-at-stateful-seam
+          round: 10
+        - id: BR-43
+          severity: Minor
+          title: target() has no pid == 0 guard, and -0 == 0 would signal Neovim's own process group
+          detail: |-
+            tasker.lua:212-216. Unreachable today (uv.spawn never yields pid 0, and a
+            failed spawn is rejected before the record is armed), but the fake added
+            `if pid == 0 then error("signalled Neovim's own process group") end`
+            precisely because the failure mode is catastrophic and silent. The
+            production side should be at least as defensive as its double.
+          family: untrusted-input-unparsed
+          round: 10
+        - id: BR-44
+          severity: Minor
+          title: The one-shot deadline timer is closed only by retire, the one path a held record never takes
+          detail: |-
+            tasker.lua:564-571 arms the timer and tasker.lua:191 closes it in retire().
+            A record that reaches unresolved-visible is retained by design and never
+            retires, so its already-fired uv timer handle is retained with it. Bounded
+            by held records, but it is a handle whose only removal path is the one
+            branch that by definition does not run.
+          family: residue-names-no-end
+          round: 10
+      boundary: M3
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -767,6 +894,90 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-37** [Minor] `allowlist-without-dead-entry-check` nodiscard_spec's DROPPED count is only a ceiling, so a declaration outlives the call it excuses
   Changing chat_respond.lua:1546 to consume its result leaves the D.set_previous_answer entry silently in place. Sibling guards reject dead entries (single_resolver_spec.lua:79-82, sidecar_authority_spec.lua:69, single_source_sweeps_spec.lua:692). Assert seen == declared.count for every DROPPED entry.
 
+## Round 10 — 2026-09-19T03:51:20-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed
+- BR-2 — addressed
+- BR-3 — addressed
+- BR-4 — withdrawn
+
+### Raised
+
+- **BR-38** [Important] `seam-change-collateral` A killed content fetch writes "curl exited with code nil" into the transcript and drops the io_error that names the cause
+  This is the 3rd finding in family `seam-change-collateral`. Do NOT fix
+  oauth.lua:1424 alone. The rule: when a seam's contract changes the meaning
+  of a value it hands out, sweep every consumer that RENDERS the value, not
+  only those that BRANCH on it. Tasker now sets `code = nil` whenever
+  `io_error` is set (tasker.lua:504-510); the branchers were swept by
+  construction, the renderers were not. The enumeration over tasker exit
+  callbacks is four: vault.lua:218 (fixed this round), dispatcher.lua:786
+  (already prints io_error), dispatcher.lua:740 (log-only, now reads
+  "exit code=nil signal=15"), and oauth.lua:1424 — the only user-visible
+  one, which formats tostring(code) into transcript text that is then cached
+  as that URL's error. The Done-when clause "User-visible errors identify
+  the recoverable action" fails there. unscoped_kill_spec.lua:103 asserts
+  only that the body is not used, so it stays green on the bad message.
+- **BR-39** [Important] `seam-change-collateral` README still says Stop keeps running tools and their claims, which M3 inverted
+  This is the 4th finding in family `seam-change-collateral`, and the second
+  this round — which is the ledger reporting the enumeration was never
+  written. Same rule as above, applied to prose consumers: a contract change
+  must sweep every STATEMENT of the old contract, not only the code. The Stop
+  contract changed (TERM to the group, SIGKILL at 2 s, claim released on
+  resolution). atlas/chat/lifecycle.md and atlas/providers/tool_execution.md
+  were updated in this range, tests/manual/chat-concurrency.md was updated,
+  README.md:115-117 was not: "while the process supervisor keeps tools that
+  are still running and their resource claims". The enumeration a boundary
+  needs is "every file that states this contract", produced once, not per
+  finding.
+- **BR-40** [Important] `enumeration-claims-completeness` The new atlas section quantifies over every process Parley starts, but five spawn families sit outside the tasker seam
+  This is the 7th finding in family `enumeration-claims-completeness`.
+  Earlier rounds fixed instances. Do NOT fix this instance — state the rule
+  and fix that. The rule: a statement quantified over a whole category
+  ("every process", "all N sites") must either be produced by an executable
+  enumeration over that category, or be scoped in words to the seam it
+  actually covers. atlas/providers/tool_execution.md:71 says "Every process
+  Parley starts is scoped or unscoped" and :113 says tasker.leave() sends
+  "SIGKILL to every live process"; its own "Residuals, stated once" list
+  names only a kernel hold, a secret command's grandchild, and an nvim
+  crash. Measured exceptions: cliproxy.lua:665 (uv.spawn, detached,
+  uv.unref, whose docstring says it is spawned to OUTLIVE nvim — a
+  deliberate counterexample), cliproxy.lua:1380 (jobstart), ~13 vim.system
+  calls in cliproxy.lua, git_markdown_source.lua:140 (uv.spawn with its own
+  TERM-only cancel, no group, no deadline), and the vim.fn.system fallbacks
+  in tools/builtin/{ls,grep,find,ack,chat_history_search}.lua plus
+  init.lua:4740. The class fix that matches this repo's own convention is an
+  arch guard over the spawn seam (tests/arch/), which also makes the atlas
+  quantifier true by construction; if it carries an allowlist, note family
+  `allowlist-without-dead-entry-check` already fired once on this issue.
+- **BR-41** [Minor] `seam-change-collateral` generate_topic replaces rather than merges transport_opts, so partial opts lose the deadline and are refused
+  chat_respond.lua:1049 uses `transport_opts or { deadline_ms = ... }`. One
+  production caller today (init.lua:4429, passes nothing), so no defect
+  ships. M4's W16 touches topic generation and is the likely trigger: a
+  caller passing `{alive = fn}` with no generation gets refused at spawn.
+  Set deadline_ms into the table when unscoped and unset instead.
+- **BR-42** [Minor] `stateless-double-at-stateful-seam` The process fake models group signals and pid signals with two different semantics
+  fake_process.lua:95-113: the group branch always delivers the signal and
+  ignores process.probe and process.signal_result; the pid branch honours
+  probe, signal_result and opts.finish_on_signal. A scoped record therefore
+  cannot be made to observe unknown/EPERM at all — which is why
+  tasker_run_spec.lua:913 had to move its failed-signal-retry case from a
+  scoped attempt to an unscoped one, losing that coverage for groups rather
+  than extending it.
+- **BR-43** [Minor] `untrusted-input-unparsed` target() has no pid == 0 guard, and -0 == 0 would signal Neovim's own process group
+  tasker.lua:212-216. Unreachable today (uv.spawn never yields pid 0, and a
+  failed spawn is rejected before the record is armed), but the fake added
+  `if pid == 0 then error("signalled Neovim's own process group") end`
+  precisely because the failure mode is catastrophic and silent. The
+  production side should be at least as defensive as its double.
+- **BR-44** [Minor] `residue-names-no-end` The one-shot deadline timer is closed only by retire, the one path a held record never takes
+  tasker.lua:564-571 arms the timer and tasker.lua:191 closes it in retire().
+  A record that reaches unresolved-visible is retained by design and never
+  retires, so its already-fired uv timer handle is retained with it. Bounded
+  by held records, but it is a handle whose only removal path is the one
+  branch that by definition does not run.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
@@ -775,3 +986,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-34** [Minor] `canonical-form-not-shared` buffer_for's private key() adds an 11th copy of the resolve(fnamemodify(x,':p')) path-canonicalisation idiom
 - **BR-36** [Minor] `enumeration-claims-completeness` nodiscard_spec only sees calls at the start of a line; three calling forms that drop the result pass green
 - **BR-37** [Minor] `allowlist-without-dead-entry-check` nodiscard_spec's DROPPED count is only a ceiling, so a declaration outlives the call it excuses
+- **BR-38** [Important] `seam-change-collateral` A killed content fetch writes "curl exited with code nil" into the transcript and drops the io_error that names the cause
+- **BR-39** [Important] `seam-change-collateral` README still says Stop keeps running tools and their claims, which M3 inverted
+- **BR-40** [Important] `enumeration-claims-completeness` The new atlas section quantifies over every process Parley starts, but five spawn families sit outside the tasker seam
+- **BR-41** [Minor] `seam-change-collateral` generate_topic replaces rather than merges transport_opts, so partial opts lose the deadline and are refused
+- **BR-42** [Minor] `stateless-double-at-stateful-seam` The process fake models group signals and pid signals with two different semantics
+- **BR-43** [Minor] `untrusted-input-unparsed` target() has no pid == 0 guard, and -0 == 0 would signal Neovim's own process group
+- **BR-44** [Minor] `residue-names-no-end` The one-shot deadline timer is closed only by retire, the one path a held record never takes

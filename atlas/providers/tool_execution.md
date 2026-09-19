@@ -70,7 +70,9 @@ Tasker also escalates to SIGKILL ([Stopping a process](#stopping-a-process)).
 
 ## Stopping a process
 
-Every process Parley starts is scoped or unscoped (`lua/parley/tasker.lua`, #261).
+Every process started through `tasker.run` (`lua/parley/tasker.lua`, #261) is
+scoped or unscoped. A process started any other way is on one list with how it
+ends ([below](#processes-outside-tasker)).
 
 - **Scoped** processes belong to a generation: provider streams, tool processes,
   skill processes. They carry `logical_generation`, keyed by
@@ -98,7 +100,7 @@ is logged with its pid and listed by `tasker.held()`, and it keeps its
 admission slot.
 
 **Leaving Neovim.** `setup` registers `VimLeavePre`, which calls
-`tasker.leave()`: SIGKILL to every live process.
+`tasker.leave()`: SIGKILL to every live process tasker owns.
 
 **A kill is a failure.** `code` is the exit code only of a process that ended on
 its own and whose output was read whole. Otherwise `code` is `nil` and
@@ -106,8 +108,9 @@ its own and whose output was read whole. Otherwise `code` is `nil` and
 - `killed: stop`, `killed: deadline` or `killed: leave` for a kill Parley caused;
 - the pipe error or overflow.
 
-A refused spawn with no start-error handler delivers
-`(nil, nil, nil, nil, reason)` to its callback. So no caller takes cut output for
+A message or log that says how a run ended uses `tasker.exit_reason`, which
+prints the `io_error` rather than a nil code. A refused spawn with no
+start-error handler delivers `(nil, nil, nil, nil, reason)` to its callback. So no caller takes cut output for
 success, and a failure writes no cache or store. For example, an unfinished
 keychain read is neither cached nor saved over the keychain.
 
@@ -119,13 +122,30 @@ keychain read is neither cached nor saved over the keychain.
 - If Neovim itself crashes, no autocmd runs, and its orphans run to their own
   end.
 
+### Processes outside tasker
+
+A few processes are started directly, not through `tasker.run`, so none of the
+above applies to them. `tests/arch/spawn_seam_spec.lua` lists each of them,
+file by file, with how it ends. A new direct spawn fails that test until it is
+routed through tasker or listed with its reason.
+
+- **Synchronous calls** wait for their process, so it cannot outlive the call.
+- **The managed proxy** is spawned so that it outlives Neovim, by design.
+- **A few user commands** report their own exit: git reads, issue creation,
+  export, opening the browser for an OAuth login, and clipboard and artifact
+  lookups.
+
+The same test also checks two rules: no `deadline_ms` is a literal, and no exit
+callback prints a raw code.
+
 Coverage:
 - the fake: `tests/helpers/fake_process.lua`, which models groups, ignored
   signals and grandchildren;
 - sequences: `tests/integration/tasker_supervision_spec.lua` and
   `unscoped_kill_spec.lua`;
 - a live check against the kernel:
-  `tests/integration/process_group_conformance_spec.lua`.
+  `tests/integration/process_group_conformance_spec.lua`;
+- the list of processes outside tasker: `tests/arch/spawn_seam_spec.lua`.
 
 For explicit effect reconciliation, the internal API is
 `service:reconcile(operation, {certainty='known', effect=..., result=...,

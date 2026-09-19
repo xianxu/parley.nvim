@@ -737,7 +737,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		-- curl has exited (tasker only fires this after process + pipes are
 		-- done), so the body is no longer being read. Before the `qt` guard —
 		-- see the lifecycle note at `discard_transport`.
-		discard_transport("exit code=" .. tostring(code) .. " signal=" .. tostring(signal))
+		discard_transport(tasker.exit_reason(code, signal, io_error))
 		local qt = tasker.get_query(qid)
 		if not qt then return end
 		stderr_data = stderr_data or ""

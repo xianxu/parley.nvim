@@ -1047,7 +1047,12 @@ end
 
 M.generate_topic = function(messages, provider, model, callback, spinner, transport_opts)
     -- Outside a generation nobody stops the stream, so it names its end (#261 M3).
-    transport_opts = transport_opts or { deadline_ms = require("parley.tasker").deadline.stream }
+    -- Merged, not replaced: a caller's partial options keep what they carry.
+    local tasker = require("parley.tasker")
+    transport_opts = vim.tbl_extend("force", {}, transport_opts or {})
+    if not tasker.is_scoped(transport_opts) and transport_opts.deadline_ms == nil then
+        transport_opts.deadline_ms = tasker.deadline.stream
+    end
     -- Build a clean copy: strip whitespace, drop empty messages and cache_control.
     -- Messages carrying content-block arrays (Anthropic tool-use shape, M2
     -- Task 2.6 of #81) are flattened to a plain-text excerpt for topic

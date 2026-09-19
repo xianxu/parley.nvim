@@ -727,6 +727,21 @@ header now states its static-check limit.
   integration stage was also run on its own (`make test-integration JOBS=4`).
   Every file passed there except `perf_chat_typing_spec`.
 
+### 2026-09-19 — M3 boundary review round 1 (FIX-THEN-SHIP) and dispositions
+
+The ledger reported "round 9, not converging: fix rules, not instances". So each
+Important finding is fixed as its rule, with a guard.
+- **BR-38** (`seam-change-collateral`): the enumeration of renderers →
+  `tasker.exit_reason`, guarded. The counterfactual (old `oauth.lua`) turns
+  the new assertion red.
+- **BR-39** (`seam-change-collateral`): the superseded-claim sweep, run → the
+  README statement is corrected.
+- **BR-40** (`enumeration-claims-completeness`): the atlas is scoped to tasker's
+  seam, plus `tests/arch/spawn_seam_spec.lua`, the reasoned, exact-count list
+  of every out-of-seam spawn with a dead-entry check.
+- **All five Minors fixed** (plan Revisions). Lessons were added to
+  `workshop/lessons.md`.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

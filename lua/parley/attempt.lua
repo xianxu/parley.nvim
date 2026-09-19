@@ -22,12 +22,17 @@ local KILL_AFTER, VISIBLE_AFTER = 2000, 5000
 -- `kill_due` while unresolved, visible at +5000. Its cause is `stop`, `deadline`
 -- or `leave`. A window an exit opened only probes, so a later stop replaces it;
 -- so does a stop after a window went visible (#261 M3).
+-- The one probe window: first tick at +50, backing off to 1000, visible at +5000.
+local function open_probe_window(state, now)
+    state.reconcile_started, state.reconcile_due, state.reconcile_delay = now, now + 50, 50
+end
+
 local function open_stop_window(state, now, cause)
     state.stop_requested = true
     if not now or (state.kill_due and not state.unresolved_visible) then return end
     state.stop_cause, state.stop_window = cause, (state.stop_window or 0) + 1
     state.kill_due, state.escalated, state.unresolved_visible = now + KILL_AFTER, nil, nil
-    state.reconcile_started, state.reconcile_due, state.reconcile_delay = now, now + 50, 50
+    open_probe_window(state, now)
 end
 
 function M.transition(previous, event)
@@ -39,9 +44,7 @@ function M.transition(previous, event)
     elseif event.type == "stop_requested" then
         open_stop_window(state, event.now, event.cause or "stop")
     elseif event.type == "reconcile_requested" then
-        if event.now and not state.reconcile_started then
-            state.reconcile_started=event.now;state.reconcile_due=event.now+50;state.reconcile_delay=50
-        end
+        if event.now and not state.reconcile_started then open_probe_window(state, event.now) end
     elseif event.type == "reconcile_tick" and state.reconcile_due and event.now>=state.reconcile_due then
         if state.kill_due and not state.escalated and event.now >= state.kill_due then state.escalated = true end
         if event.now-state.reconcile_started>=VISIBLE_AFTER then

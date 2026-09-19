@@ -110,7 +110,7 @@ must *not* be. So:
 | `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view; `source` accepts a preloaded view so a loop reads once; writes report whether they happened | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
 | `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
 | `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any; `buffer_for`: the buffer named exactly `name` | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
-| `tasker` — `scope_key`, `stop_scope`, `held`, `leave`, `deadline` (the per-kind table) | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
+| `tasker` — `scope_key`, `is_scoped`, `stop_scope`, `held`, `leave`, `deadline` (the per-kind table), `exit_reason` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
 | M4 · `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
 | M4 · `deferred_work` — `new(step, on_error)` | `lua/parley/deferred_work.lua` | modified | timer turns |
 
@@ -1953,4 +1953,61 @@ the real `find` builtin through `async_builtin` with a captured path authority
 on `/`, which is the manual "Stop during `find /`". It asserts that the attempt
 is scoped, that `stop_scope` settles the tool within 4 s, and that its pid is
 gone. With main's `detach = true` restored, all three cases fail.
+
+### 2026-09-19 — M3 boundary review round 1 (FIX-THEN-SHIP): dispositions
+
+**Delta.**
+- **BR-38, renderers of a changed value.** `tasker.exit_reason(code, signal,
+  io_error)` is the one way to print how a run ended.
+  - It is used by every tasker exit callback that renders an outcome:
+    - the remote-content fetch (`oauth.lua`), whose transcript text now reads
+      "(killed: deadline) … Resubmit the question to fetch it again.";
+    - the auth-code exchange warning;
+    - the vault copilot error;
+    - the dispatcher's transport-discard reason.
+  - The dispatcher's structured failure diagnostic already printed `io_error`
+    beside the code, and stays as it is (allowed once).
+  - `tests/arch/spawn_seam_spec.lua` fails on any raw `tostring(…code)` in a
+    module that hands callbacks to tasker. `unscoped_kill_spec` asserts that
+    the rendered text names `killed: deadline` and contains no "nil".
+- **BR-39, statements of the Stop contract.** Found by running the
+  superseded-claim sweep over `README.md`, `atlas/`, `docs/`, `tests/manual/`
+  and code comments for "still running", "claims", "does not release" and
+  "Stop".
+  - The one stale statement was `README.md`, "the process supervisor keeps
+    tools that are still running". It now reads: a stopped tool's process is
+    ended, TERM then KILL at 2 s, and its claims are held until it has ended.
+  - The other statements say that claims are held until the process ends,
+    which is still true: `tool_execution.md` (the supervisor paragraph),
+    `tool_use.md` (the Stop table), `ownership.md` and `lifecycle.md`.
+- **BR-40, "every process".** Fixed by scoping the wording and adding a guard,
+  not by moving 18 files' spawns into tasker, which is beyond #261's surface.
+  - The atlas section now covers processes "started through `tasker.run`".
+  - A new "Processes outside tasker" part points at the guard's list:
+    `tests/arch/spawn_seam_spec.lua` names each out-of-seam spawn with how it
+    ends, as an exact count per file. A new spawn fails the guard, and so does
+    a listed spawn that no longer exists (the dead-entry check).
+  - The same file also forbids a numeric `deadline_ms` literal in `lua/`.
+- **Minors.**
+  - `generate_topic` merges `transport_opts`, adding the stream deadline only
+    when the run is unscoped (`tasker.is_scoped`, one definition of scoped)
+    and no deadline is set.
+  - The fake's group kill honours the leader's scripted `signal_result`, and
+    both paths share one `scripted()` helper. `state.signals` lists only
+    accepted signals. The failed-signal-retry test runs on both paths again.
+  - `target()` never returns a pid ≤ 0.
+  - The deadline timer closes as it fires, so a held record keeps no handle.
+  - `attempt` has one `open_probe_window`.
+  - `unscoped_kill_spec` is routed to `infra/vault` as well.
+- **Census method, corrected (review §7).** Task 3.4's command
+  `grep "dispatcher.query("` misses `pcall(dispatcher.query, …)`
+  (`response_provider.lua`) and the `llm.query` alias (`skill_invoke.lua`).
+  Both are scoped, so the "18 sites + 2 streams" conclusion held by luck, not
+  by method. The enumeration is safe because tasker refuses an unscoped run
+  without a deadline at runtime; the grep was only a cross-check.
+- **For M4 (W16).** `generate_topic` now merges its options (above). The review
+  also noted that `scoped_stop` drops `cause`, so every scoped stop reads
+  `killed: stop`. M5's refusal vocabulary, where a user Stop is silent but other
+  cancellations warn, will need `cause` threaded through
+  `stop_scope`/`stop_owner`/`stop_attempt`. That belongs to M5.
 

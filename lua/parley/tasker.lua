@@ -210,7 +210,8 @@ end
 -- exited, since a reaped pid can be reused. A group id is not reused while any
 -- member lives.
 local function target(state)
-    if not state.pid then return nil end
+    -- kill(0) and kill(-0) signal Neovim's own group: never a record's target.
+    if not state.pid or state.pid <= 0 then return nil end
     if state.group then return -state.pid end
     if not state.exited then return state.pid end
 end
@@ -334,6 +335,21 @@ function M.scope_key(epoch, generation)
     return tostring(epoch) .. ":" .. tostring(generation)
 end
 
+-- Whether run options place a process in a generation's scope; an unscoped
+-- run must name its deadline.
+function M.is_scoped(opts)
+    return opts ~= nil and (opts.logical_generation or opts.generation_id) ~= nil
+end
+
+-- How a run ended, in words for a message or a log: its io_error when there
+-- is one (a kill Parley caused, a pipe error, an overflow, a refusal), else its
+-- exit code — never a nil code (#261 M3 review BR-38).
+function M.exit_reason(code, signal, io_error)
+    if io_error then return tostring(io_error) end
+    if signal and signal ~= 0 then return ("exit %s, signal %s"):format(tostring(code), tostring(signal)) end
+    return "exit " .. tostring(code)
+end
+
 -- Records still held after their stop window: a process the kernel keeps.
 function M.held()
     local out = {}
@@ -431,7 +447,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
     -- A generation's process leads its own group (#261 M3), so a stop reaches
     -- every process it started. Anything else stays in Neovim's session, where
     -- a secret command can still prompt on the terminal.
-    local group = (opts.logical_generation or opts.generation_id) ~= nil
+    local group = M.is_scoped(opts)
     local record = {
         runtime = run_uv,
         retained=0,on_unresolved=opts.on_unresolved,
@@ -565,6 +581,9 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
         local ok,timer=pcall(record.runtime.new_timer)
         if ok and timer and pcall(function()timer:start(opts.deadline_ms,0,function()
             vim.schedule(function()
+                -- One-shot: closed as it fires, so a record then held forever
+                -- keeps no handle; retire closes one that never fired.
+                if record.deadline==timer then close_timer(timer);record.deadline=nil end
                 if records[id]==record then stop_matching(function(state)return state.attempt_id==id end,15,'deadline')end
             end)
         end)end)then record.deadline=timer

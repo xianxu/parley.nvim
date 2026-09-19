@@ -1032,9 +1032,10 @@ end
 ---@param provider string|nil
 M._exchange_auth_code = function(config, code, port, callback, provider)
     provider = provider or "google"
-    M._run_auth_code_exchange(config, code, port, function(exit_code, _signal, stdout_data)
+    M._run_auth_code_exchange(config, code, port, function(exit_code, signal, stdout_data, _, io_error)
         if exit_code ~= 0 then
-            logger.warning(M._get_provider_display_name(provider) .. ": token exchange curl failed (exit " .. tostring(exit_code) .. "): " .. tostring(stdout_data))
+            logger.warning(M._get_provider_display_name(provider) .. ": token exchange curl failed ("
+                .. tasker.exit_reason(exit_code, signal, io_error) .. "): " .. tostring(stdout_data))
             callback(nil)
             return
         end
@@ -1417,11 +1418,12 @@ M._fetch_public_content = function(url, callback)
         url,
     }
 
-    tasker.run(nil, "curl", args, function(code, _, stdout_data)
+    tasker.run(nil, "curl", args, function(code, signal, stdout_data, _, io_error)
         if code ~= 0 then
             callback(nil, {
                 kind = "transport",
-                message = "Remote URL fetch failed: curl exited with code " .. tostring(code) .. " for " .. url,
+                message = "Remote URL fetch failed (" .. tasker.exit_reason(code, signal, io_error) .. ") for " .. url
+                    .. ". Resubmit the question to fetch it again.",
             })
             return
         end

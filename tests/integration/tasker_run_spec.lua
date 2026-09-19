@@ -907,19 +907,24 @@ describe("tasker.run integration", function()
             state.processes[4242]:finish()
             assert.is_true(vim.wait(100,function() return not tasker.is_busy(buf,true) end,5))
         end)
-        it("successful signals are idempotent but failed signals can retry",function()
-            local runtime,state=fake.new()
-            tasker._uv=runtime
-            -- An unscoped attempt, signalled by pid: the fake's per-pid result.
-            local id=run(11,"fake",{})
-            state.processes[4242].signal_result="unknown"
-            assert.is_false(pcall(tasker.stop_attempt,id))
-            assert.equals("unknown",tasker.get_attempt(id).signal_observation)
-            state.processes[4242].signal_result="alive"
-            assert.equals(1,tasker.stop_attempt(id))
-            assert.equals(1,tasker.stop_attempt(id))
-            assert.equals(2,#state.signals)
-        end)
+        -- A scoped attempt is signalled as a group, an unscoped one by pid; a
+        -- failed signal must be retryable on both paths (#261 M3 review).
+        for _,case in ipairs({{name="unscoped, by pid",opts={}},
+            {name="scoped, by group",opts={generation_id="a",logical_generation="e:1"}}})do
+            it("successful signals are idempotent but failed signals can retry: "..case.name,function()
+                local runtime,state=fake.new()
+                tasker._uv=runtime
+                local id=run(11,"fake",{},nil,nil,nil,nil,vim.deepcopy(case.opts))
+                state.processes[4242].signal_result="unknown"
+                assert.is_false(pcall(tasker.stop_attempt,id))
+                assert.equals("unknown",tasker.get_attempt(id).signal_observation)
+                state.processes[4242].signal_result="alive"
+                assert.equals(1,tasker.stop_attempt(id))
+                assert.equals(1,tasker.stop_attempt(id))
+                assert.equals(1,#state.signals,"one accepted signal; the failed one delivered nothing")
+                assert.equals(case.opts.generation_id~=nil,state.signals[1].group==true)
+            end)
+        end
         it("an absent owner cannot signal unscoped utility attempts",function()
             local runtime,state=fake.new()
             tasker._uv=runtime

@@ -1,5 +1,36 @@
 # Lessons
 
+## 2026-09-19 (#261 M3 review — a seam changed a value's meaning; its renderers, its statements and its quantifier were not swept)
+
+- **When a seam changes what a value means, sweep the consumers that RENDER it,
+  not only the ones that BRANCH on it** (3rd and 4th in
+  `seam-change-collateral`). Tasker began delivering `code = nil` whenever
+  `io_error` says why. That made every `code ~= 0` test right by construction,
+  and every `tostring(code)` wrong: one of them wrote "curl exited with code
+  nil" into the transcript.
+  - Enumerate both kinds of consumer from the diff.
+  - Route the renders through one helper (`tasker.exit_reason`).
+  - Guard it, so a new raw render fails (`tests/arch/spawn_seam_spec.lua`).
+- **The README miss was the superseded-claim sweep, not run** (#266 M4 entry
+  below, which states its scope and method once). Run it at every boundary
+  whose diff changes a user-facing contract — here, what Stop does to a
+  running tool. `atlas/` and `tests/manual/` were updated; `README.md` was
+  not.
+- **A doc sentence quantified over a category needs an executable enumeration,
+  or wording scoped to the seam it covers** (7th in
+  `enumeration-claims-completeness`). "Every process Parley starts" was false
+  by eighteen files.
+  - The fix is an arch guard: every spawn outside the seam is listed with how
+    it ends, each entry an exact count, so a listed spawn that no longer
+    exists fails too.
+  - The atlas then points at that list rather than restating it.
+- **One fake, one scripting vocabulary for every path**
+  (`stateless-double-at-stateful-seam`). The process fake scripted
+  `signal_result` for pid kills only, so a failed-signal test had to move from
+  a scoped attempt to an unscoped one to stay expressible, and the group path
+  lost its coverage. When a case must move paths to stay expressible, extend
+  the fake instead.
+
 ## 2026-09-19 (#261 M2 review — a missing test the Log called done, and a primitive fixed at one of five sites)
 
 - **Select a guard's members by an annotation, when the class has one.** The

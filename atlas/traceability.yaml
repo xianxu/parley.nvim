@@ -605,7 +605,9 @@ atlas:
   infra/vault:
     code:
       - lua/parley/vault.lua
+      - lua/parley/oauth.lua
     tests:
+      - tests/integration/unscoped_kill_spec.lua
       - tests/unit/vault_spec.lua
 
   modes/interview:
@@ -832,6 +834,7 @@ atlas:
       - tests/integration/tool_filesystem_native_spec.lua
       - tests/integration/tasker_supervision_spec.lua
       - tests/integration/process_group_conformance_spec.lua
+      - tests/arch/spawn_seam_spec.lua
       - tests/integration/async_builtin_spec.lua
       - tests/integration/tool_dispatch_capture_spec.lua
       - tests/integration/tool_producer_spec.lua

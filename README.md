@@ -114,8 +114,11 @@ configuration are captured for the response. Custom tools need an `execute_async
 implementation to run in this workflow; a synchronous handler alone is refused.
 
 Reload prevents further chat writes, and so does Stop once it has written out a
-tool round in progress, while the process supervisor keeps tools that are still
-running and their resource claims. A tool whose process has ended holds nothing,
+tool round in progress. A stopped tool's process is ended: SIGTERM, then SIGKILL
+2 s later
+([Stopping a process](atlas/providers/tool_execution.md#stopping-a-process)).
+The process supervisor holds its resource claims until the process has ended.
+A tool whose process has ended holds nothing,
 even when its outcome is unknown: it is reported to the model as a failure. `:ParleyToolOperations` shows
 retained operations and their evidence. After independently inspecting an effect,
 you can record whether it happened, did not happen, or partially happened. This

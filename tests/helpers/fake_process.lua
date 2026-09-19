@@ -5,7 +5,13 @@
 --   * `spawn_opts.detached == true` makes the child its own group leader
 --     (pgid == pid); otherwise it joins group 0, standing in for Neovim's own.
 --   * `kill(-pgid, sig)` signals every live member and records one
---     `{pid, signal, group = true}` entry per member.
+--     `{pid, signal, group = true}` entry per member. `state.signals` lists
+--     only signals the kernel accepted, on both paths. A group kill honours the
+--     leader's scripted `signal_result` ("unknown", "missing", "throw", or a
+--     number) exactly as a pid kill honours the process's own, so a scoped
+--     record can observe a failed signal too. Unscripted, it delivers the
+--     signal as the kernel does; a pid kill delivers only under
+--     `finish_on_signal` (the older fixtures' default).
 --   * `process.ignores = {[15] = true}` (and `[9]`, a kernel hold) ignores a
 --     signal; any other non-zero signal exits the process.
 --   * `process:fork()` adds a grandchild in the same group holding the same
@@ -95,10 +101,22 @@ function M.new(opts)
     local function deliver(process, signal)
         if signal ~= 0 and not process.exited and not process.ignores[signal] then process:exit(0, signal) end
     end
+    -- A scripted observation ("unknown", "missing", "throw", or a number) as
+    -- kill's return values; "alive" or nil is not scripted.
+    local function scripted(value)
+        if value == "throw" then error("probe/signal exploded") end
+        if value == "unknown" then return true, nil, "EPERM", "EPERM" end
+        if value == "missing" then return true, nil, "ESRCH", "ESRCH" end
+        if type(value) == "number" then return true, value end
+        return false
+    end
     runtime.kill = function(pid, signal)
         -- kill(0) signals the caller's own group, which is Neovim's: never right.
         if pid == 0 then error("signalled Neovim's own process group") end
         if pid < 0 then
+            local leader = state.processes[-pid]
+            local hit, result, detail, code = scripted(signal ~= 0 and leader and leader.signal_result)
+            if hit then return result, detail, code end
             local members = {}
             for _, process in pairs(state.processes) do
                 if process.pgid == -pid and not process.exited then members[#members + 1] = process end
@@ -113,13 +131,11 @@ function M.new(opts)
             return 0
         end
         local process = state.processes[pid]
+        if not process then return nil, "ESRCH", "ESRCH" end
+        local hit, result, detail, code = scripted(signal == 0 and process.probe or process.signal_result)
+        if hit then return result, detail, code end
+        -- `state.signals` lists the signals the kernel accepted, on both paths.
         if signal ~= 0 then table.insert(state.signals, { pid = pid, signal = signal }) end
-        local observation = "missing"
-        if process then observation = signal == 0 and process.probe or (process.signal_result or "alive") end
-        if observation == "throw" then error("probe/signal exploded") end
-        if observation == "unknown" then return nil, "EPERM", "EPERM" end
-        if observation == "missing" then return nil, "ESRCH", "ESRCH" end
-        if type(observation) == "number" then return observation end
         if signal ~= 0 and opts.finish_on_signal and not process.ignores[signal] then process:finish(0, signal) end
         return 0
     end

@@ -213,9 +213,9 @@ V.refresh_copilot_bearer = function(callback)
 
 	tasker.run(nil, "curl", curl_params, function(code, signal, stdout, stderr, io_error)
 		-- A kill reports code nil (#261 M3); every failure is reported, never thrown.
-		if code ~= 0 or io_error then
-			logger.error(string.format("copilot bearer resolve failed: code %s, signal %s: %s",
-				tostring(code), tostring(signal), tostring(io_error or stderr)))
+		if code ~= 0 then
+			logger.error("copilot bearer resolve failed (" .. tasker.exit_reason(code, signal, io_error) .. "): "
+				.. tostring(stderr))
 			return
 		end
 

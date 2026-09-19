@@ -124,6 +124,10 @@ describe("a killed unscoped process is a failure", function()
         wait(function() return resolved ~= nil end)
         assert.is_nil(resolved[url]:find("PARTIAL BODY", 1, true), resolved[url])
         assert.truthy(resolved[url]:find("[Error:", 1, true), resolved[url])
+        -- The text the transcript shows names why, and what to do (BR-38).
+        assert.truthy(resolved[url]:find("killed: deadline", 1, true), resolved[url])
+        assert.truthy(resolved[url]:find("Resubmit the question", 1, true), resolved[url])
+        assert.is_nil(resolved[url]:find("nil", 1, true), resolved[url])
         parley._remote_reference_cache = nil
         vim.fn.delete(root, "rf")
     end)
