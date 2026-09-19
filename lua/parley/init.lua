@@ -1335,6 +1335,12 @@ M.setup = function(opts)
 
 	-- set up buffer update handler
 	M.setup_buf_handler()
+	-- Leaving Neovim kills every process Parley still owns (#261 M3). Only a
+	-- crash of Neovim itself leaves orphans, which then run to their own end.
+	vim.api.nvim_create_autocmd("VimLeavePre", {
+		group = vim.api.nvim_create_augroup("ParleyLeave", { clear = true }),
+		callback = function() require("parley.tasker").leave() end,
+	})
 	-- Toggle keymaps (web_search, raw request/response) now registered via kb_registry.register_global above
 
 	-- Setup lualine integration if lualine is enabled

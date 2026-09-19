@@ -89,6 +89,20 @@ describe("a killed unscoped process is a failure", function()
         assert.is_nil(text:find("callback failed", 1, true), text)
     end)
 
+    it("leaving Neovim kills what is left: setup registers one VimLeavePre for tasker.leave", function()
+        local root = vim.fn.tempname()
+        require("parley").setup({ chat_dir = root, state_dir = root .. "/state", providers = {}, api_keys = {} })
+        require("parley").setup({ chat_dir = root, state_dir = root .. "/state", providers = {}, api_keys = {} })
+        assert.equals(1, #vim.api.nvim_get_autocmds({ group = "ParleyLeave", event = "VimLeavePre" }),
+            "setup twice still registers once")
+        T.run(nil, "fixture", {}, nil, nil, nil, nil, { attempt_id = "u", deadline_ms = T.deadline.http })
+        -- Only this group's autocmd runs; starter.lua listens on VimLeavePre too.
+        vim.api.nvim_exec_autocmds("VimLeavePre", { group = "ParleyLeave" })
+        local signal = processes.signals[#processes.signals]
+        assert.same({ pid = processes.processes[4241 + processes.spawn_calls].pid, signal = 9 }, signal)
+        vim.fn.delete(root, "rf")
+    end)
+
     it("a killed content fetch is never content, even when its output looked whole", function()
         local root = vim.fn.tempname()
         local parley = require("parley")

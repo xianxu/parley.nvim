@@ -1215,12 +1215,12 @@ other spec that calls `tasker.run` directly: `grep -rln "tasker.run(" tests`.
 
 ### Task 3.5: Leaving Neovim kills what is left
 
-- [ ] In `init.lua` `M.setup`, next to `M.setup_buf_handler()` (`:1333`):
+- [x] In `init.lua` `M.setup`, next to `M.setup_buf_handler()` (`:1333`):
   `vim.api.nvim_create_autocmd('VimLeavePre', {group = …, callback = function() require('parley.tasker').leave() end})`.
-- [ ] **Test** `tasker.leave()` directly on the fake, not through a global
+- [x] **Test** `tasker.leave()` directly on the fake, not through a global
   `VimLeavePre` (`starter.lua:120` also listens). Every live record got SIGKILL:
   scoped records by group, unscoped ones by pid.
-- [ ] Commit (`#261 M3: leaving Neovim kills every live process`).
+- [x] Commit (`#261 M3: leaving Neovim kills every live process`).
 
 ### Task 3.6: Live conformance
 
