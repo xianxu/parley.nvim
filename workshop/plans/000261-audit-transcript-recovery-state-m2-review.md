@@ -373,3 +373,111 @@ findings:
     detail: |
       This is the 2nd finding in family plan-tracking-not-updated. Do NOT fix this instance alone — state the rule. parley#270's Log says "Add to this issue's Done-when: chat_move_spec builds its chats as file-backed buffers … and a tree move of a loaded chat succeeds", but `## Done when` still carries only its two original bullets. The rule that covers both instances: work deferred into a receiving artifact lands in that artifact's CONTRACT section (`## Done when` / `## Plan`) in the same edit that writes the Log entry, because the Log is narrative and the close gate reads the contract. A deferral recorded only in prose is a deferral the gate cannot enforce.
 ```
+
+---
+
+## Re-review — 2026-09-19T02:52:33-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 261 — Audit transcript as the complete recovery state |
+| repo | parley.nvim |
+| issue file | workshop/issues/000261-audit-transcript-recovery-state.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | fc64a19462482f8a3291023691d2a37f3ae111e4..f686772b0af199e01c4088d55243e33f25d06697 |
+| command | sdlc milestone-close --issue 261 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-09-19T02:52:33-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Round 3 closes the one Important finding that was still open, and it answers the did-it-happen family with a rule rather than another single fix. I checked both claims myself instead of relying on the commit message. On a `git archive` scratch copy of HEAD, I changed `state.lua` so the exemption is computed from the owner before a revoked or non-containing grant clears it. Both new BR-32 cases went red (32/34). I also planted a bare `custom_prompts.set(...)` in `system_prompt_picker.lua`, and `nodiscard_spec` went red. At HEAD, eleven specs pass, all green:
+- the four arch/state specs: `nodiscard`, `document_state`, `sidecar_authority`, `buffer_lookup`
+- all seven M2 specs: `document_previous_answer`, `previous_answer`, `chat_respond`, `build_messages`, `helper_io`, `custom_prompts`, `document_dependency_affinity`
+
+luacheck reports 0 warnings and 0 errors on the six changed files. BR-35 is fixed: #270's `## Done when` now has the deferred fixture bullet, and the rule is in `lessons.md`. Three Minor items remain, none of them blocking:
+- **BR-34 is still open.** It was deferred "for the close" only in narrative. That breaks the rule this same commit wrote into `lessons.md`: a deferral has to land in some artifact's contract.
+- **The new annotation guard can't see three calling forms.** I planted each one and the spec stayed green.
+- **The guard's DROPPED allowlist is never checked for dead entries.** The other arch specs all do this check.
+
+## 1. Strengths
+- **The guard now picks functions by a property of the function, not by name.** `tests/arch/nodiscard_spec.lua:34-49` finds members by the `---@nodiscard` annotation, which is the property the class shares. It resolves callers through each file's own `require` aliases, so `table.remove` is never mistaken for `custom_prompts.remove`. I enumerated all nine call sites in `lua/`. Each one either uses the result or is declared in DROPPED.
+- **The reason for dropping `set_previous_answer`'s result holds up.** The function can return false for five reasons. The nil value is ruled out by the `if replaced_answer` guard at `chat_respond.lua:1545`. Each of the other four (a bad spec, `dead`, an epoch change, `holds` being false) means generation G can no longer write. So the transcript really is the right context, as the DROPPED entry says.
+- **The BR-32 tests cover both ways a write can lose its owner.** `document_state_spec.lua:389-401`: a write that is partly outside the grant (9..10 against a grant of 10..20), and a write through a revoked grant.
+- **The slot's validity is computed, not stored.** `document/init.lua:361-370` works it out from `State.holds` and `M.lookup` each time it reads. It deletes slots while iterating with `pairs`, which Lua allows.
+
+## 2. Critical findings
+None.
+
+## 3. Important findings
+None.
+
+## 4. Minor findings
+- **The guard misses three calling forms (6th finding in `enumeration-claims-completeness`).** `nodiscard_spec.lua:66-67` only matches a call at the start of a line. I planted three forms and the spec stayed green:
+  - `if c then custom_prompts.set(a, {}) end` on one line
+  - `pcall(custom_prompts.remove, a)`
+  - `local cp = custom_prompts; cp.rename(a, 'x')`
+  
+  The rule is the one BR-31 settled: a guard written as a regex states in its header which forms it cannot see, and nothing claims more than it checks. Two cheap fixes follow. First, match statement starts after `then`/`do`/`else`/`;`, and `pcall(`/`xpcall(` whose first argument is a member. Second, record whatever still can't be seen in the header. LuaLS's `discard-returns` would be the real checker, but it isn't installed here.
+- **DROPPED is never checked for dead entries (new family `allowlist-without-dead-entry-check`).** Its count is only used as a ceiling. I changed the `D.set_previous_answer` call to consume its result, and the declaration stayed silently. The repo already has this check elsewhere: `single_resolver_spec.lua:79-82` ("the allowlist becomes the stale list it replaced"), `sidecar_authority_spec.lua:69`, and `single_source_sweeps_spec.lua:692`.
+- **BR-34 stays open.** It is disposed below.
+
+## 5. Test coverage notes
+- The BR-32 cases fail when the fix is reverted: 2/34 red.
+- The nodiscard guard catches a planted bare call at the start of a line. It passes the three forms listed above.
+- `finds the annotated functions` pins three of the seven annotated functions. That is enough to catch an annotation being removed from any of those three.
+
+## 6. Architectural notes
+- **ARCH-DRY: flag.** BR-34, not addressed.
+- **ARCH-PURE: pass.** `previous_answer.lua` and `State.holds` are pure. The slot lives in the coordinator.
+- **ARCH-PURPOSE: flag.** The family is fixed as a class. But the BR-34 deferral skips the deferral rule written in the same commit.
+- **ARCH-MOCK: pass.** M2 adds no new external dependency.
+- **ARCH-CONSTRAINTS: pass, with a note.** `buffer_for` calls `vim.fn.resolve` once per buffer on every lookup. The outline makes one lookup per file in the tree, so the cost is about N×B path resolutions. That's small next to the `readfile` it already does per file. If outlines of large trees get slow, cache the resolved names once per build.
+- **ARCH-SECURE: pass.** No new untrusted input. The parent path still goes through `resolve_chat_path`.
+- **ARCH-ORDER: pass.** Validity comes from `holds`, and the negative boundary is now tested.
+- **ARCH-FUNERAL: pass for the slot.** There is at most one slot per live generation. Slots are cleared on finish, reload and detach. The allowlist residue is the second Minor above.
+
+## 7. Plan revision recommendations
+- **Change the round-3 Revisions entry "Recorded, not fixed" for BR-34.** Either name the receiving issue whose `## Done when` carries the `canonical_path` sweep, or record that two sites (`buffer_for` and `file_refresh`) were consolidated and only the rest were deferred.
+
+```findings
+dispose:
+  - id: BR-32
+    disposition: addressed
+    note: |
+      document_state_spec.lua:389-401 adds both negative cases; computing `generated` from the raw owner in a scratch copy turns both red (32/34).
+  - id: BR-33
+    disposition: addressed
+    note: |
+      Fixed as a rule: ---@nodiscard on 7 functions plus nodiscard_spec, which selects by annotation; a planted bare custom_prompts.set goes red; the set_previous_answer drop is declared, with a reason that matches every reachable false path.
+  - id: BR-34
+    disposition: not-addressed
+    note: |
+      helper.lua:694-697 still hand-rolls the idiom (10 copies in lua/); the deferral lives only in the Log and Revisions narrative, with no receiving issue, contrary to the lessons.md rule written in the same commit.
+  - id: BR-35
+    disposition: addressed
+    note: |
+      e1540f4a adds the fixture obligation to parley#270's Done when; the rule is recorded in workshop/lessons.md.
+findings:
+  - id: new
+    severity: Minor
+    family: enumeration-claims-completeness
+    title: |
+      nodiscard_spec only sees calls at the start of a line; three calling forms that drop the result pass green
+    detail: |
+      This is the 6th finding in family enumeration-claims-completeness. Planted and confirmed green: `if c then custom_prompts.set(a, {}) end` on one line, `pcall(custom_prompts.remove, a)`, and `local cp = custom_prompts; cp.rename(a, 'x')`. The rule is BR-31's: a regex guard's header lists the forms it cannot see, and nothing (commit message, lessons.md) claims "any bare-statement call" beyond what is matched. Cheap fixes: match statement starts after then/do/else/semicolon, and pcall/xpcall whose first argument is a member; record the rest in the header. Measured prevalence: 6 findings in the family; 0 live offenders today (all 9 call sites enumerated).
+  - id: new
+    severity: Minor
+    family: allowlist-without-dead-entry-check
+    title: |
+      nodiscard_spec's DROPPED count is only a ceiling, so a declaration outlives the call it excuses
+    detail: |
+      Changing chat_respond.lua:1546 to consume its result leaves the D.set_previous_answer entry silently in place. Sibling guards reject dead entries (single_resolver_spec.lua:79-82, sidecar_authority_spec.lua:69, single_source_sweeps_spec.lua:692). Assert seen == declared.count for every DROPPED entry.
+```

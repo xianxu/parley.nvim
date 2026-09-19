@@ -1872,3 +1872,15 @@ documents that it checks by spelling.
   the `resolve(fnamemodify(x, ':p'))` idiom, which has about ten copies in
   `lua/`. Extracting one `canonical_path` is a sweep beyond #261's surface.
   The close review will see it recorded.
+
+### 2026-09-19 — M2 closed (review round 4, FIX-THEN-SHIP): the guard's own edges
+
+**Delta, bundled into the close commit (#174).**
+- `nodiscard_spec` reads every statement head on a line: its start, and what
+  follows `then`, `do`, `else` or `;`. It also catches a bare `pcall` or
+  `xpcall` of a marked member.
+- Its header lists the forms it cannot see: re-aliasing by assignment, `:`
+  calls, a call split across lines, and other higher-order wrappers.
+- `DROPPED` must match the calls it excuses exactly, so a declaration cannot
+  outlive its call.
+- Counterfactuals: the two planted forms, and the stale entry, are all caught.

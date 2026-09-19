@@ -8,7 +8,14 @@
 -- A call is matched through the calling file's own `require` aliases (plus the
 -- declared injected handles below), so `table.remove(t)` is never mistaken for
 -- `custom_prompts.remove(name)`. A bare-statement call is allowed only where
--- DROPPED names the file, the callee, how many such calls, and why.
+-- DROPPED names the file, the callee, exactly how many such calls, and why.
+--
+-- Statement heads it sees: the start of a line, and what follows `then`, `do`,
+-- `else` or `;` on it; a bare `pcall`/`xpcall` whose first argument is the
+-- member. What it cannot see, stated so it is not mistaken for more: a module
+-- re-aliased by assignment (`local cp = custom_prompts`), a method call with
+-- `:`, a call whose member access starts on an earlier line, and a result
+-- dropped inside another higher-order function.
 local arch = require("tests.arch.arch_helper")
 
 -- Handles that reach a module without a `require` in the calling file.
@@ -68,21 +75,44 @@ describe("arch: a did-it-happen result is consumed", function()
                 if a then alias[a] = mod end
             end
             for n, line in ipairs(lines) do
-                local prefix, name = line:match("^%s*([%w_.]+)%.([%w_]+)%s*%(")
-                local req, rname = line:match("^%s*require%(%s*[\"']([%w_.]+)[\"']%s*%)%.([%w_]+)%s*%(")
-                local mod = req or (prefix and (alias[prefix] or INJECTED[prefix]))
-                name = rname or name
-                if mod and marked[mod .. "." .. name] and not line:match("^%s*function") then
-                    local callee = (req and ("require('" .. req .. "')") or prefix) .. "." .. name
-                    local key = file .. "|" .. callee
-                    seen[key] = (seen[key] or 0) + 1
-                    local declared = DROPPED[file] and DROPPED[file][callee]
-                    if not declared or seen[key] > declared.count then
-                        offenders[#offenders + 1] = file .. ":" .. n .. " " .. callee
+                if not line:match("^%s*%-%-") and not line:match("^%s*function") then
+                    -- Every statement head on the line.
+                    local heads = { line }
+                    for _, word in ipairs({ "then", "do", "else" }) do
+                        for rest in line:gmatch("%f[%w]" .. word .. "%f[%W](.*)") do heads[#heads + 1] = rest end
+                    end
+                    for rest in line:gmatch(";(.*)") do heads[#heads + 1] = rest end
+                    for _, head in ipairs(heads) do
+                        local body = head:match("^%s*x?pcall%(%s*(.*)") or head
+                        local prefix, name = body:match("^%s*([%w_.]+)%.([%w_]+)%s*[(,)]")
+                        local req, rname = body:match("^%s*require%(%s*[\"']([%w_.]+)[\"']%s*%)%.([%w_]+)%s*[(,)]")
+                        local mod = req or (prefix and (alias[prefix] or INJECTED[prefix]))
+                        name = rname or name
+                        if mod and marked[mod .. "." .. name] then
+                            local callee = (req and ("require('" .. req .. "')") or prefix) .. "." .. name
+                            local key = file .. "|" .. callee
+                            seen[key] = (seen[key] or 0) + 1
+                            local declared = DROPPED[file] and DROPPED[file][callee]
+                            if not declared or seen[key] > declared.count then
+                                offenders[#offenders + 1] = file .. ":" .. n .. " " .. callee
+                            end
+                        end
                     end
                 end
             end
         end
         assert.same({}, offenders, "consume the result, or declare the call in DROPPED with why")
+        -- A declaration outlives the call it excuses only if nothing checks it.
+        local stale = {}
+        for file, calls in pairs(DROPPED) do
+            for callee, declared in pairs(calls) do
+                local got = seen[file .. "|" .. callee] or 0
+                if got ~= declared.count then
+                    stale[#stale + 1] = file .. " " .. callee .. ": declared " .. declared.count .. ", found " .. got
+                end
+            end
+        end
+        table.sort(stale)
+        assert.same({}, stale, "DROPPED must match the calls it excuses exactly")
     end)
 end)

@@ -249,7 +249,7 @@ Reconciliation: Σdesign 10.66 × 1.15 = 12.26, plus Σimpl 14.84 × 1.2 = 17.81
 - [x] M1 — delete the on-disk answer-recovery store, its commands and the tools
   privacy carve-out; the #261 blocker as regression tests; guard: a
   `state_dir` reader declares why it cannot block.
-- [ ] M2 — `prev_answer` on the document coordinator (#255): same-chat and
+- [x] M2 — `prev_answer` on the document coordinator (#255): same-chat and
   sub-chat context substitution; ancestors read the parent's live buffer.
 - [ ] M3 — processes die for certain: children lead their own process group
   (`detached`), Stop kills a generation's scope TERM→KILL, unscoped helpers get
@@ -537,6 +537,7 @@ enumerations and the queries that produce them.
   This is recorded on #267 as the same family. It is not M1's.
 
 ### 2026-09-19 — M1 boundary review, round 1: FIX-THEN-SHIP, and how each finding was disposed
+- 2026-09-19: closed M2 — make test JOBS=4: 377 files pass + perf_document_spec which dies under load and passes alone 5/5 (#267). Rounds 1-3 disposed: buffer_for + guard; tree-move rewrite and ENOENT abort on #270 (contract updated); exemption boundary pinned (red on raw-owner counterfactual); did-it-happen rule enforced by ---@nodiscard guard (red on a planted bare call).; review verdict: FIX-THEN-SHIP
 - 2026-09-19: closed M1 — make test JOBS=4: 372 files pass + 2 fold specs that die under load and pass alone (#267 family, logged). Rounds 1-3 fixed as classes with guards (census, worktree listing, write-result, json_decode, per-action warning bound, one atomic writer); every fix red on revert.; review verdict: FIX-THEN-SHIP
 
 Each finding was swept as a class, not at the site it named (memory:

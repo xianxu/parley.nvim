@@ -481,6 +481,42 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: true
+    - "n": 9
+      timestamp: "2026-09-19T02:52:33-07:00"
+      agent: claude
+      dispose:
+        - id: BR-32
+          disposition: addressed
+          note: document_state_spec.lua:389-401 adds both negative cases; computing `generated` from the raw owner in a scratch copy turns both red (32/34).
+          round: 9
+        - id: BR-33
+          disposition: addressed
+          note: 'Fixed as a rule: ---@nodiscard on 7 functions plus nodiscard_spec, which selects by annotation; a planted bare custom_prompts.set goes red; the set_previous_answer drop is declared, with a reason that matches every reachable false path.'
+          round: 9
+        - id: BR-34
+          disposition: not-addressed
+          note: helper.lua:694-697 still hand-rolls the idiom (10 copies in lua/); the deferral lives only in the Log and Revisions narrative, with no receiving issue, contrary to the lessons.md rule written in the same commit.
+          round: 9
+        - id: BR-35
+          disposition: addressed
+          note: e1540f4a adds the fixture obligation to parley#270's Done when; the rule is recorded in workshop/lessons.md.
+          round: 9
+      findings:
+        - id: BR-36
+          severity: Minor
+          title: nodiscard_spec only sees calls at the start of a line; three calling forms that drop the result pass green
+          detail: 'This is the 6th finding in family enumeration-claims-completeness. Planted and confirmed green: `if c then custom_prompts.set(a, {}) end` on one line, `pcall(custom_prompts.remove, a)`, and `local cp = custom_prompts; cp.rename(a, ''x'')`. The rule is BR-31''s: a regex guard''s header lists the forms it cannot see, and nothing (commit message, lessons.md) claims "any bare-statement call" beyond what is matched. Cheap fixes: match statement starts after then/do/else/semicolon, and pcall/xpcall whose first argument is a member; record the rest in the header. Measured prevalence: 6 findings in the family; 0 live offenders today (all 9 call sites enumerated).'
+          family: enumeration-claims-completeness
+          round: 9
+        - id: BR-37
+          severity: Minor
+          title: nodiscard_spec's DROPPED count is only a ceiling, so a declaration outlives the call it excuses
+          detail: Changing chat_respond.lua:1546 to consume its result leaves the D.set_previous_answer entry silently in place. Sibling guards reject dead entries (single_resolver_spec.lua:79-82, sidecar_authority_spec.lua:69, single_source_sweeps_spec.lua:692). Assert seen == declared.count for every DROPPED entry.
+          family: allowlist-without-dead-entry-check
+          round: 9
+      boundary: M2
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -715,12 +751,27 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-35** [Minor] `plan-tracking-not-updated` The fixture obligation BR-30 deferred to parley#270 lives only in its Log, not in its Done-when contract
   This is the 2nd finding in family plan-tracking-not-updated. Do NOT fix this instance alone — state the rule. parley#270's Log says "Add to this issue's Done-when: chat_move_spec builds its chats as file-backed buffers … and a tree move of a loaded chat succeeds", but `## Done when` still carries only its two original bullets. The rule that covers both instances: work deferred into a receiving artifact lands in that artifact's CONTRACT section (`## Done when` / `## Plan`) in the same edit that writes the Log entry, because the Log is narrative and the close gate reads the contract. A deferral recorded only in prose is a deferral the gate cannot enforce.
 
+## Round 9 — 2026-09-19T02:52:33-07:00 (claude) — passed
+
+### Disposed
+
+- BR-32 — addressed — document_state_spec.lua:389-401 adds both negative cases; computing `generated` from the raw owner in a scratch copy turns both red (32/34).
+- BR-33 — addressed — Fixed as a rule: ---@nodiscard on 7 functions plus nodiscard_spec, which selects by annotation; a planted bare custom_prompts.set goes red; the set_previous_answer drop is declared, with a reason that matches every reachable false path.
+- BR-34 — not-addressed — helper.lua:694-697 still hand-rolls the idiom (10 copies in lua/); the deferral lives only in the Log and Revisions narrative, with no receiving issue, contrary to the lessons.md rule written in the same commit.
+- BR-35 — addressed — e1540f4a adds the fixture obligation to parley#270's Done when; the rule is recorded in workshop/lessons.md.
+
+### Raised
+
+- **BR-36** [Minor] `enumeration-claims-completeness` nodiscard_spec only sees calls at the start of a line; three calling forms that drop the result pass green
+  This is the 6th finding in family enumeration-claims-completeness. Planted and confirmed green: `if c then custom_prompts.set(a, {}) end` on one line, `pcall(custom_prompts.remove, a)`, and `local cp = custom_prompts; cp.rename(a, 'x')`. The rule is BR-31's: a regex guard's header lists the forms it cannot see, and nothing (commit message, lessons.md) claims "any bare-statement call" beyond what is matched. Cheap fixes: match statement starts after then/do/else/semicolon, and pcall/xpcall whose first argument is a member; record the rest in the header. Measured prevalence: 6 findings in the family; 0 live offenders today (all 9 call sites enumerated).
+- **BR-37** [Minor] `allowlist-without-dead-entry-check` nodiscard_spec's DROPPED count is only a ceiling, so a declaration outlives the call it excuses
+  Changing chat_respond.lua:1546 to consume its result leaves the D.set_previous_answer entry silently in place. Sibling guards reject dead entries (single_resolver_spec.lua:79-82, sidecar_authority_spec.lua:69, single_source_sweeps_spec.lua:692). Assert seen == declared.count for every DROPPED entry.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
 - **BR-23** [Minor] `seam-change-collateral` Routing table_to_file through the rename-based writer replaces symlinked sidecars, resets permissions, and leaves crash files the query cleanup never deletes
 - **BR-24** [Minor] `enumeration-claims-completeness` The sidecar census finds readers by the text state_dir, so file_access.json escapes it, and a wrongly typed entry makes opening a chat raise
-- **BR-32** [Important] `exemption-boundary-untested` The new generated-write staleness exemption is pinned only on its positive side; a cross-generation write that escapes its grant has no test
-- **BR-33** [Minor] `returned-handle-has-no-consumer` D.set_previous_answer returns a did-it-happen boolean that chat_respond.lua:1545 drops as a bare statement
 - **BR-34** [Minor] `canonical-form-not-shared` buffer_for's private key() adds an 11th copy of the resolve(fnamemodify(x,':p')) path-canonicalisation idiom
-- **BR-35** [Minor] `plan-tracking-not-updated` The fixture obligation BR-30 deferred to parley#270 lives only in its Log, not in its Done-when contract
+- **BR-36** [Minor] `enumeration-claims-completeness` nodiscard_spec only sees calls at the start of a line; three calling forms that drop the result pass green
+- **BR-37** [Minor] `allowlist-without-dead-entry-check` nodiscard_spec's DROPPED count is only a ceiling, so a declaration outlives the call it excuses
