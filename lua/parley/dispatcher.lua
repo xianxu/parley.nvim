@@ -666,7 +666,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 	local secret_name = providers.get_secret_name(provider)
 	local bearer = vault.get_secret(secret_name)
 	if not bearer then
-		abort_before_start(provider .. " bearer token is missing")
+		abort_before_start("bearer token is missing: " .. provider)
 		return
 	end
 

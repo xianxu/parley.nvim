@@ -30,7 +30,11 @@ function M.measure(n, done)
         finished = true
         if token then reader.clear_observer(buf, token) end
         if group then vim.api.nvim_del_augroup_by_id(group) end
-        if session then require("parley.response_session").cancel(session, "benchmark complete") end
+        -- The benchmark stops the response the way a user does, so the stop is
+        -- silent and the probe's report stays clean (#261 M5).
+        if session then
+            require("parley.response_session").cancel(session, require("parley.refusal").USER_STOP)
+        end
         -- The fake's completion is positive evidence that no delivery remains;
         -- cancellation alone does not resolve a transport operation.
         if call then call:finish() end

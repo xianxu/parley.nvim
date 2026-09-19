@@ -16,17 +16,33 @@ local FORMS = { "reject%(%s*(['\"])(.-)%1", "reject%(%s*[%w_]+%s*,%s*(['\"])(.-)
 local WRITE = "a write's validation result; the runner consumes it and the user meets the ending"
 local MACHINE = "the pure machine rejecting an event; the runner consumes it and the user meets the ending"
 local NOT_REFUSAL = {
-    ownership = WRITE, revision = WRITE, identity = WRITE, ["outside grant"] = WRITE, stale = WRITE, busy = WRITE,
-    refused = WRITE, ["write turn held elsewhere"] = WRITE,
+    ownership = WRITE, revision = WRITE, identity = WRITE, ["outside grant"] = WRITE,
+    ["write turn held elsewhere"] = WRITE,
     ["unconfirmed identity"] = "reclaim_tail's wait-and-retry answer; the runner waits",
     terminal = MACHINE, duplicate = MACHINE, ["turn status"] = MACHINE, preparation = MACHINE, gap = MACHINE,
-    output = MACHINE, extend = MACHINE, receipt = MACHINE, revoked = MACHINE, dependency = MACHINE,
+    output = MACHINE, extend = MACHINE, receipt = MACHINE, dependency = MACHINE,
     attempt = MACHINE, ["call declaration"] = MACHINE, insert = MACHINE, child = MACHINE, written = MACHINE,
     round = MACHINE, phase = MACHINE, supervision = MACHINE, ["unresolved child outcome"] = MACHINE,
     finalize = MACHINE, ["cancel reason"] = MACHINE, event = MACHINE,
     ["the source buffer no longer exists"] = "llm_readiness without validate_source; a chat passes one, so it never meets this",
     ["the source buffer is not visible in a window"] = "llm_readiness without validate_source, as above",
     [" .. tostring(qt.stop_reason) .. "] = "not a token: a concatenated diagnostic the scan's quotes catch",
+}
+
+-- Notices in the submit and generation path that do not come from `refuse`.
+-- Each is declared with the reason it is not a refusal: the guard keys on the
+-- CHANNEL, so a new literal warning in these modules is a finding whatever it
+-- says (#261 M5 review round 3).
+local CHANNEL_FILES = { "lua/parley/chat_respond.lua", "lua/parley/response_session.lua",
+    "lua/parley/response_provider.lua", "lua/parley/response_preparation.lua",
+    "lua/parley/response_submission.lua", "lua/parley/response_target.lua",
+    "lua/parley/response_topic.lua", "lua/parley/response_completion.lua",
+    "lua/parley/batch_response.lua", "lua/parley/generation_runner.lua" }
+local NOT_A_REFUSAL_NOTICE = {
+    ["collect_ancestor_chain: max depth reached, stopping"] = "a log line about context assembly, not a refusal",
+    ["collect_ancestor_chain: parent file not readable: "] = "same: the ancestor is skipped, the request proceeds",
+    ["Failed to parse YAML in raw request mode: "] = "raw-mode diagnostics; the request proceeds",
+    ["Failed to fetch remote content: "] = "the reference falls back to placeholder text; the request proceeds",
 }
 
 -- A reason composed at run time has no literal to key. One that starts with a
@@ -85,7 +101,7 @@ describe("arch: every refusal token has words", function()
     it("gives each one words, or a reason it is not a refusal", function()
         local missing = {}
         for literal, site in pairs(found) do
-            if not (R.TOKENS[literal] or R.INTERNAL[literal] or NOT_REFUSAL[literal]) then
+            if not (R.TOKENS[literal] or R.INTERNAL[literal] or R.LIFECYCLE[literal] ~= nil or NOT_REFUSAL[literal]) then
                 missing[#missing + 1] = site .. ": " .. literal
             end
         end
@@ -109,6 +125,35 @@ describe("arch: every refusal token has words", function()
         end
         table.sort(bad)
         assert.same({}, bad)
+    end)
+    it("keeps the allowlist disjoint from the vocabulary, and free of dead entries", function()
+        local shadowed, dead = {}, {}
+        for literal in pairs(NOT_REFUSAL) do
+            if R.TOKENS[literal] or R.INTERNAL[literal] or R.LIFECYCLE[literal] ~= nil then
+                shadowed[#shadowed + 1] = literal
+            end
+            if not found[literal] then dead[#dead + 1] = literal end
+        end
+        table.sort(shadowed); table.sort(dead)
+        assert.same({}, shadowed, "these have words now; the allowlist entry is shadowed and its reason is false")
+        assert.same({}, dead, "the scan no longer finds these; delete the entry")
+    end)
+    it("routes every user notice in the submit path through refuse", function()
+        local offenders = {}
+        for _, file in ipairs(CHANNEL_FILES) do
+            for n, line in ipairs(vim.fn.readfile(file)) do
+                if not line:match("^%s*%-%-") then
+                    for _, literal in line:gmatch("logger%.warning%(%s*(['\"])(.-)%1") do
+                        if not NOT_A_REFUSAL_NOTICE[literal] then offenders[#offenders + 1] = file .. ":" .. n .. ": " .. literal end
+                    end
+                    for _, literal in line:gmatch("vim%.notify%(%s*(['\"])(.-)%1") do
+                        if not NOT_A_REFUSAL_NOTICE[literal] then offenders[#offenders + 1] = file .. ":" .. n .. ": " .. literal end
+                    end
+                end
+            end
+        end
+        table.sort(offenders)
+        assert.same({}, offenders, "say it through refuse(), so parley.refusal owns the words")
     end)
     it("keeps the prefixes in refusal.lua alone", function()
         local arch = require("tests.arch.arch_helper")

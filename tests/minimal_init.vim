@@ -1,5 +1,6 @@
 " Minimal Neovim init for headless test runs.
 " Usage: nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedDirectory tests/ {sequential=true}"
+" Loaded by the parent AND by every spec child (tests/helpers/spec_runner.lua).
 
 set nocompatible
 
@@ -22,9 +23,12 @@ runtime plugin/plenary.vim
 set noswapfile
 execute 'set directory=' . fnameescape(empty($TMPDIR) ? '/tmp' : $TMPDIR) . '//'
 let g:parley_test_mode = v:true
-" PlenaryBustedFile runs each spec in a child nvim started WITHOUT this init,
-" so g: variables set here never reach a spec; the environment does. Code that
-" must know it is under the harness reads $PARLEY_TEST_MODE (#227).
+" Since #261 M5 every spec child loads this init (tests/helpers/spec_runner.lua
+" passes it to plenary), so what is set here — `g:` included — reaches specs.
+" Before that, children started without it and only the environment carried over;
+" code that must know it is under the harness still reads $PARLEY_TEST_MODE
+" (#227), which works either way. A spec that needs a different value for
+" `g:parley_test_mode` sets it itself (file_tracker_spec, sidecars.lua).
 let $PARLEY_TEST_MODE = '1'
 " #237: cliproxy's release lookups go to github.com by default. Point them at a
 " dead local port so a spec that forgets cliproxy._set_releases_url fails fast

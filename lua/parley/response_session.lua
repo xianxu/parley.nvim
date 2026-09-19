@@ -92,7 +92,9 @@ function M.start(doc,spec,opts)
             buf=opts.buf,chat_roots=opts.chat_roots,help_root=opts.help_root,page_limit=opts.page_limit,
             max_iterations=limit('max_iterations'),
             max_result_bytes=limit('max_result_bytes'),build_input=opts.build_input})
-        if not ok then return false,tostring(adapter)end
+        -- A Lua error, not a token: it rides behind a lead-in the vocabulary
+        -- keys, so the user is told what failed rather than shown a traceback.
+        if not ok then return false,'tool setup failed: '..(tostring(adapter):match('^[^\n]+') or 'unknown')end
         tools=adapter;s.tools=adapter
         if profile.agent and profile.agent~=opts.agent then
             if s.pending then s.pending:cancel();s.pending=nil end
@@ -159,7 +161,10 @@ function M.start(doc,spec,opts)
                 r.op=op
             end
             local ok,accepted=pcall(cb.prepared,r.input,write_gap)
-            if not ok or accepted==false then failed(ok and 'prepared callback refused' or tostring(accepted));return false end
+            if not ok or accepted==false then
+                failed(ok and 'prepared callback refused' or ('prepared callback threw: '..tostring(accepted):match('^[^\n]+')))
+                return false
+            end
             return true
         end
         function callbacks.failed(reason)failed(reason)end

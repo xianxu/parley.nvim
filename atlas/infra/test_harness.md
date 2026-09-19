@@ -40,11 +40,17 @@ spec has to defend itself and no lint has to police traversal roots. `nvim`'s
 `directory` (swap) follows `$TMPDIR` for the same reason
 (`tests/minimal_init.vim`).
 
-**Signals to spec code travel through the environment, not `g:`.** Each spec
-runs in a child nvim that `PlenaryBustedFile` starts *without*
-`tests/minimal_init.vim`, so the init's `g:parley_test_mode` never reaches a
-spec (`chat_move_spec` sets it again itself). The child does inherit the
-environment, so the init also exports `$PARLEY_TEST_MODE=1`. The highlight
+**Every spec child loads `tests/minimal_init.vim`.** `tests/helpers/spec_runner.lua`
+passes it to plenary, so what the init sets — `g:` variables included — reaches
+the spec, and the harness-only guards it installs (a per-process
+`$PARLEY_QUERY_DIR`, the watch for a refusal with no words) cover the whole
+suite rather than the specs that remember to ask (#261 M5). Before that, children
+started with no `-u` at all and only the environment carried over, which is why
+the init also exports `$PARLEY_TEST_MODE=1`; production code that must know it is
+under the harness reads that, and works either way. A spec that needs
+`g:parley_test_mode` to differ sets it itself: `file_tracker_spec` clears it to
+exercise real persistence, `tests/helpers/sidecars.lua` clears it for one tracked
+open, and `chat_move_spec` sets it. The highlight
 structure's scheduled repair (#227) keys on it: under the harness no repair
 timer fires on its own, and a spec opts into the real clock with
 `highlighter._set_repair_deferral(nil, ms)` or fires one by hand

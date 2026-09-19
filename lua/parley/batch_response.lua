@@ -158,7 +158,7 @@ local function run(s,effect)
     -- A throw may follow an external effect. Keep ownership unresolved unless
     -- the callback positively reported completion; never retry through a throw.
     if not ok then
-        active.unknown=true;transition(s,{type='cancel'});changed(s);return
+        active.unknown=true;transition(s,{type='cancel',cause='fault'});changed(s);return
     end
     active.handle=handle
     if not handle and not active.finished then done({outcome=reason or 'start refused'})end
@@ -218,9 +218,10 @@ function M.start(doc,opts)
     queue(s);return job
 end
 function M.snapshot(job)return B.snapshot(get(job).state)end
-function M.cancel(job)
+--- @param opts? table # {cause='user'|'lifecycle'|'fault'} — why, for the words the host gives the pause
+function M.cancel(job,opts)
     local s=get(job);if s.disposed then return {accepted=false,effects={}}end
-    local result=transition(s,{type='cancel'})
+    local result=transition(s,{type='cancel',cause=opts and opts.cause})
     s.validation=nil;s.ready_proof=nil;prune(s)
     for _,effect in ipairs(result.effects)do
         local op=s.operation
@@ -252,7 +253,7 @@ function M.resume(job,opts)
 end
 retire=function(s,reason)
     if s.disposed then return end
-    local result=transition(s,{type='cancel'})
+    local result=transition(s,{type='cancel',cause='lifecycle'})
     local operation,callback=s.operation,s.opts.retired
     s.disposed=true
     if s.unsubscribe then s.unsubscribe();s.unsubscribe=nil end

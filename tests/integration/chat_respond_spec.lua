@@ -3,6 +3,9 @@
 -- These tests exercise the full chat_respond flow including the completion callback,
 -- which requires mocking the dispatcher and tasker.
 
+-- Fixture strings, not transport tokens: the harness watch for a refusal
+-- with no words expects them (#261 M5).
+vim.g.parley_expected_unkeyed={'fixture transport failure'}
 local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-chat-respond-" .. os.time()
 
 -- Bootstrap parley

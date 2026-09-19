@@ -69,7 +69,10 @@ must *not* be. So:
 | `state` — `holds`: does a generation still hold a live grant on an entity | `lua/parley/document/state.lua` | modified |
 | `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
 | `attempt` — `open_stop_window`: TERM, then the escalate effect at +2 s, for a stop whose cause is stop, deadline or leave; `kill_cause` | `lua/parley/attempt.lua` | modified |
-| `refusal` — `describe`, `TOKENS`, `INTERNAL`, `PREFIX`, `REVOKED` (words by revocation cause), `USER_STOP` | `lua/parley/refusal.lua` | new |
+| `refusal` — `describe` (returns the message and how it resolved), `TOKENS`, `INTERNAL`, `LIFECYCLE` (a closed or reloaded chat, for every kind), `PREFIX`, `REVOKED` (words by revocation cause), `USER_STOP`, `BATCH_CONTINUE`, `BATCH_RESTART` | `lua/parley/refusal.lua` | new |
+| `_lifecycle_cause` — one statement of `:e!` detaching as a close does, for every path that reports a lifecycle cause | `lua/parley/chat_respond.lua` | new |
+| `OUTCOMES` — the set a generation can stop with, asserted in `stop` and checked for words at load | `lua/parley/generation.lua` | modified |
+| `cancel` — a batch cancel carries its cause (`user`, `lifecycle`, `fault`), validated in the transition and read off the snapshot | `lua/parley/batch.lua` | modified |
 
 - **`State.holds(handle, generation, entity)`** (M2) is true when the
   document's state has a grant with that generation and entity whose status is
@@ -2537,16 +2540,18 @@ harness.**
   atlas and target sentences that credited the static spec with catching any
   wordless reason are corrected: it reads the producer files for the call shapes
   it knows, at authoring time, and the harness covers the values.
-- **BR-73 (Minor).** `one()` in `chat_refusal_spec` now takes the whole expected
+- **BR-72 (Minor).** `one()` in `chat_refusal_spec` now takes the whole expected
   message and compares with equality, so all 17 cases inherit the rule rather
   than the three that were fixed by hand.
-- **BR-74 (Minor).** `generation.lua` declares `M.OUTCOMES` next to the only
+- **BR-73 (Minor).** `generation.lua` declares `M.OUTCOMES` next to the only
   function that sets one and asserts membership there; `refusal.lua` checks at
   **load** that every outcome has words. `revoked` (a revocation with no recorded
   cause) had none and now does.
 - **BR-70 (Minor, carried).** The replacement sentence was inaccurate too. The
   comment now states only what this module guarantees — it returns a typed error
   and never speaks — and describes no collaborator.
+- **BR-74 (Minor).** The exemption for a spec that means to pass a wordless
+  token is `g:parley_expected_unkeyed`, at file scope, with nothing to restore.
 
 **What the harness change surfaced.** With children loading `minimal_init.vim`,
 `g:parley_test_mode` reaches specs for the first time, and `file_tracker`
@@ -2571,4 +2576,72 @@ literal). Fixed as its class: every status a user edit can end with
 (`applied` aside) now has words, and a spec derives the list from
 `document/editor.lua` and `document/user_edits.lua` rather than trusting the
 five that exist today.
+
+### 2026-09-19 — M5 boundary review round 3 (FIX-THEN-SHIP): one field, one token
+
+Six disposed, three blocking. Ids below are the ledger's, verbatim (round 3's
+own `plan-tracking-not-updated` finding: round 2's entry renumbered them).
+
+- **BR-66 (Important, closed at last).** The reviewer measured what the previous
+  round missed: with every outcome worded, an unkeyed producer token no longer
+  resolved `unkeyed` — it resolved as the outcome's *detail* and printed raw,
+  `start refused | detach` eight times across the integration specs
+  ("Response not started: the response could not start (detach)"). The rule
+  applied: **a producer token and a free-text diagnosis must not share the
+  `failure` field.**
+  - `failure` is now always a token. A token with no row resolves `unkeyed` on
+    every kind, and the harness fails the spec that produced it.
+  - Free text reaches the user through `detail.notice` only. The runner types
+    its own Lua errors as `diagnosis` beside the token; a producer that used to
+    pass free text now emits a `": "` lead-in token (`request build failed: `,
+    `provider request failed: `, `bearer token is missing: `), which the
+    vocabulary keys and whose detail rides after the lead-in.
+  - One detail, enforced in `describe`: when a notice is present, the token's own
+    detail is dropped rather than repeated (the BR-65 rule, now in one place).
+- **BR-75 (Important, `canonical-form-not-shared`).** `refusal.LIFECYCLE` owns
+  the document lifecycle for every kind: a closed chat says nothing, a reloaded
+  one says so, and no call site writes those words. The host's detach→reload
+  mapping, which was written twice, is `chat_respond.lifecycle_cause(buf, cause)`.
+- **BR-76 (Important, `comment-outlives-its-behavior`).** Swept every prose claim
+  naming the seam this milestone changed: `tests/minimal_init.vim`'s header and
+  `atlas/infra/test_harness.md` said children never load the init and that `g:`
+  never reaches a spec. Both now describe what spec_runner does, and name the
+  three places that set `g:parley_test_mode` themselves.
+- **BR-72 (carried).** `refusals_are({...})` asserts the whole list; `one()`
+  delegates to it, so the two-message batch case is checked whole as well.
+- **Minor, `canonical-form-not-shared`.** The response pause and the topic abort
+  were hand-written notices. Both go through `refuse` now (`paused`, `topic`
+  prefixes), and the guard keys on the **channel**: a `logger.warning` or
+  `vim.notify` string literal in any submit-path module is a finding unless it
+  is declared with the reason it is not a refusal.
+- **Minor, `allowlist-without-dead-entry-check`.** The spec now asserts
+  `NOT_REFUSAL` is disjoint from the vocabulary and that every entry is still
+  produced by the scan. Four shadowed entries were removed.
+- **Minor, `state-change-bypasses-model`.** A pause's cause is now part of the
+  batch machine: `cancel(batch, {cause='user'|'lifecycle'|'fault'})`, validated
+  in the transition and surfaced on the snapshot. The host-side weak table and
+  the `leg_spoke` upvalue are gone — "its current response stopped" is derived
+  from the model (the pause reason is a generation outcome).
+
+**The watch keeps finding them.** Running it across the whole suite turned up
+five more, all of them the same shape — free text arriving where a token
+belongs:
+
+- the dispatcher's pre-start aborts (`bearer token is missing`, `request body
+  not written`, `query setup failed`) had no words at all;
+- an adapter whose start threw reported the Lua error as the token (now the
+  diagnosis, exposed on the runner's snapshot);
+- a reference fetch reported whatever it caught, including a launch's Lua error
+  (now `remote content failed: `);
+- the tool adapter's construction error reached the user as a traceback (now
+  `tool setup failed: `);
+- the ownership benchmark cancelled its response with `benchmark complete`,
+  which a user would have met as an unexplained stop. It now stops the response
+  the way a user does, so it is silent.
+
+Where a fixture string genuinely is not a transport token, the spec declares it
+in `g:parley_expected_unkeyed` — one line, at file scope.
+
+Two pinned assertions changed with the contract: a Lua error from a throwing
+adapter is the snapshot's `diagnosis`, not its `failure`.
 

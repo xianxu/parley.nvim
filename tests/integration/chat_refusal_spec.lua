@@ -73,12 +73,14 @@ describe("refusals reach the user once, in words", function()
         Stub.with_stub(parley.logger, "warning", function(message) warnings[#warnings + 1] = tostring(message) end, body)
     end
     -- The WHOLE message, never a probe: a substring holds either side of a
-    -- detail appended, suppressed or composed wrongly (#261 M5 review BR-65/73).
+    -- detail appended, suppressed or composed wrongly (#261 M5 review BR-65/72).
+    -- Every case goes through here, including the ones with more than one.
+    local function refusals_are(expected)
+        assert.same(expected, refusals())
+    end
     local function one(expected)
-        local got = refusals()
-        assert.equals(1, #got, "expected exactly one refusal, got: " .. vim.inspect(got))
-        assert.equals(expected, got[1])
-        return got[1]
+        refusals_are({ expected })
+        return expected
     end
 
     it("says so when the batch selection holds no question", function()
@@ -160,11 +162,12 @@ describe("refusals reach the user once, in words", function()
             -- Each edit re-checks the paused batch; none of them is a new pause.
             for i = 1, 3 do vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "later edit " .. i }); vim.wait(30) end
         end)
-        local got = refusals()
-        assert.equals(2, #got, vim.inspect(got))
-        assert.truthy(got[1]:find("Response stopped: the model's request failed", 1, true), got[1])
-        assert.equals("Batch paused: its current response stopped; :ParleyChatResumeBatch to continue"
-            .. " — 0 of 1 questions answered", got[2])
+        refusals_are({
+            "Response stopped: the model's request failed; submit again"
+                .. " — parley: provider request failed (HTTP 503): upstream down",
+            "Batch paused: its current response stopped; :ParleyChatResumeBatch to continue"
+                .. " — 0 of 1 questions answered",
+        })
     end)
 
     -- A reworded question is a new question: the paused batch cannot resume it,

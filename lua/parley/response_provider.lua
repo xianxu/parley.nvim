@@ -8,11 +8,15 @@ local function safe(fn,...)
     if type(fn)~='function'then return true end
     return pcall(fn,...)
 end
+-- A token, never free text: the words for it live in parley.refusal, and the
+-- HTTP status and body reach the user through the host's notice (the diagnosis
+-- `_failure_notice` builds). #261 M5 review round 3, BR-66.
 local function failure_reason(failure)
     if type(failure)=='table'then
-        -- A transport that ended badly names how (#261 M3 review BR-45).
-        if failure.exit then return 'provider request failed ('..failure.exit..')' end
-        return 'provider request failed (HTTP '..tostring(failure.http_status or 'unknown')..')'
+        -- A transport that ended badly names how (#261 M3 review BR-45); the
+        -- detail follows the ': ' lead-in the vocabulary keys.
+        if failure.exit then return 'provider request failed: '..failure.exit end
+        return 'provider request failed: HTTP '..tostring(failure.http_status or 'unknown')
     end
     return type(failure)=='string' and failure:sub(1,512) or 'provider request failed'
 end

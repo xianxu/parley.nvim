@@ -4,6 +4,9 @@
 -- the REAL teardown bodies at each D.query caller so an arg-position regression
 -- or a response-retirement bug is actually caught.
 
+-- Fixture strings, not transport tokens: the harness watch for a refusal
+-- with no words expects them (#261 M5).
+vim.g.parley_expected_unkeyed={'test abort'}
 local uv = vim.uv or vim.loop
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 

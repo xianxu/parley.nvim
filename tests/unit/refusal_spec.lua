@@ -2,7 +2,7 @@
 local R = require("parley.refusal")
 -- This spec describes tokens that have no words on purpose; the harness watch
 -- in tests/minimal_init.vim fails any other spec that produces one.
-vim.g.parley_expected_unkeyed = { "never heard of it" }
+vim.g.parley_expected_unkeyed = { "never heard of it", "provider request failed (HTTP 503)" }
 
 describe("refusal vocabulary", function()
     local ACTION = { "^:Parley%u", "submit again", "try again in a moment", "wait for", "edit" }
@@ -39,9 +39,15 @@ describe("refusal vocabulary", function()
         assert.equals("silent", class("ended", "revoked", nil, { cause = "detach" }))
         assert.equals("internal", class("start", nil, "invalid specification"))
         assert.equals("internal", class("ended", "finalize_failed", "invalid completion"))
-        -- Free text under a known outcome is that outcome's detail, not a missing row.
-        assert.equals("detail", class("ended", "provider_failed", "provider request failed (HTTP 503)"))
         assert.equals("unkeyed", class("start", nil, "never heard of it"))
+        -- `failure` is a token, always. Free text passed there is a producer
+        -- defect, not a detail to print (BR-66); it reaches the user as a notice.
+        assert.equals("unkeyed", class("ended", "provider_failed", "provider request failed (HTTP 503)"))
+        assert.equals("keyed", class("ended", "provider_failed", nil,
+            { notice = "parley: provider request failed (HTTP 503): upstream down" }))
+        -- A lifecycle token has one home, whatever the kind that carries it.
+        assert.equals("silent", class("start", "start refused", "detach"))
+        assert.equals("cause", class("start", "start refused", "reload"))
     end)
     -- Round 2: the harness watch caught `interrupted` from the drill-in. The
     -- class is every status a user edit can end with, not that one token.

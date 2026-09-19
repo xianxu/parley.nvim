@@ -17,6 +17,8 @@ M.PREFIX = {
     batch_paused = "Batch paused",
     batch_ended = "Batch stopped",
     ended = "Response stopped",
+    paused = "Response paused",
+    topic = "Topic not generated",
     drill = "Drill-in stopped",
 }
 
@@ -59,8 +61,6 @@ M.TOKENS = {
     ["entity row overlap"] = { what = "another response is already writing this answer",
         action = "wait for it to finish, or stop it with :ParleyStop, then submit again" },
     -- The chat changed underneath the request.
-    ["detached"] = { what = "the chat was closed", action = "reopen the chat and submit again" },
-    ["epoch"] = { what = "the chat was reloaded", action = AGAIN },
     ["document changed"] = { what = "the chat changed before the request could start", action = AGAIN },
     ["source changed"] = { what = "the question was edited before the request could start", action = AGAIN },
     ["validation interrupted by edits"] = { what = "the chat was edited while the batch was checked", action = AGAIN },
@@ -115,6 +115,13 @@ M.TOKENS = {
     ["interrupted"] = { what = "the chat changed while Parley was writing into it", action = MOMENT },
     ["busy"] = { what = "another edit is being applied to the chat", action = MOMENT },
     ["chunkneeded"] = { what = "the edit was too large to apply in one step", action = MOMENT },
+    -- A response that paused rather than ended: it keeps its place until the
+    -- user resumes or stops it.
+    ["stale input"] = { what = "the question changed while the answer was being written",
+        action = ":ParleyChatResumeResponse continues with the original input, or :ParleyStop cancels" },
+    ["ownership changed"] = { what = "the answer or a tool result was edited while it was being written",
+        action = ":ParleyStop before generating a new answer" },
+    ["topic generation aborted"] = { what = "the topic request could not start", action = AGAIN },
     -- Resume.
     ["no stale continuation ready"] = { what = "the response is not paused on a changed input",
         action = ":ParleyChatRespond to start a new one" },
@@ -153,6 +160,19 @@ M.TOKENS = {
     ["revoked"] = { what = "the answer's claim on the chat was withdrawn", action = AGAIN },
     ["staging overflow"] = { what = "the response was stopped to keep its output from being dropped", action = AGAIN },
     ["provider_failed"] = { what = "the model's request failed", action = AGAIN },
+    -- What the provider adapter reports. The HTTP status and body arrive as the
+    -- host's notice, so these say only what happened.
+    ["provider request failed"] = { what = "the model's request failed", action = AGAIN },
+    ["provider request failed: "] = { what = "the model's request failed", action = AGAIN },
+    ["provider startup failed"] = { what = "the model's request could not be started", action = AGAIN },
+    -- What the transport reports before curl starts (dispatcher.lua).
+    ["bearer token is missing: "] = { what = "the provider has no credentials",
+        action = "set its API key, then submit again" },
+    ["request body not written: "] = { what = "the request could not be staged on disk", action = MOMENT },
+    ["query setup failed: "] = { what = "the model's request could not be started", action = AGAIN },
+    ["request build failed: "] = { what = "the request could not be built", action = AGAIN },
+    ["remote content failed: "] = { what = "a linked reference could not be fetched", action = AGAIN },
+    ["tool setup failed: "] = { what = "the chat's tools could not be prepared", action = AGAIN },
     ["prepare_failed"] = { what = "the request could not be built", action = AGAIN },
     ["finalize_failed"] = { what = "the answer was written, but the next question prompt could not be added",
         action = "edit: add the 💬: prompt yourself" },
@@ -172,16 +192,30 @@ for _, token in ipairs({
     "invalid region", "invalid edit", "invalid uncertainty", "invalid proofs", "grant", "invalid epoch",
     "invalid submission", "prepare adapter required", "request adapter required", "finalize adapter required",
     "adapter failed", "cancel adapter missing; operation unresolved", "invalid completion",
+    "invalid provider input", "provider result processing failed", "prepared callback refused",
+    "prepared callback threw: ", "preparation step failed: ", "invalid response profile",
+    "invalid tool capabilities", "invalid response display name", "invalid response tool limit",
     "unknown event", "coordinator-owned event", "invalid released insertion", "row slice limit", "cannot narrow grant",
     "operation", "range", "anchor", "successor", "patch", "overlapping patches",
     "prepare/request/finalize adapters required", "invalid specification", "invalid staging limit",
     "invalid queue limit", "invalid preparation region", "invalid target", "invalid callbacks",
     "preparation and payload builders required", "wrong scope", "stale leg",
     "missing outcome", "missing context revision", "invalid context status", "invalid process limits",
+    "invalid cancel cause",
     "missing adapter: ",
     "invalid process limit: ", "task start rejected: invalid process options",
     "chat_path not supplied to build_messages", "chat path has no directory: ",
 }) do M.INTERNAL[token] = true end
+
+-- The document's lifecycle speaks once, here, for every kind and every path
+-- (#261 M5 review round 3, BR-75). A chat that closed says nothing: nobody is
+-- looking at it, and no action would help. A reloaded one says so. Producers
+-- hand over their raw token; the words are not written at the call site.
+M.LIFECYCLE = {
+    detach = false, detached = false,
+    reload = { what = "the chat was reloaded", action = AGAIN },
+    epoch = { what = "the chat was reloaded", action = AGAIN },
+}
 
 -- What a revocation means depends on why it happened.
 M.REVOKED = {
@@ -221,8 +255,10 @@ end
 ---  log_file = the Parley log's path, named when the token is unexpected, action = what to do instead of
 ---  the row's own (a batch's, which continues rather than submits)}
 ---@return string|nil # the message, or nil when there is nothing to say
----@return string # how it resolved: silent, cause, keyed, detail, internal, unkeyed. Pure,
----  so a caller (the harness) can judge the words without this module keeping state.
+---@return string # how it resolved: silent, cause, keyed, internal, unkeyed. Pure, so a
+---  caller (the harness) can judge the words without this module keeping state. `unkeyed`
+---  means a token with no row reached it — including free text, which belongs in
+---  `detail.notice`, never in `failure`.
 function M.describe(kind, outcome, failure, detail)
     detail = detail or {}
     if SILENT[failure] then return nil, "silent" end
@@ -237,22 +273,34 @@ function M.describe(kind, outcome, failure, detail)
         text = row.what .. "; " .. (detail.action or row.action)
         resolution = "cause"
     end
+    -- Any other path that carries a lifecycle token, whatever its kind.
+    if not text then
+        local lifecycle = M.LIFECYCLE[failure]
+        if lifecycle == nil and failure == nil then lifecycle = M.LIFECYCLE[detail.cause] end
+        if lifecycle == false then return nil, "silent" end
+        if lifecycle then
+            text = lifecycle.what .. "; " .. (detail.action or lifecycle.action)
+            resolution = "cause"
+        end
+    end
     if not text then
         local token = failure or outcome
         local row, extra = row_of(token)
         local pointer
         resolution = row and "keyed" or nil
-        if not row and failure and outcome then
-            -- A failure with no row of its own never erases the outcome's words.
-            -- A token the user can read becomes its detail; an internal one
-            -- becomes the pointer to the log (BR-65).
+        -- An internal token never erases a known outcome's words; it adds the log
+        -- pointer beside them (BR-65). A token that is neither keyed nor internal
+        -- is a missing row, and says so rather than printing raw as detail: free
+        -- text reaches the user through `detail.notice`, never through `failure`
+        -- (BR-66).
+        if not row and failure and outcome and internal(failure) then
             row = row_of(outcome)
-            if row then
-                resolution = internal(failure) and "internal" or "detail"
-                if internal(failure) then pointer = log else extra = tostring(failure):match("^[^\n]+") end
-            end
+            if row then resolution = "internal"; pointer = log end
         end
         if row then
+            -- One detail, and the notice is already words: a token's own detail
+            -- would repeat what the notice says (#261 M5 review BR-65).
+            if type(detail.notice) == "string" and detail.notice ~= "" then extra = nil end
             text = row.what .. (extra and extra ~= "" and (" (" .. extra .. ")") or "") .. "; " .. (detail.action or row.action)
             if CAPACITY[token] and type(detail.held) == "table" and #detail.held > 0 then
                 local pids = {}

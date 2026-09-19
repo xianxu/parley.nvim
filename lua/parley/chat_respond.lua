@@ -37,6 +37,28 @@ end
 -- (M.config, M._state, M._remote_reference_cache) are visible here by reference.
 local _parley = nil
 
+-- Every refusal and every non-success ending reaches the user once, in words
+-- (#261 M5), through one channel: the logger, which also shows it. The words
+-- live in parley.refusal; this only fills in what the words may need.
+local Refusal = require('parley.refusal')
+-- `:e!` unloads and re-reads the chat, so its document detaches exactly as a
+-- closed chat's does. A generation ends on a later turn, after the command has
+-- returned: a chat loaded again by then was reloaded, not closed. One statement
+-- of it, for every path that reports a lifecycle cause (#261 M5 review BR-75).
+local function lifecycle_cause(buf, cause)
+    if cause == 'detach' and vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then return 'reload' end
+    return cause
+end
+M._lifecycle_cause = lifecycle_cause -- test seam
+local function refuse(kind, outcome, failure, detail)
+    detail = detail or {}
+    detail.log_file = detail.log_file or (_parley.config and _parley.config.log_file)
+    if detail.held == nil then detail.held = require('parley.tasker').held() end
+    local message = Refusal.describe(kind, outcome, failure, detail)
+    if message then _parley.logger.warning(message) end
+    return message
+end
+
 local function append_neighborhood_context(agent_info, policy)
     if not agent_info or type(agent_info.tools) ~= "table" or #agent_info.tools == 0 then
         return
@@ -1163,7 +1185,7 @@ M.generate_topic = function(messages, provider, model, callback, spinner, transp
     local function on_abort(msg)
         if finished then return end
         finish(nil, "abort")
-        vim.notify(msg or "parley: topic generation aborted", vim.log.levels.WARN)
+        refuse('topic', nil, msg or 'topic generation aborted')
     end
 
     _parley.dispatcher.query(
@@ -1270,9 +1292,11 @@ M.resolve_remote_references = function(opts, callback)
         -- a throwing launch whose retained callback later supplied evidence.
         pcall(done, reason and nil or value, reason)
     end
+    -- Whatever a fetch reports — a Lua error from a launch, a transport string —
+    -- is free text, so it travels behind a token the vocabulary keys (#261 M5).
     local function failed(reason)
         if operation.failure or operation.finished then return end
-        operation.failure = tostring(reason)
+        operation.failure = 'remote content failed: ' .. (tostring(reason):match('^[^\n]+') or 'unknown')
         if on_failure then pcall(on_failure, operation.failure) end
     end
     function operation:cancel()
@@ -1344,24 +1368,10 @@ local function cancel_topic(topic, reason)
     return guarded('topic cancel', require('parley.response_topic').cancel, topic, reason)
 end
 M._cancel_topic = cancel_topic -- test seam
--- Every refusal and every non-success ending reaches the user once, in words
--- (#261 M5), through one channel: the logger, which also shows it. The words
--- live in parley.refusal; this only fills in what the words may need.
-local Refusal = require('parley.refusal')
-local function refuse(kind, outcome, failure, detail)
-    detail = detail or {}
-    detail.log_file = detail.log_file or (_parley.config and _parley.config.log_file)
-    if detail.held == nil then detail.held = require('parley.tasker').held() end
-    local message = Refusal.describe(kind, outcome, failure, detail)
-    if message then _parley.logger.warning(message) end
-    return message
-end
--- Batches the user stopped: their pause is the user's own doing, so it is not
--- announced (#261 M5). Cleared when the batch runs again.
-local user_stopped = setmetatable({}, {__mode = 'k'})
+-- A batch the user stopped records that on the batch itself, so the pause reads
+-- its cause off the model rather than a flag kept beside it (#261 M5 review).
 local function stop_batch(batch)
-    user_stopped[batch] = true
-    guarded('batch cancel', require('parley.batch_response').cancel, batch)
+    guarded('batch cancel', require('parley.batch_response').cancel, batch, {cause = 'user'})
 end
 local function cancel_entry(entry)
     if entry.batch then stop_batch(entry.batch) end
@@ -1613,14 +1623,16 @@ local function start_scoped_response(frame)
             if self.remote then pcall(self.remote.cancel, self.remote) end
             resolve()
         end
-        local function logical_failure(reason)
+        local function logical_failure(reason, diagnosis)
             if operation.cancelled or operation.failed then return end
             operation.failed = true
             -- The generation ends `prepare_failed` and its terminal says why, once.
-            cb.failed(reason)
+            cb.failed(reason, diagnosis)
         end
-        local function fail(reason)
-            logical_failure(reason)
+        -- `diagnosis` marks free text (a Lua error from the build) as opposed to a
+        -- token the vocabulary keys (#261 M5 review round 3, BR-66).
+        local function fail(reason, diagnosis)
+            logical_failure(reason, diagnosis)
             resolve()
         end
         local function build(remote, remote_error)
@@ -1653,7 +1665,9 @@ local function start_scoped_response(frame)
                         max_result_bytes = info.tool_result_max_bytes,
                     }}, plan)
             end, debug.traceback)
-            if not ok then fail(err) else resolve() end
+            -- A Lua error is free text, so it rides behind a token the vocabulary
+            -- keys, rather than reaching the user raw (#261 M5 review round 3).
+            if not ok then fail('request build failed: '..tostring(err):match('^[^\n]+')) else resolve() end
         end
         local function ready()
             if operation.cancelled or ctx.cancelled() then resolve(); return end
@@ -1676,7 +1690,7 @@ local function start_scoped_response(frame)
                 -- The fetches run in this generation's process scope (#261 M4 W4).
                 scope = require('parley.tasker').scope_key(ctx.epoch, ctx.generation),
                 on_failure = logical_failure}, build)
-            if not ok then fail(remote)
+            if not ok then fail('remote content failed: ' .. tostring(remote):match('^[^\n]+'))
             else
                 operation.remote = remote
                 if operation.cancelled and remote then remote:cancel() end
@@ -1699,9 +1713,7 @@ local function start_scoped_response(frame)
         changed = function(value)
             require('parley.response_status').update(buf,doc,value)
             if value.phase=='paused' then
-                _parley.logger.warning(value.stale_input
-                    and 'Response paused after input changed. :ParleyChatResumeResponse continues with original input; :ParleyStop cancels.'
-                    or 'Response paused: output or tool ownership changed. Stop it before generating a new answer.')
+                refuse('paused', nil, value.stale_input and 'stale input' or 'ownership changed')
             end
         end,
         on_result = function(_, qt, _, failure)
@@ -1759,20 +1771,15 @@ local function start_scoped_response(frame)
                 -- hold are already words, so they are the notice and the ending's
                 -- own reason would repeat them. Anything else is a producer token,
                 -- which `describe` keys (#261 M5 review BR-65).
-                local notice
-                if result.outcome == 'provider_failed' then notice = failure_notice
+                -- The words come from the token; free text is detail beside them.
+                local notice = result.diagnosis
+                if result.outcome == 'provider_failed' then notice = failure_notice or notice
                 elseif result.outcome == 'overflow' then
                     notice = require('parley.chat_presentation').overflow_message(result.waited_for_line)
                 end
-                local failure = notice == nil and (result.failure or completion_failure) or nil
-                -- `:e!` unloads and re-reads the chat, so its document detaches
-                -- exactly as a closed chat's does. The runner ends a generation on
-                -- a later timer turn, after the command returned: a chat loaded
-                -- again by then was reloaded, not closed.
-                local cause = result.cause
-                if cause == 'detach' and vim.api.nvim_buf_is_loaded(buf) then cause = 'reload' end
+                local failure = result.failure or (notice == nil and completion_failure or nil)
                 result.refusal = refuse(result.outcome == 'prepare_failed' and 'start' or 'ended', result.outcome,
-                    failure, {cause = cause, notice = notice})
+                    failure, {cause = lifecycle_cause(buf, result.cause), notice = notice})
             end
             failure_notice = nil
             if frame.terminal then frame.terminal(result) end
@@ -2034,16 +2041,9 @@ M.respond_all = function()
     if #selection == 0 then refuse('batch_start', nil, 'no questions selected'); return nil, 'no questions selected' end
     local root_policy = require('parley.neighborhood').policy_for_buf(buf)
     local batch, retired
-    -- A pause does not repeat what the batch's answering response already said.
-    local leg_spoke = false
     local function answered(state) return state.completed .. ' of ' .. #state.selection .. ' questions answered' end
     batch, reason = Batch.start(doc, {selection = selection,
-        start = function(entity, finished)
-            leg_spoke = false
-            local function done(result)
-                leg_spoke = type(result) == 'table' and result.refusal ~= nil
-                finished(result)
-            end
+        start = function(entity, done)
             if not vim.api.nvim_buf_is_valid(buf) or D.get(buf) ~= doc then return nil, 'document changed' end
             local marker = D.lookup(doc, entity)
             if not marker then return nil, 'question missing' end
@@ -2072,10 +2072,11 @@ M.respond_all = function()
         changed = function(state, validation)
             if validation and not validation.accepted then
                 refuse('batch_resume', nil, validation.reason)
-            elseif state.phase ~= 'paused' then
-                if batch then user_stopped[batch] = nil end
-            elseif not (batch and user_stopped[batch]) then
-                refuse('batch_paused', nil, leg_spoke and 'leg stopped' or state.reason,
+            elseif state.phase == 'paused' and state.cause ~= 'user' then
+                -- The pause says only what the batch itself knows: a leg that ended
+                -- badly already said why (its outcome is the reason on the model).
+                local leg_stopped = require('parley.generation').OUTCOMES[state.reason] ~= nil
+                refuse('batch_paused', nil, leg_stopped and 'leg stopped' or state.reason,
                     {action = Refusal.BATCH_CONTINUE, notice = answered(state)})
             end
         end,
@@ -2083,13 +2084,12 @@ M.respond_all = function()
             retired = true
             if batches[buf] == batch then batches[buf] = nil end
             -- A reload ends the batch, and its answering response (cancelled by
-            -- the batch) says nothing. `:e!` detaches as closing does; once the
-            -- command has returned, a chat loaded again was reloaded.
+            -- the batch) says nothing, so the batch speaks. The cause is read on a
+            -- later turn, once the command that detached has returned.
             if why ~= 'reload' and why ~= 'detach' then return end
             local state = batch and Batch.snapshot(batch)
             vim.schedule(function()
-                if why == 'detach' and not vim.api.nvim_buf_is_loaded(buf) then return end
-                refuse('batch_ended', nil, 'epoch', {action = Refusal.BATCH_RESTART,
+                refuse('batch_ended', nil, lifecycle_cause(buf, why), {action = Refusal.BATCH_RESTART,
                     notice = state and answered(state) or nil})
             end)
         end,

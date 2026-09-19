@@ -926,6 +926,29 @@ first time. `file_tracker` skips its persistence on that flag, so
 `file_tracker_spec` (which exercises the real read and write) now clears it
 itself. It is the flag's only reader.
 
+### 2026-09-19 — M5 boundary review round 3 (FIX-THEN-SHIP) and dispositions
+
+Six disposed, three blocking, all fixed as rules.
+
+- **BR-66 (closed):** the reviewer measured what rounds 1 and 2 missed. With
+  every outcome worded, an unkeyed token stopped resolving `unkeyed` and printed
+  raw as the outcome's detail (`start refused | detach`, eight times). A token
+  and free text no longer share the `failure` field: `failure` is always a
+  token, free text is the notice or the runner's `diagnosis`, and a producer
+  that carried free text now emits a `": "` lead-in the vocabulary keys.
+- **BR-75:** `refusal.LIFECYCLE` owns a closed or reloaded chat for every kind,
+  and the host's detach→reload rule is one helper instead of two copies.
+- **BR-76:** every prose claim about the harness seam this milestone changed is
+  swept (`tests/minimal_init.vim`, `atlas/infra/test_harness.md`).
+- **Minors:** the pause and topic notices go through `refuse` (the guard now
+  keys on the channel, not the wording); `NOT_REFUSAL` must be disjoint from the
+  vocabulary and free of dead entries; a batch pause's cause lives in the batch
+  machine, so the host-side weak table and the `leg_spoke` upvalue are gone.
+
+Run across the whole suite, the watch found five more real cases of free text
+where a token belongs, including a Lua traceback the user would have met when
+tool setup failed.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

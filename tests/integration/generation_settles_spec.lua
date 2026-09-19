@@ -129,7 +129,8 @@ describe("every wait a generation holds settles", function()
         fake.adapters.prepare = function() error("prepare exploded") end
         local r = start(doc, fake.adapters)
         assert.equals("terminal", phase(r))
-        assert.truthy(tostring(Runner.snapshot(r).failure):find("prepare exploded", 1, true))
+        -- A Lua error is the diagnosis beside the outcome, not a token (#261 M5).
+        assert.truthy(tostring(Runner.snapshot(r).diagnosis):find("prepare exploded", 1, true))
     end)
 
     it("W1: a request whose start threw still lets the generation end", function()

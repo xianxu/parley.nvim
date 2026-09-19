@@ -1305,6 +1305,126 @@ rounds:
       boundary: M5
       recipe: milestone-review
       blocked: true
+    - "n": 20
+      timestamp: "2026-09-19T14:24:16-07:00"
+      agent: claude
+      dispose:
+        - id: BR-66
+          disposition: not-addressed
+          note: |-
+            The value census cannot fire on the ending path: every outcome now has a row, so an
+            unworded failure resolves `detail` (refusal.lua:245-254) and prints the raw token in
+            parentheses instead of `unkeyed`. Measured today across eight integration specs:
+            `start refused | detach` (8x), user-visible as "Response not started: the response could
+            not start (detach); submit again". That is the runner/adapter token form BR-66 named, and
+            the atlas/target sentences still over-credit the watch. The rule: a producer token and a
+            free-text diagnosis must not share the `failure` field — type them at the producer so a
+            failure that is neither keyed nor internal resolves `unkeyed` on every kind, and free text
+            arrives only through the caller-declared notice channel.
+          round: 20
+        - id: BR-70
+          disposition: addressed
+          note: |-
+            chat_context.lua:4-9 now states only this module's own guarantee; verified no logger or
+            notify call remains in the module, and resolve/parse/chat_buffer return typed errors.
+          round: 20
+        - id: BR-71
+          disposition: addressed
+          note: |-
+            describe is pure and stateless again (returns message + resolution); the watch lives in
+            tests/minimal_init.vim and was verified to fail a spec file with exit 1 through cquit;
+            dispatcher reads a plain $PARLEY_QUERY_DIR override with no harness branch.
+          round: 20
+        - id: BR-72
+          disposition: not-addressed
+          note: |-
+            one() is equality now, but the case BR-72 named (chat_refusal_spec.lua:165, two refusals)
+            cannot use one() and still probes with find(); add a refusals_are({...}) helper asserting
+            the whole list and have one() delegate to it.
+          round: 20
+        - id: BR-73
+          disposition: addressed
+          note: |-
+            generation.OUTCOMES declared next to stop() with an assert, and refusal.lua fails at load
+            if an outcome has no words; `revoked` has a row. All nine stop() call sites checked against
+            the set; removing the row makes every spec that requires refusal.lua fail at load.
+          round: 20
+        - id: BR-74
+          disposition: addressed
+          note: |-
+            The process-global _allow_unkeyed is gone (no reference remains); the exemption is
+            file-scoped vim.g.parley_expected_unkeyed in refusal_spec.lua:5, with nothing to restore.
+          round: 20
+      findings:
+        - id: BR-75
+          severity: Important
+          title: 'The document-lifecycle cause has no single home: ''detach'' reaches the user raw on the start path, and the detach-to-reload mapping is written twice'
+          detail: |-
+            response_target.lua:116 retires with event.kind, which reaches refuse('start','start refused',why)
+            and prints "Response not started: the response could not start (detach); submit again" — a raw
+            token, plus an action the user cannot take because the chat is closed. The silence/wording rule
+            for detach and reload is hand-written at chat_respond.lua:1773 and again at :2088-2091, and not at
+            all here. This is the 3rd finding in family canonical-form-not-shared. Do NOT fix the one site:
+            refusal.lua should own the mapping from a lifecycle token to words or silence for every kind, not
+            only for outcome=='revoked', with every path handing it the raw token.
+          family: canonical-form-not-shared
+          round: 20
+        - id: BR-76
+          severity: Important
+          title: The harness docs still say spec children start without tests/minimal_init.vim, which this milestone changed
+          detail: |-
+            tests/minimal_init.vim:25-27 and atlas/infra/test_harness.md:42-46 both state that children never
+            load the init and that g: variables never reach a spec; spec_runner.lua:19-22 now passes
+            minimal_init to every child. This is the 2nd finding in family comment-outlives-its-behavior.
+            The rule: a seam's behaviour change sweeps every prose claim naming that seam in the same round
+            (grep minimal_init, PlenaryBustedFile, parley_test_mode across atlas, tests and TOOLING.md).
+          family: comment-outlives-its-behavior
+          round: 20
+        - id: BR-77
+          severity: Minor
+          title: The response pause and the topic abort are still hand-written user notices the vocabulary guard cannot see
+          detail: |-
+            chat_respond.lua:1702 words a pause with its own actions, and :1166 words a topic abort; neither
+            derives from refusal.lua, and the arch spec cannot see them because it keys on the PREFIX literals
+            and "Response paused" is not one — while the batch's pause IS in the vocabulary. 4th finding in
+            family canonical-form-not-shared. The rule: key the guard on the channel — a logger.warning or
+            vim.notify literal inside the submit/generation modules that is not refuse()'s return is a finding.
+          family: canonical-form-not-shared
+          round: 20
+        - id: BR-78
+          severity: Minor
+          title: NOT_REFUSAL still claims busy, refused, revoked and stale reach no user, while TOKENS words all four
+          detail: |-
+            Measured against the spec's own tables: those four keys are in both refusal_vocabulary_spec.lua:19-26
+            and refusal.lua TOKENS, so the allowlist entries are shadowed and their stated reason is now false.
+            3rd finding in family allowlist-without-dead-entry-check. The rule: assert the allowlist is disjoint
+            from TOKENS/INTERNAL and that every entry is still produced by the scan, rather than deleting
+            whichever entry a reviewer noticed.
+          family: allowlist-without-dead-entry-check
+          round: 20
+        - id: BR-79
+          severity: Minor
+          title: A batch pause's cause lives in host-side flags outside the batch machine
+          detail: |-
+            What the pause says depends on phase, active, the weak-keyed user_stopped[batch] and the leg_spoke
+            upvalue (chat_respond.lua:2037-2044, :2071-2080); the legal combinations are unwritten and only the
+            happy interleaving is pinned. 2nd finding in family state-change-bypasses-model. The rule: the cause
+            of a pause is part of the batch's transition (cancel(batch, {cause='user'}) surfaced on the snapshot),
+            so it is readable off the model and drivable by a sequence test.
+          family: state-change-bypasses-model
+          round: 20
+        - id: BR-80
+          severity: Minor
+          title: Round 2's dispositions are recorded one finding id off the ledger in both the issue Log and the plan
+          detail: |-
+            Logged "BR-73" is ledger BR-72 (the one() helper), logged "BR-74" is BR-73 (the outcome set), and
+            "BR-70/72" is BR-70/74 (the file-scoped exemption). 4th finding in family plan-tracking-not-updated.
+            The rule: a disposition quotes the ledger id verbatim, so a later round can verify what was claimed.
+          family: plan-tracking-not-updated
+          round: 20
+      boundary: M5
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -2036,6 +2156,72 @@ only what this module guarantees.
   restores it from after_each or through the repo's Stub.with_stub, never on the happy
   path.
 
+## Round 20 — 2026-09-19T14:24:16-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-66 — not-addressed — The value census cannot fire on the ending path: every outcome now has a row, so an
+unworded failure resolves `detail` (refusal.lua:245-254) and prints the raw token in
+parentheses instead of `unkeyed`. Measured today across eight integration specs:
+`start refused | detach` (8x), user-visible as "Response not started: the response could
+not start (detach); submit again". That is the runner/adapter token form BR-66 named, and
+the atlas/target sentences still over-credit the watch. The rule: a producer token and a
+free-text diagnosis must not share the `failure` field — type them at the producer so a
+failure that is neither keyed nor internal resolves `unkeyed` on every kind, and free text
+arrives only through the caller-declared notice channel.
+- BR-70 — addressed — chat_context.lua:4-9 now states only this module's own guarantee; verified no logger or
+notify call remains in the module, and resolve/parse/chat_buffer return typed errors.
+- BR-71 — addressed — describe is pure and stateless again (returns message + resolution); the watch lives in
+tests/minimal_init.vim and was verified to fail a spec file with exit 1 through cquit;
+dispatcher reads a plain $PARLEY_QUERY_DIR override with no harness branch.
+- BR-72 — not-addressed — one() is equality now, but the case BR-72 named (chat_refusal_spec.lua:165, two refusals)
+cannot use one() and still probes with find(); add a refusals_are({...}) helper asserting
+the whole list and have one() delegate to it.
+- BR-73 — addressed — generation.OUTCOMES declared next to stop() with an assert, and refusal.lua fails at load
+if an outcome has no words; `revoked` has a row. All nine stop() call sites checked against
+the set; removing the row makes every spec that requires refusal.lua fail at load.
+- BR-74 — addressed — The process-global _allow_unkeyed is gone (no reference remains); the exemption is
+file-scoped vim.g.parley_expected_unkeyed in refusal_spec.lua:5, with nothing to restore.
+
+### Raised
+
+- **BR-75** [Important] `canonical-form-not-shared` The document-lifecycle cause has no single home: 'detach' reaches the user raw on the start path, and the detach-to-reload mapping is written twice
+  response_target.lua:116 retires with event.kind, which reaches refuse('start','start refused',why)
+  and prints "Response not started: the response could not start (detach); submit again" — a raw
+  token, plus an action the user cannot take because the chat is closed. The silence/wording rule
+  for detach and reload is hand-written at chat_respond.lua:1773 and again at :2088-2091, and not at
+  all here. This is the 3rd finding in family canonical-form-not-shared. Do NOT fix the one site:
+  refusal.lua should own the mapping from a lifecycle token to words or silence for every kind, not
+  only for outcome=='revoked', with every path handing it the raw token.
+- **BR-76** [Important] `comment-outlives-its-behavior` The harness docs still say spec children start without tests/minimal_init.vim, which this milestone changed
+  tests/minimal_init.vim:25-27 and atlas/infra/test_harness.md:42-46 both state that children never
+  load the init and that g: variables never reach a spec; spec_runner.lua:19-22 now passes
+  minimal_init to every child. This is the 2nd finding in family comment-outlives-its-behavior.
+  The rule: a seam's behaviour change sweeps every prose claim naming that seam in the same round
+  (grep minimal_init, PlenaryBustedFile, parley_test_mode across atlas, tests and TOOLING.md).
+- **BR-77** [Minor] `canonical-form-not-shared` The response pause and the topic abort are still hand-written user notices the vocabulary guard cannot see
+  chat_respond.lua:1702 words a pause with its own actions, and :1166 words a topic abort; neither
+  derives from refusal.lua, and the arch spec cannot see them because it keys on the PREFIX literals
+  and "Response paused" is not one — while the batch's pause IS in the vocabulary. 4th finding in
+  family canonical-form-not-shared. The rule: key the guard on the channel — a logger.warning or
+  vim.notify literal inside the submit/generation modules that is not refuse()'s return is a finding.
+- **BR-78** [Minor] `allowlist-without-dead-entry-check` NOT_REFUSAL still claims busy, refused, revoked and stale reach no user, while TOKENS words all four
+  Measured against the spec's own tables: those four keys are in both refusal_vocabulary_spec.lua:19-26
+  and refusal.lua TOKENS, so the allowlist entries are shadowed and their stated reason is now false.
+  3rd finding in family allowlist-without-dead-entry-check. The rule: assert the allowlist is disjoint
+  from TOKENS/INTERNAL and that every entry is still produced by the scan, rather than deleting
+  whichever entry a reviewer noticed.
+- **BR-79** [Minor] `state-change-bypasses-model` A batch pause's cause lives in host-side flags outside the batch machine
+  What the pause says depends on phase, active, the weak-keyed user_stopped[batch] and the leg_spoke
+  upvalue (chat_respond.lua:2037-2044, :2071-2080); the legal combinations are unwritten and only the
+  happy interleaving is pinned. 2nd finding in family state-change-bypasses-model. The rule: the cause
+  of a pause is part of the batch's transition (cancel(batch, {cause='user'}) surfaced on the snapshot),
+  so it is readable off the model and drivable by a sequence test.
+- **BR-80** [Minor] `plan-tracking-not-updated` Round 2's dispositions are recorded one finding id off the ledger in both the issue Log and the plan
+  Logged "BR-73" is ledger BR-72 (the one() helper), logged "BR-74" is BR-73 (the outcome set), and
+  "BR-70/72" is BR-70/74 (the file-scoped exemption). 4th finding in family plan-tracking-not-updated.
+  The rule: a disposition quotes the ledger id verbatim, so a later round can verify what was claimed.
+
 ## Open findings
 
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
@@ -2052,8 +2238,10 @@ only what this module guarantees.
 - **BR-61** [Important] `seam-change-collateral` The dispatcher still documents a one-arg pre_query, naming copilot, after W6 made it two-arg
 - **BR-64** [Minor] `behavior-change-without-regression-test` cancel_through's throw exit and the direct site's refused-cancel exit fail nothing when reverted
 - **BR-66** [Important] `enumeration-claims-completeness` The refusal census scans call shapes, not the values describe() keys on, so `issue(s,<lit>)` tokens have no words
-- **BR-70** [Minor] `comment-outlives-its-behavior` chat_context.lua's header comment still describes the pre-M5 reporting it no longer owns
-- **BR-71** [Important] `test-hook-in-production-path` Both new guards live in production code behind PARLEY_TEST_MODE; one makes the pure vocabulary stateful and grows unbounded in production, the other is swallowed by the calling seam
 - **BR-72** [Minor] `behavior-change-without-regression-test` The refusal spec's `one()` helper is a substring probe, so the batch-pause case still cannot see a second detail on the same provider_failed ending
-- **BR-73** [Minor] `enumeration-claims-completeness` `revoked` has no TOKENS row, so an ending whose cause is not edit/reload/detach reads "unexpected (revoked)"
-- **BR-74** [Minor] `stub-restored-outside-finally` refusal_spec sets the process-global _allow_unkeyed and restores it only on the success path
+- **BR-75** [Important] `canonical-form-not-shared` The document-lifecycle cause has no single home: 'detach' reaches the user raw on the start path, and the detach-to-reload mapping is written twice
+- **BR-76** [Important] `comment-outlives-its-behavior` The harness docs still say spec children start without tests/minimal_init.vim, which this milestone changed
+- **BR-77** [Minor] `canonical-form-not-shared` The response pause and the topic abort are still hand-written user notices the vocabulary guard cannot see
+- **BR-78** [Minor] `allowlist-without-dead-entry-check` NOT_REFUSAL still claims busy, refused, revoked and stale reach no user, while TOKENS words all four
+- **BR-79** [Minor] `state-change-bypasses-model` A batch pause's cause lives in host-side flags outside the batch machine
+- **BR-80** [Minor] `plan-tracking-not-updated` Round 2's dispositions are recorded one finding id off the ledger in both the issue Log and the plan

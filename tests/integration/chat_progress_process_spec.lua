@@ -109,7 +109,7 @@ describe('chat progress managed process lifecycle',function()
     end
     it('cleans the admitted session when its provider secret is missing',function()
         parley.vault.get_secret=function()return nil end
-        prestart('bearer token is missing');assert.equals(0,processes.spawn_calls)
+        prestart('the provider has no credentials');assert.equals(0,processes.spawn_calls)
     end)
     it('cleans the admitted session when its exact transport admission key is occupied',function()
         parley.tasker.run=function(b,command,args,callback,stdout,stderr,reject,opts)

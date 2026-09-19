@@ -149,8 +149,13 @@ local function alive(s,operation)
     return not s.detached and not s.terminal and s.operations[operation]~=nil
         and G.snapshot(s.machine).phase~='stopping'
 end
-local function issue(s,reason)
-    s.failure=tostring(reason):sub(1,4096)
+-- A producer token and a free-text diagnosis are different things, and sharing
+-- one field made an unworded token print raw in the user's words (#261 M5 review
+-- round 3, BR-66). Typed here, at the producer: a token is keyed by
+-- parley.refusal; a diagnosis (a Lua error, a provider's text) travels beside it
+-- and is shown as detail.
+local function issue(s,reason,diagnosis)
+    if diagnosis then s.diagnosis=tostring(reason):sub(1,4096) else s.failure=tostring(reason):sub(1,4096) end
 end
 --- Why staged bytes overflowed. A generation held behind the write turn names the
 --- answer it waited for (#266): without that, an overflow while queued reads as
@@ -204,7 +209,7 @@ local function context(s,effect)
             options=options and {first_offset=options.first_offset,retain_prefix=options.retain_prefix} or {},
             blob_ref=ref,offset=0,bytes=#bytes,accepted=0,done=function(result)
                 pending=pending-1;s.manual_items=s.manual_items-1;failed=failed or result.status~='applied'
-                local ok,err=pcall(done,result);if not ok then issue(s,err);failed=true end
+                local ok,err=pcall(done,result);if not ok then issue(s,err,true);failed=true end
                 if pending==0 and completion then local fn=completion;completion=nil;fn(failed) end
             end})
         return true
@@ -292,13 +297,13 @@ local function callbacks(s,effect,after_writes)
         if not alive(s,operation) then return false end
         return dispatch(s,{type='provider_complete',attempt=operation}).accepted
     end
-    function cb.failed(reason)
+    function cb.failed(reason,diagnosis)
         if not s.operations[operation] or s.terminal then return false end
         if effect.type=='start_child' then return cb.outcome('unknown',{error=tostring(reason):sub(1,4096)}) end
         -- A failure reported after the generation is already stopping is an echo of
         -- the stop (the transport aborts because we refused its bytes), not a
         -- cause: keep the reason that stopped it.
-        if G.snapshot(s.machine).phase~='stopping' then issue(s,reason or 'adapter failed') end
+        if G.snapshot(s.machine).phase~='stopping' then issue(s,reason or 'adapter failed',diagnosis) end
         return dispatch(s,{type=(effect.type=='prepare' or effect.type=='continue_round') and 'prepare_failed' or 'provider_failed',
             preparation=operation,attempt=operation}).accepted
     end
@@ -365,7 +370,9 @@ local function start_operation(s,effect)
     local ok,handle=pcall(adapter,ctx,cb)
     if not ok then
         op.start_threw=true
-        cb.failed(handle)
+        -- A Lua error, not a token: it travels as the diagnosis beside the
+        -- outcome's words (#261 M5 review round 3, BR-66).
+        cb.failed(handle,true)
         -- A tool whose start threw: its outcome is `unknown` (recorded above) and
         -- it resolves now so the round goes on (#261 M4 W1). A throw is not proof
         -- nothing started — a process spawned before the throw is in the
@@ -469,6 +476,7 @@ local function finish(s,outcome)
     -- The failure reason travels with the terminal snapshot, so a host can say
     -- why a response stopped (an overflow names the answer it waited for).
     local final=G.snapshot(s.machine);final.failure=s.failure;final.waited_for_line=s.waited_for_line
+    final.diagnosis=s.diagnosis
     final.cause=s.cause
     -- A fault ends the generation outside the machine: `snapshot` reports what
     -- the host was handed, so there is one authority for "terminal".
@@ -522,7 +530,7 @@ local function execute(s,effect)
         end
         if s.detached or not writer or G.snapshot(s.machine).phase=='stopping' then done('failed');return false end
         local ok,err=pcall(writer,done)
-        if not ok then issue(s,err);done('failed') end
+        if not ok then issue(s,err,true);done('failed') end
     elseif effect.type=='request_turn' or effect.type=='release_turn' then
         if not s.detached then D.transition(s.doc,{kind=effect.type,generation=s.generation,epoch=s.epoch}) end
     elseif effect.type=='revoke' then
@@ -554,7 +562,7 @@ local function execute(s,effect)
                 if result.accepted then s.operations[effect.operation]=nil end
                 return result.accepted
             end)
-            if not ok then issue(s,err) end
+            if not ok then issue(s,err,true) end
         end
     elseif effect.type=='finalize' then
         if s.detached or G.snapshot(s.machine).phase=='stopping' then
@@ -569,7 +577,7 @@ local function execute(s,effect)
             end)
         end
         local ok,err=pcall(s.adapters.finalize,ctx,complete)
-        if not ok then issue(s,err);complete('failed') end
+        if not ok then issue(s,err,true);complete('failed') end
     elseif effect.type=='insert_tool' then
         -- One tool block (#266 M2): the machine chose which and when; the adapter
         -- renders and appends it. Always answered, so a stopping machine is never
@@ -595,7 +603,7 @@ local function execute(s,effect)
             end)
         end
         local ok,err=pcall(s.adapters.insert_tool,ctx,complete)
-        if not ok then issue(s,err);settle('failed') end
+        if not ok then issue(s,err,true);settle('failed') end
     elseif effect.type=='terminal' then
         finish(s)
     end
@@ -698,7 +706,8 @@ function M.snapshot(r)
     local s=state(r);local out=G.snapshot(s.machine)
     if s.final_outcome then out.phase='terminal';out.outcome=s.final_outcome end
     out.retained_blobs=0;for _ in pairs(s.blobs) do out.retained_blobs=out.retained_blobs+1 end
-    out.retained_staged_bytes=s.staged;out.failure=s.failure;out.waited_for_line=s.waited_for_line
+    out.retained_staged_bytes=s.staged;out.failure=s.failure;out.diagnosis=s.diagnosis
+    out.waited_for_line=s.waited_for_line
     out.presentation_failure=s.presentation_failure;return out
 end
 function M.cancel(r,reason)local s=state(r);s.written=nil;if reason then issue(s,reason) end;return dispatch(s,{type='cancel'})end

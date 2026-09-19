@@ -1,3 +1,6 @@
+-- These aborts carry fixture strings, not real transport tokens, so the
+-- harness watch for a refusal with no words expects them (#261 M5).
+vim.g.parley_expected_unkeyed={'fixture failure','fixture cleanup','old physical cancellation complete'}
 local parley=require('parley')
 local Respond=require('parley.chat_respond')
 local D=require('parley.document')
