@@ -6,8 +6,9 @@ github_issue:
 target: transcript-is-the-whole-truth
 created: 2026-09-15
 updated: 2026-09-17
-estimate_hours:
+estimate_hours: 20.64
 started: 2026-09-17T08:07:29-07:00
+flow: {kind: full, provenance: inferred}
 ---
 
 # Audit transcript as the complete recovery state
@@ -80,6 +81,96 @@ bytes, but make that relationship explicit and restart-safe.
   escalating to SIGKILL) and confirms every in-process wait on cancel, so no
   admission slot outlives it. A process that survives SIGKILL is named, with its
   pid, in the refusal it causes.
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
+
+Derived after the plan cleared plan-quality, against the durable plan's tasks,
+one `item:` per task that produces code.
+
+- **Design.** Every primitive is discounted ×0.2 (v2 Step 3), because the plan
+  pre-resolves its decisions: each decision records the operator's answer, its
+  rationale and its tests. The exception is `issue-spec` at 1.5, because its
+  design *is* the audit, three rounds of operator decisions and two plan
+  reviews. `sdlc actual` already reads **4.13 h** for that window.
+- **Design buffer.** +15%, for a thorough plan (v3.1 rule 4).
+- **Implementation.** Every value is 40% of the v2 table (v3.1 rule 5), and
+  stays within the scaled range of its primitive.
+- **Review tail.** Two `milestone-review` rows per milestone, plus one for the
+  issue close. That follows the 2026-09-16 lesson: work across a shared seam
+  budgets review as a multiple, not a single unit. #266, on the same seam, took
+  four boundary rounds.
+- **Familiarity 1.0.** The subsystems are mapped by the audit, but M3 and M4
+  touch process and callback lifecycles that no recent issue exercised.
+
+**Expect the implementation side to land high.** Every task is strict TDD
+red→green with counterfactuals, which is near the worst case for v3.1's
+fan-out discount (`baseline-v3.1.md` open question #3).
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+design-buffer: 0.15
+item: issue-spec                design=1.5  impl=0.12
+item: cross-cutting-refactor    design=0.1  impl=0.2
+item: cross-cutting-refactor    design=0.1  impl=0.2
+item: lua-neovim                design=0.2  impl=0.4
+item: lua-neovim                design=0.2  impl=0.3
+item: atlas-docs                design=0.04 impl=0.08
+item: milestone-review          design=0.0  impl=0.2
+item: milestone-review          design=0.0  impl=0.2
+item: lua-neovim                design=0.2  impl=0.3
+item: lua-neovim                design=0.2  impl=0.5
+item: lua-neovim                design=0.4  impl=0.6
+item: lua-neovim                design=0.4  impl=0.4
+item: lua-neovim                design=0.2  impl=0.4
+item: atlas-docs                design=0.04 impl=0.08
+item: milestone-review          design=0.0  impl=0.2
+item: milestone-review          design=0.0  impl=0.2
+item: lua-neovim                design=0.2  impl=0.5
+item: lua-neovim                design=0.2  impl=0.4
+item: lua-neovim                design=0.4  impl=0.6
+item: lua-neovim                design=0.2  impl=0.5
+item: cross-cutting-refactor    design=0.1  impl=0.2
+item: lua-neovim                design=0.2  impl=0.3
+item: atlas-docs                design=0.04 impl=0.08
+item: milestone-review          design=0.0  impl=0.2
+item: milestone-review          design=0.0  impl=0.2
+item: lua-neovim                design=0.4  impl=0.6
+item: lua-neovim                design=0.4  impl=0.6
+item: lua-neovim                design=0.2  impl=0.5
+item: lua-neovim                design=0.2  impl=0.5
+item: lua-neovim                design=0.2  impl=0.3
+item: atlas-docs                design=0.04 impl=0.08
+item: milestone-review          design=0.0  impl=0.2
+item: milestone-review          design=0.0  impl=0.2
+item: lua-neovim                design=0.2  impl=0.5
+item: lua-neovim                design=0.2  impl=0.4
+item: lua-neovim                design=0.2  impl=0.6
+item: atlas-docs                design=0.1  impl=0.08
+item: milestone-review          design=0.0  impl=0.2
+item: milestone-review          design=0.0  impl=0.2
+item: milestone-review          design=0.0  impl=0.2
+total: 20.64
+```
+
+Item order follows the plan:
+- issue-spec;
+- M1: store deletion, tools carve-out, degrading sidecars, regression tests,
+  atlas, 2 reviews;
+- M2: `holds` + `previous_answer`, the coordinator slot, substitution, the
+  staleness reversal, live ancestors, atlas, 2 reviews;
+- M3: fake groups, escalation, the tasker kill/scope/deadline work (with the
+  `tasker_run_spec` sweep), the 20-site deadline and callback sweep,
+  `VimLeavePre`, live conformance, atlas, 2 reviews;
+- M4: runner, session/provider/preparation/completion/topic/target, helpers,
+  tools and skills, end to end, atlas, 2 reviews;
+- M5: vocabulary, the arch scan, routing, the inventory page, 2 reviews, and
+  the issue close.
+
+Reconciliation: Σdesign 7.06 × 1.15 = 8.12, and Σimpl 12.52 × 1.0 = 12.52, so
+the total is 20.64.
 
 ## Plan
 
