@@ -1134,7 +1134,12 @@ test `tests/unit/tasker_unit_spec.lua`.
 
 **Files:** `lua/parley/tasker.lua`; `lua/parley/response_provider.lua:102` and
 `lua/parley/tools/producer.lua:120` (both consume `scope_key`). Tests:
-`tests/integration/tasker_supervision_spec.lua`, `tests/unit/tasker_unit_spec.lua`.
+`tests/integration/tasker_supervision_spec.lua`, `tests/unit/tasker_unit_spec.lua`,
+and `tests/integration/tasker_run_spec.lua`. That last spec calls `tasker.run`
+43 times with no opts (`grep -c "tasker.run(" tests/integration/tasker_run_spec.lua`),
+so every call is unscoped and has no deadline. Once the refusal lands, each one
+needs `{deadline_ms = …}`. Sweep them in this task, and re-run the grep for any
+other spec that calls `tasker.run` directly: `grep -rln "tasker.run(" tests`.
 
 - [ ] **Step 1: Failing sequence tests** on the fake. Each ends with the record
   gone (or held, where stated) and `tasker.stats().active` back at its baseline.
@@ -1283,10 +1288,10 @@ Queries:
 | W10 | child · refused first `child_outcome` (`response_tools.lua:73-75`) | the adapter records an outcome the machine rejected; the later `resolved(nil)` is refused | reproduce it first. Then the adapter records an outcome only once the machine accepts it. If the case can't be reached through public events, log that and drop the row |
 | W11 | `continue_round` threw | nil handle | W1 |
 | W12 | finalize · `response_completion.start` returned nil | `done` never called | `done('failed')` |
-| W13 | a `Deferred` step threw (`deferred_work.lua:19`) | the work cancels itself; its owner never settles | `Deferred.new(step, on_error)`. Every owner the query finds settles failed: `response_completion`, `response_preparation`, `response_topic` (`:106`), `response_target` (`:110`), and the runner (via `fault`, below) |
+| W13 | a `Deferred` step threw (`deferred_work.lua:19`) | the work cancels itself; its owner never settles | `Deferred.new(step, on_error)`. The query returns ten owners. The five that hold a generation, a target slot or a turn settle failed: `response_completion` (`:91`), `response_preparation` (`:146`), `response_topic` (`:106`), `response_target` (`:110`), and the runner (`:609`, via `fault` below). Out of scope, because none holds admission, a grant or a turn: `document/init.lua:67` (the repair pump, which self-heals on the next `schedule(doc)`), `diagnostic_refresh.lua:216`, `tool_folds.lua:468` and `outline.lua:289` (presentation pumps). `chat_recovery.lua:258` is deleted in M1 |
 | W14 | runner start (`generation_runner.lua:605-615`) | `active` +1 before throwing calls; generation registered, grants held, subscriber and timer live | increment last. On a throw after `register_generation`: `s.off()`, `s.work:close()`, `finish_generation`, drop `runners[r]`, and **return `nil, reason`** (the caller handles it, `response_submission.lua:62-63`) |
 | W15 | topic cancel (`response_topic.lua:47`) | a raise skips `Session.cancel` (`chat_respond.lua:1313-1315`) | pcall it |
-| W16 | topic generation · `provider.request` threw (`response_topic.lua:142`) | `s.started` set, `s.handle` nil; `stop()` (`:45-50`) takes neither branch, so it stays stopping forever, holding a `generation limit` slot and two user captures | `stop()` finishes directly when there is no handle |
+| W16 | topic generation · `s.provider.request` threw (`response_topic.lua:80`, reached from `:154`; `s.started=true` at `:59`) | `s.started` set, `s.handle` nil; `stop()` (`:45-50`) takes neither branch, so it stays stopping forever, holding a `generation limit` slot and two user captures | `stop()` finishes directly when there is no handle |
 | W17 | `skill_invoke._in_flight[buf]` (`:23`, `:402`) | keyed by buffer number, which `:e!` and `:bd`+reopen reuse; released only when the physical read resolves; `stop_owner` unguarded (`:161`) | release on the document's detach/reload and on `BufUnload`; pcall `stop_owner` |
 
 **Runner fault and the scope kill.** Two runner additions close what the table
@@ -1576,6 +1581,10 @@ atlas page.
     - `responses` and `batches`;
     - `skill_invoke._in_flight`;
     - the sidecars (`sidecar_degrade_spec`).
+    - the legacy `<state_dir>/answer-recovery/` directory: nothing reads or
+      writes it after M1, and it is safe to delete. This is its one mention,
+      and it closes the directory's lifecycle (ARCH-FUNERAL) without
+      migrating it.
 
     Each row points at code and tests, and states no rule the code owns. The
     Stop invariant links to `lifecycle.md`, and undo grouping to `ownership.md`.
@@ -1687,3 +1696,20 @@ questions the review raised.
   - The `revoked` text depends on its cause.
   - No action names `:ParleyToolOperations` for non-tool processes.
   - The inventory lists `response_target` slots and topic jobs.
+
+### 2026-09-18 — plan-quality gate, round 1 (no blocking findings)
+
+**Reason.** `sdlc change-code` accepted the plan. It recorded four Minor
+findings for the close review.
+
+**Delta.**
+- W13 now says which of the query's ten `Deferred` owners are in scope, and
+  why the other five are not. W16's line reference is corrected to
+  `response_topic.lua:80`.
+- Task 3.3 includes the sweep of `tasker_run_spec.lua`'s 43 option-less
+  `tasker.run` calls, which the new deadline refusal would turn red.
+- Task 5.4's inventory names the legacy directory as safe to delete, which
+  closes its lifecycle.
+- Not changed: *plan-restates-the-diff*. The embedded bodies stay as written.
+  Where a body and the code disagree, the code and its tests are
+  authoritative.
