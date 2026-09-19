@@ -411,7 +411,8 @@ end
 ---@param buf number | nil # buffer number
 ---@param cmd string # command to execute
 ---@param args table # arguments for command
----@param callback function | nil # exit callback function(code, signal, stdout_data, stderr_data, io_error)
+---@param callback function | nil # exit callback function(code, signal, stdout_data, stderr_data, io_error);
+--- code is nil whenever io_error is set, and a refusal delivers (nil, nil, nil, nil, reason)
 ---@param out_reader function | nil # stdout reader function(err, data)
 ---@param err_reader function | nil # stderr reader function(err, data)
 ---@param on_start_error function | nil # scheduled launch rejection callback(message)
@@ -500,10 +501,14 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
             stdout_buffer,stderr_buffer=nil,nil
             event(record, { type = "delivered" })
             retire(record)
-            -- A kill Parley caused is a failure, whatever the exit code says.
+            -- `code` is the exit code only of a process that ended on its own with
+            -- its output read whole; otherwise nil, and `io_error` says why — a
+            -- kill Parley caused, a pipe error, an overflow (#261 M3). So a
+            -- caller testing `code == 0` never takes cut output for success.
             local killed = attempt.kill_cause(record.state)
-            call_safely("task terminal", callback, not killed and record.state.code or nil, record.state.signal,
-                stdout_data, stderr_data, io_error or (killed and "killed: " .. killed))
+            local failure = io_error or (killed and "killed: " .. killed)
+            call_safely("task terminal", callback, not failure and record.state.code or nil, record.state.signal,
+                stdout_data, stderr_data, failure)
             local ok, message = pcall(vim.cmd, "doautocmd User ParleyQueryFinished")
             if not ok then logger.error("ParleyQueryFinished failed: " .. tostring(message)) end
         end)

@@ -1193,25 +1193,25 @@ other spec that calls `tasker.run` directly: `grep -rln "tasker.run(" tests`.
 (`generate_topic`), and the dispatcher's `transport_opts` path
 (`dispatcher.lua:853`).
 
-- [ ] **Step 1:** Re-run the census:
+- [x] **Step 1:** Re-run the census:
   `grep -rn "tasker\.run(nil" lua/parley` and
   `grep -rn "dispatcher.query(" lua/parley | grep -v "^lua/parley/dispatcher.lua"`.
   The results must match the ARCH-CONSTRAINTS table; if they don't, correct the
   table first.
-- [ ] **Step 2: Failing tests**, one per kind:
+- [x] **Step 2: Failing tests**, one per kind:
   - a killed keychain read does **not** cache an empty account store
     (`load_account_store`, oauth.lua:859-864);
   - a killed copilot-token curl reports failure without throwing (today
     vault.lua:208 formats the code with `%d`);
   - a killed content fetch is not cached as content
     (chat_respond.lua:1279-1280).
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - Pass `deadline_ms` per the table at every site, using
     `transport_opts.deadline_ms` for the two streams.
   - Sweep each callback in the census so that
     `code == nil or code ~= 0 or io_error` counts as failure, and a failure never
     writes a cache or a store.
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M3: every process Parley starts names its end`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M3: every process Parley starts names its end`).
 
 ### Task 3.5: Leaving Neovim kills what is left
 
@@ -1919,4 +1919,30 @@ documents that it checks by spelling.
     scheduler always does.
 - **Counterfactual.** When the target is the pid rather than the group, 8 of the
   12 new sequence tests fail, including 2 and 3.
+
+### 2026-09-19 — M3 Task 3.4, as built: one rule at the source
+
+**Delta.**
+- **`code` is nil whenever `io_error` is set.** It no longer means only "killed":
+  a pipe error or an overflow now reads the same way. So every callback that
+  tests `code ~= 0` or `code == 0` already counts cut output as a failure. The
+  sweep is that one rule in `tasker`, not `or io_error` added at 16 sites
+  (ARCH-DRY). The census is unchanged: 18 `tasker.run(nil, …)` sites and 2
+  streams.
+- **Two callbacks needed more than the rule.**
+  - `load_account_store`: a read that did not finish returns an *unread* store
+    (a weak-keyed set). It is not cached, and `save_account_store` refuses to
+    write it over the keychain. A non-zero exit is still the keychain's
+    answer, "no entry": cached and saveable.
+  - The vault copilot fetch formatted `code` with `%d`, and now uses `%s`
+    (the nil code threw).
+- **Content fetch.** A killed fetch becomes a transport error, never the body,
+  even when its output carried the whole write-out trailer. The counterfactual,
+  passing luv's `code=0`, turns that test red. A transport error is still
+  cached as that URL's error text: this is the existing per-question snapshot
+  rule (`remote_references_spec`), and the transcript's earlier exchange was
+  answered with it.
+- **Tests:** `tests/integration/unscoped_kill_spec.lua`, which uses the real
+  tasker over the process fake, plus a pipe-error case in
+  `tasker_supervision_spec`.
 

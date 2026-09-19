@@ -565,6 +565,10 @@ end
 -- In-memory OAuth account store (loaded from keychain on first use).
 -- Shape: { version = 2, preferred_account_id = "...", accounts = { ... } }
 local cached_account_store = nil
+-- Stores handed out when the keychain read did not finish (#261 M3): it was
+-- killed at its deadline, or its pipe failed. Such a store is unknown, not
+-- empty, so it is neither cached nor saved over the accounts it could not read.
+local unread_stores = setmetatable({}, { __mode = "k" })
 
 -- Detect platform
 ---@return string # "darwin" or "linux"
@@ -817,6 +821,11 @@ end
 ---@param callback function|nil # called after save completes
 M.save_account_store = function(store, callback)
     callback = callback or function() end
+    if unread_stores[store] then
+        logger.warning("OAuth account store not saved: the keychain could not be read, and saving would replace it")
+        callback()
+        return
+    end
     cached_account_store = M._normalize_account_store(store)
     local json_data = vim.json.encode(cached_account_store)
     local platform = M._get_platform()
@@ -856,7 +865,15 @@ M.load_account_store = function(callback)
     local cmd_args = M.build_keychain_load_cmd(platform)
     local cmd = table.remove(cmd_args, 1)
 
-    tasker.run(nil, cmd, cmd_args, function(code, _signal, stdout_data)
+    tasker.run(nil, cmd, cmd_args, function(code, _signal, stdout_data, _stderr_data, io_error)
+        if code == nil or io_error then
+            logger.warning("OAuth account store: the keychain read did not finish (" .. tostring(io_error) .. ")")
+            local unread = M._new_account_store()
+            unread_stores[unread] = true
+            callback(unread)
+            return
+        end
+        -- A non-zero exit is the keychain's answer: no entry yet.
         if code ~= 0 or not stdout_data or stdout_data == "" then
             cached_account_store = M._new_account_store()
             callback(cached_account_store)
