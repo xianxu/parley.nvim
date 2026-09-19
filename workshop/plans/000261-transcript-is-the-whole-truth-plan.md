@@ -1228,15 +1228,15 @@ other spec that calls `tasker.run` directly: `grep -rln "tasker.run(" tests`.
 route it with the tasker specs in `atlas/traceability.yaml`. It runs on every
 `make test`, and is `pending()` when `sh` is not executable.
 
-- [ ] A scoped `tasker.run` of `sh -c 'kill -0 -$$ && echo leader'` prints
+- [x] A scoped `tasker.run` of `sh -c 'kill -0 -$$ && echo leader'` prints
   `leader`, which shows the process leads its own group. It avoids `ps`, which
   some sandboxes block.
-- [ ] A scoped run of `sh -c 'trap "" TERM; sleep 30 & wait'` ignores TERM, and
+- [x] A scoped run of `sh -c 'trap "" TERM; sleep 30 & wait'` ignores TERM, and
   its grandchild holds stdout. Then `stop_scope`: the record resolves within
   4 s, and `kill -0` of the grandchild's pid fails.
-- [ ] The same, through `tools/process_bootstrap` (the real tool spawn path).
-- [ ] On main (key `detach`), the first case fails; on the branch, PASS.
-- [ ] Commit (`#261 M3: live conformance for process groups`).
+- [x] The same, through `tools/process_bootstrap` (the real tool spawn path).
+- [x] On main (key `detach`), the first case fails; on the branch, PASS.
+- [x] Commit (`#261 M3: live conformance for process groups`).
 
 ### Task 3.7: Documentation, and M3's boundary
 
@@ -1945,4 +1945,12 @@ documents that it checks by spelling.
 - **Tests:** `tests/integration/unscoped_kill_spec.lua`, which uses the real
   tasker over the process fake, plus a pipe-error case in
   `tasker_supervision_spec`.
+
+### 2026-09-19 — M3 Task 3.6, as built
+
+**Delta.** The third conformance case, "through `tools/process_bootstrap`", runs
+the real `find` builtin through `async_builtin` with a captured path authority
+on `/`, which is the manual "Stop during `find /`". It asserts that the attempt
+is scoped, that `stop_scope` settles the tool within 4 s, and that its pid is
+gone. With main's `detach = true` restored, all three cases fail.
 

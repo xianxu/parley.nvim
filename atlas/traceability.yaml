@@ -831,6 +831,7 @@ atlas:
       - tests/unit/skill_source_read_spec.lua
       - tests/integration/tool_filesystem_native_spec.lua
       - tests/integration/tasker_supervision_spec.lua
+      - tests/integration/process_group_conformance_spec.lua
       - tests/integration/async_builtin_spec.lua
       - tests/integration/tool_dispatch_capture_spec.lua
       - tests/integration/tool_producer_spec.lua
