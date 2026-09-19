@@ -775,6 +775,25 @@ are fixed in the close commit (FIX-THEN-SHIP, no re-run):
   kill does not reach them.
 - **Four Minors fixed**; lessons added.
 
+### 2026-09-19 — M4 Tasks 4.1–4.4
+
+- **4.1, the runner.** `stats`; W14 undoes a start that throws; the runner
+  settles an operation whose start threw (keyed on "threw", not on "no handle",
+  which a supervisor test showed is legitimate); `fault`; and a once-only scope
+  kill at stopping or terminal.
+- **4.2.** The session's `stopping` hook kills the scope. Cancels resolve at once
+  where nothing more can come (W2, W3, W5), which changes three pinned
+  "wait for a callback" contracts. W12/W18 finalize, W13 across four owners,
+  W15 and W16.
+- **4.3.** Content fetches take the generation's scope (W4), the Copilot
+  refresh reports every failure (W6), a setup throw aborts (W7), and recovery
+  runs only for a live owner (W8).
+- **4.4.** A skill's in-flight guard is freed when its buffer unloads (W17). W9
+  is covered by W1. W10 is unreachable through public events and is dropped
+  (plan Revisions).
+
+Every fix has a test that turns red on revert.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

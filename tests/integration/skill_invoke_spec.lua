@@ -243,6 +243,43 @@ describe("skill_invoke.invoke", function()
         end
     end)
 
+    -- #261 M4 W17: the in-flight guard is keyed by buffer number, which `:bd` and
+    -- reopening the same file reuse. A run stranded on a read that never
+    -- resolves must not refuse the reopened buffer as 'already running'.
+    for _,how in ipairs({'bdelete','edit!'})do
+        it('frees a stranded run when its buffer is unloaded ('..how..')',function()
+            local FS=require('parley.tools.filesystem');local native_new=FS.new
+            local done
+            FS.new=function()
+                FS.new=native_new
+                return {authorized=function()return {read=function(_,_,callback)
+                    done=callback
+                    return {cancel=function()end,reconcile=function()return true end,
+                        snapshot=function()return {physical_resolved=false}end}
+                end}end}
+            end
+            skill_invoke.invoke(buf,manifest(),{},{on_terminal=function(r)done_result=r end})
+            FS.new=native_new
+            assert.is_true(vim.wait(5000,function()return done~=nil end,1))
+            skill_invoke.cancel(buf)
+            assert.is_true(skill_invoke.is_in_flight(buf),'the stranded read holds the guard')
+            local before=buf
+            if how=='bdelete' then vim.cmd('bdelete!');vim.cmd('edit '..vim.fn.fnameescape(path))
+            else vim.api.nvim_buf_call(buf,function()vim.cmd('edit!')end)end
+            buf=vim.api.nvim_get_current_buf()
+            assert.equals(before,buf,'the buffer number is reused')
+            assert.is_false(skill_invoke.is_in_flight(buf),'the unloaded buffer still refuses a new run')
+            local refused=false
+            local warning=parley.logger.warning
+            parley.logger.warning=function(message)if message:find('already running',1,true)then refused=true end end
+            local ok,err=pcall(skill_invoke.invoke,buf,manifest(),{},{on_terminal=function()end})
+            parley.logger.warning=warning
+            assert(ok,err)
+            assert.is_false(refused,'a new run was refused as already running')
+            done({certainty='known',physical_resolved=true}) -- the old read settles late, harmlessly
+        end)
+    end
+
     it('retires reconciliation polling after its diagnostic without releasing the read',function()
         local FS=require('parley.tools.filesystem');local native_new=FS.new
         local done,polls,diagnostics=nil,0,0
@@ -705,7 +742,9 @@ describe("skill_invoke terminal ownership (#182)", function()
         tasker.set_query("deleted", { raw_response = "" })
         held_exit("deleted")
         assert.is_true(vim.wait(1000, function() return #events > 0 end, 10))
-        assert.are.same({ "buffer invalid" }, events)
+        -- #261 M4 W17: the run ends when its buffer unloads, before completion
+        -- is even scheduled; still no read and no done.
+        assert.are.same({ "buffer unloaded" }, events)
     end)
 
     it("delivers synchronous terminal failures once before done", function()

@@ -1382,11 +1382,11 @@ tree), `lua/parley/chat_respond.lua:1185-1297`, `lua/parley/vault.lua:159-219`,
 
 **Files:** `lua/parley/response_tools.lua` (W10), `lua/parley/skill_invoke.lua` (W17).
 
-- [ ] **Step 1: Failing tests** for W9, W10 (reproduce it first) and W17. The
+- [x] **Step 1: Failing tests** for W9, W10 (reproduce it first) and W17. The
   W17 test runs `:bd`, reopens the same file (asserting the buffer number is
   reused), then runs a skill: it is not refused as "already running".
-- [ ] **Step 2: Implement.** **Step 3:** PASS.
-- [ ] **Step 4:** Commit (`#261 M4: tools and skills settle and follow the buffer`).
+- [x] **Step 2: Implement.** **Step 3:** PASS.
+- [x] **Step 4:** Commit (`#261 M4: tools and skills settle and follow the buffer`).
 
 ### Task 4.5: The reported shape, end to end
 
@@ -2172,4 +2172,32 @@ Minors, fixed below and bundled into the close commit (#174: no re-run).
 - **W8.** A recovery runs only while `transport_alive`. A stopped owner gets the
   failure, which it ignores.
 - Each test turns red on revert: W4 (oauth and chat_respond), W6, W7, W8.
+
+### 2026-09-19 — M4 Task 4.4, as built: W10 dropped, W9 covered by W1
+
+**Delta.**
+- **W9** needs nothing of its own. A tool whose `producer.start` threw is
+  Task 4.1's thrown-start path: its outcome is `unknown` and it resolves at
+  once. Its processes are in the generation's scope, so the scope kill ends
+  them. `generation_settles_spec` "a tool whose start threw" covers it.
+- **W10 is dropped, as the plan allows.** Reproducing it: the machine refuses a
+  tool's *first* `child_outcome` only for a child that is:
+  - not found or not started: the tool layer has no record of such a child;
+  - already supervised: supervision itself sets the outcome to `unknown` and
+    removes the runner's operation, so the tool layer's later `resolved`
+    returns false with nothing held;
+  - already final: that needs an existing outcome.
+
+  None of these holds a generation, so no public sequence reaches the case. The
+  supervised path is pinned by `generation_sequences_spec`'s
+  supervisor-transfer cases.
+- **W17.** The run's guard is freed on `BufUnload` of its buffer, which `:e!`
+  fires as well as `:bd` (measured; an autoread reload does not). The
+  run is cancelled with `buffer unloaded` and no `done`, and `_gen` keeps a
+  stranded read's late callback off a newer run. `stop_owner` is guarded.
+  - The existing "invalid scheduled completion" test now ends at the unload,
+    with the same properties: no read, no done.
+  - The new tests strand a read, then `:bd` + reopen or `:e!`; they assert the
+    buffer number is reused and a new run is admitted. All three are red on
+    revert.
 
