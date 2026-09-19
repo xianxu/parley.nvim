@@ -246,7 +246,7 @@ Reconciliation: Σdesign 10.66 × 1.15 = 12.26, plus Σimpl 14.84 × 1.2 = 17.81
   reload/reopen and subsequent successful submission.~~ *(superseded — folded into M1–M5)*
 - [x] ~~Update atlas documentation and run the relevant full verification
   suite.~~ *(superseded — per milestone; the inventory page in M5)*
-- [ ] M1 — delete the on-disk answer-recovery store, its commands and the tools
+- [x] M1 — delete the on-disk answer-recovery store, its commands and the tools
   privacy carve-out; the #261 blocker as regression tests; guard: a
   `state_dir` reader declares why it cannot block.
 - [ ] M2 — `prev_answer` on the document coordinator (#255): same-chat and
@@ -537,6 +537,7 @@ enumerations and the queries that produce them.
   This is recorded on #267 as the same family. It is not M1's.
 
 ### 2026-09-19 — M1 boundary review, round 1: FIX-THEN-SHIP, and how each finding was disposed
+- 2026-09-19: closed M1 — make test JOBS=4: 372 files pass + 2 fold specs that die under load and pass alone (#267 family, logged). Rounds 1-3 fixed as classes with guards (census, worktree listing, write-result, json_decode, per-action warning bound, one atomic writer); every fix red on revert.; review verdict: FIX-THEN-SHIP
 
 Each finding was swept as a class, not at the site it named (memory:
 fix the class, not the site).
@@ -616,6 +617,24 @@ edit. The gate said the review was not converging.
   - the declared exceptions are keyed by call.
 - The plan's Revisions record the one-writer rule, and `workshop/lessons.md`
   has the rule.
+
+### 2026-09-19 — M1 closed: round 4 (FIX-THEN-SHIP) fixes, bundled into the close commit
+
+- **Fixed before the close commit** (#174 protocol; details in the plan's
+  Revisions):
+  - the writer keeps symlinks and modes and sweeps its own crash leftovers;
+  - `file_access.json` joins the sidecar list, and the census selects by
+    profile location;
+  - the vault bearer's response schema has a test (V1).
+
+  Each fix goes red when reverted.
+- **Incident, not a code change.** During round 4 the reviewer agent's setup
+  script failed to create a scratch directory and fell back to `git init -q`
+  and `git add -A` in the operator's home directory, against the existing
+  `~/.git`. It made no commit, and the index, HEAD and refs are untouched.
+  - Verified read-only: 27,978 loose objects appeared after 00:59 today
+    (3.66 GiB), plus a 1.89 GiB abandoned `tmp_pack`, in `~/.git/objects`.
+  - Nothing was deleted; the cleanup is the operator's call.
 
 ## Revisions
 

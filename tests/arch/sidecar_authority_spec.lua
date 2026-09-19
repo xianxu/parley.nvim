@@ -6,23 +6,34 @@
 -- Modules that only define the path are listed here, with that reason.
 local sidecars = require("tests.helpers.sidecars")
 
+-- Modules that name a profile location but hold no sidecar a chat action reads
+-- back, each with why.
 local PATH_ONLY = {
-    ["lua/parley/config.lua"] = "defines the default path; reads nothing",
-    ["lua/parley/starter_config.lua"] = "defines the starter path; reads nothing",
+    ["lua/parley/config.lua"] = "defines the default paths; reads nothing",
+    ["lua/parley/starter_config.lua"] = "defines the starter paths; reads nothing",
+    ["lua/parley/starter.lua"] = "the starter profile's first-run setup at startup: creates the data and state roots, migrates auth; not on the chat path",
+    ["lua/parley/cliproxy.lua"] = "the managed proxy's derived artifacts (rendered config, binary, model catalog cache), not transcript sidecars; every decode is guarded (json_decode_spec)",
 }
 
-local function state_dir_readers()
+-- The class is files persisted in the profile and read back: select by where
+-- they live — the state directory or stdpath('data') — not by one spelling
+-- (#261 M1 review round 4: file_access.json lives under stdpath('data') and
+-- escaped a census that searched only for "state_dir").
+local function profile_readers()
     local hits = {}
     for _, file in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
         local handle = assert(io.open(file, "r"))
         local text = handle:read("*a"); handle:close()
-        if text:find("state_dir", 1, true) then hits[#hits + 1] = file end
+        if text:find("state_dir", 1, true) or text:find('stdpath("data")', 1, true)
+            or text:find("stdpath('data')", 1, true) then
+            hits[#hits + 1] = file
+        end
     end
     return hits
 end
 
 describe("arch: every state-directory reader is exercised corrupt", function()
-    local hits = state_dir_readers()
+    local hits = profile_readers()
     local readers = {}
     for _, sidecar in ipairs(sidecars) do readers[sidecar.reader] = true end
 

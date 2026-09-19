@@ -12,6 +12,20 @@
   family: `sidecar_authority_spec` fails a sidecar write called as a bare
   statement.
 
+- **Changing a shared seam's contract means listing each caller and what it
+  relied on.** Routing every JSON write through the rename-based writer
+  silently replaced symlinks, reset file modes, and left crash temp files with
+  no remover. Each was a guarantee the old `io.open("w")` gave for free. Rule:
+  when you swap a seam's implementation, write the old contract's incidental
+  guarantees next to the callers that rely on them, in the same change.
+
+- **A guard that claims a class selects members by the property that defines
+  the class, not by how one member is spelled.** The sidecar census searched
+  for the text `state_dir`, so `file_access.json`, which lives under
+  `stdpath('data')`, escaped it. It also raised on opening a chat when an entry
+  had the wrong type. The class is "files persisted in the profile and read
+  back"; select by where they live.
+
 - **Derive a success result from the last fallible step of the effect.** The
   first "did it happen?" result checked `open` and `write` but not `close`,
   where buffered writes actually fail, so a full disk reported success over a

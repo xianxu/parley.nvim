@@ -327,6 +327,35 @@ describe("helper I/O functions", function()
             assert.truthy(err:find("File too large", 1, true))
         end)
 
+        -- #261 M1 review round 4: the rename-based writer replaces a file where
+        -- it really lives, with its mode, and its crash leftovers have an end.
+        it("F3g: writing through a symlink keeps the link and updates its target", function()
+            local target = tmpdir .. "/real.json"
+            local link = tmpdir .. "/link.json"
+            helper.table_to_file({ v = 1 }, target)
+            assert((vim.uv or vim.loop).fs_symlink(target, link))
+            assert.is_true(helper.table_to_file({ v = 2 }, link))
+            assert.equals("link", (vim.uv or vim.loop).fs_lstat(link).type)
+            assert.same({ v = 2 }, helper.file_to_table(target))
+        end)
+
+        it("F3h: rewriting a file keeps the mode the user gave it", function()
+            local path = tmpdir .. "/private.json"
+            helper.table_to_file({ v = 1 }, path)
+            assert((vim.uv or vim.loop).fs_chmod(path, tonumber("600", 8)))
+            assert.is_true(helper.table_to_file({ v = 2 }, path))
+            assert.equals(tonumber("600", 8), (vim.uv or vim.loop).fs_stat(path).mode % 4096)
+        end)
+
+        it("F3i: remove_stale_temps removes only the atomic writer's leftovers", function()
+            local leftover = tmpdir .. "/state.json.tmp-1234567-abcdef"
+            local unrelated = tmpdir .. "/notes.tmp-draft"
+            vim.fn.writefile({ "{" }, leftover); vim.fn.writefile({ "keep" }, unrelated)
+            helper.remove_stale_temps(tmpdir)
+            assert.equals(0, vim.fn.filereadable(leftover))
+            assert.equals(1, vim.fn.filereadable(unrelated))
+        end)
+
         it("F4: table_to_file with nested table serializes correctly", function()
             local path = tmpdir .. "/nested.json"
             local original = {

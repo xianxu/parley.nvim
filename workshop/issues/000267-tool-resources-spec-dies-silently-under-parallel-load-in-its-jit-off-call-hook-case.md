@@ -87,3 +87,7 @@ the cap, not only the one case.
 cases, and `document_fold_uncertainty_retirement_spec.lua` stopped before its
 first. Alone, both pass (5/5 and 1/1). #261's diff touches no fold code. That
 makes five specs in this family.
+- 2026-09-19 (from #261 M1 close): `perf_chat_typing_spec` died silently after
+  4 of 16 cases under JOBS=4, and passes alone (16/16, 22.5 s).
+  `perf_ownership_spec` died again in the same run. That makes six specs in
+  the family, and a different one dies on each full run.

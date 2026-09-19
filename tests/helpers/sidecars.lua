@@ -1,6 +1,7 @@
--- The one list of sidecars under the profile state directory (#261, target
+-- The one list of profile sidecars — files under the state directory or
+-- stdpath('data') that a chat action reads back (#261, target
 -- transcript-is-the-whole-truth). Each entry names the module that reads it,
--- the file, bodies whose fields hold the wrong type (every field its reader
+-- the file (`path` when it is not under state_dir), bodies whose fields hold the wrong type (every field its reader
 -- takes, and the nested levels the reader indexes), how to make that reader
 -- read it, and what its writes do with fields the read drops:
 --
@@ -91,6 +92,28 @@ return {
             assert(require("parley.custom_prompts").set("added", { system_prompt = "added" }), "set refused")
             local after = vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
             assert(vim.deep_equal(before.fixture, after.fixture), "a write dropped the user's malformed entry")
+        end,
+    },
+    {
+        reader = "lua/parley/file_tracker.lua",
+        file = "file_access.json",
+        path = function() return require("parley.file_tracker").file_path() end,
+        writes = "rewrite", why = "app-owned access history for finder sorting; a dropped entry starts again",
+        wrong_shapes = {
+            { ["/fixture.md"] = 3 },
+            { ["/fixture.md"] = { last_accessed = "x", access_count = "y" } },
+        },
+        -- Opening a chat tracks it. Test mode makes the tracker's load and save
+        -- no-ops, so the exercise turns it off for one tracked open.
+        exercise = function()
+            local tracker = require("parley.file_tracker")
+            local test_mode = vim.g.parley_test_mode
+            vim.g.parley_test_mode = false
+            tracker._file_access = {}
+            local ok, err = pcall(tracker.track_file_access, "/fixture.md")
+            vim.g.parley_test_mode = test_mode
+            tracker._file_access = {}
+            assert(ok, err)
         end,
     },
     {

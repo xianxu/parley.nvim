@@ -549,3 +549,123 @@ findings:
     detail: |
       2nd in this family. vim.fn.json_decode (file_tracker.lua:47, currently guarded) escapes the pattern. Rule: a guard's pattern covers every API that does the job, not just the spelling the finding named.
 ```
+
+---
+
+## Re-review — 2026-09-19T01:16:00-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 261 — Audit transcript as the complete recovery state |
+| repo | parley.nvim |
+| issue file | workshop/issues/000261-audit-transcript-recovery-state.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | ff5ed804a7d58499a2964235f9897db53f2c85d3..7668d5eb6127fd472855ba817e3203b5c0a5677b |
+| command | sdlc milestone-close --issue 261 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-19T01:16:00-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Round 3 fixes the defect behind BR-19. `table_to_file` now hands every write to `table_to_file_atomic` (`helper.lua:580-587`), which checks each step (encode, open, write, close, rename) and keeps the original file when one fails. BR-21 and BR-22 are also done. I confirmed each of the three by reverting it in a scratch copy of HEAD: F3f, R1 and `json_decode_spec` each went red. All seven specs touched this round pass (helper_io 42, dispatcher_query 69, sidecar_authority 5, json_decode 2, sidecar_degrade 14, custom_prompts 20, arch_helper 9).
+
+Nothing blocks SHIP. What remains is Minor:
+- BR-20's schema is applied at the network boundary, but no test covers it. With that line removed, every spec still passes.
+- Moving to the rename-based writer changed three things callers relied on. I reproduced each:
+  - a symlinked sidecar is replaced by a regular file;
+  - the file's permissions are reset to the default;
+  - a crash mid-write now leaves `*.json.tmp-*` files, which the query-directory cleanup (it only matches `*.json`) never deletes.
+- The M1 sidecar census finds readers by searching for the text `state_dir`. That misses `file_access.json`. A value of the wrong type in that file makes opening a chat raise an error.
+
+**1. Strengths**
+- **`helper.lua:580-587`**: the fix removes the second writer rather than patching it. Now there is one JSON writer, it checks every step, and it warns on failure. The `DROPPED` note in the guard ("table_to_file has warned") is now true for every kind of failure, not just a failed open.
+- **`tests/unit/dispatcher_query_spec.lua:136-148` (R1)**: a behavioural test. Curl is never started, and the caller gets the reason. It turned red when I removed the abort.
+- **`tests/arch/json_decode_spec.lua:10-13`**: one `decodes()` function is shared by the count check and the guard check, so the two cannot drift apart. It covers both decode APIs. An unguarded `vim.fn.json_decode` line I planted was reported as `file_tracker.lua:183`.
+- **`tests/arch/sidecar_authority_spec.lua:60-77`**: exceptions are now keyed by the exact call, so a new unchecked write in an already-listed file is still caught.
+- **`vault.lua:163`**: `BEARER_SCHEMA` is defined once and used at both places the token crosses: the file read and the network response.
+
+**2. Critical findings:** none.
+
+**3. Important findings:** none.
+
+**4. Minor findings**
+- **`helper.lua:596-646`, round 3's delegation** (family `seam-change-collateral`, 2nd). The rename-based writer:
+  - replaces a symlinked `custom_system_prompts.json` with a regular file, leaving the linked target (e.g. in a dotfiles repo) stale. I reproduced this: the link became a regular 0644 file and the target still held the old prompt;
+  - resets a file's permissions, e.g. a user-restricted `vault_state.json` (bearer cache) goes back to 0644;
+  - leaves `*.json.tmp-*` files after a crash mid-write. The cleanup at `dispatcher.lua:71` only matches `*.json`, so they are never deleted (ARCH-FUNERAL, ARCH-SECURE).
+- **`file_tracker.lua:23,44-49,92`** (family `enumeration-claims-completeness`, 3rd). The census finds readers by the text `state_dir`, not by what makes a file a sidecar. `file_access.json` sits under `stdpath("data")/parley`, not the state directory, and is read on every chat open (`init.lua:3112`). An entry like `{"/a.md": 3}` makes opening that chat raise `attempt to index a number value` (reproduced), and that survives quit and reopen. It is also a second, non-atomic JSON writer (`:70`), and it returns `true` whether or not the write succeeded.
+- **BR-20 (still open):** the fix at `vault.lua:223-225` has no test (details in the block).
+- **F3e** (`helper_io_spec.lua:299-314`) repeats the existing F7 close-failure case and stays green when the delegation is reverted; F3f is the test that goes red. The plan's round-3 revision says "Reverting either fix turns its test red" while naming F3e.
+
+**5. Test coverage notes**
+- F3f only checks that `table_to_file` calls the atomic writer; it does not check behaviour. Combined with F7, which tests the close failure on the atomic writer itself, the behaviour is still covered. The helper takes no injectable IO, so a direct test isn't possible without adding one.
+- Nothing drives the copilot token fetch from start to finish. The vault exercise in `tests/helpers/sidecars.lua:33-55` starts the refresh but never delivers the fake process's output.
+
+**6. Architecture notes**
+
+| Principle | Result | Why |
+|---|---|---|
+| ARCH-DRY | pass | one writer, one bearer schema, one decode matcher |
+| ARCH-PURE | pass | `conform` and the atomic writer take injected IO |
+| ARCH-PURPOSE | pass | BR-19 was fixed across its class, not just at the named site |
+| ARCH-MOCK | pass | the tests use a failing IO adapter, not a stubbed module |
+| ARCH-CONSTRAINTS | pass | one warning per failed write, not one per field |
+| ARCH-SECURE | flag (Minor) | a mode reset on the bearer cache, and an untyped `file_access.json` read |
+| ARCH-ORDER | not applicable | this round holds no state between events: every writer is a single synchronous call |
+| ARCH-FUNERAL | flag (Minor) | `*.tmp-*` crash leftovers are never removed |
+
+For M2–M5: as more code writes through `table_to_file_atomic`, the symlink and permission rules should live inside that one function, not at each call site.
+
+**7. Plan revision recommendations**
+- In the round-3 Revisions entry, name F3f, not F3e, as the test that fails on revert, and record the three behaviours the rename-based writer changed (above) along with how they're handled.
+- Record the census scope honestly: either widen it to every profile-persisted sidecar (`file_access.json` included), or add a Revisions note that it only covers files under `state_dir`.
+
+```findings
+dispose:
+  - id: BR-19
+    disposition: addressed
+    note: |
+      table_to_file delegates to table_to_file_atomic (helper.lua:580-587); F3f goes red when the old writer is restored. The sidecar-spec extension was not added, but it is moot while the only JSON writer checks every step.
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      BEARER_SCHEMA is applied to the response (vault.lua:223-225), but deleting that conform call leaves sidecar_degrade (14), vault_spec (27) and sidecar_authority (5) all green. Drive the fake_process curl with stdout of token "t" and a string expires_at, and assert the next refresh re-fetches instead of raising.
+  - id: BR-21
+    disposition: addressed
+    note: |
+      R1 (dispatcher_query_spec.lua:136) goes red when the abort is removed: curl is not started and the reason reaches on_exit.
+  - id: BR-22
+    disposition: addressed
+    note: |
+      decodes() matches both APIs. A planted unguarded vim.fn.json_decode line was reported as lua/parley/file_tracker.lua:183.
+findings:
+  - id: new
+    severity: Minor
+    family: seam-change-collateral
+    title: |
+      Routing table_to_file through the rename-based writer replaces symlinked sidecars, resets permissions, and leaves crash files the query cleanup never deletes
+    detail: |
+      2nd in this family. Rule: changing a shared seam's contract means listing each caller, what it relied on from the old contract, and which of those the new contract keeps, all in the same change. The old io.open("w") wrote through a symlink and kept the file's mode. Reproduced: a symlinked custom_system_prompts.json became a regular 0644 file and its 0600 dotfiles target kept the old prompt. A user-restricted vault_state.json (bearer cache) also reverts to 0644. A crash mid-write now leaves *.json.tmp-* files that the query cleanup (dispatcher.lua:71, glob *.json) never matches (ARCH-FUNERAL). Fix at the one writer: resolve an existing destination with uv.fs_realpath, create the temp file beside the real target, and copy its mode before the rename. Make the query cleanup also match *.json.tmp-*. Add helper_io tests for the symlink and the mode.
+  - id: new
+    severity: Minor
+    family: enumeration-claims-completeness
+    title: |
+      The sidecar census finds readers by the text state_dir, so file_access.json escapes it, and a wrongly typed entry makes opening a chat raise
+    detail: |
+      3rd in this family. Rule: a guard that claims to cover a class selects members by the property that defines the class, not by how one member happens to be spelled. Here the class is files persisted across sessions and read back by a chat action. file_tracker.lua:23 builds its own path under stdpath("data")/parley. open_buf (init.lua:3112) then calls track_file_access, which raises "attempt to index a number value" (:92, reproduced) on {"/a.md": 3}. Quit and reopen does not clear it. The same module has a second, non-atomic JSON writer (:70) that returns true regardless of the write result. Measured: grepping for stdpath( in lua/ finds one more session-persisted JSON reader on the chat path, this one. Fix the rule: derive every profile sidecar's path from one helper (or from state_dir), have the census select on that, add file_access.json to tests/helpers/sidecars.lua with a schema, and write it through table_to_file.
+```
+
+---
+
+**My error: I wrote into your home-directory git repo.** Early in the review, `mktemp` in `/tmp` was blocked by the sandbox, and my setup script didn't stop when it failed. The script then ran `git init -q` and `git add -A` in `/Users/xianxu` against the `~/.git` that was already there. I stopped it within about 10 minutes. Checked afterwards:
+- **Unchanged:** the index (dated Jul 5, no `index.lock`), `HEAD`, refs, and the one existing commit (`363116a init`). No commit was made.
+- **Left behind:** about 28,000 unreferenced loose objects, roughly **5.5 GB**, in `~/.git/objects`. Only 4 object files existed there before.
+
+I have not deleted anything. To reclaim the space, `git -C ~ prune --expire=now` removes unreferenced objects. Alternatively, delete only the files under `~/.git/objects` modified after 2026-09-19 00:59; everything written after that time came from my run. After that I used only an explicit, checked scratch path, and I've removed it.

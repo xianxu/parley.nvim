@@ -579,6 +579,9 @@ M.setup = function(opts)
 
 	M.vault.setup({ state_dir = state_dir, curl_params = curl_params })
 	custom_prompts.setup(M.helpers, state_dir)
+	-- Before anything in this process writes a sidecar, so every match is a
+	-- crash leftover of the atomic writer (#261).
+	M.helpers.remove_stale_temps(state_dir)
 
 	-- Process API keys from api_keys table and load them into vault
 	local api_keys = opts.api_keys or M.config.api_keys or {}

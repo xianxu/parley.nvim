@@ -67,6 +67,7 @@ D.setup = function(opts)
 	end
 
 	D.query_dir = helpers.prepare_dir(D.query_dir, "query store") or D.query_dir
+	helpers.remove_stale_temps(D.query_dir)
 
 	local files = vim.fn.glob(D.query_dir .. "/*.json", false, true)
 	if #files > 200 then

@@ -41,7 +41,7 @@ describe("sidecars under the state directory degrade", function()
         Respond.cancel_responses(buf)
         restore()
         if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
-        for _, sidecar in ipairs(sidecars) do vim.fn.delete(state_dir .. "/" .. sidecar.file) end
+        for _, sidecar in ipairs(sidecars) do vim.fn.delete(sidecar.path and sidecar.path(parley) or state_dir .. "/" .. sidecar.file) end
         parley._remote_reference_cache = nil
         parley._state = saved_state
     end)
@@ -62,8 +62,8 @@ describe("sidecars under the state directory degrade", function()
         end
         for _, case in ipairs(cases) do
             it(sidecar.file .. " with " .. case.label .. " neither throws nor blocks a submission", function()
-                local path = state_dir .. "/" .. sidecar.file
-                vim.fn.mkdir(state_dir, "p")
+                local path = sidecar.path and sidecar.path(parley) or state_dir .. "/" .. sidecar.file
+                vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
                 vim.fn.writefile({ case.body }, path)
                 -- #261 M1 review BR-15: a file's diagnostics belong to its
                 -- parse, and a parse to the user's action — at most one

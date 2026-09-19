@@ -328,6 +328,42 @@ rounds:
       boundary: M1
       recipe: milestone-review
       blocked: true
+    - "n": 5
+      timestamp: "2026-09-19T01:16:00-07:00"
+      agent: claude
+      dispose:
+        - id: BR-19
+          disposition: addressed
+          note: table_to_file delegates to table_to_file_atomic (helper.lua:580-587); F3f goes red when the old writer is restored. The sidecar-spec extension was not added, but it is moot while the only JSON writer checks every step.
+          round: 5
+        - id: BR-20
+          disposition: not-addressed
+          note: BEARER_SCHEMA is applied to the response (vault.lua:223-225), but deleting that conform call leaves sidecar_degrade (14), vault_spec (27) and sidecar_authority (5) all green. Drive the fake_process curl with stdout of token "t" and a string expires_at, and assert the next refresh re-fetches instead of raising.
+          round: 5
+        - id: BR-21
+          disposition: addressed
+          note: 'R1 (dispatcher_query_spec.lua:136) goes red when the abort is removed: curl is not started and the reason reaches on_exit.'
+          round: 5
+        - id: BR-22
+          disposition: addressed
+          note: decodes() matches both APIs. A planted unguarded vim.fn.json_decode line was reported as lua/parley/file_tracker.lua:183.
+          round: 5
+      findings:
+        - id: BR-23
+          severity: Minor
+          title: Routing table_to_file through the rename-based writer replaces symlinked sidecars, resets permissions, and leaves crash files the query cleanup never deletes
+          detail: '2nd in this family. Rule: changing a shared seam''s contract means listing each caller, what it relied on from the old contract, and which of those the new contract keeps, all in the same change. The old io.open("w") wrote through a symlink and kept the file''s mode. Reproduced: a symlinked custom_system_prompts.json became a regular 0644 file and its 0600 dotfiles target kept the old prompt. A user-restricted vault_state.json (bearer cache) also reverts to 0644. A crash mid-write now leaves *.json.tmp-* files that the query cleanup (dispatcher.lua:71, glob *.json) never matches (ARCH-FUNERAL). Fix at the one writer: resolve an existing destination with uv.fs_realpath, create the temp file beside the real target, and copy its mode before the rename. Make the query cleanup also match *.json.tmp-*. Add helper_io tests for the symlink and the mode.'
+          family: seam-change-collateral
+          round: 5
+        - id: BR-24
+          severity: Minor
+          title: The sidecar census finds readers by the text state_dir, so file_access.json escapes it, and a wrongly typed entry makes opening a chat raise
+          detail: '3rd in this family. Rule: a guard that claims to cover a class selects members by the property that defines the class, not by how one member happens to be spelled. Here the class is files persisted across sessions and read back by a chat action. file_tracker.lua:23 builds its own path under stdpath("data")/parley. open_buf (init.lua:3112) then calls track_file_access, which raises "attempt to index a number value" (:92, reproduced) on {"/a.md": 3}. Quit and reopen does not clear it. The same module has a second, non-atomic JSON writer (:70) that returns true regardless of the write result. Measured: grepping for stdpath( in lua/ finds one more session-persisted JSON reader on the chat path, this one. Fix the rule: derive every profile sidecar''s path from one helper (or from state_dir), have the census select on that, add file_access.json to tests/helpers/sidecars.lua with a schema, and write it through table_to_file.'
+          family: enumeration-claims-completeness
+          round: 5
+      boundary: M1
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -496,9 +532,24 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-22** [Minor] `enumeration-claims-completeness` json_decode_spec matches only vim.json.decode, and the lesson says it fails any unguarded decode
   2nd in this family. vim.fn.json_decode (file_tracker.lua:47, currently guarded) escapes the pattern. Rule: a guard's pattern covers every API that does the job, not just the spelling the finding named.
 
+## Round 5 — 2026-09-19T01:16:00-07:00 (claude) — passed
+
+### Disposed
+
+- BR-19 — addressed — table_to_file delegates to table_to_file_atomic (helper.lua:580-587); F3f goes red when the old writer is restored. The sidecar-spec extension was not added, but it is moot while the only JSON writer checks every step.
+- BR-20 — not-addressed — BEARER_SCHEMA is applied to the response (vault.lua:223-225), but deleting that conform call leaves sidecar_degrade (14), vault_spec (27) and sidecar_authority (5) all green. Drive the fake_process curl with stdout of token "t" and a string expires_at, and assert the next refresh re-fetches instead of raising.
+- BR-21 — addressed — R1 (dispatcher_query_spec.lua:136) goes red when the abort is removed: curl is not started and the reason reaches on_exit.
+- BR-22 — addressed — decodes() matches both APIs. A planted unguarded vim.fn.json_decode line was reported as lua/parley/file_tracker.lua:183.
+
+### Raised
+
+- **BR-23** [Minor] `seam-change-collateral` Routing table_to_file through the rename-based writer replaces symlinked sidecars, resets permissions, and leaves crash files the query cleanup never deletes
+  2nd in this family. Rule: changing a shared seam's contract means listing each caller, what it relied on from the old contract, and which of those the new contract keeps, all in the same change. The old io.open("w") wrote through a symlink and kept the file's mode. Reproduced: a symlinked custom_system_prompts.json became a regular 0644 file and its 0600 dotfiles target kept the old prompt. A user-restricted vault_state.json (bearer cache) also reverts to 0644. A crash mid-write now leaves *.json.tmp-* files that the query cleanup (dispatcher.lua:71, glob *.json) never matches (ARCH-FUNERAL). Fix at the one writer: resolve an existing destination with uv.fs_realpath, create the temp file beside the real target, and copy its mode before the rename. Make the query cleanup also match *.json.tmp-*. Add helper_io tests for the symlink and the mode.
+- **BR-24** [Minor] `enumeration-claims-completeness` The sidecar census finds readers by the text state_dir, so file_access.json escapes it, and a wrongly typed entry makes opening a chat raise
+  3rd in this family. Rule: a guard that claims to cover a class selects members by the property that defines the class, not by how one member happens to be spelled. Here the class is files persisted across sessions and read back by a chat action. file_tracker.lua:23 builds its own path under stdpath("data")/parley. open_buf (init.lua:3112) then calls track_file_access, which raises "attempt to index a number value" (:92, reproduced) on {"/a.md": 3}. Quit and reopen does not clear it. The same module has a second, non-atomic JSON writer (:70) that returns true regardless of the write result. Measured: grepping for stdpath( in lua/ finds one more session-persisted JSON reader on the chat path, this one. Fix the rule: derive every profile sidecar's path from one helper (or from state_dir), have the census select on that, add file_access.json to tests/helpers/sidecars.lua with a schema, and write it through table_to_file.
+
 ## Open findings
 
-- **BR-19** [Important] `returned-handle-has-no-consumer` table_to_file drops file:close()'s result, so it reports true for a write that failed at flush and left the file truncated
 - **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
-- **BR-21** [Minor] `behavior-change-without-regression-test` The dispatcher's new abort for an unwritten request body has no behavioural test
-- **BR-22** [Minor] `enumeration-claims-completeness` json_decode_spec matches only vim.json.decode, and the lesson says it fails any unguarded decode
+- **BR-23** [Minor] `seam-change-collateral` Routing table_to_file through the rename-based writer replaces symlinked sidecars, resets permissions, and leaves crash files the query cleanup never deletes
+- **BR-24** [Minor] `enumeration-claims-completeness` The sidecar census finds readers by the text state_dir, so file_access.json escapes it, and a wrongly typed entry makes opening a chat raise

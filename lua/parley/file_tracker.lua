@@ -19,8 +19,14 @@ end
 -- }
 M._file_access = {}
 
--- Path for storing file access data
+-- Path for storing file access data. A profile sidecar like those under
+-- state_dir: tests/helpers/sidecars.lua lists it, so it is exercised corrupt.
 local access_data_file = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/file_access.json"
+function M.file_path() return access_data_file end
+-- #261: typed at the read — an entry that is not a table of numbers is dropped,
+-- never indexed by track_file_access. The file is app-owned access history, so
+-- a dropped entry simply starts again.
+local SCHEMA = { ["*"] = { last_accessed = "number", access_count = "number" } }
 
 -- Ensure directory exists
 local function ensure_dir_exists(filepath)
@@ -38,23 +44,15 @@ function M.load_data()
     end
 
     ensure_dir_exists(access_data_file)
+    local helpers = require("parley.helper")
+    -- The first load of the process precedes its first save: a temp file here
+    -- is a crash leftover.
+    helpers.remove_stale_temps(vim.fn.fnamemodify(access_data_file, ":h"))
 
-    -- Check if the file exists
-    if vim.fn.filereadable(access_data_file) == 1 then
-        local content = vim.fn.readfile(access_data_file)
-        if #content > 0 then
-            local json_str = table.concat(content, "\n")
-            local ok, data = pcall(vim.fn.json_decode, json_str)
-            if ok and type(data) == "table" then
-                M._file_access = data
-                return true
-            end
-        end
-    end
-
-    -- Default to empty table if file doesn't exist or can't be parsed
-    M._file_access = {}
-    return false
+    local data = vim.fn.filereadable(access_data_file) == 1
+        and helpers.file_to_table(access_data_file, SCHEMA) or nil
+    M._file_access = data or {}
+    return data ~= nil
 end
 
 -- Save file access data to disk
@@ -64,14 +62,8 @@ function M.save_data()
     end
 
     ensure_dir_exists(access_data_file)
-
-    local ok, json_str = pcall(vim.fn.json_encode, M._file_access)
-    if ok then
-        vim.fn.writefile({json_str}, access_data_file)
-        return true
-    end
-
-    return false
+    -- The one JSON writer: atomic, and it reports whether it wrote (#261).
+    return require("parley.helper").table_to_file(M._file_access, access_data_file) == true
 end
 
 -- Track file access

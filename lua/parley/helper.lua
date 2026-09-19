@@ -617,7 +617,18 @@ _H.table_to_file_atomic = function(tbl, file_path, adapter)
 		return failure("encode", json)
 	end
 
-	local tmp = temp_path(file_path)
+	-- An existing destination is replaced where it really lives, with its mode:
+	-- a symlinked sidecar stays a symlink, and a file the user restricted stays
+	-- restricted (#261 M1 review round 4 — the rename-based writer otherwise
+	-- replaces the link and resets the mode).
+	local uv = vim.uv or vim.loop
+	local realpath = adapter.realpath or uv.fs_realpath
+	local stat = adapter.stat or uv.fs_stat
+	local chmod = adapter.chmod or uv.fs_chmod
+	local target = realpath(file_path) or file_path
+	local existing = stat(target)
+
+	local tmp = temp_path(target)
 	local open_ok, file, open_err = pcall(open, tmp, "w")
 	if not open_ok or not file then
 		cleanup(tmp)
@@ -637,13 +648,38 @@ _H.table_to_file_atomic = function(tbl, file_path, adapter)
 		return failure("close", close_ok and close_err or close_result)
 	end
 
-	local rename_ok, rename_result, rename_err = pcall(rename, tmp, file_path)
+	if existing then
+		local mode_ok, mode_result, mode_err = pcall(chmod, tmp, existing.mode % 4096)
+		if not mode_ok or not mode_result then
+			cleanup(tmp)
+			return failure("chmod", mode_ok and mode_err or mode_result)
+		end
+	end
+
+	local rename_ok, rename_result, rename_err = pcall(rename, tmp, target)
 	if not rename_ok or not rename_result then
 		cleanup(tmp)
 		return failure("rename", rename_ok and rename_err or rename_result)
 	end
 
 	return true
+end
+
+--- Remove the temp files table_to_file_atomic leaves when a process dies
+--- between its write and its rename (ARCH-FUNERAL: every file it creates names
+--- its end). Call it at setup, before this process writes into `dir`, so every
+--- match is a leftover from an earlier one.
+---@param dir string
+_H.remove_stale_temps = function(dir)
+	-- Listed, not globbed: a directory scan expands nothing in `dir`.
+	local uv = vim.uv or vim.loop
+	local scan = uv.fs_scandir(dir)
+	if not scan then return end
+	while true do
+		local name, kind = uv.fs_scandir_next(scan)
+		if not name then return end
+		if kind == "file" and name:match("%.tmp%-[^/]+%-%x%x%x%x%x%x$") then os.remove(dir .. "/" .. name) end
+	end
 end
 
 --- A JSON sidecar as a table, or nil — never an error. `schema`, when given, is

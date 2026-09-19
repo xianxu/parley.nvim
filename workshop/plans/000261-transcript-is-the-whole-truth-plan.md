@@ -105,7 +105,8 @@ must *not* be. So:
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `chat_recovery` and `response_recovery` — recovery IO, pickers, guards | `lua/parley/chat_recovery.lua`, `lua/parley/response_recovery.lua` | deleted | state dir, pickers |
-| `helper` — `file_to_table` made total, with an optional per-reader schema; `conform` drops wrongly typed fields | `lua/parley/helper.lua` | modified | JSON sidecar files |
+| `helper` — `file_to_table` made total, with an optional per-reader schema; `conform` drops wrongly typed fields; `table_to_file` is the atomic writer; `remove_stale_temps` sweeps its crash leftovers at setup | `lua/parley/helper.lua` | modified | JSON sidecar files |
+| `file_tracker` — `file_path`: `file_access.json` is a profile sidecar, read with a schema and written through the one writer | `lua/parley/file_tracker.lua` | modified | the file access history |
 | `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view; `source` accepts a preloaded view so a loop reads once; writes report whether they happened | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
 | M2 · `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
 | M2 · `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
@@ -1762,6 +1763,9 @@ writes actually fail, so it reported success over a truncated file.
 - **Tests.**
   - F3e simulates a close that fails with "File too large": the result is a
     failure, the original is intact, and no temporary file is left.
+  - F3f is the test that goes red when the old writer is restored: it proves
+    `table_to_file` delegates. F3e pins the atomic writer itself. *(Corrected
+    in round 4: this entry first named F3e as the delegation test.)*
   - R1 shows the dispatcher aborts, with its reason, before curl starts when the
     body was not written.
   - Reverting either fix turns its test red.
@@ -1769,3 +1773,34 @@ writes actually fail, so it reported success over a truncated file.
   - One `BEARER_SCHEMA` applies at both boundaries the copilot bearer crosses.
   - `json_decode_spec` covers `vim.fn.json_decode` as well.
   - `DROPPED` is keyed by the exact call, not the file.
+
+### 2026-09-19 — M1 boundary review round 4 (FIX-THEN-SHIP, finalized) — the writer's collateral and the census's scope
+
+**Reason.** Round 4 finalized M1 with FIX-THEN-SHIP and three Minor findings,
+fixed before the close commit per the #174 protocol.
+
+**Delta.**
+- **Routing every JSON write through the rename-based writer changed three
+  behaviours.** Each was checked against the callers:
+  - A symlinked sidecar was replaced by a regular file. The writer now resolves
+    an existing destination with `fs_realpath` and writes beside the real
+    target, so the link survives (F3g).
+  - The file's mode was reset. The writer now copies the existing mode onto the
+    temporary file before the rename, so a 0600 bearer cache stays 0600 (F3h).
+  - A crash between write and rename left `*.tmp-*` files that nothing removed.
+    `helper.remove_stale_temps` runs at setup for the state directory and the
+    query directory, and on the tracker's first load for `file_access.json`'s
+    directory. Each is swept before the process writes there (F3i).
+- **The census covers the profile, not one spelling.** It selects modules that
+  name the state directory *or* `stdpath('data')`, the property that defines
+  the class.
+  - `file_access.json`, which escaped the census and raised on opening a chat
+    when an entry had the wrong type, is now in `tests/helpers/sidecars.lua`.
+    It is read with a schema and written through the one writer.
+  - `starter.lua` and `cliproxy.lua` are declared with reasons: first-run setup,
+    and the proxy's derived artifacts.
+- **BR-20 is addressed.** V1 drives a token response with a string
+  `expires_at` through the stateful process fake and proves the next request
+  fetches again. Removing the response `conform` turns V1 red.
+- **Counterfactuals.** Reverting each fix turns its test red: vault V1;
+  file_access (2 degrade cases); writer (F3g, F3h).
