@@ -296,6 +296,50 @@ describe('chat_respond: scoped session integration',function()
         wait_for(function()return #calls==3 end)
         assert.truthy(vim.inspect(calls[3].payload):find('fixture tool content',1,true))
     end)
+    -- #261/#255: a sub-chat's ancestor context reads the parent as the user
+    -- sees it — its loaded buffer — and a parent exchange still being
+    -- regenerated contributes its previous answer there too.
+    local function child_of_parent()
+        local child=tmp_dir..'/2026-03-02-child-'..math.random(1000000)..'.md';files[#files+1]=child
+        local parent_name=vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf),':t')
+        vim.fn.writefile({'# topic: Child','- file: child.md','---','',
+            '🌿: '..parent_name..': Parent','','💬: child question',''},child)
+        return child
+    end
+    local function ancestors(child)
+        local lines=vim.fn.readfile(child)
+        local Parser=require('parley.chat_parser')
+        local parsed=Parser.parse_chat(lines,Parser.find_header_end(lines),parley.config)
+        local out={}
+        for _,m in ipairs(Respond._collect_ancestor_messages(child,parsed))do out[#out+1]=tostring(m.content)end
+        return table.concat(out,'\n')
+    end
+    it('gives a sub-chat the previous answer of a parent exchange being regenerated (#255)',function()
+        local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
+        local first=regenerating_q1()
+        local child_name=vim.fn.fnamemodify(child_of_parent(),':t')
+        vim.api.nvim_buf_set_lines(buf,-1,-1,false,{'🌿: '..child_name..': Child'})
+        local child=vim.fn.fnamemodify(tmp_dir..'/'..child_name,':p')
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        vim.cmd('silent write!')
+        local text=ancestors(child)
+        assert.truthy(text:find('old one',1,true),text)
+        assert.is_nil(text:find('new partial',1,true))
+        complete(first,calls[1])
+    end)
+    it('gives a sub-chat the parent\'s unsaved text, not the disk (#255)',function()
+        local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
+        open({'💬: first','','🤖: agent','disk answer',''})
+        local child_name=vim.fn.fnamemodify(child_of_parent(),':t')
+        vim.api.nvim_buf_set_lines(buf,-1,-1,false,{'🌿: '..child_name..': Child'})
+        vim.cmd('silent write!')
+        local row=assert(row_containing('disk answer'))
+        vim.api.nvim_buf_set_lines(buf,row-1,row,false,{'buffer answer'})
+        local text=ancestors(vim.fn.fnamemodify(tmp_dir..'/'..child_name,':p'))
+        assert.truthy(text:find('buffer answer',1,true),text)
+        assert.is_nil(text:find('disk answer',1,true))
+    end)
     -- The raw payload build_messages finds lives on the input the request was
     -- built from. A batch leg builds from a copy, so reading it back from this
     -- function's own table dropped a typed raw request in batch mode.

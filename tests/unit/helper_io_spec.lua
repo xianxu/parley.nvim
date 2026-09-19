@@ -185,6 +185,45 @@ describe("helper I/O functions", function()
         end)
     end)
 
+    -- #261/#255: a chat as the user sees it — its loaded buffer, else the file.
+    describe("Group G: chat_lines", function()
+        local function loaded(path, lines)
+            local buf = vim.fn.bufadd(path); vim.fn.bufload(buf)
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+            return buf
+        end
+        it("G1: reads a loaded buffer's unsaved text over the disk", function()
+            local path = tmpdir .. "/chat.md"
+            vim.fn.writefile({ "on disk" }, path)
+            local buf = loaded(path, { "unsaved edit" })
+            local lines, from = helper.chat_lines(path)
+            assert.same({ "unsaved edit" }, lines)
+            assert.equals(buf, from)
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end)
+        it("G2: reads the file when no buffer is loaded for it", function()
+            local path = tmpdir .. "/chat.md"
+            vim.fn.writefile({ "on disk" }, path)
+            local lines, from = helper.chat_lines(path)
+            assert.same({ "on disk" }, lines)
+            assert.is_nil(from)
+        end)
+        it("G3: does not match a buffer whose name merely contains the path", function()
+            local path = tmpdir .. "/chat.md"
+            vim.fn.writefile({ "on disk" }, path)
+            local other = loaded(tmpdir .. "/chat.md.bak", { "the wrong buffer" })
+            assert.same({ "on disk" }, (helper.chat_lines(path)))
+            vim.api.nvim_buf_delete(other, { force = true })
+        end)
+        it("G4: reads a loaded buffer that was never saved, and nil for nothing", function()
+            local path = tmpdir .. "/new.md"
+            local buf = loaded(path, { "never saved" })
+            assert.same({ "never saved" }, (helper.chat_lines(path)))
+            vim.api.nvim_buf_delete(buf, { force = true })
+            assert.is_nil(helper.chat_lines(tmpdir .. "/nothing.md"))
+        end)
+    end)
+
     describe("Group F: table_to_file + file_to_table", function()
         it("F1: round-trip preserves table structure", function()
             local path = tmpdir .. "/data.json"

@@ -190,18 +190,27 @@ local function collect_ancestor_chain(current_file, parsed_chat, depth)
     -- every reference whose parent had not been renamed yet.
     local abs_parent = _parley.resolve_chat_path(parsed_chat.parent_link.path, current_dir)
 
-    if vim.fn.filereadable(abs_parent) == 0 then
+    -- #261/#255: the parent as the user sees it — its loaded buffer if open,
+    -- which is ahead of the disk while an answer streams into it or while it
+    -- holds unsaved edits.
+    local parent_lines, parent_buf = _parley.helpers.chat_lines(abs_parent)
+    if not parent_lines then
         _parley.logger.warning("collect_ancestor_chain: parent file not readable: " .. abs_parent)
         return {}
     end
-
-    local parent_lines = vim.fn.readfile(abs_parent)
     local parent_header_end = find_chat_header_end(parent_lines)
     if not parent_header_end then
         return {}
     end
 
     local parent_parsed = _parley.parse_chat(parent_lines, parent_header_end)
+    -- An exchange of the parent still being regenerated contributes its
+    -- previous answer, as it does in the parent's own requests.
+    local parent_doc = parent_buf and require('parley.document').get(parent_buf)
+    if parent_doc then
+        parent_parsed = require('parley.previous_answer').substitute(parent_parsed,
+            require('parley.document').previous_answers(parent_doc), nil)
+    end
 
     -- Find which branch in the parent points back to current_file
     local branch_after = 0

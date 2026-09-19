@@ -665,6 +665,28 @@ _H.table_to_file_atomic = function(tbl, file_path, adapter)
 	return true
 end
 
+--- A chat's current text: its loaded buffer if one is open under this path,
+--- else the file; nil when neither exists. A loaded buffer can be ahead of the
+--- disk (unsaved edits, an answer streaming into it), and the buffer is what the
+--- user sees (#261/#255). Compares resolved absolute names: `bufnr(path)` is a
+--- file-pattern match and can return a buffer whose name merely contains `path`.
+---@param path string
+---@return string[]|nil lines
+---@return integer|nil buf # the loaded buffer the lines came from
+_H.chat_lines = function(path)
+	local want = vim.fn.resolve(vim.fn.fnamemodify(path, ":p"))
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_loaded(buf) then
+			local name = vim.api.nvim_buf_get_name(buf)
+			if name ~= "" and vim.fn.resolve(vim.fn.fnamemodify(name, ":p")) == want then
+				return vim.api.nvim_buf_get_lines(buf, 0, -1, false), buf
+			end
+		end
+	end
+	if vim.fn.filereadable(path) == 1 then return vim.fn.readfile(path), nil end
+	return nil
+end
+
 --- Remove the temp files table_to_file_atomic leaves when a process dies
 --- between its write and its rename (ARCH-FUNERAL: every file it creates names
 --- its end). Call it at setup, before this process writes into `dir`, so every

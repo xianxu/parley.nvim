@@ -3797,9 +3797,8 @@ M.move_chat_tree = function(file_name, target_dir)
 	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 	for _, new_path in pairs(path_map) do
 		if vim.fn.filereadable(new_path) == 1 then
-			local live_buf = vim.fn.bufnr(new_path)
-			local live = live_buf ~= -1 and vim.api.nvim_buf_is_loaded(live_buf)
-			local lines = live and vim.api.nvim_buf_get_lines(live_buf, 0, -1, false) or vim.fn.readfile(new_path)
+			local lines, live_buf = M.helpers.chat_lines(new_path)
+			local live = live_buf ~= nil
 			local changed = false
 			for i, line in ipairs(lines) do
 				if line:sub(1, #branch_prefix) == branch_prefix then
