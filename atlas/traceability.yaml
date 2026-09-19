@@ -186,6 +186,7 @@ atlas:
       - lua/parley/tasker.lua
       - lua/parley/attempt.lua
     tests:
+      - tests/integration/generation_settles_spec.lua
       - tests/unit/previous_answer_spec.lua
       - tests/integration/sidecar_degrade_spec.lua
       - tests/arch/sidecar_authority_spec.lua

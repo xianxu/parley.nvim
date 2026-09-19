@@ -112,8 +112,8 @@ must *not* be. So:
 | `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any; `buffer_for`: the buffer named exactly `name` | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
 | `tasker` — `scope_key`, `is_scoped`, `stop_scope`, `held`, `leave`, `deadline` (the per-kind table), `exit_reason` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
 | `oauth` — `_token_body_summary`: what a token endpoint's body may show in a log, its OAuth error only | `lua/parley/oauth.lua` | modified | the OAuth token endpoint |
-| M4 · `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
-| M4 · `deferred_work` — `new(step, on_error)` | `lua/parley/deferred_work.lua` | modified | timer turns |
+| `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
+| `deferred_work` — `new(step, on_error)` | `lua/parley/deferred_work.lua` | modified | timer turns |
 
 - **`helper.file_to_table`** (M1) runs `pcall(vim.json.decode)` and requires a
   table. Otherwise it logs a warning naming the file and saying it was ignored,
@@ -1340,15 +1340,15 @@ routed under `chat/lifecycle`.
 **Files:** `lua/parley/generation_runner.lua`, `lua/parley/deferred_work.lua`;
 test `tests/integration/generation_settles_spec.lua`.
 
-- [ ] **Step 1: Failing tests** for:
+- [x] **Step 1: Failing tests** for:
   - W1, W11 and W14;
   - `fault` (a step that throws);
   - the scope kill on stopping, and on a direct terminal;
   - `stats()`.
-- [ ] **Step 2: Implement** per the table and the "Runner fault" paragraph.
+- [x] **Step 2: Implement** per the table and the "Runner fault" paragraph.
   `Deferred.new(step, on_error)`: with `on_error`, the error path calls it
   instead of rethrowing; without it, behaviour is unchanged.
-- [ ] **Step 3:** PASS. **Step 4:** Commit (`#261 M4: the runner settles what it cannot cancel`).
+- [x] **Step 3:** PASS. **Step 4:** Commit (`#261 M4: the runner settles what it cannot cancel`).
 
 ### Task 4.2: Session, provider, preparation, completion, topic, target
 
@@ -2100,4 +2100,25 @@ Minors, fixed below and bundled into the close commit (#174: no re-run).
 - **Also, from the review's M4/M5 notes.** The README's custom-tool paragraph
   says a custom `execute_async` forwards `context.logical_generation` to
   `context.tasker.run`, or is refused.
+
+### 2026-09-19 — M4 Task 4.1, as built
+
+**Delta.**
+- **W1's condition is "the start threw", not "no handle".** An adapter may
+  return nothing and still be cancellable through `cancel_operation`: the
+  supervisor-transfer sequence in `generation_sequences_spec` does exactly
+  that, and keying on a nil handle skipped its supervisor. The runner marks
+  `op.start_threw` and confirms only those at cancel.
+- **A tool whose start threw** gets outcome `unknown` from `cb.failed` and is
+  resolved at once, since nothing was started, so the round goes on.
+- **`fault`** shares the terminal cleanup with the machine's own terminal
+  (`finish`) and the once-guarded scope kill (`kill_scope`).
+  `Deferred.new(step, on_error)` calls `on_error` instead of rethrowing from a
+  timer callback.
+- **The scope kill** runs in `dispatch`, on the first accepted transition into
+  `stopping` or `terminal`, through `adapters.stopping(ctx)`. The session's
+  implementation lands in Task 4.2.
+- **Tests:** `tests/integration/generation_settles_spec.lua` (9 cases). Each of
+  four targeted mutations — the thrown-start resolve, the child resolve, the
+  fault handler, the scope kill — turns it red.
 
