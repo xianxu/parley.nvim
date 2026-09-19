@@ -1519,6 +1519,157 @@ rounds:
       boundary: M5
       recipe: milestone-review
       blocked: false
+    - "n": 22
+      timestamp: "2026-09-19T16:03:40-07:00"
+      agent: claude
+      dispose:
+        - id: BR-20
+          disposition: addressed
+          note: One BEARER_SCHEMA (vault.lua:161) applied to both the file read (:184) and the network response (:229); vault_spec V1 pins a non-numeric expires_at.
+          round: 22
+        - id: BR-23
+          disposition: addressed
+          note: helper.lua:622-660 resolves the real target and copies its mode; remove_stale_temps has three call sites; helper_io_spec F3g/F3h/F3i pin symlink, mode and sweep.
+          round: 22
+        - id: BR-24
+          disposition: addressed
+          note: sidecar_authority_spec.lua:22-33 selects on state_dir OR stdpath('data'); file_access.json is in sidecars.lua with a schema, an exercise and a table_to_file write.
+          round: 22
+        - id: BR-34
+          disposition: not-addressed
+          note: helper.lua:696-699 still hand-rolls resolve(fnamemodify(n,':p')); no helper.canonical_path exists anywhere in lua/, and file_refresh.lua:6 still has its own copy.
+          round: 22
+        - id: BR-36
+          disposition: addressed
+          note: nodiscard_spec now matches statement heads after then/do/else/; and bare pcall/xpcall, and its header lists the four forms it cannot see.
+          round: 22
+        - id: BR-37
+          disposition: addressed
+          note: The stale check asserts seen == declared.count for every DROPPED entry and reports "declared N, found M".
+          round: 22
+        - id: BR-41
+          disposition: addressed
+          note: chat_respond.lua:1088-1090 merges and only defaults deadline_ms when unscoped and unset; topic_gen_spec:76-80 pins partial, bare and scoped opts.
+          round: 22
+        - id: BR-43
+          disposition: addressed
+          note: tasker.lua:219 refuses pid <= 0; tasker_supervision_spec "never signals a record whose pid is 0" drives it against a fake that raises if signalled.
+          round: 22
+        - id: BR-44
+          disposition: addressed
+          note: tasker.lua:596-598 closes the one-shot timer as it fires; "keeps no deadline handle on a record the kernel holds" pins it.
+          round: 22
+        - id: BR-45
+          disposition: addressed
+          note: dispatcher.lua:764-770 exports only failure.exit; response_provider.lua:18 and chat_respond.lua:21-28 both read it, and spawn_seam_spec's FIELDS guard fails any read of failure.code/signal/io_error.
+          round: 22
+        - id: BR-46
+          disposition: addressed
+          note: spawn_seam_spec classifies each out-of-seam spawn from its call form and requires `why` iff open > 0, failing a dead `why` too.
+          round: 22
+        - id: BR-61
+          disposition: addressed
+          note: dispatcher.lua:883-885 states the two-arg contract and that copilot now forwards it; cliproxy-managed.md:261-263 names the transport_alive precondition; the pre_query guard scans lua/ and tests/.
+          round: 22
+        - id: BR-64
+          disposition: addressed
+          note: The plan now carries a per-hunk mutation ledger (five rows), and each named case exists in response_topic_spec.lua:90-115.
+          round: 22
+        - id: BR-80
+          disposition: not-addressed
+          note: The issue Log at lines 914-917 still reads BR-73 for the one() helper (ledger BR-72), BR-74 for the outcome set (ledger BR-73), and BR-70/72 for the exemption (ledger BR-70/74).
+          round: 22
+        - id: BR-81
+          disposition: not-addressed
+          note: The routing exists at generation_runner.lua:158-166, but reverting it in a worktree leaves chat_refusal_spec 17/17, refusal_spec 15/15, refusal_vocabulary_spec 6/6, generation_settles_spec 19/19, chat_respond_spec 42/42 and batch_lifecycle_spec 8/8 all green; the only specs that observe it are the two it now breaks. No test fails without the fix.
+          round: 22
+        - id: BR-82
+          disposition: addressed
+          note: The guard keys on the call, not its first token; planting _parley.logger.warning(x) with a variable argument in chat_respond.lua turns "routes every user notice in the submit path through refuse" red (reproduced).
+          round: 22
+        - id: BR-83
+          disposition: addressed
+          note: M._lifecycle_cause and result.refusal are both deleted, and single_source_sweeps_spec now fails any "-- test seam" export with no reader.
+          round: 22
+        - id: BR-84
+          disposition: not-addressed
+          note: refusal.brief exists and all six sites route through it, but grep over tests/ finds zero references to brief (or is_token); the crash the finding named — debug.traceback("") with its leading newline — is pinned by nothing.
+          round: 22
+        - id: BR-85
+          disposition: not-addressed
+          note: 'The wording is shared now, but the wrapper reuses the `start` kind and passes the command name as `notice`, so ExchangeCut in a headerless buffer reads "Response not started: the chat has no header; edit: restore the chat''s header, then submit again — ExchangeCut" (rendered). No refuse() kind was added and no test covers the four commands.'
+          round: 22
+        - id: BR-86
+          disposition: not-addressed
+          note: The not_chat check is in place at chat_respond.lua:56-60, but reverting it to the old two-condition form leaves chat_refusal_spec 17/17 green (verified); the close case uses an unloaded buffer, which both versions treat the same. No test enters the reused-number branch.
+          round: 22
+        - id: BR-87
+          disposition: addressed
+          note: tests/minimal_init.vim:50-56 deletes the directory on VimLeavePre beside its creation; after a full run the HEAD tree left one directory out of ~380 spec processes, from the spec that died abnormally.
+          round: 22
+      findings:
+        - id: BR-88
+          severity: Critical
+          title: The close commit's `failure`-routing change reddens two specs at HEAD, and nothing fails without it
+          detail: |-
+            This is the 10th finding in family `seam-change-collateral`. Do NOT fix the two
+            assertions alone. generation_runner.lua:158-166 changed what the `failure` field
+            may hold; the sweep covered production producers but not the readers of that
+            field in tests/. Measured at HEAD: cliproxy_caller_teardown_spec.lua:161 expects
+            'test abort' and gets nil; response_session_spec.lua:186 expects 'forced
+            preparation failure' and gets nil. Both pass at 6b8c7164, and both go green again
+            when only the is_token/brief lines are reverted — while chat_refusal_spec 17/17,
+            refusal_spec 15/15, refusal_vocabulary_spec 6/6, generation_settles_spec 19/19,
+            chat_respond_spec 42/42 and batch_lifecycle_spec 8/8 stay green either way. The
+            rule: a change to what a STORED field may hold enumerates every reader of that
+            field, production and spec alike, and the round that lands it adds the case that
+            goes red when the guard is removed. Move the two assertions to
+            `generation.diagnosis` and add that case.
+          family: seam-change-collateral
+          round: 22
+        - id: BR-89
+          severity: Important
+          title: The plan's new counterfactual table trips the repo's own Core-concepts symbol guard, so tests/arch/single_source_sweeps_spec.lua is red at HEAD
+          detail: |-
+            This is the 14th finding in family `enumeration-claims-completeness`. Do NOT just
+            rename the cell. single_source_sweeps_spec.lua:282 selects rows by shape
+            (`^| \``) rather than by the table they belong to, so the mutation-ledger row at
+            plan:2700 — `| \`issue\` keeps free text in \`failure\` | the reload cases in
+            \`chat_refusal_spec\` |` — is judged a Core-concepts row and its spec name is
+            demanded as a symbol definition. The guard passed at 6b8c7164 and fails at HEAD.
+            Either scope the row matcher to Core-concepts tables (the property that defines
+            the class) or write the cell as a path so the existing module-strip applies.
+          family: enumeration-claims-completeness
+          round: 22
+        - id: BR-90
+          severity: Important
+          title: '`logger.warning(Refusal.describe(...))` forwards the resolution string into the `sensitive` parameter, so the attachment notice is logged as REDACTED'
+          detail: |-
+            This is the 11th finding in family `seam-change-collateral`. Do NOT fix only this
+            line. `describe` gained a second return value in M5 round 3; chat_respond.lua:448
+            calls it as the last argument of logger.warning(msg, sensitive), so "keyed" lands
+            in `sensitive` and logger.lua:73-86 writes "[SENSITIVE DATA] REDACTED" to the log
+            and keeps the line out of _log_history (reproduced; the parenthesised form logs
+            correctly). The channel guard added in the same commit explicitly blesses the
+            form `^Refusal%.describe%(` as routed, so it cannot see this. The rule: a
+            multi-return function is never called directly as another call's last argument —
+            assign it, or parenthesise it — and the channel guard should require the
+            parenthesised/assigned form rather than the bare call. Same line: the kind is
+            `start`, but the response does start (only images are dropped), so the user reads
+            "Response not started: … no images were sent".
+          family: seam-change-collateral
+          round: 22
+        - id: BR-91
+          severity: Minor
+          title: chat_respond.lua:48-50 duplicates the comment paragraph at :44-47, including its "One statement of it" clause
+          detail: |-
+            Introduced by ba79d86f: the new paragraph was appended rather than replacing the
+            old one, so the same two sentences appear twice above lifecycle_cause, the second
+            copy differing only in "a chat still loaded by then". Delete :48-50.
+          family: comment-outlives-its-behavior
+          round: 22
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -2352,26 +2503,84 @@ file-scoped vim.g.parley_expected_unkeyed in refusal_spec.lua:5, with nothing to
   tests/minimal_init.vim:56-58 creates $TMPDIR/parley-query-<pid> in every nvim process and nothing removes it; request bodies accumulate inside, one directory per spec file per run. `make test` is bounded by its leading test-clean-env, but `make test-spec`, `make test-changed` and the direct PlenaryBustedFile invocation TOOLING.md documents all leave them. Note also that this replaced an artifact with a writer-side bound (the shared query_dir's >200->100 prune) with an unbounded per-process one.
   This is the 3rd finding in family residue-names-no-end. The removal belongs beside the creation (a VimLeavePre delete of the directory), not in a target the operator must remember to run.
 
+## Round 22 — 2026-09-19T16:03:40-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-20 — addressed — One BEARER_SCHEMA (vault.lua:161) applied to both the file read (:184) and the network response (:229); vault_spec V1 pins a non-numeric expires_at.
+- BR-23 — addressed — helper.lua:622-660 resolves the real target and copies its mode; remove_stale_temps has three call sites; helper_io_spec F3g/F3h/F3i pin symlink, mode and sweep.
+- BR-24 — addressed — sidecar_authority_spec.lua:22-33 selects on state_dir OR stdpath('data'); file_access.json is in sidecars.lua with a schema, an exercise and a table_to_file write.
+- BR-34 — not-addressed — helper.lua:696-699 still hand-rolls resolve(fnamemodify(n,':p')); no helper.canonical_path exists anywhere in lua/, and file_refresh.lua:6 still has its own copy.
+- BR-36 — addressed — nodiscard_spec now matches statement heads after then/do/else/; and bare pcall/xpcall, and its header lists the four forms it cannot see.
+- BR-37 — addressed — The stale check asserts seen == declared.count for every DROPPED entry and reports "declared N, found M".
+- BR-41 — addressed — chat_respond.lua:1088-1090 merges and only defaults deadline_ms when unscoped and unset; topic_gen_spec:76-80 pins partial, bare and scoped opts.
+- BR-43 — addressed — tasker.lua:219 refuses pid <= 0; tasker_supervision_spec "never signals a record whose pid is 0" drives it against a fake that raises if signalled.
+- BR-44 — addressed — tasker.lua:596-598 closes the one-shot timer as it fires; "keeps no deadline handle on a record the kernel holds" pins it.
+- BR-45 — addressed — dispatcher.lua:764-770 exports only failure.exit; response_provider.lua:18 and chat_respond.lua:21-28 both read it, and spawn_seam_spec's FIELDS guard fails any read of failure.code/signal/io_error.
+- BR-46 — addressed — spawn_seam_spec classifies each out-of-seam spawn from its call form and requires `why` iff open > 0, failing a dead `why` too.
+- BR-61 — addressed — dispatcher.lua:883-885 states the two-arg contract and that copilot now forwards it; cliproxy-managed.md:261-263 names the transport_alive precondition; the pre_query guard scans lua/ and tests/.
+- BR-64 — addressed — The plan now carries a per-hunk mutation ledger (five rows), and each named case exists in response_topic_spec.lua:90-115.
+- BR-80 — not-addressed — The issue Log at lines 914-917 still reads BR-73 for the one() helper (ledger BR-72), BR-74 for the outcome set (ledger BR-73), and BR-70/72 for the exemption (ledger BR-70/74).
+- BR-81 — not-addressed — The routing exists at generation_runner.lua:158-166, but reverting it in a worktree leaves chat_refusal_spec 17/17, refusal_spec 15/15, refusal_vocabulary_spec 6/6, generation_settles_spec 19/19, chat_respond_spec 42/42 and batch_lifecycle_spec 8/8 all green; the only specs that observe it are the two it now breaks. No test fails without the fix.
+- BR-82 — addressed — The guard keys on the call, not its first token; planting _parley.logger.warning(x) with a variable argument in chat_respond.lua turns "routes every user notice in the submit path through refuse" red (reproduced).
+- BR-83 — addressed — M._lifecycle_cause and result.refusal are both deleted, and single_source_sweeps_spec now fails any "-- test seam" export with no reader.
+- BR-84 — not-addressed — refusal.brief exists and all six sites route through it, but grep over tests/ finds zero references to brief (or is_token); the crash the finding named — debug.traceback("") with its leading newline — is pinned by nothing.
+- BR-85 — not-addressed — The wording is shared now, but the wrapper reuses the `start` kind and passes the command name as `notice`, so ExchangeCut in a headerless buffer reads "Response not started: the chat has no header; edit: restore the chat's header, then submit again — ExchangeCut" (rendered). No refuse() kind was added and no test covers the four commands.
+- BR-86 — not-addressed — The not_chat check is in place at chat_respond.lua:56-60, but reverting it to the old two-condition form leaves chat_refusal_spec 17/17 green (verified); the close case uses an unloaded buffer, which both versions treat the same. No test enters the reused-number branch.
+- BR-87 — addressed — tests/minimal_init.vim:50-56 deletes the directory on VimLeavePre beside its creation; after a full run the HEAD tree left one directory out of ~380 spec processes, from the spec that died abnormally.
+
+### Raised
+
+- **BR-88** [Critical] `seam-change-collateral` The close commit's `failure`-routing change reddens two specs at HEAD, and nothing fails without it
+  This is the 10th finding in family `seam-change-collateral`. Do NOT fix the two
+  assertions alone. generation_runner.lua:158-166 changed what the `failure` field
+  may hold; the sweep covered production producers but not the readers of that
+  field in tests/. Measured at HEAD: cliproxy_caller_teardown_spec.lua:161 expects
+  'test abort' and gets nil; response_session_spec.lua:186 expects 'forced
+  preparation failure' and gets nil. Both pass at 6b8c7164, and both go green again
+  when only the is_token/brief lines are reverted — while chat_refusal_spec 17/17,
+  refusal_spec 15/15, refusal_vocabulary_spec 6/6, generation_settles_spec 19/19,
+  chat_respond_spec 42/42 and batch_lifecycle_spec 8/8 stay green either way. The
+  rule: a change to what a STORED field may hold enumerates every reader of that
+  field, production and spec alike, and the round that lands it adds the case that
+  goes red when the guard is removed. Move the two assertions to
+  `generation.diagnosis` and add that case.
+- **BR-89** [Important] `enumeration-claims-completeness` The plan's new counterfactual table trips the repo's own Core-concepts symbol guard, so tests/arch/single_source_sweeps_spec.lua is red at HEAD
+  This is the 14th finding in family `enumeration-claims-completeness`. Do NOT just
+  rename the cell. single_source_sweeps_spec.lua:282 selects rows by shape
+  (`^| \``) rather than by the table they belong to, so the mutation-ledger row at
+  plan:2700 — `| \`issue\` keeps free text in \`failure\` | the reload cases in
+  \`chat_refusal_spec\` |` — is judged a Core-concepts row and its spec name is
+  demanded as a symbol definition. The guard passed at 6b8c7164 and fails at HEAD.
+  Either scope the row matcher to Core-concepts tables (the property that defines
+  the class) or write the cell as a path so the existing module-strip applies.
+- **BR-90** [Important] `seam-change-collateral` `logger.warning(Refusal.describe(...))` forwards the resolution string into the `sensitive` parameter, so the attachment notice is logged as REDACTED
+  This is the 11th finding in family `seam-change-collateral`. Do NOT fix only this
+  line. `describe` gained a second return value in M5 round 3; chat_respond.lua:448
+  calls it as the last argument of logger.warning(msg, sensitive), so "keyed" lands
+  in `sensitive` and logger.lua:73-86 writes "[SENSITIVE DATA] REDACTED" to the log
+  and keeps the line out of _log_history (reproduced; the parenthesised form logs
+  correctly). The channel guard added in the same commit explicitly blesses the
+  form `^Refusal%.describe%(` as routed, so it cannot see this. The rule: a
+  multi-return function is never called directly as another call's last argument —
+  assign it, or parenthesise it — and the channel guard should require the
+  parenthesised/assigned form rather than the bare call. Same line: the kind is
+  `start`, but the response does start (only images are dropped), so the user reads
+  "Response not started: … no images were sent".
+- **BR-91** [Minor] `comment-outlives-its-behavior` chat_respond.lua:48-50 duplicates the comment paragraph at :44-47, including its "One statement of it" clause
+  Introduced by ba79d86f: the new paragraph was appended rather than replacing the
+  old one, so the same two sentences appear twice above lifecycle_cause, the second
+  copy differing only in "a chat still loaded by then". Delete :48-50.
+
 ## Open findings
 
-- **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
-- **BR-23** [Minor] `seam-change-collateral` Routing table_to_file through the rename-based writer replaces symlinked sidecars, resets permissions, and leaves crash files the query cleanup never deletes
-- **BR-24** [Minor] `enumeration-claims-completeness` The sidecar census finds readers by the text state_dir, so file_access.json escapes it, and a wrongly typed entry makes opening a chat raise
 - **BR-34** [Minor] `canonical-form-not-shared` buffer_for's private key() adds an 11th copy of the resolve(fnamemodify(x,':p')) path-canonicalisation idiom
-- **BR-36** [Minor] `enumeration-claims-completeness` nodiscard_spec only sees calls at the start of a line; three calling forms that drop the result pass green
-- **BR-37** [Minor] `allowlist-without-dead-entry-check` nodiscard_spec's DROPPED count is only a ceiling, so a declaration outlives the call it excuses
-- **BR-41** [Minor] `seam-change-collateral` generate_topic replaces rather than merges transport_opts, so partial opts lose the deadline and are refused
-- **BR-43** [Minor] `untrusted-input-unparsed` target() has no pid == 0 guard, and -0 == 0 would signal Neovim's own process group
-- **BR-44** [Minor] `residue-names-no-end` The one-shot deadline timer is closed only by retire, the one path a held record never takes
-- **BR-45** [Important] `seam-change-collateral` The dispatcher re-exports code/io_error on its failure table, and both of that table's renderers still drop io_error
-- **BR-46** [Important] `enumeration-claims-completeness` The out-of-seam spawn list's per-entry reasons are unchecked prose, and two of eighteen are wrong
-- **BR-61** [Important] `seam-change-collateral` The dispatcher still documents a one-arg pre_query, naming copilot, after W6 made it two-arg
-- **BR-64** [Minor] `behavior-change-without-regression-test` cancel_through's throw exit and the direct site's refused-cancel exit fail nothing when reverted
 - **BR-80** [Minor] `plan-tracking-not-updated` Round 2's dispositions are recorded one finding id off the ledger in both the issue Log and the plan
 - **BR-81** [Important] `enumeration-claims-completeness` `failure` still carries free text on three producers, so a cliproxy start failure and every `fault` reach the user as "unexpected (...)"
-- **BR-82** [Important] `enumeration-claims-completeness` The channel guard matches only a string-literal first argument, so two live warning channels inside the file it scans are neither routed nor declared
-- **BR-83** [Minor] `returned-handle-has-no-consumer` Two handles added this round have no reader: the `_lifecycle_cause` test seam and `result.refusal`
 - **BR-84** [Minor] `canonical-form-not-shared` Six hand-written variants of "first line of a Lua error", three of which throw on an empty message
 - **BR-85** [Minor] `canonical-form-not-shared` init.lua's chat_context wrapper still hand-words "not a chat" and the missing header for four commands
 - **BR-86** [Minor] `untrusted-input-unparsed` lifecycle_cause maps detach to reload on a buffer number alone, and buffer numbers are reused after :bd
-- **BR-87** [Minor] `residue-names-no-end` The per-process query directory the harness creates has no removal path, and replaced a bounded artifact
+- **BR-88** [Critical] `seam-change-collateral` The close commit's `failure`-routing change reddens two specs at HEAD, and nothing fails without it
+- **BR-89** [Important] `enumeration-claims-completeness` The plan's new counterfactual table trips the repo's own Core-concepts symbol guard, so tests/arch/single_source_sweeps_spec.lua is red at HEAD
+- **BR-90** [Important] `seam-change-collateral` `logger.warning(Refusal.describe(...))` forwards the resolution string into the `sensitive` parameter, so the attachment notice is logged as REDACTED
+- **BR-91** [Minor] `comment-outlives-its-behavior` chat_respond.lua:48-50 duplicates the comment paragraph at :44-47, including its "One statement of it" clause

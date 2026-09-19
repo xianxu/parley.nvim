@@ -43,11 +43,8 @@ local _parley = nil
 local Refusal = require('parley.refusal')
 -- `:e!` unloads and re-reads the chat, so its document detaches exactly as a
 -- closed chat's does. A generation ends on a later turn, after the command has
--- returned: a chat loaded again by then was reloaded, not closed. One statement
+-- returned: a chat still loaded by then was reloaded, not closed. One statement
 -- of it, for every path that reports a lifecycle cause (#261 M5 review BR-75).
--- `:e!` unloads and re-reads the chat, so its document detaches exactly as a
--- closed chat's does. A generation ends on a later turn, after the command has
--- returned: a chat still loaded by then was reloaded, not closed.
 --
 -- Buffer numbers are reused after `:bd`, so the buffer must still hold a chat —
 -- otherwise a closed chat whose number an ordinary file took would report a
@@ -445,7 +442,11 @@ local function attach_question_images(messages, slots, chat_path, logger)
     if plan.warning then
         -- The builder's own logger is the channel (it is injected, and tested
         -- through); parley.refusal still owns the words (#261 M5 review round 4).
-        logger.warning(Refusal.describe('start', nil, 'attachments dropped: ' .. plan.warning))
+        -- Assigned, never passed straight through: `describe` returns a second
+        -- value, which as the last argument lands in logger.warning's `sensitive`
+        -- and redacts the line (#261 M5 close: BR-90).
+        local message = Refusal.describe('attachments', nil, 'attachments dropped: ' .. plan.warning)
+        logger.warning(message)
     end
     local function read(rel)
         if chat_path == nil or chat_path == "" then

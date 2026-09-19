@@ -46,8 +46,12 @@ local NOT_A_REFUSAL_NOTICE = {
     ['"collect_ancestor_chain: parent file not readable: " .. abs_parent'] = "same: the ancestor is skipped",
     ['"Failed to parse YAML in raw request mode: " .. tostring(err)'] = "raw-mode diagnostics; the request proceeds",
     ["'Failed to fetch remote content: ' .. (err or 'unknown error')"] = "the reference falls back to placeholder text",
-    ["message"] = "refuse()'s own return, which is the one channel",
+    ["message"] = "refuse()'s own return, or a describe() result assigned first, which is the one channel",
 }
+-- `describe` returns two values, so calling it straight through as the last
+-- argument sends its resolution into logger.warning's `sensitive` parameter and
+-- redacts the line. The guard therefore refuses the bare call, which is why
+-- `message` above is the only blessed form (#261 M5 close: BR-90).
 
 -- A reason composed at run time has no literal to key. One that starts with a
 -- literal is keyed by it, so the literal must be a lead-in ending in ": " (see
@@ -150,14 +154,14 @@ describe("arch: every refusal token has words", function()
                     for call in line:gmatch("logger%.warning%((.*)") do
                         sites = sites + 1
                         local argument = vim.trim((call:gsub("%)%s*end%s*$", ""):gsub("%)%s*$", "")))
-                        if not (NOT_A_REFUSAL_NOTICE[argument] or argument:match("^Refusal%.describe%(")) then
+                        if not NOT_A_REFUSAL_NOTICE[argument] then
                             offenders[#offenders + 1] = file .. ":" .. n .. ": " .. argument
                         end
                     end
                     for call in line:gmatch("vim%.notify%((.*)") do
                         sites = sites + 1
                         local argument = vim.trim((call:gsub("%)%s*end%s*$", ""):gsub("%)%s*$", "")))
-                        if not (NOT_A_REFUSAL_NOTICE[argument] or argument:match("^Refusal%.describe%(")) then
+                        if not NOT_A_REFUSAL_NOTICE[argument] then
                             offenders[#offenders + 1] = file .. ":" .. n .. ": " .. argument
                         end
                     end

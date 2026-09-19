@@ -244,6 +244,23 @@ describe("refusals reach the user once, in words", function()
         one("Response not started: a model setup is already open; finish it, then submit again")
     end)
 
+    -- A producer that hands over a sentence (cliproxy's health message, a Lua
+    -- error) instead of a token: the words still come from the outcome, and the
+    -- sentence is the detail beside them. Red without the routing in
+    -- generation_runner.issue, which resolves `unkeyed` and prints it raw
+    -- (#261 M5 close: BR-81/BR-88).
+    it("keeps the outcome's words when a producer reports free text", function()
+        capture(function()
+            cursor("💬: first"); local session = assert(Respond.respond({ range = 0 }))
+            wait(function() return #calls == 1 end)
+            calls[1].running = false
+            calls[1].abort("cliproxy: proxy did not become healthy within 30s")
+            terminal(session)
+        end)
+        one("Response stopped: the model's request failed; submit again"
+            .. " — cliproxy: proxy did not become healthy within 30s")
+    end)
+
     it("says an overflow stopped the response, without its token", function()
         capture(function()
             cursor("💬: first"); local session = assert(Respond.respond({ range = 0 }))

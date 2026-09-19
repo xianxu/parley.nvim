@@ -158,7 +158,10 @@ describe("cliproxy on_abort teardown per caller", function()
         assert.is_true(settled, vim.inspect(Respond.response_snapshot(response)))
         local generation = Respond.response_snapshot(response).generation
         assert.equals("provider_failed", generation.outcome)
-        assert.equals("test abort", generation.failure)
+        -- A transport string the vocabulary cannot resolve is the diagnosis, not
+        -- the token the words are keyed by (#261 M5 close: BR-88).
+        assert.is_nil(generation.failure)
+        assert.equals("test abort", generation.diagnosis)
         assert.equals(0, generation.outstanding_operations)
         local Document = require("parley.document")
         assert.same({}, Document.snapshot(Document.get(buf)).grants)

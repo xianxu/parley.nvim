@@ -3528,3 +3528,22 @@ download.
   header while a response runs, so the check misfired on every reload. When you
   need "is this still the same thing", pick a property the product does not
   change on its own — here, that the buffer still holds a chat at all.
+- #261 close review (a phase that did not run is not a phase that passed): this
+  repo's `make test` runs unit then integration, and stops when the unit phase
+  fails. Twice I read "one flaky unit spec failed" as "the suite is green modulo
+  a flake", while the integration phase had never executed — and it held two
+  specs my own change had turned red. When a build has phases, confirm each one
+  produced a summary before claiming it passed; prefer running the phases
+  separately (`make test-unit`, `make test-integration`) when a change is broad.
+- #261 close review (a multi-return call is never another call's last argument):
+  `logger.warning(Refusal.describe(...))` sent describe's second return value
+  into the logger's `sensitive` parameter, which redacted the very message it was
+  meant to log. In Lua a call in the last argument position expands to all its
+  returns. Assign it first, or wrap it in parentheses — and if a guard blesses a
+  call form, bless the assigned form, never the bare call.
+- #261 close review (changing what a stored field may hold is a contract change):
+  routing free text out of `failure` was correct, but the sweep covered the
+  producers and not the readers, so two specs asserting the old contract went
+  red at HEAD. Enumerate the readers of a field as deliberately as its writers —
+  `grep` the field name across lua/ AND tests/ — and land the case that fails
+  when the new rule is removed, or a later round will call the fix unaddressed.

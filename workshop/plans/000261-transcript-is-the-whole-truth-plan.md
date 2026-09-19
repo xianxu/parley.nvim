@@ -2701,3 +2701,47 @@ Counterfactuals, each red:
 | a `logger.warning(<variable>)` in the submit path | "routes every user notice … through refuse" |
 | a `-- test seam` export with no test | "every '-- test seam' export has a reader" |
 
+### 2026-09-19 — close review round 1 (REWORK): the readers of a changed field, and a suite phase that never ran
+
+Four findings, all mine, all correct. The Critical is the one that matters most:
+**two specs were red at HEAD** — and I had reported the suite green.
+
+- **BR-88 (Critical, `seam-change-collateral`).** The M5 close changed what the
+  stored `failure` field may hold. The sweep covered production producers and
+  missed the *readers* in `tests/`:
+  `cliproxy_caller_teardown_spec` expected `'test abort'` and
+  `response_session_spec` expected `'forced preparation failure'`; both now read
+  the `diagnosis`.
+  - **Why I did not see it: `make test` stops after the unit phase fails.** Both
+    of the runs I called "green modulo #267" ended at a flaky unit spec, so the
+    integration phase never ran. From here the verification is `make test-unit`
+    and `make test-integration` separately, and a phase that did not run is not
+    a phase that passed.
+  - The rule the finding names: a change to what a stored field may hold
+    enumerates every reader, production and spec alike.
+- **BR-81 (Important, carried and now closed).** The routing had no test that
+  failed without it, which is why two rounds disposed it as unaddressed. There
+  is now a case that drives a producer's sentence (cliproxy's health message)
+  through a provider abort and asserts the outcome's words with the sentence as
+  the detail. Reverting the routing turns exactly that case red.
+- **BR-90 (Important, `seam-change-collateral`).** `logger.warning(Refusal.describe(...))`
+  passed `describe`'s SECOND return value into the logger's `sensitive`
+  parameter, so the attachment notice was written to the log as
+  "[SENSITIVE DATA] REDACTED" and kept out of the history. The call is assigned
+  first, and the channel guard now refuses the bare call — the same guard had
+  explicitly blessed that form one round earlier. The notice also claimed
+  "Response not started" for a response that does start, so its prefix is
+  `Images not sent`.
+- **BR-89 (Important).** My own mutation-ledger table tripped the repo's
+  Core-concepts symbol guard, leaving `single_source_sweeps_spec` red at HEAD:
+  the guard selected rows by shape, so any table in the plan counted. Rows now
+  count only inside a table whose header carries the Status column, which is the
+  property that defines the class; a plan naming a symbol that does not exist
+  still fails (verified by planting one).
+- **Minor.** A duplicated comment paragraph above `lifecycle_cause`, and the
+  issue Log's dispositions renumbered to the ledger's ids verbatim.
+
+Counterfactuals: reverting the routing reddens the new free-text case; the bare
+`describe(` call reddens the channel guard; a planted missing symbol reddens the
+narrowed Core-concepts guard.
+

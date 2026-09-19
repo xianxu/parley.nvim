@@ -269,8 +269,21 @@ describe("arch: single-source sweeps stay swept", function()
         for _, doc in ipairs(docs) do
             if doc ~= "" then
                 local body = read(doc)
-                -- table rows only: prose may legitimately discuss removed names
+                -- Core-concepts rows only, and the table's HEADER defines the
+                -- class: selecting by shape (`^| \``) claimed every other table
+                -- in the plan, including a mutation ledger whose cells name
+                -- specs (#261 M5 close: BR-89). Rows count while the table's
+                -- header carries the Status column the writing-plans skill
+                -- specifies; anything but a row or a separator ends the region.
+                local in_concepts = false
                 for line in body:gmatch("[^\n]+") do
+                    -- A separator row matches "^|" too, and carries no Status
+                    -- cell, so it simply leaves the region as it is.
+                    if line:match("^|") then
+                        if line:match("|%s*Status%s*|") then in_concepts = true end
+                    elseif vim.trim(line) ~= "" then
+                        in_concepts = false
+                    end
                     -- A `deleted` row names a symbol that by definition no
                     -- longer exists — that is the whole content of the row.
                     -- `deleted` is in the writing-plans status legend alongside
@@ -279,7 +292,7 @@ describe("arch: single-source sweeps stay swept", function()
                     -- outright would let a plan claim a deletion that never
                     -- happened (#225 review), so the row asserts the symbol is
                     -- GONE with the same matcher.
-                    local deleted_row = line:match("^| `") and line:match("|%s*deleted%s*|")
+                    local deleted_row = in_concepts and line:match("^| `") and line:match("|%s*deleted%s*|")
                     if deleted_row then
                         for name in line:gmatch("`([%w_]+)`") do
                             if #name > 3 and not name:match("^lua$") then
@@ -293,7 +306,7 @@ describe("arch: single-source sweeps stay swept", function()
                             end
                         end
                     end
-                    if line:match("^| `") and not deleted_row then
+                    if in_concepts and line:match("^| `") and not deleted_row then
                         -- A row names either a SYMBOL or a MODULE. A module is
                         -- checked as a file (its row carries the path in another
                         -- cell); a symbol must have a DEFINITION, not a mention.

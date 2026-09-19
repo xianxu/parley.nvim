@@ -911,10 +911,10 @@ threw where a `pcall` seam swallowed it.
 - **BR-66 (carried):** the census now keys on what `describe` resolves across
   the suite; the atlas and target sentences no longer over-credit the static
   spec.
-- **BR-73:** every refusal case compares the whole message.
-- **BR-74:** the machine declares its outcome set, and `refusal.lua` fails at
+- **BR-72:** every refusal case compares the whole message.
+- **BR-73:** the machine declares its outcome set, and `refusal.lua` fails at
   load if one has no words. `revoked` had none.
-- **BR-70/72 (carried):** the comment states only this module's guarantee, and
+- **BR-70/74 (carried):** the comment states only this module's guarantee, and
   the spec-level exemption is file-scoped with nothing to restore.
 
 On its first full run the watch caught a real one: the drill-in reported

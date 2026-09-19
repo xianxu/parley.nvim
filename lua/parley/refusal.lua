@@ -18,6 +18,7 @@ M.PREFIX = {
     batch_ended = "Batch stopped",
     ended = "Response stopped",
     paused = "Response paused",
+    attachments = "Images not sent",
     topic = "Topic not generated",
     drill = "Drill-in stopped",
 }
