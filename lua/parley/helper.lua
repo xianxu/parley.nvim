@@ -569,22 +569,21 @@ end
 
 ---@param tbl table # the table to be stored
 ---@param file_path string # the file path where the table will be stored as json
---- Returns true once the file is written; nil and the reason otherwise, so a
---- caller that tells the user something was saved can know whether it was
---- (#261 M1 review BR-14).
+--- Write `tbl` as JSON. There is one JSON writer: this delegates to
+--- table_to_file_atomic, whose result is derived from every fallible step —
+--- encode, open, write, close, rename — and which leaves the original file
+--- intact when any of them fails (#261 M1 review BR-19: a flush failure at close
+--- used to report success over a truncated file). Returns true once written;
+--- nil and the reason otherwise, having warned, so a caller that tells the user
+--- something was saved can know whether it was (BR-14).
 ---@return boolean|nil ok
 ---@return string|nil err
 _H.table_to_file = function(tbl, file_path)
-	local json = vim.json.encode(tbl)
-
-	local file, open_err = io.open(file_path, "w")
-	if not file then
-		logger.warning("Failed to open file for writing: " .. file_path)
-		return nil, tostring(open_err)
+	local ok, err = _H.table_to_file_atomic(tbl, file_path)
+	if not ok then
+		logger.warning("Failed to write " .. file_path .. ": " .. tostring(err))
+		return nil, err
 	end
-	local wrote, write_err = file:write(json)
-	file:close()
-	if not wrote then return nil, tostring(write_err) end
 	return true
 end
 
@@ -647,8 +646,6 @@ _H.table_to_file_atomic = function(tbl, file_path, adapter)
 	return true
 end
 
----@param file_path string # the file path from where to read the json into a table
----@return table | nil # the table read from the file, or nil if an error occurred
 --- A JSON sidecar as a table, or nil — never an error. `schema`, when given, is
 --- applied with `conform` (below), so a hand-edited or older-version file
 --- degrades field by field instead of failing downstream (#261: the sidecar is

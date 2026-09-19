@@ -602,6 +602,21 @@ edit. The gate said the review was not converging.
 - **Suite.** `make test JOBS=4` passes, with 373 files plus the table-row fix.
 - **Lessons.** Four rules added.
 
+### 2026-09-19 — M1 boundary review, round 3: FIX-THEN-SHIP (BR-19)
+
+- **BR-19.** `table_to_file` dropped `close()`'s result: the third finding in
+  the `returned-handle-has-no-consumer` family.
+  - Fix: it now delegates to `table_to_file_atomic`, which checks every step
+    and keeps the original file.
+  - Tests: F3e (a flush that fails at close) and R1 (the dispatcher aborts on
+    an unwritten body). Both go red when reverted.
+- **Minors fixed:**
+  - one shared bearer schema;
+  - the decode guard also covers `vim.fn.json_decode`;
+  - the declared exceptions are keyed by call.
+- The plan's Revisions record the one-writer rule, and `workshop/lessons.md`
+  has the rule.
+
 ## Revisions
 
 ### 2026-09-17 — scope and direction settled after the audit

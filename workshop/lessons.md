@@ -12,6 +12,14 @@
   family: `sidecar_authority_spec` fails a sidecar write called as a bare
   statement.
 
+- **Derive a success result from the last fallible step of the effect.** The
+  first "did it happen?" result checked `open` and `write` but not `close`,
+  where buffered writes actually fail, so a full disk reported success over a
+  truncated file. The repo already had a writer that checks every step
+  (`table_to_file_atomic`). Rule: before adding a success result, look for the
+  existing effect that already derives one, and delegate to it rather than
+  writing a second, weaker one.
+
 - **Bound diagnostics per user action, not per call site.** Fixing one warning
   per *field* (round 1) left one warning per *call*, and the picker called
   `load()` once per prompt. Rule: a file's diagnostics belong to its parse, and

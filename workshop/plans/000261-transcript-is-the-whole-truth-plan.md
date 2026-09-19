@@ -1747,3 +1747,25 @@ repeat families. The gate said "fix rules, not instances".
   - Chunk 1's steps are ticked.
 - **Counterfactuals.** Reverting each fix turns its guard red: decode (1),
   write result (1), warning bound (3), picker P1 and P3.
+
+### 2026-09-19 — M1 boundary review round 3 (FIX-THEN-SHIP) — one JSON writer
+
+**Reason.** BR-19 was the third finding in the `returned-handle-has-no-consumer`
+family. `table_to_file` dropped the result of `file:close()`, where buffered
+writes actually fail, so it reported success over a truncated file.
+
+**Delta.**
+- **Sidecar writes go through `table_to_file_atomic`.** Its result is derived
+  from encode, open, write, close and rename, and the original file survives a
+  failure. `table_to_file` now delegates to it and warns on failure, so there is
+  one JSON writer, not two with different failure reports.
+- **Tests.**
+  - F3e simulates a close that fails with "File too large": the result is a
+    failure, the original is intact, and no temporary file is left.
+  - R1 shows the dispatcher aborts, with its reason, before curl starts when the
+    body was not written.
+  - Reverting either fix turns its test red.
+- **Minors.**
+  - One `BEARER_SCHEMA` applies at both boundaries the copilot bearer crosses.
+  - `json_decode_spec` covers `vim.fn.json_decode` as well.
+  - `DROPPED` is keyed by the exact call, not the file.

@@ -276,6 +276,58 @@ rounds:
       boundary: M1
       recipe: milestone-review
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-19T00:50:01-07:00"
+      agent: claude
+      dispose:
+        - id: BR-14
+          disposition: addressed
+          note: picker.lua:109/173/210/254 consume set/remove/rename; P1 goes red when the fix is reverted in a scratch copy; bare-write guard present. The close-unchecked report gap is raised separately.
+          round: 4
+        - id: BR-15
+          disposition: addressed
+          note: _build_items reads once via source(...,loaded); generic per-action bound in sidecar_degrade_spec; revert turns P3 plus 3 degrade cases red.
+          round: 4
+        - id: BR-16
+          disposition: addressed
+          note: vault.lua:217 pcall plus type check; W6 names the non-decoding body path; json_decode_spec fails any unguarded vim.json.decode (33 found, all guarded).
+          round: 4
+        - id: BR-17
+          disposition: addressed
+          note: helper_io_spec F3b iterates an ordered list; lesson recorded in workshop/lessons.md; no other pairs-driven it( generation in the window's specs.
+          round: 4
+        - id: BR-18
+          disposition: addressed
+          note: Chunk 1 steps ticked in the durable plan; the issue's M1 row is ticked by sdlc milestone-close itself (its --help, step 1).
+          round: 4
+      findings:
+        - id: BR-19
+          severity: Important
+          title: table_to_file drops file:close()'s result, so it reports true for a write that failed at flush and left the file truncated
+          detail: '3rd in this family. Reproduced: under ulimit -f 1, table_to_file returned true and left 512 bytes of a 2.8 KB JSON file; table_to_file_atomic returned false with "close failed: File too large". The picker then says "System prompt saved" over a truncated custom_system_prompts.json, losing every authored prompt, and the dispatcher posts a truncated body. DROPPED''s "has already warned" holds only for a failed open. Rule: a success result is derived from the last fallible step of the effect and consumed up to the user-visible claim; no fallible result is dropped on a path that reports success. Class fix: one JSON writer. table_to_file_atomic (helper.lua:596) already checks encode, open, write, close and rename and preserves the original file on failure. Move its 4 production callers (custom_prompts.save, dispatcher.query, vault, chat_respond) to it, retire table_to_file or make it delegate, and extend sidecar_authority_spec to reject non-atomic sidecar writes. Prevalence: 18 write-mode io.open sites in lua/; only this one is in the state-directory family.'
+          family: returned-handle-has-no-consumer
+          round: 4
+        - id: BR-20
+          severity: Minor
+          title: The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
+          detail: '2nd in this family. vault.lua:218 stores the fetched table in V._state, so a non-numeric expires_at raises at :180 on the next request. Rule: one schema per external value, applied at every boundary it crosses. Hoist { token = "string", expires_at = "number" } and apply it to both the file read and the network response.'
+          family: untrusted-input-unparsed
+          round: 4
+        - id: BR-21
+          severity: Minor
+          title: The dispatcher's new abort for an unwritten request body has no behavioural test
+          detail: dispatcher.lua:676-680. Only the bare-write guard would notice a revert; nothing checks that the request stops and the user sees the reason.
+          family: behavior-change-without-regression-test
+          round: 4
+        - id: BR-22
+          severity: Minor
+          title: json_decode_spec matches only vim.json.decode, and the lesson says it fails any unguarded decode
+          detail: '2nd in this family. vim.fn.json_decode (file_tracker.lua:47, currently guarded) escapes the pattern. Rule: a guard''s pattern covers every API that does the job, not just the spelling the finding named.'
+          family: enumeration-claims-completeness
+          round: 4
+      boundary: M1
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -423,10 +475,30 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   `- [ ] M1` row. The durable plan is the record of what landed (AGENTS.md section 8); with no
   box ticked a reader cannot tell M1 from M2 by looking at it.
 
+## Round 4 — 2026-09-19T00:50:01-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-14 — addressed — picker.lua:109/173/210/254 consume set/remove/rename; P1 goes red when the fix is reverted in a scratch copy; bare-write guard present. The close-unchecked report gap is raised separately.
+- BR-15 — addressed — _build_items reads once via source(...,loaded); generic per-action bound in sidecar_degrade_spec; revert turns P3 plus 3 degrade cases red.
+- BR-16 — addressed — vault.lua:217 pcall plus type check; W6 names the non-decoding body path; json_decode_spec fails any unguarded vim.json.decode (33 found, all guarded).
+- BR-17 — addressed — helper_io_spec F3b iterates an ordered list; lesson recorded in workshop/lessons.md; no other pairs-driven it( generation in the window's specs.
+- BR-18 — addressed — Chunk 1 steps ticked in the durable plan; the issue's M1 row is ticked by sdlc milestone-close itself (its --help, step 1).
+
+### Raised
+
+- **BR-19** [Important] `returned-handle-has-no-consumer` table_to_file drops file:close()'s result, so it reports true for a write that failed at flush and left the file truncated
+  3rd in this family. Reproduced: under ulimit -f 1, table_to_file returned true and left 512 bytes of a 2.8 KB JSON file; table_to_file_atomic returned false with "close failed: File too large". The picker then says "System prompt saved" over a truncated custom_system_prompts.json, losing every authored prompt, and the dispatcher posts a truncated body. DROPPED's "has already warned" holds only for a failed open. Rule: a success result is derived from the last fallible step of the effect and consumed up to the user-visible claim; no fallible result is dropped on a path that reports success. Class fix: one JSON writer. table_to_file_atomic (helper.lua:596) already checks encode, open, write, close and rename and preserves the original file on failure. Move its 4 production callers (custom_prompts.save, dispatcher.query, vault, chat_respond) to it, retire table_to_file or make it delegate, and extend sidecar_authority_spec to reject non-atomic sidecar writes. Prevalence: 18 write-mode io.open sites in lua/; only this one is in the state-directory family.
+- **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
+  2nd in this family. vault.lua:218 stores the fetched table in V._state, so a non-numeric expires_at raises at :180 on the next request. Rule: one schema per external value, applied at every boundary it crosses. Hoist { token = "string", expires_at = "number" } and apply it to both the file read and the network response.
+- **BR-21** [Minor] `behavior-change-without-regression-test` The dispatcher's new abort for an unwritten request body has no behavioural test
+  dispatcher.lua:676-680. Only the bare-write guard would notice a revert; nothing checks that the request stops and the user sees the reason.
+- **BR-22** [Minor] `enumeration-claims-completeness` json_decode_spec matches only vim.json.decode, and the lesson says it fails any unguarded decode
+  2nd in this family. vim.fn.json_decode (file_tracker.lua:47, currently guarded) escapes the pattern. Rule: a guard's pattern covers every API that does the job, not just the spelling the finding named.
+
 ## Open findings
 
-- **BR-14** [Critical] `returned-handle-has-no-consumer` custom_prompts.set's new false return is dropped by the prompt editor, which clears `modified` and reports "System prompt saved"
-- **BR-15** [Important] `per-item-diagnostic-unbounded` custom_prompts.load re-reads and re-conforms the file on every call, and the picker calls it once per prompt
-- **BR-16** [Important] `untrusted-input-unparsed` vault.lua:215 decodes the copilot token endpoint's body without a pcall, in the function whose file read this diff just hardened
-- **BR-17** [Minor] `nondeterministic-test-generation` helper_io_spec.lua:228 generates its F3b cases by iterating a keyed table with pairs
-- **BR-18** [Minor] `plan-tracking-not-updated` Every M1 step in the durable plan is still unticked, as is the M1 row in the issue's Plan
+- **BR-19** [Important] `returned-handle-has-no-consumer` table_to_file drops file:close()'s result, so it reports true for a write that failed at flush and left the file truncated
+- **BR-20** [Minor] `untrusted-input-unparsed` The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
+- **BR-21** [Minor] `behavior-change-without-regression-test` The dispatcher's new abort for an unwritten request body has no behavioural test
+- **BR-22** [Minor] `enumeration-claims-completeness` json_decode_spec matches only vim.json.decode, and the lesson says it fails any unguarded decode

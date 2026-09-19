@@ -130,6 +130,23 @@ describe("dispatcher.query internals", function()
         return (prefix or "") .. sentinel .. status .. "\n"
     end
 
+    -- #261 M1 review: curl posts the request body from a file; a body that
+    -- was not written stops the request before anything is spawned, and the
+    -- caller hears why.
+    describe("request body", function()
+        it("R1: a body that was not written aborts before curl starts", function()
+            local original = helpers.table_to_file
+            helpers.table_to_file = function() return nil, "disk full" end
+            local aborted
+            local ok, err = pcall(dispatcher.query, nil, "openai", { model = "gpt-4", messages = {} },
+                make_handler(), nil, nil, nil, function(msg) aborted = msg end)
+            helpers.table_to_file = original
+            assert(ok, err)
+            assert.is_nil(captured_args, "curl was started with no body")
+            assert.truthy(tostring(aborted):find("request body not written: disk full", 1, true))
+        end)
+    end)
+
     describe("Group A: out_reader chunk reassembly", function()
         it("A1: single complete chunk emits content to handler", function()
             local handler = make_handler()

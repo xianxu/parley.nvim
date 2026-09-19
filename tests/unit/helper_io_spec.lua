@@ -293,6 +293,40 @@ describe("helper I/O functions", function()
             assert.is_string(err)
         end)
 
+        -- #261 M1 review BR-19: buffered writes fail at close (a full disk, a
+        -- file-size limit). The result must come from that step, and the
+        -- original file must survive it.
+        it("F3e: a write that fails at close reports failure and keeps the original", function()
+            local path = tmpdir .. "/kept.json"
+            helper.table_to_file({ original = true }, path)
+            local ok, err = helper.table_to_file_atomic({ replaced = true }, path, {
+                open = function(target, mode)
+                    local file = assert(io.open(target, mode))
+                    return {
+                        write = function(_, data) return file:write(data) end,
+                        close = function() file:close(); return nil, "File too large" end,
+                    }
+                end,
+            })
+            assert.is_false(ok)
+            assert.truthy(tostring(err):find("File too large", 1, true))
+            assert.same({ original = true }, helper.file_to_table(path))
+            assert.same({}, vim.fn.glob(path .. ".tmp-*", false, true))
+        end)
+
+        it("F3f: table_to_file is the atomic writer, not a second weaker one", function()
+            local atomic = helper.table_to_file_atomic
+            local called
+            helper.table_to_file_atomic = function(_, target)
+                called = target; return false, "close failed: File too large"
+            end
+            local ok, err = helper.table_to_file({ a = 1 }, tmpdir .. "/x.json")
+            helper.table_to_file_atomic = atomic
+            assert.equals(tmpdir .. "/x.json", called)
+            assert.is_nil(ok)
+            assert.truthy(err:find("File too large", 1, true))
+        end)
+
         it("F4: table_to_file with nested table serializes correctly", function()
             local path = tmpdir .. "/nested.json"
             local original = {

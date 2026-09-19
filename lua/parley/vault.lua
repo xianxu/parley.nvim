@@ -156,6 +156,12 @@ V.resolve_secret = function(name, secret, callback, on_error)
 	end
 end
 
+-- One schema for the copilot bearer at every boundary it crosses: the token
+-- endpoint's response and the cached copy in vault_state.json (#261 M1 review).
+-- A field of another type is dropped, so `expires_at` is never compared as
+-- anything but a number.
+local BEARER_SCHEMA = { token = "string", expires_at = "number" }
+
 V.refresh_copilot_bearer = function(callback)
 	local secret = secrets.copilot
 	if not secret or type(secret) == "table" then
@@ -171,8 +177,7 @@ V.refresh_copilot_bearer = function(callback)
 	if vim.fn.filereadable(state_file) ~= 0 then
 		-- #261: a malformed bearer is dropped here, not compared below. The file
 		-- is a token cache, so a pruned field is simply fetched again.
-		state = helpers.file_to_table(state_file,
-			{ copilot_bearer = { token = "string", expires_at = "number" } }) or {}
+		state = helpers.file_to_table(state_file, { copilot_bearer = BEARER_SCHEMA }) or {}
 	end
 
 	local bearer = V._state.copilot_bearer or state.copilot_bearer or {}
@@ -215,6 +220,9 @@ V.refresh_copilot_bearer = function(callback)
 		-- External output, parsed at the boundary (#261 M1 review BR-16): curl
 		-- exits 0 on an HTML proxy page or an empty body.
 		local decoded_ok, fetched = pcall(vim.json.decode, stdout)
+		if decoded_ok and type(fetched) == "table" then
+			helpers.conform(fetched, BEARER_SCHEMA, "the copilot token response")
+		end
 		if not decoded_ok or type(fetched) ~= "table" or type(fetched.token) ~= "string" then
 			logger.error("copilot bearer resolve failed: the token endpoint did not return a token")
 			return

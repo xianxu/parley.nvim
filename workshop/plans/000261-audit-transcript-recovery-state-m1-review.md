@@ -410,3 +410,142 @@ findings:
       `- [ ] M1` row. The durable plan is the record of what landed (AGENTS.md section 8); with no
       box ticked a reader cannot tell M1 from M2 by looking at it.
 ```
+
+---
+
+## Re-review — 2026-09-19T00:50:01-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 261 — Audit transcript as the complete recovery state |
+| repo | parley.nvim |
+| issue file | workshop/issues/000261-audit-transcript-recovery-state.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | ff5ed804a7d58499a2964235f9897db53f2c85d3..dd8122745bd377e74c07aeecdd0c2c91f18836c6 |
+| command | sdlc milestone-close --issue 261 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-19T00:50:01-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+**Verdict: fix one Important finding, then ship.** Round 2 fixed all five open findings, and I checked each one against the code, not the commit message. The picker now uses the result of every write and keeps the edit when a save is refused. The P1 test fails when that fix is reverted in a scratch copy. The picker reads the prompt file once per build, and reverting that fix turns P3 and three degrade cases red. Every `vim.json.decode` in `lua/` is under `pcall`, and W6 now names the decode path. What stops a clean SHIP is the result the new picker check relies on: `table_to_file` returns `true` when the write fails at `close`. I reproduced this with a file-size limit (`ulimit -f 1`). `table_to_file` returned `true` and left 512 bytes of a 2.8 KB JSON file. On the same input, `table_to_file_atomic` returned `false, "close failed: File too large"`. So when the disk is full or a quota is hit, the picker still says "System prompt saved" and truncates the user's whole prompt file. That is the case round 2 set out to close. The fix is cheap: `table_to_file_atomic` already exists at `helper.lua:596`.
+
+**1. Strengths**
+- **Picker (BR-14):** `system_prompt_picker.lua:109,173,210,254` each use the write result. A refused save leaves `modified` set, so `bufhidden=wipe` cannot throw the edit away. P1 fails without the fix (scratch revert run).
+- **One read per build (BR-15):** `source(name, builtins, loaded)` reads the file once. The warning bound sits in the generic `sidecar_degrade_spec` loop, so it covers every sidecar, not just this one.
+- **Decode guard (BR-16):** `json_decode_spec` finds all 33 decodes guarded, and it has a floor so a broken pattern cannot pass empty. The W6 row in the plan now names the non-decoding token body.
+- **Bare-write guard:** the guard against sidecar writes called as bare statements has the right shape: any unhandled write must be declared, with a reason.
+- **BR-17 / BR-18:** F3b now iterates an ordered list, and the lesson is recorded. Chunk 1's steps are ticked. The issue's `- [ ] M1` row is ticked by `sdlc milestone-close` itself (its `--help`, step 1), so leaving it unticked is correct.
+
+**2. Critical findings:** none.
+
+**3. Important findings**
+- **`helper.lua:577-589`** — `table_to_file` ignores the result of `file:close()`. With buffered output, a failed flush only shows up at close, so the function reports a write that did not land.
+  - The file is opened with `"w"`, which empties it before the write, so the user's file ends up truncated.
+  - Custom prompts: every authored prompt is lost, the user is told "saved", and every later `set` refuses because the file no longer parses.
+  - Dispatcher: `curl` posts a truncated request body, which is the unexplained transport error the new abort was meant to prevent.
+  - The `DROPPED` reasons in `sidecar_authority_spec.lua` say a failed write "has already warned". That is only true when `open` fails.
+  - This is the **3rd finding in family `returned-handle-has-no-consumer`**; the rule is stated in the findings block below.
+  - Fix: route sidecar writes through `table_to_file_atomic`, and retire or delegate `table_to_file`.
+
+**4. Minor findings**
+- **`vault.lua:218`** — the network response is checked only for `token`, while the file read at `:174` types both `token` and `expires_at`.
+  - A non-numeric `expires_at` makes the comparison at `:180` raise on the next request.
+  - Two schemas for one value; the fix is one shared schema (ARCH-DRY, ARCH-SECURE).
+- **`dispatcher.lua:676-680`** — the new abort for a request body that was not written has no behavioural test.
+- **`json_decode_spec.lua`** — the guard matches only `vim.json.decode`, not `vim.fn.json_decode` (`file_tracker.lua:47`).
+- **`sidecar_authority_spec.lua:60`** — `DROPPED` is keyed by file, so a future bare write in `vault.lua` or `chat_respond.lua` would pass the guard silently.
+
+**5. Test coverage notes.** Runs at HEAD in an isolated environment, all passing:
+
+| Spec | Result |
+|---|---|
+| `custom_prompts_spec` | 20/20 |
+| `helper_io_spec` | 40/40 |
+| `sidecar_authority_spec` | 5/5 |
+| `json_decode_spec` | 2/2 |
+| `sidecar_degrade_spec` | 14/14 |
+| `arch_helper_spec` | 9/9 |
+
+- **Reverts in a scratch copy:**
+  - Picker fix reverted: P1 fails.
+  - BR-15 fix reverted: P3 fails, plus three degrade cases.
+- **Gap:** F3d tests only a failed `open`. No test covers a failed flush at `close`, which is where buffered writes fail in practice.
+
+**6. Architectural notes for upcoming work**
+
+| Principle | Result |
+|---|---|
+| ARCH-DRY | **flag**: two JSON writers with different failure reports, and the user-authored file gets the weaker one; two bearer schemas |
+| ARCH-PURE | pass |
+| ARCH-PURPOSE | pass: the Done-when for deleting the store holds, and no references remain outside `workshop/` |
+| ARCH-MOCK | pass: the vault exercise runs on `FakeProcess` |
+| ARCH-CONSTRAINTS | pass: one read per user action |
+| ARCH-SECURE | minor flag: `expires_at` |
+| ARCH-ORDER | pass: a refused save leaves `modified` set, so `:q` refuses |
+| ARCH-FUNERAL | pass: the query directory prune bounds leftover bodies; the atomic writer also cleans up its temporary file on failure |
+
+- The other 17 places in `lua/` that open files for writing are outside the state-directory family; I recorded them rather than asking for a sweep in M1.
+
+**7. Plan revision recommendations**
+- Add a Revisions entry: "Sidecar writes go through `table_to_file_atomic`; its result is derived from encode, open, write, close and rename, and the original file survives a failed write. `table_to_file` is retired or delegates to it. The guard rejects non-atomic sidecar writes."
+
+```findings
+dispose:
+  - id: BR-14
+    disposition: addressed
+    note: |
+      picker.lua:109/173/210/254 consume set/remove/rename; P1 goes red when the fix is reverted in a scratch copy; bare-write guard present. The close-unchecked report gap is raised separately.
+  - id: BR-15
+    disposition: addressed
+    note: |
+      _build_items reads once via source(...,loaded); generic per-action bound in sidecar_degrade_spec; revert turns P3 plus 3 degrade cases red.
+  - id: BR-16
+    disposition: addressed
+    note: |
+      vault.lua:217 pcall plus type check; W6 names the non-decoding body path; json_decode_spec fails any unguarded vim.json.decode (33 found, all guarded).
+  - id: BR-17
+    disposition: addressed
+    note: |
+      helper_io_spec F3b iterates an ordered list; lesson recorded in workshop/lessons.md; no other pairs-driven it( generation in the window's specs.
+  - id: BR-18
+    disposition: addressed
+    note: |
+      Chunk 1 steps ticked in the durable plan; the issue's M1 row is ticked by sdlc milestone-close itself (its --help, step 1).
+findings:
+  - id: new
+    severity: Important
+    family: returned-handle-has-no-consumer
+    title: |
+      table_to_file drops file:close()'s result, so it reports true for a write that failed at flush and left the file truncated
+    detail: |
+      3rd in this family. Reproduced: under ulimit -f 1, table_to_file returned true and left 512 bytes of a 2.8 KB JSON file; table_to_file_atomic returned false with "close failed: File too large". The picker then says "System prompt saved" over a truncated custom_system_prompts.json, losing every authored prompt, and the dispatcher posts a truncated body. DROPPED's "has already warned" holds only for a failed open. Rule: a success result is derived from the last fallible step of the effect and consumed up to the user-visible claim; no fallible result is dropped on a path that reports success. Class fix: one JSON writer. table_to_file_atomic (helper.lua:596) already checks encode, open, write, close and rename and preserves the original file on failure. Move its 4 production callers (custom_prompts.save, dispatcher.query, vault, chat_respond) to it, retire table_to_file or make it delegate, and extend sidecar_authority_spec to reject non-atomic sidecar writes. Prevalence: 18 write-mode io.open sites in lua/; only this one is in the state-directory family.
+  - id: new
+    severity: Minor
+    family: untrusted-input-unparsed
+    title: |
+      The copilot token response is typed on token only, while the file read of the same bearer also types expires_at
+    detail: |
+      2nd in this family. vault.lua:218 stores the fetched table in V._state, so a non-numeric expires_at raises at :180 on the next request. Rule: one schema per external value, applied at every boundary it crosses. Hoist { token = "string", expires_at = "number" } and apply it to both the file read and the network response.
+  - id: new
+    severity: Minor
+    family: behavior-change-without-regression-test
+    title: |
+      The dispatcher's new abort for an unwritten request body has no behavioural test
+    detail: |
+      dispatcher.lua:676-680. Only the bare-write guard would notice a revert; nothing checks that the request stops and the user sees the reason.
+  - id: new
+    severity: Minor
+    family: enumeration-claims-completeness
+    title: |
+      json_decode_spec matches only vim.json.decode, and the lesson says it fails any unguarded decode
+    detail: |
+      2nd in this family. vim.fn.json_decode (file_tracker.lua:47, currently guarded) escapes the pattern. Rule: a guard's pattern covers every API that does the job, not just the spelling the finding named.
+```

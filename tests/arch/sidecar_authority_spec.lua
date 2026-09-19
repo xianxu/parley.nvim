@@ -57,9 +57,13 @@ describe("arch: every state-directory reader is exercised corrupt", function()
     -- statement drops that report; each such site is declared, with why losing
     -- the result is harmless.
     it("consumes the result of every sidecar write, or says why not", function()
+        -- Keyed by the exact call, so a new bare write in the same file is
+        -- still caught. table_to_file warns on every failure itself.
         local DROPPED = {
-            ["lua/parley/vault.lua"] = "the copilot bearer cache; a failed write re-fetches and has already warned",
-            ["lua/parley/chat_respond.lua"] = "the remote-reference cache; a failed write re-fetches and has already warned",
+            ["lua/parley/vault.lua"] = { ["helpers.table_to_file(V._state, state_file)"] =
+                "the copilot bearer cache; a failed write re-fetches, and table_to_file has warned" },
+            ["lua/parley/chat_respond.lua"] = { ["_parley.helpers.table_to_file(cache, M.remote_reference_cache_file())"] =
+                "the remote-reference cache; a failed write re-fetches, and table_to_file has warned" },
         }
         local offenders = {}
         for _, file in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
@@ -67,7 +71,10 @@ describe("arch: every state-directory reader is exercised corrupt", function()
                 local dropped = line:match("^%s*[%w_.]*table_to_file%(") or line:match("^%s*[%w_.]*table_to_file_atomic%(")
                     or line:match("^%s*[%w_.]*custom_prompts%.[%a_]+%(") and not line:match("custom_prompts%.load%(")
                         and not line:match("custom_prompts%.get%(") and not line:match("custom_prompts%.setup%(")
-                if dropped and not DROPPED[file] then offenders[#offenders + 1] = file .. ":" .. n end
+                local call = vim.trim(line)
+                if dropped and not (DROPPED[file] and DROPPED[file][call]) then
+                    offenders[#offenders + 1] = file .. ":" .. n
+                end
             end
         end
         assert.same({}, offenders, "consume the write's result, or declare the site in DROPPED with why")
