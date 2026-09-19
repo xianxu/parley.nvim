@@ -320,6 +320,35 @@ it offers the current chat's captured generations in a picker.
 `:ParleyStopDocument` cancels all generations in the current chat. Save a separate
 copy or use version control when you need durable recovery beyond editor history.
 
+### A stopped response always ends (#261)
+
+**The invariant:** every generation that enters `stopping` reaches `terminal`
+within the kill bound: 2 s, plus draining its effects. The one exception is a
+process the kernel holds. `generation_runner.stats().active` counts exactly the
+generations not yet terminal. So a stopped response never holds a slot, and
+the next submission is admitted, whether it comes in the same buffer, after
+`:e!`, or after `:bd` and reopening the file.
+
+A generation reaches `terminal` only when every operation it started
+confirms. What makes that certain:
+- **Its processes die.** The first time a generation stops or ends, the runner
+  kills its process scope once, through the session's `stopping` hook. That
+  reaches every process started for it: the provider stream, tools, and the
+  content fetches its preparation made. See
+  [Stopping a process](../providers/tool_execution.md#stopping-a-process).
+- **Nothing waits on a callback that cannot come.**
+  - An operation whose start threw is confirmed by the runner itself.
+  - A cancel with nothing left to wait for resolves at once: a readiness
+    picker left open, a request whose process never started.
+  - A step that throws settles its owner as failed.
+  - A step of the runner's own that throws ends the generation with outcome
+    `fault`.
+
+The proof is `tests/integration/generation_settles_spec.lua`. It holds one case
+per wait, plus the reported shape end to end: a provider stream that ignores
+SIGTERM, stopped 5 times in a buffer, 17 times across reloads, and after
+`:bd`. Each Stop is admitted.
+
 ## Implementation and checks
 
 `lua/parley/init.lua` owns creation, deletion, branch opening, and slug repair;

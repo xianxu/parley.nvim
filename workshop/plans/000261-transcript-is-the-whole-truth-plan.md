@@ -1403,7 +1403,7 @@ provider curl that ignores TERM:
 
 ### Task 4.6: Documentation, and M4's boundary
 
-- [ ] `atlas/chat/lifecycle.md` (Stop): the invariant above, pointing at
+- [x] `atlas/chat/lifecycle.md` (Stop): the invariant above, pointing at
   `generation_settles_spec.lua`. `ownership.md` links to it.
 - [ ] `make test`, `make lint`; `sdlc milestone-close --issue 261 --milestone M4`.
 

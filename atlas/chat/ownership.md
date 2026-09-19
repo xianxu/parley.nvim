@@ -66,6 +66,8 @@ text. Undo and redo remain native edits observed by the same coordinator.
 Cancellation revokes write authority immediately — except a Stop that lands during
 a tool round, which first writes the round out and only then stops
 ([what it writes, and what ends it early](../providers/tool_use.md#stop-during-a-tool-round)).
+A stopped generation always reaches terminal and frees its slot
+([A stopped response always ends](lifecycle.md#a-stopped-response-always-ends-261)).
 Provider and tool cleanup
 remain tracked until positive completion evidence arrives; a cancellation request
 alone does not prove an effect stopped. Stop selects one generation, while

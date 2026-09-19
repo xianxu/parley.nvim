@@ -793,6 +793,17 @@ are fixed in the close commit (FIX-THEN-SHIP, no re-run):
   (plan Revisions).
 
 Every fix has a test that turns red on revert.
+- **4.5–4.6.** The reported shape end to end: a SIGTERM-ignoring stream stopped
+  5 times, 17 times across `:e!`, and after `:bd`, is admitted every time
+  (red with escalation disabled). The invariant is stated in
+  `atlas/chat/lifecycle.md`.
+- **Flakes of the #267 family in the final run, all passing alone:**
+  `document_append_extent_spec`, `highlighting_spec`, and
+  `skill_invoke_spec`'s weak-table GC check ("physical cleanup must not retain
+  UI callback captures").
+  - The last one also failed once in four runs alone. A/B over ten runs on
+    each side: 0/10 before W17, 0/10 after. It also failed under load in M3
+    round 1, before W17 existed.
 
 ## Revisions
 
