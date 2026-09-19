@@ -361,6 +361,10 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
     sequence = sequence + 1
     local id = opts.attempt_id or ("attempt:" .. sequence)
     local key = opts.admission_key or (buf and ("legacy:" .. buf) or id)
+    -- A generation's process leads its own group (#261 M3), so a stop reaches
+    -- every process it started. Anything else stays in Neovim's session, where
+    -- a secret command can still prompt on the terminal.
+    local group = (opts.logical_generation or opts.generation_id) ~= nil
     local record = {
         runtime = run_uv,
         retained=0,on_unresolved=opts.on_unresolved,
@@ -374,6 +378,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
             admission_key = key,
             buf = buf,
             order = sequence,
+            group = group,
         }),
     }
     local function reject(message)
@@ -472,7 +477,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
         cwd = opts.cwd,
         stdio = { nil, stdout, stderr },
         hide = true,
-        detach = true,
+        detached = group or nil,
     }, on_exit)
     if not spawn_ok or not handle then
         spawn_error = spawn_ok and pid or handle

@@ -12,6 +12,16 @@ describe('bounded process supervision',function()
         vim.wait(100,function()return #T._handles==0 end,1)
         T._reset();T._uv=nil;T._clock=nil
     end)
+    -- #261 M3: a generation's processes lead their own group, so a stop can kill
+    -- the whole group; a run with no generation stays in Neovim's session, where
+    -- a terminal prompt still works.
+    it('spawns a scoped run as its own group leader and an unscoped one attached',function()
+        T.run(1,'fixture',{},nil,nil,nil,nil,{attempt_id='s',generation_id='g',logical_generation='e:1'})
+        T.run(nil,'fixture',{},nil,nil,nil,nil,{attempt_id='u',deadline_ms=60000})
+        assert.is_true(processes.spawn_options[1].detached)
+        assert.is_nil(processes.spawn_options[2].detached)
+        assert.is_nil(processes.spawn_options[1].detach, 'luv ignores the misspelled key')
+    end)
     it('passes captured cwd and cancels an attempt without its sibling',function()
         local a=T.run(1,'fixture',{},nil,nil,nil,nil,{cwd='/captured',attempt_id='a',generation_id='g',admission_key='a'})
         T.run(1,'fixture',{},nil,nil,nil,nil,{attempt_id='b',generation_id='g',admission_key='b'})

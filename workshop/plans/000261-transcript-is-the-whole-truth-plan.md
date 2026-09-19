@@ -68,7 +68,7 @@ must *not* be. So:
 | `traversal_policy` — private-path exclusion for tool commands | `lua/parley/tools/traversal_policy.lua` | deleted |
 | `state` — `holds`: does a generation still hold a live grant on an entity | `lua/parley/document/state.lua` | modified |
 | `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
-| M3 · `attempt` — the `escalate` effect and the `deadline` event | `lua/parley/attempt.lua` | modified |
+| `attempt` — the `escalate` effect and the `deadline` event | `lua/parley/attempt.lua` | modified |
 | M5 · `refusal` — `describe`, `TOKENS`, `INTERNAL`, `PREFIX` | `lua/parley/refusal.lua` | new |
 
 - **`State.holds(handle, generation, entity)`** (M2) is true when the
@@ -110,7 +110,7 @@ must *not* be. So:
 | `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view; `source` accepts a preloaded view so a loop reads once; writes report whether they happened | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
 | `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
 | `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any; `buffer_for`: the buffer named exactly `name` | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
-| M3 · `tasker` — `scope_key`, `stop_scope`, `held`, `leave` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
+| `tasker` — `scope_key`, `stop_scope`, `held`, `leave` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
 | M4 · `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
 | M4 · `deferred_work` — `new(step, on_error)` | `lua/parley/deferred_work.lua` | modified | timer turns |
 
@@ -1090,7 +1090,7 @@ exist for it, and Task 3.2 tests it.
 **Files:** `tests/helpers/fake_process.lua`; `lua/parley/tasker.lua:470-476`;
 test `tests/unit/tasker_unit_spec.lua`.
 
-- [ ] **Step 1: Extend the fake.** Keep every existing option and behaviour,
+- [x] **Step 1: Extend the fake.** Keep every existing option and behaviour,
   and add:
   - **Groups.** `spawn_opts.detached == true` sets `pgid = pid`; otherwise
     `pgid = 0`, standing for Neovim's group.
@@ -1105,11 +1105,11 @@ test `tests/unit/tasker_unit_spec.lua`.
     EOF is delivered only once every holder has exited. It defaults to off,
     because today `exit()` does not EOF (`fake_process.lua:36-45`).
   - **Spawn options.** `state.spawn_options` records each spawn's options.
-- [ ] **Step 2: Failing tests:** a scoped `tasker.run` spawns with
+- [x] **Step 2: Failing tests:** a scoped `tasker.run` spawns with
   `detached=true`; an unscoped one spawns without it.
-- [ ] **Step 3: Implement:** set `detached = opts.logical_generation ~= nil` in
+- [x] **Step 3: Implement:** set `detached = opts.logical_generation ~= nil` in
   the spawn options, and store `state.group = detached`. PASS.
-- [ ] **Step 4:** Commit (`#261 M3: a generation's processes lead their own group`).
+- [x] **Step 4:** Commit (`#261 M3: a generation's processes lead their own group`).
 
 ### Task 3.2: Escalation in the pure lifecycle
 
