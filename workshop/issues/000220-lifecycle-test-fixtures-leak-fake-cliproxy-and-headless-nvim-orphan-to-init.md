@@ -454,3 +454,38 @@ Verified: 17 specs (derived by grep over the changed fixtures, not typed) all
 pass; `make lint` 0 warnings. The only red is
 `fixture_reaping_spec`'s live-`ps` conformance case, whose script is M1's last
 item.
+
+### 2026-09-19 — RESUME HERE (session paused on token budget)
+
+State: branch `000220-…`, working tree clean, nothing pushed. M1 is 3/4 done.
+Plan: `workshop/plans/000220-reap-test-fixture-processes-plan.md`.
+
+Commits on the branch: `e130ed9d` (orphan rule, both watchdogs), `32da1528`
+(LoopbackHTTPServer chokepoint), `4c7e68c7` (the registry + eight-spec sweep).
+
+**The one red, and it is expected:** `tests/integration/fixture_reaping_spec.lua`
+→ "census conformance, against the real ps". Its script does not exist yet. Every
+other spec touched is green and `make lint` is clean.
+
+**Next, in order:**
+
+1. **Write `scripts/reap-test-orphans.py`** — M1's last item, fully specified in
+   the plan's Task 4 (the whole script is in the plan verbatim, along with
+   `tests/fixtures/ps_test_orphans.txt`'s six rows and the eight-case unit spec).
+   Do not re-derive it; three plan-review rounds and three plan-gate rounds went
+   into that text. Watch the two non-obvious parts: `after` re-samples for
+   `--grace` seconds before accusing anything (a fake under
+   `PARLEY_FAKE_EXIT_DELAY_MS=4000` is alive on purpose), and a `ps` that RAN but
+   cannot be parsed must fail loudly rather than report zero leaks.
+2. Route it in `atlas/traceability.yaml` under `infra/test_harness`, then
+   `sdlc milestone-close --issue 220 --milestone M1`.
+3. M2 is Tasks 5–7: the Makefile gate, the docs, the four-invariant arch guard.
+
+**Do not forget at close:** flip this issue's ledger row to `window_trusted=no`
+(the `AT CLOSE` item in `## Plan`), and remember three of the four Done-when
+proofs need a machine where `ps` is permitted — an agent sandbox refuses it.
+
+**Still outstanding on the operator's machine:** ~25 orphans from before this work
+(12 `fake_cliproxy`, 13 `nvim --headless`, oldest two days). Deliberately left in
+place — they are a live target for the census once it exists. Sweep with
+`ps -Ao pid=,ppid=,args= | grep "$(pwd -P)/tests/" | grep -v grep`.
