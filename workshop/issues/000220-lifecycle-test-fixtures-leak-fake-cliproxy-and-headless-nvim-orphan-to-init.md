@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-06
 updated: 2026-09-19
-estimate_hours: 7.79
+estimate_hours: 8.71
 started: 2026-09-19T17:59:42-07:00
 flow: {kind: full, provenance: inferred}
 ---
@@ -129,24 +129,27 @@ rows carry only the decisions their own step still holds.
 
 **Multiplicity is declared** (`×n`), because most rows aggregate more than one
 instance of their primitive and an undeclared aggregate cannot be audited
-against the v2 table's per-primitive ceiling. Each `×n` equals the number of
-instances the row's own coverage names.
+against the v2 table's per-primitive ceiling. `×n` counts instances **of the
+primitive** — a unit of the size the v2 table describes, not the smallest thing
+the coverage sentence names — and any wall-clock gross-up is stated separately in
+the row. (r2 said "the number of instances the row's own coverage names", which
+read literally makes the eight-spec sweep eight *multi-file renames*; it is not.)
 
 | primitive | what it covers | design | v2 impl | ×n | v2 impl total | impl ×0.4 |
 |---|---|---|---|---|---|---|
 | `issue-spec` | root-cause (two causes, chained) + the durable plan + its review rounds | 1.0 | 0.3 | ×1 | 0.3 | 0.12 |
-| `typed-data-prototype` | the two live prototypes — the `orphan.sh` fixture repro and its nvim twin — that found the load-bearing `ppid == 1` defect | 0.6 | 0.3 | ×1 | 0.3 | 0.12 |
+| `typed-data-prototype` | two genuinely separate prototypes — the `orphan.sh` fixture repro and its nvim twin — that found the load-bearing `ppid == 1` defect | 0.6 | 0.3 | ×2 | 0.6 | 0.24 |
 | `lua-neovim` | three artifacts: `exit_with_parent.lua`, the `fixture_process` registry, the 4-invariant arch guard with its counterfactuals | 0.4 | 1.5 | ×3 | 4.5 | 1.80 |
 | `greenfield-go-module` | `reap-test-orphans.py` — greenfield, single concern, pure core + injected `ps` seam (shape, not language) | 0.2 | 0.6 | ×1 | 0.6 | 0.24 |
 | `smaller-go-module` | three instances (five fixture edits, the Makefile gate, the traceability routing) **plus the real-machine verification loops grossed up ×2** — see the unit note below | 0.0 | 0.5 | ×5 | 2.5 | 1.00 |
-| `cross-cutting-refactor` | the eight-spec sweep onto the seam (#237 BR-5), one edit→run→commit cycle each | 0.2 | 0.5 | ×2 | 1.0 | 0.40 |
+| `cross-cutting-refactor` | the eight-spec sweep onto the seam (#237 BR-5) — ~2 specs per multi-file-rename instance, plus the eight edit→run→commit cycles grossed up inside it | 0.2 | 0.5 | ×4 | 2.0 | 0.80 |
 | `atlas-docs` | four documents: TOOLING.md, `atlas/infra/test_harness.md`, `lessons.md`, `traceability.yaml` | 0.2 | 0.2 | ×4 | 0.8 | 0.32 |
-| `milestone-review` | two boundaries (M1, M2) and, counted separately, the fix round each generates | 0.0 | 0.5 | ×4 | 2.0 | 0.80 |
+| `milestone-review` | two boundaries (M1, M2) and the fix round each generates, grossed up ×1.5 — a fresh-context review is measured wall-clock too (see the unit note) | 0.0 | 0.5 | ×6 | 3.0 | 1.20 |
 
 `design-buffer: 0.15` — the issue has a thorough plan doc (v3.1 step 4).
 `familiarity: 1.0` — this repo's harness, and #237 built the pieces being reused.
 
-Σdesign 2.60 × 1.15 = 2.99; Σimpl 4.80 × 1.0 = 4.80; total 7.79.
+Σdesign 2.60 × 1.15 = 2.99; Σimpl 5.72 × 1.0 = 5.72; total 8.71.
 
 **Unit note on the verification rows.** v3.1's ×0.40 is calibrated on
 AI-autonomous implementation, which compresses. Three items here do not: a full
@@ -161,7 +164,7 @@ harness, thorough plan, and the issue that *built* `fixture_watchdog.py` —
 estimated 5.76 and **actualized 7.20 h** (ratio 0.80). This work is comparable or
 larger (7 tasks, ~50 steps, 8 spec migrations, a new Python module, Makefile
 wiring, an arch guard, four docs), so #237's 7.20 is the floor rather than the
-ceiling. 7.79 sits just above it. The first two derivations compared against
+ceiling. 8.71 sits above it, which is where a larger scope should sit. The first two derivations compared against
 #237's *estimate*, which is the wrong side of that row.
 
 **What this estimate deliberately does NOT do.** Recent v3.1 rows in this repo
@@ -184,14 +187,14 @@ model: estimate-logic-v3.1
 familiarity: 1.0
 design-buffer: 0.15
 item: issue-spec             design=1.0  impl=0.12
-item: typed-data-prototype   design=0.6  impl=0.12
+item: typed-data-prototype   design=0.6  impl=0.24
 item: lua-neovim             design=0.4  impl=1.80
 item: greenfield-go-module   design=0.2  impl=0.24
 item: smaller-go-module      design=0.0  impl=1.00
-item: cross-cutting-refactor design=0.2  impl=0.40
+item: cross-cutting-refactor design=0.2  impl=0.80
 item: atlas-docs             design=0.2  impl=0.32
-item: milestone-review       design=0.0  impl=0.80
-total: 7.79
+item: milestone-review       design=0.0  impl=1.20
+total: 8.71
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
@@ -210,6 +213,13 @@ being scaled by 0.4 though they are wall-clock-bound and do not compress
 (→ grossed up); and the #237 sanity check compared estimate-to-estimate rather
 than to #237's 7.20 h actual. Not applied: the repo-wide 0.5–0.7 ratio drift,
 which is the model's to fix, not an individual estimate's.
+
+**2026-09-19 (r3)** — 7.79 → 8.71. Third judge pass found the r2 rules applied
+unevenly to two more rows: `typed-data-prototype` named two prototypes at ×1 and
+`cross-cutting-refactor` named eight spec cycles at ×2, and the wall-clock
+gross-up was given to `make test` but withheld from the boundary reviews, which
+post-#118 `sdlc actual` measures the same way. Also tightened what `×n` means, so
+"instances the coverage names" can no longer be read as eight multi-file renames.
 
 ## Log
 
