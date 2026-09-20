@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-06
 updated: 2026-09-19
-estimate_hours:
+estimate_hours: 4.9
 started: 2026-09-19T17:59:42-07:00
 ---
 
@@ -114,6 +114,51 @@ through, plus one `ps`-based census that fails the suite).
 **Closing needs a machine where `ps` is permitted** — an agent sandbox refuses
 it with EPERM, and three of the four Done-when proofs need a real process table.
 Every spec runs sandboxed (liveness is probed with `uv.kill(pid, 0)`).
+
+## Estimate
+
+Derived Method A (primitive decomposition) against
+`estimate-logic-v3.1.md` / `baseline-v3.1.md`: v2.1 design hours kept as-is,
+`impl=` written at **40%** of the v2 primitive-table implementation hours.
+
+Per v2's own rule — "a primitive with a thorough plan doc has ~0 design cost,
+decisions pre-resolved" — the design column is concentrated in `issue-spec`,
+which is where the decisions were actually resolved this window: the root-cause
+investigation (two causes, chained), the two live prototypes that found the
+`ppid == 1` defect, the 1775-line durable plan, and three fresh-eyes review
+rounds. The remaining primitives carry only the decisions their own step still
+holds, which is why most read 0.0–0.2.
+
+| primitive | what it covers | design | v2 impl | impl ×0.4 |
+|---|---|---|---|---|
+| `issue-spec` | root-cause + prototypes + durable plan + 3 review rounds | 1.5 | 0.3 | 0.12 |
+| `lua-neovim` | `exit_with_parent.lua`, the `fixture_process` registry, and the 4-invariant arch guard | 0.4 | 2.2 | 0.88 |
+| `greenfield-go-module` | `reap-test-orphans.py` — greenfield, single concern, pure core + injected `ps` seam | 0.2 | 0.6 | 0.24 |
+| `smaller-go-module` | the five fixture edits (well-specced, extend) + the Makefile gate wiring | 0.0 | 0.7 | 0.28 |
+| `cross-cutting-refactor` | converting eight specs onto the seam (#237 BR-5) | 0.2 | 0.5 | 0.20 |
+| `atlas-docs` | TOOLING.md, `atlas/infra/test_harness.md`, `lessons.md`, `traceability.yaml` | 0.05 | 0.2 | 0.08 |
+| `milestone-review` | two boundaries (M1, M2), 0.5 v2-impl each | 0.0 | 1.0 | 0.40 |
+
+`design-buffer: 0.15` — the issue has a thorough plan doc (v3.1 step 4).
+`familiarity: 1.0` — this repo's harness, and #237 built the pieces being reused.
+
+Σdesign 2.35 × 1.15 = 2.7025; Σimpl 2.20 × 1.0 = 2.20; total 4.90.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+design-buffer: 0.15
+item: issue-spec             design=1.5  impl=0.12
+item: lua-neovim             design=0.4  impl=0.88
+item: greenfield-go-module   design=0.2  impl=0.24
+item: smaller-go-module      design=0.0  impl=0.28
+item: cross-cutting-refactor design=0.2  impl=0.20
+item: atlas-docs             design=0.05 impl=0.08
+item: milestone-review       design=0.0  impl=0.40
+total: 4.90
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
 
 ## Log
 
