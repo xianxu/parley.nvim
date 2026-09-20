@@ -144,9 +144,12 @@ An `nvim` prototype behaved identically. Both watchdogs carry the corrected rule
   every fixture **server**.
   - **Injected into:** `fake_cliproxy`, `fake_github_releases`, `fake_sse_server`.
   - **It is not the only blocking shape.** Two fixtures block without ever binding:
-    `fake_cliproxy`'s `run_login` (`PARLEY_FAKE_LOGIN_MODE=hangs` sleeps 300 s, and
-    `cliproxy_auth_login_spec:61` drives exactly that) and `fake_sips` (`slow` mode
-    sleeps 30 s). Each calls `exit_with_parent()` directly. The invariant is
+    `fake_cliproxy`'s `run_login` (`PARLEY_FAKE_LOGIN_MODE=hangs` sleeps 300 s,
+    driven by `tests/integration/cliproxy_login_spec.lua:58` and `:183` — through
+    *production* `cliproxy.run_login`, not a direct spawn, which is why that spec is
+    absent from Task 3's conversion set but must be in Task 2's verification list)
+    and `fake_sips` (`slow` mode, `:16`, sleeps 30 s). Each calls
+    `exit_with_parent()` directly. The invariant is
     therefore "every executable fixture reaches `exit_with_parent`, or is declared
     as one that cannot block" — Task 7 invariant 2 — and the constructor is how
     most of them get there, not the whole rule.
@@ -176,7 +179,7 @@ An `nvim` prototype behaved identically. Both watchdogs carry the corrected rule
     `cliproxy_download_spec.lua:11` each do `local server = fake_releases.start()`
     and point every case at `server.url`. A blanket `reap()` in `after_each` would
     kill it and break every case after the first — which is exactly why
-    `cliproxy_update_spec`'s private `reap()` (`:41-52`) deliberately spares it and
+    `cliproxy_update_spec`'s private `reap()` (`:41-53`) deliberately spares it and
     reaps only its per-case `spawned` and `servers` lists. So the registry carries a
     monotonic sequence number per entry; a spec takes `mark()` in `before_each` and
     calls `reap({ since = mark })` in `after_each`. Sequence numbers rather than
@@ -195,6 +198,24 @@ An `nvim` prototype behaved identically. Both watchdogs carry the corrected rule
   earlier run left and exits 0; `after` reports and reaps and exits 1. Both print
   every row they act on — it sends SIGKILL, so what it killed is never a number
   alone.
+  - **`after` re-polls before it accuses (ARCH-ORDER).** Liveness at one instant is
+    not proof of a leak: a fixture reaped at `VimLeavePre` takes a moment to die,
+    and `cliproxy_update_spec:486` sets `PARLEY_FAKE_EXIT_DELAY_MS = "4000"`, so
+    that fake deliberately keeps serving for 4 s after its SIGTERM. If that spec
+    finishes last under `-P 8`, a zero-grace census fails a run that leaked nothing.
+    So `after` takes the candidate set, re-samples once a second for `--grace`
+    seconds (default 8, above that 4 s delay plus the ~2 s two-layer watchdog
+    latency), and reports only the pids present in every sample. A clean run finds
+    no candidates and pays nothing.
+  - **A `ps` it cannot parse is a failure, not a pass (ARCH-MOCK).** `ps` succeeding
+    with columns this script does not understand would parse to zero rows and exit
+    0 — the same "remedy that no-ops and reads as success" this issue exists to
+    kill, and the failure mode that let `pgrep` hide 89 orphans. So a *successful*
+    `ps` must parse at least one row and must contain the census's own pid;
+    otherwise it says the census is broken and fails (in `after`). A live
+    conformance case runs the real `ps` and asserts exactly that, in the house form
+    of `tests/integration/process_group_conformance_spec.lua` — `pending()` where
+    `ps` is refused, never a silent skip.
   - **Injected into:** `Makefile.parley`, through one `ORPHANS` variable.
   - **Concurrency:** it cannot distinguish this run's live processes from a second
     concurrent run's in the same checkout. TOOLING.md already requires one `make
@@ -279,9 +300,13 @@ local uv = vim.uv or vim.loop
 local ROOT = vim.fn.getcwd()
 local ORPHAN = ROOT .. "/tests/fixtures/orphan_me.sh"
 
---- True once `pid` no longer exists. Signal 0 checks for existence only.
+--- True once `pid` no longer exists. Signal 0 checks for existence only, and
+--- ESRCH is the answer that means "no such process" — EPERM would mean it lives
+--- and is merely unsignallable. Same form as
+--- tests/integration/process_group_conformance_spec.lua:9.
 local function gone(pid)
-    return not pcall(function() assert(uv.kill(pid, 0)) end)
+    local _, _, name = uv.kill(pid, 0)
+    return name == "ESRCH"
 end
 
 --- Start `argv` orphaned; return its pid.
@@ -362,13 +387,21 @@ end
 --- depend on a main loop that may be wedged. That skips VimLeavePre, so this
 --- does NOT reap child fixtures — they carry the same watchdog and reap
 --- themselves within one poll of being reparented.
-function M.install(poll_ms)
+---
+--- Skipping VimLeavePre also skips whatever cleanup lives there, so a caller with
+--- durable state passes it as `before_exit`: it runs (pcall'd) on this path too.
+--- tests/minimal_init.vim uses it for the per-process $PARLEY_QUERY_DIR, which
+--- #261 M5 found would otherwise accumulate one directory per spec process.
+---@param poll_ms integer|nil
+---@param before_exit fun()|nil
+function M.install(poll_ms, before_exit)
     poll_ms = poll_ms or 1000
     local parent = uv.os_getppid()
     local timer = uv.new_timer()
     timer:unref() -- never keeps the loop alive, never delays a normal exit
     timer:start(poll_ms, poll_ms, function()
         if M.orphaned(parent) then
+            if before_exit then pcall(before_exit) end
             os.exit(1)
         end
     end)
@@ -388,6 +421,20 @@ harness-only guards:
 -- this file, so one call here covers both (#220).
 require("tests.helpers.exit_with_parent").install()
 ```
+
+The query-dir cleanup two blocks below (`:53-55`) must also run on the watchdog's
+path, which bypasses `VimLeavePre`. Hoist it to a local and give it to both
+triggers, so it stays one definition:
+
+```lua
+local function drop_query_dir()
+    pcall(vim.fn.delete, vim.env.PARLEY_QUERY_DIR, "rf")
+end
+vim.api.nvim_create_autocmd("VimLeavePre", { callback = drop_query_dir })
+require("tests.helpers.exit_with_parent").install(nil, drop_query_dir)
+```
+
+Order matters: `PARLEY_QUERY_DIR` is set just above, so `install` comes after it.
 
 - [ ] **Step 6: Run the test again**
 
@@ -478,10 +525,16 @@ long-lived, and all three do that through `LoopbackHTTPServer` — so that
 constructor is the chokepoint for the server shape (ARCH-DRY).
 
 Two fixtures block **without** binding, and the constructor cannot reach them:
-`fake_cliproxy`'s `run_login` (`:184-208`; `PARLEY_FAKE_LOGIN_MODE=hangs` sleeps
-300 s, driven by `cliproxy_auth_login_spec:61`) and `fake_sips` (`slow` mode,
-`:16`, sleeps 30 s). Each gets a direct call, so the rule the guard enforces is
-"reaches `exit_with_parent`", not "constructs `LoopbackHTTPServer`".
+`fake_cliproxy`'s `run_login` (`:184`; `PARLEY_FAKE_LOGIN_MODE=hangs` sleeps 300 s)
+and `fake_sips` (`slow` mode, `:16`, sleeps 30 s). Each gets a direct call, so the
+rule the guard enforces is "reaches `exit_with_parent`", not "constructs
+`LoopbackHTTPServer`".
+
+The hangs login is driven by `tests/integration/cliproxy_login_spec.lua:58` and
+`:183`, which call **production** `cliproxy.run_login` — not a direct spawn. So that
+spec is correctly outside Task 3's conversion set, and correspondingly easy to leave
+out of the verification list, which is the only list that would catch a regression
+from `run_login`'s new call. It is in Step 6's list below.
 
 **Files:**
 - Modify: `tests/fixtures/loopback_http.py`
@@ -677,6 +730,9 @@ or `atlas/`.
 for s in tests/integration/fixture_reaping_spec.lua \
          tests/integration/cliproxy_update_spec.lua \
          tests/integration/cliproxy_catalog_spec.lua \
+         tests/integration/cliproxy_login_spec.lua \
+         tests/integration/cliproxy_auth_login_spec.lua \
+         tests/integration/image_shrink_live_spec.lua \
          tests/integration/query_cache_spec.lua \
          tests/integration/fixture_ready_publish_spec.lua \
          tests/integration/fixture_loopback_dns_spec.lua; do
@@ -685,7 +741,10 @@ for s in tests/integration/fixture_reaping_spec.lua \
 done
 ```
 
-Expected: PASS for all six.
+Expected: PASS for all nine. `cliproxy_login_spec` and `image_shrink_live_spec` are
+in the list because they drive the two fixtures whose watchdog call is NEW (the
+hangs login and `fake_sips` slow mode) — a fixture that now exits on its own could
+break a spec that relied on it hanging, and only its own driver would show that.
 
 - [ ] **Step 7: Commit**
 
@@ -715,24 +774,25 @@ directly rather than through `tests.helpers.fixture_process`, so none gets the
 merged environment or the `PYTHONDONTWRITEBYTECODE` guard the seam provides. `#237`'s
 review deferred this consolidation (BR-5) to this issue.
 
-The verified set, with the `uv.spawn(` line numbers at the time of writing:
+Enumerate the set at the moment you start, rather than reading a list that drifted
+while Tasks 1 and 2 landed:
 
-| Spec | `uv.spawn(` at |
-|---|---|
-| `tests/integration/cliproxy_lifecycle_spec.lua` | 21, 612, 707, 817 |
-| `tests/integration/cliproxy_catalog_spec.lua` | 19, 143, 160, 222, 360, 441 |
-| `tests/integration/cliproxy_dispatch_spec.lua` | 27 |
-| `tests/integration/cliproxy_caller_teardown_spec.lua` | 43 |
-| `tests/integration/cliproxy_recovery_e2e_spec.lua` | 38 |
-| `tests/integration/cliproxy_auth_login_spec.lua` | 61 |
-| `tests/integration/openai_tool_loop_spec.lua` | 33 |
-| `tests/integration/cliproxy_conformance_spec.lua` | 117 |
+```sh
+grep -rln 'uv\.spawn(' tests/ | grep -v tests/helpers/fixture_process.lua
+```
 
-The last one spawns the **real** cliproxyapi, not a fake. It belongs here for
-exactly that reason: a real binary cannot be given a watchdog, so the registry is
-the only layer that can reap it, and it currently has no coverage beyond a normal
-`after_each`. (Line numbers will drift as earlier edits land — the arch guard in
-Task 7, not this table, is what keeps the set complete.)
+At the time of writing that is eight specs — `cliproxy_lifecycle` (4 sites),
+`cliproxy_catalog` (6), `cliproxy_dispatch`, `cliproxy_caller_teardown`,
+`cliproxy_recovery_e2e`, `cliproxy_auth_login`, `openai_tool_loop`, and
+`cliproxy_conformance` (1 each) — plus `query_cache_spec`, which only saves and
+restores `uv.spawn` and is not a call. Re-run the grep after each conversion; it
+reaching empty is the completion condition, and Task 7 invariant 1 is what keeps it
+empty afterwards.
+
+`cliproxy_conformance_spec` spawns the **real** cliproxyapi, not a fake. It belongs
+here for exactly that reason: a real binary cannot be given a watchdog, so the
+registry is the only layer that can reap it, and it currently has no coverage beyond
+a normal `after_each`.
 
 **Files:**
 - Modify: `tests/helpers/fixture_process.lua`
@@ -745,6 +805,29 @@ Task 7, not this table, is what keeps the set complete.)
 Add to `tests/integration/fixture_reaping_spec.lua`:
 
 ```lua
+describe("#220 census conformance, against the real ps", function()
+    -- ARCH-MOCK: --ps-from is the seam and ps_test_orphans.txt is the recorded
+    -- state, but a recording cannot notice the day the real ps changes shape. This
+    -- is the live half: the census must find ITSELF in a real process table.
+    local SCRIPT = ROOT .. "/scripts/reap-test-orphans.py"
+
+    it("reads a real ps, or says why it cannot", function()
+        if vim.fn.executable("ps") == 0 then
+            return pending("ps is not executable here")
+        end
+        -- --grace 0: nothing is expected to be found, and a grace window would only
+        -- slow the case if something were.
+        local out = vim.system({ "python3", SCRIPT, "--root", vim.fn.tempname(),
+            "--phase", "after", "--grace", "0" }, { text = true }):wait(30000)
+        assert.equals(0, out.code, out.stdout)
+        if out.stdout:find("skipped", 1, true) then
+            return pending("ps is refused here (an agent sandbox); census not exercised")
+        end
+        assert.is_falsy(out.stdout:find("BROKEN", 1, true),
+            "the real ps produced columns parse_ps cannot read:\n" .. out.stdout)
+    end)
+end)
+
 describe("#220 the fixture seam owns every process it starts", function()
     local fixture_process = require("tests.helpers.fixture_process")
     local ready_port = require("tests.helpers.ready_port")
@@ -974,7 +1057,7 @@ Five rules for the conversion:
    "What it deliberately does NOT select".
 
 While here, delete the per-server `VimLeavePre` autocmd in `fake_releases.start`
-(`tests/helpers/fake_releases.lua:49-55`): the registry now owns that, and one
+(`tests/helpers/fake_releases.lua:49-54`): the registry now owns that, and one
 autocmd per started server is its own small accumulation (ARCH-DRY, ARCH-FUNERAL).
 
 Run each spec after converting it:
@@ -1103,6 +1186,18 @@ describe("#220 orphan census", function()
         assert.is_truthy(out.stdout:find("7458", 1, true), out.stdout)
     end)
 
+    it("fails loudly when ps RAN but its columns cannot be read", function()
+        -- Not the same as ps being absent. A successful ps this script cannot
+        -- parse yields zero rows and would otherwise exit 0 — a census reporting
+        -- no leaks forever, which is the pgrep failure shape all over again.
+        local garbage = vim.fn.tempname()
+        vim.fn.writefile({ "USER PID %CPU COMMAND", "xianxu 1 0.0 /sbin/launchd" }, garbage)
+        local out = vim.system({ "python3", SCRIPT, "--root", ROOT, "--phase", "after",
+            "--ps-from", garbage, "--self-pid", "99998" }, { text = true }):wait(10000)
+        assert.equals(1, out.code)
+        assert.is_truthy(out.stdout:find("BROKEN", 1, true), out.stdout)
+    end)
+
     it("skips visibly, and passes, where ps is refused", function()
         -- The agent sandbox refuses ps with EPERM. A gate that failed there would
         -- be turned off; a gate that passed silently would report nothing.
@@ -1161,15 +1256,27 @@ Phases (both print every row they act on, because both SIGKILL):
   before  reap what an earlier run left; exit 0. Runs before every suite.
   after   report each survivor, reap it, exit 1. A run must leave none.
 
-Where `ps` is unavailable (an agent sandbox refuses it with EPERM), both phases say
-so and exit 0: a gate that failed there would be switched off, and one that passed
-in silence would report nothing.
+`after` re-samples for --grace seconds before accusing anything. Liveness at one
+instant is not proof of a leak: a VimLeavePre reap takes a moment to land, and
+cliproxy_update_spec sets PARLEY_FAKE_EXIT_DELAY_MS=4000 so that fake deliberately
+keeps serving for four seconds after its SIGTERM. Only a pid present in every
+sample is reported. A clean run finds no candidates and pays nothing.
+
+Two ways this can fail, and they are not the same:
+  ps could not RUN      an agent sandbox refuses it with EPERM. Say so, exit 0 —
+                        a gate that failed there would just be switched off.
+  ps ran, we cannot     its columns drifted. That is a BROKEN census, and it must
+  read it               not look like a clean run: a successful ps must parse at
+                        least one row and must contain our own pid, or `after`
+                        fails. This is the same failure shape as the pgrep remedy
+                        that answered 0 while 91 orphans were resident.
 """
 import argparse
 import os
 import signal
 import subprocess
 import sys
+import time
 
 PS_ARGV = ["ps", "-Ao", "pid=,ppid=,args="]
 
@@ -1230,6 +1337,24 @@ def read_process_table(ps_command, ps_from):
     return done.stdout
 
 
+def sample(ps_command, ps_from, self_pid):
+    """One reading of the process table: (rows, why_not).
+
+    `why_not` is "unreadable" when ps could not run at all — a skip — and
+    "unparsable" when it RAN and produced something this script cannot read. The
+    second is a broken census, not an absent one, and must never look like a pass:
+    a successful ps that yields no rows, or one that does not contain our own pid,
+    means the column format drifted out from under parse_ps.
+    """
+    text = read_process_table(ps_command, ps_from)
+    if text is None:
+        return None, "unreadable"
+    rows = parse_ps(text)
+    if not rows or not any(row["pid"] == self_pid for row in rows):
+        return None, "unparsable"
+    return rows, None
+
+
 def reap(rows):
     for row in rows:
         try:
@@ -1248,18 +1373,44 @@ def main():
     parser.add_argument("--self-pid", type=int, default=os.getpid(),
                         help="the pid to treat as this census's own; only "
                              "meaningful with --ps-from, which signals nothing")
+    parser.add_argument("--grace", type=float, default=8.0,
+                        help="seconds to keep re-sampling before calling a "
+                             "candidate a leak; 0 disables (default 8)")
     args = parser.parse_args()
 
-    text = read_process_table(args.ps_command, args.ps_from)
-    if text is None:
+    root = os.path.realpath(args.root)
+    dry_run = args.ps_from is not None
+
+    def census():
+        rows, why_not = sample(args.ps_command, args.ps_from, args.self_pid)
+        if rows is None:
+            return None, why_not
+        return select_orphans(rows, root, exclude=ancestry(rows, args.self_pid)), None
+
+    orphans, why_not = census()
+    if why_not == "unreadable":
         print("orphan check skipped: `ps` is unavailable here, so surviving test "
               "processes cannot be counted")
         return 0
+    if why_not == "unparsable":
+        print("orphan check BROKEN: `%s` ran but produced no row this script can "
+              "read (not even its own pid %d)." % (args.ps_command, args.self_pid))
+        print("parse_ps expects `pid ppid args` columns. A census that cannot read "
+              "ps reports zero leaks forever — see TOOLING.md.")
+        return 0 if args.phase == "before" else 1
 
-    rows = parse_ps(text)
-    root = os.path.realpath(args.root)
-    orphans = select_orphans(rows, root, exclude=ancestry(rows, args.self_pid))
-    dry_run = args.ps_from is not None
+    # Liveness at one instant is not proof of a leak: a VimLeavePre reap takes a
+    # moment, and a fake under PARLEY_FAKE_EXIT_DELAY_MS keeps serving for seconds
+    # after its SIGTERM on purpose. Only a pid present in EVERY sample is a leak.
+    if orphans and args.phase == "after" and not dry_run:
+        deadline = time.monotonic() + args.grace
+        while orphans and time.monotonic() < deadline:
+            time.sleep(1)
+            again, why_not = census()
+            if why_not:
+                break
+            still = {row["pid"] for row in again}
+            orphans = [row for row in orphans if row["pid"] in still]
 
     if not orphans:
         return 0
@@ -1287,7 +1438,7 @@ chmod +x scripts/reap-test-orphans.py
 
 - [ ] **Step 5: Run the test**
 
-Expected: PASS, all seven cases.
+Expected: PASS, all eight cases.
 
 - [ ] **Step 6: Route it in the traceability map**
 
@@ -1343,6 +1494,10 @@ Near the `TEST_ENV` block:
 # gets the gate by adding a line rather than by restating the command.
 ORPHANS = python3 scripts/reap-test-orphans.py --root "$(CURDIR)"
 ```
+
+The default `--grace` (8 s) is deliberate and belongs to the script, not here: a
+target that overrode it would be the one place the gate could start failing clean
+runs again.
 
 Extend `PREP_TEST_ENV` — it is the chokepoint every test target already calls, so
 the sweep is inherited rather than repeated. Keep it one line: it is used as
