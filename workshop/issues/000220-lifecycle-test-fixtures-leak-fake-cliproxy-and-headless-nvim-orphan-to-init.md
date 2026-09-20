@@ -1,11 +1,12 @@
 ---
 id: 000220
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-06
-updated: 2026-09-11
+updated: 2026-09-19
 estimate_hours:
+started: 2026-09-19T17:59:42-07:00
 ---
 
 # Lifecycle test fixtures leak: fake_cliproxy and headless nvim orphan to init
