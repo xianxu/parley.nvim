@@ -188,7 +188,15 @@ already reads 5.95 h with no implementation written, because the window anchors 
 claim. It therefore spans 13 days and 87 attributed issues, with mention-fallback
 warnings throughout. AGENTS.md §2 says claiming early "anchors the active-time
 window at the claim commit"; this window did not. Read this row's ratio with that
-in mind, or exclude it from the fit.
+mind — and by operator decision on 2026-09-19 it **is** excluded: this row's
+`window_trusted` is to be set to `no` after close. `sdlc close` cannot be told
+that (it derives the flag from `started:` alone, `close.go:940`), so it is a
+manual step, listed in `## Plan` and recorded in
+`brain/data/life/42shots/velocity/calibration-findings.md` → "Excluded rows".
+
+The flag is being used slightly off-label: its documented meaning is a legacy
+window that **truncates** design time, so the actual reads low. Here the actual
+reads high. Same conclusion, opposite cause.
 
 ```estimate
 model: estimate-logic-v3.1
