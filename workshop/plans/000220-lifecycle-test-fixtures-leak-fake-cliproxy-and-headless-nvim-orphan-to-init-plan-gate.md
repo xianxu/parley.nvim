@@ -70,6 +70,62 @@ rounds:
           family: plan-restates-the-diff
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-19T19:12:24-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: '`after` re-polls for --grace (default 8 s) and reports only pids in every sample; cliproxy_update_spec:486''s 4000 ms delay verified.'
+          round: 2
+        - id: PQ-2
+          disposition: addressed
+          note: Corrected to cliproxy_login_spec.lua:58 and :183 (production run_login), verified; that spec is now in Task 2 Step 6.
+          round: 2
+        - id: PQ-3
+          disposition: addressed
+          note: sample() separates unreadable from unparsable; a successful ps must parse >=1 row and contain --self-pid, else BROKEN/exit 1, plus a live pending()-guarded conformance case.
+          round: 2
+        - id: PQ-4
+          disposition: addressed
+          note: install(poll_ms, before_exit) runs the hoisted drop_query_dir before os.exit; minimal_init gives it to both triggers.
+          round: 2
+        - id: PQ-5
+          disposition: not-addressed
+          note: Task 3's table went, but the plan grew 1803 to 1958 lines; spec bodies and the census script remain verbatim. Minor, carried to close.
+          round: 2
+      findings:
+        - id: PQ-6
+          severity: Important
+          title: Task 2 Step 6 names image_shrink_live_spec as the fake_sips slow driver; it never touches fake_sips and pending()s by default
+          detail: |-
+            2nd finding in this family. tests/integration/image_shrink_live_spec.lua has zero
+            occurrences of fake_sips, iterates shrink.RECIPES (lua/parley/image_shrink.lua:22-40 =
+            sips/magick/convert), and pending()s unless PARLEY_LIVE_SHRINK=1, so it passes without
+            exercising anything. The real driver is tests/unit/image_shrink_spec.lua:298, which asserts
+            exit 124 and elapsed in [4.5, 8) and is precisely what a new exit_with_parent() in fake_sips
+            could perturb. Do not just swap the filename. The rule, which the round that fixed PQ-2
+            applied to Task 3 and not to Task 2, is that every spec list in this plan is derived by a
+            command the plan states rather than typed. State Step 6's list as a grep over what selects
+            each mode (PARLEY_FAKE_LOGIN_MODE, PARLEY_FAKE_SIPS, plus the LoopbackHTTPServer consumers)
+            so membership is computed, not remembered (ARCH-PURPOSE).
+          family: unverified-file-line-claim
+          round: 2
+      blocked: true
+    - "n": 3
+      timestamp: "2026-09-19T19:14:08-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-6
+          disposition: addressed
+          note: Step 6's list is now computed by two stated greps, verified to return the three mode drivers; image_shrink_spec.lua:295-301 and fake_sips:16 confirmed.
+          round: 3
+        - id: PQ-5
+          disposition: not-addressed
+          note: 1975 lines now (was 1958); spec bodies and the census script remain verbatim. Minor, carried to the close review.
+          round: 3
+      blocked: false
+content_hash: 07043cab6a355d9575145ab25503bab064ed09dbedfbf2f903d9c700a9d5d9c6
 ---
 
 # Gate ledger — parley.nvim#220 (plan-quality)
@@ -119,10 +175,37 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   is the right instinct done wrong — it already says the arch guard, not the
   table, owns completeness, so the table can go.
 
+## Round 2 — 2026-09-19T19:12:24-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- PQ-1 — addressed — `after` re-polls for --grace (default 8 s) and reports only pids in every sample; cliproxy_update_spec:486's 4000 ms delay verified.
+- PQ-2 — addressed — Corrected to cliproxy_login_spec.lua:58 and :183 (production run_login), verified; that spec is now in Task 2 Step 6.
+- PQ-3 — addressed — sample() separates unreadable from unparsable; a successful ps must parse >=1 row and contain --self-pid, else BROKEN/exit 1, plus a live pending()-guarded conformance case.
+- PQ-4 — addressed — install(poll_ms, before_exit) runs the hoisted drop_query_dir before os.exit; minimal_init gives it to both triggers.
+- PQ-5 — not-addressed — Task 3's table went, but the plan grew 1803 to 1958 lines; spec bodies and the census script remain verbatim. Minor, carried to close.
+
+### Raised
+
+- **PQ-6** [Important] `unverified-file-line-claim` Task 2 Step 6 names image_shrink_live_spec as the fake_sips slow driver; it never touches fake_sips and pending()s by default
+  2nd finding in this family. tests/integration/image_shrink_live_spec.lua has zero
+  occurrences of fake_sips, iterates shrink.RECIPES (lua/parley/image_shrink.lua:22-40 =
+  sips/magick/convert), and pending()s unless PARLEY_LIVE_SHRINK=1, so it passes without
+  exercising anything. The real driver is tests/unit/image_shrink_spec.lua:298, which asserts
+  exit 124 and elapsed in [4.5, 8) and is precisely what a new exit_with_parent() in fake_sips
+  could perturb. Do not just swap the filename. The rule, which the round that fixed PQ-2
+  applied to Task 3 and not to Task 2, is that every spec list in this plan is derived by a
+  command the plan states rather than typed. State Step 6's list as a grep over what selects
+  each mode (PARLEY_FAKE_LOGIN_MODE, PARLEY_FAKE_SIPS, plus the LoopbackHTTPServer consumers)
+  so membership is computed, not remembered (ARCH-PURPOSE).
+
+## Round 3 — 2026-09-19T19:14:08-07:00 (claude) — passed
+
+### Disposed
+
+- PQ-6 — addressed — Step 6's list is now computed by two stated greps, verified to return the three mode drivers; image_shrink_spec.lua:295-301 and fake_sips:16 confirmed.
+- PQ-5 — not-addressed — 1975 lines now (was 1958); spec bodies and the census script remain verbatim. Minor, carried to the close review.
+
 ## Open findings
 
-- **PQ-1** [Critical] `async-teardown-needs-settle-window` `--phase after` runs with zero grace and will fail runs that leaked nothing
-- **PQ-2** [Important] `unverified-file-line-claim` `cliproxy_auth_login_spec:61` does not drive the hangs login; it is a -config spawn
-- **PQ-3** [Important] `external-format-drift-fails-open` A ps whose column format drifts makes the census pass silently
-- **PQ-4** [Minor] `exit-path-skips-its-own-cleanup` os.exit(1) skips VimLeavePre, stranding the per-process $PARLEY_QUERY_DIR
 - **PQ-5** [Minor] `plan-restates-the-diff` 1803 lines carrying complete spec bodies and the whole census script verbatim

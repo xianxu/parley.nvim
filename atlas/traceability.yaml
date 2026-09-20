@@ -608,7 +608,10 @@ atlas:
       - tests/helpers/ready_port.lua
       - tests/helpers/spec_runner.lua
       - tests/helpers/fixture_process.lua
+      - tests/helpers/exit_with_parent.lua
       - tests/fixtures/fake_sse_server
+      - tests/fixtures/fixture_watchdog.py
+      - tests/fixtures/orphan_me.sh
       - tests/perf/chat_typing.lua
     tests:
       - tests/unit/golden_fixture_spec.lua
@@ -620,6 +623,7 @@ atlas:
       - tests/unit/ready_port_spec.lua
       - tests/unit/spec_runner_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
+      - tests/integration/fixture_reaping_spec.lua
       - tests/integration/chat_progress_process_spec.lua
 
   infra/vault:

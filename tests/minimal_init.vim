@@ -50,9 +50,16 @@ vim.fn.mkdir(vim.env.PARLEY_QUERY_DIR, "p")
 -- The removal lives beside the creation: `make test` cleans its env, but
 -- test-spec, test-changed and a direct PlenaryBustedFile run do not, and one
 -- directory per spec process would simply accumulate (#261 M5 review round 4).
-vim.api.nvim_create_autocmd("VimLeavePre", { callback = function()
+local function drop_query_dir()
     pcall(vim.fn.delete, vim.env.PARLEY_QUERY_DIR, "rf")
-end })
+end
+vim.api.nvim_create_autocmd("VimLeavePre", { callback = drop_query_dir })
+
+-- Every harness Neovim — the `make` parent and every plenary spec child — loads
+-- this file, so one call here covers both (#220). It exits with os.exit, which
+-- skips VimLeavePre, so the query dir's removal is handed to it as well: one
+-- definition, two triggers.
+require("tests.helpers.exit_with_parent").install(nil, drop_query_dir)
 
 -- A spec that exercises a wordless token on purpose names it in
 -- g:parley_expected_unkeyed, at file scope: nothing to restore, and the

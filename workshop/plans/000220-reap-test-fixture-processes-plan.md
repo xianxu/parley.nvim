@@ -244,12 +244,21 @@ Liveness is probed with `uv.kill(pid, 0)`, never `ps` — the specs must pass wh
 Two review boundaries. They are genuinely separable: M1 stops the leak and is
 provable on its own; M2 measures it, guards it, and writes it down.
 
-- **M1** — the three reaping layers (Tasks 1–3).
-- **M2** — the census, the gate, the guard, the docs (Tasks 4–7).
+- **M1** — the three reaping layers and the census (Tasks 1–4): everything that
+  exists as a *thing*.
+- **M2** — wiring, docs, guard (Tasks 5–7): nothing new to name.
+
+**Why the census is in M1 and not with its wiring.**
+`tests/arch/single_source_sweeps_spec.lua`'s "every symbol the Spec and plan
+tables name exists in the tree" guard reads the whole plan's Core-concepts table
+on any issue branch. With the census in M2, `select_orphans` and `ancestry` do not
+exist yet at M1's boundary and that guard is red — measured, not predicted. A
+boundary a guard cannot be green at is not a boundary. M2 adds no Core-concepts
+entity, so the table is fully realized at M1 and stays so.
 
 ---
 
-# M1 — Stop the leak
+# M1 — Stop the leak, and measure it
 
 ### Task 1: The shared orphan rule, in both watchdogs
 
@@ -540,7 +549,10 @@ from `run_login`'s new call. It is in Step 6's list below.
 - Modify: `tests/fixtures/loopback_http.py`
 - Modify: `tests/fixtures/fake_cliproxy` (drop the opt-in gate and its docs; add the
   direct call in `run_login`)
-- Modify: `tests/fixtures/fake_sips` (direct call)
+- Modify: `tests/fixtures/fake_sips` (direct call; its drivers are
+  `tests/unit/image_shrink_spec.lua` and `tests/integration/paste_image_spec.lua`,
+  and `image_shrink_spec.lua:297` asserts a `[4.5, 8)` elapsed window against the
+  `slow` mode this touches)
 - Modify: `tests/fixtures/fake_github_releases` (drop the now-duplicate call)
 - Modify: `tests/helpers/fake_releases.lua` (drop the env var from the wrapper)
 - Modify: `tests/integration/cliproxy_update_spec.lua` (drop the env var)
@@ -726,25 +738,39 @@ or `atlas/`.
 
 - [ ] **Step 6: Run the reaping spec and every spec that drives a fixture server**
 
+**Derive the list, do not type it.** Every spec list in this plan is computed by a
+command the plan states — a typed one is how `cliproxy_auth_login_spec` and
+`image_shrink_live_spec` got named as drivers of fixtures they never touch. The
+set is "every spec that drives a fixture this task changed", and each fixture is
+selected by the thing that selects its behaviour:
+
+```sh
+# The three servers, by the class they now inherit their end from,
+# plus the two blocking modes, by the variable that selects each.
+grep -rl 'fake_cliproxy\|fake_github_releases\|fake_sse_server' tests/ --include='*_spec.lua'
+grep -rl 'PARLEY_FAKE_LOGIN_MODE\|PARLEY_FAKE_SIPS' tests/ --include='*_spec.lua'
 ```
-for s in tests/integration/fixture_reaping_spec.lua \
-         tests/integration/cliproxy_update_spec.lua \
-         tests/integration/cliproxy_catalog_spec.lua \
-         tests/integration/cliproxy_login_spec.lua \
-         tests/integration/cliproxy_auth_login_spec.lua \
-         tests/integration/image_shrink_live_spec.lua \
-         tests/integration/query_cache_spec.lua \
-         tests/integration/fixture_ready_publish_spec.lua \
-         tests/integration/fixture_loopback_dns_spec.lua; do
+
+At the time of writing the second grep yields `tests/integration/cliproxy_login_spec.lua`
+(the hangs login, `:58` and `:183`) and `tests/unit/image_shrink_spec.lua` plus
+`tests/integration/paste_image_spec.lua` (`fake_sips`). Those three matter most:
+they drive the two modes whose watchdog call is **new**, so a fixture that now
+exits on its own could break a spec that relied on it blocking.
+`image_shrink_spec.lua:297` is the sharp one — it asserts a 124 exit and an elapsed
+time in `[4.5, 8)` against `fake_sips` `slow`, which is exactly the timing a new
+`exit_with_parent()` could perturb.
+
+```
+for s in $(grep -rl 'fake_cliproxy\|fake_github_releases\|fake_sse_server\|PARLEY_FAKE_LOGIN_MODE\|PARLEY_FAKE_SIPS' \
+             tests/ --include='*_spec.lua' | sort -u) \
+           tests/integration/fixture_reaping_spec.lua; do
   nvim -n --headless --noplugin -u tests/minimal_init.vim \
     -c "PlenaryBustedFile $s" -c "qa!" || echo "FAILED: $s"
 done
 ```
 
-Expected: PASS for all nine. `cliproxy_login_spec` and `image_shrink_live_spec` are
-in the list because they drive the two fixtures whose watchdog call is NEW (the
-hangs login and `fake_sips` slow mode) — a fixture that now exits on its own could
-break a spec that relied on it hanging, and only its own driver would show that.
+Expected: no `FAILED:` line. A spec that `pending()`s (a live-only case) is not
+evidence — check that `image_shrink_spec`'s slow-child case actually ran.
 
 - [ ] **Step 7: Commit**
 
@@ -1076,17 +1102,7 @@ git add tests/helpers/fixture_process.lua tests/integration/<spec>.lua
 git commit -m "#220 M1: <spec> reaps through the fixture seam"
 ```
 
-- [ ] **Step 7: Close the milestone**
-
-```bash
-sdlc milestone-close --issue 220 --milestone M1
-```
-
-Fix Critical/Important findings before crossing; log the verdict in `## Log`.
-
 ---
-
-# M2 — Measure it, guard it, write it down
 
 ### Task 4: The census — find survivors with `ps`, and fail
 
@@ -1451,10 +1467,22 @@ Under `infra/test_harness`, add `scripts/reap-test-orphans.py` and
 ```bash
 git add scripts/reap-test-orphans.py tests/fixtures/ps_test_orphans.txt \
         tests/unit/reap_test_orphans_spec.lua atlas/traceability.yaml
-git commit -m "#220 M2: a ps-based census of this checkout's surviving test processes"
+git commit -m "#220 M1: a ps-based census of this checkout's surviving test processes"
 ```
 
 ---
+
+- [ ] **Step 8: Close the milestone**
+
+```bash
+sdlc milestone-close --issue 220 --milestone M1
+```
+
+Fix Critical/Important findings before crossing; log the verdict in `## Log`.
+
+---
+
+# M2 — Wire it in, write it down, guard it
 
 ### Task 5: Wire the census into the suite
 
