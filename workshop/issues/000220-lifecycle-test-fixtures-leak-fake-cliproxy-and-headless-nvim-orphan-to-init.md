@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-06
 updated: 2026-09-19
-estimate_hours: 5.98
+estimate_hours: 7.79
 started: 2026-09-19T17:59:42-07:00
 flow: {kind: full, provenance: inferred}
 ---
@@ -124,35 +124,60 @@ Derived Method A (primitive decomposition) against
 
 Per v2's own rule — "a primitive with a thorough plan doc has ~0 design cost,
 decisions pre-resolved" — the design column is concentrated in the two design
-primitives, which is where the decisions were actually resolved this window.
-The remaining rows carry only the decisions their own step still holds.
+primitives, which is where the decisions were actually resolved. The remaining
+rows carry only the decisions their own step still holds.
 
-**Multiplicity is declared** (`×n`), because five rows aggregate more than one
+**Multiplicity is declared** (`×n`), because most rows aggregate more than one
 instance of their primitive and an undeclared aggregate cannot be audited
-against the v2 table's per-primitive ceiling.
+against the v2 table's per-primitive ceiling. Each `×n` equals the number of
+instances the row's own coverage names.
 
 | primitive | what it covers | design | v2 impl | ×n | v2 impl total | impl ×0.4 |
 |---|---|---|---|---|---|---|
-| `issue-spec` | root-cause (two causes, chained) + the durable plan + 3 plan-review rounds | 1.0 | 0.3 | ×1 | 0.3 | 0.12 |
+| `issue-spec` | root-cause (two causes, chained) + the durable plan + its review rounds | 1.0 | 0.3 | ×1 | 0.3 | 0.12 |
 | `typed-data-prototype` | the two live prototypes — the `orphan.sh` fixture repro and its nvim twin — that found the load-bearing `ppid == 1` defect | 0.6 | 0.3 | ×1 | 0.3 | 0.12 |
-| `lua-neovim` | `exit_with_parent.lua`, the `fixture_process` registry, and the 4-invariant arch guard with its counterfactuals | 0.4 | 1.5 | ×2 | 3.0 | 1.20 |
+| `lua-neovim` | three artifacts: `exit_with_parent.lua`, the `fixture_process` registry, the 4-invariant arch guard with its counterfactuals | 0.4 | 1.5 | ×3 | 4.5 | 1.80 |
 | `greenfield-go-module` | `reap-test-orphans.py` — greenfield, single concern, pure core + injected `ps` seam (shape, not language) | 0.2 | 0.6 | ×1 | 0.6 | 0.24 |
-| `smaller-go-module` | the five fixture edits, the Makefile gate wiring, **and the real-machine verification loops** — full-suite runs, the interrupted-run proof, four counterfactual cycles | 0.0 | 0.5 | ×3 | 1.5 | 0.60 |
+| `smaller-go-module` | three instances (five fixture edits, the Makefile gate, the traceability routing) **plus the real-machine verification loops grossed up ×2** — see the unit note below | 0.0 | 0.5 | ×5 | 2.5 | 1.00 |
 | `cross-cutting-refactor` | the eight-spec sweep onto the seam (#237 BR-5), one edit→run→commit cycle each | 0.2 | 0.5 | ×2 | 1.0 | 0.40 |
-| `atlas-docs` | TOOLING.md, `atlas/infra/test_harness.md`, `lessons.md`, `traceability.yaml` | 0.05 | 0.2 | ×1 | 0.2 | 0.08 |
-| `milestone-review` | two boundaries (M1, M2) and the fix rounds they generate | 0.0 | 0.5 | ×2 | 1.0 | 0.40 |
+| `atlas-docs` | four documents: TOOLING.md, `atlas/infra/test_harness.md`, `lessons.md`, `traceability.yaml` | 0.2 | 0.2 | ×4 | 0.8 | 0.32 |
+| `milestone-review` | two boundaries (M1, M2) and, counted separately, the fix round each generates | 0.0 | 0.5 | ×4 | 2.0 | 0.80 |
 
 `design-buffer: 0.15` — the issue has a thorough plan doc (v3.1 step 4).
 `familiarity: 1.0` — this repo's harness, and #237 built the pieces being reused.
 
-Σdesign 2.45 × 1.15 = 2.8175; Σimpl 3.16 × 1.0 = 3.16; total 5.98.
+Σdesign 2.60 × 1.15 = 2.99; Σimpl 4.80 × 1.0 = 4.80; total 7.79.
 
-**Sanity check against the closest analogue.** `#237` — same subsystem, same
+**Unit note on the verification rows.** v3.1's ×0.40 is calibrated on
+AI-autonomous implementation, which compresses. Three items here do not: a full
+`make test` run, the interrupted-run proof, and four counterfactual cycles are
+wall-clock-bound on a suite whose defining property is that its runs are long —
+and this issue exists because they also get interrupted. They are grossed up
+inside `smaller-go-module` (the `×2` above the three primitive instances) so
+that the ×0.4 that follows returns them to roughly their real wall-clock.
+
+**Sanity check, against the analogue's ACTUAL.** `#237` — same subsystem, same
 harness, thorough plan, and the issue that *built* `fixture_watchdog.py` —
-estimated design 2.40 / impl 3.00 and actualized 7.20 h (ratio 0.80). This work
-is comparable or larger (7 tasks, ~50 steps, 8 spec migrations, a new Python
-module, Makefile wiring, an arch guard, three docs), so an impl column below
-#237's would have needed a reason and there isn't one. 3.16 sits just above it.
+estimated 5.76 and **actualized 7.20 h** (ratio 0.80). This work is comparable or
+larger (7 tasks, ~50 steps, 8 spec migrations, a new Python module, Makefile
+wiring, an arch guard, four docs), so #237's 7.20 is the floor rather than the
+ceiling. 7.79 sits just above it. The first two derivations compared against
+#237's *estimate*, which is the wrong side of that row.
+
+**What this estimate deliberately does NOT do.** Recent v3.1 rows in this repo
+cluster at ratio 0.5–0.7 (#247 0.35, #263 0.47, #262 0.53, #240 0.66, #266 0.67),
+and `baseline-v3.1.md`'s own open question 3 names that low-side bias. Correcting
+for it *per issue* would be back-fitting: it would make each row look calibrated
+while destroying the signal the ledger exists to carry. The bias belongs to the
+model, and recalibration is tracked in ariadne#127.
+
+**Caveat on the actual this will be compared against.** `sdlc actual --issue 220`
+already reads 5.95 h with no implementation written, because the window anchors at
+`7353d798` — the **issue-creation** commit of 2026-09-06, not the 2026-09-19
+claim. It therefore spans 13 days and 87 attributed issues, with mention-fallback
+warnings throughout. AGENTS.md §2 says claiming early "anchors the active-time
+window at the claim commit"; this window did not. Read this row's ratio with that
+in mind, or exclude it from the fit.
 
 ```estimate
 model: estimate-logic-v3.1
@@ -160,28 +185,31 @@ familiarity: 1.0
 design-buffer: 0.15
 item: issue-spec             design=1.0  impl=0.12
 item: typed-data-prototype   design=0.6  impl=0.12
-item: lua-neovim             design=0.4  impl=1.20
+item: lua-neovim             design=0.4  impl=1.80
 item: greenfield-go-module   design=0.2  impl=0.24
-item: smaller-go-module      design=0.0  impl=0.60
+item: smaller-go-module      design=0.0  impl=1.00
 item: cross-cutting-refactor design=0.2  impl=0.40
-item: atlas-docs             design=0.05 impl=0.08
-item: milestone-review       design=0.0  impl=0.40
-total: 5.98
+item: atlas-docs             design=0.2  impl=0.32
+item: milestone-review       design=0.0  impl=0.80
+total: 7.79
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
 
 ### Revisions
 
-**2026-09-19** — raised 4.90 → 5.98 after the estimate-quality judge (INFO, not
-blocking) showed the impl column was light against this repo's own ledger. Four
-changes, all in the judge's direction: the two live prototypes got their own
-`typed-data-prototype` row instead of hiding inside `issue-spec`'s design
-maximum; the eight-spec sweep went ×1 → ×2 (eight edit→run→commit cycles, not
-one); the real-machine verification loops got named coverage instead of hiding
-in the Makefile row; and every aggregate row now declares its `×n` so it can be
-checked against the v2 ceiling. Banked as filed it would have read as a 20%
-under-estimate in the calibration ledger.
+**2026-09-19 (r1)** — 4.90 → 5.98. The estimate-quality judge (INFO) showed the
+impl column was light. Gave the two live prototypes their own
+`typed-data-prototype` row; took the eight-spec sweep ×1 → ×2; named the
+verification loops; declared `×n` on aggregate rows.
+
+**2026-09-19 (r2)** — 5.98 → 7.79. Second judge pass found the r1 arithmetic
+still understated: `lua-neovim ×2` named *three* artifacts (→ ×3) and
+`atlas-docs ×1` named *four* documents (→ ×4); the verification loops were still
+being scaled by 0.4 though they are wall-clock-bound and do not compress
+(→ grossed up); and the #237 sanity check compared estimate-to-estimate rather
+than to #237's 7.20 h actual. Not applied: the repo-wide 0.5–0.7 ratio drift,
+which is the model's to fix, not an individual estimate's.
 
 ## Log
 
