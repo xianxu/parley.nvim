@@ -1,11 +1,12 @@
 ---
 id: 000255
-status: open
+status: working
 deps: [254]
 github_issue:
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-19
 estimate_hours:
+started: 2026-09-19T17:46:24-07:00
 ---
 
 # Use previous completed answers in context during refresh
@@ -79,3 +80,23 @@ the document coordinator's exchange structure, from the moment regeneration
 removes it until that generation ends. Ancestor context in sub-chats is
 covered too. This issue's Spec and Done-when are carried into #261's Done-when,
 and it closes when #261 closes.
+
+### 2026-09-19 — delivered by parley#261 (merged)
+
+#261 shipped this issue's substance in its M2 (PR #197, merged as 38a1d08d):
+a request that captures context while an earlier exchange is being regenerated
+receives that exchange's previous complete answer — in the same chat and from a
+sub-chat whose ancestor chain includes it, read from the parent's live buffer —
+never mixed with replacement fragments, and several exchanges regenerating at
+once each use their own. Once a generation ends, later requests see what the
+transcript says; a request already captured is unaffected.
+
+The answer lives in an in-memory `prev_answer` slot on the document
+coordinator, not the on-disk store this issue's original plan assumed (#261 M1
+deleted that store). Pinned by `tests/integration/document_previous_answer_spec.lua`
+and the `#255` cases in `tests/integration/chat_respond_spec.lua`; mapped in
+`atlas/chat/transcript_truth.md`.
+
+Nothing is left to build here. The status flip to `done` needs
+`sdlc close --issue 255`, since the binary writes `codecomplete` only through a
+close review (#160).
