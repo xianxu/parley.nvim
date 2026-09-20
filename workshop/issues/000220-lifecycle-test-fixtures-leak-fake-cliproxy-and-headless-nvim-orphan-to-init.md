@@ -86,25 +86,29 @@ Durable design: `workshop/plans/000220-reap-test-fixture-processes-plan.md`
 (three reaping layers, each at the chokepoint its class of process passes
 through, plus one `ps`-based census that fails the suite).
 
-- [ ] The shared orphan rule in both watchdogs — `ppid == 1` OR a changed
-      parent — and a Lua twin of `fixture_watchdog.py` installed from
+- [ ] M1 — the shared orphan rule in both watchdogs: `ppid == 1` OR a changed
+      parent, plus a Lua twin of `fixture_watchdog.py` installed from
       `tests/minimal_init.vim`, which every harness Neovim loads.
-- [ ] Move the watchdog into `LoopbackHTTPServer.__init__`, so every fixture
-      that binds a port exits with its parent by construction; drop the opt-in
-      `PARLEY_FAKE_EXIT_WITH_PARENT` flag.
-- [ ] One registry in `tests.helpers.fixture_process` (register on spawn, reap
-      at `VimLeavePre`); collapse the seven spec-local copies onto it (#237
-      BR-5).
-- [ ] `scripts/reap-test-orphans.py`: a `ps`-based census of this checkout's
-      surviving test processes, with a pure selector tested against a recorded
-      process table.
-- [ ] Wire it into `Makefile.parley`: `--phase before` in `PREP_TEST_ENV`,
-      `--phase after` failing every test target.
-- [ ] `tests/arch/fixture_lifecycle_spec.lua`: guard the three invariants so a
-      new fixture or spec inherits the reaping instead of remembering it.
-- [ ] Document the `ps`-based cleanup and the `pgrep` caveat in TOOLING.md; the
-      three layers in `atlas/infra/test_harness.md`; two rules in
+- [ ] M1 — move the watchdog into `LoopbackHTTPServer.__init__`, so every
+      fixture that binds a port exits with its parent by construction; drop the
+      opt-in `PARLEY_FAKE_EXIT_WITH_PARENT` flag everywhere it is named.
+- [ ] M1 — one registry in `tests.helpers.fixture_process` (register on spawn,
+      prune on exit, reap at `VimLeavePre`); collapse the eight spec-local
+      copies onto it, the real-binary conformance spawn included (#237 BR-5).
+- [ ] M2 — `scripts/reap-test-orphans.py`: a `ps`-based census of this
+      checkout's surviving test processes, with a pure selector tested against
+      a recorded process table.
+- [ ] M2 — wire it into `Makefile.parley`: `--phase before` in `PREP_TEST_ENV`,
+      `--phase after` folded into the exit code of every test target.
+- [ ] M2 — `tests/arch/fixture_lifecycle_spec.lua`: guard the three invariants
+      so a new fixture or spec inherits the reaping instead of remembering it.
+- [ ] M2 — document the `ps`-based cleanup and the `pgrep` caveat in
+      TOOLING.md; the layers in `atlas/infra/test_harness.md`; three rules in
       `workshop/lessons.md`.
+
+**Closing needs a machine where `ps` is permitted** — an agent sandbox refuses
+it with EPERM, and three of the four Done-when proofs need a real process table.
+Every spec runs sandboxed (liveness is probed with `uv.kill(pid, 0)`).
 
 ## Log
 
