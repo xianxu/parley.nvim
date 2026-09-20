@@ -257,7 +257,10 @@ quoting `authentication_error` would have popped a login prompt).
 **The claim contract.** `on_error` is terminal downstream — it finishes the
 pending session and tears down the chat leg (`chat_respond.lua`
 `teardown_chat_leg`) — while recovery is async. So the hook cannot merely "run
-first"; it **claims** synchronously (cheap: `classify_response` is pure):
+first"; it **claims** synchronously (cheap: `classify_response` is pure).
+The hook runs only while the request's owner still waits
+(`transport_alive`, #261 M4 W8): a recovery reads credentials and may prompt,
+so a stopped owner skips it and gets the failure, which it ignores.
 
 - falsy → the dispatcher calls `on_error` immediately, exactly as before. Every
   adapter without the hook takes this path.

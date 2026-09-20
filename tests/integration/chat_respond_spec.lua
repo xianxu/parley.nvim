@@ -3,6 +3,9 @@
 -- These tests exercise the full chat_respond flow including the completion callback,
 -- which requires mocking the dispatcher and tasker.
 
+-- Fixture strings, not transport tokens: the harness watch for a refusal
+-- with no words expects them (#261 M5).
+vim.g.parley_expected_unkeyed={'fixture transport failure'}
 local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-chat-respond-" .. os.time()
 
 -- Bootstrap parley
@@ -68,36 +71,20 @@ local function wait_for(predicate)
 end
 -- Native buffers with a stateful transport fixture: physical terminal callbacks
 -- are explicit, and each response exposes its actual session lifetime.
+local Fixture=require('tests.helpers.respond_fixture')
 describe('chat_respond: scoped session integration',function()
-    local old_query,old_stop,old_agent,buf,calls,files
+    local restore,old_agent,buf,calls,files
     before_each(function()
-        calls,files={},{};old_agent=parley._state.agent
-        old_query,old_stop=parley.dispatcher.query,parley.tasker.stop_owner
-        parley.dispatcher.query=function(b,provider,payload,output,complete,_,_,abort,model,failure,opts)
-            local id='session-fixture:'..#calls
-            local call={id=id,buf=b,provider=provider,model=model,payload=payload,output=output,
-                complete=complete,abort=abort,failure=failure,opts=opts,running=true}
-            calls[#calls+1]=call
-            parley.tasker.set_query(id,{buf=b,response='',raw_response='',
-                tool_wire=provider=='openai' and 'openai' or 'anthropic'})
-            return id
-        end
-        parley.tasker.stop_owner=function(owner)
-            for _,call in ipairs(calls)do
-                if call.running and call.opts.generation_id==owner then
-                    call.running=false;vim.schedule(function()call.abort('cancelled')end)
-                end
-            end
-        end
+        files={};old_agent=parley._state.agent
+        calls,restore=Fixture.install(parley)
         buf=vim.api.nvim_create_buf(true,false)
         vim.api.nvim_buf_set_name(buf,make_chat_filename())
         vim.api.nvim_set_current_buf(buf)
     end)
     after_each(function()
         Respond.cancel_responses(buf)
-        for _,call in ipairs(calls)do call.abort('fixture cleanup')end
+        restore()
         if vim.api.nvim_buf_is_valid(buf)then vim.api.nvim_buf_delete(buf,{force=true})end
-        parley.dispatcher.query,parley.tasker.stop_owner=old_query,old_stop
         for _,path in ipairs(files)do vim.fn.delete(path)end
         parley._state.agent=old_agent;parley.agents.OpenAiFamilyTest=nil
     end)
@@ -121,40 +108,259 @@ describe('chat_respond: scoped session integration',function()
         wait_for(function()return Respond.response_snapshot(session).status=='terminal'end)
         return Respond.response_snapshot(session).generation
     end
-    it('cleans recovery only after the chat deletion is confirmed',function()
+    it('reports a refused chat deletion and completes a confirmed one',function()
         open({'💬: question',''})
         local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
         vim.fn.writefile(vim.api.nvim_buf_get_lines(buf,0,-1,false),path)
-        local Recovery=require('parley.chat_recovery')
-        local old_deleted,old_delete=Recovery.deleted,parley.helpers.delete_file
-        local calls_deleted=0
-        Recovery.deleted=function(captured)
-            calls_deleted=calls_deleted+1;assert.equals(path,captured)
-            assert.equals(0,vim.fn.filereadable(path));return {ok=true}
-        end
+        local old_delete=parley.helpers.delete_file
         parley.helpers.delete_file=function()return nil,'injected deletion refusal'end
         local failed=parley.delete_chat_file(path)
         parley.helpers.delete_file=old_delete
-        assert.is_nil(failed);assert.equals(0,calls_deleted)
-        local ok=parley.delete_chat_file(path)
-        Recovery.deleted=old_deleted
-        assert.is_true(ok);assert.equals(1,calls_deleted)
+        assert.is_nil(failed);assert.equals(1,vim.fn.filereadable(path))
+        assert.is_true(parley.delete_chat_file(path))
+        assert.equals(0,vim.fn.filereadable(path))
     end)
-    it('refuses answer replacement when recovery publication is unavailable',function()
-        open({'💬: question','','🤖: original','valuable answer',''})
-        local before=vim.api.nvim_buf_get_lines(buf,0,-1,false)
-        local Store=require('parley.answer_recovery');local original=Store.open
-        Store.open=function()return nil,'injected recovery IO failure'end
-        local ok,session=pcall(Respond.respond,{range=0})
-        if ok and session then
-            ok=vim.wait(5000,function()return Respond.response_snapshot(session).status=='terminal'end,1)
+    -- #261: the reported blocker. Regenerate, edit the answer while it streams
+    -- (the edit revokes the generation), then regenerate again. Before #261 the
+    -- retained on-disk snapshot said "original" while the buffer held the
+    -- partial answer; once the in-process retry cache was invalidated (a second
+    -- edit, a reload, a reopen) every retry was refused.
+    local function row_containing(needle)
+        for index,line in ipairs(vim.api.nvim_buf_get_lines(buf,0,-1,false))do
+            if line:find(needle,1,true) then return index end
         end
-        Store.open=original
-        assert.is_true(ok,tostring(session))
-        if session then assert.equals('prepare_failed',Respond.response_snapshot(session).generation.outcome)end
-        assert.equals(0,#calls)
-        assert.same(before,vim.api.nvim_buf_get_lines(buf,0,-1,false))
+    end
+    local function regenerate_then_revoke()
+        open({'💬: question','','🤖: original','valuable answer',''})
+        local first=submit()
+        output(calls[1],'partial new text')
+        wait_for(function()return buffer_contains(buf,'partial new text')end)
+        -- Where the text lands relative to the answer header is the layout's
+        -- business; the edit only has to fall inside the granted output.
+        local row=assert(row_containing('partial new text'))
+        vim.api.nvim_buf_set_text(buf,row-1,0,row-1,0,{'edited '})
+        wait_for(function()return Respond.response_snapshot(first).status=='terminal'end)
+        assert.equals('revoked',Respond.response_snapshot(first).generation.outcome)
+        return row
+    end
+    local function submit_again()
+        vim.api.nvim_win_set_cursor(0,{5,0})
+        Respond.respond({range=0})
+        wait_for(function()return #calls==2 end)
+    end
+    -- Characterization: passes before #261 through the in-process retry cache.
+    -- Kept because deleting that cache must not break the immediate retry.
+    it('regenerates immediately after a revoked regeneration',function()
+        regenerate_then_revoke(); submit_again()
     end)
+    it('regenerates after a revoked regeneration and a further edit (#261)',function()
+        local row=regenerate_then_revoke()
+        vim.api.nvim_buf_set_text(buf,row-1,0,row-1,0,{'again '})
+        submit_again()
+    end)
+    it('regenerates after a revoked regeneration and a reload (#261)',function()
+        regenerate_then_revoke()
+        local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
+        vim.cmd('silent write!');vim.cmd('edit!')
+        submit_again()
+    end)
+    it('regenerates after a revoked regeneration, closing and reopening the chat (#261)',function()
+        regenerate_then_revoke()
+        local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
+        vim.cmd('silent write!')
+        vim.api.nvim_buf_delete(buf,{force=true})
+        vim.cmd('edit '..vim.fn.fnameescape(path));buf=vim.api.nvim_get_current_buf()
+        submit_again()
+    end)
+    it('regenerates regardless of a legacy answer-recovery directory (#261)',function()
+        local legacy=parley.config.state_dir..'/answer-recovery'
+        vim.fn.mkdir(legacy,'p');vim.uv.fs_chmod(legacy,tonumber('755',8))
+        vim.fn.writefile({'not json'},legacy..'/0.1.json')
+        local ok,err=pcall(function()
+            open({'💬: question','','🤖: original','valuable answer',''})
+            submit()
+        end)
+        vim.fn.delete(legacy,'rf')
+        assert(ok,err)
+    end)
+    -- Raw request mode parses its fence with PyYAML (log_emit.parse_yaml), which
+    -- a test host need not have. What these tests pin is where the parsed
+    -- payload is read from, so the parse is stubbed at that seam.
+    local function with_json_yaml(fn)
+        local LogEmit=require('parley.log_emit');local parse=LogEmit.parse_yaml
+        LogEmit.parse_yaml=function(text)return vim.json.decode(text)end
+        local ok,err=pcall(fn);LogEmit.parse_yaml=parse
+        assert(ok,err)
+    end
+    -- #261/#255: while Q1 is being regenerated, a request that includes Q1 in
+    -- its context carries Q1's previous answer — not the header or partial text
+    -- in the buffer — until Q1's generation ends.
+    local function regenerating_q1(q2)
+        open({'💬: first','','🤖: agent','old one','',q2 or '💬: second',''})
+        local first=submit()
+        return first
+    end
+    local function ask_q2(text)
+        local row=assert(row_containing(text or '💬: second'))
+        vim.api.nvim_win_set_cursor(0,{row,0})
+        local session=Respond.respond({range=0})
+        wait_for(function()return #calls==2 end)
+        return session,vim.json.encode(calls[2].payload)
+    end
+    it('gives a later question the previous answer before the regeneration writes (#255)',function()
+        regenerating_q1()
+        local _,payload=ask_q2()
+        assert.truthy(payload:find('old one',1,true))
+    end)
+    it('gives a later question the previous answer while the regeneration streams (#255)',function()
+        regenerating_q1()
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        local _,payload=ask_q2()
+        assert.truthy(payload:find('old one',1,true))
+        assert.is_nil(payload:find('new partial',1,true))
+    end)
+    it('gives a later question the new answer once the regeneration completes (#255)',function()
+        local first=regenerating_q1()
+        output(calls[1],'new one');complete(first,calls[1])
+        local _,payload=ask_q2()
+        assert.truthy(payload:find('new one',1,true))
+        assert.is_nil(payload:find('old one',1,true))
+    end)
+    it('gives a later question the transcript once an edit revokes the regeneration (#255)',function()
+        local first=regenerating_q1()
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        local row=assert(row_containing('new partial'))
+        vim.api.nvim_buf_set_text(buf,row-1,0,row-1,0,{'edited '})
+        wait_for(function()return Respond.response_snapshot(first).status=='terminal'end)
+        local _,payload=ask_q2()
+        assert.truthy(payload:find('edited new partial',1,true))
+        assert.is_nil(payload:find('old one',1,true))
+    end)
+    it('leaves a request captured mid-stream unchanged by the regeneration completing (#255)',function()
+        local first=regenerating_q1()
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        ask_q2()
+        output(calls[1],' and more');complete(first,calls[1])
+        local payload=vim.json.encode(calls[2].payload)
+        assert.truthy(payload:find('old one',1,true))
+        assert.is_nil(payload:find('and more',1,true))
+    end)
+    -- The event the plan names as most likely mishandled: the lines are read
+    -- while Q1 streams, but Q2's build() runs only after Q1 has ended. The
+    -- substitution belongs to the tick the lines were read.
+    it('substitutes at capture, not when the request is built later (#255)',function()
+        local first=regenerating_q1()
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        local resolve,held=Respond.resolve_remote_references,nil
+        Respond.resolve_remote_references=function(_,build) held=build end
+        -- Restored however the wait ends, so a timeout cannot leak the stub.
+        local ok,err=pcall(function()
+            local row=assert(row_containing('💬: second'))
+            vim.api.nvim_win_set_cursor(0,{row,0})
+            Respond.respond({range=0})
+            wait_for(function()return held~=nil end)
+        end)
+        Respond.resolve_remote_references=resolve
+        assert(ok,err)
+        complete(first,calls[1])
+        held(nil)
+        wait_for(function()return #calls==2 end)
+        local payload=vim.json.encode(calls[2].payload)
+        assert.truthy(payload:find('old one',1,true))
+        assert.is_nil(payload:find('new partial',1,true))
+    end)
+    it('keeps a typed raw request while an earlier answer regenerates (#255)',function()with_json_yaml(function()
+        local raw='```yaml {"type": "request"}'
+        regenerating_q1('💬: second')
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        local row=assert(row_containing('💬: second'))
+        vim.api.nvim_buf_set_lines(buf,row,row,false,{raw,
+            '{"model": "raw-fixture", "messages": [{"role": "user", "content": "custom"}]}','```'})
+        ask_q2()
+        -- The typed request IS the payload, not text inside a built one.
+        assert.equals('raw-fixture',calls[2].payload.model)
+    end)end)
+    -- #261/#255: Q1's writes land inside Q2's captured input. They used to mark
+    -- Q2 stale, so Q2's tool round paused at its continuation; the answer being
+    -- replaced stays the valid context until Q1 ends, so Q2 now continues.
+    it('continues a later question\'s tool round while an earlier answer regenerates (#255)',function()
+        local path=tmp_dir..'/tool-fixture-255.txt';files[#files+1]=path
+        vim.fn.writefile({'fixture tool content'},path)
+        local first=regenerating_q1()
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        ask_q2()
+        local qt=parley.tasker.get_query(calls[2].id)
+        qt.raw_response=mk_read_file_sse_response('tool-255',path)
+        calls[2].running=false;calls[2].complete(calls[2].id)
+        output(calls[1],' and more')
+        complete(first,calls[1])
+        wait_for(function()return #calls==3 end)
+        assert.truthy(vim.inspect(calls[3].payload):find('fixture tool content',1,true))
+    end)
+    -- #261/#255: a sub-chat's ancestor context reads the parent as the user
+    -- sees it — its loaded buffer — and a parent exchange still being
+    -- regenerated contributes its previous answer there too.
+    local function child_of_parent()
+        local child=tmp_dir..'/2026-03-02-child-'..math.random(1000000)..'.md';files[#files+1]=child
+        local parent_name=vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf),':t')
+        vim.fn.writefile({'# topic: Child','- file: child.md','---','',
+            '🌿: '..parent_name..': Parent','','💬: child question',''},child)
+        return child
+    end
+    local function ancestors(child)
+        local lines=vim.fn.readfile(child)
+        local Parser=require('parley.chat_parser')
+        local parsed=Parser.parse_chat(lines,Parser.find_header_end(lines),parley.config)
+        local out={}
+        for _,m in ipairs(Respond._collect_ancestor_messages(child,parsed))do out[#out+1]=tostring(m.content)end
+        return table.concat(out,'\n')
+    end
+    it('gives a sub-chat the previous answer of a parent exchange being regenerated (#255)',function()
+        local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
+        local first=regenerating_q1()
+        local child_name=vim.fn.fnamemodify(child_of_parent(),':t')
+        vim.api.nvim_buf_set_lines(buf,-1,-1,false,{'🌿: '..child_name..': Child'})
+        local child=vim.fn.fnamemodify(tmp_dir..'/'..child_name,':p')
+        output(calls[1],'new partial')
+        wait_for(function()return buffer_contains(buf,'new partial')end)
+        vim.cmd('silent write!')
+        local text=ancestors(child)
+        assert.truthy(text:find('old one',1,true),text)
+        assert.is_nil(text:find('new partial',1,true))
+        complete(first,calls[1])
+    end)
+    it('gives a sub-chat the parent\'s unsaved text, not the disk (#255)',function()
+        local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
+        open({'💬: first','','🤖: agent','disk answer',''})
+        local child_name=vim.fn.fnamemodify(child_of_parent(),':t')
+        vim.api.nvim_buf_set_lines(buf,-1,-1,false,{'🌿: '..child_name..': Child'})
+        vim.cmd('silent write!')
+        local row=assert(row_containing('disk answer'))
+        vim.api.nvim_buf_set_lines(buf,row-1,row,false,{'buffer answer'})
+        local text=ancestors(vim.fn.fnamemodify(tmp_dir..'/'..child_name,':p'))
+        assert.truthy(text:find('buffer answer',1,true),text)
+        assert.is_nil(text:find('disk answer',1,true))
+    end)
+    -- The raw payload build_messages finds lives on the input the request was
+    -- built from. A batch leg builds from a copy, so reading it back from this
+    -- function's own table dropped a typed raw request in batch mode.
+    it('keeps a typed raw request in a batch leg',function()with_json_yaml(function()
+        open({'💬: first','','💬: second','```yaml {"type": "request"}',
+            '{"model": "raw-fixture", "messages": [{"role": "user", "content": "custom"}]}','```',''})
+        vim.api.nvim_win_set_cursor(0,{assert(row_containing('💬: second')),0})
+        assert.is_not_nil(Respond.respond_all())
+        wait_for(function()return #calls==1 end)
+        output(calls[1],'answer one');calls[1].complete(calls[1].id)
+        wait_for(function()return #calls==2 end)
+        -- The typed request IS the payload, not text inside a built one.
+        assert.equals('raw-fixture',calls[2].payload.model)
+    end)end)
     it('supports explicit edit adoption through the registered resume command',function()
         open({'💬: first','','🤖: old first','','💬: second',''})
         vim.api.nvim_win_set_cursor(0,{9,0})

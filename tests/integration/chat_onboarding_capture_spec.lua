@@ -21,9 +21,7 @@ describe('captured response onboarding',function()
             calls[#calls+1]={buf=b,id=id,provider=provider,payload=vim.deepcopy(payload),output=output,complete=complete,abort=abort,opts=opts}
             parley.tasker.set_query(id,{buf=b,response='',raw_response='',tool_wire='openai'})
         end
-        parley.tasker.stop_owner=function(owner)
-            for _,call in ipairs(calls)do if call.opts.generation_id==owner then call.abort('cancelled')end end
-        end
+        parley.tasker.stop_owner=require('tests.helpers.respond_fixture').stop_owner(calls)
         buf=vim.api.nvim_create_buf(true,false);vim.api.nvim_set_current_buf(buf)
         vim.api.nvim_buf_set_name(buf,root..string.format('/2026-09-15.12-%02d-%02d.%03d_fixture.md',
             math.floor(buf/60000)%60,math.floor(buf/1000)%60,buf%1000))
@@ -54,6 +52,53 @@ describe('captured response onboarding',function()
         assert.equals('success',Respond.response_snapshot(session).generation.outcome)
         -- #266: the answer header lands with the first output, not at request start.
         assert.truthy(text(buf):find('🤖:[SelectedFixture]',1,true))
+    end)
+    -- #261 M4 W2, W3: a readiness picker that never answers must not hold the
+    -- generation. Stop ends it at once; a late pick starts nothing.
+    it('ends a response at Stop while its readiness picker never answers',function()
+        session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
+        Respond.cancel_responses(buf)
+        wait(function()return Respond.response_snapshot(session).status=='terminal'end)
+        parley._state.agent='SelectedFixture';ready();ready=nil
+        vim.wait(50,function()return #calls>0 end,5)
+        assert.equals(0,#calls,'a pick after Stop started a request')
+    end)
+    -- #261 M4 W12: a completion that refuses to start is a failed finalize, and
+    -- the generation ends rather than waiting on a `done` nothing will call.
+    it('ends a response whose completion refuses to start',function()
+        require('tests.helpers.stub').with_stub(require('parley.response_completion'),'start',
+            function()return nil,'completion refused'end,function()
+                parley._state.agent='SelectedFixture'
+                session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
+                ready();wait(function()return #calls==1 end)
+                calls[1].output(calls[1].id,'answer');calls[1].complete(calls[1].id)
+                wait(function()return Respond.response_snapshot(session).status=='terminal'end)
+            end)
+        assert.equals('finalize_failed',Respond.response_snapshot(session).generation.outcome)
+    end)
+    -- #261 M4 W15, the terminal handler's own site: a response that ends badly
+    -- while its automatic topic runs cancels the topic; if that cancel throws,
+    -- the handler must still run the rest of its ending cleanup.
+    it('finishes its ending cleanup when the topic cancel throws',function()
+        vim.api.nvim_buf_set_lines(buf,0,1,false,{'# topic: ?'})
+        local finalized=0
+        local Stub=require('tests.helpers.stub')
+        Stub.with_stub(require('parley.response_completion'),'start',function()return nil,'completion refused'end,function()
+            Stub.with_stub(require('parley.response_topic'),'cancel',function()error('topic cancel exploded')end,function()
+                Stub.with_stub(require('parley.buffer_lifecycle'),'finalize_mutated_api_leg',function(b)
+                    if b==buf then finalized=finalized+1 end
+                end,function()
+                    parley._state.agent='SelectedFixture'
+                    session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
+                    ready();wait(function()return #calls==1 end)
+                    calls[1].output(calls[1].id,'answer');calls[1].complete(calls[1].id)
+                    wait(function()return Respond.response_snapshot(session).status=='terminal'end)
+                    assert.equals(2,#calls,'the automatic topic never started')
+                    wait(function()return finalized>0 end)
+                end)
+            end)
+        end)
+        assert.equals('finalize_failed',Respond.response_snapshot(session).generation.outcome)
     end)
     it('never recaptures a deleted origin when onboarding finishes',function()
         session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)

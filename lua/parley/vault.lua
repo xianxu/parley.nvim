@@ -132,44 +132,56 @@ V.resolve_secret = function(name, secret, callback, on_error)
 				secrets[name] = content
 				post_process()
 			else
+				-- stdout is where a secret command prints the secret, so it is never
+				-- shown; stderr is its diagnosis, bounded (#261 M3 review, ARCH-SECURE).
 				fail(
 					"vault resolver for "
 						.. name
-						.. "secret command "
+						.. " secret command "
 						.. vim.inspect(secret)
-						.. " failed:\ncode: "
-						.. code
-						.. ", signal: "
-						.. signal
-						.. "\nstdout: "
-						.. stdout_data
-						.. "\nstderr: "
-						.. stderr_data
+						.. " failed ("
+						.. tasker.exit_reason(code, signal, io_error)
+						.. "): "
+						.. vim.trim(tostring(stderr_data)):sub(1, 500)
 				)
 			end
 		end, nil, nil, function(message)
 			fail("vault resolver for " .. name .. " launch failed: " .. tostring(message))
-		end)
+		end, { deadline_ms = tasker.deadline.prompt })
 	else
 		secrets[name] = secret
 		post_process()
 	end
 end
 
-V.refresh_copilot_bearer = function(callback)
+-- One schema for the copilot bearer at every boundary it crosses: the token
+-- endpoint's response and the cached copy in vault_state.json (#261 M1 review).
+-- A field of another type is dropped, so `expires_at` is never compared as
+-- anything but a number.
+local BEARER_SCHEMA = { token = "string", expires_at = "number" }
+
+-- Every path calls back (#261 M4 W6): `callback()` once the bearer is ready,
+-- or `on_error(message)` — a request waiting on it must never be left waiting.
+V.refresh_copilot_bearer = function(callback, on_error)
+	callback = callback or function() end
+	local function failed(message)
+		logger.error(message)
+		if on_error then on_error(message) end
+	end
 	local secret = secrets.copilot
 	if not secret or type(secret) == "table" then
+		failed("copilot bearer resolve failed: the copilot secret is not resolved")
 		return
 	end
 	logger.debug("vault refresh_copilot_bearer: started", true)
-
-	callback = callback or function() end
 
 	local state_file = V.config.state_dir .. "/vault_state.json"
 
 	local state = {}
 	if vim.fn.filereadable(state_file) ~= 0 then
-		state = helpers.file_to_table(state_file) or {}
+		-- #261: a malformed bearer is dropped here, not compared below. The file
+		-- is a token cache, so a pruned field is simply fetched again.
+		state = helpers.file_to_table(state_file, { copilot_bearer = BEARER_SCHEMA }) or {}
 	end
 
 	local bearer = V._state.copilot_bearer or state.copilot_bearer or {}
@@ -183,7 +195,6 @@ V.refresh_copilot_bearer = function(callback)
 	local curl_params = vim.deepcopy(V.config.curl_params or {})
 	local args = {
 		"-s",
-		"-v",
 		"https://api.github.com/copilot_internal/v2/token",
 		"-H",
 		"Content-Type: application/json",
@@ -203,19 +214,31 @@ V.refresh_copilot_bearer = function(callback)
 		table.insert(curl_params, arg)
 	end
 
-	tasker.run(nil, "curl", curl_params, function(code, signal, stdout, stderr)
+	tasker.run(nil, "curl", curl_params, function(code, signal, stdout, _stderr, io_error)
+		-- A kill reports code nil (#261 M3); every failure is reported, never thrown.
+		-- Neither output is shown: this request carries the Copilot token.
 		if code ~= 0 then
-			logger.error(string.format("copilot bearer resolve failed: %d, %d", code, signal, stderr))
+			failed("copilot bearer resolve failed (" .. tasker.exit_reason(code, signal, io_error) .. ")")
 			return
 		end
 
-		V._state.copilot_bearer = vim.json.decode(stdout)
-		secrets.copilot_bearer = V._state.copilot_bearer.token
+		-- External output, parsed at the boundary (#261 M1 review BR-16): curl
+		-- exits 0 on an HTML proxy page or an empty body.
+		local decoded_ok, fetched = pcall(vim.json.decode, stdout)
+		if decoded_ok and type(fetched) == "table" then
+			helpers.conform(fetched, BEARER_SCHEMA, "the copilot token response")
+		end
+		if not decoded_ok or type(fetched) ~= "table" or type(fetched.token) ~= "string" then
+			failed("copilot bearer resolve failed: the token endpoint did not return a token")
+			return
+		end
+		V._state.copilot_bearer = fetched
+		secrets.copilot_bearer = fetched.token
 		helpers.table_to_file(V._state, state_file)
 
 		logger.debug("vault refresh_copilot_bearer: token resolved, running callback", true)
 		callback()
-	end, nil, nil)
+	end, nil, nil, nil, { deadline_ms = tasker.deadline.http })
 end
 
 ---@param name string # secret name

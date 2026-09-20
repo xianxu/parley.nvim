@@ -214,6 +214,7 @@ local function observe(doc,event)
     elseif event.kind=='reload' then
         Replacement.clear(s)
         User.clear(s.editor)
+        s.previous={}
         cancel_schedule(s)
         Append.clear(s.append)
         s.epoch=epoch(); s.deferred=nil; s.idle=false
@@ -224,6 +225,7 @@ local function observe(doc,event)
     elseif event.kind=='detach' then
         Replacement.clear(s)
         User.clear(s.editor)
+        s.previous={}
         cancel_schedule(s)
         Append.clear(s.append)
         s.dead=true; s.deferred=nil; buffers[s.buf]=nil
@@ -236,7 +238,7 @@ end
 function M.attach(buf,opts)
     if buffers[buf] then return buffers[buf] end
     opts=opts or {}; local doc={}; local ep=epoch()
-    local s={buf=buf,epoch=ep,authority=State.new({epoch=ep}),subscribers={},
+    local s={buf=buf,epoch=ep,authority=State.new({epoch=ep}),subscribers={},previous={},
         patterns=opts.patterns or Lexical.patterns({}),scheduling=opts.schedule~=false,on_effect=opts.on_effect}
     documents[doc]=s
     s.editor=Editor.new(buf,{epoch=ep,driver=opts.driver,on_event=function(event) observe(doc,event) end})
@@ -328,6 +330,11 @@ function M.transition(doc,event)
     end
     local before=State.turn(s.authority)
     local result=effects(s,State.transition(s.authority,event))
+    if event.kind=='finish_generation' and result.ok then
+        for entity,slot in pairs(s.previous) do
+            if slot.generation==event.generation then s.previous[entity]=nil end
+        end
+    end
     if Replacement.prune(s) then schedule(doc) end
     Append.prune(s.append,State.snapshot(s.authority).grants)
     -- Compare the value rather than listing event kinds. finish_generation moves
@@ -336,6 +343,36 @@ function M.transition(doc,event)
     local after=State.turn(s.authority)
     if after~=before then notify(s,{kind='turn',turn=after}) end
     return result
+end
+--- #261/#255: the answer a regeneration is replacing, kept beside the index
+--- (which stores no transcript text) for request context only. Valid while the
+--- regenerating generation holds a live grant on the exchange; the lifecycle is
+--- the ARCH-ORDER table in workshop/plans/000261-transcript-is-the-whole-truth-plan.md.
+---@nodiscard
+function M.set_previous_answer(doc,spec)
+    local s=state(doc)
+    if s.dead or type(spec)~='table' or spec.epoch~=s.epoch or spec.value==nil
+        or not State.holds(s.authority,spec.generation,spec.entity) then return false end
+    s.previous[spec.entity]={generation=spec.generation,value=spec.value}
+    return true
+end
+--- Every still-valid slot as `{row=<0-based 💬: row>, generation, value}`;
+--- removes the rest (a revoked grant or a deleted marker has no other hook).
+function M.previous_answers(doc)
+    local s=state(doc); local out={}
+    if s.dead then return out end
+    for entity,slot in pairs(s.previous) do
+        local marker=State.holds(s.authority,slot.generation,entity) and M.lookup(doc,entity)
+        if marker then out[#out+1]={row=marker.start_row,generation=slot.generation,value=slot.value}
+        else s.previous[entity]=nil end
+    end
+    return out
+end
+--- Test seam: the raw slot count, so a test can prove removal, not filtering.
+function M._previous_count(doc)
+    local n=0
+    for _ in pairs(state(doc).previous or {}) do n=n+1 end
+    return n
 end
 function M.repair_step(doc,budget)
     local s=state(doc); if s.dead then return {status='detached'} end

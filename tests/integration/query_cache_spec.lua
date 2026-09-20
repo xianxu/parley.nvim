@@ -145,7 +145,8 @@ describe("dispatcher request-transport cache", function()
             nil, nil,
             function() probe.settled = probe.settled or "abort" end, -- on_abort
             nil,
-            function() probe.settled = probe.settled or "error" end) -- on_error
+            function() probe.settled = probe.settled or "error" end, -- on_error
+            { deadline_ms = 60000 }) -- outside any generation, so it names its end (#261 M3)
         return probe
     end
 

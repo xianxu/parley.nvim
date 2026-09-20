@@ -64,3 +64,53 @@ in ~1 s. Under 16 concurrent runs it fails 8/64 at #266's M3 close `e48362ab` an
 the unit phase of two full `make test` runs, once at JOBS=4. A cause in
 the harness or runtime, not in either module, now looks more likely than one
 specific to the call-hook case.
+
+### 2026-09-18 — a second spec in the same family (observed from #261 M1)
+
+`tests/integration/perf_ownership_spec.lua` dies the same way: no output after
+its first case, followed by a process exit.
+- **Alone, it runs 18–50 s on both the base commit and the #261 branch.**
+  Alternating A/B timings (base / branch, in seconds): 50.24 / 32.84,
+  50.23 / 26.00, 25.74 / 26.10, with a load average around 3.2. The two base
+  runs at 50.2 s died at the harness's ~50 s cap.
+- **Under `make test` it died twice, at JOBS=8 and JOBS=4.**
+- **`tests/unit/document_dependencies_spec.lua` also died silently once** at
+  JOBS=8. It passes alone.
+
+So the family is not specific to the JIT-off hook in `tool_resources_spec`: any
+spec near the per-file cap dies silently under load. The Done-when should cover
+the cap, not only the one case.
+
+### 2026-09-19 — two more silent deaths under JOBS=4 (from #261 M1 round 3)
+
+`tests/integration/document_fold_batches_spec.lua` stopped after 4 of its 5
+cases, and `document_fold_uncertainty_retirement_spec.lua` stopped before its
+first. Alone, both pass (5/5 and 1/1). #261's diff touches no fold code. That
+makes five specs in this family.
+- 2026-09-19 (from #261 M1 close): `perf_chat_typing_spec` died silently after
+  4 of 16 cases under JOBS=4, and passes alone (16/16, 22.5 s).
+  `perf_ownership_spec` died again in the same run. That makes six specs in
+  the family, and a different one dies on each full run.
+- 2026-09-19 (#261 M2): `highlight_typing_spec` died silently after 4 cases under JOBS=4; passes alone 8/8 — a seventh spec.
+
+### 2026-09-19 — one member of the family explained (parley#261 M5)
+
+`dispatcher_query_spec`'s parallel-load flake was not a silent death. It was a
+shared directory. The spec wrote request bodies into `stdpath('cache')`, which
+all specs in one `make test` run share, and a parallel spec removed the file
+("rename failed: No such file"). parley#261 gave it its own `tempname()`
+directory and added a guard against writes to the shared cache
+(`single_source_sweeps_spec`).
+
+Two members still die silently after many passing cases, and both also die on
+a clean HEAD:
+- `response_tools_spec`: 2 of 17 runs on the #261 tree, and on the 2nd run of a
+  clean HEAD worktree, after 72 cases;
+- `perf_ownership_spec`, `perf_document_spec`, `perf_chat_typing_spec` and
+  `document_append_extent_spec`: under load only.
+
+Shared writable state is worth ruling out for each one before looking at the JIT.
+- The native-fold specs belong to the family too. `document_fold_retirement_spec`
+  died on the 2nd run on #261's base tree (91f296b5). `document_fold_batches_spec`
+  hung there after 4 of its 5 cases. `document_fold_uncertainty_retirement_spec`
+  dies under load only. None of them touches #261's code.

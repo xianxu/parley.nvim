@@ -404,8 +404,8 @@ local function build_file_outline_items(file_path, config, depth)
 
   -- A live confirmed row supplies identity; an unopened disk item supplies
   -- only a file/row/content location, never a nearest-item substitution.
-  local live_buf=vim.fn.bufnr(abs_path)
-  local doc=live_buf~=-1 and Document.get(live_buf)
+  local live_buf=require('parley.helper').buffer_for(abs_path)
+  local doc=live_buf and Document.get(live_buf)
   for _,item in ipairs(items) do
     local entry=item.value
     if not entry.child_path then

@@ -4,6 +4,9 @@
 -- the REAL teardown bodies at each D.query caller so an arg-position regression
 -- or a response-retirement bug is actually caught.
 
+-- Fixture strings, not transport tokens: the harness watch for a refusal
+-- with no words expects them (#261 M5).
+vim.g.parley_expected_unkeyed={'test abort'}
 local uv = vim.uv or vim.loop
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
@@ -155,7 +158,10 @@ describe("cliproxy on_abort teardown per caller", function()
         assert.is_true(settled, vim.inspect(Respond.response_snapshot(response)))
         local generation = Respond.response_snapshot(response).generation
         assert.equals("provider_failed", generation.outcome)
-        assert.equals("test abort", generation.failure)
+        -- A transport string the vocabulary cannot resolve is the diagnosis, not
+        -- the token the words are keyed by (#261 M5 close: BR-88).
+        assert.is_nil(generation.failure)
+        assert.equals("test abort", generation.diagnosis)
         assert.equals(0, generation.outstanding_operations)
         local Document = require("parley.document")
         assert.same({}, Document.snapshot(Document.get(buf)).grants)

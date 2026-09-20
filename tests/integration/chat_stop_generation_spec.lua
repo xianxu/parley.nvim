@@ -20,11 +20,7 @@ describe('generation scoped Stop commands',function()
             parley.tasker.set_query(id,{buf=b,response='',raw_response='',tool_wire='openai'})
             return id
         end
-        parley.tasker.stop_owner=function(owner)
-            for _,call in ipairs(calls)do if call.opts.generation_id==owner then
-                call.running=false;vim.schedule(function()call.abort('cancelled')end)
-            end end
-        end
+        parley.tasker.stop_owner=require('tests.helpers.respond_fixture').stop_owner(calls)
         buf=vim.api.nvim_create_buf(true,false)
         vim.api.nvim_buf_set_name(buf,root..string.format('/2026-09-15.12-%02d-%02d.%03d_fixture.md',
             math.floor(buf/60000)%60,math.floor(buf/1000)%60,buf%1000))

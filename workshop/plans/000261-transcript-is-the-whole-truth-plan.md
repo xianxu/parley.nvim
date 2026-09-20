@@ -66,10 +66,13 @@ must *not* be. So:
 | `answer_recovery` — the on-disk snapshot store | `lua/parley/answer_recovery.lua` | deleted |
 | `recovery_paths` — the private-directory predicate | `lua/parley/recovery_paths.lua` | deleted |
 | `traversal_policy` — private-path exclusion for tool commands | `lua/parley/tools/traversal_policy.lua` | deleted |
-| M2 · `state` — `holds`: does a generation still hold a live grant on an entity | `lua/parley/document/state.lua` | modified |
-| M2 · `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
-| M3 · `attempt` — the `escalate` effect and the `deadline` event | `lua/parley/attempt.lua` | modified |
-| M5 · `refusal` — `describe`, `TOKENS`, `INTERNAL`, `PREFIX` | `lua/parley/refusal.lua` | new |
+| `state` — `holds`: does a generation still hold a live grant on an entity | `lua/parley/document/state.lua` | modified |
+| `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
+| `attempt` — `open_stop_window`: TERM, then the escalate effect at +2 s, for a stop whose cause is stop, deadline or leave; `kill_cause` | `lua/parley/attempt.lua` | modified |
+| `refusal` — `describe` (returns the message and how it resolved), `TOKENS`, `INTERNAL`, `LIFECYCLE` (a closed or reloaded chat, for every kind), `PREFIX`, `REVOKED` (words by revocation cause), `USER_STOP`, `BATCH_CONTINUE`, `BATCH_RESTART` | `lua/parley/refusal.lua` | new |
+| `is_token`, `brief`, `prose`, `KIND_ACTION` — what the vocabulary can resolve; the first line of a Lua error; free text folded onto one line; and what a refusal of each kind tells the user to do when its reason has no row, so an unworded one still names an action | `lua/parley/refusal.lua` | new |
+| `OUTCOMES` — the set a generation can stop with, asserted in `stop` and checked for words at load | `lua/parley/generation.lua` | modified |
+| `cancel` — a batch cancel carries its cause (`user`, `lifecycle`, `fault`), validated in the transition and read off the snapshot | `lua/parley/batch.lua` | modified |
 
 - **`State.holds(handle, generation, entity)`** (M2) is true when the
   document's state has a grant with that generation and entity whose status is
@@ -105,12 +108,17 @@ must *not* be. So:
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `chat_recovery` and `response_recovery` — recovery IO, pickers, guards | `lua/parley/chat_recovery.lua`, `lua/parley/response_recovery.lua` | deleted | state dir, pickers |
-| `helper` — `file_to_table` made total: never throws, never returns a non-table | `lua/parley/helper.lua` | modified | JSON sidecar files |
-| M2 · `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
-| M2 · `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
-| M3 · `tasker` — `scope_key`, `stop_scope`, `held`, `leave` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
-| M4 · `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
-| M4 · `deferred_work` — `new(step, on_error)` | `lua/parley/deferred_work.lua` | modified | timer turns |
+| `helper` — `file_to_table` made total, with an optional per-reader schema; `conform` drops wrongly typed fields; `table_to_file` is the atomic writer; `remove_stale_temps` sweeps its crash leftovers at setup | `lua/parley/helper.lua` | modified | JSON sidecar files |
+| `file_tracker` — `file_path`: `file_access.json` is a profile sidecar, read with a schema and written through the one writer | `lua/parley/file_tracker.lua` | modified | the file access history |
+| `custom_prompts` — `read_authored`: the file as the user wrote it, for writes; `load` is the filtered view; `source` accepts a preloaded view so a loop reads once; writes report whether they happened | `lua/parley/custom_prompts.lua` | modified | the user's custom prompt file |
+| `init` — `set_previous_answer`, `previous_answers`, `_previous_count` | `lua/parley/document/init.lua` | modified | per-document slot table |
+| `helper` — `chat_lines`: a chat's current text, from its loaded buffer if any; `buffer_for`: the buffer named exactly `name` | `lua/parley/helper.lua` | modified | loaded buffers, readfile |
+| `tasker` — `scope_key`, `is_scoped`, `stop_scope` (records the key; `run` then refuses a scoped run into it, 1024 keys, oldest evicted), `held`, `leave`, `deadline` (the per-kind table), `exit_reason` | `lua/parley/tasker.lua` | modified | spawn, kill, timers |
+| `oauth` — `_token_body_summary`: what a token endpoint's body may show in a log, its OAuth error only; the content tree takes the requesting generation's scope and spawns through `content_run`: `fetch_content`, `_fetch_public_content`, `_try_saved_accounts`, `_try_account_fetch`, `_fetch_google_api_once`, `_fetch_dropbox_api_once`, `_fetch_microsoft_api_once`, `_run_dropbox_metadata_request`, `_run_dropbox_file_request`, `_run_microsoft_metadata_request`, `_run_microsoft_content_request`, `_convert_office_to_text` | `lua/parley/oauth.lua` | modified | the OAuth token endpoint; remote content |
+| `vault` — `refresh_copilot_bearer` calls back on every path, success or its error callback | `lua/parley/vault.lua` | modified | the Copilot token endpoint |
+| `chat_respond` — `_cancel_entry` and `_cancel_topic`: a Stop's independent cleanups, each guarded so one that throws skips none after it | `lua/parley/chat_respond.lua` | modified | the chat's active responses |
+| `generation_runner` — `stats`; the `stopping` adapter; `fault` | `lua/parley/generation_runner.lua` | modified | the runner's effect loop |
+| `deferred_work` — `new`, now taking an error callback | `lua/parley/deferred_work.lua` | modified | timer turns |
 
 - **`helper.file_to_table`** (M1) runs `pcall(vim.json.decode)` and requires a
   table. Otherwise it logs a warning naming the file and saying it was ignored,
@@ -273,7 +281,7 @@ recovery tests at `:124-157`. The fixture is already in that `describe`
 (`:66-123`: `open`, `submit`, `output`, `complete`, and a stateful dispatcher
 double).
 
-- [ ] **Step 1: Write the tests.**
+- [x] **Step 1: Write the tests.**
 
 ```lua
     -- #261: the reported blocker. Regenerate, edit the answer while it streams
@@ -342,7 +350,7 @@ double).
     end)
 ```
 
-- [ ] **Step 2: Run on main, and confirm each red test fails for its named reason.**
+- [x] **Step 2: Run on main, and confirm each red test fails for its named reason.**
 
 Run: `make test-spec SPEC=chat/lifecycle`
 Expected:
@@ -356,7 +364,7 @@ Expected:
 If a red case passes, it does not reproduce the report. Fix the test before
 going on.
 
-- [ ] **Step 3: Commit** (`#261 M1: the reported blocker, as failing tests`).
+- [x] **Step 3: Commit** (`#261 M1: the reported blocker, as failing tests`).
 
 ### Task 1.2: Delete the subsystem and its hooks
 
@@ -394,9 +402,9 @@ does not match.
         end,
 ```
 
-- [ ] **Step 1:** Apply the table.
-- [ ] **Step 2:** Run the Task 1.1 tests. Expected: all PASS.
-- [ ] **Step 3: Commit** (`#261 M1: delete the on-disk answer-recovery store`).
+- [x] **Step 1:** Apply the table.
+- [x] **Step 2:** Run the Task 1.1 tests. Expected: all PASS.
+- [x] **Step 3: Commit** (`#261 M1: delete the on-disk answer-recovery store`).
   The body gives the why: a retained snapshot that disagreed with the buffer
   refused every retry, even across reopen; undo is the way back to a replaced
   answer.
@@ -416,8 +424,8 @@ does not match.
 | tools/filesystem.lua:317-319, 332-333 | drop the private-directory validation and its failure |
 | tools/traversal_policy.lua, tests/unit/tool_traversal_policy_spec.lua | delete |
 
-- [ ] **Step 1:** Apply the table.
-- [ ] **Step 2: Tests of the carve-out.** In each case below, delete what
+- [x] **Step 1:** Apply the table.
+- [x] **Step 2: Tests of the carve-out.** In each case below, delete what
   asserts the private exclusion. **Keep what pins other behaviour**, with the
   exclusion assertions removed.
   - `tests/integration/tool_process_scope_spec.lua`:
@@ -428,16 +436,16 @@ does not match.
   - Same rule for `tests/integration/async_builtin_spec.lua:101-120`,
     `tests/integration/tool_dispatch_capture_spec.lua:95-105` and
     `tests/unit/tool_process_scope_spec.lua:36-41`.
-- [ ] **Step 3:** Delete `tests/integration/{answer_recovery,chat_recovery,response_recovery,recovery_paths}_spec.lua`
+- [x] **Step 3:** Delete `tests/integration/{answer_recovery,chat_recovery,response_recovery,recovery_paths}_spec.lua`
   and `tests/helpers/fake_recovery_filesystem.lua`.
-- [ ] **Step 4:** In `tests/integration/batch_lifecycle_spec.lua`:
+- [x] **Step 4:** In `tests/integration/batch_lifecycle_spec.lua`:
   - remove `:30`, `:43-45` and `:60`;
   - in the three recovery cases (`:65-86`, `:88-95`, `:97-116`), remove the
     recovery lines but keep any batch assertions (retry after failure or cancel,
     early-save ordering).
-- [ ] **Step 5:** `make test-spec SPEC=providers/tool_execution` and
+- [x] **Step 5:** `make test-spec SPEC=providers/tool_execution` and
   `make test-spec SPEC=chat/batch`: PASS.
-- [ ] **Step 6: Commit** (`#261 M1: tools stop special-casing the recovery directory`).
+- [x] **Step 6: Commit** (`#261 M1: tools stop special-casing the recovery directory`).
 
 ### Task 1.4: Sidecars degrade, never throw — and a spec proves it for each
 
@@ -460,7 +468,7 @@ consequences:
   `tests/arch/sidecar_authority_spec.lua` (the reader census). Route both specs
   under `chat/lifecycle` in `atlas/traceability.yaml`.
 
-- [ ] **Step 1: Failing unit tests.** Call `file_to_table` on:
+- [x] **Step 1: Failing unit tests.** Call `file_to_table` on:
   - invalid JSON;
   - JSON that is not an object (`[1]`, `"x"`, `3`);
   - an empty file;
@@ -468,7 +476,7 @@ consequences:
 
   Each returns `nil` and does not throw. On invalid content it warns once,
   naming the file.
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
 
 ```lua
 --- A JSON sidecar as a table, or nil. Never throws: every sidecar under the
@@ -487,7 +495,7 @@ _H.file_to_table = function(file_path)
 end
 ```
 
-- [ ] **Step 3: The behavioural spec**, driven by one table that the census
+- [x] **Step 3: The behavioural spec**, driven by one table that the census
   shares:
 
 ```lua
@@ -512,7 +520,7 @@ return {
     stub `oauth.fetch_content` to return content;
   - **an unwritable state directory** (`chmod 500`, restored in a `finally`):
     submission still reaches the provider.
-- [ ] **Step 4: The census spec.**
+- [x] **Step 4: The census spec.**
 
 ```lua
 -- Target transcript-is-the-whole-truth (#261): a sidecar under the state
@@ -552,47 +560,47 @@ describe("arch: every state-directory reader is exercised corrupt", function()
 end)
 ```
 
-- [ ] **Step 5: Run.** Before Step 2's fix, the `state.json` and remote-cache
+- [x] **Step 5: Run.** Before Step 2's fix, the `state.json` and remote-cache
   cases fail (they throw). After it, all PASS.
-- [ ] **Step 6: Counterfactuals.** Edit, run, then restore with
+- [x] **Step 6: Counterfactuals.** Edit, run, then restore with
   `git checkout -- <file>` (`git stash` is banned; see lessons).
   - (a) Revert `file_to_table` to the unguarded decode: the degrade spec goes
     red.
   - (b) Add `local _ = config.state_dir` to a clean
     `lua/parley/chat_presentation.lua`: the census goes red.
-- [ ] **Step 7: Commit** (`#261 M1: sidecars degrade — every reader is exercised corrupt`).
+- [x] **Step 7: Commit** (`#261 M1: sidecars degrade — every reader is exercised corrupt`).
 
 ### Task 1.5: Documentation for M1
 
-- [ ] Delete `atlas/chat/recovery.md` and its `atlas/index.md:19` entry.
-- [ ] In `atlas/traceability.yaml`, delete the `chat/recovery:` block
+- [x] Delete `atlas/chat/recovery.md` and its `atlas/index.md:19` entry.
+- [x] In `atlas/traceability.yaml`, delete the `chat/recovery:` block
   (`:349-358`), and the entries for `recovery_paths.lua` (`:809`),
   `traversal_policy.lua` (`:818`) and `tool_traversal_policy_spec.lua` (`:843`).
-- [ ] In `atlas/providers/tool_execution.md`, delete only the sentences about
+- [x] In `atlas/providers/tool_execution.md`, delete only the sentences about
   the private/recovery subtree: `:11-12`, `:47`, `:203-204`, `:237-241`, and the
   private-subtree sentences within `:142-147`. Read that paragraph first; the
   rest of it stays.
-- [ ] `README.md:82-84`: remove the answer-recovery sentence.
-- [ ] `atlas/chat/lifecycle.md` (Response), a short paragraph saying:
+- [x] `README.md:82-84`: remove the answer-recovery sentence.
+- [x] `atlas/chat/lifecycle.md` (Response), a short paragraph saying:
   - regenerating replaces the answer in the buffer;
   - the previous text is reachable through native undo;
   - nothing is kept on disk.
 
   How generated writes group into undo steps is stated once, in
   [ownership.md "Undo grouping"](ownership.md). Link to it; do not restate it.
-- [ ] `tests/manual/chat-concurrency.md:61-73`: drop recovery items 3-5; the
+- [x] `tests/manual/chat-concurrency.md:61-73`: drop recovery items 3-5; the
   section becomes "Batch".
-- [ ] Target: append a Revisions entry answering the open question "What bounds
+- [x] Target: append a Revisions entry answering the open question "What bounds
   the in-session memory that replaces durable recovery?". The answer: none is
   kept. The only held copy is `prev_answer`, whose lifetime is one generation
   (M2).
-- [ ] **Removal query, final:** re-run Task 1.2's query. Expected: exactly one
+- [x] **Removal query, final:** re-run Task 1.2's query. Expected: exactly one
   hit, the string `answer-recovery` in the Task 1.1 legacy test.
-- [ ] Commit (`#261 M1: atlas — the recovery store is gone`).
+- [x] Commit (`#261 M1: atlas — the recovery store is gone`).
 
 ### Task 1.6: M1 boundary
 
-- [ ] `make test`, `make lint`. Compare any failure against `main` before
+- [x] `make test`, `make lint`. Compare any failure against `main` before
   touching it (lessons: "N failures, one cause is a hypothesis").
 - [ ] `sdlc milestone-close --issue 261 --milestone M1`. Fix Critical and
   Important findings, sweeping each finding's whole class (lessons, memory).
@@ -610,7 +618,7 @@ marked M2.
 **Files:** `lua/parley/document/state.lua` (next to `M.turn`); test
 `tests/unit/document_state_spec.lua`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
 
 ```lua
     describe('holds',function()
@@ -648,7 +656,7 @@ marked M2.
 
   Match the region fields to what `state.lua`'s `proof()` requires. The shape
   above is the one `generation_runner.lua:583-586` builds.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [x] **Step 2:** FAIL. **Step 3: Implement.**
 
 ```lua
 --- Does `generation` still hold a live grant on `entity`? Suspended counts: the
@@ -662,7 +670,7 @@ function M.holds(doc,generation,entity)
 end
 ```
 
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: State.holds`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: State.holds`).
 
 ### Task 2.2: `previous_answer.capture` / `substitute`
 
@@ -675,7 +683,7 @@ end
 - Route the spec under `chat/lifecycle`, and add `previous_answer.lua` to
   `chat/lifecycle`'s code list.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - An entry at Q1's row replaces Q1's answer, summary and reasoning. Q2 is
     unchanged (deep-equal to the input's Q2).
   - `skip_index` is never substituted, even with a matching entry.
@@ -688,7 +696,7 @@ end
     over the substituted chat emits the `tool_use`/`tool_result` messages.
   - The input `parsed` is not mutated. `capture` of an exchange without an answer
     is `nil`. Mutating a `capture` result leaves the source intact.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [x] **Step 2:** FAIL. **Step 3: Implement.**
 
 ```lua
 -- The previous answer of an exchange being regenerated (#261, #255), and its
@@ -730,7 +738,7 @@ end
 return M
 ```
 
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: previous_answer capture and substitute`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: previous_answer capture and substitute`).
 
 ### Task 2.3: The coordinator slot
 
@@ -745,7 +753,7 @@ return M
 `chat/document`. Set it up as in `tests/integration/document_turn_wake_spec.lua:11-26`
 (`Fake.new`, `D.attach(nextbuf,{driver=…,schedule=false})`, `D.drain`).
 
-- [ ] **Step 1: Failing tests**, one per coordinator-owned row of the ARCH-ORDER
+- [x] **Step 1: Failing tests**, one per coordinator-owned row of the ARCH-ORDER
   table:
   - Set with a live grant: listed as `{row, generation, value}` for E's `💬:`
     row.
@@ -757,7 +765,7 @@ return M
   - An edit deleting E's `💬:` marker: nothing listed.
   - Reload or detach: `_previous_count` is 0.
   - Two generations on two entities: both listed, each with its own value.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [x] **Step 2:** FAIL. **Step 3: Implement.**
 
 ```lua
 --- #261/#255: the answer a regeneration is replacing, kept beside the index
@@ -804,7 +812,7 @@ end
   Revocation has no coordinator hook, so `previous_answers` removes a revoked
   slot lazily. The revoke test therefore calls `previous_answers` before it
   asserts `_previous_count`.
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: the coordinator's prev_answer slot`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M2: the coordinator's prev_answer slot`).
 
 ### Task 2.4: Set the slot; substitute it in the same chat
 
@@ -812,7 +820,7 @@ end
 Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
 `describe`; the payload is on `calls[i].payload`.
 
-- [ ] **Step 1: Tests.**
+- [x] **Step 1: Tests.**
   - *Characterization (passes on main, because the gap is written only just
     before the first write):* regenerate Q1 (answered `old one`), then submit Q2
     before Q1 emits. Q2's payload contains `old one`.
@@ -837,8 +845,8 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
   - **Raw-request mode:** with a live slot, Q2 carries a typed raw payload
     (`question.raw_payload`, set by `build_messages` at `:831`). The payload
     sent is the raw one. The same holds in a batch leg (`frame.input_rows`).
-- [ ] **Step 2:** The non-characterization tests FAIL.
-- [ ] **Step 3: Implement.**
+- [x] **Step 2:** The non-characterization tests FAIL.
+- [x] **Step 3: Implement.**
   1. Move `local doc = D.get(buf) or D.attach(…)` (`:1443`) above the
      `exchange.answer = nil` line (`:1432`).
   2. Right after it, in this same tick:
@@ -870,9 +878,9 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
         end
 ```
 
-- [ ] **Step 4:** PASS. **Counterfactual:** move the `substitute` call into
+- [x] **Step 4:** PASS. **Counterfactual:** move the `substitute` call into
   `build()`; the capture-then-late-build test fails. Restore.
-- [ ] **Step 5:** Commit (`#261 M2: a regenerating answer's predecessor feeds context`).
+- [x] **Step 5:** Commit (`#261 M2: a regenerating answer's predecessor feeds context`).
 
 ### Task 2.5: Generated writes never make another generation's input stale
 
@@ -880,7 +888,7 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
 `tests/unit/document_state_spec.lua`, and one integration case in
 `tests/integration/chat_respond_spec.lua`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - Unit: generation A has a prefix dependency.
     - Generation B's granted write (an `observed_edit` whose `owner_grant` is
       B's grant) lands inside A's range: A is **not** stale, and A's range moved
@@ -889,15 +897,15 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
       before.
   - Integration: Q1 is regenerating and streaming, and Q2 is submitted with a
     tool call. Q2's tool round continues without a stale-input pause.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.** In the dependency loop, when
+- [x] **Step 2:** FAIL. **Step 3: Implement.** In the dependency loop, when
   `owner` is non-nil and `owner.generation ~= gen.id`, call `move(dep,event)`
   without marking stale. Replace the comment's "other owners" clause with the
   #255 rationale (see ARCH-ORDER, Consumer side).
-- [ ] **Step 4:** PASS. Run `make test-spec SPEC=chat/document`, and the
+- [x] **Step 4:** PASS. Run `make test-spec SPEC=chat/document`, and the
   `generation_input_affinity_spec` and `generation_turn_spec` suites. Any test
   that asserts another owner's write marks input stale is **asserting the
   reversed rule**: update it, and say so in the commit body.
-- [ ] **Step 5:** Commit (`#261 M2: only human edits make captured input stale`).
+- [x] **Step 5:** Commit (`#261 M2: only human edits make captured input stale`).
 
 ### Task 2.6: Ancestors from the live buffer
 
@@ -909,7 +917,7 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
   `grep -rln "3798\|branch.*rename\|chat_move" tests/integration`; the reviewer
   names `chat_move_spec`.
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - `chat_lines`:
     - A loaded buffer whose unsaved text differs from disk returns the buffer's
       lines and its number.
@@ -927,7 +935,7 @@ Test: `tests/integration/chat_respond_spec.lua`, in the scoped-session
     answer, and no generation is running. C's payload holds the edited text.
   - The branch-link rewrite at `init.lua:3798`, with the target loaded: the
     buffer is rewritten, and the file is not written under it.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [x] **Step 2:** FAIL. **Step 3: Implement.**
 
 ```lua
 --- A chat's current text: its loaded buffer if one is open under this path,
@@ -965,13 +973,13 @@ end
   At `init.lua:3798-3800`, use
   `local lines, live_buf = M.helpers.chat_lines(new_path); local live = live_buf ~= nil`.
   `live_buf` and `live` are still used at `:3815` and `:3824`.
-- [ ] **Step 4:** PASS. **Counterfactual:** make `chat_lines` read the file
+- [x] **Step 4:** PASS. **Counterfactual:** make `chat_lines` read the file
   only; the unsaved-parent test fails. Restore.
-- [ ] **Step 5:** Commit (`#261 M2: ancestors read the parent's live buffer`).
+- [x] **Step 5:** Commit (`#261 M2: ancestors read the parent's live buffer`).
 
 ### Task 2.7: Documentation, and M2's boundary
 
-- [ ] `atlas/chat/lifecycle.md` (Response): a "Previous answer while
+- [x] `atlas/chat/lifecycle.md` (Response): a "Previous answer while
   regenerating" paragraph covering:
   - the slot's lifetime;
   - same-chat and ancestor substitution;
@@ -980,9 +988,9 @@ end
 
   Link this plan's ARCH-ORDER table for the event list. `ownership.md` links
   here and does not restate it.
-- [ ] `atlas/chat/document.md` "Ownership and data flow": the coordinator holds
+- [x] `atlas/chat/document.md` "Ownership and data flow": the coordinator holds
   `prev_answer` beside the index, which still stores no transcript text.
-- [ ] The atlas page that documents ancestor context (`grep -rln "ancestor" atlas/`):
+- [x] The atlas page that documents ancestor context (`grep -rln "ancestor" atlas/`):
   a loaded parent is read from its buffer.
 - [ ] `make test`, `make lint`; `sdlc milestone-close --issue 261 --milestone M2`;
   log the verdict.
@@ -1088,7 +1096,7 @@ exist for it, and Task 3.2 tests it.
 **Files:** `tests/helpers/fake_process.lua`; `lua/parley/tasker.lua:470-476`;
 test `tests/unit/tasker_unit_spec.lua`.
 
-- [ ] **Step 1: Extend the fake.** Keep every existing option and behaviour,
+- [x] **Step 1: Extend the fake.** Keep every existing option and behaviour,
   and add:
   - **Groups.** `spawn_opts.detached == true` sets `pgid = pid`; otherwise
     `pgid = 0`, standing for Neovim's group.
@@ -1103,24 +1111,24 @@ test `tests/unit/tasker_unit_spec.lua`.
     EOF is delivered only once every holder has exited. It defaults to off,
     because today `exit()` does not EOF (`fake_process.lua:36-45`).
   - **Spawn options.** `state.spawn_options` records each spawn's options.
-- [ ] **Step 2: Failing tests:** a scoped `tasker.run` spawns with
+- [x] **Step 2: Failing tests:** a scoped `tasker.run` spawns with
   `detached=true`; an unscoped one spawns without it.
-- [ ] **Step 3: Implement:** set `detached = opts.logical_generation ~= nil` in
+- [x] **Step 3: Implement:** set `detached = opts.logical_generation ~= nil` in
   the spawn options, and store `state.group = detached`. PASS.
-- [ ] **Step 4:** Commit (`#261 M3: a generation's processes lead their own group`).
+- [x] **Step 4:** Commit (`#261 M3: a generation's processes lead their own group`).
 
 ### Task 3.2: Escalation in the pure lifecycle
 
 **Files:** `lua/parley/attempt.lua`; test `tests/unit/attempt_spec.lua`.
 
-- [ ] **Step 1: Failing tests**, one per table row, plus:
+- [x] **Step 1: Failing tests**, one per table row, plus:
   - KILL is due at exactly `stop+2000` (the reconcile tick is clamped to
     `kill_due`);
   - an exit at `+1000` with both EOFs: no `escalate`;
   - an exit at `+100` without EOF (the grandchild case), then `stop_requested`
     at `+3000`: the window reopens, and `escalate` fires at `+5000`;
   - a second `stop_requested` at `+1500` does not move `kill_due`.
-- [ ] **Step 2:** FAIL. **Step 3: Implement** the table:
+- [x] **Step 2:** FAIL. **Step 3: Implement** the table:
   - the `kill_due`, `escalated` and `stop_cause` fields, and the `deadline`
     event;
   - the tick clamp: `reconcile_due = math.min(reconcile_due, kill_due)` while
@@ -1128,15 +1136,20 @@ test `tests/unit/tasker_unit_spec.lua`.
   - a `stop_requested` after `unresolved_visible` opens a new window.
 
   Return `escalate` next to `probe` and `unresolved`.
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M3: the attempt lifecycle escalates`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M3: the attempt lifecycle escalates`).
 
 ### Task 3.3: Group kill, scopes, deadlines, settling spawns, kill reporting
 
 **Files:** `lua/parley/tasker.lua`; `lua/parley/response_provider.lua:102` and
 `lua/parley/tools/producer.lua:120` (both consume `scope_key`). Tests:
-`tests/integration/tasker_supervision_spec.lua`, `tests/unit/tasker_unit_spec.lua`.
+`tests/integration/tasker_supervision_spec.lua`, `tests/unit/tasker_unit_spec.lua`,
+and `tests/integration/tasker_run_spec.lua`. That last spec calls `tasker.run`
+43 times with no opts (`grep -c "tasker.run(" tests/integration/tasker_run_spec.lua`),
+so every call is unscoped and has no deadline. Once the refusal lands, each one
+needs `{deadline_ms = …}`. Sweep them in this task, and re-run the grep for any
+other spec that calls `tasker.run` directly: `grep -rln "tasker.run(" tests`.
 
-- [ ] **Step 1: Failing sequence tests** on the fake. Each ends with the record
+- [x] **Step 1: Failing sequence tests** on the fake. Each ends with the record
   gone (or held, where stated) and `tasker.stats().active` back at its baseline.
   1. A scoped process ignores TERM. Stop → SIGKILL to the group at 2 s →
      resolved.
@@ -1157,7 +1170,7 @@ test `tests/unit/tasker_unit_spec.lua`.
   11. A process that ignores KILL goes unresolved-visible at 5 s. It is logged
       with its pid, listed by `tasker.held()` as `{pid, kind, since, scope}`,
       and still counted.
-- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [x] **Step 2:** FAIL. **Step 3: Implement.**
   - `M.scope_key(epoch, generation)` returns
     `tostring(epoch)..':'..tostring(generation)`. Replace both spellings with it.
   - `stop_matching`:
@@ -1175,9 +1188,9 @@ test `tests/unit/tasker_unit_spec.lua`.
     `callback(nil,nil,nil,nil,message)` through `call_safely`.
   - On exit after a signal Parley sent, pass `code=nil` and
     `io_error='killed: '..cause`.
-- [ ] **Step 4:** PASS. **Counterfactual:** target `state.pid` instead of the
+- [x] **Step 4:** PASS. **Counterfactual:** target `state.pid` instead of the
   group; tests 2 and 3 fail. Restore.
-- [ ] **Step 5:** Commit (`#261 M3: stop kills a scope as groups, escalating to SIGKILL`).
+- [x] **Step 5:** Commit (`#261 M3: stop kills a scope as groups, escalating to SIGKILL`).
 
 ### Task 3.4: Every unscoped run declares its end; callbacks read kills as failure
 
@@ -1186,34 +1199,34 @@ test `tests/unit/tasker_unit_spec.lua`.
 (`generate_topic`), and the dispatcher's `transport_opts` path
 (`dispatcher.lua:853`).
 
-- [ ] **Step 1:** Re-run the census:
+- [x] **Step 1:** Re-run the census:
   `grep -rn "tasker\.run(nil" lua/parley` and
   `grep -rn "dispatcher.query(" lua/parley | grep -v "^lua/parley/dispatcher.lua"`.
   The results must match the ARCH-CONSTRAINTS table; if they don't, correct the
   table first.
-- [ ] **Step 2: Failing tests**, one per kind:
+- [x] **Step 2: Failing tests**, one per kind:
   - a killed keychain read does **not** cache an empty account store
     (`load_account_store`, oauth.lua:859-864);
   - a killed copilot-token curl reports failure without throwing (today
     vault.lua:208 formats the code with `%d`);
   - a killed content fetch is not cached as content
     (chat_respond.lua:1279-1280).
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - Pass `deadline_ms` per the table at every site, using
     `transport_opts.deadline_ms` for the two streams.
   - Sweep each callback in the census so that
     `code == nil or code ~= 0 or io_error` counts as failure, and a failure never
     writes a cache or a store.
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M3: every process Parley starts names its end`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M3: every process Parley starts names its end`).
 
 ### Task 3.5: Leaving Neovim kills what is left
 
-- [ ] In `init.lua` `M.setup`, next to `M.setup_buf_handler()` (`:1333`):
+- [x] In `init.lua` `M.setup`, next to `M.setup_buf_handler()` (`:1333`):
   `vim.api.nvim_create_autocmd('VimLeavePre', {group = …, callback = function() require('parley.tasker').leave() end})`.
-- [ ] **Test** `tasker.leave()` directly on the fake, not through a global
+- [x] **Test** `tasker.leave()` directly on the fake, not through a global
   `VimLeavePre` (`starter.lua:120` also listens). Every live record got SIGKILL:
   scoped records by group, unscoped ones by pid.
-- [ ] Commit (`#261 M3: leaving Neovim kills every live process`).
+- [x] Commit (`#261 M3: leaving Neovim kills every live process`).
 
 ### Task 3.6: Live conformance
 
@@ -1221,19 +1234,19 @@ test `tests/unit/tasker_unit_spec.lua`.
 route it with the tasker specs in `atlas/traceability.yaml`. It runs on every
 `make test`, and is `pending()` when `sh` is not executable.
 
-- [ ] A scoped `tasker.run` of `sh -c 'kill -0 -$$ && echo leader'` prints
+- [x] A scoped `tasker.run` of `sh -c 'kill -0 -$$ && echo leader'` prints
   `leader`, which shows the process leads its own group. It avoids `ps`, which
   some sandboxes block.
-- [ ] A scoped run of `sh -c 'trap "" TERM; sleep 30 & wait'` ignores TERM, and
+- [x] A scoped run of `sh -c 'trap "" TERM; sleep 30 & wait'` ignores TERM, and
   its grandchild holds stdout. Then `stop_scope`: the record resolves within
   4 s, and `kill -0` of the grandchild's pid fails.
-- [ ] The same, through `tools/process_bootstrap` (the real tool spawn path).
-- [ ] On main (key `detach`), the first case fails; on the branch, PASS.
-- [ ] Commit (`#261 M3: live conformance for process groups`).
+- [x] The same, through `tools/process_bootstrap` (the real tool spawn path).
+- [x] On main (key `detach`), the first case fails; on the branch, PASS.
+- [x] Commit (`#261 M3: live conformance for process groups`).
 
 ### Task 3.7: Documentation, and M3's boundary
 
-- [ ] `atlas/providers/tool_execution.md` (process bounds) and
+- [x] `atlas/providers/tool_execution.md` (process bounds) and
   `atlas/chat/lifecycle.md` (Stop). Cover:
   - scoped vs unscoped runs;
   - TERM, then KILL at 2 s;
@@ -1243,10 +1256,10 @@ route it with the tasker specs in `atlas/traceability.yaml`. It runs on every
 
   State the residuals once: a kernel hold; a grandchild of a user-configured
   secret command; Neovim crashing.
-- [ ] The `atlas/infra` page for the vault/secret command: a
+- [x] The `atlas/infra` page for the vault/secret command: a
   terminal-prompting secret command still works (unscoped runs stay attached),
   and it is killed at 600 s.
-- [ ] `tests/manual/chat-concurrency.md`: Stop during a long tool (`find /`),
+- [x] `tests/manual/chat-concurrency.md`: Stop during a long tool (`find /`),
   then submit again at once.
 - [ ] `make test`, `make lint`; `sdlc milestone-close --issue 261 --milestone M3`.
 
@@ -1276,18 +1289,19 @@ Queries:
 | W3 | prepare · readiness UI (`llm_readiness.lua:84-150`) | picker never calls back | W2; a late `on_select` fails `validate_source` |
 | W4 | prepare · remote content fetch (`chat_respond.lua:1185-1297`) | unowned curl; refused spawn → no callback; `fetch_content` throws → `pending` stuck | pass `logical_generation = scope_key(ctx.epoch, ctx.generation)` to `fetch_content`, and through its **content** tree only: public, Google, Dropbox, Microsoft and office conversion (not keychain or refresh, which are shared). Pcall the call at `:1289-1292`. On a throw, mark that child `done`; that is safe now because the scope kill ends anything it started (update the comment at `:1287-1288`) |
 | W5 | request · pre-spawn (`response_provider.lua:110-121`) | zero tasker match → waits | if `stop_owner` matched nothing, resolve at once. A late callback aborts via `transport_alive` (`dispatcher.lua:852,885`; covered by `response_provider_spec.lua:71-80`) |
-| W6 | request · copilot `pre_query` (`vault.lua:159-219`) | `code~=0` (`:207-209`) and the early return (`:161-162`) never call back | call back with the error on both paths |
+| W6 | request · copilot `pre_query` (`vault.lua:159-219`) | `code~=0` (`:207-209`), the early return (`:161-162`), and a token body that does not decode never call back (the decode itself was a raise until M1 review BR-16 guarded it) | call back with the error on all three paths |
 | W7 | request · async continuation (`dispatcher.lua:446-854`) | a throw → nothing aborts | pcall it; on error, `abort_before_start` |
 | W8 | request · `recover_query` (`dispatcher.lua:794-828`) | no liveness check | check `transport_alive` before acting |
 | W9 | child · `producer.start` threw | `producer.cancel(nil)` false | W1; its processes die with the scope |
 | W10 | child · refused first `child_outcome` (`response_tools.lua:73-75`) | the adapter records an outcome the machine rejected; the later `resolved(nil)` is refused | reproduce it first. Then the adapter records an outcome only once the machine accepts it. If the case can't be reached through public events, log that and drop the row |
 | W11 | `continue_round` threw | nil handle | W1 |
 | W12 | finalize · `response_completion.start` returned nil | `done` never called | `done('failed')` |
-| W13 | a `Deferred` step threw (`deferred_work.lua:19`) | the work cancels itself; its owner never settles | `Deferred.new(step, on_error)`. Every owner the query finds settles failed: `response_completion`, `response_preparation`, `response_topic` (`:106`), `response_target` (`:110`), and the runner (via `fault`, below) |
+| W13 | a `Deferred` step threw (`deferred_work.lua:19`) | the work cancels itself; its owner never settles | `Deferred.new(step, on_error)`. The query returns ten owners. The five that hold a generation, a target slot or a turn settle failed: `response_completion` (`:91`), `response_preparation` (`:146`), `response_topic` (`:106`), `response_target` (`:110`), and the runner (`:609`, via `fault` below). Out of scope, because none holds admission, a grant or a turn: `document/init.lua:67` (the repair pump, which self-heals on the next `schedule(doc)`), `diagnostic_refresh.lua:216`, `tool_folds.lua:468` and `outline.lua:289` (presentation pumps). `chat_recovery.lua:258` is deleted in M1 |
 | W14 | runner start (`generation_runner.lua:605-615`) | `active` +1 before throwing calls; generation registered, grants held, subscriber and timer live | increment last. On a throw after `register_generation`: `s.off()`, `s.work:close()`, `finish_generation`, drop `runners[r]`, and **return `nil, reason`** (the caller handles it, `response_submission.lua:62-63`) |
 | W15 | topic cancel (`response_topic.lua:47`) | a raise skips `Session.cancel` (`chat_respond.lua:1313-1315`) | pcall it |
-| W16 | topic generation · `provider.request` threw (`response_topic.lua:142`) | `s.started` set, `s.handle` nil; `stop()` (`:45-50`) takes neither branch, so it stays stopping forever, holding a `generation limit` slot and two user captures | `stop()` finishes directly when there is no handle |
+| W16 | topic generation · `s.provider.request` threw (`response_topic.lua:80`, reached from `:154`; `s.started=true` at `:59`) | `s.started` set, `s.handle` nil; `stop()` (`:45-50`) takes neither branch, so it stays stopping forever, holding a `generation limit` slot and two user captures | `stop()` finishes directly when there is no handle |
 | W17 | `skill_invoke._in_flight[buf]` (`:23`, `:402`) | keyed by buffer number, which `:e!` and `:bd`+reopen reuse; released only when the physical read resolves; `stop_owner` unguarded (`:161`) | release on the document's detach/reload and on `BufUnload`; pcall `stop_owner` |
+| W18 | finalize · the adapter's returned `{cancel=…}` handle (`chat_respond.lua` finalize) | `generation_runner.lua:502` discards it, so cancellation mid-finalize relies only on `response_completion`'s own subscription and `ctx.cancelled` (M1 review, Minor) | the runner keeps the handle and calls its `cancel` on stop, or the adapter stops returning one — decide with W12, and test cancellation during finalize |
 
 **Runner fault and the scope kill.** Two runner additions close what the table
 cannot.
@@ -1331,15 +1345,15 @@ routed under `chat/lifecycle`.
 **Files:** `lua/parley/generation_runner.lua`, `lua/parley/deferred_work.lua`;
 test `tests/integration/generation_settles_spec.lua`.
 
-- [ ] **Step 1: Failing tests** for:
+- [x] **Step 1: Failing tests** for:
   - W1, W11 and W14;
   - `fault` (a step that throws);
   - the scope kill on stopping, and on a direct terminal;
   - `stats()`.
-- [ ] **Step 2: Implement** per the table and the "Runner fault" paragraph.
+- [x] **Step 2: Implement** per the table and the "Runner fault" paragraph.
   `Deferred.new(step, on_error)`: with `on_error`, the error path calls it
   instead of rethrowing; without it, behaviour is unchanged.
-- [ ] **Step 3:** PASS. **Step 4:** Commit (`#261 M4: the runner settles what it cannot cancel`).
+- [x] **Step 3:** PASS. **Step 4:** Commit (`#261 M4: the runner settles what it cannot cancel`).
 
 ### Task 4.2: Session, provider, preparation, completion, topic, target
 
@@ -1351,9 +1365,9 @@ test `tests/integration/generation_settles_spec.lua`.
 - `lua/parley/response_target.lua`, `lua/parley/response_completion.lua` and
   `lua/parley/response_preparation.lua`: W13.
 
-- [ ] **Step 1: Failing tests** for W2, W3, W5, W12, W13 (each owner), W15 and W16.
-- [ ] **Step 2: Implement** per the table. **Step 3:** PASS.
-- [ ] **Step 4:** Commit (`#261 M4: preparation, provider, completion and topics settle on cancel`).
+- [x] **Step 1: Failing tests** for W2, W3, W5, W12, W13 (each owner), W15 and W16.
+- [x] **Step 2: Implement** per the table. **Step 3:** PASS.
+- [x] **Step 4:** Commit (`#261 M4: preparation, provider, completion and topics settle on cancel`).
 
 ### Task 4.3: Helpers a generation calls
 
@@ -1361,39 +1375,39 @@ test `tests/integration/generation_settles_spec.lua`.
 tree), `lua/parley/chat_respond.lua:1185-1297`, `lua/parley/vault.lua:159-219`,
 `lua/parley/dispatcher.lua`.
 
-- [ ] **Step 1: Failing tests** for:
+- [x] **Step 1: Failing tests** for:
   - W4: a fetch that never exits. Stop → its group is signalled through the
     scope.
   - W6, W7 and W8.
-- [ ] **Step 2: Implement.** **Step 3:** PASS.
-- [ ] **Step 4:** Commit (`#261 M4: helpers a generation starts share its scope or settle`).
+- [x] **Step 2: Implement.** **Step 3:** PASS.
+- [x] **Step 4:** Commit (`#261 M4: helpers a generation starts share its scope or settle`).
 
 ### Task 4.4: Tools and skills
 
 **Files:** `lua/parley/response_tools.lua` (W10), `lua/parley/skill_invoke.lua` (W17).
 
-- [ ] **Step 1: Failing tests** for W9, W10 (reproduce it first) and W17. The
+- [x] **Step 1: Failing tests** for W9, W10 (reproduce it first) and W17. The
   W17 test runs `:bd`, reopens the same file (asserting the buffer number is
   reused), then runs a skill: it is not refused as "already running".
-- [ ] **Step 2: Implement.** **Step 3:** PASS.
-- [ ] **Step 4:** Commit (`#261 M4: tools and skills settle and follow the buffer`).
+- [x] **Step 2: Implement.** **Step 3:** PASS.
+- [x] **Step 4:** Commit (`#261 M4: tools and skills settle and follow the buffer`).
 
 ### Task 4.5: The reported shape, end to end
 
 In `tests/integration/generation_settles_spec.lua`, on the fake runtime, with a
 provider curl that ignores TERM:
 
-- [ ] Submit, Stop, and fire the fake timers past 2 s → `terminal`, and `active`
+- [x] Submit, Stop, and fire the fake timers past 2 s → `terminal`, and `active`
   is back at its baseline. Repeat 5 times in one buffer: the 5th submission is
   admitted. Before M3/M4 it is refused with `generation limit` (`state.lua:205`).
-- [ ] Repeat 17 times across `:e!` reloads: the 17th is admitted. Before M3/M4
+- [x] Repeat 17 times across `:e!` reloads: the 17th is admitted. Before M3/M4
   it is refused with `process generation limit` (`generation_runner.lua:574`).
-- [ ] `:bd`, reopen the same file (same buffer number), submit → admitted.
-- [ ] Commit (`#261 M4: a stopped response never holds a slot`).
+- [x] `:bd`, reopen the same file (same buffer number), submit → admitted.
+- [x] Commit (`#261 M4: a stopped response never holds a slot`).
 
 ### Task 4.6: Documentation, and M4's boundary
 
-- [ ] `atlas/chat/lifecycle.md` (Stop): the invariant above, pointing at
+- [x] `atlas/chat/lifecycle.md` (Stop): the invariant above, pointing at
   `generation_settles_spec.lua`. `ownership.md` links to it.
 - [ ] `make test`, `make lint`; `sdlc milestone-close --issue 261 --milestone M4`.
 
@@ -1478,7 +1492,7 @@ module owns the words.
 **Files:** Create `lua/parley/refusal.lua` and `tests/unit/refusal_spec.lua`
 (routed under `chat/lifecycle`).
 
-- [ ] **Step 1: Failing tests.**
+- [x] **Step 1: Failing tests.**
   - Every `TOKENS` entry has a non-empty `what`, and an `action` that matches
     `:Parley%u` or one of `submit again`, `try again in a moment`, `wait for`,
     `edit`.
@@ -1490,7 +1504,7 @@ module owns the words.
     token.
   - With `tasker.held()` stubbed non-empty, the three capacity tokens carry the
     pid.
-- [ ] **Step 2:** FAIL. **Step 3:** Implement: one `TOKENS` or `INTERNAL` row per
+- [x] **Step 2:** FAIL. **Step 3:** Implement: one `TOKENS` or `INTERNAL` row per
   literal the Task 5.2 scan finds. **Step 4:** PASS. **Step 5:** Commit.
 
 ### Task 5.2: The guard — every producer literal has words
@@ -1510,7 +1524,7 @@ and testable.
   `fail(<lit>)`, `retire(s, <status>, <lit>)`, `start_error(<lit>)`, and
   tasker's `reject(<lit>)`.
 
-- [ ] **Step 1: Write the spec** with three assertions:
+- [x] **Step 1: Write the spec** with three assertions:
   1. The scan finds at least 100 literals. The floor means a broken pattern
      cannot pass vacuously; the 2026-09-18 count was about 150.
   2. Every literal is a key of `TOKENS` or `INTERNAL`, or of a `NOT_REFUSAL`
@@ -1518,18 +1532,18 @@ and testable.
      an effect annotation such as `'explicit revoke'`).
   3. The `PREFIX` strings appear as literals in no file under `lua/` except
      `refusal.lua`.
-- [ ] **Step 2: Counterfactuals.**
+- [x] **Step 2: Counterfactuals.**
   - Add `return nil,'brand new token'` to a clean `response_target.lua`:
     assertion 2 fails.
   - Add `logger.warning('Response not started: x')` to `chat_presentation.lua`:
     assertion 3 fails.
 
   Restore both with `git checkout --`.
-- [ ] **Step 3:** Commit (`#261 M5: every refusal token has words`).
+- [x] **Step 3:** Commit — with Task 5.3, since the guard went green only once the routing landed.
 
 ### Task 5.3: Route every refusal through it
 
-- [ ] **Step 1: Failing integration tests** in
+- [x] **Step 1: Failing integration tests** in
   `tests/integration/chat_respond_spec.lua`, capturing `vim.notify`:
   - each of the five silent returns → exactly one WARN, containing its action;
   - each terminal non-success outcome in single mode that the fixture can drive
@@ -1540,7 +1554,7 @@ and testable.
   - a user Stop → no WARN;
   - a kernel-held process (a fake that ignores KILL) → the `generation limit`
     refusal names its pid.
-- [ ] **Step 2: Implement.**
+- [x] **Step 2: Implement.**
   - Replace every site under "What is broken today" with
     `_parley.logger.warning(Refusal.describe(kind, outcome, failure, detail))`.
   - Collapse the `:1542` channel into it.
@@ -1548,18 +1562,18 @@ and testable.
   - In `terminal`, warn for every non-success outcome. Keep `failure_notice`
     (the provider's HTTP detail) as `detail`, and keep the overflow text via
     `chat_presentation.overflow_message` in `overflow`'s row.
-- [ ] **Step 3:** Delete the force-flag parsing and its message in
+- [x] **Step 3:** Delete the force-flag parsing and its message in
   `cmd_respond`, delete `init.lua:4171`, and fix the header comment at
   `chat_respond.lua:3`. Then `grep -rn "resubmit_questions_recursively" lua tests`
   prints nothing.
-- [ ] **Step 4:** PASS. **Step 5:** Commit (`#261 M5: no silent refusal, no raw token`).
+- [x] **Step 4:** PASS. **Step 5:** Commit (`#261 M5: no silent refusal, no raw token`).
 
 ### Task 5.4: The inventory, the restart invariant, the close
 
 This covers Done-when #1 and #6: the audit's inventory becomes a maintained
 atlas page.
 
-- [ ] **Create `atlas/chat/transcript_truth.md`**, linked from `atlas/index.md`,
+- [x] **Create `atlas/chat/transcript_truth.md`**, linked from `atlas/index.md`,
   with two sections:
   - **Restart invariant:** quitting and reopening a chat rebuilds every
     submission-relevant fact from the file. Nothing else survives; say why.
@@ -1576,14 +1590,18 @@ atlas page.
     - `responses` and `batches`;
     - `skill_invoke._in_flight`;
     - the sidecars (`sidecar_degrade_spec`).
+    - the legacy `<state_dir>/answer-recovery/` directory: nothing reads or
+      writes it after M1, and it is safe to delete. This is its one mention,
+      and it closes the directory's lifecycle (ARCH-FUNERAL) without
+      migrating it.
 
     Each row points at code and tests, and states no rule the code owns. The
     Stop invariant links to `lifecycle.md`, and undo grouping to `ownership.md`.
-- [ ] Target: a Revisions entry recording what #261 delivered, linking the page.
+- [x] Target: a Revisions entry recording what #261 delivered, linking the page.
 - [ ] **#255:** after #261's close gate passes, move it through
   `working → codecomplete → done` with `sdlc issue set-status`, and add a Log
   line pointing at #261.
-- [ ] **#265:** a Log line saying its refusal words come from
+- [x] **#265:** a Log line saying its refusal words come from
   `lua/parley/refusal.lua`.
 - [ ] `make test`, `make lint`, `make check-fresh-clone PLENARY=…` (TOOLING.md).
 - [ ] `sdlc milestone-close --issue 261 --milestone M5`, then
@@ -1687,3 +1705,1104 @@ questions the review raised.
   - The `revoked` text depends on its cause.
   - No action names `:ParleyToolOperations` for non-tool processes.
   - The inventory lists `response_target` slots and topic jobs.
+
+### 2026-09-18 — plan-quality gate, round 1 (no blocking findings)
+
+**Reason.** `sdlc change-code` accepted the plan. It recorded four Minor
+findings for the close review.
+
+**Delta.**
+- W13 now says which of the query's ten `Deferred` owners are in scope, and
+  why the other five are not. W16's line reference is corrected to
+  `response_topic.lua:80`.
+- Task 3.3 includes the sweep of `tasker_run_spec.lua`'s 43 option-less
+  `tasker.run` calls, which the new deadline refusal would turn red.
+- Task 5.4's inventory names the legacy directory as safe to delete, which
+  closes its lifecycle.
+- Not changed: *plan-restates-the-diff*. The embedded bodies stay as written.
+  Where a body and the code disagree, the code and its tests are
+  authoritative.
+
+### 2026-09-19 — M1 boundary review round 2 (REWORK) — dispositions
+
+**Reason.** Round 2 found a Critical introduced by round 1's own fix, and two
+repeat families. The gate said "fix rules, not instances".
+
+**Delta.**
+- **BR-14 (`returned-handle-has-no-consumer`, Critical).** The picker ignored
+  `set`'s new `false` and announced a save that had not happened.
+  - `table_to_file` now reports whether it wrote, and `save`/`set`/`remove`/
+    `rename` pass that on.
+  - The picker says "saved" only on success; a refused save keeps the buffer
+    modified. The dispatcher aborts a request whose body was not written.
+  - Guard: `sidecar_authority_spec` fails a sidecar write called as a bare
+    statement, unless it is declared with a reason. The two cache writes are
+    declared.
+  - The finalize handle stays W18.
+- **BR-15 (`per-item-diagnostic-unbounded`, second in the family).** The
+  picker's build now reads the prompt file once, via `source(name, builtins,
+  loaded)`.
+  - Guard: `sidecar_degrade_spec` counts the warnings naming a sidecar during
+    one user action, and asserts at most one. The custom-prompt exercise is
+    that loop.
+- **BR-16 (`untrusted-input-unparsed`).** `vault.lua`'s token decode is under
+  `pcall`, and the token is typed at the boundary. W6 gains that path.
+  - Guard: `tests/arch/json_decode_spec.lua` fails any unguarded
+    `vim.json.decode` in `lua/`. It finds 33, with a floor of 30.
+- **Minors.**
+  - `helper_io_spec` F3b generates its cases from an ordered list.
+  - Chunk 1's steps are ticked.
+- **Counterfactuals.** Reverting each fix turns its guard red: decode (1),
+  write result (1), warning bound (3), picker P1 and P3.
+
+### 2026-09-19 — M1 boundary review round 3 (FIX-THEN-SHIP) — one JSON writer
+
+**Reason.** BR-19 was the third finding in the `returned-handle-has-no-consumer`
+family. `table_to_file` dropped the result of `file:close()`, where buffered
+writes actually fail, so it reported success over a truncated file.
+
+**Delta.**
+- **Sidecar writes go through `table_to_file_atomic`.** Its result is derived
+  from encode, open, write, close and rename, and the original file survives a
+  failure. `table_to_file` now delegates to it and warns on failure, so there is
+  one JSON writer, not two with different failure reports.
+- **Tests.**
+  - F3e simulates a close that fails with "File too large": the result is a
+    failure, the original is intact, and no temporary file is left.
+  - F3f is the test that goes red when the old writer is restored: it proves
+    `table_to_file` delegates. F3e pins the atomic writer itself. *(Corrected
+    in round 4: this entry first named F3e as the delegation test.)*
+  - R1 shows the dispatcher aborts, with its reason, before curl starts when the
+    body was not written.
+  - Reverting either fix turns its test red.
+- **Minors.**
+  - One `BEARER_SCHEMA` applies at both boundaries the copilot bearer crosses.
+  - `json_decode_spec` covers `vim.fn.json_decode` as well.
+  - `DROPPED` is keyed by the exact call, not the file.
+
+### 2026-09-19 — M1 boundary review round 4 (FIX-THEN-SHIP, finalized) — the writer's collateral and the census's scope
+
+**Reason.** Round 4 finalized M1 with FIX-THEN-SHIP and three Minor findings,
+fixed before the close commit per the #174 protocol.
+
+**Delta.**
+- **Routing every JSON write through the rename-based writer changed three
+  behaviours.** Each was checked against the callers:
+  - A symlinked sidecar was replaced by a regular file. The writer now resolves
+    an existing destination with `fs_realpath` and writes beside the real
+    target, so the link survives (F3g).
+  - The file's mode was reset. The writer now copies the existing mode onto the
+    temporary file before the rename, so a 0600 bearer cache stays 0600 (F3h).
+  - A crash between write and rename left `*.tmp-*` files that nothing removed.
+    `helper.remove_stale_temps` runs at setup for the state directory and the
+    query directory, and on the tracker's first load for `file_access.json`'s
+    directory. Each is swept before the process writes there (F3i).
+- **The census covers the profile, not one spelling.** It selects modules that
+  name the state directory *or* `stdpath('data')`, the property that defines
+  the class.
+  - `file_access.json`, which escaped the census and raised on opening a chat
+    when an entry had the wrong type, is now in `tests/helpers/sidecars.lua`.
+    It is read with a schema and written through the one writer.
+  - `starter.lua` and `cliproxy.lua` are declared with reasons: first-run setup,
+    and the proxy's derived artifacts.
+- **BR-20 is addressed.** V1 drives a token response with a string
+  `expires_at` through the stateful process fake and proves the next request
+  fetches again. Removing the response `conform` turns V1 red.
+- **Counterfactuals.** Reverting each fix turns its test red: vault V1;
+  file_access (2 degrade cases); writer (F3g, F3h).
+
+### 2026-09-19 — M2 boundary review (FIX-THEN-SHIP) — the lookup primitive, and a test that could not be written as planned
+
+**Reason.** The review found two blocking families.
+- `enumeration-claims-completeness`, fourth in the family: `bufnr(path)`'s
+  partial match was fixed at 1 of 5 sites. The `chat_lines` consumer list had
+  no query.
+- `plan-step-not-as-specified`, second: Task 2.6's loaded-target move test
+  was missing, and the Log said "as planned".
+
+**Delta.**
+- **`helper.buffer_for(name, loaded_only)` is the one exact-name lookup.**
+  File paths are compared resolved; `parley://` names are compared as written.
+  - `chat_lines`, `init.lua` (child topic after a prune, twice), `outline.lua`
+    and `system_prompt_picker.lua` use it.
+  - Query: `grep -rn "vim.fn.bufnr(" lua/parley | grep -v "vim.fn.bufnr()"`.
+  - Guard: `tests/arch/buffer_lookup_spec.lua`.
+  - Regression: P4, where opening prompt `foo` from another window no longer
+    force-deletes `foobar`'s unsaved editor. It goes red with the old lookup.
+- **Task 2.6's loaded-target bullet is withdrawn as specified.** The
+  `move_chat_tree` rewrite branch did not fire in any configuration tried:
+  timestamped references resolve by glob to the moved file since #224, and a
+  stable-named tree produced no rewrite. Filed as parley#270. What remains is a
+  characterization: a tree move leaves a loaded chat's unsaved text and its
+  file alone.
+- **Task 2.2 did not lift `parsed_chat` into a shared helper.** The pure tests
+  use literals, and the `build_messages` checks live beside that spec's
+  fixtures.
+- **Task 2.6's sub-chat tests use the `_collect_ancestor_messages` seam**
+  rather than submitting in the child.
+- **Minors.**
+  - `lifecycle.md` states the broader staleness rule: every generated write,
+    and why an earlier capture is final.
+  - A two-entry `substitute` test covers several exchanges regenerating at once.
+  - The late-build stub is restored under `pcall`.
+
+### 2026-09-19 — M2 review round 2: the tree-move stand-in withdrawn
+
+**Reason.** BR-30: the stand-in test for Task 2.6's loaded-target bullet
+passed only because its chat was a scratch buffer.
+
+**Delta.** The stand-in is deleted and the bullet is withdrawn outright. The
+real behaviour, a loaded chat's tree move aborting with ENOENT after a save
+triggers a slug rename, is recorded on parley#270. The buffer-lookup guard
+documents that it checks by spelling.
+
+### 2026-09-19 — M2 review round 3: the exemption's boundary, and the did-it-happen rule by annotation
+
+**Delta.**
+- **BR-32.** The staleness exemption is safe only because a write outside its
+  grant, or through a revoked grant, has no owner. Two unit cases pin that the
+  reader stays stale in both. Computing the exemption from the raw owner turns
+  both red.
+- **The `returned-handle-has-no-consumer` family is fixed as a rule.**
+  - Did-it-happen functions carry `---@nodiscard`: `table_to_file`,
+    `table_to_file_atomic`, `custom_prompts.save/set/remove/rename`, and
+    `D.set_previous_answer`.
+  - `tests/arch/nodiscard_spec.lua` fails any bare-statement call to them
+    unless it is declared with a count and a reason. It replaces the
+    name-listed check in `sidecar_authority_spec`.
+  - `set_previous_answer`'s false is declared: the generation has already lost
+    its grant, and the transcript is then the right context.
+- **Deferrals land in contracts.** parley#270's `## Done when` now carries the
+  file-backed fixture obligation.
+- **Recorded, not fixed.** `buffer_for`'s private path key is another copy of
+  the `resolve(fnamemodify(x, ':p'))` idiom, which has about ten copies in
+  `lua/`. Extracting one `canonical_path` is a sweep beyond #261's surface.
+  The close review will see it recorded.
+
+### 2026-09-19 — M2 closed (review round 4, FIX-THEN-SHIP): the guard's own edges
+
+**Delta, bundled into the close commit (#174).**
+- `nodiscard_spec` reads every statement head on a line: its start, and what
+  follows `then`, `do`, `else` or `;`. It also catches a bare `pcall` or
+  `xpcall` of a marked member.
+- Its header lists the forms it cannot see: re-aliasing by assignment, `:`
+  calls, a call split across lines, and other higher-order wrappers.
+- `DROPPED` must match the calls it excuses exactly, so a declaration cannot
+  outlive its call.
+- Counterfactuals: the two planted forms, and the stale entry, are all caught.
+
+### 2026-09-19 — M3 Tasks 3.1–3.3, as built
+
+**Delta.**
+- **Deadlines land in 3.3, not 3.4.** The refusal of an unscoped run without
+  `deadline_ms` would otherwise make the 3.3 commit refuse every vault, OAuth,
+  topic and memory-preference spawn. So 3.3 also passes `tasker.deadline.<kind>`
+  at all 18 `tasker.run(nil, …)` sites, and gives both streams
+  (`generate_topic`, `memory_prefs`) `transport_opts = {deadline_ms = …stream}`.
+  The per-kind values are one table, `tasker.deadline` (ARCH-DRY). 3.4 keeps the
+  callback sweep and its tests.
+- **"Scoped" means `logical_generation` or `generation_id` is present**, since
+  `state.logical_generation` defaults to the generation id.
+- **No `deadline` event.** A deadline is `stop_requested` with
+  `cause = 'deadline'`. One event opens every stop window, whatever its cause:
+  `stop`, `deadline` or `leave`. `stop_requested` also reports `opened`, so a
+  repeated stop inside one window sends nothing new unless its signal differs.
+- **What counts as a kill.** `kill_cause` names the cause when any signal Parley
+  sent was accepted while the attempt was unresolved. That includes a group
+  signal that reached only a grandchild after the parent exited, because the
+  output may then be cut. An attempt whose group had already gone (ESRCH) is
+  not a kill, and neither is one that ended on its own.
+- **A resolved attempt closes its window** (`reconcile_due = nil`), so no late
+  tick can escalate it.
+- **Test sweep.**
+  - `tasker_run_spec` routes its calls through one local `run` that adds
+    `deadline_ms`.
+  - The pid-result test now uses an unscoped attempt: a scoped one is signalled
+    by group.
+  - The `dispatcher.query` callers in `query_cache_spec` and
+    `cliproxy_recovery_e2e_spec` pass `{deadline_ms = 60000}`.
+  - The `async_builtin_spec` contexts carry `logical_generation`, as the
+    scheduler always does.
+- **Counterfactual.** When the target is the pid rather than the group, 8 of the
+  12 new sequence tests fail, including 2 and 3.
+
+### 2026-09-19 — M3 Task 3.4, as built: one rule at the source
+
+**Delta.**
+- **`code` is nil whenever `io_error` is set.** It no longer means only "killed":
+  a pipe error or an overflow now reads the same way. So every callback that
+  tests `code ~= 0` or `code == 0` already counts cut output as a failure. The
+  sweep is that one rule in `tasker`, not `or io_error` added at 16 sites
+  (ARCH-DRY). The census is unchanged: 18 `tasker.run(nil, …)` sites and 2
+  streams.
+- **Two callbacks needed more than the rule.**
+  - `load_account_store`: a read that did not finish returns an *unread* store
+    (a weak-keyed set). It is not cached, and `save_account_store` refuses to
+    write it over the keychain. A non-zero exit is still the keychain's
+    answer, "no entry": cached and saveable.
+  - The vault copilot fetch formatted `code` with `%d`, and now uses `%s`
+    (the nil code threw).
+- **Content fetch.** A killed fetch becomes a transport error, never the body,
+  even when its output carried the whole write-out trailer. The counterfactual,
+  passing luv's `code=0`, turns that test red. A transport error is still
+  cached as that URL's error text: this is the existing per-question snapshot
+  rule (`remote_references_spec`), and the transcript's earlier exchange was
+  answered with it.
+- **Tests:** `tests/integration/unscoped_kill_spec.lua`, which uses the real
+  tasker over the process fake, plus a pipe-error case in
+  `tasker_supervision_spec`.
+
+### 2026-09-19 — M3 Task 3.6, as built
+
+**Delta.** The third conformance case, "through `tools/process_bootstrap`", runs
+the real `find` builtin through `async_builtin` with a captured path authority
+on `/`, which is the manual "Stop during `find /`". It asserts that the attempt
+is scoped, that `stop_scope` settles the tool within 4 s, and that its pid is
+gone. With main's `detach = true` restored, all three cases fail.
+
+### 2026-09-19 — M3 boundary review round 1 (FIX-THEN-SHIP): dispositions
+
+**Delta.**
+- **BR-38, renderers of a changed value.** `tasker.exit_reason(code, signal,
+  io_error)` is the one way to print how a run ended.
+  - It is used by every tasker exit callback that renders an outcome:
+    - the remote-content fetch (`oauth.lua`), whose transcript text now reads
+      "(killed: deadline) … Resubmit the question to fetch it again.";
+    - the auth-code exchange warning;
+    - the vault copilot error;
+    - the dispatcher's transport-discard reason.
+  - The dispatcher's structured failure diagnostic already printed `io_error`
+    beside the code, and stays as it is (allowed once).
+  - `tests/arch/spawn_seam_spec.lua` fails on any raw `tostring(…code)` in a
+    module that hands callbacks to tasker. `unscoped_kill_spec` asserts that
+    the rendered text names `killed: deadline` and contains no "nil".
+- **BR-39, statements of the Stop contract.** Found by running the
+  superseded-claim sweep over `README.md`, `atlas/`, `docs/`, `tests/manual/`
+  and code comments for "still running", "claims", "does not release" and
+  "Stop".
+  - The one stale statement was `README.md`, "the process supervisor keeps
+    tools that are still running". It now reads: a stopped tool's process is
+    ended, TERM then KILL at 2 s, and its claims are held until it has ended.
+  - The other statements say that claims are held until the process ends,
+    which is still true: `tool_execution.md` (the supervisor paragraph),
+    `tool_use.md` (the Stop table), `ownership.md` and `lifecycle.md`.
+- **BR-40, "every process".** Fixed by scoping the wording and adding a guard,
+  not by moving 18 files' spawns into tasker, which is beyond #261's surface.
+  - The atlas section now covers processes "started through `tasker.run`".
+  - A new "Processes outside tasker" part points at the guard's list:
+    `tests/arch/spawn_seam_spec.lua` names each out-of-seam spawn with how it
+    ends, as an exact count per file. A new spawn fails the guard, and so does
+    a listed spawn that no longer exists (the dead-entry check).
+  - The same file also forbids a numeric `deadline_ms` literal in `lua/`.
+- **Minors.**
+  - `generate_topic` merges `transport_opts`, adding the stream deadline only
+    when the run is unscoped (`tasker.is_scoped`, one definition of scoped)
+    and no deadline is set.
+  - The fake's group kill honours the leader's scripted `signal_result`, and
+    both paths share one `scripted()` helper. `state.signals` lists only
+    accepted signals. The failed-signal-retry test runs on both paths again.
+  - `target()` never returns a pid ≤ 0.
+  - The deadline timer closes as it fires, so a held record keeps no handle.
+  - `attempt` has one `open_probe_window`.
+  - `unscoped_kill_spec` is routed to `infra/vault` as well.
+- **Census method, corrected (review §7).** Task 3.4's command
+  `grep "dispatcher.query("` misses `pcall(dispatcher.query, …)`
+  (`response_provider.lua`) and the `llm.query` alias (`skill_invoke.lua`).
+  Both are scoped, so the "18 sites + 2 streams" conclusion held by luck, not
+  by method. The enumeration is safe because tasker refuses an unscoped run
+  without a deadline at runtime; the grep was only a cross-check.
+- **For M4 (W16).** `generate_topic` now merges its options (above). The review
+  also noted that `scoped_stop` drops `cause`, so every scoped stop reads
+  `killed: stop`. M5's refusal vocabulary, where a user Stop is silent but other
+  cancellations warn, will need `cause` threaded through
+  `stop_scope`/`stop_owner`/`stop_attempt`. That belongs to M5.
+
+### 2026-09-19 — M3 boundary review round 2 (FIX-THEN-SHIP): dispositions
+
+**Delta.** Round 1's three Importants were disposed as addressed; two new ones
+and three untested Minors came back.
+- **BR-45, the value's other seam.** The dispatcher now renders the transport's
+  end once, into `failure.exit` (`tasker.exit_reason`), and no longer exports
+  `code` or `signal` at all — so a consumer cannot render the nil code.
+  - `chat_respond._failure_notice` reads `failure.exit`, and no longer shows the
+    partial body as if it were a diagnosis when the transport itself failed.
+  - `response_provider.failure_reason` reads it too, instead of reporting
+    "(HTTP unknown)" for a killed stream.
+  - The guard is anchored on the value: no module may read `failure.code`,
+    `failure.signal` or `failure.io_error`, and the header lists the forms the
+    matchers cannot see.
+  - Tests: `failure_notice_spec` (a kill names its cause and hides the partial
+    body), `response_provider_spec` (a killed stream's reported reason),
+    `dispatcher_query_spec` I9 (the table carries `exit`, not `code`). Each red
+    on revert.
+- **BR-46, the enumeration's reasons.** `spawn_seam_spec` now derives each
+  out-of-seam spawn's class from its call form — `sync`, `bounded`,
+  `delegated`, `open` — and declares counts per class per file. Free text is
+  required only for `open`, and refused when there is none.
+  - `bounded` covers a declared argv helper (`api_argv`), and the test asserts
+    that helper's own body carries the bound.
+  - `delegated` covers cliproxy's `run(argv, cb)` wrapper, and the test asserts
+    every call site passes a bounded argv.
+  - The two wrong entries are gone: `git_markdown_source` is `git ls-files`
+    cancelled by one SIGTERM with no timer, and cliproxy's unbounded calls are
+    the 9 synchronous ones.
+- **The three untested Minors now have tests** (BR-41 merge, BR-43 pid 0,
+  BR-44 the held record's timer), each verified red on revert. The fake gained
+  one seam, `spawn_pid`, for BR-43.
+- **One guard caught another.** `arch_helper_spec`'s meta-guard flagged the word
+  `git ls-files` inside the new spec's prose. The reason now names the command's
+  real flags, which is both more precise and outside the meta-guard's pattern.
+- **Recorded, not fixed.** The reviewer's two M4/M5 notes stand: a derived
+  `phase` tag on `attempt`, and threading `cause` through `scoped_stop` so a
+  reload-caused kill differs from a user Stop. Both belong to M4/M5, and the
+  earlier Revisions entry already records the second.
+
+### 2026-09-19 — M3 boundary review round 3 (FIX-THEN-SHIP, finalized at the round cap): dispositions
+
+The close finalized at the gate's round cap. Round 3 disposed round 2's five
+findings as addressed, and raised one Critical, two Importants and four
+Minors, fixed below and bundled into the close commit (#174: no re-run).
+- **Critical — the vault log line** (Task 3.4). Round 1 fixed a `%d`-on-nil
+  throw by rewriting the Copilot failure log to include stderr. The request ran
+  `curl -v`, whose stderr carries `authorization: token <secret>`, and the
+  base's `string.format` had silently dropped that argument, so the leak was
+  new. The class, swept:
+  - `-v` removed; neither output is logged for that request.
+  - A failed secret command shows its bounded stderr, never its stdout, which
+    is the secret.
+  - The token exchange logs its OAuth `error`/`error_description` through
+    `_token_body_summary`, never the body.
+  - A guard forbids a verbose or traced argv anywhere in `lua/`.
+  - Three regression tests plant the secret where each process puts it. Each
+    fails against the pre-fix code.
+- **Important — the exit value's non-rendering consumers** (Task 3.4). The
+  census covered the 18 unscoped `tasker.run(nil, …)` sites, but never the
+  scoped callbacks, and the defect was there: `async_builtin` overwrote an
+  inherited `io_error`, so an early Stop of a shell tool read "scoped process
+  bootstrap failed".
+  - It now writes `io_error = io_error or …`.
+  - A guard forbids an overwrite in any module where tasker's callbacks land.
+  - The live conformance case asserts the tool's result is `killed: stop`: red
+    3/3 on revert.
+- **Important — `scope_key`'s producers** (Task 3.3). "One function" held for
+  the two spellings named here and missed `skill_invoke`'s hand-built
+  `skill:<buf>:<gen>`.
+  - It is now `tasker.scope_key("skill:"..buf, gen)`, the same string from the
+    one function.
+  - A census guard classifies every production `logical_generation`
+    assignment as built with scope_key, forwarded from one, or a failure. It
+    is red on the old line.
+  - The atlas now says that a chat generation's scope kill (M4 Task 4.1) does
+    not reach a skill's processes. **M4 must keep that in mind when wiring the
+    kill:** a skill stops its own.
+- **Minors.**
+  - `failure.io_error` is retired from the dispatcher's table, which already
+    carries it inside `exit`, so the field and its guard entry agree.
+  - The conformance spec pins the exemption's negative live: an unscoped run
+    leads no group (red when everything is detached). `gone()` means ESRCH.
+  - The atlas's out-of-seam summary follows the guard's derived classes.
+  - `join_code` records the invariant that keeps a nil code from reaching it.
+- **Also, from the review's M4/M5 notes.** The README's custom-tool paragraph
+  says a custom `execute_async` forwards `context.logical_generation` to
+  `context.tasker.run`, or is refused.
+
+### 2026-09-19 — M4 Task 4.1, as built
+
+**Delta.**
+- **W1's condition is "the start threw", not "no handle".** An adapter may
+  return nothing and still be cancellable through `cancel_operation`: the
+  supervisor-transfer sequence in `generation_sequences_spec` does exactly
+  that, and keying on a nil handle skipped its supervisor. The runner marks
+  `op.start_threw` and confirms only those at cancel.
+- **A tool whose start threw** gets outcome `unknown` from `cb.failed` and is
+  resolved at once, since nothing was started, so the round goes on.
+- **`fault`** shares the terminal cleanup with the machine's own terminal
+  (`finish`) and the once-guarded scope kill (`kill_scope`).
+  `Deferred.new(step, on_error)` calls `on_error` instead of rethrowing from a
+  timer callback.
+- **The scope kill** runs in `dispatch`, on the first accepted transition into
+  `stopping` or `terminal`, through `adapters.stopping(ctx)`. The session's
+  implementation lands in Task 4.2.
+- **Tests:** `tests/integration/generation_settles_spec.lua` (9 cases). Each of
+  four targeted mutations — the thrown-start resolve, the child resolve, the
+  fault handler, the scope kill — turns it red.
+
+### 2026-09-19 — M4 Task 4.2, as built
+
+**Delta.**
+- **The session's `stopping` hook** calls
+  `tasker.stop_scope(tasker.scope_key(ctx.epoch, ctx.generation))`. The test
+  signals a process in the scope that no adapter tracks, and turns red without
+  the hook.
+- **W2 changes a pinned contract.** `chat_remote_preparation_spec` asserted that
+  a preparation holds until every content fetch calls back ("a throw is not
+  proof the child never spawned"). Cancel now resolves at once. Anything a
+  fetch spawned dies with the scope kill, once Task 4.3 puts fetches in the
+  scope; until that commit, an orphaned fetch ends at its 120 s deadline. Both
+  cases are rewritten: Stop, or a launch that throws, ends the generation, and
+  late results publish nothing.
+- **W3** is covered by W2 plus the existing `validate_source` check; its test
+  is a readiness picker that never answers.
+- **W5 changes two pinned contracts** in `response_provider_spec`: a cancel
+  during `pre_query` or during recovery resolves at once. The late callback
+  spawns nothing and resolves nothing twice.
+- **W12/W18.** A refused completion start is `done('failed')`. The finalize
+  adapter no longer returns a handle the runner discarded: completion settles
+  itself on `ctx.cancelled`, pinned by a completion-level test.
+- **W13.** All four owners pass an error callback to `Deferred.new`. Each test
+  makes the owner's own step throw, and turns red on revert.
+- **W15.** Batch and topic cancels are guarded, so the session's cancel always
+  runs; the topic cancel in the terminal handler too.
+- **W16.** A topic started without a handle retires in `stop()`, and a throwing
+  provider cancel retires it failed.
+
+### 2026-09-19 — M4 Task 4.3, as built
+
+**Delta.**
+- **W4.** The scope is one explicit trailing argument, `scope`, threaded through
+  the content tree: public fetch, Google, Dropbox, Microsoft and office
+  conversion. The provider definitions' `fetch_with_access_token` carry it too.
+  Each content spawn takes `content_run(scope, kind)`, which is scoped when
+  there is a scope and keeps its kind's deadline either way. Keychain, refresh
+  and the auth-code exchange stay unscoped (shared).
+  - `chat_respond` passes `tasker.scope_key(ctx.epoch, ctx.generation)`.
+  - A fetch launch that throws now marks its child done.
+  - The producer census declares oauth's forwarded `scope` parameter, with an
+    exact count.
+- **W6.** `refresh_copilot_bearer(callback, on_error)` reports all three failure
+  paths, and Copilot's `pre_query` forwards the dispatcher's error callback,
+  which it had dropped.
+- **W7.** `start_query` guards `query`; a setup throw aborts the request.
+- **W8.** A recovery runs only while `transport_alive`. A stopped owner gets the
+  failure, which it ignores.
+- Each test turns red on revert: W4 (oauth and chat_respond), W6, W7, W8.
+
+### 2026-09-19 — M4 Task 4.4, as built: W10 dropped, W9 covered by W1
+
+**Delta.**
+- **W9** needs nothing of its own. A tool whose `producer.start` threw is
+  Task 4.1's thrown-start path: its outcome is `unknown` and it resolves at
+  once. Its processes are in the generation's scope, so the scope kill ends
+  them. `generation_settles_spec` "a tool whose start threw" covers it.
+- **W10 is dropped, as the plan allows.** Reproducing it: the machine refuses a
+  tool's *first* `child_outcome` only for a child that is:
+  - not found or not started: the tool layer has no record of such a child;
+  - already supervised: supervision itself sets the outcome to `unknown` and
+    removes the runner's operation, so the tool layer's later `resolved`
+    returns false with nothing held;
+  - already final: that needs an existing outcome.
+
+  None of these holds a generation, so no public sequence reaches the case. The
+  supervised path is pinned by `generation_sequences_spec`'s
+  supervisor-transfer cases.
+- **W17.** The run's guard is freed on `BufUnload` of its buffer, which `:e!`
+  fires as well as `:bd` (measured; an autoread reload does not). The
+  run is cancelled with `buffer unloaded` and no `done`, and `_gen` keeps a
+  stranded read's late callback off a newer run. `stop_owner` is guarded.
+  - The existing "invalid scheduled completion" test now ends at the unload,
+    with the same properties: no read, no done.
+  - The new tests strand a read, then `:bd` + reopen or `:e!`; they assert the
+    buffer number is reused and a new run is admitted. All three are red on
+    revert.
+
+### 2026-09-19 — M4 boundary review round 1 (FIX-THEN-SHIP): dispositions
+
+**Delta.**
+- **I1, restatements of the changed contract** (7th `seam-change-collateral`).
+  The seam's name and its old claims were grepped, not recalled.
+  - `tool_execution.md`: content fetches for a generation are scoped; only those
+    made outside one are unscoped.
+  - `architecture.md`: a stop that matches no process resolves at once.
+  - `ownership.md`: what never started, or whose start threw, resolves at once.
+  - The six `stop_owner` doubles are now one, `respond_fixture.stop_owner`. It
+    returns the count it stopped, as the real one does, so chat specs take W5's
+    branch. `batch_lifecycle_spec` keeps a declared variant that counts
+    without aborting. A guard (`spawn_seam_spec`) refuses an undeclared copy.
+- **I2, a red test per edited site** (2nd
+  `behavior-change-without-regression-test`).
+  - W15: one guarded helper (`cancel_topic`), plus `M._cancel_entry`. The
+    `cancel_responses` batch cancel is guarded as well. `chat_cancel_entry_spec`
+    makes each callee throw and is red with the guard removed.
+  - The Copilot forward: `providers_pre_query_spec`, red with the forward
+    dropped.
+  - The oauth scope tree: a table-driven test in `unscoped_kill_spec` reaches
+    every spawn: public; Google meta, content and fallback; both Dropbox and
+    both Microsoft requests; office conversion; the three provider closures;
+    and `fetch_content`'s saved-account and fresh-login paths. It also asserts
+    that the shared keychain calls stay unscoped. Mutating each of the 39 scope
+    sites in turn, every one turns a row red.
+  - `chat_remote_preparation_spec` pins that `chat_respond` hands the fetches
+    its scope.
+- **I3, each stop cause** (2nd `done-when-clause-untested`). The end-to-end
+  helper takes the cause: Stop, an edit inside the streamed answer, `:e!`
+  mid-stream, and `:bd` mid-stream. Each runs twice against a SIGTERM-ignoring
+  stream, and all are red with escalation disabled.
+- **I4, the completeness claim** (9th `enumeration-claims-completeness`). The
+  test column this review asked for lives with the tests. The `WAITS` list at
+  the top of `generation_settles_spec` names, for each of W1–W18, its spec and
+  case, or the drop reason for W10. A case checks every named spec and case
+  exists. The atlas points at the list and claims no count. This supersedes
+  Chunk 4's "one case per row, W1–W17" and its `after_each` sentence: the
+  runner describe asserts `Runner.stats`, and the end-to-end describe asserts
+  `tasker.stats` after each cycle.
+- **Minors.**
+  - `fault` leaves `snapshot()` reporting what the host was handed.
+  - W16 is keyed on the request having thrown (`start_threw`), not on having
+    no handle.
+  - tasker refuses a scoped run into a scope already stopped, bounded at 1024
+    keys, so a fetch chain resuming after the kill cannot spawn into it.
+  - The thrown-tool residual is stated.
+  - W14's pcall covers `sync` and the first `dispatch`, with a test.
+  - `tests/helpers/stub.lua` `with_stub` restores on every path; the flagged
+    specs use it.
+- **For M5 (Chunk 5's inventory).** Two new producers need words: the `fault`
+  terminal outcome (the runner's own step threw), and the
+  `Response completion not started: <reason>` warning from the W12 finalize
+  path. Task 5.3 must cover both.
+
+### 2026-09-19 — M4 boundary review round 2 (FIX-THEN-SHIP): the fix round's own hunks
+
+**Delta.** Ten findings were disposed. The two new Importants are the round-1
+rules, not applied to round 1's own changes.
+- **The stopped-scope refusal is in the atlas** (8th `seam-change-collateral`).
+  - `tool_execution.md`: a stopped scope stays closed; the bound is 1024 keys,
+    and a forgotten key is admitted again, bounded by its deadline.
+  - `lifecycle.md`: nothing new may start in a stopped scope.
+- **The `cancel_responses` batch guard has its test** (3rd
+  `behavior-change-without-regression-test`). `batch_lifecycle_spec` makes a
+  real batch's cancel throw, asserts the running response is still cancelled,
+  and is red with the guard reverted.
+- **Round 1's other production hunks, swept.**
+  - The stopped-scope refusal, the fault snapshot, W14's first dispatch and the
+    cleanup guards already had red tests.
+  - **W16:** `response_topic_spec` now stops a topic *during* its request. It
+    must cancel through the handle once the request returns, not retire first,
+    and it is red when keyed on having no handle. `stop()` no longer sends a
+    handle-less cancel while the request is in flight.
+  - **The office temp file:** the scope table asserts that pandoc's input
+    lives in Neovim's private temp dir.
+- **Corrected claim.** Round 1 said chat specs now take W5's branch. They do
+  not: the fixture registers calls synchronously, so there is no pre-query
+  window, and the branch was measured at 0 hits. W5 is pinned in
+  `response_provider_spec`. The double returns a count for fidelity only, and
+  its comment now says so.
+- **Minors.**
+  - The `WAITS` check matches a real `it(`/`describe(` declaration and cuts the
+    list out first, so it cannot vouch for itself; a counterfactual case
+    checks this.
+  - Five hand-rolled stub restores now use `with_stub`.
+
+### 2026-09-19 — M4 boundary review round 3 (FIX-THEN-SHIP): recommendations, and the per-row seam ledger
+
+**The prior reviews' plan recommendations, each disposed**:
+- *Round 2:*
+  - W5 correction: applied in round 2.
+  - The `tasker` row: missed in round 2, applied now (Core concepts).
+  - The W16 test naming: applied in round 2, and extended here (below).
+- *Round 3:*
+  - The `tasker` row: applied.
+  - The W16 exits:
+    - One helper, `cancel_through`, now serves both the direct cancel and the
+      deferred one. It retires on a throw, and on a cancel the provider did not
+      accept (`false`).
+    - A request that throws after a stop landed retires the topic.
+    - `response_topic_spec` covers both exits; they are red on the old code.
+  - W15's terminal site now has its own test. `chat_onboarding_capture_spec`,
+    "finishes its ending cleanup when the topic cancel throws", drives a
+    failed finalize while an automatic topic runs, with a throwing cancel. It
+    is red with that one site reverted to the raw call.
+  - The boundary sweep ledger: below.
+
+**The per-row seam ledger.** For each row whose fix changed a seam's contract,
+`grep -rn <seam> lua/ atlas/ tests/ README.md` was run. Every hit that defines or
+describes the seam is listed with its disposition: prose, comments, and test
+doubles alike (a double restates the contract). Only pure call sites are left
+out.
+
+| Row | Seam | Restating hits → disposition |
+|---|---|---|
+| W1, W9, W11 | `cancel_operation` | `response_session.lua` (ordinary cancel path), `generation.lua` (flush walk) → unaffected |
+| W2, W3 | the preparation's cancel | none |
+| W4 | content fetches, `fetch_content` | `tool_execution.md` (scoped vs unscoped), `lifecycle.md` (scope kill reach) → updated, round 1 |
+| W5 | `stop_owner` | `architecture.md` → updated, round 1; the fixture doubles → one double, round 1; its comment → corrected, round 2 |
+| W6 | `pre_query` | `dispatcher.lua` query doc ("a one-arg pre_query (e.g. copilot)") → updated, round 3; the doubles `dispatcher_query_spec` H2 ("backward compatible", one-arg) and `response_provider_spec` (one-arg) → **updated at close**; the guard now scans `tests/` too; `cliproxy-managed.md`, `cliproxy.lua`, `providers.lua`, other `dispatcher.lua` comments → unaffected |
+| W7 | `start_query` | its own comment → current |
+| W8 | `recover_query` | `cliproxy-managed.md` claim contract → **updated now** (the `transport_alive` precondition); `dispatcher.lua`, `cliproxy.lua`, the specs → unaffected |
+| W12, W18 | the finalize adapter | `response_completion.lua`, `chat_respond.lua` → current |
+| W13 | `Deferred.new` | the `deferred_work.lua` header → updated, Task 4.1; other hits unrelated |
+| W14 | `Runner.start` | none |
+| W15 | `cancel_responses`, `cancel_topic` | none |
+| W16 | topic `stop` | `response_topic.lua` comments → current |
+| W17 | the skill in-flight guard | `cliproxy_caller_teardown_spec` (#131 abort path) → unaffected |
+| Round 1 | `stop_scope` refusal | `tool_execution.md`, `lifecycle.md` → updated, round 2 |
+| Round 1 | `exit_reason`, `failure.exit` | `tool_execution.md`, `spawn_seam_spec` → current |
+| Round 1 | `stats()` | `lifecycle.md`, the settles spec → current |
+
+### 2026-09-19 — M4 closed (review round 4, FIX-THEN-SHIP at the round cap): the doubles, and a mutation ledger
+
+**Delta, bundled into the close commit (#174).**
+- **BR-61, the rule.** The seam ledger's scope now includes test doubles
+  (above). The `pre_query` guard scans `tests/`, with string literals
+  stripped so a matcher's own test data does not count. Two instances fell
+  out of that:
+  - `dispatcher_query_spec` H2 had a one-arg double titled
+    "backward compatible", commented "ignores the error cb";
+  - `response_provider_spec` had a one-arg double.
+
+  Both are two-arg now. The guard is red on the old H2.
+- **Per-hunk mutation ledger** (4th `behavior-change-without-regression-test`).
+  Round 3's "red on the old code" was a whole-file revert, which is evidence
+  for no single hunk. Each `response_topic.lua` cancel hunk was mutated alone:
+
+| Hunk | Mutation | Test that turned red |
+|---|---|---|
+| `cancel_through`'s pcall | call `cancel_operation` bare | "retires a started topic whose cancel throws" |
+| `cancel_through`'s refused-cancel exit | drop `accepted==false` | "retires a started topic whose cancel is refused"; "retires when the provider does not accept the cancel" |
+| direct site uses `cancel_through` | restore the old inline cancel | both "retires a started topic whose …" cases |
+| deferred site uses `cancel_through` | restore the old inline cancel | "retires when the provider does not accept the cancel" |
+| request throws after a stop landed | always `stop()` | "retires when the request throws after the stop landed" |
+
+  The two direct-site cases are new in `response_topic_spec`. All of these
+  exits are unreachable through `response_provider` today; the tests pin them
+  for the next adapter.
+
+### 2026-09-19 — M5 Tasks 5.2–5.3, as built: what the tests found
+
+- **The spec is `tests/integration/chat_refusal_spec.lua`,** a new file routed
+  under `chat/lifecycle`, not `chat_respond_spec`. It has 15 cases and captures
+  `logger.warning`, which is the one channel. A refusal counts when it starts
+  with a `refusal.PREFIX`. The kernel-hold case stubs `tasker.held` at the seam.
+  `tasker_supervision_spec` already pins `held()` against a fake that ignores
+  KILL.
+- **`:e!` is a detach, not an epoch change.** This corrects the M5 design above.
+  Measured: Neovim fires the buffer's `on_detach` (then BufUnload, BufReadPre,
+  BufReadPost), the document dies, and a new one attaches. So the runner recorded
+  `cause = 'detach'`, and a reload said nothing.
+  - The runner ends a generation only in a step on a later timer turn
+    (`deferred_work`), after the command has returned. At that point a chat that
+    is loaded again was reloaded, and a closed one is unloaded.
+  - `chat_respond`'s terminal turns `detach` into `reload` when the buffer is
+    loaded. A batch's `retired('detach')` makes the same check on a scheduled
+    turn.
+  - Pinned both ways: `:e!` says "reloaded"; `enew` plus unload says nothing.
+- **Batches spoke wrongly in three ways, and this adds two more changes:**
+  - **The user's own Stop warned, and warned three times.** `changed` reports
+    every state change, and main warned on each paused one. Now a batch the user
+    stopped (`stop_batch`, through both Stop paths) says nothing, until it runs
+    again.
+  - **A leg's failure was said twice:** once by the leg, and once by the pause
+    with the same reason. Now the leg's terminal hands its message to the batch
+    as `result.refusal`, and the pause then says only "its current response
+    stopped".
+  - **A pause's action said "submit again".** A pause continues, so the host
+    passes `detail.action = Refusal.BATCH_CONTINUE`
+    (`:ParleyChatResumeBatch to continue`).
+  - **A reload ends a batch.** Its leg was cancelled as `batch cancelled`, so the
+    leg says nothing. The batch now says so, under the new `batch_ended` prefix
+    ("Batch stopped"), with `BATCH_RESTART`.
+  - **A permanent blocker, removed.** `:ParleyChatRespondAll` refused whenever a
+    batch was paused. A paused batch whose question was reworded or deleted can
+    never resume (`question obsolete` / `missing`), so every later batch was
+    refused until `:e!`. Now a paused, settled batch (no active leg) gives way to
+    the new one. A running batch still refuses (`batch active`), and so does a
+    paused batch with an unresolved leg (`leg unresolved`).
+  - A once-per-pause gate was built and then removed (Simplicity First). Its
+    mutation survived: an edit made while the batch is paused does not re-notify
+    (pinned), and the one repeating path, the user's Stop, is silent.
+- **The guard had two holes, fixed as rules:**
+  - **Composed reasons.** `batch.lua` builds `question|context` ..
+    `missing|obsolete|changed`, which no literal scan keys, so "question
+    obsolete" reached the user as "unexpected". A fourth assertion now scans for
+    composition:
+    - a reason that starts with a literal must use a `": "` lead-in, which
+      `row_of` keys (the runner's `'missing '..type..' adapter'` became
+      `'missing adapter: '..type`);
+    - a reason that starts with a variable is declared in the spec's
+      `COMPOSED`, with every value it takes, and each expansion needs words.
+  - **`reject(x, <lit>)`.** `response_submission` passes the owner first, which
+    the one-argument form missed, so `invalid submission` had no row. The form
+    is added.
+  - Also added: `revision unavailable` moves from `INTERNAL` to `TOKENS` (a
+    deferred validation the user can meet), and the raw refusals left in
+    `cmd_resume_response`, `respond`'s not-a-chat and header paths, and
+    `respond_all`'s active-batch path now go through `refuse`.
+- **Counterfactuals.** Each one was applied to a backup copy and restored from
+  it, because the tree was uncommitted and `git checkout` would lose the work.
+  Each turns the named test red:
+
+  | Change | Fails |
+  |---|---|
+  | plan 5.2: `return nil,'brand new token'` | assertion 2 |
+  | plan 5.2: a raw `'Response not started: x'` | assertion 3 |
+  | `'missing '..type..' adapter'` | assertion 4 (and 2) |
+  | `question obsolete` renamed | assertion 4 |
+  | `invalid submission` unkeyed | assertion 2, via the new form |
+  | no reload mapping | "a reload stopped the answer" |
+  | no `leg_spoke` | "paused once, without repeating" |
+  | no retire message | "a reload ended the batch" |
+  | the paused batch kept | "lets a new batch start" |
+  | no `user_stopped` | "nothing when the user stops a batch" |
+  | `LLM setup is already in progress` renamed | assertion 2, via the new file |
+- **The full suite found one more double.** The dispatcher showed "query abort
+  before start" as an ERROR, but every caller's `on_abort` already speaks in
+  its own words: the chat's ending, a topic, a skill, and memory preferences.
+  `chat_progress_process_spec` already required exactly one notice, and it
+  failed. The dispatcher now logs this at `debug`, which writes the log file but
+  shows nothing. That spec's `owner is busy` case now looks for the words the
+  user meets.
+- **First-use model setup.** `llm_readiness` cancels a submission with its own
+  reasons, which read as "the request could not be built". It is added to the
+  guard's files, with its `cancel(opts, <lit>)` form. The three reasons a chat
+  can meet get rows. The two it cannot meet (a chat passes `validate_source`)
+  are listed as not refusals.
+- **The #267 family, measured.** `response_tools_spec` sometimes dies
+  mid-run, printing no summary. It did this 2 times in 17 runs on this tree,
+  and on a clean HEAD worktree on the 2nd run (after 72 cases). So it predates
+  this work. `perf_ownership_spec` passes when run alone.
+
+### 2026-09-19 — M5 boundary review round 1 (FIX-THEN-SHIP): dispositions
+
+Six findings, two blocking. Each is fixed as the rule it names, not the site.
+
+- **BR-65 (Important, `behavior-change-without-regression-test`).** Correct and
+  serious: `A and B and nil or C` is always `C` in Lua, so the provider-detail
+  suppression never ran — the diagnosis printed twice, and `overflow` passed its
+  internal token `staging overflow` into the words. The rule, applied: **an
+  ending carries at most one detail, and never a raw token.** The provider's
+  diagnosis and the overflow's hold are already words, so they are the notice;
+  everything else is a producer token, which `describe` keys. The second rule,
+  applied: **a user-visible message is asserted whole, not probed.** The provider,
+  prepare and overflow cases now assert equality (a `find("HTTP 503")` holds on
+  either side of the bug), and a new overflow case drives a 1 MiB output through
+  the session.
+- **BR-66 (Important, `enumeration-claims-completeness`).** Correct: the census
+  keyed on call shapes, and `issue(s, <lit>)` in the runner is not one of them.
+  The rule, applied: **key on the value that reaches the behaviour.**
+  `describe` now records every token that arrives with no words in
+  `refusal._unkeyed`, and under `$PARLEY_TEST_MODE` fails where it is produced;
+  a spec that means to pass one sets `_allow_unkeyed`. Free text under a known
+  outcome is that outcome's detail, recorded separately in `_detail_only` and
+  never a failure. The three runner tokens get rows. The static census stays: it
+  catches at authoring time, before any test drives the path.
+  - The same inversion for the cache guard: `dispatcher.query` now fails under
+    the harness when its `query_dir` resolves under `stdpath('cache')`, which
+    catches a spec that inherits the default without naming it.
+- **BR-67 (Minor, `action-does-not-unblock`).** Correct: nothing clears a
+  batch's `unknown`, so `:ParleyToolOperations` cannot resume it. It now says
+  `:ParleyChatRespondAll to start a new batch`. Two rules are now tested: every
+  batch-fatal token points at a new batch, and **every command an action names
+  exists** (checked against `M.cmd.<Name>` in `init.lua`).
+- **BR-68 (Minor, `fallback-order-hides-known-cause`).** Correct: `describe`
+  consulted `REVOKED` only when the failure was nil, so a revocation carrying a
+  stop's failure read "unexpected". The cause is the more specific fact and now
+  outranks the failure.
+- **BR-69 (Minor, `returned-handle-has-no-consumer`).** `init.lua`'s
+  `chat_respond` forwarded the deleted force flag to a three-parameter function.
+  Deleted at that hop too.
+- **BR-70 (Minor, `comment-outlives-its-behavior`).** `chat_context.lua`'s header
+  described the pre-M5 reporting. Rewritten: it returns a typed error and never
+  speaks; its callers word it through `refuse`.
+
+Counterfactuals for this round, each red:
+
+| Change | Fails |
+|---|---|
+| the `A and B and nil or C` line restored | "the model's request failed" (equality) |
+| the unkeyed-token failure removed | "records a token that has no words" |
+| an action naming `:ParleyNoSuchThing` | "names only commands that exist" |
+| the spec's `query_dir` back to the shared cache | 67 cases of `dispatcher_query_spec` |
+
+### 2026-09-19 — M5 boundary review round 2 (FIX-THEN-SHIP): the guards leave production
+
+Round 1 disposed six findings; two of its own fixes were wrong in the same way,
+and the round's rule is the one it names: **a harness-only check belongs in the
+harness.**
+
+- **BR-71 (Important, `test-hook-in-production-path`).** Correct on both counts.
+  Round 1 put the value census inside `describe` behind `$PARLEY_TEST_MODE`,
+  which made a module the plan lists as PURE stateful (ARCH-PURE), grew
+  `_detail_only` without bound or removal in production — holding up to ~500
+  characters of provider body (ARCH-FUNERAL, ARCH-SECURE) — and threw where the
+  runner's `pcall` swallowed it. The dispatcher's guard had the same shape.
+  - `describe` is pure again and keeps nothing. It returns the message **and how
+    it resolved**: `keyed`, `detail`, `internal`, `cause`, `silent`, `unkeyed`.
+  - `tests/minimal_init.vim` wraps `describe`, and any spec that produces an
+    `unkeyed` token fails the file through `cquit`, which no `pcall` can swallow.
+    A spec that means to pass one names it in `g:parley_expected_unkeyed`, at
+    file scope: nothing to restore (this also answers BR-72).
+  - `tests/helpers/spec_runner.lua` now passes `minimal_init` to plenary, so
+    every spec child loads it. Before this, children ran with no `-u` at all.
+  - The query directory is a plain override, `$PARLEY_QUERY_DIR`, which the
+    harness sets per process. No branch on the environment is left in the
+    dispatcher.
+- **BR-66 (Important, carried).** The census now keys on what `describe`
+  resolves, across every spec in the suite, rather than on producer syntax. The
+  atlas and target sentences that credited the static spec with catching any
+  wordless reason are corrected: it reads the producer files for the call shapes
+  it knows, at authoring time, and the harness covers the values.
+- **BR-72 (Minor).** `one()` in `chat_refusal_spec` now takes the whole expected
+  message and compares with equality, so all 17 cases inherit the rule rather
+  than the three that were fixed by hand.
+- **BR-73 (Minor).** `generation.lua` declares `M.OUTCOMES` next to the only
+  function that sets one and asserts membership there; `refusal.lua` checks at
+  **load** that every outcome has words. `revoked` (a revocation with no recorded
+  cause) had none and now does.
+- **BR-70 (Minor, carried).** The replacement sentence was inaccurate too. The
+  comment now states only what this module guarantees — it returns a typed error
+  and never speaks — and describes no collaborator.
+- **BR-74 (Minor).** The exemption for a spec that means to pass a wordless
+  token is `g:parley_expected_unkeyed`, at file scope, with nothing to restore.
+
+**What the harness change surfaced.** With children loading `minimal_init.vim`,
+`g:parley_test_mode` reaches specs for the first time, and `file_tracker`
+short-circuits its persistence on that flag. `file_tracker_spec`, which
+exercises the real read and write against a redirected `stdpath`, was passing
+only because the flag never arrived. It now clears the flag itself and restores
+it. `file_tracker` is the only reader.
+
+Counterfactuals for this round:
+
+| Change | Fails |
+|---|---|
+| a spec that produces a wordless token | that spec file, through the harness watch (verified: `refusal_spec` before its exemption) |
+| an outcome added to `OUTCOMES` with no row | `refusal.lua` at load, in every spec that requires it |
+| a detail appended to any refusal | its case, by whole-message equality |
+
+**The watch earned its place on its first full run.** `drill_in_transaction_spec`
+failed with "these reached a user with no words: interrupted" — a real refusal
+the user met as `Drill-in stopped: unexpected (interrupted)`, which the static
+census could not see (the value comes from a document status, not a producer
+literal). Fixed as its class: every status a user edit can end with
+(`applied` aside) now has words, and a spec derives the list from
+`document/editor.lua` and `document/user_edits.lua` rather than trusting the
+five that exist today.
+
+### 2026-09-19 — M5 boundary review round 3 (FIX-THEN-SHIP): one field, one token
+
+Six disposed, three blocking. Ids below are the ledger's, verbatim (round 3's
+own `plan-tracking-not-updated` finding: round 2's entry renumbered them).
+
+- **BR-66 (Important, closed at last).** The reviewer measured what the previous
+  round missed: with every outcome worded, an unkeyed producer token no longer
+  resolved `unkeyed` — it resolved as the outcome's *detail* and printed raw,
+  `start refused | detach` eight times across the integration specs
+  ("Response not started: the response could not start (detach)"). The rule
+  applied: **a producer token and a free-text diagnosis must not share the
+  `failure` field.**
+  - `failure` is now always a token. A token with no row resolves `unkeyed` on
+    every kind, and the harness fails the spec that produced it.
+  - Free text reaches the user through `detail.notice` only. The runner types
+    its own Lua errors as `diagnosis` beside the token; a producer that used to
+    pass free text now emits a `": "` lead-in token (`request build failed: `,
+    `provider request failed: `, `bearer token is missing: `), which the
+    vocabulary keys and whose detail rides after the lead-in.
+  - One detail, enforced in `describe`: when a notice is present, the token's own
+    detail is dropped rather than repeated (the BR-65 rule, now in one place).
+- **BR-75 (Important, `canonical-form-not-shared`).** `refusal.LIFECYCLE` owns
+  the document lifecycle for every kind: a closed chat says nothing, a reloaded
+  one says so, and no call site writes those words. The host's detach→reload
+  mapping, which was written twice, is `chat_respond.lifecycle_cause(buf, cause)`.
+- **BR-76 (Important, `comment-outlives-its-behavior`).** Swept every prose claim
+  naming the seam this milestone changed: `tests/minimal_init.vim`'s header and
+  `atlas/infra/test_harness.md` said children never load the init and that `g:`
+  never reaches a spec. Both now describe what spec_runner does, and name the
+  three places that set `g:parley_test_mode` themselves.
+- **BR-72 (carried).** `refusals_are({...})` asserts the whole list; `one()`
+  delegates to it, so the two-message batch case is checked whole as well.
+- **Minor, `canonical-form-not-shared`.** The response pause and the topic abort
+  were hand-written notices. Both go through `refuse` now (`paused`, `topic`
+  prefixes), and the guard keys on the **channel**: a `logger.warning` or
+  `vim.notify` string literal in any submit-path module is a finding unless it
+  is declared with the reason it is not a refusal.
+- **Minor, `allowlist-without-dead-entry-check`.** The spec now asserts
+  `NOT_REFUSAL` is disjoint from the vocabulary and that every entry is still
+  produced by the scan. Four shadowed entries were removed.
+- **Minor, `state-change-bypasses-model`.** A pause's cause is now part of the
+  batch machine: `cancel(batch, {cause='user'|'lifecycle'|'fault'})`, validated
+  in the transition and surfaced on the snapshot. The host-side weak table and
+  the `leg_spoke` upvalue are gone — "its current response stopped" is derived
+  from the model (the pause reason is a generation outcome).
+
+**The watch keeps finding them.** Running it across the whole suite turned up
+five more, all of them the same shape — free text arriving where a token
+belongs:
+
+- the dispatcher's pre-start aborts (`bearer token is missing`, `request body
+  not written`, `query setup failed`) had no words at all;
+- an adapter whose start threw reported the Lua error as the token (now the
+  diagnosis, exposed on the runner's snapshot);
+- a reference fetch reported whatever it caught, including a launch's Lua error
+  (now `remote content failed: `);
+- the tool adapter's construction error reached the user as a traceback (now
+  `tool setup failed: `);
+- the ownership benchmark cancelled its response with `benchmark complete`,
+  which a user would have met as an unexplained stop. It now stops the response
+  the way a user does, so it is silent.
+
+Where a fixture string genuinely is not a transport token, the spec declares it
+in `g:parley_expected_unkeyed` — one line, at file scope.
+
+Two pinned assertions changed with the contract: a Lua error from a throwing
+adapter is the snapshot's `diagnosis`, not its `failure`.
+
+### 2026-09-19 — M5 closed (boundary review round 4, FIX-THEN-SHIP): the invariant moves to where the value is stored
+
+Round 4 finalized the boundary: no open blocking findings. Its seven findings
+are fixed here, in the close commit, as the rules they name.
+
+- **`failure` must hold a value the vocabulary can resolve — enforced where it
+  is STORED.** The reviewer measured three producers still passing free text
+  (cliproxy's health sentence through `failure_reason`'s string branch, and the
+  raw Lua errors in `fault` and `kill_scope`), and pointed out that the `fault`
+  row therefore had no reachable consumer. Chasing producers is the
+  syntax-vs-value mistake again, so the invariant now lives in
+  `generation_runner.issue`: anything `refusal.is_token` does not recognise
+  becomes the `diagnosis`, whatever the caller meant. `fault`, `kill_scope` and
+  every adapter string are covered by construction, and the census no longer
+  needs a complete FILES list. `is_token` counts a row, an `INTERNAL` entry, a
+  `": "` lead-in, a `LIFECYCLE` key and a deliberately silent token.
+- **The channel guard matches the CALL, not its first token.** Matching only a
+  string-literal argument let two live channels hide inside a file the guard
+  already scanned: the attachment-budget notice (`logger.warning(plan.warning)`)
+  and `guarded()`'s `label .. ' failed: '`, which printed a traceback on the
+  Stop path. Both are routed now (`attachments dropped: `, and an internal
+  `cleanup failed: ` whose traceback goes to the log), and every
+  `logger.warning(`/`vim.notify(` site in the submit path must be `refuse`'s
+  return or a declared non-refusal, keyed by the argument as written.
+- **A handle added without a reader.** `M._lifecycle_cause` (labelled a test
+  seam, used by no test) and `result.refusal` (written twice, read nowhere —
+  the batch derives `leg_stopped` from the model) are deleted. A new arch
+  assertion fails any `-- test seam` export with no test referencing it.
+- **One `brief(err)`.** Six hand-written copies of "first line of a Lua error",
+  three of which would throw inside the failure handler on
+  `debug.traceback("")`, are one helper with the fallback and cap built in.
+- **One wording per condition, for every entry point.** `init.lua`'s
+  chat-context wrapper hand-worded "not a chat" and the missing header for four
+  commands; it calls `refusal.describe` now, with the command as the notice.
+  The attachment-budget notice keeps the builder's **injected** logger as its
+  channel (that seam is what `build_messages_spec` tests through) and takes only
+  its words from the vocabulary; the channel guard accepts a
+  `Refusal.describe(...)` argument as routed.
+- **Buffer numbers are reused.** `lifecycle_cause` took a loaded buffer as proof
+  of a reload; it now requires the buffer to still hold a chat, so a closed chat
+  whose number an ordinary file took is silent rather than "reloaded". The name
+  is deliberately not the test: a chat renames itself from its `- file:` header
+  while a response runs, which the first attempt (comparing the captured
+  `file_name`) broke — `chat_refusal_spec`'s two reload cases caught it.
+- **The harness removes what it creates.** The per-process query directory is
+  deleted on `VimLeavePre`, beside its creation, rather than relying on a target
+  the operator must remember.
+
+Counterfactuals, each red:
+
+| Change | Fails |
+|---|---|
+| `issue` keeps free text in `failure` | the reload cases in `chat_refusal_spec` |
+| a `logger.warning(<variable>)` in the submit path | "routes every user notice … through refuse" |
+| a `-- test seam` export with no test | "every '-- test seam' export has a reader" |
+
+### 2026-09-19 — close review round 1 (REWORK): the readers of a changed field, and a suite phase that never ran
+
+Four findings, all mine, all correct. The Critical is the one that matters most:
+**two specs were red at HEAD** — and I had reported the suite green.
+
+- **BR-88 (Critical, `seam-change-collateral`).** The M5 close changed what the
+  stored `failure` field may hold. The sweep covered production producers and
+  missed the *readers* in `tests/`:
+  `cliproxy_caller_teardown_spec` expected `'test abort'` and
+  `response_session_spec` expected `'forced preparation failure'`; both now read
+  the `diagnosis`.
+  - **Why I did not see it: `make test` stops after the unit phase fails.** Both
+    of the runs I called "green modulo #267" ended at a flaky unit spec, so the
+    integration phase never ran. From here the verification is `make test-unit`
+    and `make test-integration` separately, and a phase that did not run is not
+    a phase that passed.
+  - The rule the finding names: a change to what a stored field may hold
+    enumerates every reader, production and spec alike.
+- **BR-81 (Important, carried and now closed).** The routing had no test that
+  failed without it, which is why two rounds disposed it as unaddressed. There
+  is now a case that drives a producer's sentence (cliproxy's health message)
+  through a provider abort and asserts the outcome's words with the sentence as
+  the detail. Reverting the routing turns exactly that case red.
+- **BR-90 (Important, `seam-change-collateral`).** `logger.warning(Refusal.describe(...))`
+  passed `describe`'s SECOND return value into the logger's `sensitive`
+  parameter, so the attachment notice was written to the log as
+  "[SENSITIVE DATA] REDACTED" and kept out of the history. The call is assigned
+  first, and the channel guard now refuses the bare call — the same guard had
+  explicitly blessed that form one round earlier. The notice also claimed
+  "Response not started" for a response that does start, so its prefix is
+  `Images not sent`.
+- **BR-89 (Important).** My own mutation-ledger table tripped the repo's
+  Core-concepts symbol guard, leaving `single_source_sweeps_spec` red at HEAD:
+  the guard selected rows by shape, so any table in the plan counted. Rows now
+  count only inside a table whose header carries the Status column, which is the
+  property that defines the class; a plan naming a symbol that does not exist
+  still fails (verified by planting one).
+- **Minor.** A duplicated comment paragraph above `lifecycle_cause`, and the
+  issue Log's dispositions renumbered to the ledger's ids verbatim.
+
+Counterfactuals: reverting the routing reddens the new free-text case; the bare
+`describe(` call reddens the channel guard; a planted missing symbol reddens the
+narrowed Core-concepts guard.
+
+### 2026-09-19 — close review round 2 (FIX-THEN-SHIP): the gate moves to where the value is READ
+
+Four findings. The verdict improved to FIX-THEN-SHIP; two were blocking.
+
+- **BR-92 (Important).** BR-81's rule was "enforced where the value is STORED",
+  and I gated one store: the runner. The other is `refuse` itself, whose
+  `failure` argument is a variable at eleven call sites — and a live reason,
+  `preparation outside captured output` (response_submission → session →
+  `refuse('start','start refused', why)`), reached the user as
+  "unexpected (…)" with no action, which this issue's Done-when forbids.
+  - The gate now lives where the value is **read**, in `describe`, so every seam
+    inherits it rather than each one repeating it. A reason the vocabulary cannot
+    resolve becomes the detail, and the action comes from `refusal.KIND_ACTION` — the
+    floor for each kind, so no refusal can reach a user without an action.
+  - `describe` still returns `unkeyed` for it, so the harness watch keeps telling
+    the developer. The runner's store-level gate stays (it keeps the snapshot's
+    `failure` honest for the specs that read it), and its comment no longer
+    claims a raw value "can never" reach a user.
+- **BR-93 (Important).** The atlas page and the target both enumerated "two
+  nets", whose completeness equals spec coverage — the very thing BR-81
+  rejected. Both now say the guarantee is in the code (the by-value gate), with
+  the census and the watch as developer signal. The reviewer notes that nothing
+  mechanical will catch this class in `atlas/` or `workshop/targets/`, since
+  `superseded_comment_spec` globs only `lua/**`, `tests/**` and `scripts/**`.
+- **Minor.** `brief()` was documented for Lua errors (first line, 512) but was
+  applied to provider prose, dropping everything after line 1 — including a
+  trailing remedy — and its `:sub(1,4096)` was dead. Provider text now goes
+  through `prose()`, which folds every line onto one; `brief()` still drops a
+  traceback on purpose.
+- **Minor.** A guard whose selection is empty passes while checking nothing. The
+  fix is at the selection, not in one test: `repo_files` fails when its pattern
+  matches no file, so every corpus guard in the file inherits the check, and the
+  two row-based selections count their own rows.
+
+### 2026-09-19 — closed (close review round 3, FIX-THEN-SHIP): 16.31 h against a 30.07 h estimate
+
+No blocking findings. The three Minors are fixed in the close commit, each with
+a counterfactual.
+
+- **A gate that demotes a value must PLACE it.** `notice = detail.notice or stray`
+  meant a caller's notice swallowed the demoted reason — gone from the message
+  and from the log line `refuse` writes, leaving only the kind's floor. The same
+  shape as BR-68, where a cause lost to a failure. Details are joined in a
+  defined order now, and the one-detail suppression runs off the joined value.
+  Red without it: "keeps both details when a caller's notice meets a demoted
+  reason".
+- **One fact, one wording.** Every `KIND.what` restated its `PREFIX` in clause
+  form ("Response not started: the response could not start"), and the test only
+  asserted a row existed per prefix, so neither the tautology nor future drift
+  was caught. `KIND_ACTION` carries only the action.
+- **Each changed routing gets its own counterfactual — including the fix
+  round's.** Reverting `prose` to `brief` reddened nothing, so a case now drives
+  a provider's multi-line message (its remedy on the last line) through `issue`
+  into the words a user reads. Red without it.
+
+**Estimate vs actual.** 30.07 estimated, 16.31 measured (1.8×, trusted window).
+The estimate's own note said to read the total as a floor because every task is
+strict TDD with counterfactuals; the review tail is where that floor was wrong —
+it budgeted eleven review rounds at 0.2 h, and the boundary gates ran 23 rounds
+across the issue, but each round cost far less than a fresh design would have.
+

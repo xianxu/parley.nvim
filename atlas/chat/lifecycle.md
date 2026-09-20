@@ -184,9 +184,50 @@ footnotes. `response_topic` separately owns the captured `?` header suffix and
 origin markers; normal answer completion permits it to finish, while origin
 edits and reload invalidate it.
 
+Regenerating an answer replaces it in the buffer, and nothing is kept outside
+the transcript (#261). The previous text is reachable through native undo; how
+generated writes group into undo steps is stated once, in
+[Chat Write Ownership, "Undo grouping"](ownership.md). With `undofile` set, that
+history survives reopening the chat.
+
+### Previous answer while regenerating (#261, #255)
+
+While an answer is being regenerated, the rest of the chat still sees the
+answer it replaces.
+- A request whose context includes that exchange — a later question in the
+  same chat, or a sub-chat whose ancestors include it — carries the previous
+  answer, whole, rather than the header or partial text now in the buffer.
+- It is captured from the command-time parse and held on the document
+  coordinator (`D.set_previous_answer` / `D.previous_answers`) from the top of
+  `prepare_input`, before preparation removes a byte.
+- It is substituted in the tick the command reads the chat, because
+  `build()` runs later.
+
+It lives exactly as long as that generation holds its grant:
+- it ends when the generation ends, in success or failure, since both are
+  recorded in the transcript;
+- an edit that revokes it, reload, detach, or deleting the question also end
+  it;
+- the event list is the ARCH-ORDER table in
+  `workshop/plans/000261-transcript-is-the-whole-truth-plan.md`.
+
+A generation's writes inside its own grant move other generations' captured
+input ranges but never mark them stale; only human edits do
+(`document/state.lua`). That covers every generated write: a regeneration, a
+first answer, and a topic header.
+- For a regeneration, the answer being replaced stays the valid context until
+  the generation ends.
+- For any generated write, a request captured before it is final: it carries
+  the transcript as it was when its command ran. A later generated write
+  changes what later requests read, not what an earlier one already sent.
+
 Pending progress is presentation only, described in [Response progress](response_progress.md).
-Stop cancels captured sessions for the current chat; cancellation does not release
-unresolved subprocesses or tool effects. Undo/redo stays native. Document edit
+Stop cancels captured sessions for the current chat. Its processes are stopped as
+process groups — SIGTERM, then SIGKILL 2 s later while one is still running
+([Stopping a process](../providers/tool_execution.md#stopping-a-process)) — while
+a subprocess or tool effect that has not resolved keeps its ownership until it
+does: cancellation is a request, not evidence that an effect stopped.
+Undo/redo stays native. Document edit
 observation revokes affected grants; no pending confirmation or synthetic tool
 result can replace that evidence.
 
@@ -242,6 +283,11 @@ If no matching forward reference is found, that ancestor contributes no
 exchanges. The question of each included exchange is retained; its answer uses
 the `📝:` summary when present, otherwise the full answer.
 
+A parent is read as the user sees it (`helper.chat_lines`): from its loaded
+buffer when one is open, which is ahead of the disk while an answer streams in
+or while edits are unsaved, else from the file. A parent exchange still being
+regenerated contributes its previous answer, as above.
+
 This ancestor-summary rule applies even when `chat_memory.enable=false`.
 Disabling memory preserves the current chat's ordinary message window; it does
 not turn ancestor summaries into full ancestor answers. The implementation is
@@ -273,6 +319,40 @@ writer; edits to a disjoint question can proceed while that answer streams.
 it offers the current chat's captured generations in a picker.
 `:ParleyStopDocument` cancels all generations in the current chat. Save a separate
 copy or use version control when you need durable recovery beyond editor history.
+
+### A stopped response always ends (#261)
+
+**The invariant:** every generation that enters `stopping` reaches `terminal`
+within the kill bound: 2 s, plus draining its effects. The one exception is a
+process the kernel holds. `generation_runner.stats().active` counts exactly the
+generations not yet terminal. So a stopped response never holds a slot, and
+the next submission is admitted, whether it comes in the same buffer, after
+`:e!`, or after `:bd` and reopening the file.
+
+A generation reaches `terminal` only when every operation it started
+confirms. What makes that certain:
+- **Its processes die.** The first time a generation stops or ends, the runner
+  kills its process scope once, through the session's `stopping` hook. That
+  reaches every process started for it: the provider stream, tools, and the
+  content fetches its preparation made. The scope then stays closed: nothing
+  new may start in it. See
+  [Stopping a process](../providers/tool_execution.md#stopping-a-process).
+- **Nothing waits on a callback that cannot come.**
+  - An operation whose start threw is confirmed by the runner itself.
+  - A cancel with nothing left to wait for resolves at once: a readiness
+    picker left open, a request whose process never started.
+  - A step that throws settles its owner as failed.
+  - A step of the runner's own that throws ends the generation with outcome
+    `fault`.
+
+The evidence is `tests/integration/generation_settles_spec.lua`.
+- **Each wait.** Its `WAITS` list names each wait with the spec and case that
+  pin it, or the reason it was dropped. The spec checks that list against the
+  specs it names.
+- **The reported shape, end to end.** A provider stream that ignores SIGTERM is
+  stopped by each cause: Stop, an edit to its answer, `:e!`, and `:bd`. It is
+  also stopped 5 times in one buffer and 17 times across reloads. Each next
+  submission is admitted.
 
 ## Implementation and checks
 

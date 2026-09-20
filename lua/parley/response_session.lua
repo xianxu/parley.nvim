@@ -89,10 +89,12 @@ function M.start(doc,spec,opts)
         -- an explicit onboarding choice has become the frozen request profile.
         local ok,adapter=pcall(Tools.new,doc,{producer=opts.producer,registry=opts.registry,
             root_policy=opts.root_policy,allowed_tools=profile.allowed_tools or opts.allowed_tools or {},
-            buf=opts.buf,state_dir=opts.state_dir,chat_roots=opts.chat_roots,help_root=opts.help_root,page_limit=opts.page_limit,
+            buf=opts.buf,chat_roots=opts.chat_roots,help_root=opts.help_root,page_limit=opts.page_limit,
             max_iterations=limit('max_iterations'),
             max_result_bytes=limit('max_result_bytes'),build_input=opts.build_input})
-        if not ok then return false,tostring(adapter)end
+        -- A Lua error, not a token: it rides behind a lead-in the vocabulary
+        -- keys, so the user is told what failed rather than shown a traceback.
+        if not ok then return false,'tool setup failed: '..require('parley.refusal').brief(adapter)end
         tools=adapter;s.tools=adapter
         if profile.agent and profile.agent~=opts.agent then
             if s.pending then s.pending:cancel();s.pending=nil end
@@ -159,7 +161,10 @@ function M.start(doc,spec,opts)
                 r.op=op
             end
             local ok,accepted=pcall(cb.prepared,r.input,write_gap)
-            if not ok or accepted==false then failed(ok and 'prepared callback refused' or tostring(accepted));return false end
+            if not ok or accepted==false then
+                failed(ok and 'prepared callback refused' or ('prepared callback threw: '..require('parley.refusal').brief(accepted)))
+                return false
+            end
             return true
         end
         function callbacks.failed(reason)failed(reason)end
@@ -225,7 +230,14 @@ function M.start(doc,spec,opts)
             end
             safe(opts.changed,value)
         end,
-        terminal=function(result)finish(result,false)end,rejected=function(reason)finish(reason,true)end}
+        terminal=function(result)finish(result,false)end,rejected=function(reason)finish(reason,true)end,
+        -- The scope kill (#261 M4): the runner calls it once, when this
+        -- generation first stops or ends. Every process started in its scope —
+        -- provider stream, tools, content fetches — is stopped as a group.
+        stopping=function(ctx)
+            local tasker=opts.tasker or require('parley.tasker')
+            tasker.stop_scope(tasker.scope_key(ctx.epoch,ctx.generation))
+        end}
     function hooks.cancel_operation(ctx,done)
         local handle=ctx.handle
         if type(handle)~='table'then return false end

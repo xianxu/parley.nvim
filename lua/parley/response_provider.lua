@@ -1,15 +1,22 @@
 -- Operation-scoped provider transport. This module owns no document positions.
 local M={}
 local serial=0
+local scope_key=require('parley.tasker').scope_key
 local function scalar(v)return type(v)=='string' and #v>0 and #v<=256
     or type(v)=='number' and v>=0 and v<math.huge and v%1==0 end
 local function safe(fn,...)
     if type(fn)~='function'then return true end
     return pcall(fn,...)
 end
+-- A token, never free text: the words for it live in parley.refusal, and the
+-- HTTP status and body reach the user through the host's notice (the diagnosis
+-- `_failure_notice` builds). #261 M5 review round 3, BR-66.
 local function failure_reason(failure)
     if type(failure)=='table'then
-        return 'provider request failed (HTTP '..tostring(failure.http_status or 'unknown')..')'
+        -- A transport that ended badly names how (#261 M3 review BR-45); the
+        -- detail follows the ': ' lead-in the vocabulary keys.
+        if failure.exit then return 'provider request failed: '..failure.exit end
+        return 'provider request failed: HTTP '..tostring(failure.http_status or 'unknown')
     end
     return type(failure)=='string' and failure:sub(1,512) or 'provider request failed'
 end
@@ -99,7 +106,7 @@ function M.new(opts)
             function(_,event)if alive(r)then safe(opts.on_progress,r.ctx,event)end end,
             abort,function()if alive(r)then safe(opts.on_activity,r.ctx)end end,
             function(qid,err)completed(r,qid,err)end,
-            {generation_id=r.owner,logical_generation=tostring(ctx.epoch)..':'..tostring(ctx.generation),admission_key=r.owner,attempt_id=r.owner,alive=function()return alive(r)end})
+            {generation_id=r.owner,logical_generation=scope_key(ctx.epoch,ctx.generation),admission_key=r.owner,attempt_id=r.owner,alive=function()return alive(r)end})
         if not ok then
             r.active=false;failed(r,'provider startup failed')
             if tasker.get_attempt(r.owner)then tasker.stop_owner(r.owner)
@@ -114,9 +121,12 @@ function M.new(opts)
         r.cancelled=true;r.active=false
         if r.terminal then safe(resolved);return true end
         r.cancel_resolved=resolved
-        tasker.stop_owner(r.owner)
-        -- A zero match can mean asynchronous pre_query/recovery is outstanding.
-        -- Its guarded startup/abort callback, not this observation, resolves it.
+        -- A zero match means no process is running for this request: a pre_query
+        -- or a recovery is pending. Nothing would resolve it, so it resolves now;
+        -- its late callback finds the owner inactive and aborts (`transport_alive`,
+        -- #261 M4 W5). A signal that failed leaves the process to its exit.
+        local ok,matched=pcall(tasker.stop_owner,r.owner)
+        if ok and matched==0 then resolve(r) end
         return true
     end
     return adapter

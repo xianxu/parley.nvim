@@ -149,25 +149,31 @@ function M.invoke(buf, manifest, args, opts)
         source_pool,read_state,permissions=SourceRead.transition(source_pool,read_state,event)
         return permissions
     end
-    local process_owner="skill:"..tostring(buf)..":"..tostring(gen)
+    -- A skill run's own process scope, spelled by the one scope function
+    -- (#261 M3); a chat generation's scope kill does not reach it.
+    local process_owner=tasker.scope_key("skill:"..tostring(buf),gen)
     local detached_progress = opts.detached_progress ~= false
     local progress_started = false
     local finish
+    local lifecycle -- this run's buffer-lifecycle autocmds (#261 M4 W17)
+    local function release_owner()
+        if _terminals[buf]==finish then _terminals[buf]=nil;_in_flight[buf]=nil end
+        if lifecycle then pcall(vim.api.nvim_del_augroup_by_id,lifecycle);lifecycle=nil end
+    end
     local function complete_logical(result,deliver_done,permissions)
         if not permissions.deliver then return false end
         source_completion=nil
         if permissions.cancel and source_read then source_read:cancel() end
         if tool_producer then tool_producer.close();tool_producer=nil end
-        tasker.stop_owner(process_owner)
+        -- A stop that raises must not skip the cleanup below (#261 M4 W17).
+        pcall(tasker.stop_owner,process_owner)
         require("parley.buffer_edit").cancel_user(source_capture)
         source_capture=nil
         if progress_started then
             pcall(function() require("parley.progress").stop() end)
             progress_started=false
         end
-        if permissions.release_owner and _terminals[buf]==finish then
-            _terminals[buf]=nil;_in_flight[buf]=nil
-        end
+        if permissions.release_owner then release_owner() end
         deliver_attempt(result,deliver_done)
         return true
     end
@@ -211,9 +217,7 @@ function M.invoke(buf, manifest, args, opts)
             source_completion=nil;source_read=nil;source_filesystem=nil
             stop_read_timer()
         end
-        if effects.release_owner and _terminals[buf]==finish then
-            _terminals[buf]=nil;_in_flight[buf]=nil
-        end
+        if effects.release_owner then release_owner() end
         if continuation then
             local ok=pcall(continuation,read)
             if not ok then finish({ok=false,msg='source completion failed',reconciliation_required=true},true)end
@@ -394,12 +398,26 @@ function M.invoke(buf, manifest, args, opts)
         or neighborhood.policy_from_roots(vim.fn.fnamemodify(artifact_path, ":h"), nil, {})
     local tool_error
     tool_producer,tool_error=require('parley.tools.producer').new({buf=buf,deferred_refresh_buf=buf,registry=tools_registry,
-        allowed_tools=inv.tools,root_policy=root_policy,state_dir=p.config.state_dir,
+        allowed_tools=inv.tools,root_policy=root_policy,
         page_limit=p.config.tool_result_page_lines,
         help_root=vim.fn.fnamemodify(debug.getinfo(1,'S').source:sub(2):match('^(.*)/lua/parley/skill_invoke%.lua$'),':p')})
     if not tool_producer then finish({ok=false,msg=tool_error},true);return end
 
     _in_flight[buf] = true
+    -- The guard is keyed by buffer number, which `:e!` and `:bd` + reopen reuse
+    -- (#261 M4 W17). Both unload the buffer's text first (`BufUnload`), so the
+    -- run is over for that buffer: cancel it, and free the guard even while a
+    -- cancelled source read is still settling — that read belongs to text that
+    -- is gone, and `_gen` keeps its late callbacks off any newer run. An
+    -- autoread reload is not an unload, so a run survives one.
+    lifecycle=vim.api.nvim_create_augroup('ParleySkillBuffer'..buf..':'..gen,{clear=true})
+    vim.api.nvim_create_autocmd('BufUnload',{group=lifecycle,buffer=buf,once=true,callback=function()
+        if _terminals[buf]~=finish then return end
+        -- No `done`: its continuation re-renders a buffer whose text is gone.
+        pcall(finish,{ok=false,msg='buffer unloaded'},false)
+        _gen[buf]=(_gen[buf] or 0)+1
+        release_owner()
+    end})
     -- Detached progress bar: this is a ~30s headless op, so show a running cue
     -- (the first substantive-progress surface, #133 M7). Stopped on exit/abort.
     if detached_progress then

@@ -38,6 +38,18 @@ local function drain(op)
 end
 
 describe('finite response preparation',function()
+    -- #261 M4 W13: a step that throws settles the preparation failed, so the
+    -- generation waiting on it is released rather than held.
+    it('settles failed when its step throws',function()
+        local doc,_,ctx,spec=setup({'answer'},false)
+        ctx.cancelled=function()error('preparation exploded')end
+        local failed,resolved
+        local op=assert(P.start(doc,ctx,{failed=function(reason)failed=reason end,
+            resolved=function()resolved=true end},spec,{schedule=true}))
+        assert.is_true(vim.wait(500,function()return resolved==true end,5))
+        assert.truthy(tostring(failed):find('preparation exploded',1,true))
+        assert.equals('error',P.snapshot(op).status)
+    end)
     after_each(function()for _,doc in ipairs(docs)do D.detach(doc)end;docs={}
         for _,buf in ipairs(buffers)do if vim.api.nvim_buf_is_valid(buf)then vim.api.nvim_buf_delete(buf,{force=true})end end;buffers={}end)
     it('preserves raw annotations and revokes cleanup grants before publishing prepared input',function()

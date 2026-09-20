@@ -83,3 +83,22 @@ describe("cliproxyapi.recover_query", function()
         assert.is_false(claimed)
     end)
 end)
+
+-- #261 M4 W6: copilot's pre_query hands the dispatcher's error callback to the
+-- bearer refresh, so a request waiting on the bearer hears a failure. With the
+-- forward dropped, the vault reports to no one and the request waits forever.
+describe("copilot.pre_query", function()
+    it("forwards the dispatcher's error callback to the bearer refresh", function()
+        package.loaded["parley.vault"] = nil
+        local vault = require("parley.vault")
+        vault.setup({ state_dir = vim.fn.tempname() }) -- no copilot secret resolved
+        local ok, err = pcall(function()
+            local started, failed = false, nil
+            providers.get("copilot").pre_query(function() started = true end, function(message) failed = message end)
+            assert.is_false(started)
+            assert.truthy(tostring(failed):find("copilot bearer resolve failed", 1, true), tostring(failed))
+        end)
+        package.loaded["parley.vault"] = nil
+        assert(ok, err)
+    end)
+end)

@@ -95,7 +95,7 @@ function M.new(opts)
         end,cancel=function(h,done)if not refused[h]then return false end;invoke(done);return true end,close=function()end}
     end
     if not scalar(opts.buf)then return nil,'captured buffer required'end
-    local profile,err=Dispatch.capture(definitions,{root_policy=opts.root_policy,state_dir=opts.state_dir,buf=opts.buf,
+    local profile,err=Dispatch.capture(definitions,{root_policy=opts.root_policy,buf=opts.buf,
         chat_roots=opts.chat_roots,help_root=opts.help_root,page_limit=opts.page_limit,max_bytes=maximum,
         max_file_bytes=configured.max_file_bytes,deferred_refresh_buf=opts.deferred_refresh_buf})
     if not profile then return nil,err end
@@ -117,7 +117,7 @@ function M.new(opts)
         local prepared,why=Dispatch.prepare(profile,call);if not prepared then return refuse(call,events,why)end
         service=service or shared()
         if not generation then
-            generation,why=service:generation({document=buf..':'..epoch,logical_generation=epoch..':'..logical,
+            generation,why=service:generation({document=buf..':'..epoch,logical_generation=Tasker.scope_key(epoch,logical),
                 context=Dispatch.context(profile),capabilities=Dispatch.capabilities(profile)})
             if not generation then return refuse(call,events,why)end
             identity=current

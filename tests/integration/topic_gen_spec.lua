@@ -50,6 +50,36 @@ describe("_conversation_after_lead (drops system-prompt + ancestors)", function(
 end)
 
 describe("generate_topic", function()
+    -- #261 M3 review BR-41: an unscoped topic stream names its end, and a
+    -- caller's own options survive — the deadline is merged in, not substituted.
+    it("merges the caller's transport options and adds the stream deadline when unscoped", function()
+        local captured
+        local saved = parley.dispatcher.query
+        parley.dispatcher.query = function(_buf, _provider, _payload, _handler, _on_exit, _cb, _prog, _abort,
+            _activity, _err, transport_opts)
+            captured = transport_opts
+        end
+        local alive = function() return true end
+        chat_respond.generate_topic({ { role = "user", content = "q" } }, "openai", { model = "gpt-x" },
+            function() end, nil, { alive = alive })
+        local partial = captured
+        chat_respond.generate_topic({ { role = "user", content = "q" } }, "openai", { model = "gpt-x" },
+            function() end, nil, nil)
+        local bare = captured
+        chat_respond.generate_topic({ { role = "user", content = "q" } }, "openai", { model = "gpt-x" },
+            function() end, nil, { generation_id = "g", logical_generation = "e:1" })
+        local scoped = captured
+        parley.dispatcher.query = saved
+
+        local stream = require("parley.tasker").deadline.stream
+        -- The caller's own option survives, and the deadline is added beside it.
+        assert.equals(alive, partial.alive)
+        assert.equals(stream, partial.deadline_ms)
+        assert.equals(stream, bare.deadline_ms)
+        assert.is_nil(scoped.deadline_ms, "a scoped topic is stopped with its generation")
+        assert.equals("g", scoped.generation_id)
+    end)
+
     it("drops the system prompt and uses the minimal topic prompt", function()
         local captured
         local saved = parley.dispatcher.query

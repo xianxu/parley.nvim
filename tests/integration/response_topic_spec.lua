@@ -43,6 +43,89 @@ describe('independent automatic topic ownership',function()
     local function start(doc,value,jobs)
         local job=assert(Topic.start(doc,value,{}));jobs[#jobs+1]=job;return job
     end
+    -- #261 M4 W13: a step that throws stops the topic, failed, and releases it.
+    it('retires failed when its step throws',function()
+        local value=spec();value.schedule=true
+        local final
+        require('tests.helpers.stub').with_stub(D,'repair_step',function()error('topic exploded')end,function()
+            local job=assert(Topic.start(doc,value,{terminal=function(result)final=result end}));jobs[#jobs+1]=job
+            assert(vim.wait(500,function()return final~=nil end,5),'the topic never retired')
+        end)
+        assert.equals('failed',final.status)
+        assert.equals(0,D.user_guard_stats(doc).live)
+    end)
+    -- #261 M4 W16: a request that throws leaves the topic started with no
+    -- handle; it must still retire rather than stop forever.
+    it('retires when its provider request throws',function()
+        local value=spec();value.schedule=true
+        local final
+        require('tests.helpers.stub').with_stub(require('parley.response_provider'),'new',function()
+            return {request=function()error('request exploded')end,cancel_operation=function()return false end}
+        end,function()
+            local job=assert(Topic.start(doc,value,{terminal=function(result)final=result end}));jobs[#jobs+1]=job
+            assert(vim.wait(500,function()return final~=nil end,5),'the topic never retired')
+        end)
+        assert.equals('failed',final.status)
+        assert.equals(0,D.user_guard_stats(doc).live)
+    end)
+    -- #261 M4 review BR-52: a Stop that lands while the request is still being
+    -- made has no handle yet. That is not a request that threw: the topic
+    -- waits for the request to return, then cancels through its handle.
+    it('answers a stop that arrives during its request once the request returns',function()
+        local job,cancels,final
+        local fake={request=function()Topic.cancel(job,'stopped mid-request');return {handle=true}end,
+            cancel_operation=function(ctx,done)cancels[#cancels+1]={ctx=ctx,done=done};return true end}
+        cancels={}
+        require('tests.helpers.stub').with_stub(require('parley.response_provider'),'new',function()return fake end,function()
+            job=assert(Topic.start(doc,spec(),{terminal=function(result)final=result end}));jobs[#jobs+1]=job
+            pump(job)
+        end)
+        assert.equals(1,#cancels,'the stop was never sent through the handle')
+        assert.is_not_nil(cancels[1].ctx.handle)
+        assert.is_nil(final,'retired before the request it stopped was confirmed')
+        cancels[1].done()
+        assert.equals('cancelled',final.status)
+    end)
+    -- #261 M4 review: the deferred cancel has the same exits as the direct one —
+    -- a request that throws after the stop landed, and a cancel not accepted.
+    for _,case in ipairs({
+        {name='the request throws after the stop landed',request=function(job)
+            Topic.cancel(job,'stopped mid-request');error('request exploded')end,accepted=true},
+        {name='the provider does not accept the cancel',request=function(job)
+            Topic.cancel(job,'stopped mid-request');return {handle=true}end,accepted=false},
+    })do
+        it('retires when '..case.name,function()
+            local job,final
+            local fake={request=function()return case.request(job)end,
+                cancel_operation=function()return case.accepted end}
+            require('tests.helpers.stub').with_stub(require('parley.response_provider'),'new',function()return fake end,function()
+                job=assert(Topic.start(doc,spec(),{terminal=function(result)final=result end}));jobs[#jobs+1]=job
+                pump(job)
+            end)
+            assert.is_not_nil(final,'the topic never retired')
+            assert.equals(0,D.user_guard_stats(doc).live)
+        end)
+    end
+    -- #261 M4 review round 4: the direct cancel (a stop that has the handle) has
+    -- the same two exits: a cancel that throws, and one the provider refuses.
+    for _,case in ipairs({
+        {name='its cancel throws',cancel=function()error('cancel exploded')end},
+        {name='its cancel is refused',cancel=function()return false end},
+    })do
+        it('retires a started topic whose '..case.name,function()
+            local job,final
+            local fake={request=function()return {handle=true}end,cancel_operation=case.cancel}
+            require('tests.helpers.stub').with_stub(require('parley.response_provider'),'new',function()return fake end,function()
+                job=assert(Topic.start(doc,spec(),{terminal=function(result)final=result end}));jobs[#jobs+1]=job
+                pump(job)
+                assert.is_nil(final)
+                Topic.cancel(job,'operator stopped')
+            end)
+            assert.is_not_nil(final,'the topic never retired')
+            assert.equals('failed',final.status)
+            assert.equals(0,D.user_guard_stats(doc).live)
+        end)
+    end
     it('writes only the final first line after positive process and pipe completion',function()
         local job=start(doc,spec(),jobs);pump(job)
         local p=processes.processes[4242];assert.is_not_nil(p)

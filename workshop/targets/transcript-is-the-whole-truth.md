@@ -3,7 +3,7 @@ type: target
 slug: transcript-is-the-whole-truth
 status: active
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-19
 sources:
   - "parley#261 — the audit that enumerated every state outside the transcript and found the one authoritative violation"
   - "parley#254 — hardened chat ownership/concurrency; introduced the disjoint-generation model this target deliberately reverses"
@@ -228,3 +228,55 @@ a tool round", derived from every `stop()` reachable from `flushing`. This
 target defends only the property: a Stop during a tool round leaves every call
 of that round in the file with what is known of its outcome, unless one of the
 listed hard stops intervenes.
+
+### 2026-09-18 — the on-disk store is gone; no replaced answer is kept (parley#261 M1)
+
+**Reason.** #261 M1 deleted the answer-recovery store. The operator decided
+that nothing replaces it as a user-facing affordance.
+
+**Delta.**
+
+- The open question "What bounds the in-session memory that replaces durable
+  recovery?" is answered: none is kept. Native undo is the way back to a
+  replaced answer.
+- The only held copy is `prev_answer`. It lives on the document coordinator for
+  as long as one generation runs, and feeds request context only (parley#255,
+  folded into #261 M2).
+- Every remaining sidecar under the state directory now degrades instead of
+  throwing, whether the file is invalid JSON or has wrongly typed fields.
+  - `tests/helpers/sidecars.lua` lists them.
+  - `tests/integration/sidecar_degrade_spec.lua` corrupts each one and then
+    submits.
+  - `tests/arch/sidecar_authority_spec.lua` fails any new reader that is not
+    listed.
+
+### 2026-09-19 — the inventory is kept up to date in the atlas; no blocker goes unexplained (parley#261 M5)
+
+**Reason.** #261's first Done-when asks for an inventory of every state that
+can block submission or hold a generation. An audit's list goes stale once
+written, so the inventory now lives on a maintained atlas page. M5's tests also
+found a permanent blocker: a paused batch that could never resume refused
+every later batch until `:e!`.
+
+**Delta.**
+
+- [`atlas/chat/transcript_truth.md`](../../atlas/chat/transcript_truth.md)
+  states the restart invariant: a reopen rebuilds every fact a submission
+  depends on from the file. It lists each state with its bucket, what releases
+  it, and the spec that pins that. Adding a state that can refuse a submission
+  means adding its row there.
+- The file carries no pending or error marker. An interrupted answer is partial
+  text with no next `💬:` prompt. Why it stopped is said once, when it stops, in
+  the words of `lua/parley/refusal.lua`, and is never stored.
+  The guarantee is in the code: `refusal.describe` gates its `failure` by
+  value, so a reason with no words becomes the detail beside the words of that
+  refusal's kind, and every refusal still names an action. The runner gates the
+  same way where it stores a failure. Two nets then find the gaps for a
+  developer — `tests/arch/refusal_vocabulary_spec.lua` at authoring time, for
+  the call shapes it knows, and the harness watch over what `describe` resolves
+  across the suite — and neither is what makes the invariant true.
+- `:e!` reaches the document as a detach followed by a fresh attach, not an
+  epoch change. Everything a detach releases, a reload releases too. The host
+  tells the two apart only to choose its words.
+- A paused batch whose response has settled gives way to a new
+  `:ParleyChatRespondAll`. Only a running batch refuses.

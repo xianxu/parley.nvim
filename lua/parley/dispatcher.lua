@@ -14,7 +14,10 @@ local providers = require("parley.providers")
 local D = {
 	config = {},
 	providers = {},
-	query_dir = vim.fn.stdpath("cache") .. "/parley/query",
+	-- Where curl's request bodies are staged. $PARLEY_QUERY_DIR overrides it, which
+	-- the test harness sets per process so parallel runs never share one directory
+	-- (#261 M5 review BR-71: the harness owns that, not a branch in here).
+	query_dir = vim.env.PARLEY_QUERY_DIR or (vim.fn.stdpath("cache") .. "/parley/query"),
 	-- How long an adapter that CLAIMED a failure via recover_query has to settle
 	-- it (#197). A backstop, not a design element: every recovery path is
 	-- expected to call retry()/give_up() itself. Overridable so specs can drive
@@ -67,6 +70,7 @@ D.setup = function(opts)
 	end
 
 	D.query_dir = helpers.prepare_dir(D.query_dir, "query store") or D.query_dir
+	helpers.remove_stale_temps(D.query_dir)
 
 	local files = vim.fn.glob(D.query_dir .. "/*.json", false, true)
 	if #files > 200 then
@@ -662,7 +666,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 	local secret_name = providers.get_secret_name(provider)
 	local bearer = vault.get_secret(secret_name)
 	if not bearer then
-		abort_before_start(provider .. " bearer token is missing")
+		abort_before_start("bearer token is missing: " .. provider)
 		return
 	end
 
@@ -671,7 +675,13 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 
 	local temp_file = D.query_dir ..
 		"/" .. logger.now() .. "." .. string.format("%x", math.random(0, 0xFFFFFF)) .. ".json"
-	helpers.table_to_file(payload, temp_file)
+	-- curl posts this file (`-d @file`): a body that was not written must stop
+	-- the request here, not fail later as an unexplained transport error.
+	local wrote, write_err = helpers.table_to_file(payload, temp_file)
+	if not wrote then
+		abort_before_start("request body not written: " .. tostring(write_err))
+		return
+	end
 
 	-- Transport-file lifecycle (#231 BR-7). The body above is what curl posts
 	-- (`-d @file`). A text-only body stays behind as a debug aid, bounded by the
@@ -730,7 +740,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		-- curl has exited (tasker only fires this after process + pipes are
 		-- done), so the body is no longer being read. Before the `qt` guard —
 		-- see the lifecycle note at `discard_transport`.
-		discard_transport("exit code=" .. tostring(code) .. " signal=" .. tostring(signal))
+		discard_transport(tasker.exit_reason(code, signal, io_error))
 		local qt = tasker.get_query(qid)
 		if not qt then return end
 		stderr_data = stderr_data or ""
@@ -751,12 +761,16 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			or (http_status ~= 0 and (http_status < 200 or http_status > 299))
 		if failed then
 			local failure = {
-				code = code,
-				signal = signal,
+				-- How the transport ended when it did not end cleanly, rendered
+				-- once here: a kill, a pipe error or a curl exit. The raw fields
+				-- are not re-exported — code is nil whenever io_error says why,
+				-- so a consumer rendering it would print "nil" (#261 M3 review
+				-- BR-45), and io_error is already inside `exit`. The log below
+				-- keeps both.
+				exit = (io_error ~= nil or code ~= 0) and tasker.exit_reason(code, signal, io_error) or nil,
 				http_status = http_status,
 				body = qt.raw_response,
 				stderr = clean_stderr,
-				io_error = io_error,
 				-- The request's model: the only path by which a failure body
 				-- that names neither provider nor model (cliproxy's expired-token
 				-- 401) can still be resolved to a credential channel (#197).
@@ -791,8 +805,11 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			-- on_error and puts the adapter in debt for exactly one of
 			-- retry()/give_up(); a falsy claim (and every adapter without the
 			-- hook) leaves today's behavior untouched.
+			-- A recovery acts — it reads credentials and may prompt — so it runs
+			-- only for an owner still waiting on this request (#261 M4 W8). A
+			-- stopped one gets the failure, which it ignores.
 			if type(adapter.recover_query) == "function" and attempt == 0
-				and type(restart) == "function" then
+				and type(restart) == "function" and transport_alive(transport_opts) then
 				local settle = tasker.once(function(action, msg)
 					if action == "retry" then
 						restart(attempt + 1)
@@ -867,12 +884,16 @@ end
 ---   the dispatcher invokes on_abort(msg) INSTEAD of running the query — the
 ---   caller uses it to tear down qid-free pre-query state (spinner, inserted
 ---   blocks, in-flight guards) so the request fails fast instead of hanging.
----   Additive + backward compatible: a one-arg pre_query (e.g. copilot) simply
----   ignores the error callback the dispatcher passes it.
+---   An adapter's pre_query(start, on_error) must call exactly one of them on
+---   every path: one that ignores `on_error` leaves a failed request waiting
+---   forever (#261 M4 W6 — copilot's did, and now forwards it).
 D.query = function(buf, provider, payload, handler, on_exit, callback, on_progress, on_abort,
 	on_activity, on_error, transport_opts)
+	-- Logged, not shown: every caller's on_abort tells the user in its own words
+	-- (the chat's ending, a topic, a skill, memory preferences), so showing it
+	-- here too said one failure twice (#261 M5).
 	local abort_before_start = tasker.once(function(msg)
-		logger.error("query abort before start [" .. tostring(provider) .. "]: " .. tostring(msg))
+		logger.debug("query abort before start [" .. tostring(provider) .. "]: " .. tostring(msg))
 		if type(on_abort) == "function" then
 			on_abort(msg)
 		end
@@ -888,8 +909,13 @@ D.query = function(buf, provider, payload, handler, on_exit, callback, on_progre
 		-- a retry that reused the same table would re-issue a materially
 		-- different request — an anthropic-routed claude call would retry against
 		-- the OpenAI-shaped endpoint with OpenAI headers.
-		query(buf, provider, vim.deepcopy(payload), handler, on_exit, callback, on_progress,
+		-- This runs inside a vault or pre_query callback, so a throw would escape
+		-- to whoever called that and abort nothing: the request would wait
+		-- forever. It aborts instead (#261 M4 W7). A process it may already have
+		-- spawned is its generation's, so the scope kill ends it.
+		local ok, err = pcall(query, buf, provider, vim.deepcopy(payload), handler, on_exit, callback, on_progress,
 			on_activity, on_error, abort_before_start, start_query, attempt or 0, transport_opts)
+		if not ok then abort_before_start("query setup failed: " .. tostring(err)) end
 	end
 	local adapter = providers.get(provider)
 	if adapter.pre_query then

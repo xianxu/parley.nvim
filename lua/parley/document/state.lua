@@ -69,6 +69,15 @@ function M.snapshot(doc) return copy(state(doc)) end
 --- before and after every transition to decide whether to wake subscribers, and
 --- a full M.snapshot on that path would double an already-expensive copy.
 function M.turn(doc) return state(doc).turn end
+--- Does `generation` still hold a live grant on `entity`? Suspended counts: the
+--- region is still its own, pending re-proof. The one question a prev_answer
+--- slot asks of authority (#261, #255).
+function M.holds(doc,generation,entity)
+    for _,g in pairs(state(doc).grants) do
+        if g.generation==generation and g.entity==entity and g.status~='revoked' then return true end
+    end
+    return false
+end
 
 --- True when `generation` owns `grant` but another generation holds the write
 --- turn (#266): the writer could write, just not now, so its caller parks with
@@ -274,11 +283,19 @@ function M.transition(doc,event)
                 -- The question ends where its output grant starts. Exact
                 -- same-generation insertion at that seam belongs to output,
                 -- so it neither changes nor grows the consumed input range.
-                -- Human edits, other owners and edits inside input stay stale.
                 local output_seam=owner and owner.generation==gen.id and owner.first==dep.last
                     and dep.first<dep.last and event.first==dep.last and event.last==event.first
+                -- #261/#255: another generation's write inside its own live
+                -- grant moves the range but never marks it stale. The answer it
+                -- replaces stays the valid context until that generation ends
+                -- (the prev_answer slot), and a request captured before it is
+                -- unaffected by its completion. Human edits, and a generation's
+                -- own writes inside its input, still stale it.
+                local generated=owner and owner.generation~=gen.id
                 if not output_seam then
-                    if overlaps(dep,event) and not gen.stale then gen.stale=true; effect(result,'stale',gen.id,'input edit') end
+                    if overlaps(dep,event) and not gen.stale and not generated then
+                        gen.stale=true; effect(result,'stale',gen.id,'input edit')
+                    end
                     move(dep,event)
                 end
             end

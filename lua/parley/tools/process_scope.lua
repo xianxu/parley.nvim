@@ -27,6 +27,8 @@ function M.plan(command)
     end
     return plans
 end
+-- `current` is never nil here: tasker delivers a nil code only with an io_error,
+-- and async_builtin's `await` raises on that outcome before a join (#261 M3).
 function M.join_code(prior,current)
     if prior==nil then return current end
     if prior>=2 or current>=2 then return math.max(prior,current)end

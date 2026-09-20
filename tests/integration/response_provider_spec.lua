@@ -68,17 +68,33 @@ describe('production response provider adapter',function()
         assert.is_true(vim.wait(100,function()return resolved==1 end,1))
         assert.equals(0,sa.complete);assert.equals(0,sa.resolved)
     end)
-    it('prevents delayed pre-query startup after cancellation without claiming early resolution',function()
+    -- #261 M3 review BR-45: a killed stream has no HTTP status and a partial
+    -- body; what the host is told must name the kill, not "(HTTP unknown)".
+    it('names how a killed stream ended in the failure it reports',function()
+        local cb,s=callbacks();local adapter=Provider.new()
+        adapter.request(context(1),cb)
+        local p=processes.processes[4242]
+        p:emit('stdout','data: {"choices":[{"delta":{"content":"partial"}}]}\n\n')
+        assert.equals(1,Tasker.stop_scope(Tasker.scope_key(1,1)))
+        p:finish(0,15)
+        assert.is_true(vim.wait(100,function()return s.failed==1 end,1))
+        assert.truthy(s.reason:find('killed: stop',1,true),s.reason)
+        assert.is_nil(s.reason:find('unknown',1,true),s.reason)
+    end)
+    -- #261 M4 W5: a cancel that finds no process resolves at once — nothing else
+    -- would. The late pre_query callback finds the owner inactive and spawns
+    -- nothing, and never resolves a second time.
+    it('resolves a cancel during pre-query at once, and the late startup spawns nothing',function()
         local ready
-        Providers.get=function(name)local p=vim.tbl_extend('force',{},old_get(name));p.pre_query=function(fn)ready=fn end;return p end
+        Providers.get=function(name)local p=vim.tbl_extend('force',{},old_get(name));p.pre_query=function(fn,_on_error)ready=fn end;return p end
         local adapter=Provider.new();local cb,s=callbacks();local ctx=context(1)
         local handle=adapter.request(ctx,cb);local resolved=0
         adapter.cancel_operation({epoch=1,generation=1,operation=ctx.operation,handle=handle},function()resolved=resolved+1 end)
-        assert.equals(0,processes.spawn_calls);assert.equals(0,resolved)
+        assert.equals(0,processes.spawn_calls);assert.equals(1,resolved)
         ready();assert.equals(0,processes.spawn_calls);assert.equals(1,resolved);assert.equals(0,s.resolved)
         ready();assert.equals(1,resolved);assert.equals(0,s.resolved)
     end)
-    it('refuses a cancelled recovery retry and waits for its explicit settlement',function()
+    it('resolves a cancel during recovery at once, and refuses the late retry',function()
         local retry
         Providers.get=function(name)
             local p=vim.tbl_extend('force',{},old_get(name))
@@ -91,7 +107,7 @@ describe('production response provider adapter',function()
         assert.is_true(vim.wait(100,function()return retry~=nil end,1))
         local resolved=0
         adapter.cancel_operation({epoch=1,generation=1,operation=ctx.operation,handle=handle},function()resolved=resolved+1 end)
-        assert.equals(0,resolved);retry()
+        assert.equals(1,resolved);retry()
         assert.equals(1,resolved);assert.equals(1,processes.spawn_calls);assert.equals(0,s.failed)
         retry();assert.equals(1,resolved)
     end)

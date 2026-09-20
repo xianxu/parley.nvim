@@ -69,7 +69,13 @@ local function release_turn(s,effects)
     s.turn_wanted=false; emit(s,effects,'release_turn',{})
 end
 
+--- Every outcome a generation can stop with (#261 M5 review BR-74). Declared
+--- here, next to the only function that sets one, so adding an outcome is a
+--- change to this list; parley.refusal asserts at load that each has words.
+M.OUTCOMES={success=true,cancelled=true,revoked=true,uncertain=true,overflow=true,
+    provider_failed=true,prepare_failed=true,finalize_failed=true,round_capacity=true,insert_failed=true}
 local function stop(s,effects,outcome)
+    assert(M.OUTCOMES[outcome],'unknown outcome: '..tostring(outcome))
     if s.phase=='stopping' then return end
     s.phase='stopping';s.outcome=outcome;s.grant_status='revoked'
     -- Revoke before yielding the turn. The runner executes one effect per step,

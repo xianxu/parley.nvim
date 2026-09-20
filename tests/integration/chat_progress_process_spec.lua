@@ -109,7 +109,7 @@ describe('chat progress managed process lifecycle',function()
     end
     it('cleans the admitted session when its provider secret is missing',function()
         parley.vault.get_secret=function()return nil end
-        prestart('bearer token is missing');assert.equals(0,processes.spawn_calls)
+        prestart('the provider has no credentials');assert.equals(0,processes.spawn_calls)
     end)
     it('cleans the admitted session when its exact transport admission key is occupied',function()
         parley.tasker.run=function(b,command,args,callback,stdout,stderr,reject,opts)
@@ -117,7 +117,8 @@ describe('chat progress managed process lifecycle',function()
             old_run(b,'fixture-blocker',{},nil,nil,nil,nil,{admission_key=opts.admission_key,generation_id='existing-owner'})
             return old_run(b,command,args,callback,stdout,stderr,reject,opts)
         end
-        prestart('owner is busy');assert.equals(1,processes.spawn_calls)
+        -- The user meets the words for `owner is busy`, not the token (#261 M5).
+        prestart('this request is still running');assert.equals(1,processes.spawn_calls)
     end)
     it('cleans the admitted session when process spawn is rejected',function()
         local runtime;runtime,processes=Process.new({spawn_error='fixture spawn rejection'});parley.tasker._uv=runtime

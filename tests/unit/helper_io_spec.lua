@@ -185,6 +185,52 @@ describe("helper I/O functions", function()
         end)
     end)
 
+    -- #261/#255: a chat as the user sees it — its loaded buffer, else the file.
+    describe("Group G: chat_lines", function()
+        local function loaded(path, lines)
+            local buf = vim.fn.bufadd(path); vim.fn.bufload(buf)
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+            return buf
+        end
+        it("G1: reads a loaded buffer's unsaved text over the disk", function()
+            local path = tmpdir .. "/chat.md"
+            vim.fn.writefile({ "on disk" }, path)
+            local buf = loaded(path, { "unsaved edit" })
+            local lines, from = helper.chat_lines(path)
+            assert.same({ "unsaved edit" }, lines)
+            assert.equals(buf, from)
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end)
+        it("G2: reads the file when no buffer is loaded for it", function()
+            local path = tmpdir .. "/chat.md"
+            vim.fn.writefile({ "on disk" }, path)
+            local lines, from = helper.chat_lines(path)
+            assert.same({ "on disk" }, lines)
+            assert.is_nil(from)
+        end)
+        it("G3: does not match a buffer whose name merely contains the path", function()
+            local path = tmpdir .. "/chat.md"
+            vim.fn.writefile({ "on disk" }, path)
+            local other = loaded(tmpdir .. "/chat.md.bak", { "the wrong buffer" })
+            assert.same({ "on disk" }, (helper.chat_lines(path)))
+            vim.api.nvim_buf_delete(other, { force = true })
+        end)
+        it("G5: buffer_for matches an exact name, not a name that contains it", function()
+            local foobar = vim.api.nvim_create_buf(false, true)
+            vim.api.nvim_buf_set_name(foobar, "parley://system_prompt/foobar")
+            assert.is_nil(helper.buffer_for("parley://system_prompt/foo"))
+            assert.equals(foobar, helper.buffer_for("parley://system_prompt/foobar"))
+            vim.api.nvim_buf_delete(foobar, { force = true })
+        end)
+        it("G4: reads a loaded buffer that was never saved, and nil for nothing", function()
+            local path = tmpdir .. "/new.md"
+            local buf = loaded(path, { "never saved" })
+            assert.same({ "never saved" }, (helper.chat_lines(path)))
+            vim.api.nvim_buf_delete(buf, { force = true })
+            assert.is_nil(helper.chat_lines(tmpdir .. "/nothing.md"))
+        end)
+    end)
+
     describe("Group F: table_to_file + file_to_table", function()
         it("F1: round-trip preserves table structure", function()
             local path = tmpdir .. "/data.json"
@@ -209,6 +255,151 @@ describe("helper I/O functions", function()
             f:close()
             local result = helper.file_to_table(path)
             assert.is_nil(result)
+        end)
+
+        -- #261: every JSON sidecar under the state directory is read through
+        -- file_to_table, and a corrupt one must never stop a submission.
+        describe("F3b: an unreadable sidecar is ignored, never thrown", function()
+            local logger = require("parley.logger")
+            local original, warnings
+            before_each(function()
+                warnings = {}
+                original = logger.warning
+                logger.warning = function(msg) warnings[#warnings + 1] = msg end
+            end)
+            after_each(function() logger.warning = original end)
+            -- A JSON array decodes to a Lua table and is returned: readers
+            -- index fields on it and find nil, which already degrades. Refusing
+            -- it would also refuse `{}`, which decodes to the same empty table.
+            for _, case in ipairs({
+                { label = "invalid JSON", content = "{" },
+                { label = "a JSON string", content = '"x"' },
+                { label = "a JSON number", content = "3" },
+            }) do
+                local label, content = case.label, case.content
+                it("returns nil for " .. label .. " and names the file", function()
+                    local path = tmpdir .. "/corrupt.json"
+                    local f = io.open(path, "w"); f:write(content); f:close()
+                    local ok, result = pcall(helper.file_to_table, path)
+                    assert.is_true(ok, tostring(result))
+                    assert.is_nil(result)
+                    assert.equals(1, #warnings)
+                    assert.truthy(warnings[1]:find(path, 1, true))
+                end)
+            end
+        end)
+
+        describe("F3c: a schema drops wrongly typed fields", function()
+            local logger = require("parley.logger")
+            local original, warnings
+            before_each(function()
+                warnings = {}
+                original = logger.warning
+                logger.warning = function(msg) warnings[#warnings + 1] = msg end
+            end)
+            after_each(function() logger.warning = original end)
+            it("keeps fields of the declared type and drops the rest", function()
+                local path = tmpdir .. "/typed.json"
+                helper.table_to_file({ agent = 3, updated = 7, extra = "kept" }, path)
+                local got = helper.file_to_table(path, { agent = "string", updated = "number" })
+                assert.same({ updated = 7, extra = "kept" }, got)
+                assert.equals(1, #warnings)
+                assert.truthy(warnings[1]:find("agent", 1, true))
+            end)
+            it("applies the wildcard type to every undeclared key", function()
+                local got = helper.conform({ a = {}, b = 3 }, { ["*"] = "table" }, "fixture")
+                assert.same({ a = {} }, got)
+            end)
+            it("conforms a nested schema level by level", function()
+                local got, dropped = helper.conform(
+                    { chats = { one = { url = "text", bad = 3 }, two = 5 }, other = 1 },
+                    { chats = { ["*"] = { ["*"] = "string" } } }, "fixture")
+                assert.same({ chats = { one = { url = "text" } }, other = 1 }, got)
+                assert.same({ "chats.one.bad", "chats.two" }, dropped)
+            end)
+            -- #261 M1 review BR-7: a sidecar with a thousand bad leaves must not
+            -- become a thousand notifications.
+            it("emits one warning however many fields it drops", function()
+                local chats = {}
+                for i = 1, 300 do chats["c" .. i] = { url = i } end
+                local _, dropped = helper.conform({ chats = chats },
+                    { chats = { ["*"] = { ["*"] = "string" } } }, "fixture")
+                assert.equals(300, #dropped)
+                assert.equals(1, #warnings)
+                assert.truthy(warnings[1]:find("300 wrongly typed fields", 1, true))
+            end)
+        end)
+
+        -- #261 M1 review BR-14: a caller that tells the user something was
+        -- saved must be able to know whether it was.
+        it("F3d: table_to_file reports whether the file was written", function()
+            assert.is_true(helper.table_to_file({ a = 1 }, tmpdir .. "/ok.json"))
+            local ok, err = helper.table_to_file({ a = 1 }, tmpdir .. "/missing-dir/x.json")
+            assert.is_nil(ok)
+            assert.is_string(err)
+        end)
+
+        -- #261 M1 review BR-19: buffered writes fail at close (a full disk, a
+        -- file-size limit). The result must come from that step, and the
+        -- original file must survive it.
+        it("F3e: a write that fails at close reports failure and keeps the original", function()
+            local path = tmpdir .. "/kept.json"
+            helper.table_to_file({ original = true }, path)
+            local ok, err = helper.table_to_file_atomic({ replaced = true }, path, {
+                open = function(target, mode)
+                    local file = assert(io.open(target, mode))
+                    return {
+                        write = function(_, data) return file:write(data) end,
+                        close = function() file:close(); return nil, "File too large" end,
+                    }
+                end,
+            })
+            assert.is_false(ok)
+            assert.truthy(tostring(err):find("File too large", 1, true))
+            assert.same({ original = true }, helper.file_to_table(path))
+            assert.same({}, vim.fn.glob(path .. ".tmp-*", false, true))
+        end)
+
+        it("F3f: table_to_file is the atomic writer, not a second weaker one", function()
+            local atomic = helper.table_to_file_atomic
+            local called
+            helper.table_to_file_atomic = function(_, target)
+                called = target; return false, "close failed: File too large"
+            end
+            local ok, err = helper.table_to_file({ a = 1 }, tmpdir .. "/x.json")
+            helper.table_to_file_atomic = atomic
+            assert.equals(tmpdir .. "/x.json", called)
+            assert.is_nil(ok)
+            assert.truthy(err:find("File too large", 1, true))
+        end)
+
+        -- #261 M1 review round 4: the rename-based writer replaces a file where
+        -- it really lives, with its mode, and its crash leftovers have an end.
+        it("F3g: writing through a symlink keeps the link and updates its target", function()
+            local target = tmpdir .. "/real.json"
+            local link = tmpdir .. "/link.json"
+            helper.table_to_file({ v = 1 }, target)
+            assert((vim.uv or vim.loop).fs_symlink(target, link))
+            assert.is_true(helper.table_to_file({ v = 2 }, link))
+            assert.equals("link", (vim.uv or vim.loop).fs_lstat(link).type)
+            assert.same({ v = 2 }, helper.file_to_table(target))
+        end)
+
+        it("F3h: rewriting a file keeps the mode the user gave it", function()
+            local path = tmpdir .. "/private.json"
+            helper.table_to_file({ v = 1 }, path)
+            assert((vim.uv or vim.loop).fs_chmod(path, tonumber("600", 8)))
+            assert.is_true(helper.table_to_file({ v = 2 }, path))
+            assert.equals(tonumber("600", 8), (vim.uv or vim.loop).fs_stat(path).mode % 4096)
+        end)
+
+        it("F3i: remove_stale_temps removes only the atomic writer's leftovers", function()
+            local leftover = tmpdir .. "/state.json.tmp-1234567-abcdef"
+            local unrelated = tmpdir .. "/notes.tmp-draft"
+            vim.fn.writefile({ "{" }, leftover); vim.fn.writefile({ "keep" }, unrelated)
+            helper.remove_stale_temps(tmpdir)
+            assert.equals(0, vim.fn.filereadable(leftover))
+            assert.equals(1, vim.fn.filereadable(unrelated))
         end)
 
         it("F4: table_to_file with nested table serializes correctly", function()

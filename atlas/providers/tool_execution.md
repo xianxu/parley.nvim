@@ -8,15 +8,15 @@ the chat loop and [Chat Write Ownership](../chat/ownership.md) for buffer grants
 
 ## Captured authority and admission
 
-`tools/dispatcher.lua` captures selected definitions, root policy, cwd, private
-recovery directory, and presentation limits in an opaque profile. Preparation
-copies validated input and resolves canonical resource claims before execution.
-Native JSON empty-object markers become plain argument tables. JSON null values
-are currently refused explicitly; preparation never silently drops them.
-The scheduler captures each actual `execute_async` function and its config;
-changing the registry, current buffer, cwd, or agent settings later does not
-replace an admitted capability. Preparation receipts bind result normalization
-to the captured call and paging policy.
+`tools/dispatcher.lua` captures selected definitions, root policy, cwd, and
+presentation limits in an opaque profile. Preparation copies validated input and
+resolves canonical resource claims before execution. Native JSON empty-object
+markers become plain argument tables. JSON null values are currently refused
+explicitly; preparation never silently drops them. The scheduler captures each
+actual `execute_async` function and its config; changing the registry, current
+buffer, cwd, or agent settings later does not replace an admitted capability.
+Preparation receipts bind result normalization to the captured call and paging
+policy.
 
 `tools/operation.lua` identifies a call by generation, attempt, round, and provider
 call ID. Acceptance records its copied arguments and capability before effects
@@ -44,7 +44,7 @@ Builtin claim declarations live in `tools/async_builtin.lua`: reads use file or
 subtree claims; edits claim the parent subtree for target and numbered backup;
 `write_file` claims the write-root subtree because it may create missing parents.
 Undeclared custom effects receive a conservative global claim. Canonicalization
-and private-path checks belong to the dispatcher, not the pure overlap service.
+belongs to the dispatcher, not the pure overlap service.
 
 ## Effect evidence and physical completion
 
@@ -65,7 +65,110 @@ Scheduler and Tasker reconciliation probe at 50ms initially, double the interval
 up to 1000ms, and stop polling after five seconds with an unresolved diagnostic.
 This is a diagnostic deadline, not fabricated completion. Resources and admission
 capacity remain retained. Later original callbacks can still settle the work.
-Ordinary running processes have no five-second execution deadline.
+Ordinary running processes have no five-second execution deadline; after a stop,
+Tasker also escalates to SIGKILL ([Stopping a process](#stopping-a-process)).
+
+## Stopping a process
+
+Every process started through `tasker.run` (`lua/parley/tasker.lua`, #261) is
+scoped or unscoped. A process started any other way is on one list with how it
+ends ([below](#processes-outside-tasker)).
+
+- **Scoped** processes carry `logical_generation`, a key always built by
+  `tasker.scope_key`:
+  - a chat generation's key, `(epoch, generation)`, for provider streams, tool
+    processes, and the content fetches its preparation makes;
+  - a skill run's own key, `("skill:<buf>", run)`, for skill processes.
+
+  A chat generation's scope kill therefore does not reach a skill's processes;
+  the skill stops its own. Each scoped process is spawned `detached`, so it
+  leads its own process group and is signalled as a group. A grandchild holding
+  its pipe dies with it, even after the parent has exited.
+- **Unscoped** processes are shared helpers: the vault's secret command, OAuth
+  keychain and token calls, content fetches made outside a generation, and the
+  automatic topic and memory-preference streams. They stay in Neovim's session, so a
+  [secret command](../infra/vault.md) can still prompt on the terminal, and they
+  are signalled by pid.
+  - Nobody stops them, so each names its end: `tasker.run` refuses an unscoped
+    run without `deadline_ms`.
+  - The values are one table, `tasker.deadline`: 600 s where a human may be
+    answering a prompt, 120 s for one HTTP call, 60 s for a document
+    conversion, and 900 s for an LLM stream with no owner.
+
+A stop sends SIGTERM. That stop is `:ParleyStop`, a deadline, or leaving
+Neovim, which sends SIGKILL at once. If the process has not exited and drained
+both pipes 2 s later, it gets SIGKILL. `tasker.stop_scope(key)` stops every
+process of one generation.
+
+**A stopped scope stays closed.** After `stop_scope`, tasker refuses any new
+scoped run into that key, so a helper chain that resumes after the kill cannot
+spawn into it: a keychain read or a login finishing late, then a content fetch.
+A generation's key is never live again, so nothing legitimate is refused. The
+set of closed keys is bounded at 1024, oldest forgotten first. A forgotten key
+would be admitted again, but only as a run bounded by its deadline.
+
+The five-second observation window then follows. A process still held after it
+is logged with its pid and listed by `tasker.held()`, and it keeps its
+admission slot.
+
+**Leaving Neovim.** `setup` registers `VimLeavePre`, which calls
+`tasker.leave()`: SIGKILL to every live process tasker owns.
+
+**A kill is a failure.** `code` is the exit code only of a process that ended on
+its own and whose output was read whole. Otherwise `code` is `nil` and
+`io_error` says why:
+- `killed: stop`, `killed: deadline` or `killed: leave` for a kill Parley caused;
+- the pipe error or overflow.
+
+A message or log that says how a run ended uses `tasker.exit_reason`, which
+prints the `io_error` rather than a nil code. A refused spawn with no
+start-error handler delivers `(nil, nil, nil, nil, reason)` to its callback. So no caller takes cut output for
+success, and a failure writes no cache or store. For example, an unfinished
+keychain read is neither cached nor saved over the keychain.
+
+**Residuals, stated once.**
+- A process the kernel holds (uninterruptible sleep) survives SIGKILL, and
+  `held()` keeps listing it.
+- A grandchild of a user-configured secret command can outlive it, because
+  unscoped processes are signalled by pid.
+- If Neovim itself crashes, no autocmd runs, and its orphans run to their own
+  end.
+
+### Processes outside tasker
+
+A few processes are started directly, not through `tasker.run`, so none of the
+above applies to them. `tests/arch/spawn_seam_spec.lua` is their list. It
+classifies each one from its own call, and declares how many of each class
+every file may hold. A new direct spawn fails that test until it is routed
+through tasker or declared.
+
+- **Synchronous:** the call waits for the process, so it cannot outlive the
+  call.
+- **Bounded:** the call carries a timeout or curl's `--max-time`, directly or
+  through an argv helper the test checks.
+- **Open:** neither, each with its reason in the test.
+  - The managed proxy is spawned so that it outlives Neovim, by design.
+  - The proxy's login helper is stopped when its window closes.
+  - The markdown finder's git listing is cancelled by its caller.
+  - A few user commands report their own exit: issue creation, export,
+    opening the browser for an OAuth login, and artifact lookups.
+
+The same file checks the neighbouring rules too:
+- every scope key is built by `tasker.scope_key`;
+- no `deadline_ms` is a literal;
+- how a run ended is rendered once, and an inherited `io_error` is never
+  overwritten;
+- no argv asks curl for a verbose trace, which would copy an Authorization
+  header to stderr.
+
+Coverage:
+- the fake: `tests/helpers/fake_process.lua`, which models groups, ignored
+  signals and grandchildren;
+- sequences: `tests/integration/tasker_supervision_spec.lua` and
+  `unscoped_kill_spec.lua`;
+- a live check against the kernel:
+  `tests/integration/process_group_conformance_spec.lua`;
+- the list of processes outside tasker: `tests/arch/spawn_seam_spec.lua`.
 
 For explicit effect reconciliation, the internal API is
 `service:reconcile(operation, {certainty='known', effect=..., result=...,
@@ -117,7 +220,7 @@ cannot be distinguished safely and remains quarantined. Missing callbacks keep
 the original request pending. Descriptor cleanup alone cannot resolve uncertain
 target-write effects.
 
-## Bounds and private data
+## Bounds
 
 The shared producer owns the `tool_execution` setup defaults below. Configuration
 validates finite positive values and permits lowering these ceilings. It refuses
@@ -139,12 +242,9 @@ stdout retention and delivers chunks of at most 64KiB. Overflow cancels only the
 owning attempt; capacity is freed after exit and both pipe EOF observations.
 Diagnostic logs omit command arguments and raw tool errors.
 
-Captured policy denies explicit access to the private answer-recovery subtree,
-including aliases. Search adapters exclude that subtree before traversal;
-recursive `ls` refuses an overlapping private subtree. Read roots do not widen
-write authority. Help uses a captured installed-document catalog rather than
-arbitrary model-supplied paths. See [Tool Use safety](tool_use.md#safety) for
-structured argv and result paging.
+Read roots do not widen write authority. Help uses a captured installed-document
+catalog rather than arbitrary model-supplied paths. See [Tool Use
+safety](tool_use.md#safety) for structured argv and result paging.
 
 ## Implementation and verification
 
@@ -197,18 +297,19 @@ requires LuaJIT plus POSIX descriptor-relative calls on macOS/Linux; unsupported
 builds refuse protected execution. Native conformance was run on macOS.
 
 Builtin traversal runs through `process_scope` and `process_bootstrap`: a clean
-Neovim child imports the bounded authority, pins one target, then replaces itself
-with the captured command. Directory targets become its pinned cwd; regular files
-remain inherited descriptors. Multiple search targets run sequentially inside
-one owned tool operation. No child-follow flags are accepted, and private-path
-exclusions are translated before traversal. Tasker owns the same process through
-bootstrap, exec, cancellation, exit and drain. A19-byte stderr handshake
-distinguishes successful bootstrap from a search returning no matches; Tasker
-accounts that bounded control metadata in addition to the body capture budget. This protects admitted path
+Neovim child imports the bounded authority, pins one target, then replaces
+itself with the captured command. Directory targets become its pinned cwd;
+regular files remain inherited descriptors. Multiple search targets run
+sequentially inside one owned tool operation. No child-follow flags are
+accepted. Tasker owns the same process through bootstrap, exec, cancellation,
+exit and drain. A19-byte stderr handshake distinguishes successful bootstrap
+from a search returning no matches; Tasker accounts that bounded control
+metadata in addition to the body capture budget. This protects admitted path
 identity; it does not serialize arbitrary external writers or sandbox custom
-programs. Authority payloads are limited to64KiB, path depth128, captured identity
-entries4096 and command targets32. Ambiguous intermediate descriptor closes stay
-quarantined until positive probe evidence; they are never blindly retried.
+programs. Authority payloads are limited to64KiB, path depth128, captured
+identity entries4096 and command targets32. Ambiguous intermediate descriptor
+closes stay quarantined until positive probe evidence; they are never blindly
+retried.
 
 `file_transform` owns pure edits, insertion and numbered-read policy for both
 async and compatibility handlers. `file_refresh` captures open-buffer identity
@@ -233,12 +334,6 @@ and identity after directory sync; native truncation revalidates its revision.
 Substituted temporary/backup leaves are not certified or deleted. Dynamic created
 identities are bounded to256 entries/64KiB per authority. Uncertain artifact
 obligations remain visible separately from unresolved descriptors.
-
-`traversal_policy` applies mandatory exclusions after each target is expanded and
-after optional filters. Literal-safe rg/grep/find patterns and exact ack directory
-exclusion prevent globs, hidden/ignore flags or metacharacter names from widening
-private access. Recursive ls still refuses overlap. Chat-history search shares
-the same policy; there is no independent exclusion-string implementation.
 
 Skills defer intermediate refresh only for their captured source buffer, leaving
 other open buffers on the shared tool-refresh path. The skill owns the original

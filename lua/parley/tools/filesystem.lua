@@ -314,9 +314,8 @@ function M.new(opts)
         local c,handle=operation(done)
         local valid=type(spec)=='table' and path(spec.path) and path(spec.root)
             and (spec.root=='/' or spec.path==spec.root or spec.path:sub(1,#spec.root+1)==spec.root..'/')
-            and (spec.private_directory==nil or path(spec.private_directory))
-        local target,root,private
-        if valid then target,root,private=spec.path,spec.root,spec.private_directory end
+        local target,root
+        if valid then target,root=spec.path,spec.root end
         schedule(function()
             if not valid then c.fail('invalid');return end
             local suffix=target:sub(#root+1);local paths={root};local current=root=='/' and '' or root
@@ -329,9 +328,6 @@ function M.new(opts)
                 if not c.proceed()then return end
                 index=index+1;local directory=paths[index]
                 if not directory then c.effect({complete_if_mutated=true});c.publish();return end
-                if private and (directory==private or directory:sub(1,#private+1)==private..'/')then
-                    c.fail('private');return
-                end
                 c.stat(directory,function(observed)
                     if observed.exists then
                         if observed.type~='directory'then c.fail('not_directory');return end

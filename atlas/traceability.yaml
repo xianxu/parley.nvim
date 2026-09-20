@@ -151,6 +151,7 @@ atlas:
 
   chat/lifecycle:
     code:
+      - lua/parley/previous_answer.lua
       - lua/parley/new_question.lua
       - lua/parley/chat_context.lua
       - lua/parley/generation.lua
@@ -184,7 +185,19 @@ atlas:
       - lua/parley/chat_pending.lua
       - lua/parley/tasker.lua
       - lua/parley/attempt.lua
+      - lua/parley/refusal.lua
     tests:
+      - tests/integration/generation_settles_spec.lua
+      - tests/unit/refusal_spec.lua
+      - tests/arch/refusal_vocabulary_spec.lua
+      - tests/integration/chat_refusal_spec.lua
+      - tests/unit/chat_cancel_entry_spec.lua
+      - tests/unit/previous_answer_spec.lua
+      - tests/integration/sidecar_degrade_spec.lua
+      - tests/arch/sidecar_authority_spec.lua
+      - tests/arch/json_decode_spec.lua
+      - tests/arch/buffer_lookup_spec.lua
+      - tests/arch/nodiscard_spec.lua
       - tests/unit/new_question_spec.lua
       - tests/integration/new_question_spec.lua
       - tests/unit/chat_context_spec.lua
@@ -272,6 +285,7 @@ atlas:
       - tests/integration/create_handler_spec.lua
       - tests/integration/chat_progress_process_spec.lua
       - tests/integration/tasker_run_spec.lua
+      - tests/integration/unscoped_kill_spec.lua
       - tests/unit/exchange_model_spec.lua
       - tests/integration/topic_gen_spec.lua
       - tests/integration/cliproxy_caller_teardown_spec.lua
@@ -332,11 +346,24 @@ atlas:
       - tests/unit/stream_output_spec.lua
       - tests/unit/user_buffer_edit_spec.lua
 
+  chat/transcript_truth:
+    code:
+      - lua/parley/refusal.lua
+      - lua/parley/response_completion.lua
+      - lua/parley/document/state.lua
+      - lua/parley/generation_runner.lua
+      - lua/parley/tasker.lua
+    tests:
+      - tests/integration/chat_respond_spec.lua
+      - tests/integration/generation_settles_spec.lua
+      - tests/integration/sidecar_degrade_spec.lua
+      - tests/integration/chat_refusal_spec.lua
   chat/batch:
     code:
       - lua/parley/batch.lua
       - lua/parley/batch_response.lua
       - lua/parley/chat_respond.lua
+      - lua/parley/refusal.lua
       - lua/parley/document/structure.lua
     tests:
       - tests/unit/batch_spec.lua
@@ -346,16 +373,7 @@ atlas:
       - tests/integration/batch_lifecycle_spec.lua
       - tests/integration/batch_validation_budget_spec.lua
       - tests/integration/chat_respond_spec.lua
-  chat/recovery:
-    code:
-      - lua/parley/chat_recovery.lua
-      - lua/parley/answer_recovery.lua
-      - lua/parley/response_recovery.lua
-    tests:
-      - tests/integration/chat_recovery_spec.lua
-      - tests/integration/recovery_paths_spec.lua
-      - tests/integration/answer_recovery_spec.lua
-      - tests/integration/response_recovery_spec.lua
+      - tests/integration/chat_refusal_spec.lua
   chat/document:
     code:
       - lua/parley/line_reader.lua
@@ -374,6 +392,7 @@ atlas:
       - lua/parley/document/write_turn.lua
       - lua/parley/document/projection.lua
     tests:
+      - tests/integration/document_previous_answer_spec.lua
       - tests/unit/document_write_turn_spec.lua
       - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/unit/document_sequence_spec.lua
@@ -606,7 +625,9 @@ atlas:
   infra/vault:
     code:
       - lua/parley/vault.lua
+      - lua/parley/oauth.lua
     tests:
+      - tests/integration/unscoped_kill_spec.lua
       - tests/unit/vault_spec.lua
 
   modes/interview:
@@ -806,7 +827,6 @@ atlas:
       - lua/parley/tools/scheduler.lua
       - lua/parley/tools/producer.lua
       - lua/parley/tool_operations.lua
-      - lua/parley/recovery_paths.lua
       - lua/parley/tools/dispatcher.lua
       - lua/parley/tools/types.lua
       - lua/parley/tools/async_builtin.lua
@@ -815,7 +835,6 @@ atlas:
       - lua/parley/skill_source_read.lua
       - lua/parley/tools/path_authority.lua
       - lua/parley/tools/process_scope.lua
-      - lua/parley/tools/traversal_policy.lua
       - lua/parley/tools/process_bootstrap.lua
       - scripts/tool_process.lua
       - lua/parley/tools/file_transform.lua
@@ -834,13 +853,14 @@ atlas:
       - tests/unit/skill_source_read_spec.lua
       - tests/integration/tool_filesystem_native_spec.lua
       - tests/integration/tasker_supervision_spec.lua
+      - tests/integration/process_group_conformance_spec.lua
+      - tests/arch/spawn_seam_spec.lua
       - tests/integration/async_builtin_spec.lua
       - tests/integration/tool_dispatch_capture_spec.lua
       - tests/integration/tool_producer_spec.lua
       - tests/integration/chat_async_tools_spec.lua
       - tests/unit/tool_path_authority_lifecycle_spec.lua
       - tests/unit/tool_process_scope_spec.lua
-      - tests/unit/tool_traversal_policy_spec.lua
       - tests/unit/tool_file_transform_spec.lua
       - tests/unit/tool_result_evidence_spec.lua
       - tests/integration/tool_path_authority_spec.lua

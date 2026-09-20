@@ -56,10 +56,30 @@ local function present(s)
         if not ok then s.presentation_failure=tostring(err):sub(1,4096)end
     end
 end
+--- The scope kill (#261 M4): once, when the machine first reaches `stopping` or
+--- `terminal` (a successful generation never stops). It ends every process the
+--- generation started — the ones an adapter could not cancel included — so
+--- nothing it spawned outlives it. O(1) phase check: this runs on every dispatch.
+local issue -- defined below; kill_scope and fault both record through it
+local function kill_scope(s)
+    if s.scope_killed then return end
+    s.scope_killed=true
+    local stopping=s.adapters.stopping
+    if stopping then
+        local ok,err=pcall(stopping,{epoch=s.epoch,generation=s.generation})
+        if not ok then issue(s,err,true) end
+    end
+end
+local function scope_kill(s)
+    if s.scope_killed then return end
+    local phase=G.phase(s.machine)
+    if phase=='stopping' or phase=='terminal' then kill_scope(s) end
+end
 local function dispatch(s,event)
     event.epoch,event.generation=s.epoch,s.generation
     local result
     s.machine,result=G.transition(s.machine,event)
+    if result.accepted then scope_kill(s) end
     for _,effect in ipairs(result.effects) do
         if effect.type=='release_blob' then release(s,effect.blob_ref) else enqueue(s,effect) end
     end
@@ -92,10 +112,16 @@ local function blocker(s,doc)
     end
     return {generation=doc.turn}
 end
+-- Why a generation lost its grant, for the words its ending gets (#261 M5):
+-- the first cause wins. An edit to its output, a reload, or a detach, which is
+-- both the chat closing and `:e!` (Neovim detaches the buffer to re-read it);
+-- the host, which knows the buffer, tells those two apart.
+local EDIT_REASONS={['output edit']=true,identity=true}
 local function sync(s)
     if s.terminal then return end
     local doc=D.snapshot(s.doc)
     if doc.epoch~=s.epoch or not doc.attached then
+        s.cause=s.cause or (not doc.attached and 'detach' or 'reload')
         s.detached=true;s.written=nil
         dispatch(s,{type='grant_revoked',grant=s.grant})
         return
@@ -104,6 +130,7 @@ local function sync(s)
         local current=doc.grants[grant]
         local status=current and current.status or 'revoked'
         if status~=previous then
+            if status=='revoked' and current and EDIT_REASONS[current.reason] then s.cause=s.cause or 'edit' end
             s.grants[grant]=status
             dispatch(s,{type=status=='valid' and 'grant_resumed' or 'grant_'..status,grant=grant})
         end
@@ -123,8 +150,22 @@ local function alive(s,operation)
     return not s.detached and not s.terminal and s.operations[operation]~=nil
         and G.snapshot(s.machine).phase~='stopping'
 end
-local function issue(s,reason)
-    s.failure=tostring(reason):sub(1,4096)
+-- A producer token and a free-text diagnosis are different things, and sharing
+-- one field made an unworded token print raw in the user's words (#261 M5 review
+-- round 3, BR-66). Typed here, at the producer: a token is keyed by
+-- parley.refusal; a diagnosis (a Lua error, a provider's text) travels beside it
+-- and is shown as detail.
+function issue(s,reason,diagnosis)
+    -- `failure` holds a token; anything the vocabulary cannot resolve is the
+    -- diagnosis beside it, whatever the caller meant. This keeps the snapshot's
+    -- own field honest for its readers. It is not the only gate: parley.refusal
+    -- gates again where the value is READ, because a host can supply a reason
+    -- that never passed through here (#261 close: BR-92).
+    local Refusal=require('parley.refusal')
+    if not diagnosis and not Refusal.is_token(reason) then diagnosis=true end
+    -- Provider prose keeps every line (the last often carries the action); a Lua
+    -- error keeps its first, and drops the traceback.
+    if diagnosis then s.diagnosis=Refusal.prose(reason) else s.failure=tostring(reason):sub(1,4096) end
 end
 --- Why staged bytes overflowed. A generation held behind the write turn names the
 --- answer it waited for (#266): without that, an overflow while queued reads as
@@ -178,7 +219,7 @@ local function context(s,effect)
             options=options and {first_offset=options.first_offset,retain_prefix=options.retain_prefix} or {},
             blob_ref=ref,offset=0,bytes=#bytes,accepted=0,done=function(result)
                 pending=pending-1;s.manual_items=s.manual_items-1;failed=failed or result.status~='applied'
-                local ok,err=pcall(done,result);if not ok then issue(s,err);failed=true end
+                local ok,err=pcall(done,result);if not ok then issue(s,err,true);failed=true end
                 if pending==0 and completion then local fn=completion;completion=nil;fn(failed) end
             end})
         return true
@@ -266,13 +307,13 @@ local function callbacks(s,effect,after_writes)
         if not alive(s,operation) then return false end
         return dispatch(s,{type='provider_complete',attempt=operation}).accepted
     end
-    function cb.failed(reason)
+    function cb.failed(reason,diagnosis)
         if not s.operations[operation] or s.terminal then return false end
         if effect.type=='start_child' then return cb.outcome('unknown',{error=tostring(reason):sub(1,4096)}) end
         -- A failure reported after the generation is already stopping is an echo of
         -- the stop (the transport aborts because we refused its bytes), not a
         -- cause: keep the reason that stopped it.
-        if G.snapshot(s.machine).phase~='stopping' then issue(s,reason or 'adapter failed') end
+        if G.snapshot(s.machine).phase~='stopping' then issue(s,reason or 'adapter failed',diagnosis) end
         return dispatch(s,{type=(effect.type=='prepare' or effect.type=='continue_round') and 'prepare_failed' or 'provider_failed',
             preparation=operation,attempt=operation}).accepted
     end
@@ -332,12 +373,21 @@ local function start_operation(s,effect)
             ctx.results[i]=copy(s.blobs[ref].value);release(s,ref)
         end
     end
-    local op={next_seq=1};s.operations[effect.operation]=op
+    local op={next_seq=1,kind=effect.type};s.operations[effect.operation]=op
     local cb=callbacks(s,effect,after_writes)
     local adapter=s.adapters[effect.type]
-    if not adapter then cb.failed('missing '..effect.type..' adapter');return end
+    if not adapter then cb.failed('missing adapter: '..effect.type);return end
     local ok,handle=pcall(adapter,ctx,cb)
-    if not ok then cb.failed(handle)
+    if not ok then
+        op.start_threw=true
+        -- A Lua error, not a token: it travels as the diagnosis beside the
+        -- outcome's words (#261 M5 review round 3, BR-66).
+        cb.failed(handle,true)
+        -- A tool whose start threw: its outcome is `unknown` (recorded above) and
+        -- it resolves now so the round goes on (#261 M4 W1). A throw is not proof
+        -- nothing started — a process spawned before the throw is in the
+        -- generation's scope and runs until the scope kill at its terminal.
+        if effect.type=='start_child' then cb.resolved() end
     elseif s.operations[effect.operation]==op then op.handle=handle end
 end
 -- Presentation receives copied receipt facts after accounting, never mutation
@@ -424,6 +474,35 @@ local function replace(s,effect)
         error=result.error,reason=result.reason})
     return false
 end
+--- The terminal cleanup, once: the machine's own terminal, or a fault.
+local function finish(s,outcome)
+    if s.terminal then return end
+    if not s.detached then D.transition(s.doc,{kind='finish_generation',generation=s.generation}) end
+    s.terminal=true;s.written=nil;s.off();s.work:close();active=active-1
+    for ref in pairs(s.blobs) do release(s,ref) end
+    local terminal=s.adapters.terminal
+    s.queue={};s.pending=nil;s.seed=nil;s.capabilities=nil;s.adapters={};s.gap_writer=nil
+    s.operations={};s.doc=nil;s.grants={};s.preparation_grants={};s.detached=true;s.off=nil
+    -- The failure reason travels with the terminal snapshot, so a host can say
+    -- why a response stopped (an overflow names the answer it waited for).
+    local final=G.snapshot(s.machine);final.failure=s.failure;final.waited_for_line=s.waited_for_line
+    final.diagnosis=s.diagnosis
+    final.cause=s.cause
+    -- A fault ends the generation outside the machine: `snapshot` reports what
+    -- the host was handed, so there is one authority for "terminal".
+    if outcome then final.outcome=outcome;final.phase='terminal';s.final_outcome=outcome end
+    if terminal then pcall(terminal,final) end
+end
+--- The runner's own step threw (#261 M4). Nothing can be trusted to call back
+--- now, so the generation ends here with outcome `fault`: its processes are
+--- killed through the scope first, then it is cleaned up like any terminal.
+--- The one way a generation reaches terminal with operations outstanding.
+local function fault(s,err)
+    if s.terminal then return end
+    issue(s,err,true)
+    kill_scope(s)
+    finish(s,'fault')
+end
 local function execute(s,effect)
     if effect.type=='prepare' or effect.type=='request' or effect.type=='start_child' or effect.type=='continue_round' then
         if effect.type=='continue_round' and G.snapshot(s.machine).phase~='stopping'
@@ -461,14 +540,22 @@ local function execute(s,effect)
         end
         if s.detached or not writer or G.snapshot(s.machine).phase=='stopping' then done('failed');return false end
         local ok,err=pcall(writer,done)
-        if not ok then issue(s,err);done('failed') end
+        if not ok then issue(s,err,true);done('failed') end
     elseif effect.type=='request_turn' or effect.type=='release_turn' then
         if not s.detached then D.transition(s.doc,{kind=effect.type,generation=s.generation,epoch=s.epoch}) end
     elseif effect.type=='revoke' then
         if not s.detached then D.transition(s.doc,{kind='revoke',grant=effect.grant}) end
     elseif effect.type=='cancel_operation' then
         local op=s.operations[effect.operation]
-        if op then
+        if op and op.start_threw then
+            -- Its start threw, so no adapter holds it and none can cancel it.
+            -- Whatever it spawned dies with the scope kill; the runner confirms it
+            -- here (#261 M4 W1, W9, W11). A tool is handed to supervision, the only
+            -- resolution the machine accepts for a tool without an outcome.
+            local child=op.kind=='start_child'
+            local result=dispatch(s,{type=child and 'operation_supervised' or 'operation_resolved',operation=effect.operation})
+            if result.accepted then s.operations[effect.operation]=nil end
+        elseif op then
             local adapter=s.adapters.cancel_operation
             if not adapter then issue(s,'cancel adapter missing; operation unresolved');return end
             local ok,err=pcall(adapter,{epoch=s.epoch,generation=s.generation,operation=effect.operation,handle=op.handle},function(evidence)
@@ -485,7 +572,7 @@ local function execute(s,effect)
                 if result.accepted then s.operations[effect.operation]=nil end
                 return result.accepted
             end)
-            if not ok then issue(s,err) end
+            if not ok then issue(s,err,true) end
         end
     elseif effect.type=='finalize' then
         if s.detached or G.snapshot(s.machine).phase=='stopping' then
@@ -500,7 +587,7 @@ local function execute(s,effect)
             end)
         end
         local ok,err=pcall(s.adapters.finalize,ctx,complete)
-        if not ok then issue(s,err);complete('failed') end
+        if not ok then issue(s,err,true);complete('failed') end
     elseif effect.type=='insert_tool' then
         -- One tool block (#266 M2): the machine chose which and when; the adapter
         -- renders and appends it. Always answered, so a stopping machine is never
@@ -526,18 +613,9 @@ local function execute(s,effect)
             end)
         end
         local ok,err=pcall(s.adapters.insert_tool,ctx,complete)
-        if not ok then issue(s,err);settle('failed') end
+        if not ok then issue(s,err,true);settle('failed') end
     elseif effect.type=='terminal' then
-        if not s.detached then D.transition(s.doc,{kind='finish_generation',generation=s.generation}) end
-        s.terminal=true;s.written=nil;s.off();s.work:close();active=active-1
-        for ref in pairs(s.blobs) do release(s,ref) end
-        local terminal=s.adapters.terminal
-        s.queue={};s.pending=nil;s.seed=nil;s.capabilities=nil;s.adapters={};s.gap_writer=nil
-        s.operations={};s.doc=nil;s.grants={};s.preparation_grants={};s.detached=true;s.off=nil
-        -- The failure reason travels with the terminal snapshot, so a host can say
-        -- why a response stopped (an overflow names the answer it waited for).
-        local final=G.snapshot(s.machine);final.failure=s.failure;final.waited_for_line=s.waited_for_line
-        if terminal then pcall(terminal,final) end
+        finish(s)
     end
     return false
 end
@@ -602,23 +680,44 @@ function M.start(doc,spec,adapters)
         s.grants[gid]='valid'
         if i>1 then s.preparation_grants[#s.preparation_grants+1]=gid end
     end
-    runners[r]=s;active=active+1
-    s.seed=blob(s,spec.input,false);s.dependencies_ref=blob(s,spec.dependencies or {},false)
-    s.machine=G.new({epoch=s.epoch,generation=generation,exchange=s.entity,grant=s.grant,input_seed_ref=s.seed,
-        dependencies_ref=s.dependencies_ref,capabilities_ref=blob(s,s.capabilities,false),limits=limits})
-    s.work=Deferred.new(function()return M.step(r).status=='more'end)
-    s.off=D.subscribe(doc,function()
-        sync(s)
-        if s.schedule then s.work:request() end
+    runners[r]=s
+    -- Everything below can throw, and the generation is already registered with
+    -- grants held. A throw releases all of it and reports the reason; `active`
+    -- counts the runner only once it has started (#261 M4 W14).
+    local started,reason=pcall(function()
+        s.seed=blob(s,spec.input,false);s.dependencies_ref=blob(s,spec.dependencies or {},false)
+        s.machine=G.new({epoch=s.epoch,generation=generation,exchange=s.entity,grant=s.grant,input_seed_ref=s.seed,
+            dependencies_ref=s.dependencies_ref,capabilities_ref=blob(s,s.capabilities,false),limits=limits})
+        s.work=Deferred.new(function()return M.step(r).status=='more'end,function(err)fault(s,err)end)
+        s.off=D.subscribe(doc,function()
+            sync(s)
+            if s.schedule then s.work:request() end
+        end)
+        sync(s) -- carry pre-admission stale input evidence before any preparation effect
+        dispatch(s,{type='start'})
     end)
-    sync(s) -- carry pre-admission stale input evidence before any preparation effect
-    dispatch(s,{type='start'})
+    if not started then
+        if s.off then pcall(s.off) end
+        if s.work then s.work:close() end
+        for ref in pairs(s.blobs) do release(s,ref) end
+        D.transition(doc,{kind='finish_generation',generation=generation})
+        runners[r]=nil
+        return nil,tostring(reason):sub(1,4096)
+    end
+    active=active+1
     return r
+end
+--- The runners not yet terminal (#261 M4): a generation that stops must reach
+--- terminal, so this returns to its baseline once every stopped one has.
+function M.stats()
+    return {active=active}
 end
 function M.snapshot(r)
     local s=state(r);local out=G.snapshot(s.machine)
+    if s.final_outcome then out.phase='terminal';out.outcome=s.final_outcome end
     out.retained_blobs=0;for _ in pairs(s.blobs) do out.retained_blobs=out.retained_blobs+1 end
-    out.retained_staged_bytes=s.staged;out.failure=s.failure;out.waited_for_line=s.waited_for_line
+    out.retained_staged_bytes=s.staged;out.failure=s.failure;out.diagnosis=s.diagnosis
+    out.waited_for_line=s.waited_for_line
     out.presentation_failure=s.presentation_failure;return out
 end
 function M.cancel(r,reason)local s=state(r);s.written=nil;if reason then issue(s,reason) end;return dispatch(s,{type='cancel'})end

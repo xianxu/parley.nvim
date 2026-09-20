@@ -25,8 +25,10 @@ order, each call immediately before its own result, through the answer's own
 grant (#266 M2); a failed call is written as an error result and the round goes
 on. An edit intersecting owned output revokes the affected writer — inside a tool
 round that is the whole answer, since its blocks have no grants of their own;
-reload invalidates all grants from the former document epoch. Earlier context edits mark captured input
-stale without redirecting output.
+reload invalidates all grants from the former document epoch. A human edit to
+earlier context marks captured input stale without redirecting output; another
+generation's writes do not ([previous answer while
+regenerating](lifecycle.md), #261).
 
 **Undo grouping** — this page is the one statement of it; the
 [target](../../workshop/targets/transcript-is-the-whole-truth.md) and plans point
@@ -64,9 +66,14 @@ text. Undo and redo remain native edits observed by the same coordinator.
 Cancellation revokes write authority immediately — except a Stop that lands during
 a tool round, which first writes the round out and only then stops
 ([what it writes, and what ends it early](../providers/tool_use.md#stop-during-a-tool-round)).
+A stopped generation always reaches terminal and frees its slot
+([A stopped response always ends](lifecycle.md#a-stopped-response-always-ends-261)).
 Provider and tool cleanup
-remain tracked until positive completion evidence arrives; a cancellation request
-alone does not prove an effect stopped. Stop selects one generation, while
+remain tracked until positive completion evidence arrives — a process's exit and
+drain, or a tool's supervision handoff; a cancellation request alone does not prove
+an effect stopped. What a generation never started, or whose start threw, has
+nothing to wait for and resolves at once; anything it spawned dies with the scope
+kill (#261 M4). Stop selects one generation, while
 StopDocument explicitly selects every generation in the current chat.
 
 See [response progress](response_progress.md) for the presentation lifecycle and

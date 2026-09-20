@@ -78,10 +78,10 @@ function M.tools_message(tools)
     return wait_note('Running tools: '..tools.finished..' of '..tools.total..' finished',':ParleyStop stops it')
 end
 -- An overflow stops the response on purpose: dropping bytes would lose provider
--- output. `line` is set when it overflowed while held behind another answer.
+-- output. `line` is set when it overflowed while held behind another answer. The
+-- words for the ending are parley.refusal's; this is its detail (#261 M5).
 function M.overflow_message(line)
-    return 'Response stopped: its output passed the staging budget'
-        ..(line and ' while waiting for '..holder(line) or '')
+    return 'its output passed the staging budget'..(line and ' while waiting for '..holder(line) or '')
 end
 -- Accumulate one provider detail stream and derive its meaningful status text.
 M.progress_message = function(detail_state, event)

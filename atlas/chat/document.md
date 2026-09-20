@@ -26,8 +26,11 @@ the materialized exchange model supplies request input only.
 | `replacement` | Finite replacement cursors, bounded native writes, and private successor evidence across deletion/insertion receipts. |
 | `init` | Per-buffer coordinator, immediate authority invalidation, bounded repair, and subscriptions. |
 
-The index retains no transcript payload. An unread region occupies one aggregate
-span. Readers supply bounded byte slices; long lines retain bounded lexer state.
+The index retains no transcript payload. Beside it, the coordinator holds one
+piece of text per regenerating exchange: its previous answer, for request
+context only, for as long as that generation holds its grant (see
+[Chat Lifecycle, "Previous answer while regenerating"](lifecycle.md)). An unread
+region occupies one aggregate span. Readers supply bounded byte slices; long lines retain bounded lexer state.
 Reload replaces the document epoch, invalidating outstanding publication jobs.
 
 A row handle identifies membership in the current sequence. Local publication
@@ -92,7 +95,9 @@ one closed range, disjoint from every other live grant and never carved out of
 one (#266 M4), so an insertion at its boundary is inside it. A continuation first
 narrows its answer's grant to the tail (`reclaim_tail`). Editing
 granted output revokes overlapping writers;
-editing an input dependency marks the captured input stale. Disjoint edits can
+a human edit to an input dependency marks the captured input stale, while
+another generation's writes move it without staling it (#261, see
+[Chat Lifecycle](lifecycle.md)). Disjoint edits can
 move a grant without cancelling its writer, but retire plans with old revisions.
 Reload replaces the epoch and invalidates every old grant and callback.
 

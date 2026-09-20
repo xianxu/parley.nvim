@@ -7,14 +7,6 @@ local logger = require("parley.logger")
 local _H = {}
 local LAST_CONTENT_LINE_CHUNK_SIZE = 256
 
-local function private_recovery_path(path)
-    -- Helper has no setup lifecycle. Consult the already-loaded configuration
-    -- at the IO boundary without introducing an init/helper require cycle.
-    local module = package.loaded.parley
-    local config = type(module) == "table" and module.config
-    return require("parley.recovery_paths").is_private(path, config and config.state_dir)
-end
-
 -- Pop a non-blocking as-you-type completion menu (no auto-insert, no auto-select),
 -- restoring the user's `completeopt` afterward. The shared idiom behind parley's
 -- typeahead completers (spell suggestions, vision YAML). `start` is the 1-indexed
@@ -368,7 +360,6 @@ _H.read_file_content = function(filepath)
         logger.warning("Refusing to expand a path containing a backtick: " .. tostring(filepath))
         return nil
     end
-    if private_recovery_path(expanded_path) then return nil end
     if vim.fn.filereadable(expanded_path) == 0 then
         logger.warning("File not found: " .. expanded_path)
         return nil
@@ -430,7 +421,6 @@ _H.find_files = function(dirpath, pattern, recursive)
         logger.warning("Refusing to expand a path containing a backtick: " .. tostring(dirpath))
         return {}
     end
-    if private_recovery_path(expanded_dir) then return {} end
     if vim.fn.isdirectory(expanded_dir) == 0 then
         logger.warning("Directory not found: " .. expanded_dir)
         return {}
@@ -468,7 +458,7 @@ _H.find_files = function(dirpath, pattern, recursive)
 
     -- Filter to include only files, not directories
     for _, match in ipairs(matches) do
-        if not private_recovery_path(match) and vim.fn.isdirectory(match) == 0 then
+        if vim.fn.isdirectory(match) == 0 then
             table.insert(files, match)
         end
     end
@@ -579,16 +569,23 @@ end
 
 ---@param tbl table # the table to be stored
 ---@param file_path string # the file path where the table will be stored as json
+--- Write `tbl` as JSON. There is one JSON writer: this delegates to
+--- table_to_file_atomic, whose result is derived from every fallible step —
+--- encode, open, write, close, rename — and which leaves the original file
+--- intact when any of them fails (#261 M1 review BR-19: a flush failure at close
+--- used to report success over a truncated file). Returns true once written;
+--- nil and the reason otherwise, having warned, so a caller that tells the user
+--- something was saved can know whether it was (BR-14).
+---@nodiscard
+---@return boolean|nil ok
+---@return string|nil err
 _H.table_to_file = function(tbl, file_path)
-	local json = vim.json.encode(tbl)
-
-	local file = io.open(file_path, "w")
-	if not file then
-		logger.warning("Failed to open file for writing: " .. file_path)
-		return
+	local ok, err = _H.table_to_file_atomic(tbl, file_path)
+	if not ok then
+		logger.warning("Failed to write " .. file_path .. ": " .. tostring(err))
+		return nil, err
 	end
-	file:write(json)
-	file:close()
+	return true
 end
 
 ---@param tbl table # table to encode as JSON
@@ -596,6 +593,7 @@ end
 ---@param adapter table|nil # optional IO adapter for deterministic failure tests
 ---@return boolean ok
 ---@return string|nil err
+---@nodiscard
 _H.table_to_file_atomic = function(tbl, file_path, adapter)
 	adapter = adapter or {}
 	local encode = adapter.encode or vim.json.encode
@@ -621,7 +619,18 @@ _H.table_to_file_atomic = function(tbl, file_path, adapter)
 		return failure("encode", json)
 	end
 
-	local tmp = temp_path(file_path)
+	-- An existing destination is replaced where it really lives, with its mode:
+	-- a symlinked sidecar stays a symlink, and a file the user restricted stays
+	-- restricted (#261 M1 review round 4 — the rename-based writer otherwise
+	-- replaces the link and resets the mode).
+	local uv = vim.uv or vim.loop
+	local realpath = adapter.realpath or uv.fs_realpath
+	local stat = adapter.stat or uv.fs_stat
+	local chmod = adapter.chmod or uv.fs_chmod
+	local target = realpath(file_path) or file_path
+	local existing = stat(target)
+
+	local tmp = temp_path(target)
 	local open_ok, file, open_err = pcall(open, tmp, "w")
 	if not open_ok or not file then
 		cleanup(tmp)
@@ -641,7 +650,15 @@ _H.table_to_file_atomic = function(tbl, file_path, adapter)
 		return failure("close", close_ok and close_err or close_result)
 	end
 
-	local rename_ok, rename_result, rename_err = pcall(rename, tmp, file_path)
+	if existing then
+		local mode_ok, mode_result, mode_err = pcall(chmod, tmp, existing.mode % 4096)
+		if not mode_ok or not mode_result then
+			cleanup(tmp)
+			return failure("chmod", mode_ok and mode_err or mode_result)
+		end
+	end
+
+	local rename_ok, rename_result, rename_err = pcall(rename, tmp, target)
 	if not rename_ok or not rename_result then
 		cleanup(tmp)
 		return failure("rename", rename_ok and rename_err or rename_result)
@@ -650,9 +667,70 @@ _H.table_to_file_atomic = function(tbl, file_path, adapter)
 	return true
 end
 
----@param file_path string # the file path from where to read the json into a table
----@return table | nil # the table read from the file, or nil if an error occurred
-_H.file_to_table = function(file_path)
+--- A chat's current text: its loaded buffer if one is open under this path,
+--- else the file; nil when neither exists. A loaded buffer can be ahead of the
+--- disk (unsaved edits, an answer streaming into it), and the buffer is what the
+--- user sees (#261/#255). Compares resolved absolute names: `bufnr(path)` is a
+--- file-pattern match and can return a buffer whose name merely contains `path`.
+---@param path string
+---@return string[]|nil lines
+---@return integer|nil buf # the loaded buffer the lines came from
+_H.chat_lines = function(path)
+	local buf = _H.buffer_for(path, true)
+	if buf then return vim.api.nvim_buf_get_lines(buf, 0, -1, false), buf end
+	if vim.fn.filereadable(path) == 1 then return vim.fn.readfile(path), nil end
+	return nil
+end
+
+--- The buffer named exactly `name`, or nil. `vim.fn.bufnr(name)` is a
+--- file-pattern match: `bufnr('/x/chat.md')` can return a loaded
+--- `/x/chat.md.bak`, and `bufnr('parley://system_prompt/foo')` returns the
+--- `…/foobar` buffer, which the prompt editor then force-deleted (#261 M2
+--- review BR-26). A file path is compared resolved and absolute; a scheme name
+--- (`parley://…`) is compared as written. tests/arch/buffer_lookup_spec.lua
+--- fails any other `vim.fn.bufnr(<name>)` in lua/.
+---@param name string
+---@param loaded_only boolean|nil # only a loaded buffer
+---@return integer|nil
+_H.buffer_for = function(name, loaded_only)
+	local function key(n)
+		if n:match("^%a[%w+.-]*://") then return n end
+		return vim.fn.resolve(vim.fn.fnamemodify(n, ":p"))
+	end
+	local want = key(name)
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		local bname = vim.api.nvim_buf_get_name(buf)
+		if bname ~= "" and (not loaded_only or vim.api.nvim_buf_is_loaded(buf)) and key(bname) == want then
+			return buf
+		end
+	end
+	return nil
+end
+
+--- Remove the temp files table_to_file_atomic leaves when a process dies
+--- between its write and its rename (ARCH-FUNERAL: every file it creates names
+--- its end). Call it at setup, before this process writes into `dir`, so every
+--- match is a leftover from an earlier one.
+---@param dir string
+_H.remove_stale_temps = function(dir)
+	-- Listed, not globbed: a directory scan expands nothing in `dir`.
+	local uv = vim.uv or vim.loop
+	local scan = uv.fs_scandir(dir)
+	if not scan then return end
+	while true do
+		local name, kind = uv.fs_scandir_next(scan)
+		if not name then return end
+		if kind == "file" and name:match("%.tmp%-[^/]+%-%x%x%x%x%x%x$") then os.remove(dir .. "/" .. name) end
+	end
+end
+
+--- A JSON sidecar as a table, or nil — never an error. `schema`, when given, is
+--- applied with `conform` (below), so a hand-edited or older-version file
+--- degrades field by field instead of failing downstream (#261: the sidecar is
+--- parsed into typed values at the boundary).
+---@param file_path string
+---@param schema table|nil
+_H.file_to_table = function(file_path, schema)
 	local file, err = io.open(file_path, "r")
 	if not file then
 		logger.warning("Failed to open file for reading: " .. file_path .. "\nError: " .. err)
@@ -666,8 +744,59 @@ _H.file_to_table = function(file_path)
 		return nil
 	end
 
-	local tbl = vim.json.decode(content)
+	-- #261: every sidecar under the state directory is input from another
+	-- process, version or crash, and none may stop someone working on a chat.
+	-- Content that does not decode to a table is ignored, never thrown and
+	-- never returned as a scalar a caller would index.
+	local ok, tbl = pcall(vim.json.decode, content)
+	if not ok or type(tbl) ~= "table" then
+		logger.warning("Ignoring unreadable state file " .. file_path .. ": "
+			.. (ok and "not a JSON table" or tostring(tbl)))
+		return nil
+	end
+	if schema then return (_H.conform(tbl, schema, file_path)) end
 	return tbl
+end
+
+local function conform_into(tbl, schema, prefix, dropped)
+	for key, value in pairs(tbl) do
+		local want = schema[key]
+		if want == nil then want = schema["*"] end
+		if type(want) == "table" then
+			if type(value) == "table" then
+				conform_into(value, want, prefix .. tostring(key) .. ".", dropped)
+			else
+				dropped[#dropped + 1] = prefix .. tostring(key); tbl[key] = nil
+			end
+		elseif want and type(value) ~= want then
+			dropped[#dropped + 1] = prefix .. tostring(key); tbl[key] = nil
+		end
+	end
+end
+
+--- Drop every field of `tbl` whose type `schema` rules out. A schema maps a key
+--- to the Lua type its value must have ('string', 'number', 'boolean',
+--- 'table'), or to a nested schema — the value must then be a table, conformed
+--- in turn. `['*']` applies to every key the schema does not name. Mutates
+--- `tbl` and returns it with the list of dropped paths. Emits ONE warning per
+--- call however many fields go (#261 M1 review BR-7): a sidecar with a thousand
+--- bad leaves must not become a thousand notifications.
+---@param tbl table
+---@param schema table
+---@param label string # names the source in the warning
+---@return table tbl, string[] dropped
+_H.conform = function(tbl, schema, label)
+	local dropped = {}
+	conform_into(tbl, schema, "", dropped)
+	if #dropped > 0 then
+		table.sort(dropped)
+		local shown = {}
+		for i = 1, math.min(#dropped, 5) do shown[i] = dropped[i] end
+		logger.warning(("Ignoring %d wrongly typed field%s of %s: %s%s"):format(#dropped,
+			#dropped == 1 and "" or "s", tostring(label), table.concat(shown, ", "),
+			#dropped > 5 and ", …" or ""))
+	end
+	return tbl, dropped
 end
 
 _H.get_week_number_sunday_based = function(date_str)

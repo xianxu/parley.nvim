@@ -77,8 +77,10 @@ describe("dispatcher.query internals", function()
         dispatcher.providers["openai"] = dispatcher.providers["openai"] or {}
         dispatcher.providers["openai"].endpoint = "http://fake.test/v1/chat/completions"
 
-        -- Ensure dispatcher has a query_dir
-        dispatcher.query_dir = vim.fn.stdpath("cache") .. "/parley/query"
+        -- Its own query_dir, as every other spec has: the shared cache directory
+        -- is written and pruned by specs running in parallel, and since #261 M1 a
+        -- body that was not written aborts before curl starts (#261 M5).
+        dispatcher.query_dir = vim.fn.tempname() .. "-queries"
         helpers.prepare_dir(dispatcher.query_dir, "query test")
     end)
 
@@ -129,6 +131,23 @@ describe("dispatcher.query internals", function()
         assert.is_truthy(sentinel)
         return (prefix or "") .. sentinel .. status .. "\n"
     end
+
+    -- #261 M1 review: curl posts the request body from a file; a body that
+    -- was not written stops the request before anything is spawned, and the
+    -- caller hears why.
+    describe("request body", function()
+        it("R1: a body that was not written aborts before curl starts", function()
+            local original = helpers.table_to_file
+            helpers.table_to_file = function() return nil, "disk full" end
+            local aborted
+            local ok, err = pcall(dispatcher.query, nil, "openai", { model = "gpt-4", messages = {} },
+                make_handler(), nil, nil, nil, function(msg) aborted = msg end)
+            helpers.table_to_file = original
+            assert(ok, err)
+            assert.is_nil(captured_args, "curl was started with no body")
+            assert.truthy(tostring(aborted):find("request body not written: disk full", 1, true))
+        end)
+    end)
 
     describe("Group A: out_reader chunk reassembly", function()
         it("A1: single complete chunk emits content to handler", function()
@@ -582,12 +601,12 @@ describe("dispatcher.query internals", function()
             assert.equals(0, #on_exit_calls) -- and the normal teardown path didn't fire either
         end)
 
-        it("H2: pre_query success runs the query as before (backward compatible)", function()
+        it("H2: pre_query success runs the query", function()
             providers.get = function()
                 return {
-                    pre_query = function(on_success)
+                    pre_query = function(on_success, _on_error)
                         on_success()
-                    end, -- one-arg adapter ignores the error cb the dispatcher passes
+                    end,
                     format_headers = function(_secret, _model, _payload, endpoint)
                         return { "-H", "x: y" }, endpoint
                     end,
@@ -672,7 +691,7 @@ describe("dispatcher.query internals", function()
                 nil, nil, nil, nil, nil, function(_qid, value) failure = value end)
             captured_out_reader(nil, nil)
             captured_terminal(0, 0, "", "plain stderr", nil)
-            assert.is_truthy(failure.io_error)
+            assert.is_truthy(failure.exit)
 
             local exits = 0
             dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
@@ -720,7 +739,8 @@ describe("dispatcher.query internals", function()
             captured_terminal(9, 0, body, status_stderr("000"), "stdout: read boom")
             assert.same({ "content:partial", "failure" }, events)
             assert.equals(body, failure.body)
-            assert.is_truthy(failure.io_error)
+            assert.equals("stdout: read boom", failure.exit)
+            assert.is_nil(failure.io_error, "retired: `exit` carries it")
         end)
 
         it("I8: reports partial SSE plus HTTP 500 with byte-exact body", function()
@@ -748,8 +768,10 @@ describe("dispatcher.query internals", function()
             captured_terminal(28, 9, "", status_stderr("000"), nil)
             captured_terminal(0, 0, "", status_stderr("200"), nil)
             assert.equals(1, #failures)
-            assert.equals(28, failures[1].code)
-            assert.equals(9, failures[1].signal)
+            -- The transport's end is rendered once, here (#261 M3 review BR-45);
+            -- the raw code is not re-exported, since it is nil on every kill.
+            assert.equals("exit 28, signal 9", failures[1].exit)
+            assert.is_nil(failures[1].code)
             assert.equals(0, failures[1].http_status)
         end)
 
@@ -762,7 +784,7 @@ describe("dispatcher.query internals", function()
             local malformed = status_stderr("200"):gsub("200\n$", "20x\n")
             captured_out_reader(nil, nil)
             captured_terminal(0, 0, "", malformed, nil)
-            assert.is_truthy(failures[1].io_error)
+            assert.is_truthy(failures[1].exit)
 
             dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
                 nil, nil, nil, nil, nil, function(_qid, value)
@@ -770,7 +792,7 @@ describe("dispatcher.query internals", function()
                 end)
             captured_out_reader(nil, nil)
             captured_terminal(0, 0, "", "", nil)
-            assert.is_truthy(failures[2].io_error)
+            assert.is_truthy(failures[2].exit)
         end)
 
         it("I11: legacy failure logging exposes only bounded metadata", function()
@@ -944,6 +966,39 @@ describe("dispatcher.query internals", function()
             return errors
         end
 
+        -- #261 M4 W8: a recovery acts (credentials, prompts), so it runs only
+        -- for an owner still waiting; a stopped one just gets the failure.
+        it("J0b: a recovery is not started once the owner stops mid-request", function()
+            local recovered, errors, alive = 0, {}, true
+            with_adapter(function() recovered = recovered + 1; return true end, function()
+                dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                    nil, nil, nil, nil, nil, function(_qid, failure) table.insert(errors, failure) end,
+                    { alive = function() return alive end, deadline_ms = 60000 })
+                alive = false
+                captured_out_reader(nil, "")
+                captured_out_reader(nil, nil)
+                captured_terminal(0, 0, "", status_stderr("503"), nil)
+            end)
+            assert.equals(0, recovered, "a recovery ran for a stopped owner")
+            assert.equals(1, #errors, "the failure still reaches the owner")
+        end)
+        -- #261 M4 W7: the request is set up inside a vault or pre_query callback;
+        -- a throw there aborts the request instead of escaping and waiting forever.
+        it("J0c: a throw while setting up the request aborts it", function()
+            local aborted
+            local providers_mod = require("parley.providers")
+            local get = providers_mod.get
+            providers_mod.get = function(name)
+                local adapter = vim.tbl_extend("force", {}, get(name))
+                adapter.format_headers = function() error("headers exploded") end
+                return adapter
+            end
+            local ok, err = pcall(dispatcher.query, nil, "openai", { model = "gpt-4", messages = {} }, function() end,
+                nil, nil, nil, function(msg) aborted = msg end)
+            providers_mod.get = get
+            assert(ok, err)
+            assert.truthy(tostring(aborted):find("headers exploded", 1, true), tostring(aborted))
+        end)
         it("J1: an adapter without recover_query behaves exactly as before", function()
             local errors = fail_query()
             assert.equals(1, #errors)

@@ -77,4 +77,28 @@ function M.assert_pattern_scoping(opts)
     end
 end
 
+--- The working tree's files matching git pathspecs: tracked AND untracked,
+--- minus ignored and deleted ones, sorted. A guard that lists files through the
+--- git index (`git ls-files`, `git grep`) cannot see the file being written right
+--- now — untracked is the normal state of new code during the loop that adds it
+--- (#261 M1 review BR-6). Every file-set guard lists through here;
+--- tests/unit/arch_helper_spec.lua fails an arch spec that lists any other way.
+---@param pathspecs string[] # git pathspecs, e.g. { 'lua/**/*.lua' }
+---@return string[]
+function M.worktree_files(pathspecs)
+    local specs = {}
+    for _, spec in ipairs(pathspecs) do specs[#specs + 1] = vim.fn.shellescape(spec) end
+    local out = vim.fn.systemlist("git ls-files --cached --others --exclude-standard -- "
+        .. table.concat(specs, " "))
+    assert(vim.v.shell_error == 0, "git ls-files failed")
+    local files, seen = {}, {}
+    for _, file in ipairs(out) do
+        if not seen[file] and vim.fn.filereadable(file) == 1 then
+            seen[file] = true; files[#files + 1] = file
+        end
+    end
+    table.sort(files)
+    return files
+end
+
 return M

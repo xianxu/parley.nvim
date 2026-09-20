@@ -1,7 +1,11 @@
 -- One timer per work owner. A new timer turn separates every bounded slice.
+-- A step that throws cancels the work; with `on_error` the owner is told, so it
+-- can settle what it holds, instead of the error escaping a timer callback
+-- where nothing can (#261 M4).
 local M={}
-function M.new(step)
+function M.new(step,on_error)
     assert(type(step)=='function','work callback required')
+    assert(on_error==nil or type(on_error)=='function','error callback must be a function')
     local epoch,timer,running,requested,closed=0,nil,false,false,false
     local work={}
     local function stop_timer()
@@ -18,7 +22,11 @@ function M.new(step)
             timer=nil;running=true;requested=false
             local success,again=pcall(step)
             running=false
-            if not success then self:cancel();error(again,0) end
+            if not success then
+                self:cancel()
+                if on_error then on_error(again) else error(again,0) end
+                return
+            end
             if not closed and captured==epoch and (again==true or requested) then self:request() end
         end,1)
     end

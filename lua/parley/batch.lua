@@ -73,7 +73,12 @@ function M.transition(h,event)
         end
     elseif event.type=='cancel' then
         if s.phase=='completed' or s.phase=='paused' then return reject('not cancellable') end
-        s.phase='paused';s.reason='cancelled'
+        -- Why it was cancelled belongs to the batch, not to a flag beside it: a
+        -- host reads it off the snapshot and words the pause (#261 M5 review).
+        if event.cause~=nil and event.cause~='user' and event.cause~='lifecycle' and event.cause~='fault' then
+            return reject('invalid cancel cause')
+        end
+        s.phase='paused';s.reason='cancelled';s.cause=event.cause
         if s.active then effects[1]={type='cancel_generation',epoch=s.epoch,batch=s.batch,leg=s.active.leg} end
     elseif event.type=='finished' then
         if not s.active or event.leg~=s.active.leg then return reject('stale leg') end
@@ -105,7 +110,7 @@ function M.transition(h,event)
             end
             for entity in pairs(s.contexts)do s.contexts[entity]=event.evidence.contexts[entity].revision end
         end
-        s.phase=s.completed==#s.selection and 'completed' or 'ready';s.reason=nil
+        s.phase=s.completed==#s.selection and 'completed' or 'ready';s.reason=nil;s.cause=nil
     else return reject('unknown event') end
     return wrap(s),{accepted=true,effects=effects}
 end

@@ -579,6 +579,9 @@ M.setup = function(opts)
 
 	M.vault.setup({ state_dir = state_dir, curl_params = curl_params })
 	custom_prompts.setup(M.helpers, state_dir)
+	-- Before anything in this process writes a sidecar, so every match is a
+	-- crash leftover of the atomic writer (#261).
+	M.helpers.remove_stale_temps(state_dir)
 
 	-- Process API keys from api_keys table and load them into vault
 	local api_keys = opts.api_keys or M.config.api_keys or {}
@@ -1332,6 +1335,12 @@ M.setup = function(opts)
 
 	-- set up buffer update handler
 	M.setup_buf_handler()
+	-- Leaving Neovim kills every process Parley still owns (#261 M3). Only a
+	-- crash of Neovim itself leaves orphans, which then run to their own end.
+	vim.api.nvim_create_autocmd("VimLeavePre", {
+		group = vim.api.nvim_create_augroup("ParleyLeave", { clear = true }),
+		callback = function() require("parley.tasker").leave() end,
+	})
 	-- Toggle keymaps (web_search, raw request/response) now registered via kb_registry.register_global above
 
 	-- Setup lualine integration if lualine is enabled
@@ -1442,6 +1451,17 @@ local function live_agent_options()
 end
 
 --- Reconcile in-memory state with what is on disk, apply `update`, persist.
+-- The fields state.json may carry, by type (#261). A field of another type —
+-- a hand edit, an older version — is dropped at the read, never compared or
+-- indexed downstream.
+local STATE_SCHEMA = {
+	agent = "string", system_prompt = "string", last_chat = "string",
+	web_search = "boolean", claude_web_search = "boolean", follow_cursor = "boolean",
+	interview_mode = "boolean", updated = "number", interview_start_time = "number",
+	live_agent = "table", note_dirs = "table", note_roots = "table",
+	chat_dirs = "table", chat_roots = "table", repo_modes = "table",
+}
+
 ---@param update table | nil # table with options
 M.refresh_state = function(update)
 	local state_file = M.config.state_dir .. "/state.json"
@@ -1451,7 +1471,7 @@ M.refresh_state = function(update)
 
 	local disk_state = {}
 	if vim.fn.filereadable(state_file) ~= 0 then
-		disk_state = M.helpers.file_to_table(state_file) or {}
+		disk_state = M.helpers.file_to_table(state_file, STATE_SCHEMA) or {}
 	end
 
 	if not disk_state.updated then
@@ -1597,12 +1617,6 @@ M.cmd.ChatResumeResponse = function() chat_respond.cmd_resume_response() end
 
 M.cmd.ToolOperations = function() require("parley.tool_operations").open() end
 M.cmd.ChatResumeBatch = function(params) return chat_respond.resume_batch(params) end
-M.cmd.AnswerRecovery = function()
-    local recovery = require('parley.chat_recovery'); recovery.setup(M); return recovery.open()
-end
-M.cmd.AnswerRestore = function()
-    local recovery = require('parley.chat_recovery'); recovery.setup(M); return recovery.restore()
-end
 
 --------------------------------------------------------------------------------
 -- Keybinding help (driven by keybinding_registry)
@@ -3691,12 +3705,6 @@ M.delete_chat_file = function(path)
 		vim.notify("not deleted: " .. tostring(path) .. " (" .. tostring(err) .. ")", vim.log.levels.ERROR)
 		return nil, err
 	end
-	local recovery = require("parley.chat_recovery")
-	recovery.setup(M)
-	local cleaned = recovery.deleted(path)
-	if not cleaned.ok then
-		vim.notify("Deleted " .. path .. " but answer recovery cleanup failed: " .. tostring(cleaned.reason), vim.log.levels.WARN)
-	end
 	local fok, ferr = require("parley.assets").delete_with(path)
 	if not fok then
 		vim.notify("Deleted " .. path .. " but " .. tostring(ferr), vim.log.levels.WARN)
@@ -3795,9 +3803,8 @@ M.move_chat_tree = function(file_name, target_dir)
 	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 	for _, new_path in pairs(path_map) do
 		if vim.fn.filereadable(new_path) == 1 then
-			local live_buf = vim.fn.bufnr(new_path)
-			local live = live_buf ~= -1 and vim.api.nvim_buf_is_loaded(live_buf)
-			local lines = live and vim.api.nvim_buf_get_lines(live_buf, 0, -1, false) or vim.fn.readfile(new_path)
+			local lines, live_buf = M.helpers.chat_lines(new_path)
+			local live = live_buf ~= nil
 			local changed = false
 			for i, line in ipairs(lines) do
 				if line:sub(1, #branch_prefix) == branch_prefix then
@@ -4164,11 +4171,9 @@ M._build_messages = function(opts) return chat_respond.build_messages(opts) end
 
 M._resolve_remote_references = function(opts, cb) return chat_respond.resolve_remote_references(opts, cb) end
 
-M.chat_respond = function(p, cb, ofc, f) return chat_respond.respond(p, cb, ofc, f) end
+M.chat_respond = function(p, cb, ofc) return chat_respond.respond(p, cb, ofc) end
 
 M.chat_respond_all = function() return chat_respond.respond_all() end
-
-M.resubmit_questions_recursively = function(...) return chat_respond.resubmit_questions_recursively(...) end
 
 M.cmd.ChatRespond = function(p) chat_respond.cmd_respond(p) end
 
@@ -4289,11 +4294,14 @@ end
 local function chat_context(what)
 	local ctx, reason, kind = require("parley.chat_context").resolve()
 	if ctx then return ctx end
-	if kind == "not_chat" then
-		M.logger.warning(what .. " is only available in chat files: " .. reason)
-	else
-		M.logger.error(what .. ": could not find header separator ---")
-	end
+	-- One wording per condition, whatever the entry point: parley.refusal owns
+	-- both facts, and chat_respond.respond already reports them this way
+	-- (#261 M5 review round 4). `reason` stays in the log, not in the sentence.
+	M.logger.debug(what .. ": " .. tostring(reason))
+	local Refusal = require("parley.refusal")
+	local message = Refusal.describe("start", nil, kind == "not_chat" and "not a chat" or "chat header unavailable",
+		{ notice = what, log_file = M.config and M.config.log_file })
+	if message then M.logger.warning(message) end
 	return nil
 end
 
@@ -4401,9 +4409,9 @@ M.cmd.ChatPrune = function()
 		local agent = M.get_agent()
 		local agent_info = M.get_agent_info(parsed_chat.headers, agent)
 		-- The child is now the active buffer — animate its topic line
-		local child_buf = vim.fn.bufnr(new_file)
+		local child_buf = M.helpers.buffer_for(new_file)
 		local spinner_opts = nil
-		if child_buf ~= -1 then
+		if child_buf then
 			spinner_opts = { buf = child_buf, find_line = function()
 				return chat_respond.find_topic_line(child_buf)
 			end }
@@ -4413,7 +4421,7 @@ M.cmd.ChatPrune = function()
 			{first={row=prune_start,col=0},last={row=prune_start,col=#branch_line}},
 		})
 		local child_capture,topic_prefix,topic_suffix
-		if child_buf~=-1 and vim.api.nvim_buf_is_loaded(child_buf) then
+		if child_buf and vim.api.nvim_buf_is_loaded(child_buf) then
 			child_capture,topic_prefix,topic_suffix=capture_chat_topic(child_buf,
 				vim.api.nvim_buf_get_lines(child_buf,0,-1,false))
 		end
@@ -4424,7 +4432,7 @@ M.cmd.ChatPrune = function()
 			if child_capture then
 				edits.apply_user(child_capture,{{region=1,text=topic_prefix..topic..topic_suffix}})
 			elseif disk_source and vim.fn.filereadable(new_file)==1
-				and not vim.api.nvim_buf_is_loaded(vim.fn.bufnr(new_file)) then
+				and not M.helpers.buffer_for(new_file, true) then
 				local file_lines=vim.fn.readfile(new_file)
 				local version=vim.uv.fs_stat(new_file)
 				if version and disk_version and version.ino==disk_version.ino and version.dev==disk_version.dev

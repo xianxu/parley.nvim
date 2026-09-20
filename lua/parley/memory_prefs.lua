@@ -268,7 +268,7 @@ M.generate_preferences = function(buckets, callback)
 			-- this tag and keep the batch moving instead of silently stalling.
 			_parley.logger.warning("memory_prefs: tag [" .. tag .. "] aborted: " .. tostring(msg))
 			process_next()
-		end)
+		end, nil, nil, { deadline_ms = require("parley.tasker").deadline.stream })
 	end
 
 	process_next()

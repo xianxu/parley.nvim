@@ -11,9 +11,14 @@
 --     rejecting their own bearer.
 -- so the guards are the deliverable, not a nicety.
 
+-- Every guard here selects a corpus and then asserts the offender list is
+-- empty, so an empty SELECTION passes while checking nothing (#261 close:
+-- BR-94). The check belongs to the selection, not to each guard: a pattern that
+-- matches no file is a broken guard, whatever it then asserts.
 local function repo_files(pattern)
     local out = vim.fn.systemlist(pattern)
     assert.equals(0, vim.v.shell_error, "listing failed: " .. pattern)
+    assert.is_true(#out > 0, "selected no files, so the guard would pass vacuously: " .. pattern)
     return out
 end
 
@@ -266,11 +271,26 @@ describe("arch: single-source sweeps stay swept", function()
         end
         local missing = {}
         local survived = {}
+        local rows = 0
         for _, doc in ipairs(docs) do
             if doc ~= "" then
                 local body = read(doc)
-                -- table rows only: prose may legitimately discuss removed names
+                -- Core-concepts rows only, and the table's HEADER defines the
+                -- class: selecting by shape (`^| \``) claimed every other table
+                -- in the plan, including a mutation ledger whose cells name
+                -- specs (#261 M5 close: BR-89). Rows count while the table's
+                -- header carries the Status column the writing-plans skill
+                -- specifies; anything but a row or a separator ends the region.
+                local in_concepts = false
                 for line in body:gmatch("[^\n]+") do
+                    if in_concepts and line:match("^| `") then rows = rows + 1 end
+                    -- A separator row matches "^|" too, and carries no Status
+                    -- cell, so it simply leaves the region as it is.
+                    if line:match("^|") then
+                        if line:match("|%s*Status%s*|") then in_concepts = true end
+                    elseif vim.trim(line) ~= "" then
+                        in_concepts = false
+                    end
                     -- A `deleted` row names a symbol that by definition no
                     -- longer exists — that is the whole content of the row.
                     -- `deleted` is in the writing-plans status legend alongside
@@ -279,7 +299,7 @@ describe("arch: single-source sweeps stay swept", function()
                     -- outright would let a plan claim a deletion that never
                     -- happened (#225 review), so the row asserts the symbol is
                     -- GONE with the same matcher.
-                    local deleted_row = line:match("^| `") and line:match("|%s*deleted%s*|")
+                    local deleted_row = in_concepts and line:match("^| `") and line:match("|%s*deleted%s*|")
                     if deleted_row then
                         for name in line:gmatch("`([%w_]+)`") do
                             if #name > 3 and not name:match("^lua$") then
@@ -293,7 +313,7 @@ describe("arch: single-source sweeps stay swept", function()
                             end
                         end
                     end
-                    if line:match("^| `") and not deleted_row then
+                    if in_concepts and line:match("^| `") and not deleted_row then
                         -- A row names either a SYMBOL or a MODULE. A module is
                         -- checked as a file (its row carries the path in another
                         -- cell); a symbol must have a DEFINITION, not a mention.
@@ -326,6 +346,7 @@ describe("arch: single-source sweeps stay swept", function()
                 end
             end
         end
+        assert.is_true(rows > 0, "no Core-concepts row was selected, so this guard checked nothing")
         assert.same({}, missing,
             "these are named in a Core-concepts table but exist nowhere in the tree")
         assert.same({}, survived,
@@ -388,6 +409,49 @@ describe("arch: single-source sweeps stay swept", function()
                 .. "require('parley.cliproxy')._set_data_dir(vim.fn.tempname())")
     end)
 
+    it("every '-- test seam' export has a reader", function()
+        -- #261 M5 review round 4. An export kept for tests, with no test using
+        -- it, is dead surface that reads as covered.
+        local offenders, seams = {}, 0
+        for _, path in ipairs(repo_files("ls lua/parley/*.lua lua/parley/**/*.lua 2>/dev/null")) do
+            for line in read(path):gmatch("[^\n]+") do
+                local name = line:match("^%s*M%.(_[%w_]+)%s*=.*%-%-%s*test seam")
+                    or line:match("^%s*function%s+M%.(_[%w_]+)%s*%(.*%-%-%s*test seam")
+                if name then
+                    seams = seams + 1
+                    local module = path:match("lua/(.*)%.lua"):gsub("/", ".")
+                    local short = module:match("([%w_]+)$")
+                    local found = false
+                    for _, spec in ipairs(repo_files("ls tests/*/*.lua 2>/dev/null")) do
+                        local text = read(spec)
+                        if text:find("%." .. name .. "[^%w_]") and (text:find(module, 1, true) or text:find(short, 1, true)) then
+                            found = true; break
+                        end
+                    end
+                    if not found then offenders[#offenders + 1] = path .. ": M." .. name end
+                end
+            end
+        end
+        table.sort(offenders)
+        assert.is_true(seams > 0, "no '-- test seam' export was selected")
+        assert.same({}, offenders, "delete the export, or give it the test it claims")
+    end)
+
+    it("no spec writes into Neovim's shared cache directory", function()
+        -- #261 M5. `make test` runs specs in parallel against one XDG cache, so a
+        -- file a spec writes there can be pruned or renamed away by another; a
+        -- request body lost that way aborts the query before curl starts. Each
+        -- spec gives its writers a vim.fn.tempname() directory instead.
+        local offenders = {}
+        for _, path in ipairs(repo_files("ls tests/integration/*.lua tests/unit/*.lua 2>/dev/null")) do
+            local text = read(path)
+            if text:find('stdpath("cache")', 1, true) or text:find("stdpath('cache')", 1, true) then
+                offenders[#offenders + 1] = path
+            end
+        end
+        assert.same({}, offenders, "these specs write into the shared stdpath('cache'); use vim.fn.tempname()")
+    end)
+
     -- #218. A triple-backtick predicate belongs in exactly two places: the prose
     -- grammar (highlight_structure.is_fence_delim) and the tool-body grammar
     -- (fence.lua). Hand-rolled copies drifted three separate times in this one
@@ -407,7 +471,7 @@ describe("arch: single-source sweeps stay swept", function()
         }
         local ALLOWANCES = { ["lua/parley/chat_respond.lua"] = 1 }
         local offenders = {}
-        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+        for _, path in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
             if not OWNERS[path] then
                 local text = read(path)
                 -- MATCHING a fence is the invariant; EMITTING one is fine and
@@ -528,7 +592,7 @@ end)
 describe("arch: the branch-ref line has one formatter (#214)", function()
     it("no module hand-builds a 🌿: line", function()
         local offenders = {}
-        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+        for _, path in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
             if path ~= "lua/parley/branch_ref.lua" then
                 for _, line in ipairs(vim.split(read(path), "\n")) do
                     if not line:match("^%s*%-%-")
@@ -559,7 +623,7 @@ describe("arch: no runtime string is a gsub replacement (#214)", function()
         -- matching :sub( floods this with false positives.
         local pat = ":gsub%b()"
         local offenders = {}
-        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+        for _, path in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
             local lines = vim.split(read(path), "\n")
             for n, line in ipairs(lines) do
                 if not line:match("^%s*%-%-") then
@@ -591,7 +655,7 @@ end)
 describe("arch: every key derives from the keybinding registry (#214)", function()
     it("no module outside the registry reads a config `.shortcut` field", function()
         local offenders = {}
-        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+        for _, path in ipairs(require("tests.arch.arch_helper").worktree_files({ "lua/**/*.lua" })) do
             if not path:match("keybinding_registry%.lua$") then
                 -- `[^\n]*` yields an empty match after every line, which doubles
                 -- every reported line number (a planted violation at :121 was

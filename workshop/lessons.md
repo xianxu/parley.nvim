@@ -1,5 +1,281 @@
 # Lessons
 
+## 2026-09-19 (#261 M4 close — a double is a restatement, and a whole-file revert proves no hunk)
+
+- **Test doubles are in a seam's ledger, and a guard over a seam scans
+  `tests/` too** (BR-61, 10th `seam-change-collateral`). The ledger scoped
+  itself to "prose", and a one-arg `pre_query` double titled "backward
+  compatible" survived. That is the same narrowing the rule was written to
+  stop.
+- **Evidence is per hunk** (4th `behavior-change-without-regression-test`).
+  "Red on the old code" from reverting a whole file shows that *some* hunk is
+  tested, not which one.
+  - Keep a mutation ledger: hunk → mutation → the test that failed, or "none,
+    unreachable because X".
+  - Build it by mutating one hunk at a time.
+
+## 2026-09-19 (#261 M4 review round 3 — sweep from the change's own rows, and keep a ledger)
+
+- **The list of seams to sweep is the change's own rows, not the review's list**
+  (9th `seam-change-collateral`). Each round's lesson narrowed the rule:
+  "grep the seam", then "grep changed names across `atlas/`". Each time, the
+  sweep started from whatever the review had named.
+  - At the boundary, every change row whose fix alters a contract gets
+    `grep -rn <seam> lua/ atlas/ tests/ README.md`.
+  - The hits and their dispositions go into the as-built as a ledger (updated,
+    or unaffected). The fix rounds' rows join the same table.
+  - A missing row is then visible in the ledger itself.
+- **Each round's revision disposes every recommendation of the prior review**
+  (3rd `plan-tracking-not-updated`): applied, or declined with a reason. A
+  recommendation silently dropped (the `tasker` row) is then visible.
+- **A contract that says "every path reports" needs a guard, not a comment.** A
+  comment blessed one-arg `pre_query` adapters for months; `spawn_seam_spec`
+  now requires the error callback.
+
+## 2026-09-19 (#261 M4 review round 2 — the fix round is part of the boundary diff)
+
+- **Apply the sweeps to the fix round's own changes, not only to the review's
+  list** (8th `seam-change-collateral`, 3rd
+  `behavior-change-without-regression-test`). Round 1 fixed each listed site,
+  then added a stopped-scope refusal the atlas never mentioned and a batch
+  guard no test exercised.
+  - Before a fix round's commit, list its own production hunks.
+  - Grep each changed public function's name across `atlas/`.
+  - Mutate each behaviour-changing hunk and require a red test.
+- **Measure a claim about which tests reach a branch.** "Chat specs now take
+  W5's branch" was written from how the double looked. Instrumenting the
+  branch showed 0 hits.
+
+## 2026-09-19 (#261 M4 review — the contract changed; its doubles, its per-site tests and its alternatives had to follow)
+
+- **A test double is a restatement of the contract too** (7th in
+  `seam-change-collateral`). W5 made `stop_owner`'s return value load-bearing.
+  Six doubles returned nothing, so no chat-level test ever took the new branch.
+  - Grep the seam's name across `tests/` as well as `lua/`, `atlas/` and
+    `README.md`, and fix the doubles with the prose.
+  - Keep one double, and guard against copies.
+- **"Red on revert" is per edited site, not per W-row** (2nd in
+  `behavior-change-without-regression-test`). A pcall only changes behaviour if
+  a test makes its callee throw. A threaded argument is only tested at the hops
+  a test reaches.
+  - Check it mechanically: mutate each site in turn and require a red test.
+  - Here, 39 scope sites were mutated one by one.
+- **A Done-when that lists alternatives is tested per alternative** (2nd in
+  `done-when-clause-untested`). "Stop, an edit, reload or detach" was tested
+  only through Stop. Parametrize over the list, so a missing cause shows up in
+  a test name.
+- **Put the evidence column in the enumeration, beside the tests** (9th in
+  `enumeration-claims-completeness`). A `WAITS` list in the spec, naming each
+  wait's spec and case and checked against those files, cannot claim a test
+  that does not exist. Prose then points at it and claims no count.
+- **Replace a module field only through `with_stub`** (2nd in
+  `stub-restored-outside-finally`). A stub restored after its assertions leaks
+  into every later case once one fails.
+
+## 2026-09-19 (#261 M3 review round 3 — a fix leaked a secret, and a consumer overwrote the value it was handed)
+
+- **A process that carries or returns a secret never has its raw output shown**
+  (Critical, ARCH-SECURE). Round 1 fixed a `%d`-on-nil throw in the Copilot
+  token fetch by rewriting its failure log, and appended the process's stderr.
+  That request ran curl with `-v`, which copies every request header to stderr,
+  including `authorization: token <secret>`. The old line had silently dropped
+  that argument, so the leak was new.
+  - When a change widens what a message includes, check what the newly
+    included data can contain.
+  - The class, swept in the same change: a secret command's stdout (it is the
+    secret), a token endpoint's body (it carries tokens, even when a kill cuts
+    it short), and a verbose curl's stderr.
+  - Now: stdout and bodies are summarised, never shown; a guard forbids a
+    verbose or traced argv anywhere in `lua/`; and a regression test plants the
+    secret where each process would put it.
+- **A value's consumers are not only branchers and renderers** (7th in
+  `seam-change-collateral`). The value is `io_error`, an inherited diagnosis
+  (a kill, a pipe error), and its consumer kinds are branch, render, overwrite
+  and compute.
+  - Round 1 swept one kind of consumer, round 2 a second; round 3 found a
+    third. The tool layer replaced it with "scoped process bootstrap failed"
+    whenever a kill landed before the bootstrap's marker, so every early Stop
+    of a shell tool named the wrong cause.
+  - Enumerate the consumer kinds of a changed value up front and guard each
+    one. For io_error: `io_error = io_error or '<reason>'`, never an assignment
+    over it.
+- **A single source needs a census of its producers, not just its consumers**
+  (9th in `enumeration-claims-completeness`). `scope_key` replaced the two
+  spellings the plan named, but a third producer, skill processes, still
+  hand-built a different key, and the atlas said every scope used scope_key.
+  - A census now classifies every production assignment: built with
+    scope_key, or forwarded from one that was.
+  - The atlas says what that proves: a chat generation's scope kill does not
+    reach a skill's processes.
+
+## 2026-09-19 (#261 M3 review round 2 — a sweep anchored on call sites, and an enumeration whose entries were prose)
+
+- **Anchor a sweep on the VALUE, not on the callers of one function** (5th in
+  `seam-change-collateral`). Round 1 read "sweep every consumer that renders
+  this value" as "every file containing `tasker.run(`". The value crossed one
+  more seam: the dispatcher re-exported `code`/`signal`/`io_error` on its
+  failure table, and both of that table's renderers printed the nil code or
+  `(HTTP unknown)`.
+  - Follow the value to every table it is copied onto, and render it once at the
+    seam that produces it (`failure.exit`).
+  - Then stop exporting the raw field, so no consumer can render it again — a
+    stronger guard than any pattern.
+- **An enumeration that justifies a documented claim must justify it
+  mechanically** (8th in `enumeration-claims-completeness`). Once the atlas
+  deferred to a test as the list of "how each process ends", each entry's prose
+  became documentation that nothing checked — and two of eighteen were wrong.
+  - Derive the classification from the code (`:wait()` ⇒ synchronous,
+    `--max-time` ⇒ bounded), declare counts per class, and keep free text only
+    for the entries that genuinely have no mechanical answer.
+  - Where the bound lives one call away (an argv helper, or a wrapper spawning
+    its caller's argv), check THAT: the helper's body carries the bound, or
+    every call site of the wrapper does.
+- **A fix without a test is not done, even when it is right.** Three of round
+  1's Minors landed correct code with no test, and the reviewer had to write
+  them to show the debt. Each was under ten lines: a held record keeping no
+  timer handle, a merge preserving a caller's option, a pid that must never be
+  signalled (which needed one new seam on the fake).
+
+## 2026-09-19 (#261 M3 review — a seam changed a value's meaning; its renderers, its statements and its quantifier were not swept)
+
+- **When a seam changes what a value means, sweep the consumers that RENDER it,
+  not only the ones that BRANCH on it** (3rd and 4th in
+  `seam-change-collateral`). Tasker began delivering `code = nil` whenever
+  `io_error` says why. That made every `code ~= 0` test right by construction,
+  and every `tostring(code)` wrong: one of them wrote "curl exited with code
+  nil" into the transcript.
+  - Enumerate both kinds of consumer from the diff.
+  - Route the renders through one helper (`tasker.exit_reason`).
+  - Guard it, so a new raw render fails (`tests/arch/spawn_seam_spec.lua`).
+- **The README miss was the superseded-claim sweep, not run** (#266 M4 entry
+  below, which states its scope and method once). Run it at every boundary
+  whose diff changes a user-facing contract — here, what Stop does to a
+  running tool. `atlas/` and `tests/manual/` were updated; `README.md` was
+  not.
+- **A doc sentence quantified over a category needs an executable enumeration,
+  or wording scoped to the seam it covers** (7th in
+  `enumeration-claims-completeness`). "Every process Parley starts" was false
+  by eighteen files.
+  - The fix is an arch guard: every spawn outside the seam is listed with how
+    it ends, each entry an exact count, so a listed spawn that no longer
+    exists fails too.
+  - The atlas then points at that list rather than restating it.
+- **One fake, one scripting vocabulary for every path**
+  (`stateless-double-at-stateful-seam`). The process fake scripted
+  `signal_result` for pid kills only, so a failed-signal test had to move from
+  a scoped attempt to an unscoped one to stay expressible, and the group path
+  lost its coverage. When a case must move paths to stay expressible, extend
+  the fake instead.
+
+## 2026-09-19 (#261 M2 review — a missing test the Log called done, and a primitive fixed at one of five sites)
+
+- **Select a guard's members by an annotation, when the class has one.** The
+  "did it happen?" family recurred four times because each guard listed the
+  functions by name, so every new one was a fresh gap. `---@nodiscard` is
+  LuaLS's own annotation for exactly this class. `tests/arch/nodiscard_spec.lua`
+  selects by it, and resolves callers through their `require` aliases so
+  `table.remove` is never mistaken for `custom_prompts.remove`.
+- **Work deferred into another artifact lands in that artifact's contract**
+  (`## Done when` / `## Plan`), in the same edit as the Log entry. The close
+  gate reads the contract; a deferral that exists only in narrative is one
+  nothing enforces.
+
+- **A test stand-in must have every behaviour the code under test branches on.**
+  The tree-move test used a scratch buffer as its chat. The code's save of that
+  buffer failed silently, so the test certified "the file is left alone" — for
+  a buffer production never creates. A real chat buffer saves, slug-renames and
+  aborts the move (parley#270). Rule: build chat buffers the way production
+  opens them (file-backed, `bufadd` + `bufload`) whenever the code under test
+  writes, renames or reads the file.
+
+- **Before closing a milestone, match every test bullet in the plan to a named
+  test or a logged deviation.** Task 2.6 asked for a loaded-target
+  tree-move test. The Log said "landed as planned" and no such test existed.
+  When I wrote it, the branch it targets turned out never to fire. Rule: walk
+  each task's Step-1 bullets against the diff before `milestone-close`. A
+  bullet with neither a test nor a logged deviation blocks the close.
+- **A list of sites a change must cover comes from a query recorded next to
+  it; when the defect is a primitive, the query becomes a guard.** `chat_lines`
+  documented that `bufnr(path)` matches file patterns, and was applied at one
+  of five call sites. One of the others force-deleted another prompt's
+  unsaved editor. `helper.buffer_for` now serves all five, and
+  `tests/arch/buffer_lookup_spec.lua` fails any new `vim.fn.bufnr(<name>)`.
+
+## 2026-09-19 (#261 M1 review round 2 — a fix created a Critical, and two families repeated)
+
+- **A new "did it happen?" result must be consumed by whoever tells the user
+  it happened.** Round 1 made `custom_prompts.set` refuse (return `false`) to
+  protect the user's file. The picker ignored the result, cleared `modified`,
+  and announced "System prompt saved", so the edit was wiped. Refusing without
+  telling the caller converted a raise into silent data loss. Rule: when you
+  add or change a function's success result, walk every caller up to the line
+  that reports success to the user in the same change. Enforce it for the
+  family: `sidecar_authority_spec` fails a sidecar write called as a bare
+  statement.
+
+- **Changing a shared seam's contract means listing each caller and what it
+  relied on.** Routing every JSON write through the rename-based writer
+  silently replaced symlinks, reset file modes, and left crash temp files with
+  no remover. Each was a guarantee the old `io.open("w")` gave for free. Rule:
+  when you swap a seam's implementation, write the old contract's incidental
+  guarantees next to the callers that rely on them, in the same change.
+
+- **A guard that claims a class selects members by the property that defines
+  the class, not by how one member is spelled.** The sidecar census searched
+  for the text `state_dir`, so `file_access.json`, which lives under
+  `stdpath('data')`, escaped it. It also raised on opening a chat when an entry
+  had the wrong type. The class is "files persisted in the profile and read
+  back"; select by where they live.
+
+- **Derive a success result from the last fallible step of the effect.** The
+  first "did it happen?" result checked `open` and `write` but not `close`,
+  where buffered writes actually fail, so a full disk reported success over a
+  truncated file. The repo already had a writer that checks every step
+  (`table_to_file_atomic`). Rule: before adding a success result, look for the
+  existing effect that already derives one, and delegate to it rather than
+  writing a second, weaker one.
+
+- **Bound diagnostics per user action, not per call site.** Fixing one warning
+  per *field* (round 1) left one warning per *call*, and the picker called
+  `load()` once per prompt. Rule: a file's diagnostics belong to its parse, and
+  a parse belongs to a user action, never to a loop iteration. Test the action
+  with the loop in it, and count its warnings.
+
+- **When you harden one reader of external input, grep for its siblings in the
+  same function.** The vault's state-file read was typed while the token
+  body, three lines below, was decoded raw. `tests/arch/json_decode_spec.lua`
+  now fails any unguarded decode.
+
+- **Generated `it(` cases iterate an ordered list, never a keyed table.**
+  `pairs` makes their order vary from run to run, and the family recurred in
+  the commit that fixed its first instance.
+
+## 2026-09-19 (#261 M1 review — three families, each swept as a class)
+
+- **A filter applied at read time is a view. If the same table is written
+  back, the filter becomes a deletion.** `custom_prompts.load()` dropped
+  malformed entries; `set`/`remove`/`rename` saved `load()`'s result, so a
+  user's hand-edited prompt disappeared on the next save. Rule: when a read
+  drops or normalizes data, decide per source whether the file is *authored*
+  (the writes must work on the file as written) or *derived* (a cache or
+  app-owned state, where rewriting the typed value is the recovery). Write that
+  decision next to the source's declaration, and test it:
+  `tests/helpers/sidecars.lua` `writes = "preserve" | "rewrite"`.
+
+- **A guard that lists files through the git index is blind to the file being
+  written.** `git grep` and `git ls-files` skip untracked files, and untracked
+  is the normal state of new code during the loop that adds it. The census
+  passed with a new reader present. Counterfactuals must also use a *new* file,
+  not an edit to a tracked one. Rule: file-set guards list through
+  `arch_helper.worktree_files`; `tests/unit/arch_helper_spec.lua` fails any arch
+  spec that lists another way.
+
+- **A diagnostic emitted per item over an unbounded collection is a storm.**
+  `conform` warned once per dropped field, over a cache that is never pruned: a
+  thousand bad leaves would have meant a thousand notifications, which is itself
+  a sidecar blocking work. Rule: a validator reports once per call, with a count
+  and a sample.
+
 ## 2026-09-17 (#266 M1 closed at review round 4)
 
 - **A rule about prose is enforced by a query, kept next to the rule.** Two doc
@@ -3172,3 +3448,115 @@ download.
   display: re-assert it on every clear and recreate, and test it in the composed
   session across the event that clears it. A test of the composer's strings
   cannot see this.
+- #261 M5 (census of literals): a guard that keys every literal a producer emits
+  must also cover how reasons are built. It has to catch reasons composed at run
+  time (`kind..' obsolete'`) and every call shape that carries a literal (the
+  owner-first `reject(owner, lit)`). Otherwise the literals it misses pass
+  quietly, and the user sees "unexpected". Two rules make the census complete:
+  - a reason that starts with a literal uses a keyable lead-in;
+  - a reason that starts with a variable is declared along with every value the
+    variable takes.
+  Test the census with one counterfactual per form.
+- #261 M5 (editor events are measured, not assumed): the plan said `:e!` was an
+  epoch change, but Neovim fires `on_detach` for it, the same as closing the
+  buffer, then BufUnload, BufReadPre and BufReadPost. Before a design keys on
+  which editor event a command produces, record that command's event sequence
+  in a test. Tell apart causes that share an event by what is true once the
+  command returns: whether the buffer is loaded again.
+- #261 M5 (test "once" where things combine): "exactly one message" held for
+  each producer on its own but failed where they combine. A batch leg and its
+  batch both spoke. The host's per-state-change `changed` callback spoke three
+  times on one Stop. Test a once-contract through the combined flow (a leg
+  inside a batch, a Stop, a reload), counting what the user actually receives.
+- #261 M5 review (assert the composed message whole): `A and B and nil or C` is
+  always `C` in Lua, so a suppression never ran and a provider diagnosis printed
+  twice. The test did not see it because it probed `find("HTTP 503")`, which
+  holds on either side of the bug. When a message is composed from parts (what +
+  detail + action + notice), assert the WHOLE string with equality. A probe can
+  only prove a part survived, never that the parts were assembled as intended.
+- #261 M5 review (a census keys on values, not syntax): the refusal guard scanned
+  producer call shapes and missed `issue(s, <lit>)`, its third hole of the same
+  kind. A guard that enumerates syntax is only as complete as the forms its
+  author happened to know. Invert it: record the VALUE where it reaches the
+  behaviour — `describe` now registers every token that arrives without words and
+  fails under the harness at the producing site — and keep the static scan only
+  as the early, authoring-time warning. The same inversion applies to a path
+  guard: check what a directory resolves to when it is written, not how it is
+  spelled in a spec.
+- #261 M5 review (an action must clear the condition it names): a paused batch
+  was told to run `:ParleyToolOperations`, which reconciles tool records and
+  cannot clear the `unknown` flag that blocks resume, so the advice could not
+  work. The unit test could not see it, because it only checked that the action
+  matched `:Parley%u`. For each refusal, ask what the named command changes; test
+  that a class of refusal names the command that actually unblocks it, and that
+  every command named exists.
+- #261 M5 review round 2 (a harness-only check belongs in the harness): the fix
+  for a missing census put the census inside a module the plan lists as PURE,
+  behind `$PARLEY_TEST_MODE`. That made it stateful, grew a table with no bound
+  and no removal in production (holding provider text), and threw where the
+  caller's `pcall` swallowed it. When a guard needs a value that only production
+  code sees, have production code REPORT it — return how it resolved, with no
+  state and no environment branch — and let the harness judge and fail. A test
+  hook compiled into production is a leak of the test into the product, and a
+  `pcall` between the check and the runner makes it silent anyway.
+- #261 M5 review round 2 (a harness flag that production reads is a behaviour
+  switch): `tests/minimal_init.vim` set `g:parley_test_mode`, and plenary's spec
+  children never loaded it, so `file_tracker`'s short-circuit on that flag was
+  dead under the suite. The moment children loaded the init, two specs failed —
+  they had been exercising the real persistence by accident. If production code
+  branches on a harness flag, the specs that depend on either branch set it
+  themselves; and know which processes actually load your init before relying on
+  what it sets.
+- #261 M5 review round 4 (put the invariant where the value is stored): three
+  rounds of fixing producers one at a time still left free text reaching users,
+  because "every producer passes a token" is only as true as the list of
+  producers you happened to enumerate. The fix that held was moving the check to
+  the single place the value is STORED — the runner's `issue` routes anything
+  `refusal.is_token` cannot resolve into the diagnosis — so every present and
+  future producer is covered by construction and no census has to be complete.
+  When an invariant keeps leaking, stop listing the sites and find the one
+  chokepoint every value passes through.
+- #261 M5 review round 4 (a guard that matches a literal misses the variable):
+  the channel guard grepped `logger.warning('...')`, so two live warnings whose
+  argument was a variable sat inside a file it already scanned — one of them
+  printing a traceback on the Stop path — while the test asserted the opposite.
+  Match the CALL and judge its argument, rather than matching only the shape of
+  the argument you expect.
+- #261 M5 review round 4 (identity is not the name): checking that a buffer
+  still held the captured file name looked like the right way to defend against
+  buffer-number reuse, but a parley chat renames its own file from its `- file:`
+  header while a response runs, so the check misfired on every reload. When you
+  need "is this still the same thing", pick a property the product does not
+  change on its own — here, that the buffer still holds a chat at all.
+- #261 close review (a phase that did not run is not a phase that passed): this
+  repo's `make test` runs unit then integration, and stops when the unit phase
+  fails. Twice I read "one flaky unit spec failed" as "the suite is green modulo
+  a flake", while the integration phase had never executed — and it held two
+  specs my own change had turned red. When a build has phases, confirm each one
+  produced a summary before claiming it passed; prefer running the phases
+  separately (`make test-unit`, `make test-integration`) when a change is broad.
+- #261 close review (a multi-return call is never another call's last argument):
+  `logger.warning(Refusal.describe(...))` sent describe's second return value
+  into the logger's `sensitive` parameter, which redacted the very message it was
+  meant to log. In Lua a call in the last argument position expands to all its
+  returns. Assign it first, or wrap it in parentheses — and if a guard blesses a
+  call form, bless the assigned form, never the bare call.
+- #261 close review (changing what a stored field may hold is a contract change):
+  routing free text out of `failure` was correct, but the sweep covered the
+  producers and not the readers, so two specs asserting the old contract went
+  red at HEAD. Enumerate the readers of a field as deliberately as its writers —
+  `grep` the field name across lua/ AND tests/ — and land the case that fails
+  when the new rule is removed, or a later round will call the fix unaddressed.
+- #261 close review (a gate that demotes a value must PLACE it): the by-value
+  gate wrote `notice = detail.notice or stray`, so when a caller already supplied
+  a notice the demoted reason vanished from the message and from the log — the
+  gate destroyed the only record of what it had rejected. Two facts competing for
+  one slot is the same shape as the earlier precedence bug where a cause lost to
+  a failure. When a mechanism demotes a value, define where the value GOES and
+  join it in a fixed order; never let it fall into an `or`.
+- #261 close review (a second per-key table restates the first): a per-kind floor
+  whose `what` was the prefix in clause form rendered "Response not started: the
+  response could not start", and the test only asserted a row EXISTED for each
+  prefix, so nothing caught the tautology or future drift. When adding a table
+  keyed by something an existing table already keys, carry only the fields the
+  first one lacks.

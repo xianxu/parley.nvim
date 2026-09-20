@@ -79,7 +79,17 @@ if [ "$mode" = full ]; then
     mkdir "$scratch/full"
     tar -xf "$scratch/candidate.tar" -C "$scratch/full"
     git -C "$scratch/full" init -q
-    git -C "$scratch/full" add .
+    # The archive is the tracked set, so index all of it: a plain `add .` filters
+    # through .gitignore and drops a tracked-but-ignored file
+    # (construct/generated/vocabulary/issue.json), which the nested --worktree
+    # snapshot then reads as deleted.
+    git -C "$scratch/full" add -f .
+    archived=$(tar -tf "$scratch/candidate.tar" | grep -vc '/$')
+    indexed=$(git -C "$scratch/full" ls-files | wc -l | tr -d ' ')
+    if [ "$archived" != "$indexed" ]; then
+        echo "fresh-clone: indexed $indexed of $archived archived files" >&2
+        exit 1
+    fi
     (cd "$scratch/full" && env -i PATH="$PATH" HOME="$scratch/home" \
         XDG_CONFIG_HOME="$scratch/config" XDG_DATA_HOME="$scratch/data" \
         XDG_STATE_HOME="$scratch/state" XDG_CACHE_HOME="$scratch/cache" \

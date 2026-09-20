@@ -203,7 +203,8 @@ describe('generation runner sequences',function()
         cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.drain(r,100)
         assert.equals('terminal',Runner.snapshot(r).phase)
         assert.equals('insert_failed',Runner.snapshot(r).outcome)
-        assert.truthy(Runner.snapshot(r).failure:find('adapter failed',1,true))
+        -- A Lua error is the diagnosis, not the token the words are keyed by (#261 M5).
+        assert.truthy(Runner.snapshot(r).diagnosis:find('adapter failed',1,true))
     end)
 
     it('binds context writes to private authority despite mutated context fields',function()
@@ -238,7 +239,7 @@ describe('generation runner sequences',function()
         local doc=document();local fake=Fake.new();fake.adapters.cancel_operation=function()error('cleanup failed')end
         local r=start(doc,fake,2);Runner.cancel(r);Runner.drain(r,100)
         assert.equals('stopping',Runner.snapshot(r).phase)
-        assert.matches('cleanup failed',Runner.snapshot(r).failure)
+        assert.matches('cleanup failed',Runner.snapshot(r).diagnosis)
         fake.preparations[1].callbacks.resolved();Runner.drain(r,100)
         assert.equals('terminal',Runner.snapshot(r).phase)
     end)

@@ -344,3 +344,63 @@ describe("vault", function()
         end)
     end)
 end)
+
+-- #261 M1 review BR-20: one schema types the copilot bearer at both boundaries
+-- it crosses. A token response whose expires_at is not a number keeps its token
+-- but drops that field, so the next request fetches again instead of raising on
+-- the comparison.
+describe("vault copilot bearer from the token endpoint", function()
+    local Process = require("tests.helpers.fake_process")
+    local vault, tasker, runtime, processes, dir
+    before_each(function()
+        package.loaded["parley.vault"] = nil
+        vault = require("parley.vault")
+        tasker = require("parley.tasker")
+        tasker._reset(); runtime, processes = Process.new(); tasker._uv = runtime
+        dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-vault-bearer-" .. string.format("%x", math.random(0, 0xFFFFFF))
+        vault.setup({ state_dir = dir })
+        vault.add_secret("copilot", "fixture-token")
+    end)
+    after_each(function()
+        tasker._reset(); tasker._uv = nil
+        vim.fn.delete(dir, "rf")
+    end)
+    local function answer(body)
+        local pid = next(processes.processes) and math.max(unpack(vim.tbl_keys(processes.processes)))
+        local process = processes.processes[pid]
+        process:emit("stdout", body)
+        process:finish(0)
+    end
+
+    -- #261 M4 W6: every failure path reports, so a request waiting on the
+    -- bearer (the copilot pre_query) is never left waiting.
+    it("V2: every failed refresh calls on_error, and never the success callback", function()
+        local errors, successes = {}, 0
+        local function refresh() vault.refresh_copilot_bearer(function() successes = successes + 1 end,
+            function(message) errors[#errors + 1] = message end) end
+        refresh()
+        local p = processes.processes[4242]; p:finish(22, 0)
+        assert.is_true(vim.wait(1000, function() return #errors == 1 end, 5), "a failed curl never reported")
+        refresh()
+        answer("<html>proxy error</html>")
+        assert.is_true(vim.wait(1000, function() return #errors == 2 end, 5), "an undecodable body never reported")
+        -- A vault with no copilot secret resolved returns early: it must report too.
+        package.loaded["parley.vault"] = nil
+        vault = require("parley.vault"); vault.setup({ state_dir = dir })
+        refresh()
+        assert.equals(3, #errors, "an unresolved secret never reported")
+        assert.equals(0, successes)
+    end)
+    it("V1: drops a non-numeric expires_at and fetches again on the next request", function()
+        local refreshed = 0
+        vault.refresh_copilot_bearer(function() refreshed = refreshed + 1 end)
+        assert.is_true(vim.wait(1000, function() return processes.spawn_calls == 1 end, 5))
+        answer('{"token":"t","expires_at":"soon"}')
+        assert.is_true(vim.wait(1000, function() return refreshed == 1 end, 5))
+        assert.same({ token = "t" }, vault._state.copilot_bearer)
+        local ok, err = pcall(vault.refresh_copilot_bearer, function() refreshed = refreshed + 1 end)
+        assert(ok, err)
+        assert.is_true(vim.wait(1000, function() return processes.spawn_calls == 2 end, 5),
+            "a bearer without a numeric expiry must be fetched again")
+    end)
+end)

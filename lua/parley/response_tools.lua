@@ -108,7 +108,7 @@ function M.new(doc,opts)
     if not s.producer then
         local reason
         s.producer,reason=require('parley.tools.producer').new({registry=opts.registry,
-            allowed_tools=opts.allowed_tools or {},root_policy=opts.root_policy,state_dir=opts.state_dir,
+            allowed_tools=opts.allowed_tools or {},root_policy=opts.root_policy,
             buf=opts.buf,chat_roots=opts.chat_roots,help_root=opts.help_root,
             page_limit=opts.page_limit,max_result_bytes=result_limit})
         assert(s.producer,reason)

@@ -45,6 +45,10 @@ transcript text ([tool use](../../atlas/providers/tool_use.md#loop-model)).
 Stop during tool activity: the round is written out in declared order, then the
 answer ends — what each call gets is listed once in
 [Stop during a tool round](../../atlas/providers/tool_use.md#stop-during-a-tool-round).
+Stop during a long tool: ask for `find /`, `:ParleyStop` while it runs, then submit
+again at once. The answer ends within about 2 s, `ps` shows no `find` left, and the
+new submission is admitted without waiting for the old process
+([Stopping a process](../../atlas/providers/tool_execution.md#stopping-a-process)).
 Reload during tool activity: already-started external effects may finish; late
 output cannot write into the reloaded chat. Inspect retained work with
 `:ParleyToolOperations`. An effect decision must not invent process or file
@@ -58,20 +62,16 @@ your newer buffer text must survive and the result should request reconciliation
 Cancel a skill while its tools are active, then inspect disk and buffer separately;
 unfinished I/O must not permit a new conflicting run or apply a late source refresh.
 
-## Batch and answer recovery
+## Batch
 
 1. Start `:ParleyChatRespondAll` through a chosen question. Insert a new question,
    move the cursor and switch windows. The original membership stays fixed.
 2. Edit or delete a remaining question. The batch pauses without repeating a
    completed answer or substituting a neighbor. Try normal resume and the explicit
    edit-adopting `:ParleyChatResumeBatch!` separately.
-3. Regenerate an existing answer, then stop midway. Use `:ParleyAnswerRecovery`
-   to inspect/export the original and `:ParleyAnswerRestore` to restore it.
-4. Edit the replacement before restoring; verify the preview and confirmation.
-   Edit again while a picker is open; stale selection must not overwrite it.
-5. Save while streaming, then save the completed replacement. Cleanup requires
-   the saved file to match the completed answer; an earlier partial save must
-   retain the original. Closing a buffer alone must not delete a needed copy.
+3. Regenerate an existing answer, edit it while it streams, then regenerate it
+   again — also after `:e!`, and after closing and reopening the chat. Each
+   regeneration starts; `u` walks back to the earlier answers (#261).
 
 ## Rendering and long chats
 

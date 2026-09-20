@@ -79,9 +79,7 @@ The stale note clears when a fresh response starts or the file is reloaded.
 
 These controls apply to concurrent work in one Neovim instance.
 
-[Question batches](atlas/chat/batch.md) keep a fixed selection, and
-[answer recovery](atlas/chat/recovery.md) preserves previous answers before
-regeneration.
+[Question batches](atlas/chat/batch.md) keep a fixed selection.
 
 ## Learn by chatting
 
@@ -112,13 +110,19 @@ been extensively redesigned. See [LICENSE](LICENSE).
 
 Builtin tools run asynchronously. Independent resources can proceed together;
 conflicting file operations wait for earlier work. Capabilities, roots and tool
-configuration are captured for the response. Custom tools need an `execute_async`
+configuration are captured for the response. A custom `execute_async` that
+starts a process through `context.tasker.run` passes `context.logical_generation`
+along, so the process is stopped with the response; a process with neither that
+nor a `deadline_ms` is refused. Custom tools need an `execute_async`
 implementation to run in this workflow; a synchronous handler alone is refused.
 
 Reload prevents further chat writes, and so does Stop once it has written out a
-tool round in progress, while the process supervisor keeps tools that are still
-running and their resource claims. A tool whose process has ended holds nothing,
-even when its outcome is unknown: it is reported to the model as a failure. `:ParleyToolOperations` shows
+tool round in progress. A stopped tool's process is ended — SIGTERM, then SIGKILL
+2 s later ([Stopping a
+process](atlas/providers/tool_execution.md#stopping-a-process)) — and the process
+supervisor holds its resource claims until it has ended. A tool whose process has
+ended holds nothing, even when its outcome is unknown: it is reported to the
+model as a failure. `:ParleyToolOperations` shows
 retained operations and their evidence. After independently inspecting an effect,
 you can record whether it happened, did not happen, or partially happened. This
 never reruns it or invents process/file cleanup; conflicting work remains blocked

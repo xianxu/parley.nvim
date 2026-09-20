@@ -88,7 +88,10 @@ function M.start(doc,ctx,done,opts)
         bytes='\n\n'..opts.user_prefix..'\n'}
     states[op]=s
     function op:cancel(resolved)return M.cancel(self,resolved)end
-    s.work=Deferred.new(function()return M.step(op).status=='more'end)
+    -- A step that throws settles the completion failed (#261 M4 W13): its owner,
+    -- the finalize effect, is waiting on `done`.
+    s.work=Deferred.new(function()return M.step(op).status=='more'end,
+        function(err)retire(s,'cancelled','completion step failed: '..tostring(err):sub(1,512))end)
     s.off=D.subscribe(doc,function(event)
         if event.kind=='reload' or event.kind=='detach'then retire(s,'cancelled',event.kind)end
     end)
