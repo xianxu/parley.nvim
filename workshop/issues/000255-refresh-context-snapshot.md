@@ -55,12 +55,25 @@ incomplete, use that exchange's previous completed answer when available.
 
 ## Plan
 
-- [ ] Design how context capture resolves a valid previous completed answer from
+- [x] Design how context capture resolves a valid previous completed answer from
   the exchange/recovery lifecycle without depending on transient line positions.
-- [ ] Add deterministic concurrent-refresh context tests and implement the
+  → #261 M2: a `prev_answer` slot on the document coordinator, keyed by the
+  exchange entity and held only while its generation owns a live grant, so no
+  line position is involved.
+- [x] Add deterministic concurrent-refresh context tests and implement the
   substitution at the shared request-context boundary.
-- [ ] Verify all request-context consumers, update documentation and traceability,
+  → `previous_answer.capture/substitute` (pure), applied where the request
+  captures its context. Tests: `chat_respond_spec` "(#255)" cases — before the
+  regeneration writes, while it streams, once it completes, when an edit revokes
+  it, a request captured mid-stream left unchanged, substitution at capture
+  rather than at build, and a typed raw request.
+- [x] Verify all request-context consumers, update documentation and traceability,
   and complete review.
+  → `document_previous_answer_spec` covers absent/invalid availability and every
+  identity change (no grant, stale epoch, revoked, deleted marker, reload,
+  detach) and that each exchange keeps its own slot; sub-chat ancestors read the
+  parent's live buffer. Mapped in `atlas/chat/transcript_truth.md`, routed in
+  `atlas/traceability.yaml`, reviewed across #261 M2's boundary rounds.
 
 ## Log
 
