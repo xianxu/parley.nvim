@@ -100,9 +100,12 @@ means here.
    documented rule is "run before a release and after any decoder change",
    and the release checklist (parley#206's docs rebuild is the nearest home)
    lists it.
-5. **No leaks.** Every spawned fake uses `PARLEY_FAKE_EXIT_WITH_PARENT=1` and
-   the suite-level sweep #220 adds; this issue does not ship until #220's
-   survivor count is enforced, or it multiplies the leak.
+5. **No leaks.** Satisfied by construction since #220: a fake that binds a port
+   inherits parent-death exit from `LoopbackHTTPServer`, so there is no flag for
+   a new fake to set or forget, and `tests/arch/fixture_lifecycle_spec.lua`
+   fails any fixture that reaches the watchdog by neither route. This issue
+   still does not ship until #220's survivor count is enforced, or it
+   multiplies the leak.
 
 Out of scope: the record-side oracle (`scripts/parley_harness.lua` builds
 payloads offline and is separately tested); Google Drive (`google_drive.lua`

@@ -31,8 +31,7 @@ end
 local spawned, servers = {}, {}
 
 local function spawn_fake(args, env)
-    local handle, _, err = fixture_process.spawn(FAKE, args,
-        vim.tbl_extend("force", { PARLEY_FAKE_EXIT_WITH_PARENT = "1" }, env or {}))
+    local handle, _, err = fixture_process.spawn(FAKE, args, env or {})
     assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
     spawned[#spawned + 1] = handle
     return handle

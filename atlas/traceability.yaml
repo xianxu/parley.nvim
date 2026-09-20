@@ -610,6 +610,8 @@ atlas:
       - tests/helpers/fixture_process.lua
       - tests/helpers/exit_with_parent.lua
       - tests/fixtures/fake_sse_server
+      - tests/fixtures/fake_sips
+      - tests/fixtures/loopback_http.py
       - tests/fixtures/fixture_watchdog.py
       - tests/fixtures/orphan_me.sh
       - tests/perf/chat_typing.lua
