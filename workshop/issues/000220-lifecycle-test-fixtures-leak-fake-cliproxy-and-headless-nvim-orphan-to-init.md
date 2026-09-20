@@ -95,7 +95,7 @@ through, plus one `ps`-based census that fails the suite).
       direct call to the two fixtures that block WITHOUT binding
       (`fake_cliproxy`'s `run_login`, `fake_sips` slow mode); drop the opt-in
       `PARLEY_FAKE_EXIT_WITH_PARENT` flag everywhere it is named.
-- [ ] M1 — one registry in `tests.helpers.fixture_process` (register on spawn,
+- [x] M1 — one registry in `tests.helpers.fixture_process` (register on spawn,
       prune on exit, `mark()`/`reap({since})` so a file-scope server survives a
       per-case reap, `VimLeavePre` backstop); collapse the eight spec-local
       copies onto it, the real-binary conformance spawn included (#237 BR-5).
@@ -416,3 +416,41 @@ mind, or excluded from the calibration fit.
 
 **Next:** Task 3 (the `fixture_process` registry + the eight-spec sweep), then
 Task 4 (the census), then M1 close.
+
+### 2026-09-19 — M1 item 3: one registry, eight specs collapsed onto it
+
+`tests.helpers.fixture_process` now registers every process it starts, prunes it
+on exit, reaps at `VimLeavePre`, and exposes `mark()` / `reap({since, signal})`.
+`grep -rn 'uv\.spawn(' tests/` outside the seam returns **nothing**; the seam
+holds exactly one, which is the floor the arch guard will assert against.
+
+**`mark()` earned its place immediately.** `cliproxy_update_spec:14` and
+`cliproxy_download_spec:11` each start a release server at FILE scope and point
+every case at its url — a blanket `reap()` in `after_each` kills it and breaks
+every case after the first, which is exactly why update_spec's hand-rolled reap
+deliberately spared it. Sequence numbers rather than indices, because a process
+that exits on its own is pruned and would shift them.
+
+Converted: `cliproxy_lifecycle` (4 sites), `cliproxy_catalog` (6),
+`cliproxy_dispatch`, `cliproxy_caller_teardown`, `cliproxy_recovery_e2e`,
+`cliproxy_auth_login`, `openai_tool_loop`, `cliproxy_conformance` (1 each), plus
+`cliproxy_update`'s three private lists collapsed to one marked reap.
+
+Three things fell out that were not in the plan:
+
+- **The seam MERGES env; three specs were replacing it.** `openai_tool_loop` and
+  `cliproxy_recovery_e2e` were re-adding `PATH` (and `HOME`) by hand to survive
+  `uv.spawn`'s replace semantics. Through the seam those lines are gone — the
+  bug the seam's keyed-map fold exists to prevent.
+- **`cliproxy_conformance_spec` spawns the REAL cliproxyapi**, which can carry no
+  watchdog, so the registry is the only layer that can ever collect it. It had a
+  normal `after_each` and nothing for the killed-run case; now it has the
+  `VimLeavePre` backstop, with SIGTERM preserved for the graceful shutdown.
+- **`fake_releases.start`'s per-server `VimLeavePre` autocmd is gone** — the
+  registry owns that now, and one autocmd per started server was its own small
+  accumulation.
+
+Verified: 17 specs (derived by grep over the changed fixtures, not typed) all
+pass; `make lint` 0 warnings. The only red is
+`fixture_reaping_spec`'s live-`ps` conformance case, whose script is M1's last
+item.
