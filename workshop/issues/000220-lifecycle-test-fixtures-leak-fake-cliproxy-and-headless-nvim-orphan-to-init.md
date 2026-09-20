@@ -157,7 +157,12 @@ AI-autonomous implementation, which compresses. Three items here do not: a full
 wall-clock-bound on a suite whose defining property is that its runs are long —
 and this issue exists because they also get interrupted. They are grossed up
 inside `smaller-go-module` (the `×2` above the three primitive instances) so
-that the ×0.4 that follows returns them to roughly their real wall-clock.
+that the ×0.4 that follows returns them to roughly their real wall-clock. The same
+argument applies to `milestone-review`: post-#118 `sdlc actual` counts subagent
+execution spans as elapsed, so a fresh-context boundary review over this diff is
+measured wall-clock by exactly the same logic — #237's log records four such
+reviews, long enough that their own agents were leaking orphans. Withholding the
+gross-up there while applying it to `make test` was inconsistent.
 
 **Sanity check, against the analogue's ACTUAL.** `#237` — same subsystem, same
 harness, thorough plan, and the issue that *built* `fixture_watchdog.py` —
