@@ -82,11 +82,29 @@ inference from the counts rather than something measured.
 
 ## Plan
 
-- [ ] Reproduce: run the lifecycle tests, count survivors with `ps`, then
-      interrupt a run mid-way and count again.
-- [ ] Reap in teardown; add the suite-level sweep for the interrupted case.
-- [ ] Add the exit-time survivor count as a test failure.
-- [ ] Document the `ps`-based cleanup and the `pgrep` caveat.
+Durable design: `workshop/plans/000220-reap-test-fixture-processes-plan.md`
+(three reaping layers, each at the chokepoint its class of process passes
+through, plus one `ps`-based census that fails the suite).
+
+- [ ] The shared orphan rule in both watchdogs — `ppid == 1` OR a changed
+      parent — and a Lua twin of `fixture_watchdog.py` installed from
+      `tests/minimal_init.vim`, which every harness Neovim loads.
+- [ ] Move the watchdog into `LoopbackHTTPServer.__init__`, so every fixture
+      that binds a port exits with its parent by construction; drop the opt-in
+      `PARLEY_FAKE_EXIT_WITH_PARENT` flag.
+- [ ] One registry in `tests.helpers.fixture_process` (register on spawn, reap
+      at `VimLeavePre`); collapse the seven spec-local copies onto it (#237
+      BR-5).
+- [ ] `scripts/reap-test-orphans.py`: a `ps`-based census of this checkout's
+      surviving test processes, with a pure selector tested against a recorded
+      process table.
+- [ ] Wire it into `Makefile.parley`: `--phase before` in `PREP_TEST_ENV`,
+      `--phase after` failing every test target.
+- [ ] `tests/arch/fixture_lifecycle_spec.lua`: guard the three invariants so a
+      new fixture or spec inherits the reaping instead of remembering it.
+- [ ] Document the `ps`-based cleanup and the `pgrep` caveat in TOOLING.md; the
+      three layers in `atlas/infra/test_harness.md`; two rules in
+      `workshop/lessons.md`.
 
 ## Log
 
