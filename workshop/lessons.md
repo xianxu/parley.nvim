@@ -3547,3 +3547,16 @@ download.
   red at HEAD. Enumerate the readers of a field as deliberately as its writers —
   `grep` the field name across lua/ AND tests/ — and land the case that fails
   when the new rule is removed, or a later round will call the fix unaddressed.
+- #261 close review (a gate that demotes a value must PLACE it): the by-value
+  gate wrote `notice = detail.notice or stray`, so when a caller already supplied
+  a notice the demoted reason vanished from the message and from the log — the
+  gate destroyed the only record of what it had rejected. Two facts competing for
+  one slot is the same shape as the earlier precedence bug where a cause lost to
+  a failure. When a mechanism demotes a value, define where the value GOES and
+  join it in a fixed order; never let it fall into an `or`.
+- #261 close review (a second per-key table restates the first): a per-kind floor
+  whose `what` was the prefix in clause form rendered "Response not started: the
+  response could not start", and the test only asserted a row EXISTED for each
+  prefix, so nothing caught the tautology or future drift. When adding a table
+  keyed by something an existing table already keys, carry only the fields the
+  first one lacks.

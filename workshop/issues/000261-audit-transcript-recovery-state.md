@@ -1,14 +1,15 @@
 ---
 id: 000261
-status: working
+status: codecomplete
 deps: [parley#266]
 github_issue:
 target: transcript-is-the-whole-truth
 created: 2026-09-15
-updated: 2026-09-17
+updated: 2026-09-19
 estimate_hours: 30.07
 started: 2026-09-17T08:07:29-07:00
 flow: {kind: full, provenance: inferred}
+actual_hours: 16.31
 ---
 
 # Audit transcript as the complete recovery state
@@ -537,6 +538,7 @@ enumerations and the queries that produce them.
   This is recorded on #267 as the same family. It is not M1's.
 
 ### 2026-09-19 — M1 boundary review, round 1: FIX-THEN-SHIP, and how each finding was disposed
+- 2026-09-19: closed — The transcript is the whole truth (M1-M5: the on-disk store deleted; #255 folded; process groups with TERM->KILL through the scope and live kernel conformance; every wait a generation holds settles, pinned over Stop/edit/:e!/:bd, 5x and 17x; every refusal in one vocabulary, one channel, one wording, a users own Stop silent). atlas/chat/transcript_truth.md holds the restart invariant and the inventory of every state that can refuse a submission or hold a generation, with what releases it and the spec that pins it. Close rounds 1-2 fixed: two specs read the superseded `failure` contract and were red at HEAD; logger.warning(describe(...)) leaked the second return into `sensitive`; the Core-concepts guard selected rows by shape; and the by-value gate moved to where the value is READ, so every seam inherits it and refusal.KIND gives each kind an action instead of "unexpected (...)". Verification per phase: make test-unit and make test-integration clean apart from #267 members that pass alone; 0 assertion failures, 0 wordless refusals; make lint 0 warnings/644 files; check-fresh-clone green.; review verdict: FIX-THEN-SHIP
 - 2026-09-19: closed M5 — M5 + review rounds 1-3. A token and free text no longer share one field: `failure` is always a token the vocabulary keys, free text is the notice or the runner diagnosis, and producers that carried free text emit a ": " lead-in (request build / remote content / tool setup / provider request / bearer token / query setup). refusal.LIFECYCLE owns a closed or reloaded chat for every kind; the host detach->reload rule is one helper. The harness (tests/minimal_init.vim, loaded by every spec child) watches what describe resolves and fails the producing spec; across the suite it found five more real cases, including a Lua traceback on tool setup. Guards: outcome set checked at load against generation.OUTCOMES; user-edit statuses derived from their producer files; NOT_REFUSAL disjoint and free of dead entries; notices in the submit path must come from refuse(). Batch pause cause lives in the batch machine. chat_refusal_spec 17/17 whole-message equality; refusal_spec 15/15; refusal_vocabulary_spec 6/6. make test JOBS=4: only response_tools_spec (#267, dies on a clean HEAD too), 0 assertion failures, 0 wordless refusals; make lint 0 warnings/644 files.; review verdict: FIX-THEN-SHIP
 - 2026-09-19: closed M4 — make test JOBS=4 unit stage 213/214 (document_semantic_spec passes 20/20 alone x2); make test-integration JOBS=4 168/169 (document_fold_uncertainty_retirement passes alone x2) - #267 family. make lint clean. Round 3: BR-48 W15 terminal-site test (red with only that site reverted); BR-61 dispatcher pre_query doc + recovery claim contract updated, guard that every pre_query takes on_error; topic cancel_through helper (throw / refused cancel / stop-then-throw), tests red on old code; tasker plan row; per-row seam ledger recorded in plan.; review verdict: FIX-THEN-SHIP
 - 2026-09-19: closed M3 — make test JOBS=4: 381 files PASS, exit 0. make lint clean (637 files). Counterfactuals all red on revert: main detach key (3 live conformance cases), group target (8/12 sequence tests), kill code (content fetch), old oauth render, response_provider exit branch, topic merge, pid-0 guard, held deadline timer. Round 2: BR-45 failure.exit rendered once at the dispatcher + value-anchored guard; BR-46 derived spawn classification (sync/bounded/delegated/open) with per-class counts, helper and wrapper bounds checked; 3 untested Minors now tested.; review verdict: FIX-THEN-SHIP

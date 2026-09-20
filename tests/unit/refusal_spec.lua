@@ -3,7 +3,7 @@ local R = require("parley.refusal")
 -- This spec describes tokens that have no words on purpose; the harness watch
 -- in tests/minimal_init.vim fails any other spec that produces one.
 vim.g.parley_expected_unkeyed = { "never heard of it", "provider request failed (HTTP 503)",
-    "preparation outside captured output", "brand new reason" }
+    "preparation outside captured output", "brand new reason", "a reason nobody worded" }
 
 describe("refusal vocabulary", function()
     local ACTION = { "^:Parley%u", "submit again", "try again in a moment", "wait for", "edit" }
@@ -84,16 +84,31 @@ describe("refusal vocabulary", function()
     end)
     -- BR-92: a reason nobody worded still leaves the user an action. It becomes
     -- the detail beside the KIND's words, and the caller hears "unkeyed".
-    it("gives an unworded reason the kind's words, and keeps it as the detail", function()
+    it("gives an unworded reason an action, and keeps it as the detail", function()
         local message, resolution = R.describe("start", nil, "preparation outside captured output")
-        assert.equals("Response not started: the response could not start; submit again"
-            .. " — preparation outside captured output", message)
+        -- The prefix already says what happened, so the floor adds only the
+        -- action (#261 close: BR-97).
+        assert.equals("Response not started: submit again — preparation outside captured output", message)
         assert.equals("unkeyed", resolution)
-        -- Every kind has that floor, so no prefix can reach a user bare.
+        -- Every kind has that floor, so no prefix can reach a user without one.
         for kind in pairs(R.PREFIX) do
-            assert.is_not_nil(R.KIND[kind], kind)
+            assert.is_not_nil(R.KIND_ACTION[kind], kind)
             assert.truthy(R.describe(kind, nil, "brand new reason"):find("brand new reason", 1, true))
         end
+    end)
+    -- BR-96: the gate PLACES what it demotes. A caller's notice does not
+    -- swallow the reason, and a row's own detail is dropped instead of doubling.
+    it("keeps both details when a caller's notice meets a demoted reason", function()
+        assert.equals("Batch paused: :ParleyChatResumeBatch to continue"
+            .. " — 1 of 3 questions answered — a reason nobody worded",
+            R.describe("batch_paused", nil, "a reason nobody worded",
+                { action = R.BATCH_CONTINUE, notice = "1 of 3 questions answered" }))
+        -- A KEYED token's own detail still yields to the notice: one detail, as
+        -- BR-65 requires. Only a demoted reason is joined, because dropping it
+        -- would lose the only record of what happened.
+        assert.equals("Response stopped: the model's request failed; submit again — upstream gone",
+            R.describe("ended", "provider_failed", "provider request failed: HTTP 503",
+                { notice = "upstream gone" }))
     end)
     -- Provider prose keeps its last line, which often carries the action;
     -- `brief` drops a traceback on purpose, so the two are separate entry points.

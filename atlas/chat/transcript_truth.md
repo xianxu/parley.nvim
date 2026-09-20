@@ -86,11 +86,12 @@ words that name what to do. The words live in
 message and says how it resolved, and the caller logs it.
 
 What keeps a reason from reaching a user as a bare token is the code, not a
-test: `describe` gates its `failure` **by value**. A reason it cannot resolve
-becomes the detail beside the words of that refusal's kind, so every refusal
-still names an action, and the caller is told the reason was unworded. The
-runner gates the same way where it STORES a failure, which keeps that field
-honest for the specs that read it.
+test: `describe` gates its `failure` **by value**. A reason it cannot resolve is
+placed as a detail — joined after whatever detail the caller already supplied,
+never in competition with it — and the prefix and the kind's action carry the
+message, so every refusal still names something to do. The caller is told the
+reason was unworded. The runner gates the same way where it STORES a failure,
+which keeps that field honest for the specs that read it.
 
 Two nets then find the gaps for a developer, and neither is the guarantee:
 

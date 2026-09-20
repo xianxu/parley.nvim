@@ -70,7 +70,7 @@ must *not* be. So:
 | `previous_answer` — `capture`, `substitute` | `lua/parley/previous_answer.lua` | new |
 | `attempt` — `open_stop_window`: TERM, then the escalate effect at +2 s, for a stop whose cause is stop, deadline or leave; `kill_cause` | `lua/parley/attempt.lua` | modified |
 | `refusal` — `describe` (returns the message and how it resolved), `TOKENS`, `INTERNAL`, `LIFECYCLE` (a closed or reloaded chat, for every kind), `PREFIX`, `REVOKED` (words by revocation cause), `USER_STOP`, `BATCH_CONTINUE`, `BATCH_RESTART` | `lua/parley/refusal.lua` | new |
-| `is_token`, `brief`, `prose`, `KIND` — what the vocabulary can resolve; the first line of a Lua error; free text folded onto one line; and the words a refusal of each kind falls back to, so an unworded reason still names an action | `lua/parley/refusal.lua` | new |
+| `is_token`, `brief`, `prose`, `KIND_ACTION` — what the vocabulary can resolve; the first line of a Lua error; free text folded onto one line; and what a refusal of each kind tells the user to do when its reason has no row, so an unworded one still names an action | `lua/parley/refusal.lua` | new |
 | `OUTCOMES` — the set a generation can stop with, asserted in `stop` and checked for words at load | `lua/parley/generation.lua` | modified |
 | `cancel` — a batch cancel carries its cause (`user`, `lifecycle`, `fault`), validated in the transition and read off the snapshot | `lua/parley/batch.lua` | modified |
 
@@ -2757,7 +2757,7 @@ Four findings. The verdict improved to FIX-THEN-SHIP; two were blocking.
   "unexpected (…)" with no action, which this issue's Done-when forbids.
   - The gate now lives where the value is **read**, in `describe`, so every seam
     inherits it rather than each one repeating it. A reason the vocabulary cannot
-    resolve becomes the detail, and the words come from `refusal.KIND` — the
+    resolve becomes the detail, and the action comes from `refusal.KIND_ACTION` — the
     floor for each kind, so no refusal can reach a user without an action.
   - `describe` still returns `unkeyed` for it, so the harness watch keeps telling
     the developer. The runner's store-level gate stays (it keeps the snapshot's
@@ -2778,4 +2778,31 @@ Four findings. The verdict improved to FIX-THEN-SHIP; two were blocking.
   fix is at the selection, not in one test: `repo_files` fails when its pattern
   matches no file, so every corpus guard in the file inherits the check, and the
   two row-based selections count their own rows.
+
+### 2026-09-19 — closed (close review round 3, FIX-THEN-SHIP): 16.31 h against a 30.07 h estimate
+
+No blocking findings. The three Minors are fixed in the close commit, each with
+a counterfactual.
+
+- **A gate that demotes a value must PLACE it.** `notice = detail.notice or stray`
+  meant a caller's notice swallowed the demoted reason — gone from the message
+  and from the log line `refuse` writes, leaving only the kind's floor. The same
+  shape as BR-68, where a cause lost to a failure. Details are joined in a
+  defined order now, and the one-detail suppression runs off the joined value.
+  Red without it: "keeps both details when a caller's notice meets a demoted
+  reason".
+- **One fact, one wording.** Every `KIND.what` restated its `PREFIX` in clause
+  form ("Response not started: the response could not start"), and the test only
+  asserted a row existed per prefix, so neither the tautology nor future drift
+  was caught. `KIND_ACTION` carries only the action.
+- **Each changed routing gets its own counterfactual — including the fix
+  round's.** Reverting `prose` to `brief` reddened nothing, so a case now drives
+  a provider's multi-line message (its remedy on the last line) through `issue`
+  into the words a user reads. Red without it.
+
+**Estimate vs actual.** 30.07 estimated, 16.31 measured (1.8×, trusted window).
+The estimate's own note said to read the total as a floor because every task is
+strict TDD with counterfactuals; the review tail is where that floor was wrong —
+it budgeted eleven review rounds at 0.2 h, and the boundary gates ran 23 rounds
+across the issue, but each round cost far less than a fresh design would have.
 

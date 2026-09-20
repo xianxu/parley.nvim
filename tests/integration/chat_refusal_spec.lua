@@ -261,6 +261,21 @@ describe("refusals reach the user once, in words", function()
             .. " — cliproxy: proxy did not become healthy within 30s")
     end)
 
+    -- A provider's prose can span lines, and the last often carries the remedy.
+    -- Red when `issue` routes the diagnosis through `brief`, which keeps only
+    -- the first line (#261 close: BR-98).
+    it("keeps every line of a provider's prose in the words the user reads", function()
+        capture(function()
+            cursor("💬: first"); local session = assert(Respond.respond({ range = 0 }))
+            wait(function() return #calls == 1 end)
+            calls[1].running = false
+            calls[1].abort("cliproxy: proxy did not become healthy within 30s\n  try :ParleyProxy status")
+            terminal(session)
+        end)
+        one("Response stopped: the model's request failed; submit again"
+            .. " — cliproxy: proxy did not become healthy within 30s try :ParleyProxy status")
+    end)
+
     it("says an overflow stopped the response, without its token", function()
         capture(function()
             cursor("💬: first"); local session = assert(Respond.respond({ range = 0 }))

@@ -1793,6 +1793,112 @@ rounds:
           round: 23
       recipe: milestone-review
       blocked: true
+    - "n": 24
+      timestamp: "2026-09-19T17:25:10-07:00"
+      agent: claude
+      dispose:
+        - id: BR-34
+          disposition: not-addressed
+          note: No helper.canonical_path in lua/; helper.lua:698 and nine other sites still hand-roll resolve(fnamemodify(x,':p')); neither close-round commit touches it.
+          round: 24
+        - id: BR-84
+          disposition: addressed
+          note: Zero hand-written first-line variants remain in lua/ (only refusal.lua:291); removing brief's `or "unknown"` in a scratch copy of f636d241 reddens refusal_spec.lua:100 (measured).
+          round: 24
+        - id: BR-85
+          disposition: not-addressed
+          note: 'init.lua is in neither close-round commit; :ParleyChatPrune still renders "Response not started: the chat has no header; … — Prune", and no test covers the four commands.'
+          round: 24
+        - id: BR-86
+          disposition: not-addressed
+          note: The guard at chat_respond.lua:53-58 stands, but there is still no :bd / buffer-reuse case in chat_refusal_spec and no _lifecycle_cause seam to reach it directly; nothing in this round touches it.
+          round: 24
+        - id: BR-92
+          disposition: addressed
+          note: Gate moved to the read point (refusal.lua:325-327) plus the M.KIND floor; reverting those two lines in a scratch copy of f636d241 reddens refusal_spec.lua:87 (measured), and generation_runner.lua:159-163's "can never" comment is corrected.
+          round: 24
+        - id: BR-93
+          disposition: addressed
+          note: atlas/chat/transcript_truth.md:87-101 and workshop/targets/transcript-is-the-whole-truth.md:271-277 now name the by-value gate as the guarantee; a grep of atlas/, workshop/targets/, README.md and docs/ finds no third consumer still enumerating the two nets.
+          round: 24
+        - id: BR-94
+          disposition: addressed
+          note: repo_files itself now fails on an empty corpus (single_source_sweeps_spec.lua:21), so every guard in the file inherits it; the two narrowed selections count rows (:349) and seams (:436), and the routed-spec guard already used `pending`.
+          round: 24
+        - id: BR-95
+          disposition: addressed
+          note: prose() added with its own doc and bound; brief()'s doc is scoped to Lua errors and all five remaining callers are pcall errors; the dead :sub(1,4096) is gone from the diagnosis branch. The missing counterfactual for the routing is raised separately.
+          round: 24
+      findings:
+        - id: BR-96
+          severity: Minor
+          title: describe's new `stray` loses to detail.notice, so the by-value gate drops the very reason it demoted
+          detail: |-
+            This is the 2nd finding in family `fallback-order-hides-known-cause`. Do NOT
+            fix the one line — state the rule. BR-68 was the same shape: a precedence
+            test inside `describe` (`failure == nil` gating REVOKED) silently discarded
+            the more specific fact. refusal.lua:327 repeats it: `notice = detail.notice
+            or stray`, so when a caller already supplies a notice the unworded reason
+            is dropped from the message AND from the log line `refuse` writes, and the
+            user is left with only the KIND floor. chat_respond.lua:2097 is the live
+            selector — `answered(state)` (chat_respond.lua:2062) is unconditional, so
+            every `batch_paused` refusal carries a notice; today every batch reason is
+            keyed, which makes it latent, but a by-value gate exists precisely because
+            that enumeration is not trusted. The mirror symptom sits at refusal.lua:364,
+            which suppresses a row's `extra` on `detail.notice` only, so a stray notice
+            yields the two details BR-65 forbade. The atlas states the demotion
+            unconditionally (atlas/chat/transcript_truth.md:88-90) and the target at
+            :271-274 does too, so the docs are wrong on this path as well. The rule: a
+            gate that demotes a value must PLACE it, never compete with an existing
+            field for one slot — when two details arrive, join them in a defined order
+            and run the `extra`-suppression off the joined value, not off `detail.notice`.
+          family: fallback-order-hides-known-cause
+          round: 24
+        - id: BR-97
+          severity: Minor
+          title: All eleven M.KIND `what` strings restate M.PREFIX, so every floor message is a tautology
+          detail: |-
+            This is the 7th finding in family `canonical-form-not-shared`. Do NOT reword
+            the eleven rows. refusal.lua:226-238 adds a second hand-maintained table
+            whose `what` field is refusal.lua:12-24's `prefix` in clause form for every
+            single key — start/"the response could not start", ended/"the response
+            stopped", attachments/"the images were not sent", and eight more. The
+            rendered result is "Response not started: the response could not start;
+            submit again — <reason>", which says the same thing twice before it says
+            anything useful. The only information KIND adds is `action`. The test at
+            tests/unit/refusal_spec.lua:88-92 asserts a KIND row EXISTS for each PREFIX
+            key but never that the two differ, so nothing catches the restatement or a
+            future drift between them. The rule: one fact, one wording — a per-kind
+            table carries only what the existing per-kind table does not. Fold KIND into
+            PREFIX as `{prefix = …, action = …}` (or keep it as KIND_ACTION) and render
+            `prefix .. ": " .. (detail.action or action)`, which also removes the
+            two-tables-to-keep-in-sync obligation the presence-only test cannot enforce.
+          family: canonical-form-not-shared
+          round: 24
+        - id: BR-98
+          severity: Minor
+          title: The brief-to-prose routing at generation_runner.lua:168 reddens nothing when reverted
+          detail: |-
+            This is the 7th finding in family `behavior-change-without-regression-test`.
+            Do NOT just add one case here. Measured in a scratch copy of f636d241:
+            restoring `s.diagnosis=Refusal.brief(reason):sub(1,4096)` leaves
+            chat_refusal_spec, generation_settles_spec, cliproxy_caller_teardown_spec,
+            response_session_spec and refusal_spec all GREEN. prose() and brief() are
+            unit-tested at refusal.lua's door (refusal_spec.lua:100-105), but no test
+            drives a multi-line value through `issue` into a user-visible message, so
+            the behavior the change exists for is unpinned. This is the same LINE that
+            BR-88 was raised about one round earlier, for the same reason — which is the
+            point: the rule is not "each finding gets a counterfactual", it is "each
+            CHANGED ROUTING gets one, including the ones the fix round introduces".
+            Apply it as a checklist step on the fix commit itself: for every line of the
+            round's own diff that changes where a value goes, revert it and name the
+            spec that reddens, or add one. (Note also that BR-95's cited example was
+            wrong: every branch of cliproxy_auth.diagnosis at cliproxy_auth.lua:271-300
+            returns a single line, so the live multi-line case is a provider body.)
+          family: behavior-change-without-regression-test
+          round: 24
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#261 (boundary-review)
@@ -2769,13 +2875,79 @@ file-scoped vim.g.parley_expected_unkeyed in refusal_spec.lua:5, with nothing to
   doc-comment and the bound move with them — or the helper gets a second entry
   point for the wider case.
 
+## Round 24 — 2026-09-19T17:25:10-07:00 (claude) — passed
+
+### Disposed
+
+- BR-34 — not-addressed — No helper.canonical_path in lua/; helper.lua:698 and nine other sites still hand-roll resolve(fnamemodify(x,':p')); neither close-round commit touches it.
+- BR-84 — addressed — Zero hand-written first-line variants remain in lua/ (only refusal.lua:291); removing brief's `or "unknown"` in a scratch copy of f636d241 reddens refusal_spec.lua:100 (measured).
+- BR-85 — not-addressed — init.lua is in neither close-round commit; :ParleyChatPrune still renders "Response not started: the chat has no header; … — Prune", and no test covers the four commands.
+- BR-86 — not-addressed — The guard at chat_respond.lua:53-58 stands, but there is still no :bd / buffer-reuse case in chat_refusal_spec and no _lifecycle_cause seam to reach it directly; nothing in this round touches it.
+- BR-92 — addressed — Gate moved to the read point (refusal.lua:325-327) plus the M.KIND floor; reverting those two lines in a scratch copy of f636d241 reddens refusal_spec.lua:87 (measured), and generation_runner.lua:159-163's "can never" comment is corrected.
+- BR-93 — addressed — atlas/chat/transcript_truth.md:87-101 and workshop/targets/transcript-is-the-whole-truth.md:271-277 now name the by-value gate as the guarantee; a grep of atlas/, workshop/targets/, README.md and docs/ finds no third consumer still enumerating the two nets.
+- BR-94 — addressed — repo_files itself now fails on an empty corpus (single_source_sweeps_spec.lua:21), so every guard in the file inherits it; the two narrowed selections count rows (:349) and seams (:436), and the routed-spec guard already used `pending`.
+- BR-95 — addressed — prose() added with its own doc and bound; brief()'s doc is scoped to Lua errors and all five remaining callers are pcall errors; the dead :sub(1,4096) is gone from the diagnosis branch. The missing counterfactual for the routing is raised separately.
+
+### Raised
+
+- **BR-96** [Minor] `fallback-order-hides-known-cause` describe's new `stray` loses to detail.notice, so the by-value gate drops the very reason it demoted
+  This is the 2nd finding in family `fallback-order-hides-known-cause`. Do NOT
+  fix the one line — state the rule. BR-68 was the same shape: a precedence
+  test inside `describe` (`failure == nil` gating REVOKED) silently discarded
+  the more specific fact. refusal.lua:327 repeats it: `notice = detail.notice
+  or stray`, so when a caller already supplies a notice the unworded reason
+  is dropped from the message AND from the log line `refuse` writes, and the
+  user is left with only the KIND floor. chat_respond.lua:2097 is the live
+  selector — `answered(state)` (chat_respond.lua:2062) is unconditional, so
+  every `batch_paused` refusal carries a notice; today every batch reason is
+  keyed, which makes it latent, but a by-value gate exists precisely because
+  that enumeration is not trusted. The mirror symptom sits at refusal.lua:364,
+  which suppresses a row's `extra` on `detail.notice` only, so a stray notice
+  yields the two details BR-65 forbade. The atlas states the demotion
+  unconditionally (atlas/chat/transcript_truth.md:88-90) and the target at
+  :271-274 does too, so the docs are wrong on this path as well. The rule: a
+  gate that demotes a value must PLACE it, never compete with an existing
+  field for one slot — when two details arrive, join them in a defined order
+  and run the `extra`-suppression off the joined value, not off `detail.notice`.
+- **BR-97** [Minor] `canonical-form-not-shared` All eleven M.KIND `what` strings restate M.PREFIX, so every floor message is a tautology
+  This is the 7th finding in family `canonical-form-not-shared`. Do NOT reword
+  the eleven rows. refusal.lua:226-238 adds a second hand-maintained table
+  whose `what` field is refusal.lua:12-24's `prefix` in clause form for every
+  single key — start/"the response could not start", ended/"the response
+  stopped", attachments/"the images were not sent", and eight more. The
+  rendered result is "Response not started: the response could not start;
+  submit again — <reason>", which says the same thing twice before it says
+  anything useful. The only information KIND adds is `action`. The test at
+  tests/unit/refusal_spec.lua:88-92 asserts a KIND row EXISTS for each PREFIX
+  key but never that the two differ, so nothing catches the restatement or a
+  future drift between them. The rule: one fact, one wording — a per-kind
+  table carries only what the existing per-kind table does not. Fold KIND into
+  PREFIX as `{prefix = …, action = …}` (or keep it as KIND_ACTION) and render
+  `prefix .. ": " .. (detail.action or action)`, which also removes the
+  two-tables-to-keep-in-sync obligation the presence-only test cannot enforce.
+- **BR-98** [Minor] `behavior-change-without-regression-test` The brief-to-prose routing at generation_runner.lua:168 reddens nothing when reverted
+  This is the 7th finding in family `behavior-change-without-regression-test`.
+  Do NOT just add one case here. Measured in a scratch copy of f636d241:
+  restoring `s.diagnosis=Refusal.brief(reason):sub(1,4096)` leaves
+  chat_refusal_spec, generation_settles_spec, cliproxy_caller_teardown_spec,
+  response_session_spec and refusal_spec all GREEN. prose() and brief() are
+  unit-tested at refusal.lua's door (refusal_spec.lua:100-105), but no test
+  drives a multi-line value through `issue` into a user-visible message, so
+  the behavior the change exists for is unpinned. This is the same LINE that
+  BR-88 was raised about one round earlier, for the same reason — which is the
+  point: the rule is not "each finding gets a counterfactual", it is "each
+  CHANGED ROUTING gets one, including the ones the fix round introduces".
+  Apply it as a checklist step on the fix commit itself: for every line of the
+  round's own diff that changes where a value goes, revert it and name the
+  spec that reddens, or add one. (Note also that BR-95's cited example was
+  wrong: every branch of cliproxy_auth.diagnosis at cliproxy_auth.lua:271-300
+  returns a single line, so the live multi-line case is a provider body.)
+
 ## Open findings
 
 - **BR-34** [Minor] `canonical-form-not-shared` buffer_for's private key() adds an 11th copy of the resolve(fnamemodify(x,':p')) path-canonicalisation idiom
-- **BR-84** [Minor] `canonical-form-not-shared` Six hand-written variants of "first line of a Lua error", three of which throw on an empty message
 - **BR-85** [Minor] `canonical-form-not-shared` init.lua's chat_context wrapper still hand-words "not a chat" and the missing header for four commands
 - **BR-86** [Minor] `untrusted-input-unparsed` lifecycle_cause maps detach to reload on a buffer number alone, and buffer numbers are reused after :bd
-- **BR-92** [Important] `enumeration-claims-completeness` `refuse()`'s `failure` argument bypasses the store-level is_token gate, and a live non-token reaches a user as "unexpected (...)"
-- **BR-93** [Important] `comment-outlives-its-behavior` The atlas page and the target both still say "Two nets" and omit the store-level enforcement that closed BR-81
-- **BR-94** [Minor] `enumeration-claims-completeness` The narrowed Core-concepts row selector can match zero rows and still assert no offenders
-- **BR-95** [Minor] `rule-statement-scope-drift` `brief` is documented as "the first line of a Lua error" but now truncates every diagnosis, and its 4096 cap is dead
+- **BR-96** [Minor] `fallback-order-hides-known-cause` describe's new `stray` loses to detail.notice, so the by-value gate drops the very reason it demoted
+- **BR-97** [Minor] `canonical-form-not-shared` All eleven M.KIND `what` strings restate M.PREFIX, so every floor message is a tautology
+- **BR-98** [Minor] `behavior-change-without-regression-test` The brief-to-prose routing at generation_runner.lua:168 reddens nothing when reverted

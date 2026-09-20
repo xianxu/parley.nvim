@@ -220,21 +220,25 @@ M.LIFECYCLE = {
     epoch = { what = "the chat was reloaded", action = AGAIN },
 }
 
--- The floor: what a refusal of this KIND says when its reason has no row of its
--- own. Without it a producer's unknown token became the whole message
--- ("unexpected (...)"), which names no action (#261 close: BR-92).
-M.KIND = {
-    start = { what = "the response could not start", action = AGAIN },
-    resume = { what = "the response could not be resumed", action = ":ParleyChatRespond to start a new one" },
-    batch_start = { what = "the batch could not start", action = AGAIN },
-    batch_resume = { what = "the batch could not be resumed", action = ":ParleyChatRespondAll to start a new batch" },
-    batch_paused = { what = "the batch paused", action = ":ParleyChatResumeBatch to continue" },
-    batch_ended = { what = "the batch stopped", action = ":ParleyChatRespondAll to start again" },
-    ended = { what = "the response stopped", action = AGAIN },
-    paused = { what = "the response paused", action = ":ParleyStop cancels it" },
-    drill = { what = "the drill-in stopped", action = AGAIN },
-    topic = { what = "the topic could not be generated", action = AGAIN },
-    attachments = { what = "the images were not sent", action = AGAIN },
+-- The floor: what a refusal of this KIND tells the user to do when its reason
+-- has no row of its own. Without it a producer's unknown token became the whole
+-- message ("unexpected (...)"), which names no action (#261 close: BR-92).
+--
+-- Only the action: PREFIX already says what happened, and a `what` here would
+-- restate it in clause form ("Response not started: the response could not
+-- start") — one fact, one wording (#261 close: BR-97).
+M.KIND_ACTION = {
+    start = AGAIN,
+    resume = ":ParleyChatRespond to start a new one",
+    batch_start = AGAIN,
+    batch_resume = ":ParleyChatRespondAll to start a new batch",
+    batch_paused = ":ParleyChatResumeBatch to continue",
+    batch_ended = ":ParleyChatRespondAll to start again",
+    ended = AGAIN,
+    paused = ":ParleyStop cancels it",
+    drill = AGAIN,
+    topic = AGAIN,
+    attachments = AGAIN,
 }
 
 -- What a revocation means depends on why it happened.
@@ -324,7 +328,11 @@ function M.describe(kind, outcome, failure, detail)
     -- caller still learns it was unworded, through the returned resolution.
     local stray
     if failure ~= nil and not M.is_token(failure) then stray = M.prose(failure); failure = nil end
-    local notice = detail.notice or stray
+    -- Two details are JOINED, in a defined order — what the caller already
+    -- worded, then the reason this gate demoted. A gate that drops the value it
+    -- demoted would leave the user only the kind's floor (#261 close: BR-96).
+    local notice = detail.notice
+    if stray then notice = (notice and notice ~= "") and (notice .. " — " .. stray) or stray end
     local text, resolution
     -- A revocation says why the grant went, whatever failure the stop recorded
     -- on the way (BR-68): the cause is the more specific fact.
@@ -361,7 +369,9 @@ function M.describe(kind, outcome, failure, detail)
         if row then
             -- One detail, and the notice is already words: a token's own detail
             -- would repeat what the notice says (#261 M5 review BR-65).
-            if type(detail.notice) == "string" and detail.notice ~= "" then extra = nil end
+            -- Off the JOINED value: a stray reason is a detail too, so a row's
+            -- own detail would be the second one BR-65 forbids.
+            if type(notice) == "string" and notice ~= "" then extra = nil end
             text = row.what .. (extra and extra ~= "" and (" (" .. extra .. ")") or "") .. "; " .. (detail.action or row.action)
             if CAPACITY[token] and type(detail.held) == "table" and #detail.held > 0 then
                 local pids = {}
@@ -372,9 +382,8 @@ function M.describe(kind, outcome, failure, detail)
         elseif internal(token) then
             text = "an unexpected internal error (" .. tostring(token) .. "); " .. log
             resolution = "internal"
-        elseif token == nil and M.KIND[kind] then
-            local floor = M.KIND[kind]
-            text = floor.what .. "; " .. (detail.action or floor.action)
+        elseif token == nil and M.KIND_ACTION[kind] then
+            text = detail.action or M.KIND_ACTION[kind]
             resolution = resolution or "kind"
         else
             text = "unexpected (" .. tostring(token) .. "); " .. log
