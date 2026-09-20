@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-06
 updated: 2026-09-19
-estimate_hours: 4.9
+estimate_hours: 5.98
 started: 2026-09-19T17:59:42-07:00
 flow: {kind: full, provenance: inferred}
 ---
@@ -123,43 +123,65 @@ Derived Method A (primitive decomposition) against
 `impl=` written at **40%** of the v2 primitive-table implementation hours.
 
 Per v2's own rule — "a primitive with a thorough plan doc has ~0 design cost,
-decisions pre-resolved" — the design column is concentrated in `issue-spec`,
-which is where the decisions were actually resolved this window: the root-cause
-investigation (two causes, chained), the two live prototypes that found the
-`ppid == 1` defect, the 1775-line durable plan, and three fresh-eyes review
-rounds. The remaining primitives carry only the decisions their own step still
-holds, which is why most read 0.0–0.2.
+decisions pre-resolved" — the design column is concentrated in the two design
+primitives, which is where the decisions were actually resolved this window.
+The remaining rows carry only the decisions their own step still holds.
 
-| primitive | what it covers | design | v2 impl | impl ×0.4 |
-|---|---|---|---|---|
-| `issue-spec` | root-cause + prototypes + durable plan + 3 review rounds | 1.5 | 0.3 | 0.12 |
-| `lua-neovim` | `exit_with_parent.lua`, the `fixture_process` registry, and the 4-invariant arch guard | 0.4 | 2.2 | 0.88 |
-| `greenfield-go-module` | `reap-test-orphans.py` — greenfield, single concern, pure core + injected `ps` seam | 0.2 | 0.6 | 0.24 |
-| `smaller-go-module` | the five fixture edits (well-specced, extend) + the Makefile gate wiring | 0.0 | 0.7 | 0.28 |
-| `cross-cutting-refactor` | converting eight specs onto the seam (#237 BR-5) | 0.2 | 0.5 | 0.20 |
-| `atlas-docs` | TOOLING.md, `atlas/infra/test_harness.md`, `lessons.md`, `traceability.yaml` | 0.05 | 0.2 | 0.08 |
-| `milestone-review` | two boundaries (M1, M2), 0.5 v2-impl each | 0.0 | 1.0 | 0.40 |
+**Multiplicity is declared** (`×n`), because five rows aggregate more than one
+instance of their primitive and an undeclared aggregate cannot be audited
+against the v2 table's per-primitive ceiling.
+
+| primitive | what it covers | design | v2 impl | ×n | v2 impl total | impl ×0.4 |
+|---|---|---|---|---|---|---|
+| `issue-spec` | root-cause (two causes, chained) + the durable plan + 3 plan-review rounds | 1.0 | 0.3 | ×1 | 0.3 | 0.12 |
+| `typed-data-prototype` | the two live prototypes — the `orphan.sh` fixture repro and its nvim twin — that found the load-bearing `ppid == 1` defect | 0.6 | 0.3 | ×1 | 0.3 | 0.12 |
+| `lua-neovim` | `exit_with_parent.lua`, the `fixture_process` registry, and the 4-invariant arch guard with its counterfactuals | 0.4 | 1.5 | ×2 | 3.0 | 1.20 |
+| `greenfield-go-module` | `reap-test-orphans.py` — greenfield, single concern, pure core + injected `ps` seam (shape, not language) | 0.2 | 0.6 | ×1 | 0.6 | 0.24 |
+| `smaller-go-module` | the five fixture edits, the Makefile gate wiring, **and the real-machine verification loops** — full-suite runs, the interrupted-run proof, four counterfactual cycles | 0.0 | 0.5 | ×3 | 1.5 | 0.60 |
+| `cross-cutting-refactor` | the eight-spec sweep onto the seam (#237 BR-5), one edit→run→commit cycle each | 0.2 | 0.5 | ×2 | 1.0 | 0.40 |
+| `atlas-docs` | TOOLING.md, `atlas/infra/test_harness.md`, `lessons.md`, `traceability.yaml` | 0.05 | 0.2 | ×1 | 0.2 | 0.08 |
+| `milestone-review` | two boundaries (M1, M2) and the fix rounds they generate | 0.0 | 0.5 | ×2 | 1.0 | 0.40 |
 
 `design-buffer: 0.15` — the issue has a thorough plan doc (v3.1 step 4).
 `familiarity: 1.0` — this repo's harness, and #237 built the pieces being reused.
 
-Σdesign 2.35 × 1.15 = 2.7025; Σimpl 2.20 × 1.0 = 2.20; total 4.90.
+Σdesign 2.45 × 1.15 = 2.8175; Σimpl 3.16 × 1.0 = 3.16; total 5.98.
+
+**Sanity check against the closest analogue.** `#237` — same subsystem, same
+harness, thorough plan, and the issue that *built* `fixture_watchdog.py` —
+estimated design 2.40 / impl 3.00 and actualized 7.20 h (ratio 0.80). This work
+is comparable or larger (7 tasks, ~50 steps, 8 spec migrations, a new Python
+module, Makefile wiring, an arch guard, three docs), so an impl column below
+#237's would have needed a reason and there isn't one. 3.16 sits just above it.
 
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
 design-buffer: 0.15
-item: issue-spec             design=1.5  impl=0.12
-item: lua-neovim             design=0.4  impl=0.88
+item: issue-spec             design=1.0  impl=0.12
+item: typed-data-prototype   design=0.6  impl=0.12
+item: lua-neovim             design=0.4  impl=1.20
 item: greenfield-go-module   design=0.2  impl=0.24
-item: smaller-go-module      design=0.0  impl=0.28
-item: cross-cutting-refactor design=0.2  impl=0.20
+item: smaller-go-module      design=0.0  impl=0.60
+item: cross-cutting-refactor design=0.2  impl=0.40
 item: atlas-docs             design=0.05 impl=0.08
 item: milestone-review       design=0.0  impl=0.40
-total: 4.90
+total: 5.98
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
+
+### Revisions
+
+**2026-09-19** — raised 4.90 → 5.98 after the estimate-quality judge (INFO, not
+blocking) showed the impl column was light against this repo's own ledger. Four
+changes, all in the judge's direction: the two live prototypes got their own
+`typed-data-prototype` row instead of hiding inside `issue-spec`'s design
+maximum; the eight-spec sweep went ×1 → ×2 (eight edit→run→commit cycles, not
+one); the real-machine verification loops got named coverage instead of hiding
+in the Makefile row; and every aggregate row now declares its `×n` so it can be
+checked against the v2 ceiling. Banked as filed it would have read as a 20%
+under-estimate in the calibration ledger.
 
 ## Log
 
