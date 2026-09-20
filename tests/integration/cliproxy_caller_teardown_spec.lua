@@ -15,6 +15,7 @@ vim.fn.mkdir(tmp_dir, "p")
 
 local parley = require("parley")
 local ready_port = require("tests.helpers.ready_port")
+local fixture_process = require("tests.helpers.fixture_process")
 parley.setup({
     -- Teardown begins after model selection; the learner placeholder is unrelated.
     default_agent = "TeardownTest",
@@ -36,13 +37,12 @@ local vault = require("parley.vault")
 -- a test port with a test api-key. That happened during #205.
 require("parley.cliproxy")._set_data_dir(vim.fn.tempname())
 
-local started = {}
+local mark
 
 
 local function start_fake(port, mode)
-    local handle, pid = uv.spawn(FAKE, { args = { "--port", tostring(port), "--mode", mode } }, function() end)
-    assert(handle, "spawn fake")
-    table.insert(started, pid)
+    local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port), "--mode", mode })
+    assert(handle, "spawn fake: " .. tostring(err))
     vim.wait(5000, function()
         local ok = false
         local c = uv.new_tcp()
@@ -57,15 +57,17 @@ local function start_fake(port, mode)
 end
 
 describe("cliproxy on_abort teardown per caller", function()
+    before_each(function()
+        mark = fixture_process.mark()
+    end)
+
     after_each(function()
-        for _, pid in ipairs(started) do
-            pcall(uv.kill, pid, "sigkill")
-        end
+        -- Only this case's fixtures; the seam owns the registry (#220).
+        fixture_process.reap({ since = mark })
         for _, pid in ipairs(cliproxy.spawned_pids()) do
             pcall(uv.kill, pid, "sigkill")
         end
         cliproxy._reset_spawned()
-        started = {}
         parley.config.cliproxy = nil
     end)
 

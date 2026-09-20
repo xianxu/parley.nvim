@@ -26,16 +26,15 @@ local registry = require("parley.tools")
 local vault = require("parley.vault")
 local parley = require("parley")
 
-local started = {}
-
+local fixture_process = require("tests.helpers.fixture_process")
+local mark
 
 local function start_fake(port, response_mode, env)
-    local handle, pid = uv.spawn(FAKE, {
-        args = { "--port", tostring(port), "--response-mode", response_mode },
-        env = env,
-    }, function() end)
-    assert(handle, "spawn fake")
-    table.insert(started, pid)
+    -- The seam MERGES env into the parent's rather than replacing it, so this no
+    -- longer has to re-add PATH by hand (#220).
+    local handle, _, err, pid = fixture_process.spawn(FAKE,
+        { "--port", tostring(port), "--response-mode", response_mode }, env)
+    assert(handle, "spawn fake: " .. tostring(err))
     -- wait for the listener
     local up = false
     vim.wait(5000, function()
@@ -56,6 +55,7 @@ describe("openai tool loop against a stateful fake (#198)", function()
     local saved_endpoint, saved_manage, buf, doc, session
 
     before_each(function()
+        mark = fixture_process.mark()
         buf,doc,session=nil,nil,nil
         registry.register_builtins()
         parley._state = parley._state or {}
@@ -86,10 +86,7 @@ describe("openai tool loop against a stateful fake (#198)", function()
         if session then Session.cancel(session)end
         if doc then D.detach(doc)end
         if buf and vim.api.nvim_buf_is_valid(buf)then vim.api.nvim_buf_delete(buf,{force=true})end
-        for _, pid in ipairs(started) do
-            pcall(function() uv.kill(pid, "sigterm") end)
-        end
-        started = {}
+        fixture_process.reap({ since = mark, signal = "sigterm" })
         if saved_endpoint then
             dispatcher.providers.cliproxyapi.endpoint = saved_endpoint
         end
@@ -101,8 +98,7 @@ describe("openai tool loop against a stateful fake (#198)", function()
     -- translated role:tool messages, so a lost tool result cannot pass by count.
     local function run_session(mode)
         start_fake(port, mode, {
-            "PARLEY_FAKE_TOOL_PATH_A="..file_a,"PARLEY_FAKE_TOOL_PATH_B="..file_b,
-            "PATH="..(vim.env.PATH or ""),
+            PARLEY_FAKE_TOOL_PATH_A = file_a, PARLEY_FAKE_TOOL_PATH_B = file_b,
         })
         buf=vim.api.nvim_create_buf(false,true)
         vim.api.nvim_buf_set_lines(buf,0,-1,false,{"💬: read files","🤖: old","text"})

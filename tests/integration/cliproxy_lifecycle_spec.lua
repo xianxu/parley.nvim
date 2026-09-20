@@ -12,17 +12,16 @@ local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 local SPEC_DATA_DIR = vim.fn.tempname()
 require("parley.cliproxy")._set_data_dir(SPEC_DATA_DIR)
 
--- Track fake processes started by a test so after_each can reap them.
-local started = {}
-
+-- The seam registers every process it starts and reaps it at VimLeavePre; a
+-- case reaps its own with `reap({ since = mark })` (#220).
+local fixture_process = require("tests.helpers.fixture_process")
+local mark
 
 -- Start the fake on `port` in `mode`; returns the pid.
 local function start_fake(port, mode)
-    local handle, pid = uv.spawn(FAKE, {
-        args = { "--port", tostring(port), "--mode", mode },
-    }, function() end)
-    assert(handle, "failed to spawn fake_cliproxy")
-    table.insert(started, { handle = handle, pid = pid })
+    local handle, _, err, pid = fixture_process.spawn(FAKE,
+        { "--port", tostring(port), "--mode", mode })
+    assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
     return pid
 end
 
@@ -40,6 +39,7 @@ describe("cliproxy IO lifecycle", function()
     local saved_config, saved_path
 
     before_each(function()
+        mark = fixture_process.mark()
         saved_config = parley.config
         saved_path = vim.env.PATH
         -- System dirs only — deliberately WITHOUT /opt/homebrew/bin (#197).
@@ -62,18 +62,16 @@ describe("cliproxy IO lifecycle", function()
         parley.config = saved_config
         vim.env.PATH = saved_path
         vim.env.PARLEY_FAKE_MODE = nil
-        for _, p in ipairs(started) do
-            pcall(function()
-                uv.kill(p.pid, "sigkill")
-            end)
-        end
+        -- Only this case's fixtures; the seam owns the registry (#220).
+        fixture_process.reap({ since = mark })
+        -- Proxies PRODUCTION code spawned detached have no handle here, which is
+        -- why the fixtures also carry their own parent-death watchdog.
         for _, pid in ipairs(cliproxy.spawned_pids()) do
             pcall(function()
                 uv.kill(pid, "sigkill")
             end)
         end
         cliproxy._reset_spawned()
-        started = {}
     end)
 
     --------------------------------------------------------------------------
@@ -419,7 +417,7 @@ describe("cliproxy IO lifecycle", function()
         it("stop reaps a leftover cliproxy on the port not spawned this session", function()
             local port = ready_port.free_port()
             set_endpoint(port)
-            start_fake(port, "healthy") -- tracked in `started`, NOT in _spawned
+            start_fake(port, "healthy") -- tracked by the seam, NOT in _spawned
             ready_port.wait_listening(port)
             assert.equals(0, #cliproxy.spawned_pids()) -- this session spawned nothing
             local n = cliproxy.stop()
@@ -609,9 +607,8 @@ describe("cliproxy IO lifecycle", function()
                 conf["remote-management"] = { ["secret-key"] = mgmt_key }
             end
             vim.fn.writefile({ vim.json.encode(conf) }, cfg_file)
-            local handle, pid = uv.spawn(FAKE, { args = { "-config", cfg_file } }, function() end)
-            assert(handle, "failed to spawn fake_cliproxy")
-            table.insert(started, { handle = handle, pid = pid })
+            local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file })
+            assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
             ready_port.wait_listening(port)
         end
 
@@ -704,9 +701,8 @@ describe("cliproxy IO lifecycle", function()
             vim.fn.writefile({ vim.json.encode({
                 port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" },
             }) }, cfg_file)
-            local handle, pid = uv.spawn(FAKE, { args = { "-config", cfg_file } }, function() end)
-            assert(handle, "failed to spawn fake_cliproxy")
-            table.insert(started, { handle = handle, pid = pid })
+            local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file })
+            assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
             ready_port.wait_listening(port)
             return pid
         end
@@ -814,8 +810,8 @@ describe("cliproxy IO lifecycle", function()
                 port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" },
                 ["remote-management"] = { ["secret-key"] = cliproxy.management_key() },
             }) }, cfg_file)
-            local handle, pid = uv.spawn(FAKE, { args = { "-config", cfg_file } }, function() end)
-            table.insert(started, { handle = handle, pid = pid })
+            local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file })
+            assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
             ready_port.wait_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE, auth_dir = store } }
 

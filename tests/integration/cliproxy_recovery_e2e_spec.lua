@@ -6,6 +6,7 @@
 local uv = vim.uv or vim.loop
 local parley = require("parley")
 local ready_port = require("tests.helpers.ready_port")
+local fixture_process = require("tests.helpers.fixture_process")
 local dispatcher = require("parley.dispatcher")
 local cliproxy = require("parley.cliproxy")
 local chat_respond = require("parley.chat_respond")
@@ -17,7 +18,7 @@ cliproxy._set_data_dir(vim.fn.tempname())
 local UNOWNED = { deadline_ms = 60000 }
 
 describe("cliproxy recovery end to end", function()
-    local saved_config, saved_providers, saved_path, started
+    local saved_config, saved_providers, saved_path, mark
 
     -- Boot the fake serving `error_mode` on /v1/chat/completions, with a
     -- credential store whose claude channel carries `overlay`.
@@ -35,13 +36,11 @@ describe("cliproxy recovery end to end", function()
             port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" },
             ["remote-management"] = { ["secret-key"] = cliproxy.management_key() },
         }) }, cfg_file)
-        local handle, pid = uv.spawn(FAKE, {
-            args = { "-config", cfg_file },
-            env = { "PARLEY_FAKE_ERROR_MODE=" .. error_mode, "PATH=" .. vim.env.PATH,
-                    "HOME=" .. vim.env.HOME },
-        }, function() end)
-        assert(handle, "failed to spawn fake_cliproxy")
-        table.insert(started, { handle = handle, pid = pid })
+        -- The seam MERGES env into the parent's, so PATH and HOME no longer have
+        -- to be re-added by hand (#220).
+        local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file },
+            { PARLEY_FAKE_ERROR_MODE = error_mode })
+        assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
         ready_port.wait_listening(port)
 
         dispatcher.providers.cliproxyapi = {
@@ -88,7 +87,7 @@ describe("cliproxy recovery end to end", function()
         saved_providers = vim.deepcopy(dispatcher.providers)
         saved_path = vim.env.PATH
         vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin" -- never find a real cliproxyapi
-        started = {}
+        mark = fixture_process.mark()
         cliproxy._reset_login_prompt()
         cliproxy._reset_management_restart()
         vim.ui.select = function(_i, _o, cb) cb(nil, 2) end -- always "Not now"
@@ -98,9 +97,8 @@ describe("cliproxy recovery end to end", function()
         parley.config = saved_config
         dispatcher.providers = saved_providers
         vim.env.PATH = saved_path
-        for _, p in ipairs(started) do
-            pcall(function() uv.kill(p.pid, "sigkill") end)
-        end
+        -- Only this case's fixtures; the seam owns the registry (#220).
+        fixture_process.reap({ since = mark })
         for _, pid in ipairs(cliproxy.spawned_pids()) do
             pcall(function() uv.kill(pid, "sigkill") end)
         end

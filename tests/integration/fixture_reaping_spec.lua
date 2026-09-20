@@ -83,3 +83,93 @@ describe("#220 a harness process exits when its parent is gone", function()
         dies_within(pid, 6000, "an orphaned fake_sips")
     end)
 end)
+
+describe("#220 census conformance, against the real ps", function()
+    -- ARCH-MOCK: the recorded process table is the seam's state, but a recording
+    -- cannot notice the day the real ps changes shape. This is the live half.
+    local SCRIPT = ROOT .. "/scripts/reap-test-orphans.py"
+
+    it("reads a real ps, or says why it cannot", function()
+        if vim.fn.executable("ps") == 0 then
+            return pending("ps is not executable here")
+        end
+        -- --root points at a tempname so nothing can match; --grace 0 because
+        -- nothing is expected to be found.
+        local out = vim.system({ "python3", SCRIPT, "--root", vim.fn.tempname(),
+            "--phase", "after", "--grace", "0" }, { text = true }):wait(30000)
+        assert.equals(0, out.code, out.stdout)
+        if out.stdout:find("skipped", 1, true) then
+            return pending("ps is refused here (an agent sandbox); census not exercised")
+        end
+        assert.is_falsy(out.stdout:find("BROKEN", 1, true),
+            "the real ps produced columns parse_ps cannot read:\n" .. out.stdout)
+    end)
+end)
+
+describe("#220 the fixture seam owns every process it starts", function()
+    local fixture_process = require("tests.helpers.fixture_process")
+    local ready_port = require("tests.helpers.ready_port")
+
+    -- Each case starts from an empty registry, so the absolute live() assertions
+    -- below do not depend on the case before them having reaped.
+    before_each(function() fixture_process.reap() end)
+
+    local function start()
+        local port = ready_port.free_port()
+        local handle, _, err, pid = fixture_process.spawn(
+            ROOT .. "/tests/fixtures/fake_cliproxy", { "--port", tostring(port) })
+        assert.is_truthy(handle, tostring(err))
+        assert.is_true(ready_port.wait_listening(port), "the fake never came up")
+        return pid
+    end
+
+    it("reap() kills what spawn() started, and forgets it", function()
+        local pid = start()
+        assert.equals(1, fixture_process.live())
+
+        fixture_process.reap()
+        assert.equals(0, fixture_process.live())
+        assert.is_true(vim.wait(5000, function() return gone(pid) end, 50),
+            "reap() left pid " .. tostring(pid) .. " alive")
+    end)
+
+    it("reap({since = mark}) spares what was started before the mark", function()
+        -- The case two specs actually need: cliproxy_update_spec and
+        -- cliproxy_download_spec each start a release server at FILE scope and
+        -- point every case at it. A blanket reap in after_each kills it and
+        -- breaks every case after the first.
+        local kept = start()
+        local mark = fixture_process.mark()
+        local transient = start()
+
+        fixture_process.reap({ since = mark })
+        assert.is_true(vim.wait(5000, function() return gone(transient) end, 50),
+            "the marked reap left pid " .. tostring(transient) .. " alive")
+        assert.is_false(gone(kept), "the marked reap killed a file-scope fixture")
+        assert.equals(1, fixture_process.live())
+
+        fixture_process.reap()
+        assert.is_true(vim.wait(5000, function() return gone(kept) end, 50))
+    end)
+
+    it("forgets a process that exited on its own, so live() cannot over-count", function()
+        -- `crash` mode exits(1) at startup. Without pruning on exit, live() would
+        -- keep counting it and a spec asserting "I left nothing behind" would
+        -- fail for a process that is already gone.
+        local handle, exited = fixture_process.spawn(
+            ROOT .. "/tests/fixtures/fake_cliproxy", { "--port", "1", "--mode", "crash" })
+        assert.is_truthy(handle)
+        assert.is_true(vim.wait(5000, exited, 50), "the crash-mode fake never exited")
+        assert.equals(0, fixture_process.live())
+    end)
+
+    it("reaps with the signal the caller asks for", function()
+        -- cliproxy_update_spec's restart-race cases need SIGTERM: fake_cliproxy
+        -- models graceful shutdown under PARLEY_FAKE_EXIT_DELAY_MS, and SIGKILL
+        -- would make that window unobservable.
+        local pid = start()
+        fixture_process.reap({ signal = "sigterm" })
+        assert.is_true(vim.wait(5000, function() return gone(pid) end, 50),
+            "sigterm did not stop pid " .. tostring(pid))
+    end)
+end)

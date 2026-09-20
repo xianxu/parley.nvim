@@ -20,13 +20,12 @@ local vault = require("parley.vault")
 local tasker = require("parley.tasker")
 local parley = require("parley")
 
-local started = {}
-
+local fixture_process = require("tests.helpers.fixture_process")
+local mark
 
 local function start_fake(port, mode)
-    local handle, pid = uv.spawn(FAKE, { args = { "--port", tostring(port), "--mode", mode } }, function() end)
-    assert(handle, "spawn fake")
-    table.insert(started, pid)
+    local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port), "--mode", mode })
+    assert(handle, "spawn fake: " .. tostring(err))
     vim.wait(5000, function()
         local ok = false
         local c = uv.new_tcp()
@@ -45,6 +44,7 @@ describe("managed cliproxy dispatch (e2e)", function()
     local ran_query
 
     before_each(function()
+        mark = fixture_process.mark()
         saved_config = parley.config
         saved_providers = dispatcher.providers.cliproxyapi
         saved_tasker_run = tasker.run
@@ -58,14 +58,14 @@ describe("managed cliproxy dispatch (e2e)", function()
         parley.config = saved_config
         dispatcher.providers.cliproxyapi = saved_providers
         tasker.run = saved_tasker_run
-        for _, pid in ipairs(started) do
-            pcall(uv.kill, pid, "sigkill")
-        end
+        -- Only this case's fixtures; the seam owns the registry (#220).
+        fixture_process.reap({ since = mark })
+        -- Proxies PRODUCTION code spawned detached have no handle here, which is
+        -- why the fixtures also carry their own parent-death watchdog.
         for _, pid in ipairs(cliproxy.spawned_pids()) do
             pcall(uv.kill, pid, "sigkill")
         end
         cliproxy._reset_spawned()
-        started = {}
     end)
 
     local function dispatch(port)

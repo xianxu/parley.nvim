@@ -46,11 +46,9 @@ function M.start(mode)
         handle = handle,
         url = ("http://127.0.0.1:%d/router-for-me/CLIProxyAPI/releases"):format(port),
     }
-    vim.api.nvim_create_autocmd("VimLeavePre", {
-        callback = function()
-            M.stop(server)
-        end,
-    })
+    -- No per-server VimLeavePre autocmd: fixture_process registers this handle
+    -- and reaps it at VimLeavePre already, and one autocmd per started server is
+    -- its own small accumulation (#220, ARCH-DRY).
     return server
 end
 
