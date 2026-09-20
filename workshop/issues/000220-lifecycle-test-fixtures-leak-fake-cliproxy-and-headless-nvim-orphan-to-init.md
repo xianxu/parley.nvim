@@ -90,21 +90,26 @@ through, plus one `ps`-based census that fails the suite).
       parent, plus a Lua twin of `fixture_watchdog.py` installed from
       `tests/minimal_init.vim`, which every harness Neovim loads.
 - [ ] M1 — move the watchdog into `LoopbackHTTPServer.__init__`, so every
-      fixture that binds a port exits with its parent by construction; drop the
-      opt-in `PARLEY_FAKE_EXIT_WITH_PARENT` flag everywhere it is named.
+      fixture that binds a port exits with its parent by construction; add the
+      direct call to the two fixtures that block WITHOUT binding
+      (`fake_cliproxy`'s `run_login`, `fake_sips` slow mode); drop the opt-in
+      `PARLEY_FAKE_EXIT_WITH_PARENT` flag everywhere it is named.
 - [ ] M1 — one registry in `tests.helpers.fixture_process` (register on spawn,
-      prune on exit, reap at `VimLeavePre`); collapse the eight spec-local
+      prune on exit, `mark()`/`reap({since})` so a file-scope server survives a
+      per-case reap, `VimLeavePre` backstop); collapse the eight spec-local
       copies onto it, the real-binary conformance spawn included (#237 BR-5).
 - [ ] M2 — `scripts/reap-test-orphans.py`: a `ps`-based census of this
       checkout's surviving test processes, with a pure selector tested against
       a recorded process table.
 - [ ] M2 — wire it into `Makefile.parley`: `--phase before` in `PREP_TEST_ENV`,
       `--phase after` folded into the exit code of every test target.
-- [ ] M2 — `tests/arch/fixture_lifecycle_spec.lua`: guard the three invariants
-      so a new fixture or spec inherits the reaping instead of remembering it.
 - [ ] M2 — document the `ps`-based cleanup and the `pgrep` caveat in
       TOOLING.md; the layers in `atlas/infra/test_harness.md`; three rules in
       `workshop/lessons.md`.
+- [ ] M2 — `tests/arch/fixture_lifecycle_spec.lua`: guard the four invariants
+      (seam, watchdog reach, the `ppid == 1` rule in both copies, and TOOLING's
+      remedy) so a new fixture or spec inherits the reaping instead of
+      remembering it.
 
 **Closing needs a machine where `ps` is permitted** — an agent sandbox refuses
 it with EPERM, and three of the four Done-when proofs need a real process table.
