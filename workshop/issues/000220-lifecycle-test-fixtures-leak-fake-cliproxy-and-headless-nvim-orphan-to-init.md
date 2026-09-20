@@ -115,6 +115,12 @@ through, plus one `ps`-based census that fails the suite).
       remedy) so a new fixture or spec inherits the reaping instead of
       remembering it.
 
+- [ ] AT CLOSE — flip this issue's ledger row to `window_trusted=no`. `sdlc close`
+      appends it as `yes` (`close.go:940` derives the flag from `started:` being
+      set, which it is), but the window is wrong in the other direction. Operator
+      decision 2026-09-19: exclude #220 from calibration. Recorded in
+      `brain/data/life/42shots/velocity/calibration-findings.md` → "Excluded rows".
+
 **Closing needs a machine where `ps` is permitted** — an agent sandbox refuses
 it with EPERM, and three of the four Done-when proofs need a real process table.
 Every spec runs sandboxed (liveness is probed with `uv.kill(pid, 0)`).
