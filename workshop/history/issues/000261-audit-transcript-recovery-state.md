@@ -1,6 +1,6 @@
 ---
 id: 000261
-status: codecomplete
+status: done
 deps: [parley#266]
 github_issue:
 target: transcript-is-the-whole-truth
