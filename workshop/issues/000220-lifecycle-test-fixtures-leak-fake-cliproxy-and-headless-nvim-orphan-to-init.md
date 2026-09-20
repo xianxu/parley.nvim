@@ -87,10 +87,10 @@ Durable design: `workshop/plans/000220-reap-test-fixture-processes-plan.md`
 (three reaping layers, each at the chokepoint its class of process passes
 through, plus one `ps`-based census that fails the suite).
 
-- [ ] M1 — the shared orphan rule in both watchdogs: `ppid == 1` OR a changed
+- [x] M1 — the shared orphan rule in both watchdogs: `ppid == 1` OR a changed
       parent, plus a Lua twin of `fixture_watchdog.py` installed from
       `tests/minimal_init.vim`, which every harness Neovim loads.
-- [ ] M1 — move the watchdog into `LoopbackHTTPServer.__init__`, so every
+- [x] M1 — move the watchdog into `LoopbackHTTPServer.__init__`, so every
       fixture that binds a port exits with its parent by construction; add the
       direct call to the two fixtures that block WITHOUT binding
       (`fake_cliproxy`'s `run_login`, `fake_sips` slow mode); drop the opt-in
@@ -341,3 +341,64 @@ gone in under a second under the corrected one. So the watchdog that has been in
 the tree since #237 looked correct and could not fire for the dominant case.
 
 Design: `workshop/plans/000220-reap-test-fixture-processes-plan.md`.
+
+### 2026-09-19 — M1 in progress: two of four plan items landed
+
+Branch `000220-…`. Both delivered items are green and verified against real
+processes, not mocks; liveness is probed with `uv.kill(pid, 0)` (ESRCH), never
+`ps`, so every spec passes inside an agent sandbox.
+
+**Landed — `e130ed9d` the shared orphan rule.** The rule both watchdogs used was
+"ppid differs from the value sampled at startup". A process orphaned *while it is
+still booting* samples `1` as its own starting parent, so the rule never fired for
+the case that produces these. Measured on `fake_cliproxy` with the flag that was
+supposed to enable it:
+
+    PARLEY_FAKE_EXIT_WITH_PARENT=1, parent exits at once
+      ppid != parent            → STILL ALIVE at t=4s
+      ppid == 1 or ppid != parent → GONE by t=3s
+
+`tests/helpers/exit_with_parent.lua` is the Neovim twin, installed from
+`tests/minimal_init.vim` — the one file the `make` parent and every plenary spec
+child both load. It exits with `os.exit` (the loop may be wedged: the measured
+orphans had each burned 0.05 s of CPU and never run a spec), which skips
+`VimLeavePre`, so the per-process `$PARLEY_QUERY_DIR` cleanup is handed to it as a
+`before_exit` hook rather than being stranded.
+
+**Landed — `32da1528` the chokepoint.** `LoopbackHTTPServer.__init__` installs the
+watchdog, so every fixture server inherits it by construction and
+`PARLEY_FAKE_EXIT_WITH_PARENT` is gone from the tree. The constructor is *not* the
+whole rule: `run_login` (`hangs`, 300 s) and `fake_sips` (`slow`, 30 s) block
+without ever binding, and each calls the watchdog itself. Regression list derived
+by grep over the changed fixtures rather than typed — 17 specs, all pass, and
+`image_shrink_spec`'s "kills a real slow child" case (which asserts a `[4.5, 8)` s
+window against `fake_sips slow`) genuinely ran rather than pending.
+
+**Side-quest, in `e130ed9d`.** `single_source_sweeps_spec`'s `definition_pattern`
+was Lua-only, so a Core-concepts row naming `LoopbackHTTPServer` read as "exists
+nowhere in the tree" though it has been a Python class since #202. `tests/fixtures`
+is real code here; the matcher now covers `def`/`class` too.
+
+**Milestone boundary moved, and a test is why.** That same guard reads the *whole*
+plan's Core-concepts table on any issue branch. With the census in M2,
+`select_orphans` and `ancestry` do not exist at M1's boundary and the guard is red
+— measured, not predicted. A boundary a guard cannot be green at is not a boundary,
+so the census moved into M1: M1 is now everything that exists as a *thing*
+(Tasks 1–4), M2 is wiring, docs and the guard (Tasks 5–7).
+
+**Estimate took three judge rounds** (4.90 → 5.98 → 7.79 → 8.71). Each round found
+my own declared `×n` rule applied unevenly — prototypes counted ×1 while naming
+two, docs ×1 while naming four, and the wall-clock gross-up given to `make test`
+but withheld from boundary reviews that post-#118 `sdlc actual` measures the same
+way. See `## Estimate` → Revisions.
+
+**Measurement caveat worth carrying to close.** `sdlc actual --issue 220` anchors
+its window at `7353d798` — the **issue-creation** commit of 2026-09-06, not the
+2026-09-19 claim — so it already read 5.95 h before a line of implementation
+existed, across 13 days and 87 attributed issues with mention-fallback warnings
+throughout. AGENTS.md §2 says claiming early "anchors the active-time window at the
+claim commit"; this window did not. This row's ratio should be read with that in
+mind, or excluded from the calibration fit.
+
+**Next:** Task 3 (the `fixture_process` registry + the eight-spec sweep), then
+Task 4 (the census), then M1 close.
