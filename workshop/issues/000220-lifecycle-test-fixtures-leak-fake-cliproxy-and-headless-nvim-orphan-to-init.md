@@ -99,9 +99,12 @@ through, plus one `ps`-based census that fails the suite).
       prune on exit, `mark()`/`reap({since})` so a file-scope server survives a
       per-case reap, `VimLeavePre` backstop); collapse the eight spec-local
       copies onto it, the real-binary conformance spawn included (#237 BR-5).
-- [ ] M2 — `scripts/reap-test-orphans.py`: a `ps`-based census of this
+- [ ] M1 — `scripts/reap-test-orphans.py`: a `ps`-based census of this
       checkout's surviving test processes, with a pure selector tested against
-      a recorded process table.
+      a recorded process table. In M1, not M2: `single_source_sweeps_spec`'s
+      plan-entity guard reads the whole plan's Core-concepts table, so leaving
+      `select_orphans`/`ancestry` for M2 makes that guard red at M1's boundary
+      (measured).
 - [ ] M2 — wire it into `Makefile.parley`: `--phase before` in `PREP_TEST_ENV`,
       `--phase after` folded into the exit code of every test target.
 - [ ] M2 — document the `ps`-based cleanup and the `pgrep` caveat in
