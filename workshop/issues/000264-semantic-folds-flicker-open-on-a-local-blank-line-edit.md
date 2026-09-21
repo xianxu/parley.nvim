@@ -169,3 +169,56 @@ vim.cmd('qa!')
 To be promoted into `tests/integration/` next to
 `document_fold_uncertainty_retirement_spec.lua`, which covers only the 50k-row
 suspended path and asserts nothing about continuity.
+
+### 2026-09-19 — operator re-report, and the bounded-extent constraint it adds
+
+Reported again, unprompted, and generalized past the blank-line trigger: *"folded
+text (tool call, summary) sometimes expand temporarily when following text
+change."* Same defect — both named kinds are in the four this issue already
+scopes, and "following text change" is the same edit-below-the-fold shape as the
+original report.
+
+The operator's mechanism hypothesis: *"unsure how boundary's decided but this
+seems pointing to undesired greedy matching algorithm that look beyond
+necessary. For summary, which is always a single line, or worst can terminate at
+next `💬:` start, this is not needed. Not sure about tool call, as there's code
+fence involved. But with a proper state machine (not regex), we should be able
+to do non-greedy look ahead."*
+
+Checked against the code: there is **no regex scan** to make non-greedy. The
+boundary is an incremental parser with a confirmed frontier
+(`document/semantic.lua:205`, `confirmed_frontier`) over channel-partitioned
+dependencies (`document/dependencies.lua`), and `uncertain_range`
+(`document/structure.lua:111`) reports `frontier → EOF`. So the "looking beyond
+necessary" is real, but it is **confirmation being retracted**, not a match
+overrunning: the frontier retreats to row 0, and everything after it is
+unconfirmed by definition. That is defect (a) above.
+
+What the hypothesis *does* add, and what the design should carry, is a
+**bounded-extent argument per foldable kind** — the reason the retraction is
+provably unnecessary, stated in the grammar's own terms rather than as a
+heuristic:
+
+- **`summary`** — one line, terminating at worst at the next `💬:`. Nothing
+  below a summary can change where it ends, so an edit below it can never
+  invalidate it. If the frontier retreats past a summary, the retreat is
+  provably over-conservative.
+- **`tool_use` / `tool_result`** — bounded by a fence, so the extent is not
+  single-line, but it is still closed by a token the grammar already
+  recognizes (`lua/parley/fence.lua`). A fenced block's end is decidable from
+  inside the block; it does not depend on what follows the close fence.
+- **`thinking`** — the one kind with a genuine downstream dependency: a
+  non-explicit reasoning block is terminated by a blank row
+  (`highlight_structure.lua:81`, `answer_structure.lua:81`), which is exactly
+  why the original blank-line edit could not be proven inert.
+
+So three of the four foldable kinds have an extent that is closed from above and
+cannot be lengthened by an edit below them. That asymmetry is the lever for
+making the uncertain origin local (Spec (a)), and it also says the fix is not
+uniform across kinds: `thinking` needs the deferred-clear half (Spec (b)) to stay
+still, while the other three should not be invalidated at all.
+
+Still ARCH-PURPOSE: fix the class. But "local to the affected block" now has a
+per-kind proof obligation attached, and the tests should assert the negative —
+an edit below a `summary` / fenced tool block leaves its confirmation intact —
+not merely that the flicker stopped.
