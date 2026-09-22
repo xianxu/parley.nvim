@@ -511,3 +511,8 @@ predicates PURE, but the first tests reached them only through subprocesses.
 Added `tests/unit/reap_test_orphans_pure.py` with direct no-IO calls for
 `parse_ps`, `select_orphans`, `ancestry`, and `orphaned`; the plan now records
 the revision and the test is routed in `atlas/traceability.yaml`.
+
+Boundary review BR-3 returned FIX-THEN-SHIP: grace resampling hard-coded `ps`
+instead of preserving the configured `--ps-command` seam. Threaded the command
+through `persistent_candidates` and added a direct regression test; the review
+also confirmed BR-2 was addressed.

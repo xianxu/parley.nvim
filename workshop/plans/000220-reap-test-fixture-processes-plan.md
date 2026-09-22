@@ -1995,3 +1995,9 @@ Added `tests/unit/reap_test_orphans_pure.py` so the Core-concepts table's PURE
 entities (`parse_ps`, `select_orphans`, `ancestry`, and `orphaned`) are tested by
 direct no-IO calls. The existing Lua spec remains the integration contract for
 the CLI, recorded process-table seam, and signal-free boundary behavior.
+
+### 2026-09-22 — boundary review BR-3
+
+Threaded the configured `--ps-command` through grace-period resampling and added
+a direct regression test proving subsequent samples use that seam rather than
+hard-coding `ps`.

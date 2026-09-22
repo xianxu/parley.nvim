@@ -103,6 +103,7 @@ def persistent_candidates(
     excluded: set[int],
     ps_from: str | None,
     grace: float,
+    ps_command: str,
 ) -> list[dict[str, int | str]]:
     """Keep only rows still present after the bounded grace period."""
     if grace <= 0 or ps_from:
@@ -112,7 +113,7 @@ def persistent_candidates(
     deadline = time.monotonic() + grace
     while time.monotonic() < deadline and survivors:
         time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
-        text, why_not = read_process_table(None, "ps")
+        text, why_not = read_process_table(None, ps_command)
         if why_not or text is None:
             break
         current = select_orphans(parse_ps(text), root, excluded)
@@ -162,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     excluded.update(ancestry(caller_pid, rows))
     excluded.add(self_pid)
     selected = select_orphans(rows, args.root, excluded)
-    selected = persistent_candidates(selected, args.root, excluded, args.ps_from, args.grace)
+    selected = persistent_candidates(selected, args.root, excluded, args.ps_from, args.grace, args.ps_command)
 
     if args.phase == "before":
         if selected:

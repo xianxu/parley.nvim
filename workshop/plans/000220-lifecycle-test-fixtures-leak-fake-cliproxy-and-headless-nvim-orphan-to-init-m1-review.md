@@ -57,3 +57,75 @@ Architectural notes:
 Plan revision recommendations:
 
 - Add a `## Revisions` entry documenting whether the four entities remain PURE with direct tests, or are reclassified as INTEGRATION because their current tests require IO.
+
+---
+
+## Re-review — 2026-09-22T14:54:20-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 220 — Lifecycle test fixtures leak: fake_cliproxy and headless nvim orphan to init |
+| repo | parley.nvim |
+| issue file | workshop/issues/000220-lifecycle-test-fixtures-leak-fake-cliproxy-and-headless-nvim-orphan-to-init.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 451190265e1a453044fdbd3b8efc5f7322107fb9..33e2d297f9b85b5e214e3fc76adb6c2897888736 |
+| command | sdlc milestone-close --issue 220 --milestone M1 |
+| reviewer | codex |
+| timestamp | 2026-09-22T14:54:20-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+M1 substantially delivers the reaping layers and passes the targeted and full integration coverage observed. One Important seam bug remains: grace-period resampling ignores the configured `--ps-command`. BR-1 remains unresolved but is Minor.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: not-addressed
+    note: |
+      The durable plan remains approximately 1997 lines and still embeds complete spec bodies and census implementation text.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      tests/unit/reap_test_orphans_pure.py directly tests parse_ps, select_orphans, ancestry, and orphaned without process or filesystem IO; 5/5 tests pass.
+findings:
+  - id: new
+    severity: Important
+    family: external-seam-consistency
+    title: |
+      Grace resampling ignores the configured ps command
+    detail: |
+      scripts/reap-test-orphans.py:115 calls read_process_table(None, "ps") instead of using the caller's --ps-command. A custom or injected process-table provider is used for the initial sample but silently replaced by the real ps during grace polling. Thread ps_command through persistent_candidates and add a regression test proving every sample uses the configured seam. ARCH-MOCK.
+```
+
+1. Strengths: centralized `fixture_process` registry; boot-time orphan detection in both watchdogs; direct PURE tests now exist and pass; migrated cliproxy integration tests pass; real-process lifecycle tests pass.
+
+2. Critical findings: none.
+
+3. Important findings: the `--ps-command` seam is not preserved during grace resampling, as detailed above.
+
+4. Minor findings: BR-1 plan restatement remains unresolved.
+
+5. Test coverage notes: pure Python tests passed 5/5; fixture lifecycle tests passed 11 tests with the expected sandbox-pending `ps` check; the integration suite passed all reached files. No test covers repeated grace sampling with a custom `--ps-command`.
+
+6. Architectural notes:
+
+- ARCH-DRY: pass — registry and watchdog ownership are centralized.
+- ARCH-PURE: pass — census predicates have direct no-IO tests.
+- ARCH-PURPOSE: pass for M1’s reaping layers and census.
+- ARCH-MOCK: flag — configured process-table seam is bypassed during resampling.
+- ARCH-CONSTRAINTS: pass — polling and grace periods are bounded.
+- ARCH-SECURE: pass — selection is narrowed by checkout path and process shape; recorded tables signal nothing.
+- ARCH-ORDER: pass — startup orphaning, teardown, and marked registry lifetimes are covered.
+- ARCH-FUNERAL: pass — spawned processes have normal-exit, parent-death, and census cleanup paths.
+
+7. Plan revision recommendations:
+
+- Add a `## Revisions` entry documenting the `--ps-command` propagation fix and its regression test.
+- BR-1 still recommends reducing duplicated implementation/spec bodies in the durable plan.

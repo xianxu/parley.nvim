@@ -39,6 +39,16 @@ class CensusPureTests(unittest.TestCase):
             [2, 3],
         )
 
+    def test_grace_resampling_uses_the_configured_process_table_command(self):
+        rows = [{"pid": 3, "ppid": 1, "args": "/repo/tests/fixtures/fake"}]
+        with patch.object(census, "read_process_table",
+                          return_value=("3 1 /repo/tests/fixtures/fake\n", None)) as read:
+            survivors = census.persistent_candidates(rows, "/repo", set(), None, 0.01,
+                                                     "custom-ps")
+        self.assertEqual([row["pid"] for row in survivors], [3])
+        self.assertTrue(read.called)
+        self.assertEqual(read.call_args.args, (None, "custom-ps"))
+
 
 class WatchdogPureTests(unittest.TestCase):
     def test_init_parent_is_orphaned(self):
