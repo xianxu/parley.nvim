@@ -505,3 +505,9 @@ Python compilation, real-`ps` smoke path, and `git diff --check` all pass.
 
 ARCH-DRY: one selector defines the checkout-owned process class for both phases;
 ARCH-ORDER: only pids persistent across the grace samples are reported.
+
+Boundary review BR-2 returned REWORK: the plan called the census and watchdog
+predicates PURE, but the first tests reached them only through subprocesses.
+Added `tests/unit/reap_test_orphans_pure.py` with direct no-IO calls for
+`parse_ps`, `select_orphans`, `ancestry`, and `orphaned`; the plan now records
+the revision and the test is routed in `atlas/traceability.yaml`.

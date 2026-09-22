@@ -229,6 +229,7 @@ An `nvim` prototype behaved identically. Both watchdogs carry the corrected rule
 | What | Where | Kind |
 |------|-------|------|
 | `parse_ps` / `select_orphans` / `ancestry` over a recorded `ps` table | `tests/unit/reap_test_orphans_spec.lua` | drives the script with `--ps-from`, so nothing is signalled |
+| `parse_ps` / `select_orphans` / `ancestry` / `orphaned` direct contracts | `tests/unit/reap_test_orphans_pure.py` | no-IO Python unit tests of the PURE entities |
 | a fixture server outlives nothing: orphan it, watch it die | `tests/integration/fixture_reaping_spec.lua` | real process, real orphaning |
 | a spec-child Neovim outlives nothing: same | `tests/integration/fixture_reaping_spec.lua` | real process, real orphaning |
 | `fixture_process` registers, reaps, and forgets | `tests/integration/fixture_reaping_spec.lua` | real process |
@@ -1110,6 +1111,7 @@ git commit -m "#220 M1: <spec> reaps through the fixture seam"
 - Create: `scripts/reap-test-orphans.py`
 - Create: `tests/fixtures/ps_test_orphans.txt`
 - Create: `tests/unit/reap_test_orphans_spec.lua`
+- Create: `tests/unit/reap_test_orphans_pure.py`
 - Modify: `atlas/traceability.yaml`
 
 - [x] **Step 1: Record a process table to select against**
@@ -1984,3 +1986,12 @@ fixtures that production code spawns detached.
 - **ARCH-MOCK** — `ps` is the external dependency; `--ps-from` is its seam and
   `tests/fixtures/ps_test_orphans.txt` its recorded state, taken from this machine
   rather than invented.
+
+## Revisions
+
+### 2026-09-22 — boundary review BR-2
+
+Added `tests/unit/reap_test_orphans_pure.py` so the Core-concepts table's PURE
+entities (`parse_ps`, `select_orphans`, `ancestry`, and `orphaned`) are tested by
+direct no-IO calls. The existing Lua spec remains the integration contract for
+the CLI, recorded process-table seam, and signal-free boundary behavior.

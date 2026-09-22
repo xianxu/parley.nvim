@@ -629,6 +629,7 @@ atlas:
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/fixture_reaping_spec.lua
       - tests/unit/reap_test_orphans_spec.lua
+      - tests/unit/reap_test_orphans_pure.py
       - tests/integration/chat_progress_process_spec.lua
 
   infra/vault:
