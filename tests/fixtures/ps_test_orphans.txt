@@ -1,0 +1,6 @@
+7458 1 /opt/homebrew/.../Python /Users/x/workspace/parley.nvim/tests/fixtures/fake_cliproxy --port 55546
+27095 1 /opt/homebrew/opt/nvim-0.11/bin/nvim --headless -c set rtp+=.,/Users/x/.local/share/nvim/lazy/plenary.nvim | runtime plugin/plenary.vim --noplugin -u tests/minimal_init.vim -c lua require("plenary.busted").run("/Users/x/workspace/parley.nvim/tests/unit/refusal_spec.lua")
+31000 1 /opt/homebrew/opt/nvim-0.11/bin/nvim --headless -c lua require("plenary.busted").run("/Users/x/workspace/other-repo/tests/unit/a_spec.lua")
+31001 999 /usr/bin/nvim /Users/x/workspace/parley.nvim/tests/unit/refusal_spec.lua
+99999 888 /bin/sh -c nvim -n --headless --noplugin -u /Users/x/workspace/parley.nvim/tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/a_spec.lua" -c "qa!"
+99998 99999 python3 /Users/x/workspace/parley.nvim/scripts/reap-test-orphans.py --root /Users/x/workspace/parley.nvim --phase after --ps-from /Users/x/workspace/parley.nvim/tests/fixtures/ps_test_orphans.txt

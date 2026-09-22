@@ -609,6 +609,8 @@ atlas:
       - tests/helpers/spec_runner.lua
       - tests/helpers/fixture_process.lua
       - tests/helpers/exit_with_parent.lua
+      - scripts/reap-test-orphans.py
+      - tests/fixtures/ps_test_orphans.txt
       - tests/fixtures/fake_sse_server
       - tests/fixtures/fake_sips
       - tests/fixtures/loopback_http.py
@@ -626,6 +628,7 @@ atlas:
       - tests/unit/spec_runner_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/fixture_reaping_spec.lua
+      - tests/unit/reap_test_orphans_spec.lua
       - tests/integration/chat_progress_process_spec.lua
 
   infra/vault:

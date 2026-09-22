@@ -99,7 +99,7 @@ through, plus one `ps`-based census that fails the suite).
       prune on exit, `mark()`/`reap({since})` so a file-scope server survives a
       per-case reap, `VimLeavePre` backstop); collapse the eight spec-local
       copies onto it, the real-binary conformance spawn included (#237 BR-5).
-- [ ] M1 — `scripts/reap-test-orphans.py`: a `ps`-based census of this
+- [x] M1 — `scripts/reap-test-orphans.py`: a `ps`-based census of this
       checkout's surviving test processes, with a pure selector tested against
       a recorded process table. In M1, not M2: `single_source_sweeps_spec`'s
       plan-entity guard reads the whole plan's Core-concepts table, so leaving
@@ -489,3 +489,19 @@ proofs need a machine where `ps` is permitted — an agent sandbox refuses it.
 (12 `fake_cliproxy`, 13 `nvim --headless`, oldest two days). Deliberately left in
 place — they are a live target for the census once it exists. Sweep with
 `ps -Ao pid=,ppid=,args= | grep "$(pwd -P)/tests/" | grep -v grep`.
+
+### 2026-09-22 — M1 census landed
+
+Implemented the `ps`-based census in `scripts/reap-test-orphans.py` with pure
+`parse_ps`, `select_orphans`, and `ancestry` logic, a recorded-table
+`--ps-from` seam, ancestry exclusion, bounded `--grace` re-sampling, and
+visible skipped/broken outcomes. Added the six-row process-table fixture and
+eight unit cases covering selection, near-misses, before/after behavior,
+malformed output, and unavailable `ps`; routed both artifacts in
+`atlas/traceability.yaml`. The RED test first failed because the script was
+absent, then passed after implementation. The 11-case fixture-reaping
+integration spec, 25-case architecture sweep, `make lint` (0 warnings/errors),
+Python compilation, real-`ps` smoke path, and `git diff --check` all pass.
+
+ARCH-DRY: one selector defines the checkout-owned process class for both phases;
+ARCH-ORDER: only pids persistent across the grace samples are reported.

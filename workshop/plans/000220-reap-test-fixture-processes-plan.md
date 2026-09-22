@@ -1112,7 +1112,7 @@ git commit -m "#220 M1: <spec> reaps through the fixture seam"
 - Create: `tests/unit/reap_test_orphans_spec.lua`
 - Modify: `atlas/traceability.yaml`
 
-- [ ] **Step 1: Record a process table to select against**
+- [x] **Step 1: Record a process table to select against**
 
 `tests/fixtures/ps_test_orphans.txt` — real row shapes, from the measurement taken
 while planning, plus the three near-misses the selector must get right. Columns are
@@ -1143,7 +1143,7 @@ What each row pins:
 | 99999 | the recipe `sh` that invoked the census | no | matches on both clauses, and is excluded only by `ancestry` — this is the row that would otherwise make `make` kill its own recipe |
 | 99998 | the census itself, a child of 99999 | no | matches on both clauses; excluded as the first element of the same walk |
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 `tests/unit/reap_test_orphans_spec.lua`:
 
@@ -1226,7 +1226,7 @@ describe("#220 orphan census", function()
 end)
 ```
 
-- [ ] **Step 3: Run it and watch it fail**
+- [x] **Step 3: Run it and watch it fail**
 
 ```
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
@@ -1235,7 +1235,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 Expected: FAIL — the script does not exist.
 
-- [ ] **Step 4: Write the script**
+- [x] **Step 4: Write the script**
 
 `scripts/reap-test-orphans.py`:
 
@@ -1452,17 +1452,17 @@ if __name__ == "__main__":
 chmod +x scripts/reap-test-orphans.py
 ```
 
-- [ ] **Step 5: Run the test**
+- [x] **Step 5: Run the test**
 
 Expected: PASS, all eight cases.
 
-- [ ] **Step 6: Route it in the traceability map**
+- [x] **Step 6: Route it in the traceability map**
 
 Under `infra/test_harness`, add `scripts/reap-test-orphans.py` and
 `tests/fixtures/ps_test_orphans.txt` to `code:`, and
 `tests/unit/reap_test_orphans_spec.lua` to `tests:`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add scripts/reap-test-orphans.py tests/fixtures/ps_test_orphans.txt \
