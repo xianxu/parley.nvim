@@ -129,3 +129,89 @@ findings:
 
 - Add a `## Revisions` entry documenting the `--ps-command` propagation fix and its regression test.
 - BR-1 still recommends reducing duplicated implementation/spec bodies in the durable plan.
+
+---
+
+## Re-review — 2026-09-22T14:59:10-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 220 — Lifecycle test fixtures leak: fake_cliproxy and headless nvim orphan to init |
+| repo | parley.nvim |
+| issue file | workshop/issues/000220-lifecycle-test-fixtures-leak-fake-cliproxy-and-headless-nvim-orphan-to-init.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 451190265e1a453044fdbd3b8efc5f7322107fb9..dea6cb100c0e18ce428dcfe6193976ee40f4665c |
+| command | sdlc milestone-close --issue 220 --milestone M1 |
+| reviewer | codex |
+| timestamp | 2026-09-22T14:59:10-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+M1’s lifecycle layers and census are implemented and targeted tests pass. Boundary crossing is blocked by a missing architectural atlas update; the durable-plan restatement finding also remains unresolved.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: not-addressed
+    note: |
+      The durable plan remains approximately 2003 lines and still embeds complete implementation/spec bodies.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      scripts/reap-test-orphans.py now threads ps_command through persistent_candidates, with a regression test in tests/unit/reap_test_orphans_pure.py that fails if resampling uses literal ps.
+findings:
+  - id: new
+    severity: Important
+    family: atlas-update-missing
+    title: |
+      Atlas update is missing for the new fixture lifecycle/reaping surface
+    detail: |
+      The diff adds exit_with_parent, fixture-process registry ownership, watchdog-based fixture cleanup, and the reap-test-orphans census, but only updates traceability.yaml; atlas/infra/test_harness.md is unchanged and has no corresponding lifecycle/reaping documentation. Add the architectural surface to atlas in this boundary. ARCH-PURPOSE.
+```
+
+1. Strengths
+
+- `fixture_process` centralizes registration, marking, pruning, and teardown.
+- Both watchdogs cover the boot-time `ppid == 1` race.
+- Pure census predicates now have direct no-IO Python tests.
+- Targeted tests passed: census 8/8, lifecycle 11 reached tests, pure Python tests 6/6.
+
+2. Critical findings
+
+None.
+
+3. Important findings
+
+- Missing atlas documentation for the new fixture lifecycle/reaping architecture, as listed above.
+
+4. Minor findings
+
+- BR-1 remains open: the durable plan duplicates extensive implementation and test bodies.
+
+5. Test coverage notes
+
+`git diff --check`, Python compilation, pure tests, census tests, and lifecycle tests passed. The real-`ps` conformance case was correctly pending in the sandbox. `make test-unit JOBS=1` was interrupted after partial progress without producing a final result.
+
+6. Architectural notes
+
+- ARCH-DRY: Pass — ownership is consolidated in `fixture_process` and `LoopbackHTTPServer`.
+- ARCH-PURE: Pass — pure census/watchdog predicates have direct tests.
+- ARCH-PURPOSE: Flag — atlas coverage does not yet document the new lifecycle surface.
+- ARCH-MOCK: Pass — the process-table seam is injectable and the `ps_command` fix is covered.
+- ARCH-CONSTRAINTS: Pass — census grace polling is bounded.
+- ARCH-SECURE: Pass — recorded tables do not signal processes; selection is narrowed by checkout and process shape.
+- ARCH-ORDER: Pass — registry marks and teardown ordering are exercised.
+- ARCH-FUNERAL: Pass — normal exit, parent death, and census cleanup paths exist.
+
+7. Plan revision recommendations
+
+- Add a `## Revisions` entry documenting the `ps_command` propagation fix and regression test.
+- Add a `## Revisions` entry documenting the unresolved plan-restatement issue or reduce the duplicated plan bodies.
+- Add an atlas documentation step to the M1 plan, or explicitly revise the boundary contract if documentation is intentionally deferred to M2.

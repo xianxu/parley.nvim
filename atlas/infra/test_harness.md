@@ -116,6 +116,26 @@ via `PARLEY_PUBLISH_DELAY` and asserts the ready path is never observable
 incomplete — and asserts the delay was honored, so the hook cannot be deleted to
 make it pass. Neither has a race to win.
 
+## Process lifecycle
+
+Every process a test creates has an owner and an end. The layers are placed at
+the chokepoint for each process shape:
+
+| failure or exit shape | owner and cleanup |
+|---|---|
+| normal spec exit or assertion failure | `tests/helpers/fixture_process.lua` registers every `uv.spawn` handle, reaps it at `VimLeavePre`, and supports marked per-case cleanup |
+| killed or wedged harness Neovim | `tests/helpers/exit_with_parent.lua`, installed by `tests/minimal_init.vim`, exits when the parent is gone or when the process is reparented to init |
+| fixture server or blocking fixture mode | `LoopbackHTTPServer` installs `tests/fixtures/fixture_watchdog.py` for server fixtures; non-server blocking modes call the same watchdog directly |
+| detached real `cliproxyapi` | the fixture-process registry provides best-effort normal-exit cleanup; it has no parent-death watchdog because the binary is intentionally detached and shared |
+| anything that survives those layers | `scripts/reap-test-orphans.py` reads the checkout's `ps` rows, excludes the invoking ancestry and non-harness editors, then reports and reaps persistent survivors |
+
+The census uses `--ps-from` as a signal-free recorded-table seam in tests and
+re-samples live `ps` output within a bounded grace period before accusing a
+process. `pgrep -f` is not a substitute on macOS: it does not match the fixture
+process shape this harness produces. New fixture servers inherit the watchdog
+through `LoopbackHTTPServer`; new spec subprocesses inherit registry cleanup
+through `fixture_process`.
+
 ## Comment drift
 
 `tests/arch/superseded_comment_spec.lua` fails on two paragraphs in ONE

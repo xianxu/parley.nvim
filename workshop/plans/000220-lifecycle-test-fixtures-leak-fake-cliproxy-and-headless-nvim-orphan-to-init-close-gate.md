@@ -56,6 +56,28 @@ rounds:
       boundary: M1
       recipe: milestone-review
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-22T14:59:10-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: not-addressed
+          note: The durable plan remains approximately 2003 lines and still embeds complete implementation/spec bodies.
+          round: 4
+        - id: BR-3
+          disposition: addressed
+          note: scripts/reap-test-orphans.py now threads ps_command through persistent_candidates, with a regression test in tests/unit/reap_test_orphans_pure.py that fails if resampling uses literal ps.
+          round: 4
+      findings:
+        - id: BR-4
+          severity: Important
+          title: Atlas update is missing for the new fixture lifecycle/reaping surface
+          detail: The diff adds exit_with_parent, fixture-process registry ownership, watchdog-based fixture cleanup, and the reap-test-orphans census, but only updates traceability.yaml; atlas/infra/test_harness.md is unchanged and has no corresponding lifecycle/reaping documentation. Add the architectural surface to atlas in this boundary. ARCH-PURPOSE.
+          family: atlas-update-missing
+          round: 4
+      boundary: M1
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#220 (boundary-review)
@@ -93,7 +115,19 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Important] `external-seam-consistency` Grace resampling ignores the configured ps command
   scripts/reap-test-orphans.py:115 calls read_process_table(None, "ps") instead of using the caller's --ps-command. A custom or injected process-table provider is used for the initial sample but silently replaced by the real ps during grace polling. Thread ps_command through persistent_candidates and add a regression test proving every sample uses the configured seam. ARCH-MOCK.
 
+## Round 4 — 2026-09-22T14:59:10-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — not-addressed — The durable plan remains approximately 2003 lines and still embeds complete implementation/spec bodies.
+- BR-3 — addressed — scripts/reap-test-orphans.py now threads ps_command through persistent_candidates, with a regression test in tests/unit/reap_test_orphans_pure.py that fails if resampling uses literal ps.
+
+### Raised
+
+- **BR-4** [Important] `atlas-update-missing` Atlas update is missing for the new fixture lifecycle/reaping surface
+  The diff adds exit_with_parent, fixture-process registry ownership, watchdog-based fixture cleanup, and the reap-test-orphans census, but only updates traceability.yaml; atlas/infra/test_harness.md is unchanged and has no corresponding lifecycle/reaping documentation. Add the architectural surface to atlas in this boundary. ARCH-PURPOSE.
+
 ## Open findings
 
 - **BR-1** [Minor] `plan-restates-the-diff` 1803 lines carrying complete spec bodies and the whole census script verbatim
-- **BR-3** [Important] `external-seam-consistency` Grace resampling ignores the configured ps command
+- **BR-4** [Important] `atlas-update-missing` Atlas update is missing for the new fixture lifecycle/reaping surface

@@ -516,3 +516,8 @@ Boundary review BR-3 returned FIX-THEN-SHIP: grace resampling hard-coded `ps`
 instead of preserving the configured `--ps-command` seam. Threaded the command
 through `persistent_candidates` and added a direct regression test; the review
 also confirmed BR-2 was addressed.
+
+Boundary review BR-4 returned REWORK because the new lifecycle/reaping surface
+was not mapped in `atlas/infra/test_harness.md`. Added the process-lifecycle
+map covering registry teardown, both watchdog chokepoints, the intentionally
+detached real proxy, and the final `ps` census.

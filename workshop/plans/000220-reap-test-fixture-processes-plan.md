@@ -2001,3 +2001,10 @@ the CLI, recorded process-table seam, and signal-free boundary behavior.
 Threaded the configured `--ps-command` through grace-period resampling and added
 a direct regression test proving subsequent samples use that seam rather than
 hard-coding `ps`.
+
+### 2026-09-22 — boundary review BR-4
+
+Moved the atlas process-lifecycle map into the M1 boundary so the new watchdog,
+registry, detached-binary, and census surfaces are documented before crossing;
+the remaining M2 documentation work is the operator remedy in `TOOLING.md` and
+the distilled rules in `workshop/lessons.md`.
