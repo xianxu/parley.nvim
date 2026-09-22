@@ -215,3 +215,84 @@ None.
 - Add a `## Revisions` entry documenting the `ps_command` propagation fix and regression test.
 - Add a `## Revisions` entry documenting the unresolved plan-restatement issue or reduce the duplicated plan bodies.
 - Add an atlas documentation step to the M1 plan, or explicitly revise the boundary contract if documentation is intentionally deferred to M2.
+
+---
+
+## Re-review — 2026-09-22T15:04:43-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 220 — Lifecycle test fixtures leak: fake_cliproxy and headless nvim orphan to init |
+| repo | parley.nvim |
+| issue file | workshop/issues/000220-lifecycle-test-fixtures-leak-fake-cliproxy-and-headless-nvim-orphan-to-init.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 451190265e1a453044fdbd3b8efc5f7322107fb9..ee97c9af13fdafa4e99d51395a8951c937c59c7c |
+| command | sdlc milestone-close --issue 220 --milestone M1 |
+| reviewer | codex |
+| timestamp | 2026-09-22T15:04:43-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+M1 delivers the lifecycle watchdogs, centralized fixture registry, orphan census, and atlas documentation. Targeted and full unit verification passed; no Critical or Important findings remain.
+
+1. Strengths
+
+- `fixture_process` centralizes spawn/reap ownership.
+- Watchdogs cover both changed-parent and boot-time `ppid == 1` cases.
+- Pure census/watchdog functions have direct no-IO tests.
+- Atlas documents the new lifecycle/reaping architecture.
+
+2. Critical findings
+
+None.
+
+3. Important findings
+
+None.
+
+4. Minor findings
+
+- BR-1 remains unresolved: the durable plan still embeds extensive implementation and test bodies.
+
+5. Test coverage notes
+
+- Pure Python tests: 6/6 passed.
+- Census spec: 8/8 passed.
+- Fixture lifecycle spec: 11 passed, with the real-`ps` case correctly pending in the sandbox.
+- Full unit suite: passed.
+- Python compilation and `git diff --check`: passed.
+
+6. Architectural notes
+
+- ARCH-DRY: pass — shared registry and constructor chokepoints.
+- ARCH-PURE: pass — pure census predicates are directly tested.
+- ARCH-PURPOSE: pass — M1’s reaping and measurement scope is delivered.
+- ARCH-MOCK: pass — `ps` has a recorded-table seam and live conformance case.
+- ARCH-CONSTRAINTS: pass — watchdog polling and census grace are bounded.
+- ARCH-SECURE: pass — census selection is narrowed and recorded tables cannot signal.
+- ARCH-ORDER: pass — startup orphaning and teardown ordering are covered.
+- ARCH-FUNERAL: pass — created processes and handles have cleanup paths.
+
+7. Plan revision recommendations
+
+- Reduce or remove the duplicated implementation/spec bodies noted by BR-1.
+- Update the M2 documentation checklist to reflect that the atlas lifecycle documentation already landed in M1.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: not-addressed
+    note: |
+      The durable plan still embeds extensive implementation and test bodies; retain as a Minor follow-up.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      atlas/infra/test_harness.md now documents the watchdogs, fixture registry, detached-process handling, and orphan census.
+```

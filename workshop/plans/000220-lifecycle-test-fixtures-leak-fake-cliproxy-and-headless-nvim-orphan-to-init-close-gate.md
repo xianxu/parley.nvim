@@ -78,6 +78,21 @@ rounds:
       boundary: M1
       recipe: milestone-review
       blocked: true
+    - "n": 5
+      timestamp: "2026-09-22T15:04:43-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: not-addressed
+          note: The durable plan still embeds extensive implementation and test bodies; retain as a Minor follow-up.
+          round: 5
+        - id: BR-4
+          disposition: addressed
+          note: atlas/infra/test_harness.md now documents the watchdogs, fixture registry, detached-process handling, and orphan census.
+          round: 5
+      boundary: M1
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#220 (boundary-review)
@@ -127,7 +142,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Important] `atlas-update-missing` Atlas update is missing for the new fixture lifecycle/reaping surface
   The diff adds exit_with_parent, fixture-process registry ownership, watchdog-based fixture cleanup, and the reap-test-orphans census, but only updates traceability.yaml; atlas/infra/test_harness.md is unchanged and has no corresponding lifecycle/reaping documentation. Add the architectural surface to atlas in this boundary. ARCH-PURPOSE.
 
+## Round 5 — 2026-09-22T15:04:43-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — not-addressed — The durable plan still embeds extensive implementation and test bodies; retain as a Minor follow-up.
+- BR-4 — addressed — atlas/infra/test_harness.md now documents the watchdogs, fixture registry, detached-process handling, and orphan census.
+
 ## Open findings
 
 - **BR-1** [Minor] `plan-restates-the-diff` 1803 lines carrying complete spec bodies and the whole census script verbatim
-- **BR-4** [Important] `atlas-update-missing` Atlas update is missing for the new fixture lifecycle/reaping surface
