@@ -1648,7 +1648,7 @@ landed), and the final `ps` prints nothing — one watchdog poll for the Neovims
 second for the fixtures they were holding, plus slack.
 **Needs a machine where `ps` is permitted.**
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add Makefile.parley
@@ -1722,7 +1722,7 @@ where the coverage comes from rather than having to arrange it.
   `sh` carries the whole nvim command line in its own argv.
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add TOOLING.md atlas/infra/test_harness.md workshop/lessons.md
@@ -1901,7 +1901,7 @@ Add two lines to `tests/arch/spawn_seam_spec.lua`'s header comment pointing at
 `tests/arch/fixture_lifecycle_spec.lua` as the `tests/` half of the same principle,
 so a reader of either finds the other.
 
-- [ ] **Step 7: Route it, run it, commit**
+- [x] **Step 7: Route it, run it, commit**
 
 Add `tests/arch/fixture_lifecycle_spec.lua` to `atlas/traceability.yaml` under
 `infra/test_harness`.
@@ -2037,3 +2037,8 @@ missing path rather than deleting a fixture. The final guard passes 4/4.
 The current SDLC contract requires an M2 milestone verdict before whole-issue
 close, so Task 7 Step 8 includes `sdlc milestone-close --issue 220 --milestone M2`
 followed by `sdlc close`. The atlas lifecycle map was already delivered at M1.
+
+M2 implementation and its evidence are committed in `caa953ab`. The final mapped
+harness target passed (census 9/9 including the Python 6/6 suite; lifecycle guard
+4/4; fixture reaping 11/11), with no after-census survivors. Targeted lint and
+`git diff --check` passed after the final test and documentation edits.
