@@ -2077,3 +2077,21 @@ The post-fix full `make test` passed with zero census survivors, and the repeate
 SIGINT proof (group 88869, observed Neovims 88953/88956) also left none after ten
 seconds. The intentional live leak proof reported pid 63227 and made make exit 2;
 no mapped spec failed in that run.
+
+### 2026-09-22 — BR-5 command-boundary class
+
+The second M2 review disposed BR-6/7/8 and verified the pure predicates, but
+reproduced BR-5 with a leading `-c`/`--cmd` whose command text contained fake
+harness flags. The authority rule now recognizes only initial known valueless
+flags followed immediately by the absolute harness init, or the known Plenary
+child invocation (including its optional startup command). It does not search
+arbitrary command or filename arguments for options.
+
+The negative enumeration follows local `nvim --help`: -c/--cmd (separate and
+attached forms), +cmd, -l, -S, -s, -u, -i, -V, --listen, --server, --startuptime,
+--remote-expr, and --. Each is tested at the start, after -n, and after a genuine
+--headless flag: 48 cases. Thirty failed before the first correction; extending
+the corpus to a genuine headless flag exposed eleven more init-path false
+positives, fixed by recognizing complete launch forms. All 13 Python tests and
+10 Lua census cases pass. A live proof selected actual harness pid 1040 and
+fixture pid 1041, while preserving an unrelated headless fixture viewer.

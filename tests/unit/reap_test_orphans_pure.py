@@ -58,6 +58,7 @@ class CensusPureTests(unittest.TestCase):
             'nvim /repo/tests/fixtures/fake_cliproxy -c echo --headless',
             'nvim --headless /repo/tests/fixtures/ps_test_orphans.txt',
             'nvim --headless -c echo /repo/tests/fixtures/fake_cliproxy',
+            'nvim --headless -c echo "-c lua require(\'plenary.busted\').run(\'/repo/tests/a.lua\')"',
         ]
         for command in commands:
             with self.subTest(command=command):
@@ -70,6 +71,27 @@ class CensusPureTests(unittest.TestCase):
             '/usr/bin/python3 /repo/tests/fixtures/fake_cliproxy --port 1',
             'python3 -B /repo/tests/fixtures/fake_cliproxy --port 1',
             '/bin/sh /repo/tests/fixtures/orphan_me.sh /tmp/pid nvim',
+        ]:
+            with self.subTest(command=command):
+                self.assertEqual(len(census.select_orphans(
+                    [{"pid": 9, "ppid": 1, "args": command}], '/repo')), 1)
+
+    def test_nvim_option_arguments_never_supply_headless_flags(self):
+        # nvim --help: command, script, path, address, and end-of-options forms.
+        for option in ['-c echo', '--cmd echo', '-cecho', '--cmd=echo', '+echo',
+                       '-l', '-S', '-s', '-u', '-i', '-V1', '--listen',
+                       '--server', '--startuptime', '--remote-expr', '--']:
+            for prefix in ['', '-n ', '--headless ']:
+                command = f'nvim {prefix}{option} " --headless -u /repo/tests/minimal_init.vim "'
+                with self.subTest(command=command):
+                    self.assertEqual(census.select_orphans(
+                        [{"pid": 9, "ppid": 1, "args": command}], '/repo'), [])
+
+    def test_harness_parent_and_plenary_child_are_selected(self):
+        for command in [
+            'nvim -n --headless --noplugin -u /repo/tests/minimal_init.vim -c qa!',
+            'nvim --headless --noplugin -u /repo/tests/minimal_init.vim -c qa!',
+            'nvim --headless -c lua require("plenary.busted").run("/repo/tests/unit/a_spec.lua")',
         ]:
             with self.subTest(command=command):
                 self.assertEqual(len(census.select_orphans(

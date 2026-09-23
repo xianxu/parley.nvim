@@ -81,12 +81,22 @@ def select_orphans(
             while rest.startswith(("-B ", "-u ")) and name not in ("bash", "sh"):
                 rest = rest.split(None, 1)[1]
             fixture = rest.startswith(fixture_prefix)
-        options = re.split(r"\s+(?:-c|--cmd)\s", rest, maxsplit=1)[0]
-        harness_init = re.search(r'(?:^|\s)-u\s+"?' + re.escape(tests_prefix + "minimal_init.vim")
-                                 + r'"?(?:\s|$)', options)
-        plenary_child = re.search(r'''require\(["']plenary\.busted["']\)\.run\(["']'''
-                                  + re.escape(tests_prefix), rest)
-        harness = name == "nvim" and "--headless" in options.split() and (harness_init or plenary_child)
+        # Only the launcher's initial, known valueless flags can establish
+        # headless mode. Stop at the first command, filename, or value-bearing
+        # option: ps cannot distinguish spaces inside its argument from argv.
+        flags = re.match(r"(?:(?:-n|--headless|--noplugin|--clean)(?:\s+|$))*", rest)
+        headless = "--headless" in flags.group().split()
+        invocation = rest[flags.end():]
+        harness_init = re.match(r'-u\s+"?' + re.escape(tests_prefix + "minimal_init.vim")
+                                + r'"?(?:\s|$)', invocation)
+        # Plenary's optional startup command is one known form, not arbitrary
+        # command text in which a later substring can confer ownership.
+        plenary_child = re.match(
+            r"(?:-c set rtp\+=.+? \| runtime plugin/plenary\.vim --noplugin "
+            r"(?:-u tests/minimal_init\.vim )?)?"
+            r'''-c lua require\(["']plenary\.busted["']\)\.run\(["']'''
+            + re.escape(tests_prefix), invocation)
+        harness = name == "nvim" and headless and (harness_init or plenary_child)
         if harness or fixture:
             selected.append(row)
     return selected

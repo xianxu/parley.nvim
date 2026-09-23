@@ -133,6 +133,33 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: true
+    - "n": 7
+      timestamp: "2026-09-22T18:59:15-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: not-addressed
+          note: The plan still contains full implementation/spec snapshots; lines 2071–2074 explicitly retain them. The appended revision explains retention but does not resolve the duplication concern. Remains Minor.
+          round: 7
+        - id: BR-5
+          disposition: not-addressed
+          note: scripts/reap-test-orphans.py:84 fails to delimit -c/--cmd at the beginning of rest. Direct evaluation selects nvim -c echo " --headless -u /repo/tests/minimal_init.vim " and the equivalent --cmd form, although the apparent harness options are command text. Remains Critical in process-ownership-before-signalling; enumerate command-argument boundaries and test both leading and later positions.
+          round: 7
+        - id: BR-6
+          disposition: addressed
+          note: Initial and subsequent samples use validated_rows. The sequence regression passes; replacing validation with permissive parsing in memory makes both malformed-later-sample cases fail. Unavailable resampling also returns BROKEN without signalling.
+          round: 7
+        - id: BR-7
+          disposition: addressed
+          note: tests/minimal_init.vim uses synchronous libuv cleanup. The orphan regression passes, including directory removal and symlink-target preservation. Replacing cleanup with pcall(vim.fn.delete, ...) in a scratch copy makes that exact regression fail at fixture_reaping_spec.lua:69.
+          round: 7
+        - id: BR-8
+          disposition: addressed
+          note: README.md:105–106 adds the cleanup-command link in the pinned range. Its TOOLING.md#orphaned-test-processes target documents the actual --root/--phase invocation and ps caveat.
+          round: 7
+      boundary: M2
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#220 (boundary-review)
@@ -207,11 +234,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-8** [Important] `readme-surface-discovery` README update is missing for the new manual census command
   TOOLING.md:78 introduces an operator command with --root and --phase, but README.md is unchanged in the pinned range. The existing generic contributor link does not satisfy this review's explicit same-range README gate. Add a short cleanup-command pointer linking to the detailed TOOLING section.
 
+## Round 7 — 2026-09-22T18:59:15-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — not-addressed — The plan still contains full implementation/spec snapshots; lines 2071–2074 explicitly retain them. The appended revision explains retention but does not resolve the duplication concern. Remains Minor.
+- BR-5 — not-addressed — scripts/reap-test-orphans.py:84 fails to delimit -c/--cmd at the beginning of rest. Direct evaluation selects nvim -c echo " --headless -u /repo/tests/minimal_init.vim " and the equivalent --cmd form, although the apparent harness options are command text. Remains Critical in process-ownership-before-signalling; enumerate command-argument boundaries and test both leading and later positions.
+- BR-6 — addressed — Initial and subsequent samples use validated_rows. The sequence regression passes; replacing validation with permissive parsing in memory makes both malformed-later-sample cases fail. Unavailable resampling also returns BROKEN without signalling.
+- BR-7 — addressed — tests/minimal_init.vim uses synchronous libuv cleanup. The orphan regression passes, including directory removal and symlink-target preservation. Replacing cleanup with pcall(vim.fn.delete, ...) in a scratch copy makes that exact regression fail at fixture_reaping_spec.lua:69.
+- BR-8 — addressed — README.md:105–106 adds the cleanup-command link in the pinned range. Its TOOLING.md#orphaned-test-processes target documents the actual --root/--phase invocation and ps caveat.
+
 ## Open findings
 
 - **BR-1** [Minor] `plan-restates-the-diff` 1803 lines carrying complete spec bodies and the whole census script verbatim
 - **BR-2** [Critical] `pure-entity-test-seam` Core-concepts PURE entities are not tested without IO
 - **BR-5** [Critical] `process-ownership-before-signalling` The census selects unrelated editors and pagers for SIGKILL
-- **BR-6** [Critical] `process-observation-validity` Malformed grace-period samples turn known survivors into a clean result
-- **BR-7** [Important] `cleanup-execution-context` Watchdog query-directory cleanup always fails in the timer callback
-- **BR-8** [Important] `readme-surface-discovery` README update is missing for the new manual census command

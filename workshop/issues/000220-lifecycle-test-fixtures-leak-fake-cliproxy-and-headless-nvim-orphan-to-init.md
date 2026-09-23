@@ -571,3 +571,15 @@ After the review fixes, `make test` exited 0 (lint: 648 files, zero warnings/err
 unit and integration after censuses clean). Real ps confirmed zero checkout test
 processes. A fresh SIGINT proof observed Neovims 88953/88956 in group 88869 before
 signaling; after ten seconds the checkout's process set was again empty.
+
+### 2026-09-22 — BR-5 re-review correction
+
+The second M2 review cleared BR-6/7/8 and purity but retained BR-5: leading
+command arguments could still supply apparent Neovim options. Replaced option
+substring searches with known launch forms from the start of argv. The 48-case
+negative enumeration spans command/script/path/address options at leading,
+later, and genuine-headless positions; it reproduced the remaining defect.
+All 13 Python tests and 10 Lua census cases now pass. Real process verification
+selected and reaped harness pid 1040 plus fixture pid 1041, while leaving a
+headless Neovim viewing the fixture alive. BR-1 remains Minor with the historical
+plan-retention rationale recorded in the durable plan.

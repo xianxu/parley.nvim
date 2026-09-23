@@ -103,3 +103,106 @@ findings:
    - Correct `orphaned`’s PURE classification or extract the pure predicate.
    - Record fast-event-compatible cleanup and directory-removal verification.
    - Resolve BR-1 by replacing copied bodies with concise contracts and source references.
+
+---
+
+## Re-review — 2026-09-22T18:59:15-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 220 — Lifecycle test fixtures leak: fake_cliproxy and headless nvim orphan to init |
+| repo | parley.nvim |
+| issue file | workshop/issues/000220-lifecycle-test-fixtures-leak-fake-cliproxy-and-headless-nvim-orphan-to-init.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 451190265e1a453044fdbd3b8efc5f7322107fb9..ba7a9fe9f7d1b4e952678ff918d6743ffcd6fdd9 |
+| command | sdlc milestone-close --issue 220 --milestone M2 |
+| reviewer | codex |
+| timestamp | 2026-09-22T18:59:15-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+M2’s census wiring, observation validation, watchdog cleanup, and documentation are substantially delivered. BR-6, BR-7, and BR-8 are addressed with concrete evidence. **BR-5 still blocks the boundary:** the census can mistake command text inside an interactive Neovim invocation for harness options and select that editor for SIGKILL. BR-1 remains a non-blocking documentation concern.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: not-addressed
+    note: |
+      The plan still contains full implementation/spec snapshots; lines 2071–2074 explicitly retain them. The appended revision explains retention but does not resolve the duplication concern. Remains Minor.
+  - id: BR-5
+    disposition: not-addressed
+    note: |
+      scripts/reap-test-orphans.py:84 fails to delimit -c/--cmd at the beginning of rest. Direct evaluation selects nvim -c echo " --headless -u /repo/tests/minimal_init.vim " and the equivalent --cmd form, although the apparent harness options are command text. Remains Critical in process-ownership-before-signalling; enumerate command-argument boundaries and test both leading and later positions.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Initial and subsequent samples use validated_rows. The sequence regression passes; replacing validation with permissive parsing in memory makes both malformed-later-sample cases fail. Unavailable resampling also returns BROKEN without signalling.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      tests/minimal_init.vim uses synchronous libuv cleanup. The orphan regression passes, including directory removal and symlink-target preservation. Replacing cleanup with pcall(vim.fn.delete, ...) in a scratch copy makes that exact regression fail at fixture_reaping_spec.lua:69.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      README.md:105–106 adds the cleanup-command link in the pinned range. Its TOOLING.md#orphaned-test-processes target documents the actual --root/--phase invocation and ps caveat.
+```
+
+1. **Strengths**
+
+   - Shared `validated_rows` prevents malformed later observations from becoming a false clean result.
+   - Query cleanup now works in the timer’s execution context, with a regression that checks filesystem residue as well as process death.
+   - Makefile recipes preserve test failures while reaching the after-census; README and atlas explain the new surface and concurrency restriction.
+
+2. **Critical findings**
+
+   **BR-5 — command text still establishes ownership**, [scripts/reap-test-orphans.py:84](/Users/xianxu/workspace/parley.nvim/scripts/reap-test-orphans.py:84), **ARCH-SECURE / ARCH-PURPOSE**.
+
+   This valid interactive invocation has no headless option:
+
+   ```sh
+   nvim -c 'echo " --headless -u /repo/tests/minimal_init.vim "'
+   ```
+
+   Its flattened process-table command is selected by `select_orphans`. The delimiter requires whitespace *before* `-c`, but `rest` starts with `-c`; consequently the entire command body is scanned as options. `--cmd` behaves identically. Persistent selection reaches `reap()` and SIGKILL.
+
+   Fix the ownership rule across command-bearing argument forms, including start-of-string boundaries. Extend the negative tests to leading and later `-c`/`--cmd` positions while preserving positive harness cases. This is the existing BR-5, not a new finding.
+
+3. **Important findings**
+
+   None remaining.
+
+4. **Minor findings**
+
+   BR-1 remains: the plan retains extensive executable snapshots alongside the maintained source.
+
+5. **Test coverage notes**
+
+   - Python suite: **11 passed**.
+   - Lua census suite: **10 passed**.
+   - Lifecycle architecture guard: **4 passed**.
+   - Fixture integration: **11 behavioral cases passed**; real-`ps` conformance explicitly skipped because the sandbox refuses `ps`.
+   - BR-6 and BR-7 mutations produced the expected regression failures.
+   - `git diff --check` passed; repository remained clean.
+   - Full-suite and interrupted-run machine-level proofs were not independently repeated here.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared spawn registry, server watchdog, and sample validation.
+   - **ARCH-PURE — pass:** listed pure predicates accept data and have direct tests.
+   - **ARCH-PURPOSE — flag:** BR-5 leaves cleanup unsafe for unrelated editors.
+   - **ARCH-MOCK — pass:** injected observations exercise sequences; live conformance exists, with the execution limitation above.
+   - **ARCH-CONSTRAINTS — pass:** bounded grace period and explicit same-checkout concurrency restriction.
+   - **ARCH-SECURE — flag:** command text still becomes signalling authority.
+   - **ARCH-ORDER — pass:** invalid resampling preserves uncertainty; startup orphaning and marked cleanup are exercised.
+   - **ARCH-FUNERAL — pass:** process cleanup layers and query-directory removal have concrete owners and tests.
+
+7. **Plan revision recommendations**
+
+   Append a `## Revisions` entry documenting BR-5’s remaining command-boundary class, its enumerated negative cases, and regression evidence after correction. Preserve BR-1’s explicit Minor disposition until its documentation recommendation is resolved.

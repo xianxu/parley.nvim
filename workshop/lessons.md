@@ -6,6 +6,11 @@
   Census selectors must establish executable/script identity before signaling;
   include editors, pagers, shell command text, and interpreter command/module
   modes as negative cases.
+- #220 M2 re-review (same ownership finding): matching an option substring is
+  not parsing argv. A leading command option defeated a whitespace-only boundary;
+  filename/address arguments could contain the same text. Recognize known launch
+  forms from the beginning, and enumerate every value-bearing option family in
+  the negative corpus, including a real headless flag followed by a fake init path.
 - #220 M2 review: validate every observation in a polling sequence. An invalid
   later sample is unknown, not an empty set; never convert it to success or use
   the earlier snapshot as authority to signal.
