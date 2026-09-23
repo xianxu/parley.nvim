@@ -48,8 +48,13 @@ TEST_TMP = $(TEST_ENV_ROOT)/tmp
 LEGACY_TEST_DIRS = "$(CURDIR)/.test-home" "$(CURDIR)/.test-xdg" "$(CURDIR)/.test-tmp"
 TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)"
 
+# The orphan gate (#220). `before` reaps what an earlier interrupted run left;
+# `after` reports this run's survivors and fails. One owner, so a new test target
+# gets the gate by adding a line rather than restating the command.
+ORPHANS = python3 scripts/reap-test-orphans.py --root "$(CURDIR)"
+
 define PREP_TEST_ENV
-mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)"
+mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)" && $(ORPHANS) --phase before
 endef
 
 # Run the whole suite. Execution model (parallel fan-out, per-spec processes,
@@ -74,7 +79,7 @@ JOBS ?= 8
 # reliable summary after xargs finishes. Single-line PASS writes are atomic;
 # the FAIL block is best-effort across parallel jobs but the end-of-run
 # summary is authoritative either way.
-RUN_SPEC = sh -c 'out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); if nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s\n" "$$1"; rm -f "$$out"; else { printf "===FAIL: %s===\n" "$$1"; sed "s/^/  /" "$$out"; }; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
+RUN_SPEC = sh -c 'out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); if nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s\n" "$$1"; rm -f "$$out"; else { printf "===FAIL: %s===\n" "$$1"; sed "s/^/  /" "$$out"; }; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
 
 # Each spec file runs in its own Neovim process.
 test-unit:
@@ -90,6 +95,7 @@ test-unit:
 	  rc=1; \
 	fi; \
 	rm -f "$$FAILED_LOG"; \
+	$(ORPHANS) --phase after || rc=1; \
 	exit $$rc
 
 # Integration + arch specs, same per-file process fan-out.
@@ -106,6 +112,7 @@ test-integration:
 	  rc=1; \
 	fi; \
 	rm -f "$$FAILED_LOG"; \
+	$(ORPHANS) --phase after || rc=1; \
 	exit $$rc
 
 # Run tests mapped to one spec key/path from atlas/traceability.yaml.
@@ -115,25 +122,28 @@ test-spec:
 		echo "Usage: make test-spec SPEC=chat/lifecycle"; \
 		exit 1; \
 	fi
-	@$(PREP_TEST_ENV); \
+	@$(PREP_TEST_ENV) || exit $$?; \
 	tests="$$(scripts/spec_test_map.sh list-tests "$(SPEC)")"; \
 	if [ -z "$$tests" ]; then \
 		echo "No tests mapped for spec: $(SPEC)"; \
 		echo "Update atlas/traceability.yaml to add mappings."; \
 		exit 1; \
 	fi; \
+	rc=0; \
 	for test_file in $$tests; do \
 		echo "Running $$test_file"; \
-		$(TEST_ENV) nvim -n --headless --noplugin -u tests/minimal_init.vim \
+		$(TEST_ENV) nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 		  -c "PlenaryBustedFile $$test_file" \
-		  -c "qa!" || exit $$?; \
-	done
+		  -c "qa!" || rc=1; \
+	done; \
+	$(ORPHANS) --phase after || rc=1; \
+	exit $$rc
 
 # Run tests mapped to changed spec files under atlas/*/*.md.
 # Uses tracked and untracked file changes since feature-branch base
 # (default base ref: remote/main, fallback origin/main, then main).
 test-changed:
-	@$(PREP_TEST_ENV); \
+	@$(PREP_TEST_ENV) || exit $$?; \
 	scripts/spec_test_map.sh base-info; \
 	changed_specs="$$(scripts/spec_test_map.sh list-changed-specs)"; \
 	if [ -z "$$changed_specs" ]; then \
@@ -170,7 +180,7 @@ test-changed:
 		echo "Unknown test types:$$unknown"; \
 		exit 1; \
 	fi; \
-	sh_pids=""; sh_fail=0; \
+	sh_pids=""; sh_fail=0; rc=0; \
 	for test_file in $$sh_tests; do \
 		echo "Running $$test_file (background)"; \
 		bash "$$test_file" & \
@@ -179,9 +189,9 @@ test-changed:
 	if [ -n "$$lua_tests" ]; then \
 		for test_file in $$lua_tests; do \
 			echo "Running $$test_file"; \
-			$(TEST_ENV) nvim -n --headless --noplugin -u tests/minimal_init.vim \
+			$(TEST_ENV) nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 			  -c "PlenaryBustedFile $$test_file" \
-			  -c "qa!" || exit $$?; \
+			  -c "qa!" || rc=1; \
 		done; \
 	fi; \
 	for pid in $$sh_pids; do \
@@ -189,16 +199,21 @@ test-changed:
 	done; \
 	if [ "$$sh_fail" -ne 0 ]; then \
 		echo "One or more shell tests failed"; \
-		exit 1; \
-	fi
+		rc=1; \
+	fi; \
+	$(ORPHANS) --phase after || rc=1; \
+	exit $$rc
 
 # Report-only real-Neovim chat typing benchmark. Elapsed timings never gate CI;
 # scenario validity and structural work accounting still fail loudly.
 PERF_OUTPUT ?= $(TEST_TMP)/perf/parley-chat-typing.json
 perf:
-	@$(PREP_TEST_ENV)
-	@$(TEST_ENV) PERF_OUTPUT="$(PERF_OUTPUT)" nvim -n --headless --noplugin -u tests/minimal_init.vim \
-	  -c "lua require('tests.perf.chat_typing').start()"
+	@$(PREP_TEST_ENV) || exit $$?; \
+	rc=0; \
+	$(TEST_ENV) PERF_OUTPUT="$(PERF_OUTPUT)" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+	  -c "lua require('tests.perf.chat_typing').start()" || rc=1; \
+	$(ORPHANS) --phase after || rc=1; \
+	exit $$rc
 
 # Run static analysis for Lua code and tests.
 lint:
@@ -211,10 +226,13 @@ lint:
 # Refresh SSE fixture files from real APIs.
 # Requires ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLEAI_API_KEY in environment.
 fixtures:
-	@$(PREP_TEST_ENV)
-	@$(TEST_ENV) nvim --headless --noplugin -u tests/minimal_init.vim \
+	@$(PREP_TEST_ENV) || exit $$?; \
+	rc=0; \
+	$(TEST_ENV) nvim --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 	  -c "luafile scripts/record_fixtures.lua" \
-	  -c "qa!"
+	  -c "qa!" || rc=1; \
+	$(ORPHANS) --phase after || rc=1; \
+	exit $$rc
 
 # Check latest model offerings from each provider and optionally update fixture models.
 # Requires API keys in environment.

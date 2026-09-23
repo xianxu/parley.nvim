@@ -1,5 +1,19 @@
 # Lessons
 
+## 2026-09-22 (#220 — fixture process lifecycle)
+
+- A watchdog comparing a current value to one sampled at startup must handle the
+  condition already being true at startup. A fixture orphaned while booting
+  samples parent pid 1; a change-only check never fires. Test that ordering.
+- Put a class-wide safety rule at the class constructor. Parent-death exit was
+  an opt-in flag at two of eight spawn sites; `LoopbackHTTPServer` now supplies
+  it to every long-lived server fixture, while the two non-server blocking paths
+  call the watchdog directly.
+- A broad path match needs a process-kind clause before it sends SIGKILL. A
+  process with this checkout's `tests/` path in argv might be the operator's
+  editor or the recipe shell. Match harness Neovim or fixture executables and
+  exclude the census caller's ancestry.
+
 ## 2026-09-19 (#261 M4 close — a double is a restatement, and a whole-file revert proves no hunk)
 
 - **Test doubles are in a seam's ledger, and a guard over a seam scans

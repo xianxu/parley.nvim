@@ -93,8 +93,9 @@ shape.
 - **One `make test` per checkout at a time.** A second concurrent run in the
   same checkout wipes the first's live scratch. It fails loudly
   (`rm: ... Directory not empty`) rather than corrupting silently. Run
-  concurrent suites from separate worktrees — the root is keyed by checkout — or
-  pass a distinct `TEST_ENV_ROOT`. A per-run suffix was rejected: it makes the
+  concurrent suites from separate worktrees. A distinct `TEST_ENV_ROOT` isolates
+  scratch, but the process census still sees all runs in the same checkout and
+  may reap another run's processes. A per-run suffix was rejected: it makes the
   scratch path unpredictable (the perf report's default location derives from
   it) and leaves one directory per run with nothing to reap them.
 
@@ -135,6 +136,11 @@ process. `pgrep -f` is not a substitute on macOS: it does not match the fixture
 process shape this harness produces. New fixture servers inherit the watchdog
 through `LoopbackHTTPServer`; new spec subprocesses inherit registry cleanup
 through `fixture_process`.
+
+`Makefile.parley` runs the census before every harness target and after its
+tests finish, including failed specs. Survivors make the target fail. All
+parent Neovim commands use the physical checkout path in their init argument
+so the census can identify them through symlinked working directories too.
 
 ## Comment drift
 

@@ -105,12 +105,12 @@ through, plus one `ps`-based census that fails the suite).
       plan-entity guard reads the whole plan's Core-concepts table, so leaving
       `select_orphans`/`ancestry` for M2 makes that guard red at M1's boundary
       (measured).
-- [ ] M2 — wire it into `Makefile.parley`: `--phase before` in `PREP_TEST_ENV`,
+- [x] M2 — wire it into `Makefile.parley`: `--phase before` in `PREP_TEST_ENV`,
       `--phase after` folded into the exit code of every test target.
-- [ ] M2 — document the `ps`-based cleanup and the `pgrep` caveat in
+- [x] M2 — document the `ps`-based cleanup and the `pgrep` caveat in
       TOOLING.md; the layers in `atlas/infra/test_harness.md`; three rules in
       `workshop/lessons.md`.
-- [ ] M2 — `tests/arch/fixture_lifecycle_spec.lua`: guard the four invariants
+- [x] M2 — `tests/arch/fixture_lifecycle_spec.lua`: guard the four invariants
       (seam, watchdog reach, the `ppid == 1` rule in both copies, and TOOLING's
       remedy) so a new fixture or spec inherits the reaping instead of
       remembering it.
@@ -522,3 +522,30 @@ Boundary review BR-4 returned REWORK because the new lifecycle/reaping surface
 was not mapped in `atlas/infra/test_harness.md`. Added the process-lifecycle
 map covering registry teardown, both watchdog chokepoints, the intentionally
 detached real proxy, and the final `ps` census.
+
+### 2026-09-22 — M2 wiring, operator remedy, and lifecycle guard
+
+Wired the before/after census into all harness targets, using absolute physical
+init paths at all five launch sites. Failed spec loops accumulate failure and
+still run the after census; preflight failures stop combined recipes. Added the
+operator remedy and concurrency limit to TOOLING and the atlas, plus lifecycle
+lessons. A separate scratch root does not isolate the checkout-scoped census.
+
+The four-invariant arch guard passes and detected each planted regression before
+restoration: bypassed spawn, missing non-server watchdog, stale exemption,
+change-only parent predicate, and pgrep remedy. The Python predicate tests now
+run through the Lua census spec; their raw .py path was removed from the
+Lua-only traceability mapping.
+
+Real-machine evidence: `make test` exited 0 with clean after censuses for both
+unit and integration phases; a separate `ps` listing found no checkout test
+processes. The planted live fake_cliproxy (pid 19049) caused `LEAKED: 1` and make
+exit 2 after otherwise passing mapped specs. SIGINT to fresh integration group
+46237, after observing actual Neovims 46312 and 46314, left no checkout test
+processes in real `ps` after ten seconds. The first mapped run also reaped 21
+older init-parented processes left by earlier sessions.
+
+ARCH-DRY: one Makefile census command owns every target's invocation. ARCH-FUNERAL:
+the suite now measures the lifetime rules and rejects survivors. M2 review and
+whole-issue close remain; the operator's `window_trusted=no` instruction still
+applies to the calibration row created at close.

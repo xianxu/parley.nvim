@@ -624,12 +624,12 @@ atlas:
       - tests/arch/scratch_placement_spec.lua
       - tests/arch/destructive_recipe_spec.lua
       - tests/arch/superseded_comment_spec.lua
+      - tests/arch/fixture_lifecycle_spec.lua
       - tests/unit/ready_port_spec.lua
       - tests/unit/spec_runner_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/fixture_reaping_spec.lua
       - tests/unit/reap_test_orphans_spec.lua
-      - tests/unit/reap_test_orphans_pure.py
       - tests/integration/chat_progress_process_spec.lua
 
   infra/vault:

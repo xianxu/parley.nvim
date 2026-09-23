@@ -73,8 +73,29 @@ else is safe. It also removes the pre-#202 in-repo `.test-home`, `.test-xdg`,
 and `.test-tmp` directories if they are still around.
 
 Run only one `make test` per checkout at a time: a second concurrent run deletes
-the first's scratch, loudly. Use a separate worktree (the root is keyed by
-checkout) or a distinct `TEST_ENV_ROOT` for concurrent suites.
+the first's scratch, loudly. Use a separate worktree for concurrent suites;
+a distinct `TEST_ENV_ROOT` isolates scratch but does not isolate the process census.
+
+## Orphaned test processes
+
+Test targets reap processes left by an interrupted earlier run before starting,
+then report survivors and fail at the end. The census is scoped to this checkout.
+Do not run test targets concurrently in the same checkout: the census cannot
+distinguish another run's processes from leaks and can kill them.
+
+To inspect and reap survivors manually, use the physical checkout path. Under a
+symlinked working directory (including macOS `/tmp`), `$PWD` can differ from the
+path the census matches. On macOS, `pgrep -f` failed to find these fixtures even
+when `ps` found them; do not use it as a cleanup check.
+
+```sh
+ROOT=$(pwd -P)
+ps -Ao pid=,ppid=,args= | grep "$ROOT/tests/" | grep -v grep
+python3 scripts/reap-test-orphans.py --root "$ROOT" --phase after
+```
+
+The original leak held about 11 GB resident while nearly idle, leaving the
+memory compressor busy; low CPU use did not mean it was harmless.
 
 ## Chat-Typing Performance Report
 

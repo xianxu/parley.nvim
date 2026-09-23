@@ -11,6 +11,12 @@ local function run(root, phase, extra)
 end
 
 describe("#220 orphan census", function()
+    it("runs the direct Python predicate tests through the normal suite", function()
+        local out = vim.system({ "python3", "-B", "-m", "unittest",
+            "tests/unit/reap_test_orphans_pure.py" }, { text = true }):wait(10000)
+        assert.equals(0, out.code, (out.stdout or "") .. (out.stderr or ""))
+    end)
+
     it("selects exactly this checkout's leaked harness processes", function()
         local out = run(ROOT, "after", { "--grace", "0" })
         assert.equals(1, out.code, "survivors must fail the run")
