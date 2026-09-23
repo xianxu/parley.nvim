@@ -7,6 +7,7 @@ created: 2026-09-23
 updated: 2026-09-23
 estimate_hours:
 started: 2026-09-23T10:34:00-07:00
+flow: {kind: quick, provenance: inferred, spec: "51264e50", done: "381e00aa"}
 ---
 
 # Record Ariadne remote acquisition source
