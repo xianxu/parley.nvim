@@ -1,10 +1,10 @@
 ---
 id: 000220
-status: codecomplete
+status: done
 deps: []
 github_issue:
 created: 2026-09-06
-updated: 2026-09-22
+updated: 2026-09-23
 estimate_hours: 8.71
 started: 2026-09-19T17:59:42-07:00
 flow: {kind: full, provenance: inferred}
