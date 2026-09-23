@@ -140,7 +140,7 @@ neither.
 
 ## Plan
 
-- [ ]
+- [ ] Confirm an implementation plan against the Spec and Done when before starting work.
 
 ## Log
 
@@ -160,3 +160,10 @@ Not established, and worth ten minutes before designing the fix: whether class B
 came from the un-guarded inner write re-entering the rename, or from a stale
 second buffer writing `topic: ?` over the renamed file. Both are live paths in
 the current code; the fix for one does not cover the other.
+
+## Revisions
+
+### 2026-09-22 — publish conformance
+
+Replaced the empty Plan checkbox with an explicit pending planning task to satisfy
+the publish validator. No implementation design, scope, or status change.
