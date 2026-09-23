@@ -187,6 +187,44 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: false
+    - "n": 9
+      timestamp: "2026-09-22T19:09:42-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: not-addressed
+          note: The plan still embeds complete implementations and test bodies; its revision at line 2071 explicitly retains them. This remains a non-blocking documentation recommendation.
+          round: 9
+        - id: BR-2
+          disposition: addressed
+          note: tests/unit/reap_test_orphans_pure.py directly tests all four PURE entities without IO in those test cases. Both watchdog loops consume the extracted predicates. The plan records the correction under Revisions at line 1992. Restoring the old Python change-only predicate in memory makes the init-parent regression fail.
+          round: 9
+        - id: BR-3
+          disposition: addressed
+          note: Grace resampling forwards ps_command to read_process_table; the configured-command regression passes.
+          round: 9
+        - id: BR-4
+          disposition: addressed
+          note: atlas/infra/test_harness.md adds the process-lifecycle map, covering watchdogs, registry ownership, census behavior, and the real-binary exception.
+          round: 9
+        - id: BR-5
+          disposition: addressed
+          note: Selection requires executable/script position or recognized Neovim harness launch forms. The negative command-boundary corpus and positive fixture/harness cases pass.
+          round: 9
+        - id: BR-6
+          disposition: addressed
+          note: Resampling validates every observation and returns BROKEN before signaling on invalid samples. Injected malformed and unavailable observation tests pass.
+          round: 9
+        - id: BR-7
+          disposition: addressed
+          note: Query cleanup uses synchronous libuv operations. The real orphan integration test passes for populated-directory removal and preservation of the external symlink target.
+          round: 9
+        - id: BR-8
+          disposition: addressed
+          note: README.md links to TOOLING.md's orphaned-process section, which supplies the physical-root ps listing and census command.
+          round: 9
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#220 (boundary-review)
@@ -281,7 +319,19 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-7 — addressed — Retained disposition: minimal_init.vim uses synchronous libuv cleanup; fixture_reaping_spec.lua:48 checks populated-directory removal and preservation of an external symlink target.
 - BR-8 — addressed — README.md:105 links the manual census remedy documented in TOOLING.md, matching the introduced CLI surface.
 
+## Round 9 — 2026-09-22T19:09:42-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — not-addressed — The plan still embeds complete implementations and test bodies; its revision at line 2071 explicitly retains them. This remains a non-blocking documentation recommendation.
+- BR-2 — addressed — tests/unit/reap_test_orphans_pure.py directly tests all four PURE entities without IO in those test cases. Both watchdog loops consume the extracted predicates. The plan records the correction under Revisions at line 1992. Restoring the old Python change-only predicate in memory makes the init-parent regression fail.
+- BR-3 — addressed — Grace resampling forwards ps_command to read_process_table; the configured-command regression passes.
+- BR-4 — addressed — atlas/infra/test_harness.md adds the process-lifecycle map, covering watchdogs, registry ownership, census behavior, and the real-binary exception.
+- BR-5 — addressed — Selection requires executable/script position or recognized Neovim harness launch forms. The negative command-boundary corpus and positive fixture/harness cases pass.
+- BR-6 — addressed — Resampling validates every observation and returns BROKEN before signaling on invalid samples. Injected malformed and unavailable observation tests pass.
+- BR-7 — addressed — Query cleanup uses synchronous libuv operations. The real orphan integration test passes for populated-directory removal and preservation of the external symlink target.
+- BR-8 — addressed — README.md links to TOOLING.md's orphaned-process section, which supplies the physical-root ps listing and census command.
+
 ## Open findings
 
 - **BR-1** [Minor] `plan-restates-the-diff` 1803 lines carrying complete spec bodies and the whole census script verbatim
-- **BR-2** [Critical] `pure-entity-test-seam` Core-concepts PURE entities are not tested without IO

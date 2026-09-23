@@ -1914,7 +1914,7 @@ git add tests/arch/fixture_lifecycle_spec.lua tests/arch/spawn_seam_spec.lua \
 git commit -m "#220 M2: guard the reaping invariants"
 ```
 
-- [ ] **Step 8: Close**
+- [x] **Step 8: Close**
 
 ```bash
 sdlc close --issue 220 --verified '<the Done-when evidence, including the interrupted run>'
@@ -2099,3 +2099,8 @@ fixture pid 1041, while preserving an unrelated headless fixture viewer.
 M2's third review returned SHIP at `45119026..9d58e9db`, with no blocking
 findings. The reviewer independently ran the 13 Python tests and confirmed the
 BR-5 counterfactual produced 45 failing subtests. BR-1 remains advisory.
+
+Whole-issue close returned SHIP at `45119026..74d9e898` and set status to
+codecomplete. The generated calibration row was marked `window_trusted=no` as
+directed. M1's recorded review metadata was repaired without rewriting history;
+M2 and final close carry proper review trailers. Publication remains separate.

@@ -1,13 +1,14 @@
 ---
 id: 000220
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-06
-updated: 2026-09-19
+updated: 2026-09-22
 estimate_hours: 8.71
 started: 2026-09-19T17:59:42-07:00
 flow: {kind: full, provenance: inferred}
+actual_hours: 11.73
 ---
 
 # Lifecycle test fixtures leak: fake_cliproxy and headless nvim orphan to init
@@ -115,7 +116,7 @@ through, plus one `ps`-based census that fails the suite).
       remedy) so a new fixture or spec inherits the reaping instead of
       remembering it.
 
-- [ ] AT CLOSE — flip this issue's ledger row to `window_trusted=no`. `sdlc close`
+- [x] AT CLOSE — flip this issue's ledger row to `window_trusted=no`. `sdlc close`
       appends it as `yes` (`close.go:940` derives the flag from `started:` being
       set, which it is), but the window is wrong in the other direction. Operator
       decision 2026-09-19: exclude #220 from calibration. Recorded in
@@ -491,6 +492,7 @@ place — they are a live target for the census once it exists. Sweep with
 `ps -Ao pid=,ppid=,args= | grep "$(pwd -P)/tests/" | grep -v grep`.
 
 ### 2026-09-22 — M1 census landed
+- 2026-09-22: closed — Full make test passed; completed and SIGINT-interrupted runs left zero processes in real ps; planted leaks failed the target; 13 Python and 10 Lua census tests plus live harness/fixture/viewer selection cover final ownership changes; query cleanup verified. The sole unchecked Plan row is window_trusted=no on the calibration row that this close creates; apply immediately after close, hence --no-plan-check.; review verdict: SHIP
 - 2026-09-22: closed M2 — Full make test passed after watchdog/snapshot fixes; clean complete and interrupted runs verified with real ps; final command-boundary fix passes 13 Python tests including 48 negative argument cases and 10 Lua census cases; live census selected the real harness and fixture while preserving a headless fixture viewer; diff check clean.; review verdict: SHIP
 - 2026-09-22: closed M1 — Census unit: 8 passed; pure no-IO census/watchdog tests: 6 passed; fixture-reaping integration: 11 passed; architecture sweep: 25 passed; atlas lifecycle map updated; make lint: 0 warnings/errors; Python compilation, real-ps smoke, and diff check passed.; review verdict: SHIP
 
@@ -584,3 +586,17 @@ All 13 Python tests and 10 Lua census cases now pass. Real process verification
 selected and reaped harness pid 1040 plus fixture pid 1041, while leaving a
 headless Neovim viewing the fixture alive. BR-1 remains Minor with the historical
 plan-retention rationale recorded in the durable plan.
+
+### 2026-09-22 — local acceptance complete
+
+M2 and whole-issue close both returned SHIP with no blocking findings. The final
+review independently passed the Python, Lua census, lifecycle guard, and lifecycle
+behavior tests (its sandbox visibly skipped real ps; the machine-level evidence
+above covers that check). BR-1 remains a Minor historical-plan duplication
+advisory. Restored proper M1 review trailers from its recorded SHIP artifact
+because the original close commit contained literal backslash-n sequences.
+
+Close measured 11.73h and created the calibration row. Immediately changed its
+`window_trusted` field to `no` per the operator's 2026-09-19 exclusion decision;
+the brain ledger edit is left to that repo's capture/commit rhythm. All issue
+plan rows are now checked. Status is codecomplete; publication has not run.
