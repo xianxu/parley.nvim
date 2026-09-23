@@ -161,6 +161,43 @@ came from the un-guarded inner write re-entering the rename, or from a stale
 second buffer writing `topic: ?` over the renamed file. Both are live paths in
 the current code; the fix for one does not cover the other.
 
+### 2026-09-20 — operator re-report: "slug generation seems inconsistent"
+
+Reported again, framed from the filename side: *"the chat file slug generation
+seems inconsistent. For example `../parli/workshop/parley/`, some of the file name
+slugs are not generated."* That is class A above — same defect, seen from
+`ls` instead of from the header. No new ticket; this is the same fix.
+
+Re-survey of `parli/workshop/parley/`, one day on: 13 chats, 9 slugged.
+
+| file | answers | topic | slug | class |
+|---|---|---|---|---|
+| `2026-09-19.23-08-17.193` | 0 | `?` | none | correct — never asked |
+| `2026-09-19.23-09-28.629_government-driven-ai-safety-review` | 1 | `?` | yes | **B** (the original report) |
+| `2026-09-19.23-17-24.715` | 1 | `Greeting, awaiting direction` | none | **A** |
+| `2026-09-19.23-17-53.792` | 1 | `Debate prep greeting` | none | **A** |
+| `2026-09-20.08-37-26.511` | 1 | `Prop 40 debate prep` | none | **A** (new since the first survey) |
+
+Class A grew from 2 to 3 in `parli` in a day and class B did not change, so the
+defect is live rather than historical.
+
+**A pattern worth using:** every class-A chat in `parli` is among the *newest*
+in the directory — the three most recent real chats. The nine slugged files are
+all earlier. Two of the three are tiny (18 and 22 lines, one exchange), so the
+topic leg is quick there, which fits the ordering in the Problem section: the
+topic lands after the last save that would have armed the rename, and nothing
+re-arms it. It does not by itself distinguish that from "the chat's buffer is
+still open and unsaved since the topic landed" — the discriminating check is
+whether the rename fires when one of these three is next saved by hand
+(`:w` on an unslugged chat with a real topic should slug it; if it does, the
+defect is purely a missing trigger, and the Spec's "drive the rename from the
+topic leg" is the whole fix for class A).
+
+Not yet checked: whether these chats were opened in an Neovim that has parli's
+chat root configured, since `not_chat` gates the `BufWritePost` autocmd. The
+nine slugged siblings in the same directory make a config gap unlikely, but a
+per-window `not_chat` result is a one-line confirmation.
+
 ## Revisions
 
 ### 2026-09-22 — publish conformance
