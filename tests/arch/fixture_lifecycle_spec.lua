@@ -49,6 +49,8 @@ describe("arch: fixture process lifecycle", function()
     end)
 
     it("every executable fixture either watches its parent or declares why it cannot block", function()
+        assert.is_truthy(uncommented("tests/fixtures/loopback_http.py"):find("exit_with_parent%s*%("),
+            "LoopbackHTTPServer must install the watchdog it supplies to fixtures")
         local files, seen, offenders = {}, {}, {}
         for _, file in ipairs(arch.worktree_files({ "tests/fixtures/*" })) do
             if vim.fn.executable(file) == 1 then

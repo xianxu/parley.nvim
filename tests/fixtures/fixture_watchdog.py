@@ -11,7 +11,7 @@ import threading
 import time
 
 
-def orphaned(parent):
+def orphaned(parent, ppid):
     """A fixture is orphaned when its parent is init, OR when its parent changed.
 
     The `== 1` half is load-bearing and not redundant: a fixture orphaned while it
@@ -21,7 +21,6 @@ def orphaned(parent):
     t=4s under the old rule, gone by t=3s under this one. Stated identically in
     tests/helpers/exit_with_parent.lua.
     """
-    ppid = os.getppid()
     return ppid == 1 or ppid != parent
 
 
@@ -31,7 +30,7 @@ def exit_with_parent(poll_seconds=1.0):
     def watch():
         while True:
             time.sleep(poll_seconds)
-            if orphaned(parent):
+            if orphaned(parent, os.getppid()):
                 os._exit(0)
 
     threading.Thread(target=watch, daemon=True).start()

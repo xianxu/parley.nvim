@@ -137,6 +137,17 @@ process shape this harness produces. New fixture servers inherit the watchdog
 through `LoopbackHTTPServer`; new spec subprocesses inherit registry cleanup
 through `fixture_process`.
 
+Ownership requires a fixture in executable/script position, or an actual
+headless Neovim using this checkout's harness init or Plenary spec invocation.
+An editor or pager merely naming a fixture is excluded. Every live observation
+is validated; malformed or unavailable resampling reports `BROKEN`, fails the
+target, and sends no signals based on the stale snapshot. An initially unavailable
+`ps` remains a visible skip for restricted environments.
+
+The Neovim watchdog also removes its captured query directory using synchronous
+libuv filesystem calls, which work in its timer callback. Cleanup unlinks
+symlinks without following them and reports errors to stderr.
+
 `Makefile.parley` runs the census before every harness target and after its
 tests finish, including failed specs. Survivors make the target fail. All
 parent Neovim commands use the physical checkout path in their init argument

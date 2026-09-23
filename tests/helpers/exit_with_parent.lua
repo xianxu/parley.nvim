@@ -19,8 +19,7 @@ local M = {}
 --- only watches for a change never fires for exactly the case that produces these.
 --- Measured: a fixture orphaned during startup survived indefinitely under the
 --- change-only rule and exited in under a second under this one.
-function M.orphaned(parent)
-    local ppid = uv.os_getppid()
+function M.orphaned(parent, ppid)
     return ppid == 1 or ppid ~= parent
 end
 
@@ -43,8 +42,11 @@ function M.install(poll_ms, before_exit)
     local timer = uv.new_timer()
     timer:unref() -- never keeps the loop alive, never delays a normal exit
     timer:start(poll_ms, poll_ms, function()
-        if M.orphaned(parent) then
-            if before_exit then pcall(before_exit) end
+        if M.orphaned(parent, uv.os_getppid()) then
+            if before_exit then
+                local ok, err = pcall(before_exit)
+                if not ok then io.stderr:write("test watchdog cleanup failed: " .. tostring(err) .. "\n") end
+            end
             os.exit(1)
         end
     end)

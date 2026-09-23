@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -55,12 +56,12 @@ def select_orphans(
 ) -> list[dict[str, int | str]]:
     """Select headless harnesses and fixture processes under *root*.
 
-    A path under ``root/tests`` identifies this checkout.  ``--headless`` or a
-    path under ``tests/fixtures`` identifies a process the census owns.  The
+    Only an actual headless Neovim command or fixture executable/script position
+    establishes ownership; an editor's or viewer's arbitrary argument does not. The
     caller and its ancestors are excluded by the CLI before this function is
     called, so the command that launched the census cannot be killed.
     """
-    root_prefix = os.path.abspath(root).rstrip(os.sep) + os.sep
+    root_prefix = root.rstrip(os.sep) + os.sep
     tests_prefix = root_prefix + "tests" + os.sep
     excluded = {int(pid) for pid in excluded_pids}
     selected: list[dict[str, int | str]] = []
@@ -69,9 +70,38 @@ def select_orphans(
         args = str(row["args"])
         if pid in excluded or tests_prefix not in args:
             continue
-        if "--headless" in args or tests_prefix + "fixtures" + os.sep in args:
+        program, _, rest = args.partition(" ")
+        name = os.path.basename(program)
+        fixture_prefix = tests_prefix + "fixtures" + os.sep
+        # ps flattens argv, so inspect only unambiguous executable/script
+        # positions. In particular, never search shell -c or Python -m/-c text.
+        fixture = args.startswith(fixture_prefix)
+        if re.fullmatch(r"python(?:\d+(?:\.\d+)*)?|Python|bash|sh", name):
+            rest = rest.lstrip()
+            while rest.startswith(("-B ", "-u ")) and name not in ("bash", "sh"):
+                rest = rest.split(None, 1)[1]
+            fixture = rest.startswith(fixture_prefix)
+        options = re.split(r"\s+(?:-c|--cmd)\s", rest, maxsplit=1)[0]
+        harness_init = re.search(r'(?:^|\s)-u\s+"?' + re.escape(tests_prefix + "minimal_init.vim")
+                                 + r'"?(?:\s|$)', options)
+        plenary_child = re.search(r'''require\(["']plenary\.busted["']\)\.run\(["']'''
+                                  + re.escape(tests_prefix), rest)
+        harness = name == "nvim" and "--headless" in options.split() and (harness_init or plenary_child)
+        if harness or fixture:
             selected.append(row)
     return selected
+
+
+def validated_rows(text: str | None, self_pid: int) -> list[dict[str, int | str]]:
+    """Require a complete readable snapshot, including the observing process."""
+    if text is None:
+        raise ValueError("process table unavailable during resampling")
+    rows = parse_ps(text)
+    if len(rows) != len([line for line in text.splitlines() if line.strip()]) or not any(
+        int(row["pid"]) == self_pid for row in rows
+    ):
+        raise ValueError("process table malformed or missing the census process")
+    return rows
 
 
 def read_process_table(path: str | None, ps_command: str) -> tuple[str | None, str | None]:
@@ -104,6 +134,7 @@ def persistent_candidates(
     ps_from: str | None,
     grace: float,
     ps_command: str,
+    self_pid: int,
 ) -> list[dict[str, int | str]]:
     """Keep only rows still present after the bounded grace period."""
     if grace <= 0 or ps_from:
@@ -115,8 +146,8 @@ def persistent_candidates(
         time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
         text, why_not = read_process_table(None, ps_command)
         if why_not or text is None:
-            break
-        current = select_orphans(parse_ps(text), root, excluded)
+            raise ValueError("process table unavailable during resampling")
+        current = select_orphans(validated_rows(text, self_pid), root, excluded)
         current_by_pid = {int(row["pid"]): row for row in current}
         survivors &= set(current_by_pid)
         latest.update(current_by_pid)
@@ -150,20 +181,24 @@ def main(argv: list[str] | None = None) -> int:
     if why_not == "unreadable":
         print("orphan check skipped: `ps` is unavailable here, so surviving test processes cannot be counted")
         return 0
-    if text is None:
-        return 0
-    rows = parse_ps(text)
     self_pid = args.self_pid
-    if not rows or not any(int(row["pid"]) == self_pid for row in rows):
-        print(f"orphan check BROKEN: `{args.ps_command}` ran but produced no row this script can read (not even its own pid {self_pid}).")
-        print("parse_ps expects `pid ppid args` columns. A census that cannot read ps reports zero leaks forever.")
-        return 0 if args.phase == "before" else 1
+    try:
+        rows = validated_rows(text, self_pid)
+    except ValueError as exc:
+        print(f"orphan check BROKEN: {exc}")
+        return 1
     excluded = {os.getpid()}
     caller_pid = args.caller_pid if args.caller_pid is not None else self_pid
     excluded.update(ancestry(caller_pid, rows))
     excluded.add(self_pid)
-    selected = select_orphans(rows, args.root, excluded)
-    selected = persistent_candidates(selected, args.root, excluded, args.ps_from, args.grace, args.ps_command)
+    root = os.path.realpath(args.root)
+    selected = select_orphans(rows, root, excluded)
+    try:
+        selected = persistent_candidates(selected, root, excluded, args.ps_from,
+                                         args.grace, args.ps_command, self_pid)
+    except ValueError as exc:
+        print(f"orphan check BROKEN: {exc}; survivors are unknown, no signals sent")
+        return 1
 
     if args.phase == "before":
         if selected:

@@ -2,6 +2,19 @@
 
 ## 2026-09-22 (#220 — fixture process lifecycle)
 
+- #220 M2 review: an argument mentioning an owned path is not process ownership.
+  Census selectors must establish executable/script identity before signaling;
+  include editors, pagers, shell command text, and interpreter command/module
+  modes as negative cases.
+- #220 M2 review: validate every observation in a polling sequence. An invalid
+  later sample is unknown, not an empty set; never convert it to success or use
+  the earlier snapshot as authority to signal.
+- #220 M2 review: cleanup must run in the execution context that calls it.
+  A pcall around vim.fn.delete hid E5560 in the libuv timer. Test both process
+  death and removal of its owned files, including symlink boundaries.
+- #220 BR-2: a function that reads process state is not pure merely because a
+  unit test patches that read. Pass the observation as data to the predicate.
+
 - A watchdog comparing a current value to one sampled at startup must handle the
   condition already being true at startup. A fixture orphaned while booting
   samples parent pid 1; a change-only check never fires. Test that ordering.

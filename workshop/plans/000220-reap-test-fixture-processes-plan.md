@@ -2042,3 +2042,38 @@ M2 implementation and its evidence are committed in `caa953ab`. The final mapped
 harness target passed (census 9/9 including the Python 6/6 suite; lifecycle guard
 4/4; fixture reaping 11/11), with no after-census survivors. Targeted lint and
 `git diff --check` passed after the final test and documentation edits.
+
+### 2026-09-22 — M2 review BR-2, BR-5 through BR-8
+
+BR-5 changes the authority rule for signaling: a fixture path must occupy the
+executable/script position, with only recognized Python/shell interpreters and
+safe interpreter flags; command/module strings and arbitrary arguments do not
+establish ownership. Neovim must be the executable, have a headless option, and
+use the checkout's absolute harness init or a Plenary invocation of its specs.
+Ambiguous command representations are excluded. Negative tests cover editors,
+pagers, echo, shell -c, Python -c/-m, and non-harness headless Neovim.
+
+BR-6 introduces pure `validated_rows(text, self_pid)` in the census, directly
+tested in `tests/unit/reap_test_orphans_pure.py`. Both the initial observation
+and every resample pass through it. Malformed, incomplete, or unavailable later
+observations fail visibly as BROKEN and send no signals from stale information;
+only an initially unavailable ps retains the documented visible-skip behavior.
+Sampling tests are INTEGRATION tests with injected process-table sequences.
+
+BR-2 extracts both watchdogs' pure `orphaned(parent, ppid)` predicate. Their IO
+loops supply the current observation; predicate tests use plain values, no mocks.
+BR-7 replaces vim.fn cleanup with synchronous libuv operations over the captured
+query-directory path, with lstat/unlink for symlinks and visible failure output.
+The real orphan test now verifies PID disappearance, populated directory removal,
+and survival of an external symlink target. It failed before the change and
+passes after it. BR-8 adds README's link to the manual census remedy.
+
+BR-1 remains a non-blocking documentation recommendation. The implementation
+blocks above are historical design snapshots; this revision and source files
+describe the implemented contracts. Retaining them follows AGENTS.md's explicit
+append-only plan-revision rule rather than rewriting the approved design.
+
+The post-fix full `make test` passed with zero census survivors, and the repeated
+SIGINT proof (group 88869, observed Neovims 88953/88956) also left none after ten
+seconds. The intentional live leak proof reported pid 63227 and made make exit 2;
+no mapped spec failed in that run.

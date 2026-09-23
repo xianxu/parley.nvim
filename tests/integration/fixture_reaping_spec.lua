@@ -45,6 +45,31 @@ describe("#220 a harness process exits when its parent is gone", function()
         dies_within(pid, 6000, "an orphaned harness Neovim")
     end)
 
+    it("removes its query directory from the watchdog callback without following links", function()
+        local scratch, ready = vim.fn.tempname(), vim.fn.tempname()
+        vim.fn.mkdir(scratch, "p")
+        local external = scratch .. "/keep"
+        vim.fn.writefile({ "keep me" }, external)
+        local command = "lua local q = vim.env.PARLEY_QUERY_DIR; "
+            .. "vim.fn.mkdir(q .. '/nested', 'p'); "
+            .. "vim.fn.writefile({'body'}, q .. '/nested/body'); "
+            .. "assert(vim.uv.fs_symlink(" .. string.format("%q", external) .. ", q .. '/link')); "
+            .. "vim.fn.writefile({q}, " .. string.format("%q", ready) .. "); "
+            .. "vim.wait(60000, function() return false end, 100)"
+        local pid = orphan({ "nvim", "-n", "--headless", "--noplugin",
+            "-u", ROOT .. "/tests/minimal_init.vim", "-c", command }, { TMPDIR = scratch })
+        local published = vim.wait(3000, function() return vim.fn.filereadable(ready) == 1 end, 20)
+        dies_within(pid, 6000, "an orphaned harness with request bodies")
+        local query_dir = published and vim.fn.readfile(ready)[1]
+        local removed = query_dir and vim.fn.isdirectory(query_dir) == 0
+        local kept = vim.fn.filereadable(external) == 1
+        vim.fn.delete(scratch, "rf")
+        vim.fn.delete(ready)
+        assert.is_true(published, "child did not publish its query directory")
+        assert.is_true(removed, "watchdog left query directory behind: " .. tostring(query_dir))
+        assert.is_true(kept, "cleanup followed a symlink outside its owned directory")
+    end)
+
     it("the fake_cliproxy fixture does", function()
         local port = require("tests.helpers.ready_port").free_port()
         local pid = orphan({ ROOT .. "/tests/fixtures/fake_cliproxy",

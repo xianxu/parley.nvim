@@ -11,6 +11,12 @@ local function run(root, phase, extra)
 end
 
 describe("#220 orphan census", function()
+    it("the Lua orphan predicate takes observations as data", function()
+        local orphaned = require("tests.helpers.exit_with_parent").orphaned
+        assert.is_true(orphaned(1, 1))
+        assert.is_true(orphaned(8, 9))
+        assert.is_false(orphaned(8, 8))
+    end)
     it("runs the direct Python predicate tests through the normal suite", function()
         local out = vim.system({ "python3", "-B", "-m", "unittest",
             "tests/unit/reap_test_orphans_pure.py" }, { text = true }):wait(10000)

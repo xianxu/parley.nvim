@@ -93,6 +93,46 @@ rounds:
       boundary: M1
       recipe: milestone-review
       blocked: false
+    - "n": 6
+      timestamp: "2026-09-22T18:45:43-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: not-addressed
+          note: The plan still contains complete implementation and test bodies, including Task 4's census script at workshop/plans/000220-reap-test-fixture-processes-plan.md:1108. Retain contracts, function names, and verification strategy; remove duplicated bodies and stale line-number inventories.
+          round: 6
+        - id: BR-2
+          disposition: not-addressed
+          note: 'The prior purity correction remains incomplete: the plan''s Pure entities table lists orphaned at line 76, but tests/fixtures/fixture_watchdog.py:25 reads os.getppid(), and tests/unit/reap_test_orphans_pure.py patches that dependency in all three watchdog cases. Direct invocation did not make this entity PURE. Extract orphaned(parent, current_ppid) and test it without mocks, or revise its classification.'
+          round: 6
+      findings:
+        - id: BR-5
+          severity: Critical
+          title: The census selects unrelated editors and pagers for SIGKILL
+          detail: scripts/reap-test-orphans.py:72 treats any argument containing the fixture-directory path as process ownership. Direct evaluation selects both "/usr/bin/nvim /repo/tests/fixtures/fake_cliproxy" and "/usr/bin/less /repo/tests/fixtures/ps_test_orphans.txt"; reap() then sends SIGKILL at line 131. Establish executable/script identity rather than matching arbitrary arguments, and add negative cases for editors, viewers, and commands merely mentioning fixture paths.
+          family: process-ownership-before-signalling
+          round: 6
+        - id: BR-6
+          severity: Critical
+          title: Malformed grace-period samples turn known survivors into a clean result
+          detail: 'scripts/reap-test-orphans.py:119 parses subsequent samples without the initial sample''s validity check. A valid initial table containing a fixture followed by malformed successful output empties survivors; invoking main with that sequence printed "clean: no surviving test processes" and returned 0. Validate every sample through one shared boundary and preserve an explicit unknown/broken outcome; test valid-to-malformed and valid-to-unavailable sequences.'
+          family: process-observation-validity
+          round: 6
+        - id: BR-7
+          severity: Important
+          title: Watchdog query-directory cleanup always fails in the timer callback
+          detail: tests/minimal_init.vim:54 calls vim.fn.delete from the fast-event callback in tests/helpers/exit_with_parent.lua:46. A headless Neovim reproduction returned E5560; pcall suppresses it before os.exit skips VimLeavePre. Use cleanup valid in that context and verify that an orphaned harness removes its query directory, not merely that its PID disappears.
+          family: cleanup-execution-context
+          round: 6
+        - id: BR-8
+          severity: Important
+          title: README update is missing for the new manual census command
+          detail: TOOLING.md:78 introduces an operator command with --root and --phase, but README.md is unchanged in the pinned range. The existing generic contributor link does not satisfy this review's explicit same-range README gate. Add a short cleanup-command pointer linking to the detailed TOOLING section.
+          family: readme-surface-discovery
+          round: 6
+      boundary: M2
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#220 (boundary-review)
@@ -149,6 +189,29 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-1 — not-addressed — The durable plan still embeds extensive implementation and test bodies; retain as a Minor follow-up.
 - BR-4 — addressed — atlas/infra/test_harness.md now documents the watchdogs, fixture registry, detached-process handling, and orphan census.
 
+## Round 6 — 2026-09-22T18:45:43-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — not-addressed — The plan still contains complete implementation and test bodies, including Task 4's census script at workshop/plans/000220-reap-test-fixture-processes-plan.md:1108. Retain contracts, function names, and verification strategy; remove duplicated bodies and stale line-number inventories.
+- BR-2 — not-addressed — The prior purity correction remains incomplete: the plan's Pure entities table lists orphaned at line 76, but tests/fixtures/fixture_watchdog.py:25 reads os.getppid(), and tests/unit/reap_test_orphans_pure.py patches that dependency in all three watchdog cases. Direct invocation did not make this entity PURE. Extract orphaned(parent, current_ppid) and test it without mocks, or revise its classification.
+
+### Raised
+
+- **BR-5** [Critical] `process-ownership-before-signalling` The census selects unrelated editors and pagers for SIGKILL
+  scripts/reap-test-orphans.py:72 treats any argument containing the fixture-directory path as process ownership. Direct evaluation selects both "/usr/bin/nvim /repo/tests/fixtures/fake_cliproxy" and "/usr/bin/less /repo/tests/fixtures/ps_test_orphans.txt"; reap() then sends SIGKILL at line 131. Establish executable/script identity rather than matching arbitrary arguments, and add negative cases for editors, viewers, and commands merely mentioning fixture paths.
+- **BR-6** [Critical] `process-observation-validity` Malformed grace-period samples turn known survivors into a clean result
+  scripts/reap-test-orphans.py:119 parses subsequent samples without the initial sample's validity check. A valid initial table containing a fixture followed by malformed successful output empties survivors; invoking main with that sequence printed "clean: no surviving test processes" and returned 0. Validate every sample through one shared boundary and preserve an explicit unknown/broken outcome; test valid-to-malformed and valid-to-unavailable sequences.
+- **BR-7** [Important] `cleanup-execution-context` Watchdog query-directory cleanup always fails in the timer callback
+  tests/minimal_init.vim:54 calls vim.fn.delete from the fast-event callback in tests/helpers/exit_with_parent.lua:46. A headless Neovim reproduction returned E5560; pcall suppresses it before os.exit skips VimLeavePre. Use cleanup valid in that context and verify that an orphaned harness removes its query directory, not merely that its PID disappears.
+- **BR-8** [Important] `readme-surface-discovery` README update is missing for the new manual census command
+  TOOLING.md:78 introduces an operator command with --root and --phase, but README.md is unchanged in the pinned range. The existing generic contributor link does not satisfy this review's explicit same-range README gate. Add a short cleanup-command pointer linking to the detailed TOOLING section.
+
 ## Open findings
 
 - **BR-1** [Minor] `plan-restates-the-diff` 1803 lines carrying complete spec bodies and the whole census script verbatim
+- **BR-2** [Critical] `pure-entity-test-seam` Core-concepts PURE entities are not tested without IO
+- **BR-5** [Critical] `process-ownership-before-signalling` The census selects unrelated editors and pagers for SIGKILL
+- **BR-6** [Critical] `process-observation-validity` Malformed grace-period samples turn known survivors into a clean result
+- **BR-7** [Important] `cleanup-execution-context` Watchdog query-directory cleanup always fails in the timer callback
+- **BR-8** [Important] `readme-surface-discovery` README update is missing for the new manual census command

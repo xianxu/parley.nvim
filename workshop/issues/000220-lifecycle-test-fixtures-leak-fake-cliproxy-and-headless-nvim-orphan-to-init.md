@@ -566,3 +566,8 @@ The 11 Python tests and 12 fixture-reaping integration cases pass; targeted lint
 and diff check pass. A live fixture planted after startup (pid 63227) was still
 reported and reaped by the tightened selector and made the mapped target exit 2.
 The full suite is being repeated because both census and harness startup changed.
+
+After the review fixes, `make test` exited 0 (lint: 648 files, zero warnings/errors;
+unit and integration after censuses clean). Real ps confirmed zero checkout test
+processes. A fresh SIGINT proof observed Neovims 88953/88956 in group 88869 before
+signaling; after ten seconds the checkout's process set was again empty.
