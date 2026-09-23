@@ -1,1 +1,1 @@
-substrate ../ariadne
+substrate ../ariadne https://github.com/xianxu/ariadne.git
