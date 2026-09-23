@@ -28,10 +28,12 @@ Add the canonical recorded remote https://github.com/xianxu/ariadne.git to the e
 
 ## Plan
 
-- [ ] Add the recorded remote, verify parser/dry-run evidence, and publish through the boundary review.
+- [x] Add the recorded remote and verify parser/dry-run evidence; publication follows the close gate.
 
 ## Log
 
 ### 2026-09-23
 
 Approved ariadne#243 metadata subtask; canonical Ariadne origin verified as https://github.com/xianxu/ariadne.git. The clone was made directly from origin/main in /tmp, leaving operator branches and working files untouched.
+
+Production `weave dependencies --dry-run` parsed the source and exited 1 with the expected incomplete graph diagnostic naming the missing sibling Ariadne and https://github.com/xianxu/ariadne.git. No dependency clone or package install occurred. Exact construct/deps content checked; the production diff is one line.
