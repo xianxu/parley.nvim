@@ -549,3 +549,20 @@ ARCH-DRY: one Makefile census command owns every target's invocation. ARCH-FUNER
 the suite now measures the lifetime rules and rejects survivors. M2 review and
 whole-issue close remain; the operator's `window_trusted=no` instruction still
 applies to the calibration row created at close.
+
+### 2026-09-22 — M2 review fixes
+
+M2 review returned REWORK. BR-5's executable-identity negatives and BR-6's
+valid-to-malformed/unavailable snapshot sequences reproduced the two census
+failures, then passed after the fixes. Both initial and later snapshots now
+share validation; a failed resample neither reports clean nor signals stale PIDs.
+BR-2's predicates now receive parent observations as data in Python and Lua.
+BR-7's new real orphan test failed on the leftover query directory, then passed
+with synchronous libuv cleanup; a nested body is removed and an external symlink
+target survives. BR-8's manual cleanup pointer is in README. ARCH-SECURE,
+ARCH-ORDER, ARCH-PURE, and ARCH-FUNERAL shaped these changes.
+
+The 11 Python tests and 12 fixture-reaping integration cases pass; targeted lint
+and diff check pass. A live fixture planted after startup (pid 63227) was still
+reported and reaped by the tightened selector and made the mapped target exit 2.
+The full suite is being repeated because both census and harness startup changed.
