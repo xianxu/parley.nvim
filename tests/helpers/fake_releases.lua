@@ -46,11 +46,9 @@ function M.start(mode)
         handle = handle,
         url = ("http://127.0.0.1:%d/router-for-me/CLIProxyAPI/releases"):format(port),
     }
-    vim.api.nvim_create_autocmd("VimLeavePre", {
-        callback = function()
-            M.stop(server)
-        end,
-    })
+    -- No per-server VimLeavePre autocmd: fixture_process registers this handle
+    -- and reaps it at VimLeavePre already, and one autocmd per started server is
+    -- its own small accumulation (#220, ARCH-DRY).
     return server
 end
 
@@ -76,9 +74,9 @@ function M.publish(server, ver, opts)
     vim.fn.writefile({
         "#!/bin/sh",
         "PARLEY_FAKE_CPA_VERSION=" .. vim.fn.shellescape(ver),
-        -- parley spawns this detached; it must still exit with the spec's nvim (#220)
-        "PARLEY_FAKE_EXIT_WITH_PARENT=1",
-        "export PARLEY_FAKE_CPA_VERSION PARLEY_FAKE_EXIT_WITH_PARENT",
+        -- parley spawns this detached, and it still exits with the spec's nvim:
+        -- LoopbackHTTPServer installs the watchdog when it binds (#220).
+        "export PARLEY_FAKE_CPA_VERSION",
         "exec " .. vim.fn.shellescape(FAKE_PROXY) .. ' "$@"',
     }, stage .. "/cli-proxy-api")
     vim.fn.system({ "chmod", "+x", stage .. "/cli-proxy-api" })

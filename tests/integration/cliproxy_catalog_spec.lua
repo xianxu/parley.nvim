@@ -5,6 +5,7 @@
 
 local uv = vim.uv or vim.loop
 local ready_port = require("tests.helpers.ready_port")
+local fixture_process = require("tests.helpers.fixture_process")
 
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
@@ -13,12 +14,11 @@ local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 local SPEC_DATA_DIR = vim.fn.tempname()
 require("parley.cliproxy")._set_data_dir(SPEC_DATA_DIR)
 
-local started = {}
+local mark
 
 local function start_fake(port)
-    local handle, pid = uv.spawn(FAKE, { args = { "--port", tostring(port) } }, function() end)
-    assert(handle, "failed to spawn fake_cliproxy")
-    table.insert(started, { handle = handle, pid = pid })
+    local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port) })
+    assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
     assert(ready_port.wait_listening(port), "fake never came up")
     return pid
 end
@@ -48,6 +48,7 @@ describe("cliproxy model catalog", function()
     end
 
     before_each(function()
+        mark = fixture_process.mark()
         saved_providers = parley.dispatcher and parley.dispatcher.providers
         saved_path = vim.env.PATH
         -- Without /opt/homebrew/bin, so nothing here can discover and spawn the
@@ -61,10 +62,8 @@ describe("cliproxy model catalog", function()
             parley.dispatcher.providers = saved_providers
         end
         vim.env.PATH = saved_path
-        for _, p in ipairs(started) do
-            pcall(function() uv.kill(p.pid, "sigkill") end)
-        end
-        started = {}
+        -- Only this case's fixtures; the seam owns the registry (#220).
+        fixture_process.reap({ since = mark })
     end)
 
     it("joins both routes and caches the result to disk", function()
@@ -93,8 +92,7 @@ describe("cliproxy model catalog", function()
         set_endpoint(port)
         fetch()
 
-        for _, p in ipairs(started) do pcall(function() uv.kill(p.pid, "sigkill") end) end
-        started = {}
+        fixture_process.reap({ since = mark })
         vim.wait(300, function() return not ready_port.is_listening(port) end, 20)
 
         local cached = cliproxy.catalog_cached()
@@ -120,8 +118,7 @@ describe("cliproxy model catalog", function()
         set_endpoint(port)
         local warm = fetch()
 
-        for _, p in ipairs(started) do pcall(function() uv.kill(p.pid, "sigkill") end) end
-        started = {}
+        fixture_process.reap({ since = mark })
         fetch() -- fails; must not blank the cache
 
         assert.equals(#warm, #cliproxy.catalog_cached())
@@ -138,13 +135,9 @@ describe("cliproxy model catalog", function()
         local warm = fetch()
         assert.is_true(#warm > 0)
 
-        for _, p in ipairs(started) do pcall(function() uv.kill(p.pid, "sigkill") end) end
-        started = {}
-        local handle, pid = uv.spawn(FAKE, {
-            args = { "--port", tostring(port), "--mode", "client_key_mismatch" },
-        }, function() end)
+        fixture_process.reap({ since = mark })
+        local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port), "--mode", "client_key_mismatch" })
         assert(handle, "failed to spawn the fake in 401 mode")
-        table.insert(started, { handle = handle, pid = pid })
         assert(ready_port.wait_listening(port), "401-mode fake never came up")
 
         fetch()
@@ -157,11 +150,8 @@ describe("cliproxy model catalog", function()
         -- empty registry (nothing authenticated), that MUST reach the cache —
         -- the picker's logged-out rows are derived from it.
         local port = ready_port.free_port()
-        local handle, pid = uv.spawn(FAKE, {
-            args = { "--port", tostring(port), "--mode", "needs_login" },
-        }, function() end)
+        local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port), "--mode", "needs_login" })
         assert(handle)
-        table.insert(started, { handle = handle, pid = pid })
         assert(ready_port.wait_listening(port))
         set_endpoint(port)
         cliproxy._write_catalog({ { id = "stale-1", owner = "openai" } })
@@ -219,11 +209,8 @@ describe("cliproxy model catalog", function()
         -- answer the next probe, and the test then proves nothing. (It did
         -- exactly that on first writing — reverting the fix left it green.)
         local foreign_port = ready_port.free_port()
-        local handle, pid = uv.spawn(FAKE, {
-            args = { "--port", tostring(foreign_port), "--mode", "foreign" },
-        }, function() end)
+        local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(foreign_port), "--mode", "foreign" })
         assert(handle)
-        table.insert(started, { handle = handle, pid = pid })
         assert(ready_port.wait_listening(foreign_port), "foreign fake never came up")
         set_endpoint(foreign_port)
 
@@ -305,6 +292,7 @@ describe("cliproxy catalog staleness clocks", function()
     local cliproxy = require("parley.cliproxy")
 
     before_each(function()
+        mark = fixture_process.mark()
         cliproxy._reset_catalog_clock()
         os.remove(cliproxy._catalog_path())
     end)
@@ -357,9 +345,8 @@ describe("cliproxy catalog invalidation on login", function()
         -- consuming the invalidation there loses it (see the declined-refresh
         -- case below). So this drives a fetch against a live fake.
         local port = ready_port.free_port()
-        local handle, pid = uv.spawn(FAKE, { args = { "--port", tostring(port) } }, function() end)
+        local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port) })
         assert(handle)
-        table.insert(started, { handle = handle, pid = pid })
         assert(ready_port.wait_listening(port))
         parley.dispatcher.providers.cliproxyapi = {
             endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
@@ -438,9 +425,8 @@ describe("cliproxy catalog cold install", function()
         assert.same({}, cliproxy.catalog_cached(), "precondition: cold install")
 
         local port = ready_port.free_port()
-        local handle, pid = uv.spawn(FAKE, { args = { "--port", tostring(port) } }, function() end)
+        local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port) })
         assert(handle)
-        table.insert(started, { handle = handle, pid = pid })
         assert(ready_port.wait_listening(port))
         parley.dispatcher = parley.dispatcher or {}
         parley.dispatcher.providers = parley.dispatcher.providers or {}

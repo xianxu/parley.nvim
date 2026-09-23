@@ -102,6 +102,8 @@ README, tutorials, and [atlas](atlas/index.md) from your installed version.
 
 For contributors: [development and tests](TOOLING.md), [architecture](ARCH.md),
 and [code style](STYLE.md).
+If an interrupted test run leaves processes behind, see the
+[process census and cleanup command](TOOLING.md#orphaned-test-processes).
 
 Parley was adapted from [gp.nvim](https://github.com/Robitx/gp.nvim) and has since
 been extensively redesigned. See [LICENSE](LICENSE).

@@ -11,8 +11,9 @@ Invocation mirrors the real binary closely enough for the module to spawn it:
 
 Every /v0/management/* response carries X-CPA-VERSION (PARLEY_FAKE_CPA_VERSION,
 default 7.1.71) when a management key is configured, as the real binary's does,
-and GET /v0/management/latest-version answers like the real route (#237). With
-PARLEY_FAKE_EXIT_WITH_PARENT=1 the fake exits when its parent does (#220).
+and GET /v0/management/latest-version answers like the real route (#237). It exits
+when its parent does, through LoopbackHTTPServer — or, on the login path, which
+never binds, through its own call to the same watchdog (#220).
 
 Mode is taken from --mode or the PARLEY_FAKE_MODE env var (default: healthy),
 so the module's spawn path (which only passes `-config <path>`) can still
@@ -184,10 +185,14 @@ def read_auth_store(auth_store):
 def run_login(login_mode, auth_store):
     """Stand in for `cli-proxy-api -<provider>-login`.
 
+    This path never binds a port, so LoopbackHTTPServer cannot give it its end
+    (#220): `hangs` sleeps for 300s and returns. It calls the watchdog itself.
+
     Models what the real binary does from parley's side: print an authorize URL
     on stdout, then (on success) write a credential into the auth-dir. The four
     modes are the four ways #197's login could end.
     """
+    exit_with_parent()
     url = ("https://claude.ai/oauth/authorize?client_id=fake&code=true"
            "&redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback&state=fake")
     sys.stdout.write("Visit the following URL to continue authentication:\n")
@@ -253,10 +258,6 @@ def main():
             sys.stdout.write("  %s\n" % flag)
         sys.exit(0)
     port, mode, mgmt_key, auth_store, error_mode, response_mode = parse_args(sys.argv[1:])
-    # Opt-in (#237 sets it for every fake it starts); #220 owns making it the
-    # default, alongside its suite-level sweep.
-    if os.environ.get("PARLEY_FAKE_EXIT_WITH_PARENT") == "1":
-        exit_with_parent()
     login_mode = os.environ.get("PARLEY_FAKE_LOGIN_MODE")
     if login_mode or any(a.endswith("-login") for a in sys.argv[1:]):
         run_login(login_mode or "success", auth_store)

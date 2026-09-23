@@ -25,31 +25,27 @@ local function dead_url()
     return ("http://127.0.0.1:%d/router-for-me/CLIProxyAPI/releases"):format(ready_port.free_port())
 end
 
--- Every process a case starts is registered here and reaped in after_each, so a
--- failing assertion cannot orphan it (PQ-1, #220). The fixtures also exit when
--- this nvim does (fixture_watchdog.py), which covers a crashed or killed run.
-local spawned, servers = {}, {}
+-- The seam registers every process it starts and reaps it at VimLeavePre, so a
+-- failing assertion cannot orphan one; the fixtures also exit when this nvim
+-- does (fixture_watchdog.py), which covers a crashed or killed run (#220).
+--
+-- `mark` is what makes a per-case reap safe here: `server` above is started at
+-- FILE scope and every case points at its url, so a blanket reap would kill it
+-- and break every case after the first. Per-case release servers (the `slow` one
+-- below) are spawned through the same seam, so the marked reap collects them too
+-- and no second list is needed.
+local mark
 
 local function spawn_fake(args, env)
-    local handle, _, err = fixture_process.spawn(FAKE, args,
-        vim.tbl_extend("force", { PARLEY_FAKE_EXIT_WITH_PARENT = "1" }, env or {}))
+    local handle, _, err = fixture_process.spawn(FAKE, args, env or {})
     assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
-    spawned[#spawned + 1] = handle
     return handle
 end
 
+-- SIGTERM: fake_cliproxy models a graceful shutdown under
+-- PARLEY_FAKE_EXIT_DELAY_MS, and the restart-race cases need that window.
 local function reap()
-    for _, h in ipairs(spawned) do
-        pcall(function()
-            if not h:is_closing() then
-                h:kill("sigterm")
-            end
-        end)
-    end
-    for _, s in ipairs(servers) do
-        fake_releases.stop(s)
-    end
-    spawned, servers = {}, {}
+    fixture_process.reap({ since = mark, signal = "sigterm" })
 end
 
 describe("harness", function()
@@ -109,6 +105,7 @@ describe("resolve_target", function()
     local parley = require("parley")
     local saved
     before_each(function()
+        mark = fixture_process.mark()
         saved = parley.config
     end)
     after_each(function()
@@ -244,6 +241,7 @@ describe(":ParleyProxy update", function()
     local saved_config, saved_path
 
     before_each(function()
+        mark = fixture_process.mark()
         saved_config, saved_path = parley.config, vim.env.PATH
         vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin" -- no brew binary (#197)
         proxy_port = ready_port.free_port()
@@ -505,6 +503,7 @@ describe("first-run auto_download", function()
     local saved_config, saved_path
 
     before_each(function()
+        mark = fixture_process.mark()
         saved_config, saved_path = parley.config, vim.env.PATH
         vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin" -- no brew binary (#197)
         proxy_port = ready_port.free_port()
@@ -553,6 +552,7 @@ describe("status version", function()
     local saved_config, saved_path
 
     before_each(function()
+        mark = fixture_process.mark()
         saved_config, saved_path = parley.config, vim.env.PATH
         vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin" -- no brew binary (#197)
         proxy_port = ready_port.free_port()
@@ -589,7 +589,6 @@ describe("status version", function()
 
     it("answers once, after the slowest read, whatever the order", function()
         local slow = fake_releases.start("slow") -- /latest answers after 1.5 s
-        servers[#servers + 1] = slow
         fake_releases.publish(slow, "9.9.5")
         cliproxy._set_releases_url(slow.url)
         local calls, info = 0, nil
@@ -655,6 +654,7 @@ describe("management lockout (7.2.x)", function()
     local saved_config, saved_path
 
     before_each(function()
+        mark = fixture_process.mark()
         saved_config, saved_path = parley.config, vim.env.PATH
         vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin" -- no brew binary (#197)
         proxy_port = ready_port.free_port()

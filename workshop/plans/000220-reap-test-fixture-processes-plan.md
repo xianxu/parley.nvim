@@ -229,6 +229,7 @@ An `nvim` prototype behaved identically. Both watchdogs carry the corrected rule
 | What | Where | Kind |
 |------|-------|------|
 | `parse_ps` / `select_orphans` / `ancestry` over a recorded `ps` table | `tests/unit/reap_test_orphans_spec.lua` | drives the script with `--ps-from`, so nothing is signalled |
+| `parse_ps` / `select_orphans` / `ancestry` / `orphaned` direct contracts | `tests/unit/reap_test_orphans_pure.py` | no-IO Python unit tests of the PURE entities |
 | a fixture server outlives nothing: orphan it, watch it die | `tests/integration/fixture_reaping_spec.lua` | real process, real orphaning |
 | a spec-child Neovim outlives nothing: same | `tests/integration/fixture_reaping_spec.lua` | real process, real orphaning |
 | `fixture_process` registers, reaps, and forgets | `tests/integration/fixture_reaping_spec.lua` | real process |
@@ -244,12 +245,21 @@ Liveness is probed with `uv.kill(pid, 0)`, never `ps` — the specs must pass wh
 Two review boundaries. They are genuinely separable: M1 stops the leak and is
 provable on its own; M2 measures it, guards it, and writes it down.
 
-- **M1** — the three reaping layers (Tasks 1–3).
-- **M2** — the census, the gate, the guard, the docs (Tasks 4–7).
+- **M1** — the three reaping layers and the census (Tasks 1–4): everything that
+  exists as a *thing*.
+- **M2** — wiring, docs, guard (Tasks 5–7): nothing new to name.
+
+**Why the census is in M1 and not with its wiring.**
+`tests/arch/single_source_sweeps_spec.lua`'s "every symbol the Spec and plan
+tables name exists in the tree" guard reads the whole plan's Core-concepts table
+on any issue branch. With the census in M2, `select_orphans` and `ancestry` do not
+exist yet at M1's boundary and that guard is red — measured, not predicted. A
+boundary a guard cannot be green at is not a boundary. M2 adds no Core-concepts
+entity, so the table is fully realized at M1 and stays so.
 
 ---
 
-# M1 — Stop the leak
+# M1 — Stop the leak, and measure it
 
 ### Task 1: The shared orphan rule, in both watchdogs
 
@@ -540,7 +550,10 @@ from `run_login`'s new call. It is in Step 6's list below.
 - Modify: `tests/fixtures/loopback_http.py`
 - Modify: `tests/fixtures/fake_cliproxy` (drop the opt-in gate and its docs; add the
   direct call in `run_login`)
-- Modify: `tests/fixtures/fake_sips` (direct call)
+- Modify: `tests/fixtures/fake_sips` (direct call; its drivers are
+  `tests/unit/image_shrink_spec.lua` and `tests/integration/paste_image_spec.lua`,
+  and `image_shrink_spec.lua:297` asserts a `[4.5, 8)` elapsed window against the
+  `slow` mode this touches)
 - Modify: `tests/fixtures/fake_github_releases` (drop the now-duplicate call)
 - Modify: `tests/helpers/fake_releases.lua` (drop the env var from the wrapper)
 - Modify: `tests/integration/cliproxy_update_spec.lua` (drop the env var)
@@ -726,25 +739,39 @@ or `atlas/`.
 
 - [ ] **Step 6: Run the reaping spec and every spec that drives a fixture server**
 
+**Derive the list, do not type it.** Every spec list in this plan is computed by a
+command the plan states — a typed one is how `cliproxy_auth_login_spec` and
+`image_shrink_live_spec` got named as drivers of fixtures they never touch. The
+set is "every spec that drives a fixture this task changed", and each fixture is
+selected by the thing that selects its behaviour:
+
+```sh
+# The three servers, by the class they now inherit their end from,
+# plus the two blocking modes, by the variable that selects each.
+grep -rl 'fake_cliproxy\|fake_github_releases\|fake_sse_server' tests/ --include='*_spec.lua'
+grep -rl 'PARLEY_FAKE_LOGIN_MODE\|PARLEY_FAKE_SIPS' tests/ --include='*_spec.lua'
 ```
-for s in tests/integration/fixture_reaping_spec.lua \
-         tests/integration/cliproxy_update_spec.lua \
-         tests/integration/cliproxy_catalog_spec.lua \
-         tests/integration/cliproxy_login_spec.lua \
-         tests/integration/cliproxy_auth_login_spec.lua \
-         tests/integration/image_shrink_live_spec.lua \
-         tests/integration/query_cache_spec.lua \
-         tests/integration/fixture_ready_publish_spec.lua \
-         tests/integration/fixture_loopback_dns_spec.lua; do
+
+At the time of writing the second grep yields `tests/integration/cliproxy_login_spec.lua`
+(the hangs login, `:58` and `:183`) and `tests/unit/image_shrink_spec.lua` plus
+`tests/integration/paste_image_spec.lua` (`fake_sips`). Those three matter most:
+they drive the two modes whose watchdog call is **new**, so a fixture that now
+exits on its own could break a spec that relied on it blocking.
+`image_shrink_spec.lua:297` is the sharp one — it asserts a 124 exit and an elapsed
+time in `[4.5, 8)` against `fake_sips` `slow`, which is exactly the timing a new
+`exit_with_parent()` could perturb.
+
+```
+for s in $(grep -rl 'fake_cliproxy\|fake_github_releases\|fake_sse_server\|PARLEY_FAKE_LOGIN_MODE\|PARLEY_FAKE_SIPS' \
+             tests/ --include='*_spec.lua' | sort -u) \
+           tests/integration/fixture_reaping_spec.lua; do
   nvim -n --headless --noplugin -u tests/minimal_init.vim \
     -c "PlenaryBustedFile $s" -c "qa!" || echo "FAILED: $s"
 done
 ```
 
-Expected: PASS for all nine. `cliproxy_login_spec` and `image_shrink_live_spec` are
-in the list because they drive the two fixtures whose watchdog call is NEW (the
-hangs login and `fake_sips` slow mode) — a fixture that now exits on its own could
-break a spec that relied on it hanging, and only its own driver would show that.
+Expected: no `FAILED:` line. A spec that `pending()`s (a live-only case) is not
+evidence — check that `image_shrink_spec`'s slow-child case actually ran.
 
 - [ ] **Step 7: Commit**
 
@@ -1076,17 +1103,7 @@ git add tests/helpers/fixture_process.lua tests/integration/<spec>.lua
 git commit -m "#220 M1: <spec> reaps through the fixture seam"
 ```
 
-- [ ] **Step 7: Close the milestone**
-
-```bash
-sdlc milestone-close --issue 220 --milestone M1
-```
-
-Fix Critical/Important findings before crossing; log the verdict in `## Log`.
-
 ---
-
-# M2 — Measure it, guard it, write it down
 
 ### Task 4: The census — find survivors with `ps`, and fail
 
@@ -1094,9 +1111,10 @@ Fix Critical/Important findings before crossing; log the verdict in `## Log`.
 - Create: `scripts/reap-test-orphans.py`
 - Create: `tests/fixtures/ps_test_orphans.txt`
 - Create: `tests/unit/reap_test_orphans_spec.lua`
+- Create: `tests/unit/reap_test_orphans_pure.py`
 - Modify: `atlas/traceability.yaml`
 
-- [ ] **Step 1: Record a process table to select against**
+- [x] **Step 1: Record a process table to select against**
 
 `tests/fixtures/ps_test_orphans.txt` — real row shapes, from the measurement taken
 while planning, plus the three near-misses the selector must get right. Columns are
@@ -1127,7 +1145,7 @@ What each row pins:
 | 99999 | the recipe `sh` that invoked the census | no | matches on both clauses, and is excluded only by `ancestry` — this is the row that would otherwise make `make` kill its own recipe |
 | 99998 | the census itself, a child of 99999 | no | matches on both clauses; excluded as the first element of the same walk |
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 `tests/unit/reap_test_orphans_spec.lua`:
 
@@ -1210,7 +1228,7 @@ describe("#220 orphan census", function()
 end)
 ```
 
-- [ ] **Step 3: Run it and watch it fail**
+- [x] **Step 3: Run it and watch it fail**
 
 ```
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
@@ -1219,7 +1237,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 Expected: FAIL — the script does not exist.
 
-- [ ] **Step 4: Write the script**
+- [x] **Step 4: Write the script**
 
 `scripts/reap-test-orphans.py`:
 
@@ -1436,25 +1454,37 @@ if __name__ == "__main__":
 chmod +x scripts/reap-test-orphans.py
 ```
 
-- [ ] **Step 5: Run the test**
+- [x] **Step 5: Run the test**
 
 Expected: PASS, all eight cases.
 
-- [ ] **Step 6: Route it in the traceability map**
+- [x] **Step 6: Route it in the traceability map**
 
 Under `infra/test_harness`, add `scripts/reap-test-orphans.py` and
 `tests/fixtures/ps_test_orphans.txt` to `code:`, and
 `tests/unit/reap_test_orphans_spec.lua` to `tests:`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add scripts/reap-test-orphans.py tests/fixtures/ps_test_orphans.txt \
         tests/unit/reap_test_orphans_spec.lua atlas/traceability.yaml
-git commit -m "#220 M2: a ps-based census of this checkout's surviving test processes"
+git commit -m "#220 M1: a ps-based census of this checkout's surviving test processes"
 ```
 
 ---
+
+- [x] **Step 8: Close the milestone**
+
+```bash
+sdlc milestone-close --issue 220 --milestone M1
+```
+
+Fix Critical/Important findings before crossing; log the verdict in `## Log`.
+
+---
+
+# M2 — Wire it in, write it down, guard it
 
 ### Task 5: Wire the census into the suite
 
@@ -1463,7 +1493,7 @@ git commit -m "#220 M2: a ps-based census of this checkout's surviving test proc
   `test-unit` / `test-integration` (`:80-109`), `test-spec` (`:127`),
   `test-changed` (`:182`), `perf` (`:200`), `fixtures` (`:215`)
 
-- [ ] **Step 1: Make the parent Neovim identifiable by path**
+- [x] **Step 1: Make the parent Neovim identifiable by path**
 
 The plenary spec *child* already carries an absolute spec path in its argv; the
 `make` parent carries only relative paths, so the census cannot see it. Change every
@@ -1484,7 +1514,7 @@ symlink to `/private/tmp`, where the issue log says the dominant orphan source l
 single-quoted `RUN_SPEC` string, and the surrounding double quotes protect a path
 containing spaces.
 
-- [ ] **Step 2: Add one owner for the gate**
+- [x] **Step 2: Add one owner for the gate**
 
 Near the `TEST_ENV` block:
 
@@ -1509,7 +1539,7 @@ mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cach
 endef
 ```
 
-- [ ] **Step 3: Fail every test target on survivors**
+- [x] **Step 3: Fail every test target on survivors**
 
 In `test-unit` and `test-integration`, fold the census into the existing `rc` so a
 leak fails a suite that otherwise passed and does not mask a real test failure:
@@ -1546,7 +1576,7 @@ headless Neovim under the harness init and can leak exactly the same way, and an
 asymmetric gate is one somebody will later "fix" by removing it from the targets
 that have it.
 
-- [ ] **Step 4: Prove the gate is not vacuous**
+- [x] **Step 4: Prove the gate is not vacuous**
 
 Two things this step gets wrong if written casually, and both make it silently
 useless:
@@ -1579,7 +1609,7 @@ its command line, and `rc=1`.
 Then re-run the target with nothing leaked and confirm `rc=0` and no `LEAKED:`
 line — a gate that fires unconditionally is as useless as one that never fires.
 
-- [ ] **Step 5: Run the whole suite and confirm it is clean**
+- [x] **Step 5: Run the whole suite and confirm it is clean**
 
 `$(pwd -P)`, not `$PWD`: the physical path is what make's `CURDIR` holds and what
 the census realpaths, and under a symlinked cwd (`/tmp → /private/tmp` on macOS, the
@@ -1594,7 +1624,7 @@ ps -Ao pid=,ppid=,args= | grep "$ROOT/tests/" | grep -v grep
 Expected: `rc=0`, no `LEAKED:` line, and the `ps` check prints nothing.
 **Needs a machine where `ps` is permitted.**
 
-- [ ] **Step 6: Prove the interrupted case**
+- [x] **Step 6: Prove the interrupted case**
 
 The Done-when criterion that no teardown can satisfy. Run the suite in its **own
 process group** so SIGINT reaches the whole tree the way Ctrl-C does in a terminal —
@@ -1618,7 +1648,7 @@ landed), and the final `ps` prints nothing — one watchdog poll for the Neovims
 second for the fixtures they were holding, plus slack.
 **Needs a machine where `ps` is permitted.**
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add Makefile.parley
@@ -1634,7 +1664,7 @@ git commit -m "#220 M2: the suite fails when it leaves a process behind"
 - Modify: `atlas/infra/test_harness.md`
 - Modify: `workshop/lessons.md`
 
-- [ ] **Step 1: TOOLING.md — the operator-facing remedy**
+- [x] **Step 1: TOOLING.md — the operator-facing remedy**
 
 A new "Orphaned test processes" section: what the suite now does at both ends of a
 run, the manual command, and the caveat.
@@ -1656,7 +1686,7 @@ until the machine swaps. Add the second reason for the existing "one `make test`
 checkout" rule: the census cannot tell a concurrent run's live processes from a
 leak, and it sends SIGKILL.
 
-- [ ] **Step 2: atlas/infra/test_harness.md — a "Process lifecycle" section**
+- [x] **Step 2: atlas/infra/test_harness.md — a "Process lifecycle" section**
 
 The layers and which case each covers, as a table: normal exit and spec failure
 (`fixture_process`'s `VimLeavePre`), killed or wedged harness (both watchdogs), a
@@ -1665,7 +1695,7 @@ anything that still got through (the census). Name `LoopbackHTTPServer` and
 `tests/minimal_init.vim` as the two chokepoints, so a reader adding a fixture knows
 where the coverage comes from rather than having to arrange it.
 
-- [ ] **Step 3: workshop/lessons.md — three rules**
+- [x] **Step 3: workshop/lessons.md — three rules**
 
 ```markdown
 - #220 (a watchdog that only watches for a CHANGE misses the case it exists for):
@@ -1692,7 +1722,7 @@ where the coverage comes from rather than having to arrange it.
   `sh` carries the whole nvim command line in its own argv.
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add TOOLING.md atlas/infra/test_harness.md workshop/lessons.md
@@ -1715,7 +1745,7 @@ would catch a reintroduction.
 - Modify: `tests/arch/spawn_seam_spec.lua` (header cross-reference only)
 - Modify: `atlas/traceability.yaml`
 
-- [ ] **Step 1: Write invariant 1 — every spec spawn goes through the seam**
+- [x] **Step 1: Write invariant 1 — every spec spawn goes through the seam**
 
 Open the file with the header that says what it is for, so a reader meets the
 reasons before the matchers:
@@ -1785,7 +1815,7 @@ uses `vim.fn.jobstart`, which Neovim terminates on exit and whose `--embed` chil
 exits when its stdin closes; it is not `uv.spawn` and is not matched. Verify both
 claims by running the guard before writing invariant 2.
 
-- [ ] **Step 2: Write invariant 2 — every fixture reaches `exit_with_parent`, or says why not**
+- [x] **Step 2: Write invariant 2 — every fixture reaches `exit_with_parent`, or says why not**
 
 The obvious form — "a fixture that mentions `HTTPServer` constructs
 `LoopbackHTTPServer`" — is too narrow: it misses `fake_cliproxy`'s `run_login`
@@ -1827,14 +1857,14 @@ out of the corpus — a note that stops the filter being loosened later without 
 thought for what it would then pull in. Assert the selection is non-empty and holds
 at least the three known servers.
 
-- [ ] **Step 3: Write invariant 3 — both watchdogs test against `1`**
+- [x] **Step 3: Write invariant 3 — both watchdogs test against `1`**
 
 Read `tests/fixtures/fixture_watchdog.py` and `tests/helpers/exit_with_parent.lua`;
 flag either if it lacks a comparison of a ppid against `1`, and flag either if it
 does not name the other's path (the cross-reference is what makes the pair
 discoverable, since the rule cannot be single-sourced across the language boundary).
 
-- [ ] **Step 4: Write invariant 4 — the documented remedy uses `ps`**
+- [x] **Step 4: Write invariant 4 — the documented remedy uses `ps`**
 
 Done-when's fourth criterion is about wording, and wording is the thing that rots
 without a test. `TOOLING.md` must contain a `ps -Ao` listing command and name the
@@ -1851,7 +1881,7 @@ it("TOOLING.md's remedy uses ps, and warns about pgrep", function()
 end)
 ```
 
-- [ ] **Step 5: Run each counterfactual for real**
+- [x] **Step 5: Run each counterfactual for real**
 
 For each invariant: make the offending edit in the working tree, confirm the guard
 fails naming the exact site, then revert.
@@ -1865,13 +1895,13 @@ fails naming the exact site, then revert.
 
 A guard whose counterfactual was never run is a guard that may match nothing.
 
-- [ ] **Step 6: Cross-reference from the production-side guard**
+- [x] **Step 6: Cross-reference from the production-side guard**
 
 Add two lines to `tests/arch/spawn_seam_spec.lua`'s header comment pointing at
 `tests/arch/fixture_lifecycle_spec.lua` as the `tests/` half of the same principle,
 so a reader of either finds the other.
 
-- [ ] **Step 7: Route it, run it, commit**
+- [x] **Step 7: Route it, run it, commit**
 
 Add `tests/arch/fixture_lifecycle_spec.lua` to `atlas/traceability.yaml` under
 `infra/test_harness`.
@@ -1884,7 +1914,7 @@ git add tests/arch/fixture_lifecycle_spec.lua tests/arch/spawn_seam_spec.lua \
 git commit -m "#220 M2: guard the reaping invariants"
 ```
 
-- [ ] **Step 8: Close**
+- [x] **Step 8: Close**
 
 ```bash
 sdlc close --issue 220 --verified '<the Done-when evidence, including the interrupted run>'
@@ -1956,3 +1986,121 @@ fixtures that production code spawns detached.
 - **ARCH-MOCK** — `ps` is the external dependency; `--ps-from` is its seam and
   `tests/fixtures/ps_test_orphans.txt` its recorded state, taken from this machine
   rather than invented.
+
+## Revisions
+
+### 2026-09-22 — boundary review BR-2
+
+Added `tests/unit/reap_test_orphans_pure.py` so the Core-concepts table's PURE
+entities (`parse_ps`, `select_orphans`, `ancestry`, and `orphaned`) are tested by
+direct no-IO calls. The existing Lua spec remains the integration contract for
+the CLI, recorded process-table seam, and signal-free boundary behavior.
+
+### 2026-09-22 — boundary review BR-3
+
+Threaded the configured `--ps-command` through grace-period resampling and added
+a direct regression test proving subsequent samples use that seam rather than
+hard-coding `ps`.
+
+### 2026-09-22 — boundary review BR-4
+
+Moved the atlas process-lifecycle map into the M1 boundary so the new watchdog,
+registry, detached-binary, and census surfaces are documented before crossing;
+the remaining M2 documentation work is the operator remedy in `TOOLING.md` and
+the distilled rules in `workshop/lessons.md`.
+
+### 2026-09-22 — M2 implementation and verification
+
+The five parent Neovim launch sites now carry `$(CURDIR)` in their init path.
+Every harness target inherits the before census; completed or failed spec loops
+reach the after census. Preflight failures stop combined recipes. Validation-only
+early returns in `test-changed` occur before any test process is launched.
+
+Removed the Python test from the Lua-only traceability test list and invoked its
+six direct predicate tests from `reap_test_orphans_spec.lua`, so ordinary test
+targets run them. Corrected the concurrency advice in both TOOLING and the atlas:
+separate scratch roots cannot isolate the checkout-scoped census.
+
+Verification: the full `make test` passed with clean unit and integration
+censuses. An intentionally live fixture (pid 19049) survived the mapped specs,
+was reported as `LEAKED: 1`, and made make exit 2 (the recipe exited 1). A fresh
+integration process group (46237) was interrupted after observing actual Neovims
+46312 and 46314; real `ps` found no checkout test processes ten seconds later.
+
+All four arch invariants were counterfactually checked in the worktree and then
+restored: a bypassing spawn failed at ready_port_spec.lua:69; removing fake_sips'
+watchdog failed by path; a deliberately stale exemption failed by name; removing
+Python's init-parent comparison failed; replacing the documented ps command
+with pgrep failed. For the stale exemption proof, changed the declaration to a
+missing path rather than deleting a fixture. The final guard passes 4/4.
+
+The current SDLC contract requires an M2 milestone verdict before whole-issue
+close, so Task 7 Step 8 includes `sdlc milestone-close --issue 220 --milestone M2`
+followed by `sdlc close`. The atlas lifecycle map was already delivered at M1.
+
+M2 implementation and its evidence are committed in `caa953ab`. The final mapped
+harness target passed (census 9/9 including the Python 6/6 suite; lifecycle guard
+4/4; fixture reaping 11/11), with no after-census survivors. Targeted lint and
+`git diff --check` passed after the final test and documentation edits.
+
+### 2026-09-22 — M2 review BR-2, BR-5 through BR-8
+
+BR-5 changes the authority rule for signaling: a fixture path must occupy the
+executable/script position, with only recognized Python/shell interpreters and
+safe interpreter flags; command/module strings and arbitrary arguments do not
+establish ownership. Neovim must be the executable, have a headless option, and
+use the checkout's absolute harness init or a Plenary invocation of its specs.
+Ambiguous command representations are excluded. Negative tests cover editors,
+pagers, echo, shell -c, Python -c/-m, and non-harness headless Neovim.
+
+BR-6 introduces pure `validated_rows(text, self_pid)` in the census, directly
+tested in `tests/unit/reap_test_orphans_pure.py`. Both the initial observation
+and every resample pass through it. Malformed, incomplete, or unavailable later
+observations fail visibly as BROKEN and send no signals from stale information;
+only an initially unavailable ps retains the documented visible-skip behavior.
+Sampling tests are INTEGRATION tests with injected process-table sequences.
+
+BR-2 extracts both watchdogs' pure `orphaned(parent, ppid)` predicate. Their IO
+loops supply the current observation; predicate tests use plain values, no mocks.
+BR-7 replaces vim.fn cleanup with synchronous libuv operations over the captured
+query-directory path, with lstat/unlink for symlinks and visible failure output.
+The real orphan test now verifies PID disappearance, populated directory removal,
+and survival of an external symlink target. It failed before the change and
+passes after it. BR-8 adds README's link to the manual census remedy.
+
+BR-1 remains a non-blocking documentation recommendation. The implementation
+blocks above are historical design snapshots; this revision and source files
+describe the implemented contracts. Retaining them follows AGENTS.md's explicit
+append-only plan-revision rule rather than rewriting the approved design.
+
+The post-fix full `make test` passed with zero census survivors, and the repeated
+SIGINT proof (group 88869, observed Neovims 88953/88956) also left none after ten
+seconds. The intentional live leak proof reported pid 63227 and made make exit 2;
+no mapped spec failed in that run.
+
+### 2026-09-22 — BR-5 command-boundary class
+
+The second M2 review disposed BR-6/7/8 and verified the pure predicates, but
+reproduced BR-5 with a leading `-c`/`--cmd` whose command text contained fake
+harness flags. The authority rule now recognizes only initial known valueless
+flags followed immediately by the absolute harness init, or the known Plenary
+child invocation (including its optional startup command). It does not search
+arbitrary command or filename arguments for options.
+
+The negative enumeration follows local `nvim --help`: -c/--cmd (separate and
+attached forms), +cmd, -l, -S, -s, -u, -i, -V, --listen, --server, --startuptime,
+--remote-expr, and --. Each is tested at the start, after -n, and after a genuine
+--headless flag: 48 cases. Thirty failed before the first correction; extending
+the corpus to a genuine headless flag exposed eleven more init-path false
+positives, fixed by recognizing complete launch forms. All 13 Python tests and
+10 Lua census cases pass. A live proof selected actual harness pid 1040 and
+fixture pid 1041, while preserving an unrelated headless fixture viewer.
+
+M2's third review returned SHIP at `45119026..9d58e9db`, with no blocking
+findings. The reviewer independently ran the 13 Python tests and confirmed the
+BR-5 counterfactual produced 45 failing subtests. BR-1 remains advisory.
+
+Whole-issue close returned SHIP at `45119026..74d9e898` and set status to
+codecomplete. The generated calibration row was marked `window_trusted=no` as
+directed. M1's recorded review metadata was repaired without rewriting history;
+M2 and final close carry proper review trailers. Publication remains separate.

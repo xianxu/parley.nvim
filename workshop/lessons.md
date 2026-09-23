@@ -1,5 +1,37 @@
 # Lessons
 
+## 2026-09-22 (#220 — fixture process lifecycle)
+
+- #220 M2 review: an argument mentioning an owned path is not process ownership.
+  Census selectors must establish executable/script identity before signaling;
+  include editors, pagers, shell command text, and interpreter command/module
+  modes as negative cases.
+- #220 M2 re-review (same ownership finding): matching an option substring is
+  not parsing argv. A leading command option defeated a whitespace-only boundary;
+  filename/address arguments could contain the same text. Recognize known launch
+  forms from the beginning, and enumerate every value-bearing option family in
+  the negative corpus, including a real headless flag followed by a fake init path.
+- #220 M2 review: validate every observation in a polling sequence. An invalid
+  later sample is unknown, not an empty set; never convert it to success or use
+  the earlier snapshot as authority to signal.
+- #220 M2 review: cleanup must run in the execution context that calls it.
+  A pcall around vim.fn.delete hid E5560 in the libuv timer. Test both process
+  death and removal of its owned files, including symlink boundaries.
+- #220 BR-2: a function that reads process state is not pure merely because a
+  unit test patches that read. Pass the observation as data to the predicate.
+
+- A watchdog comparing a current value to one sampled at startup must handle the
+  condition already being true at startup. A fixture orphaned while booting
+  samples parent pid 1; a change-only check never fires. Test that ordering.
+- Put a class-wide safety rule at the class constructor. Parent-death exit was
+  an opt-in flag at two of eight spawn sites; `LoopbackHTTPServer` now supplies
+  it to every long-lived server fixture, while the two non-server blocking paths
+  call the watchdog directly.
+- A broad path match needs a process-kind clause before it sends SIGKILL. A
+  process with this checkout's `tests/` path in argv might be the operator's
+  editor or the recipe shell. Match harness Neovim or fixture executables and
+  exclude the census caller's ancestry.
+
 ## 2026-09-19 (#261 M4 close — a double is a restatement, and a whole-file revert proves no hunk)
 
 - **Test doubles are in a seam's ledger, and a guard over a seam scans

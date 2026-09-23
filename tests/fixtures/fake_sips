@@ -5,6 +5,10 @@ import os
 import sys
 import time
 
+sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fixture_watchdog import exit_with_parent  # noqa: E402
+
 args = sys.argv[1:]
 mode = os.environ.get('PARLEY_FAKE_SIPS', 'empty')
 log = os.environ.get('PARLEY_FAKE_SIPS_LOG')
@@ -13,6 +17,9 @@ if log:
         stream.write(json.dumps(args) + '\n')
 output = args[args.index('--out') + 1]
 if mode == 'slow':
+    # This fixture binds nothing, so LoopbackHTTPServer cannot give it its end
+    # (#220). Thirty seconds is short, but a killed harness leaves one per run.
+    exit_with_parent()
     time.sleep(30)
 if mode == 'fail':
     sys.stderr.write('fixture conversion failure\n')

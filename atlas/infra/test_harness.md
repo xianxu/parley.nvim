@@ -93,8 +93,9 @@ shape.
 - **One `make test` per checkout at a time.** A second concurrent run in the
   same checkout wipes the first's live scratch. It fails loudly
   (`rm: ... Directory not empty`) rather than corrupting silently. Run
-  concurrent suites from separate worktrees — the root is keyed by checkout — or
-  pass a distinct `TEST_ENV_ROOT`. A per-run suffix was rejected: it makes the
+  concurrent suites from separate worktrees. A distinct `TEST_ENV_ROOT` isolates
+  scratch, but the process census still sees all runs in the same checkout and
+  may reap another run's processes. A per-run suffix was rejected: it makes the
   scratch path unpredictable (the perf report's default location derives from
   it) and leaves one directory per run with nothing to reap them.
 
@@ -115,6 +116,42 @@ zero-byte, empty-then-filled, non-numeric, and out-of-range signals directly.
 via `PARLEY_PUBLISH_DELAY` and asserts the ready path is never observable
 incomplete — and asserts the delay was honored, so the hook cannot be deleted to
 make it pass. Neither has a race to win.
+
+## Process lifecycle
+
+Every process a test creates has an owner and an end. The layers are placed at
+the chokepoint for each process shape:
+
+| failure or exit shape | owner and cleanup |
+|---|---|
+| normal spec exit or assertion failure | `tests/helpers/fixture_process.lua` registers every `uv.spawn` handle, reaps it at `VimLeavePre`, and supports marked per-case cleanup |
+| killed or wedged harness Neovim | `tests/helpers/exit_with_parent.lua`, installed by `tests/minimal_init.vim`, exits when the parent is gone or when the process is reparented to init |
+| fixture server or blocking fixture mode | `LoopbackHTTPServer` installs `tests/fixtures/fixture_watchdog.py` for server fixtures; non-server blocking modes call the same watchdog directly |
+| detached real `cliproxyapi` | the fixture-process registry provides best-effort normal-exit cleanup; it has no parent-death watchdog because the binary is intentionally detached and shared |
+| anything that survives those layers | `scripts/reap-test-orphans.py` reads the checkout's `ps` rows, excludes the invoking ancestry and non-harness editors, then reports and reaps persistent survivors |
+
+The census uses `--ps-from` as a signal-free recorded-table seam in tests and
+re-samples live `ps` output within a bounded grace period before accusing a
+process. `pgrep -f` is not a substitute on macOS: it does not match the fixture
+process shape this harness produces. New fixture servers inherit the watchdog
+through `LoopbackHTTPServer`; new spec subprocesses inherit registry cleanup
+through `fixture_process`.
+
+Ownership requires a fixture in executable/script position, or an actual
+headless Neovim using this checkout's harness init or Plenary spec invocation.
+An editor or pager merely naming a fixture is excluded. Every live observation
+is validated; malformed or unavailable resampling reports `BROKEN`, fails the
+target, and sends no signals based on the stale snapshot. An initially unavailable
+`ps` remains a visible skip for restricted environments.
+
+The Neovim watchdog also removes its captured query directory using synchronous
+libuv filesystem calls, which work in its timer callback. Cleanup unlinks
+symlinks without following them and reports errors to stderr.
+
+`Makefile.parley` runs the census before every harness target and after its
+tests finish, including failed specs. Survivors make the target fail. All
+parent Neovim commands use the physical checkout path in their init argument
+so the census can identify them through symlinked working directories too.
 
 ## Comment drift
 

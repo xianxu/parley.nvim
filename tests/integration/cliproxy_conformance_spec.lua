@@ -15,6 +15,7 @@
 --   fabricated token makes that refresh a harmless 401.
 
 local uv = vim.uv or vim.loop
+local fixture_process = require("tests.helpers.fixture_process")
 local cliproxy = require("parley.cliproxy")
 local ready_port = require("tests.helpers.ready_port")
 local ca = require("parley.cliproxy_auth")
@@ -67,19 +68,19 @@ local function needs_binary()
 end
 
 describe("cliproxyapi management API conformance", function()
-    local binary, proc, port, mgmt_key, auth_dir_path
+    local binary, proc, port, mgmt_key, auth_dir_path, mark
 
     before_each(function()
         binary = BINARY
+        mark = fixture_process.mark()
     end)
 
     after_each(function()
         -- Reap per test: a real proxy left running would keep a 15-minute
         -- refresh loop alive against the throwaway auth-dir.
-        if proc then
-            pcall(function() uv.kill(proc, "sigterm") end)
-            proc = nil
-        end
+        -- SIGTERM: the real binary shuts down gracefully, and this models that.
+        fixture_process.reap({ since = mark, signal = "sigterm" })
+        proc = nil
     end)
 
     -- Boot a real cliproxyapi against a THROWAWAY auth-dir holding a
@@ -114,8 +115,12 @@ describe("cliproxyapi management API conformance", function()
         end
         vim.fn.writefile({ vim.json.encode(conf) }, cfg_path)
 
-        local handle, pid = uv.spawn(binary, { args = { "-config", cfg_path } }, function() end)
-        assert(handle, "failed to spawn the real cliproxyapi")
+        -- Through the seam, so VimLeavePre reaps it even when this spec dies
+        -- before its own after_each (#220). This is the one process here that
+        -- can carry no parent-death watchdog — it is the REAL binary — so the
+        -- registry is the only layer that can ever collect it.
+        local handle, _, err, pid = fixture_process.spawn(binary, { "-config", cfg_path })
+        assert(handle, "failed to spawn the real cliproxyapi: " .. tostring(err))
         proc = pid
         return port, mgmt_key
     end

@@ -33,7 +33,6 @@ from http.server import BaseHTTPRequestHandler
 
 sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fixture_watchdog import exit_with_parent  # noqa: E402
 from loopback_http import LoopbackHTTPServer  # noqa: E402
 
 PREFIX = "/router-for-me/CLIProxyAPI/releases"
@@ -62,7 +61,8 @@ def parse_args(argv):
 
 def main():
     port, root, mode = parse_args(sys.argv[1:])
-    exit_with_parent()  # a crashed or killed spec must not orphan this server (#220)
+    # A crashed or killed spec cannot orphan this server: LoopbackHTTPServer
+    # installs the parent-death watchdog when it binds (#220).
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_a):

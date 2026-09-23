@@ -45,14 +45,40 @@ let $PARLEY_CLIPROXY_RELEASES_URL = 'http://127.0.0.1:9/router-for-me/CLIProxyAP
 "    and fails the spec file through `cquit`, which no pcall seam can swallow.
 lua << EOF
 local tmp = (vim.env.TMPDIR or "/tmp"):gsub("/$", "")
-vim.env.PARLEY_QUERY_DIR = tmp .. "/parley-query-" .. vim.fn.getpid()
-vim.fn.mkdir(vim.env.PARLEY_QUERY_DIR, "p")
+local query_dir = tmp .. "/parley-query-" .. vim.fn.getpid()
+vim.env.PARLEY_QUERY_DIR = query_dir
+vim.fn.mkdir(query_dir, "p")
 -- The removal lives beside the creation: `make test` cleans its env, but
 -- test-spec, test-changed and a direct PlenaryBustedFile run do not, and one
 -- directory per spec process would simply accumulate (#261 M5 review round 4).
-vim.api.nvim_create_autocmd("VimLeavePre", { callback = function()
-    pcall(vim.fn.delete, vim.env.PARLEY_QUERY_DIR, "rf")
-end })
+-- Synchronous libuv calls work in the watchdog's fast-event context; vim.fn
+-- does not. lstat keeps cleanup inside this process's tree, even with links.
+local uv = vim.uv or vim.loop
+local function remove_tree(path)
+    local stat, err, code = uv.fs_lstat(path)
+    if not stat then return code == "ENOENT", err end
+    if stat.type ~= "directory" then return uv.fs_unlink(path) end
+    local scan, scan_err = uv.fs_scandir(path)
+    if not scan then return nil, scan_err end
+    while true do
+        local name = uv.fs_scandir_next(scan)
+        if not name then break end
+        local ok, child_err = remove_tree(path .. "/" .. name)
+        if not ok then return nil, child_err end
+    end
+    return uv.fs_rmdir(path)
+end
+local function drop_query_dir()
+    local ok, err = remove_tree(query_dir)
+    if not ok then io.stderr:write("test query cleanup failed: " .. tostring(err) .. "\n") end
+end
+vim.api.nvim_create_autocmd("VimLeavePre", { callback = drop_query_dir })
+
+-- Every harness Neovim — the `make` parent and every plenary spec child — loads
+-- this file, so one call here covers both (#220). It exits with os.exit, which
+-- skips VimLeavePre, so the query dir's removal is handed to it as well: one
+-- definition, two triggers.
+require("tests.helpers.exit_with_parent").install(nil, drop_query_dir)
 
 -- A spec that exercises a wordless token on purpose names it in
 -- g:parley_expected_unkeyed, at file scope: nothing to restore, and the

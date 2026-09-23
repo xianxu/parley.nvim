@@ -8,6 +8,7 @@
 local uv = vim.uv or vim.loop
 local parley = require("parley")
 local ready_port = require("tests.helpers.ready_port")
+local fixture_process = require("tests.helpers.fixture_process")
 local cliproxy = require("parley.cliproxy")
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
@@ -35,7 +36,7 @@ local NO_AUTH = '{"type":"error","error":{"type":"api_error","message":"auth_una
     .. 'session and cooldown state via /v0/management/auth-files"}}'
 
 describe("cliproxy.recover", function()
-    local saved_config, saved_select, saved_path, started
+    local saved_config, saved_select, saved_path, mark
 
 
 
@@ -58,9 +59,8 @@ describe("cliproxy.recover", function()
             port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" },
             ["remote-management"] = { ["secret-key"] = cliproxy.management_key() },
         }) }, cfg_file)
-        local handle, pid = uv.spawn(FAKE, { args = { "-config", cfg_file } }, function() end)
-        assert(handle, "failed to spawn fake_cliproxy")
-        table.insert(started, { handle = handle, pid = pid })
+        local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file })
+        assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
         ready_port.wait_listening(port)
         parley.dispatcher = parley.dispatcher or {}
         parley.dispatcher.providers = parley.dispatcher.providers or {}
@@ -89,7 +89,7 @@ describe("cliproxy.recover", function()
         saved_select = vim.ui.select
         saved_path = vim.env.PATH
         vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin" -- no real cliproxyapi (#197)
-        started = {}
+        mark = fixture_process.mark()
         parley.config = vim.deepcopy(MANAGED)
         cliproxy._reset_login_prompt()
         cliproxy._reset_management_restart()
@@ -100,9 +100,8 @@ describe("cliproxy.recover", function()
         vim.ui.select = saved_select
         vim.env.PATH = saved_path
         vim.ui.select = saved_select
-        for _, p in ipairs(started) do
-            pcall(function() uv.kill(p.pid, "sigkill") end)
-        end
+        -- Only this case's fixtures; the seam owns the registry (#220).
+        fixture_process.reap({ since = mark })
         for _, pid in ipairs(cliproxy.spawned_pids()) do
             pcall(function() uv.kill(pid, "sigkill") end)
         end

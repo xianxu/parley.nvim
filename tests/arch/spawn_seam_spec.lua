@@ -1,5 +1,7 @@
 -- #261 M3 review BR-40, BR-45, BR-46: the process seam, as executable
 -- enumerations.
+-- tests/arch/fixture_lifecycle_spec.lua guards the tests/ half of the same
+-- process-lifecycle principle; this file covers lua/ production spawns.
 --
 -- The atlas says how a process started through `tasker.run` is stopped
 -- (atlas/providers/tool_execution.md#stopping-a-process). A statement about
@@ -459,4 +461,3 @@ describe("arch: every pre_query reports its failure", function()
         assert.same({}, problems)
     end)
 end)
-

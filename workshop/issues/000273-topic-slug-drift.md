@@ -140,7 +140,7 @@ neither.
 
 ## Plan
 
-- [ ]
+- [ ] Confirm an implementation plan against the Spec and Done when before starting work.
 
 ## Log
 
@@ -197,3 +197,10 @@ Not yet checked: whether these chats were opened in an Neovim that has parli's
 chat root configured, since `not_chat` gates the `BufWritePost` autocmd. The
 nine slugged siblings in the same directory make a config gap unlikely, but a
 per-window `not_chat` result is a one-line confirmation.
+
+## Revisions
+
+### 2026-09-22 — publish conformance
+
+Replaced the empty Plan checkbox with an explicit pending planning task to satisfy
+the publish validator. No implementation design, scope, or status change.

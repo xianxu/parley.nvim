@@ -44,9 +44,15 @@ end
 ---
 --- ERE, not Lua patterns: this string goes to `grep -E`, where `[%%w_]` would
 --- be the literal characters % and w.
+--- The corpus is `lua/ tests/ scripts/ packaging/`, and tests/fixtures holds real
+--- Python (the process-level fakes) — so a Core-concepts row naming a Python
+--- entity had no definition form here and read as "exists nowhere in the tree"
+--- (#220: `LoopbackHTTPServer`, defined as a class since #202, was reported
+--- missing). `def` and `class` are the Python halves of the same question.
 local function definition_pattern(name)
-    return ("(function [A-Za-z0-9_.]*%s\\b|[A-Za-z0-9_.]*[.]%s *=[^=]|local function %s\\b|local %s *=[^=]|\"%s\")")
-        :format(name, name, name, name, name)
+    return ("(function [A-Za-z0-9_.]*%s\\b|[A-Za-z0-9_.]*[.]%s *=[^=]|local function %s\\b|local %s *=[^=]"
+        .. "|def %s\\b|class %s\\b|\"%s\")")
+        :format(name, name, name, name, name, name, name)
 end
 
 --- Run the real matcher over synthetic text, so the injection cases below
