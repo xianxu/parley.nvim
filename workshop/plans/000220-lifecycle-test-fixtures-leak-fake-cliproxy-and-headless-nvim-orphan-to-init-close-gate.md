@@ -160,6 +160,33 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: true
+    - "n": 8
+      timestamp: "2026-09-22T19:06:30-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: not-addressed
+          note: The plan still embeds complete implementation and test bodies, including the census at line 1244. The revision explicitly retains these historical snapshots; the original Minor recommendation remains.
+          round: 8
+        - id: BR-5
+          disposition: addressed
+          note: select_orphans now recognizes executable/script positions and complete harness launch forms. All 13 Python tests pass; substituting the pre-correction ba7a9fe9 census in memory produces 45 failing ownership subtests.
+          round: 8
+        - id: BR-6
+          disposition: addressed
+          note: 'Retained disposition: validated_rows checks every resample, and the passing invalid-observation regression asserts failure without clean output or signals.'
+          round: 8
+        - id: BR-7
+          disposition: addressed
+          note: 'Retained disposition: minimal_init.vim uses synchronous libuv cleanup; fixture_reaping_spec.lua:48 checks populated-directory removal and preservation of an external symlink target.'
+          round: 8
+        - id: BR-8
+          disposition: addressed
+          note: README.md:105 links the manual census remedy documented in TOOLING.md, matching the introduced CLI surface.
+          round: 8
+      boundary: M2
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#220 (boundary-review)
@@ -244,8 +271,17 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-7 — addressed — tests/minimal_init.vim uses synchronous libuv cleanup. The orphan regression passes, including directory removal and symlink-target preservation. Replacing cleanup with pcall(vim.fn.delete, ...) in a scratch copy makes that exact regression fail at fixture_reaping_spec.lua:69.
 - BR-8 — addressed — README.md:105–106 adds the cleanup-command link in the pinned range. Its TOOLING.md#orphaned-test-processes target documents the actual --root/--phase invocation and ps caveat.
 
+## Round 8 — 2026-09-22T19:06:30-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — not-addressed — The plan still embeds complete implementation and test bodies, including the census at line 1244. The revision explicitly retains these historical snapshots; the original Minor recommendation remains.
+- BR-5 — addressed — select_orphans now recognizes executable/script positions and complete harness launch forms. All 13 Python tests pass; substituting the pre-correction ba7a9fe9 census in memory produces 45 failing ownership subtests.
+- BR-6 — addressed — Retained disposition: validated_rows checks every resample, and the passing invalid-observation regression asserts failure without clean output or signals.
+- BR-7 — addressed — Retained disposition: minimal_init.vim uses synchronous libuv cleanup; fixture_reaping_spec.lua:48 checks populated-directory removal and preservation of an external symlink target.
+- BR-8 — addressed — README.md:105 links the manual census remedy documented in TOOLING.md, matching the introduced CLI surface.
+
 ## Open findings
 
 - **BR-1** [Minor] `plan-restates-the-diff` 1803 lines carrying complete spec bodies and the whole census script verbatim
 - **BR-2** [Critical] `pure-entity-test-seam` Core-concepts PURE entities are not tested without IO
-- **BR-5** [Critical] `process-ownership-before-signalling` The census selects unrelated editors and pagers for SIGKILL

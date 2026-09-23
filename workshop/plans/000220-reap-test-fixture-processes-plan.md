@@ -1474,7 +1474,7 @@ git commit -m "#220 M1: a ps-based census of this checkout's surviving test proc
 
 ---
 
-- [ ] **Step 8: Close the milestone**
+- [x] **Step 8: Close the milestone**
 
 ```bash
 sdlc milestone-close --issue 220 --milestone M1
@@ -2095,3 +2095,7 @@ the corpus to a genuine headless flag exposed eleven more init-path false
 positives, fixed by recognizing complete launch forms. All 13 Python tests and
 10 Lua census cases pass. A live proof selected actual harness pid 1040 and
 fixture pid 1041, while preserving an unrelated headless fixture viewer.
+
+M2's third review returned SHIP at `45119026..9d58e9db`, with no blocking
+findings. The reviewer independently ran the 13 Python tests and confirmed the
+BR-5 counterfactual produced 45 failing subtests. BR-1 remains advisory.

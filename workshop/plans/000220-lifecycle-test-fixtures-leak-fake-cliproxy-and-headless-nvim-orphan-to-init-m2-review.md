@@ -206,3 +206,85 @@ dispose:
 7. **Plan revision recommendations**
 
    Append a `## Revisions` entry documenting BR-5’s remaining command-boundary class, its enumerated negative cases, and regression evidence after correction. Preserve BR-1’s explicit Minor disposition until its documentation recommendation is resolved.
+
+---
+
+## Re-review — 2026-09-22T19:06:30-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 220 — Lifecycle test fixtures leak: fake_cliproxy and headless nvim orphan to init |
+| repo | parley.nvim |
+| issue file | workshop/issues/000220-lifecycle-test-fixtures-leak-fake-cliproxy-and-headless-nvim-orphan-to-init.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 451190265e1a453044fdbd3b8efc5f7322107fb9..9d58e9db4bd5cb4cb4c5ec78754edae0eb7e1611 |
+| command | sdlc milestone-close --issue 220 --milestone M2 |
+| reviewer | codex |
+| timestamp | 2026-09-22T19:06:30-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+The pinned range delivers M2’s census wiring, lifecycle guards, and documentation. BR-5 is addressed with regression evidence; no Critical or Important findings remain. BR-1 remains a non-blocking documentation concern. This review ran the Python tests but did not rerun process-spawning integration tests.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: not-addressed
+    note: |
+      The plan still embeds complete implementation and test bodies, including the census at line 1244. The revision explicitly retains these historical snapshots; the original Minor recommendation remains.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      select_orphans now recognizes executable/script positions and complete harness launch forms. All 13 Python tests pass; substituting the pre-correction ba7a9fe9 census in memory produces 45 failing ownership subtests.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Retained disposition: validated_rows checks every resample, and the passing invalid-observation regression asserts failure without clean output or signals.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Retained disposition: minimal_init.vim uses synchronous libuv cleanup; fixture_reaping_spec.lua:48 checks populated-directory removal and preservation of an external symlink target.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      README.md:105 links the manual census remedy documented in TOOLING.md, matching the introduced CLI surface.
+```
+
+1. **Strengths**
+   - Ownership regression tests cover editors, pagers, interpreter command strings, and Neovim option arguments.
+   - Shared fixture registration replaces duplicated teardown lists while preserving file-scope servers through marks.
+   - Failed spec loops reach the after-census check and propagate failure.
+   - Atlas and README changes document cleanup ownership and the single-run-per-checkout constraint.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings**
+   - **BR-1 / ARCH-DRY:** `workshop/plans/000220-reap-test-fixture-processes-plan.md:1244` still duplicates maintained executable code. Prefer concise contracts and source references in future plans.
+
+5. **Test coverage**
+   - Python suite: **13 passed**.
+   - BR-5 counterfactual: **45 failing subtests**, zero errors.
+   - Pinned-range `git diff --check`: passed.
+   - Inspected integration coverage for orphan startup, watchdog cleanup, marked reaping, and real-`ps` conformance; not rerun during this read-only review.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** shared spawn registry and cleanup callbacks; BR-1 remains a documentation caveat.
+   - **ARCH-PURE — pass:** selection, ancestry, validation, and orphan predicates accept data directly.
+   - **ARCH-PURPOSE — pass:** prevention, measurement, failure propagation, and remedy are delivered.
+   - **ARCH-MOCK — pass:** recorded tables and injected observation sequences exercise the census seam; live conformance coverage exists.
+   - **ARCH-CONSTRAINTS — pass:** polling and grace periods are bounded; checkout concurrency limits are documented.
+   - **ARCH-SECURE — pass:** ownership narrowing addresses BR-5; recorded-table tests never signal.
+   - **ARCH-ORDER — pass:** startup orphaning and failed later observations have explicit regression coverage.
+   - **ARCH-FUNERAL — pass:** fixture processes, harness timers, and query directories have cleanup paths.
+
+7. **Plan revisions**
+   - No additional revision required. Existing revisions describe the corrected ownership and observation contracts; retain BR-1’s Minor disposition.

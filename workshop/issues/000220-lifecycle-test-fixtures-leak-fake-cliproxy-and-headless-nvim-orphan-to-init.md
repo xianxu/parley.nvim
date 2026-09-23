@@ -491,6 +491,7 @@ place — they are a live target for the census once it exists. Sweep with
 `ps -Ao pid=,ppid=,args= | grep "$(pwd -P)/tests/" | grep -v grep`.
 
 ### 2026-09-22 — M1 census landed
+- 2026-09-22: closed M2 — Full make test passed after watchdog/snapshot fixes; clean complete and interrupted runs verified with real ps; final command-boundary fix passes 13 Python tests including 48 negative argument cases and 10 Lua census cases; live census selected the real harness and fixture while preserving a headless fixture viewer; diff check clean.; review verdict: SHIP
 - 2026-09-22: closed M1 — Census unit: 8 passed; pure no-IO census/watchdog tests: 6 passed; fixture-reaping integration: 11 passed; architecture sweep: 25 passed; atlas lifecycle map updated; make lint: 0 warnings/errors; Python compilation, real-ps smoke, and diff check passed.; review verdict: SHIP
 
 Implemented the `ps`-based census in `scripts/reap-test-orphans.py` with pure
