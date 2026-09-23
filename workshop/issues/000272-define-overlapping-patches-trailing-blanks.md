@@ -122,7 +122,7 @@ the fix belongs where the collapse happens, not in the caller.
 
 ## Plan
 
-- [ ]
+- [ ] Confirm an implementation plan against the Spec and Done when before starting work.
 
 ## Log
 
@@ -152,3 +152,10 @@ Ruled out by measurement, so nobody re-walks them: the selection's word count,
 whether the selection spans two lines, the model's `term` differing from the
 phrase, and an already-present footnote footer. All four behave identically; only
 the count of trailing blank lines moves the outcome.
+
+## Revisions
+
+### 2026-09-22 — publish conformance
+
+Replaced the empty Plan checkbox with an explicit pending planning task to satisfy
+the publish validator. No implementation design, scope, or status change.
