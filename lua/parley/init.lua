@@ -2249,6 +2249,16 @@ local function drill_in_insert(buf)
 	vim.api.nvim_win_set_cursor(0, { row + 1, col + 5 })
 end
 
+-- Insert a private-note line below the current line. The prefix must begin at
+-- column one because the chat grammar treats 🔒: as a single-line annotation.
+local function private_note_insert(buf)
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local row = cursor[1] - 1
+	local prefix = M.config.chat_local_prefix or "🔒:"
+	vim.api.nvim_buf_set_lines(buf, row + 1, row + 1, false, { prefix })
+	vim.api.nvim_win_set_cursor(0, { row + 2, #prefix })
+end
+
 -- Build the registry callbacks table for drill-in / review markers.
 -- Identical shape used in both prep_chat and setup_markdown_keymaps.
 --
@@ -2274,6 +2284,16 @@ local function drill_in_callbacks(buf)
 				-- convention; <M-q> doesn't overload to mean both.
 				drill_in_insert(buf)
 				vim.cmd("startinsert")
+			end,
+		},
+		private_note = {
+			i = function()
+				private_note_insert(buf)
+				vim.cmd("startinsert!")
+			end,
+			n = function()
+				private_note_insert(buf)
+				vim.cmd("startinsert!")
 			end,
 		},
 		chat_accept_drill_in = function()
@@ -2855,6 +2875,7 @@ M.prep_chat = function(buf, file_name)
 			chat_exchange_paste = M.cmd.ExchangePaste,
 			chat_toggle_tool_folds = M.cmd.ToggleToolFolds,
 			chat_drill_in = drill_in_cbs.chat_drill_in,
+			private_note = drill_in_cbs.private_note,
 			chat_accept_drill_in = drill_in_cbs.chat_accept_drill_in,
 			chat_reject_drill_in = drill_in_cbs.chat_reject_drill_in,
 		},
@@ -3031,6 +3052,7 @@ M.setup_markdown_keymaps = function(buf)
 			branch_ref = md_branch,
 			paste_image = function() M.paste_image(vim.api.nvim_get_current_buf()) end,
 			chat_drill_in = drill_in_cbs.chat_drill_in,
+			private_note = drill_in_cbs.private_note,
 			chat_accept_drill_in = drill_in_cbs.chat_accept_drill_in,
 			chat_reject_drill_in = drill_in_cbs.chat_reject_drill_in,
 			-- markdown scope

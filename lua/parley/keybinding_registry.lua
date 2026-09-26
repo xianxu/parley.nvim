@@ -550,6 +550,16 @@ M.entries = {
 		buffer_local = true,
 	},
 	{
+		id = "private_note",
+		config_key = "chat_shortcut_private_note",
+		default_key = "<M-p>",
+		default_modes = { "n", "i" },
+		scope = "parley_buffer",
+		desc = "Parley insert private-note prefix on a new line",
+		help_desc = "Insert private-note prefix on next line",
+		buffer_local = true,
+	},
+	{
 		id = "paste_image",
 		config_key = "chat_shortcut_paste_image",
 		default_key = "<M-v>",

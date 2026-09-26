@@ -1148,6 +1148,7 @@ atlas:
     tests:
       - tests/unit/new_question_spec.lua
       - tests/integration/new_question_spec.lua
+      - tests/integration/private_note_prefix_spec.lua
       - tests/unit/keybindings_spec.lua
       - tests/unit/config_tools_spec.lua
       - tests/unit/branch_ref_spec.lua
