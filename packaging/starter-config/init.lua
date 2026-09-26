@@ -6,7 +6,6 @@ end
 if vim.env.PARLEY_RUNTIME and vim.env.PARLEY_RUNTIME ~= "" then
     vim.opt.runtimepath:prepend(vim.env.PARLEY_RUNTIME)
 end
-local theme = require("parley.theme")
 
 vim.g.mapleader = " "
 vim.opt.termguicolors = true
@@ -76,7 +75,33 @@ local ok, err = xpcall(function()
         if result.code ~= 0 then
             error("Parley bootstrap git failed: " .. (result.stderr or "timeout"))
         end
+        return result.stdout or ""
     end
+    local runtime = vim.env.PARLEY_RUNTIME
+    if not runtime or runtime == "" then
+        runtime = data .. "/lazy/parley.nvim"
+        if not uv.fs_stat(runtime) then
+            local staging = lock .. "/parley-staging"
+            git({ "clone", "--filter=blob:none", "--no-checkout",
+                "https://github.com/xianxu/parley.nvim.git", staging })
+            local tags = git({ "-C", staging, "tag", "--sort=-version:refname", "--list", "v*" })
+            local release
+            for tag in tags:gmatch("[^\r\n]+") do
+                if tag:match("^v%d+%.%d+%.%d+$") then release = tag; break end
+            end
+            assert(release, "Parley bootstrap found no stable release")
+            git({ "-C", staging, "checkout", "--detach", release })
+            assert(uv.fs_stat(staging .. "/lua/parley/theme.lua"),
+                "Parley bootstrap release " .. release .. " lacks theme support; retry after v2.6.0 is published")
+            vim.fn.mkdir(data .. "/lazy", "p", 448)
+            assert(uv.fs_rename(staging, runtime))
+        elseif not uv.fs_stat(runtime .. "/lua/parley/theme.lua") then
+            error("Parley bootstrap cached Parley release lacks theme support: " .. runtime
+                .. "; preserve any local changes, update that checkout to v2.6.0 or later, then retry")
+        end
+        vim.opt.runtimepath:prepend(runtime)
+    end
+    local theme = require("parley.theme")
     if not uv.fs_stat(lazy) then
         local staging = lock .. "/staging"
         git({ "clone", "--filter=blob:none", "--no-checkout",

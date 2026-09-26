@@ -138,3 +138,7 @@ oracle, and the mutation that would make the test fail.
 - Enumerate every preview exit: no-result confirmation and failed commits need
   the same restoration semantics as cancellation. Test failure after a successful
   preview, not only from the original appearance.
+
+- Starter dependencies used before the plugin manager initializes must be available
+  in both launcher-provided and documented standalone startup. Test both with
+  fresh processes and isolated data homes; never inject the runtime into every fixture.

@@ -10,6 +10,12 @@ Copy this release's `init.lua` to `~/.config/parley/init.lua`, then run:
 NVIM_APPNAME=parley nvim
 ```
 
+Without the Homebrew launcher, the first launch downloads the latest stable Parley
+release into the profile’s Lazy directory, then loads its pinned theme registry.
+Later launches reuse that checkout; `:Lazy update parley.nvim` manages updates.
+If an older cached checkout lacks theme support, startup reports its path: preserve
+any local changes and update it to v2.6.0 or later before retrying.
+
 The first launch downloads the pinned editor plugins and opens `chats/welcome.md`
 with setup instructions and an example question. Later launches reuse it. The
 app uses its own chat folder, separate from ordinary Neovim. Existing chats in

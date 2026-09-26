@@ -199,3 +199,11 @@ commits; failed loads remain previews until confirmed or cancelled.
 Three production-command regressions reproduce empty confirmation, failed-load
 confirmation after an earlier preview, and failed preference writes. All three
 failed before the correction.
+
+### 2026-09-25 — BR-10 standalone starter compatibility
+
+The theme registry must also be available before Lazy setup when users copy the
+starter without the Homebrew runtime environment. Bootstrap the latest stable
+Parley release under the existing initializer lock/deadline, then load its registry
+(ARCH-DRY). Reuse compatible caches; preserve incompatible caches with a clear
+update instruction. Cover fresh/cached startup and incomplete-release cleanup.

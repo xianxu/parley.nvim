@@ -29,6 +29,7 @@ describe('starter bootstrap', function()
         vim.fn.writefile({ '#!/bin/sh',
             'if [ "$1" = "-C" ] && [ "$3" = "checkout" ]; then',
             '  printf "%s\\n" "$5" >> "$BOOTSTRAP_CALLS"',
+            '  case "$5" in v*) exec "' .. real_git .. '" "$@";; esac',
             '  exec "' .. real_git .. '" -C "$2" checkout --detach ' .. commit,
             'fi',
             'exec "' .. real_git .. '" "$@"',
@@ -58,6 +59,55 @@ describe('starter bootstrap', function()
         assert.equals('', result.stderr, 'production starter reported an initialization error')
         return vim.json.decode(table.concat(vim.fn.readfile(root .. '/result'), '\n'))
     end
+
+    local function standalone_env()
+        local runtime_repo = root .. '/runtime'
+        git({ 'init', '-q', runtime_repo })
+        git({ '-C', runtime_repo, 'add', '.' })
+        git({ '-C', runtime_repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+            '-c', 'commit.gpgsign=false', 'commit', '-qm', 'runtime fixture' })
+        git({ '-C', runtime_repo, 'tag', 'v2.6.0' })
+        git({ '-C', runtime_repo, 'tag', 'v9.0.0-beta' })
+        return { PARLEY_RUNTIME = '', GIT_CONFIG_COUNT = '2',
+            GIT_CONFIG_KEY_1 = 'url.file://' .. runtime_repo .. '.insteadOf',
+            GIT_CONFIG_VALUE_1 = 'https://github.com/xianxu/parley.nvim.git' }
+    end
+
+    it('bootstraps and reuses the stable release without PARLEY_RUNTIME', function()
+        local extra = standalone_env()
+        preference('{"id":"dayfox"}')
+        for _ = 1, 2 do
+            local observed = startup_appearance(extra)
+            assert.equals('dayfox', observed.appearance.colorscheme)
+            assert.equals(root .. '/data/parley/lazy/parley.nvim', observed.runtime)
+            assert.equals(0, vim.fn.isdirectory(root .. '/data/parley/initializer.lock'))
+        end
+        assert.same({ 'v2.6.0', '85c7ff3711b730b4030d03144f6db6375044ae82' },
+            vim.fn.readfile(root .. '/calls'))
+    end)
+
+    it('cleans standalone staging when the published release lacks theme support', function()
+        local extra = standalone_env()
+        git({ '-C', root .. '/runtime', 'rm', 'lua/parley/theme.lua' })
+        git({ '-C', root .. '/runtime', '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+            '-c', 'commit.gpgsign=false', 'commit', '-qm', 'old runtime fixture' })
+        git({ '-C', root .. '/runtime', 'tag', '-f', 'v2.6.0' })
+        local result = run(nil, extra)
+        assert.matches('lacks theme support', result.stderr)
+        assert.equals(0, vim.fn.isdirectory(root .. '/data/parley/initializer.lock'))
+        assert.equals(0, vim.fn.isdirectory(root .. '/data/parley/lazy/parley.nvim'))
+    end)
+
+    it('reports an old standalone cache without altering it', function()
+        local extra = standalone_env()
+        local cached = root .. '/data/parley/lazy/parley.nvim'
+        vim.fn.mkdir(cached .. '/lua/parley', 'p')
+        vim.fn.writefile({ 'local changes' }, cached .. '/keep.txt')
+        local result = run(nil, extra)
+        assert.matches('cached Parley release lacks', result.stderr)
+        assert.same({ 'local changes' }, vim.fn.readfile(cached .. '/keep.txt'))
+        assert.equals(0, vim.fn.isdirectory(root .. '/data/parley/initializer.lock'))
+    end)
 
     it('restores a saved light theme in a fresh production starter process', function()
         preference('{"id":"dayfox"}')

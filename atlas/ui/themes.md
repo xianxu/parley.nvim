@@ -21,3 +21,8 @@ invalid preference falls back to the startup theme.
 Implementation: `lua/parley/theme.lua`, `lua/parley/theme_picker.lua`, and
 `lua/parley/float_picker.lua`; starter dependencies live in
 `packaging/starter-config/init.lua`.
+
+The standalone copied starter (without `PARLEY_RUNTIME`) bootstraps the latest
+stable Parley release into Lazy’s cache before reading the theme registry. This
+shares the initializer lock and deadline with Lazy bootstrap. Existing caches
+without the registry fail with an update instruction and remain untouched.

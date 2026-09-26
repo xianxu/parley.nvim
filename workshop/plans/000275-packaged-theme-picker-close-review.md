@@ -601,3 +601,110 @@ findings:
 
 7. **Plan revision recommendation**
    - Append a `## Revisions` entry defining empty-confirmation behavior and the invariant that every closed preview session resolves through commit or restoration. Include its production-path regression evidence.
+
+---
+
+## Re-review — 2026-09-25T22:17:32-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 275 — Add a packaged Parley theme picker with live preview |
+| repo | parley.nvim |
+| issue file | workshop/issues/000275-packaged-theme-picker.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | d8da2fe2132dc4946ae02955b7431746139fb285..f2cbc6ac357edd01f83070af643fb346c8042cad |
+| command | sdlc close --issue 275 |
+| reviewer | codex |
+| timestamp | 2026-09-25T22:17:32-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-9 is addressed: all three terminal-outcome regressions pass and fail when the fixes are removed. The mapped suite passes 116 tests. However, the change breaks the documented standalone starter launch by requiring Parley before bootstrap has made it available.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Selection notifications compare item identity; the production filter-change regression passes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Starter dependencies derive from theme.packaged_plugins(); bootstrap tests check registry-derived pins.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Startup capture precedes preference restoration; startup and opening-snapshot tests pass.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Production command and fresh starter subprocess tests exercise selection, persistence, and restoration.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Preference reads catch readfile failures; the unreadable-state regression passes.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      README.md now documents ParleyTheme, Moonfly, confirmation, and cancellation, matching the implementation.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Solarized specifies light mode, applied before colorscheme loading; its production-command regression passes.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Failed application restores the previous snapshot; the partial-highlight-failure regression passes.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Empty confirmation dismisses through on_cancel; failed load/save confirmation also restores the opening snapshot. Reverting the two production files to their parent versions in a scratch copy makes all three regressions fail with dayfox instead of moonfly.
+findings:
+  - id: new
+    severity: Critical
+    family: dependency-bootstrap-order
+    title: |
+      Standalone starter requires Parley before installing or loading it
+    detail: |
+      packaging/starter-config/init.lua:9 unconditionally requires parley.theme before Lazy bootstrap. The documented standalone launch without PARLEY_RUNTIME fails immediately with module 'parley.theme' not found. Establish the Parley runtime before consuming its registry, retaining one metadata source, and add fresh/cached standalone startup regressions without PARLEY_RUNTIME (ARCH-PURPOSE).
+```
+
+1. **Strengths**
+   - Picker choices, preference validation, and packaged dependencies derive from the theme registry.
+   - Production-command tests exercise real colorscheme loading, filtering, mouse mappings, persistence, and rollback.
+   - BR-9 now covers empty confirmation, failed application, and failed persistence; mutation testing confirms meaningful assertions.
+   - README and atlas describe the new command and theme lifecycle.
+
+2. **Critical findings**
+   - [packaging/starter-config/init.lua:9](/Users/xianxu/workspace/parley.nvim/packaging/starter-config/init.lua:9): standalone bootstrap fails before reaching plugin installation. Reproduced from `/tmp` with isolated XDG directories, `NVIM_APPNAME=parley`, and `PARLEY_RUNTIME` unset. This contradicts [the documented launch instructions](/Users/xianxu/workspace/parley.nvim/packaging/starter-config/README.md:7).
+   - Fix the dependency ordering and cover both first installation and cached startup. Existing bootstrap tests always provide `PARLEY_RUNTIME` and copy the theme module there.
+
+3. **Important findings:** None beyond the coverage needed for the critical finding.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+   - `make test-spec SPEC=ui/themes`: **116 passed**.
+   - `git diff --check`: passed.
+   - Scratch mutation: all three new terminal-outcome tests failed at their appearance assertions. An unrelated architecture test could not run in that archive because it lacked Git metadata.
+   - Process census was unavailable because the sandbox disallowed `ps`. Real-plugin compatibility was inspected, not rerun.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** registry consumers derive their enumerations.
+   - **ARCH-PURE — pass:** registry calculations remain deterministic; effectful functions are classified as integration.
+   - **ARCH-PURPOSE — flag:** the supported standalone installation path regresses.
+   - **ARCH-MOCK — pass:** executable colorscheme fixtures and the bootstrap fake exercise production boundaries; a real-plugin conformance script exists.
+   - **ARCH-CONSTRAINTS — pass:** preview performs synchronous local work without network requests or fan-out.
+   - **ARCH-SECURE — pass:** persisted IDs are validated and malformed/read-failure paths are covered.
+   - **ARCH-ORDER — pass for BR-9:** terminal outcomes are enumerated, routed through shared dismissal/selection paths, and regression-tested.
+   - **ARCH-FUNERAL — pass:** persistence overwrites one preference file; picker cleanup reuses the existing lifecycle.
+
+7. **Plan revision recommendation**
+   - Append a `## Revisions` entry covering runtime discovery before registry consumption and standalone startup verification with `PARLEY_RUNTIME` absent. Preserve the documented copy-and-launch workflow.

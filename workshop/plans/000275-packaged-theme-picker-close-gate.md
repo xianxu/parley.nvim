@@ -228,6 +228,55 @@ rounds:
           round: 6
       recipe: milestone-review
       blocked: true
+    - "n": 7
+      timestamp: "2026-09-25T22:17:32-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Selection notifications compare item identity; the production filter-change regression passes.
+          round: 7
+        - id: BR-2
+          disposition: addressed
+          note: Starter dependencies derive from theme.packaged_plugins(); bootstrap tests check registry-derived pins.
+          round: 7
+        - id: BR-3
+          disposition: addressed
+          note: Startup capture precedes preference restoration; startup and opening-snapshot tests pass.
+          round: 7
+        - id: BR-4
+          disposition: addressed
+          note: Production command and fresh starter subprocess tests exercise selection, persistence, and restoration.
+          round: 7
+        - id: BR-5
+          disposition: addressed
+          note: Preference reads catch readfile failures; the unreadable-state regression passes.
+          round: 7
+        - id: BR-6
+          disposition: addressed
+          note: README.md now documents ParleyTheme, Moonfly, confirmation, and cancellation, matching the implementation.
+          round: 7
+        - id: BR-7
+          disposition: addressed
+          note: Solarized specifies light mode, applied before colorscheme loading; its production-command regression passes.
+          round: 7
+        - id: BR-8
+          disposition: addressed
+          note: Failed application restores the previous snapshot; the partial-highlight-failure regression passes.
+          round: 7
+        - id: BR-9
+          disposition: addressed
+          note: Empty confirmation dismisses through on_cancel; failed load/save confirmation also restores the opening snapshot. Reverting the two production files to their parent versions in a scratch copy makes all three regressions fail with dayfox instead of moonfly.
+          round: 7
+      findings:
+        - id: BR-10
+          severity: Critical
+          title: Standalone starter requires Parley before installing or loading it
+          detail: packaging/starter-config/init.lua:9 unconditionally requires parley.theme before Lazy bootstrap. The documented standalone launch without PARLEY_RUNTIME fails immediately with module 'parley.theme' not found. Establish the Parley runtime before consuming its registry, retaining one metadata source, and add fresh/cached standalone startup regressions without PARLEY_RUNTIME (ARCH-PURPOSE).
+          family: dependency-bootstrap-order
+          round: 7
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#275 (boundary-review)
@@ -325,6 +374,25 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-9** [Critical] `preview-terminal-outcomes` Confirming no matches closes the picker without resolving its preview
   lua/parley/float_picker.lua:1111-1121 closes unconditionally but invokes on_select only when an item exists; it never invokes on_cancel for empty results. Reproduced through :ParleyTheme: preview dayfox, filter to no matches, press Enter. Both floats close and no preference is saved, but dayfox remains instead of the opening Moonfly. Enforce the rule that every preview-session exit commits a valid selection or restores the opening snapshot; alternatively keep empty confirmation open. Enumerate terminal paths and add a production-command regression (ARCH-ORDER, ARCH-PURPOSE).
 
+## Round 7 — 2026-09-25T22:17:32-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Selection notifications compare item identity; the production filter-change regression passes.
+- BR-2 — addressed — Starter dependencies derive from theme.packaged_plugins(); bootstrap tests check registry-derived pins.
+- BR-3 — addressed — Startup capture precedes preference restoration; startup and opening-snapshot tests pass.
+- BR-4 — addressed — Production command and fresh starter subprocess tests exercise selection, persistence, and restoration.
+- BR-5 — addressed — Preference reads catch readfile failures; the unreadable-state regression passes.
+- BR-6 — addressed — README.md now documents ParleyTheme, Moonfly, confirmation, and cancellation, matching the implementation.
+- BR-7 — addressed — Solarized specifies light mode, applied before colorscheme loading; its production-command regression passes.
+- BR-8 — addressed — Failed application restores the previous snapshot; the partial-highlight-failure regression passes.
+- BR-9 — addressed — Empty confirmation dismisses through on_cancel; failed load/save confirmation also restores the opening snapshot. Reverting the two production files to their parent versions in a scratch copy makes all three regressions fail with dayfox instead of moonfly.
+
+### Raised
+
+- **BR-10** [Critical] `dependency-bootstrap-order` Standalone starter requires Parley before installing or loading it
+  packaging/starter-config/init.lua:9 unconditionally requires parley.theme before Lazy bootstrap. The documented standalone launch without PARLEY_RUNTIME fails immediately with module 'parley.theme' not found. Establish the Parley runtime before consuming its registry, retaining one metadata source, and add fresh/cached standalone startup regressions without PARLEY_RUNTIME (ARCH-PURPOSE).
+
 ## Open findings
 
-- **BR-9** [Critical] `preview-terminal-outcomes` Confirming no matches closes the picker without resolving its preview
+- **BR-10** [Critical] `dependency-bootstrap-order` Standalone starter requires Parley before installing or loading it

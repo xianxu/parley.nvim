@@ -154,3 +154,15 @@ keyboard/mouse entry through the production command.
   confirming an unavailable scheme or failed save restores the opening snapshot.
 - Three production-command regressions failed before the fix; mapped suite now
   passes 116 tests (14 theme command tests), with lint and diff checks clean.
+
+- 2026-09-25 BR-10: restored documented copied-starter startup without
+  `PARLEY_RUNTIME`. Under the existing initializer lock/deadline, bootstrap the
+  latest stable release into Lazy's cache before reading its canonical theme
+  registry; reuse compatible caches and preserve older caches with an actionable
+  update error. Local Git fixtures cover fresh/cached startup, ignore prerelease
+  tags, and prove incomplete-release staging/lock cleanup. New standalone tests
+  failed against the previous starter (`parley.theme` unavailable), then passed.
+  `make test-spec SPEC=ui/themes PLENARY=/tmp/plenary.nvim
+  TEST_ENV_ROOT=/tmp/parley-br10-final JOBS=1` passed all 119 cases;
+  `/tmp/parley-br10-final.log` holds evidence. Luacheck of starter and both bootstrap
+  fixtures reports zero warnings/errors; `git diff --check` passes.

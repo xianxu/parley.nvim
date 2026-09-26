@@ -23,7 +23,12 @@ return {
         -- Materialize executable color files at the dependency boundary. The
         -- production starter must load the saved preference itself; this fake
         -- only models Lazy loading the configured startup colorscheme.
-        local colors = vim.env.PARLEY_RUNTIME .. '/colors'
+        local runtime = vim.env.PARLEY_RUNTIME
+        if not runtime or runtime == '' then
+            assert(by_name['xianxu/parley.nvim'].version == '*')
+            runtime = opts.root .. '/parley.nvim'
+        end
+        local colors = runtime .. '/colors'
         vim.fn.mkdir(colors, 'p')
         for _, item in ipairs(require('parley.theme').items()) do
             vim.fn.writefile({ 'vim.cmd("highlight clear")',
@@ -65,7 +70,6 @@ return {
         vim.fn.writefile({'#!/bin/sh', 'echo 0.0.9'}, dir .. '/app/bin/' .. binary)
         local verified, verify_error = pcall(preview.build, {dir = dir})
         assert(not verified and tostring(verify_error):find('verification failed', 1, true))
-        local runtime
         for _, plugin in ipairs(spec) do
             if plugin.dir then runtime = plugin.dir end
         end
