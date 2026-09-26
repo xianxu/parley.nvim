@@ -103,7 +103,7 @@ local ok, err = xpcall(function()
         plugin.lazy = false
         plugin.priority = i == 1 and 1000 or 999
     end
-    require("lazy").setup(vim.list_extend(theme_plugins, {
+    local additional_plugins = {
         { "nvim-lua/plenary.nvim", commit = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
         { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026" },
         { "iamcco/markdown-preview.nvim",
@@ -131,13 +131,15 @@ local ok, err = xpcall(function()
                     "MarkdownPreview server verification failed; retry with :Lazy build markdown-preview.nvim")
             end },
         parley,
-    }, {
+    }
+    for _, plugin in ipairs(additional_plugins) do theme_plugins[#theme_plugins + 1] = plugin end
+    require("lazy").setup(theme_plugins, {
         root = data .. "/lazy",
         lockfile = vim.fn.stdpath("config") .. "/lazy-lock.json",
         checker = { enabled = false },
         change_detection = { enabled = false },
         git = { timeout = math.min(120, math.max(1, math.floor(remaining() / 1000))) },
-    }))
+    })
     -- First-install setup leaves Lazy's floating progress window focused.
     -- Its close is scheduled, so restore our window before opening any chat.
     local installer = package.loaded["lazy.view"]
