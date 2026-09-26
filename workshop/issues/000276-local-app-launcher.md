@@ -29,7 +29,9 @@ PARLEY_DEMO_DIR selects another profile; no user data is silently removed.
 
 ## Done when
 
-- The launcher uses the checkout starter from any cwd and an isolated demo profile.
+- The launcher uses the checkout starter from any cwd and a reusable isolated demo
+  profile. Its canonical default is outside the repo; PARLEY_DEMO_DIR selects an
+  alternate profile. Preserve demo data between launches and reject in-repo paths.
 - Packaged startup shows the mode prominently and keeps the status bar simple.
 - Tests assert actual launch arguments/cwd/environment and statusline rendering.
 - Statusline stays readable under all packaged theme variants.
