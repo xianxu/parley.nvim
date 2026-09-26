@@ -68,7 +68,9 @@ end
 
 function M.packaged_plugins()
     local result, seen = {}, {}
-    for _, spec in ipairs({ DEFAULT, table.unpack(CHOICES) }) do
+    local specs = { DEFAULT }
+    for _, spec in ipairs(CHOICES) do specs[#specs + 1] = spec end
+    for _, spec in ipairs(specs) do
         if spec.plugin and not seen[spec.plugin.name] then
             seen[spec.plugin.name] = true
             result[#result + 1] = vim.deepcopy(spec.plugin)

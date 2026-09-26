@@ -42,6 +42,18 @@ describe("Parley theme registry", function()
         assert.equals("startup", theme.load(state_dir))
     end)
 
+    it("falls back when the preference file cannot be read", function()
+        local readfile = vim.fn.readfile
+        local filereadable = vim.fn.filereadable
+        vim.fn.readfile = function() error("unreadable") end
+        vim.fn.filereadable = function() return 1 end
+        local ok, value = pcall(theme.load, "/tmp/parley-theme-unreadable")
+        vim.fn.readfile = readfile
+        vim.fn.filereadable = filereadable
+        assert.is_true(ok)
+        assert.equals("startup", value)
+    end)
+
     it("applies a scheme through an injectable runner and refreshes highlights", function()
         local applied
         local refreshed

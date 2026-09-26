@@ -3,6 +3,10 @@
 if vim.env.NVIM_APPNAME ~= "parley" then
     error("Parley starter requires NVIM_APPNAME=parley before startup")
 end
+if vim.env.PARLEY_RUNTIME and vim.env.PARLEY_RUNTIME ~= "" then
+    vim.opt.runtimepath:prepend(vim.env.PARLEY_RUNTIME)
+end
+local theme = require("parley.theme")
 
 vim.g.mapleader = " "
 vim.opt.termguicolors = true
@@ -93,16 +97,13 @@ local ok, err = xpcall(function()
         parley = { dir = vim.env.PARLEY_RUNTIME, name = "parley.nvim", lazy = false }
     end
     local main_window = vim.api.nvim_get_current_win()
-    require("lazy").setup({
-        { "bluz71/vim-moonfly-colors", name = "moonfly", lazy = false, priority = 1000,
-            commit = "4ed07bc0c6083cdd547c63f5c245e02c068b0c45",
-            config = function() vim.cmd.colorscheme("moonfly") end },
-        { "catppuccin/nvim", name = "catppuccin", lazy = false, priority = 999,
-            commit = "edefef779ab08ce1a4a404713e3012b0d202bd35" },
-        { "folke/tokyonight.nvim", name = "tokyonight", lazy = false, priority = 999,
-            commit = "cdc07ac78467a233fd62c493de29a17e0cf2b2b6" },
-        { "altercation/vim-colors-solarized", name = "solarized", lazy = false, priority = 999,
-            commit = "528a59f26d12278698bb946f8fb82a63711eec21" },
+    local theme_plugins = theme.packaged_plugins()
+    theme_plugins[1].config = function() vim.cmd.colorscheme("moonfly") end
+    for i, plugin in ipairs(theme_plugins) do
+        plugin.lazy = false
+        plugin.priority = i == 1 and 1000 or 999
+    end
+    require("lazy").setup(vim.list_extend(theme_plugins, {
         { "nvim-lua/plenary.nvim", commit = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
         { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026" },
         { "iamcco/markdown-preview.nvim",
@@ -136,13 +137,12 @@ local ok, err = xpcall(function()
         checker = { enabled = false },
         change_detection = { enabled = false },
         git = { timeout = math.min(120, math.max(1, math.floor(remaining() / 1000))) },
-    })
+    }))
     -- First-install setup leaves Lazy's floating progress window focused.
     -- Its close is scheduled, so restore our window before opening any chat.
     local installer = package.loaded["lazy.view"]
     if installer and installer.visible() then installer.view:close() end
     vim.api.nvim_set_current_win(main_window)
-    local theme = require("parley.theme")
     theme.apply(theme.load(data .. "/parley/persisted") or "startup")
     require("parley.starter").start()
 end, debug.traceback)
