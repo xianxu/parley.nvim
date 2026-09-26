@@ -39,3 +39,4 @@ ARCH-FUNERAL).
 ### 2026-09-26
 
 - Root cause: response preparation currently waits for remote input before replacing the old answer (#266 boundary).
+- Implemented command-time answer removal with a pending document snapshot; focused document and chat response integration specs pass (9 and 42 cases).

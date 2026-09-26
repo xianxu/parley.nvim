@@ -198,6 +198,7 @@ describe('chat_respond: scoped session integration',function()
     local function regenerating_q1(q2)
         open({'💬: first','','🤖: agent','old one','',q2 or '💬: second',''})
         local first=submit()
+        assert.is_false(buffer_contains(buf, 'old one'))
         return first
     end
     local function ask_q2(text)

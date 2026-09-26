@@ -41,6 +41,15 @@ describe('document prev_answer slot', function()
         D.detach(doc)
     end)
 
+    it('lists a pending slot before generation admission and clears it explicitly', function()
+        local doc = attach(); local entity = D.query(doc, 0, 1)[1].handle
+        assert.is_true(D.set_pending_previous_answer(doc, { entity = entity, value = VALUE }))
+        assert.same({ { row = 0, generation = nil, value = VALUE } }, D.previous_answers(doc))
+        assert.is_true(D.clear_pending_previous_answer(doc, entity))
+        assert.same({}, D.previous_answers(doc))
+        D.detach(doc)
+    end)
+
     it('refuses a slot without a grant, or from a stale epoch', function()
         local doc = attach()
         local entity = D.query(doc, 0, 1)[1].handle

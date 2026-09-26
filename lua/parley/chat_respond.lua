@@ -1496,10 +1496,41 @@ local function start_scoped_response(frame)
     -- This exchange's own answer, from the command-time parse: the grant this
     -- response acquires guarantees it is exactly what preparation will remove.
     local replaced_answer = exchange.answer and PrevAnswer.capture(frame.parsed.exchanges[index]) or nil
+    local footer = trailing_footnote_boundary(frame.lines, exchange.question.line_end)
+    local pending_entity
+    local input_parsed = vim.deepcopy(parsed)
+    if replaced_answer then
+        -- Publish the old answer before changing the transcript.  The pending
+        -- slot is adopted by the generation once it acquires its grant, so a
+        -- concurrent question can still use this snapshot during readiness.
+        local live_marker = D.query(doc, exchange.question.line_start - 1, exchange.question.line_start)[1]
+        pending_entity = live_marker and live_marker.handle
+        if not pending_entity then
+            refuse('start', nil, 'exchange identity unavailable'); return nil, 'exchange identity unavailable'
+        end
+        D.set_pending_previous_answer(doc, {entity = pending_entity, value = replaced_answer})
+        local delete_last = exchange.answer.line_end - 1
+        if footer then delete_last = math.min(delete_last, footer - 1) end
+        require('parley.buffer_edit').delete_answer(buf, exchange.question.line_end, delete_last, config)
+        local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        footer = trailing_footnote_boundary(current_lines, exchange.question.line_end)
+        local current_header = require('parley.chat_parser').find_header_end(current_lines)
+        if current_header then
+            local current = require('parley.chat_parser').parse_chat(current_lines, current_header, config)
+            if current.exchanges[index] then
+                parsed = current
+                exchange = parsed.exchanges[index]
+            end
+        end
+    end
     local question = exchange.question
     local last = exchange.answer and exchange.answer.line_end or question.line_end
-    local footer = trailing_footnote_boundary(frame.lines, question.line_end)
-    if footer then last = math.max(question.line_end, math.min(last, footer)) end
+    local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    footer = trailing_footnote_boundary(current_lines, question.line_end)
+    -- Footnotes live outside the replaceable answer span.  Once the old answer
+    -- is removed, the new shell starts directly after the question and leaves
+    -- surviving annotations and the footer in place.
+    if footer then last = question.line_end end
     local agent = vim.deepcopy(_parley.get_agent())
     local selected_record = (_parley.agents or {})[agent.name]
     local model_name = type(agent.model) == 'table' and agent.model.model or agent.model
@@ -1508,7 +1539,7 @@ local function start_scoped_response(frame)
     local root_policy = frame.params.root_policy or require('parley.neighborhood').policy_for_buf(buf)
     info.root_policy = root_policy
     local source = {}
-    for row = question.line_end + 1, last do source[#source + 1] = frame.lines[row] end
+    for row = question.line_end + 1, last do source[#source + 1] = current_lines[row] end
     local first_byte = vim.api.nvim_buf_get_offset(buf, question.line_end)
     local function preparation_plan()
         local prefix = config.chat_assistant_prefix
@@ -1524,13 +1555,14 @@ local function start_scoped_response(frame)
     local spec = {operation = 'respond', question = {first = {row = question.line_start - 1, col = 0}, last = point},
         output = {first = point, last = {row = last - 1, col = #frame.lines[last]}},
         preparation = plan, input = {selection = index}, input_prefix = true}
-    -- The captured request excludes the answer being replaced. Its old bytes
-    -- remain in the editor until preparation has acquired every mutable gap.
+    -- The captured request excludes the answer being replaced. The old bytes
+    -- have already been removed; preparation now installs the new shell.
     exchange.answer = nil
-    local input_parsed, input_index = parsed, index
+    local input_index = index
     if frame.input_rows then
-        input_parsed = vim.deepcopy(parsed); input_parsed.exchanges = {}
-        for i, item in ipairs(parsed.exchanges) do
+        local source_parsed = input_parsed
+        input_parsed = vim.deepcopy(source_parsed); input_parsed.exchanges = {}
+        for i, item in ipairs(source_parsed.exchanges) do
             if item.question and frame.input_rows[item.question.line_start] then
                 input_parsed.exchanges[#input_parsed.exchanges + 1] = vim.deepcopy(item)
                 if i == index then input_index = #input_parsed.exchanges end
@@ -1541,6 +1573,7 @@ local function start_scoped_response(frame)
     response_order = response_order + 1
     local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order, batch = frame.batch,
         label = (frame.lines[question.line_start] or 'Response'):sub(1, 256)}; group[entry] = true
+    entry.pending_previous_entity = pending_entity
     local latest, messages, final_payload, topic_source, topic_parent, failure_notice, completion_failure
     local message_lead = 0
     local topic_attempted, main_finished, topic_finished = false, false, true
@@ -1557,6 +1590,10 @@ local function start_scoped_response(frame)
     end
     local function release()
         if not main_finished or not topic_finished then return end
+        if entry.pending_previous_entity then
+            D.clear_pending_previous_answer(doc, entry.pending_previous_entity)
+            entry.pending_previous_entity = nil
+        end
         if topic_source then D.cancel_user(doc, topic_source); topic_source = nil end
         if topic_parent then D.cancel_user(doc, topic_parent); topic_parent = nil end
         group[entry] = nil
