@@ -26,12 +26,13 @@ selection change so the open chat and picker visibly preview the result.
 
 The theme registry is the single source for ids, labels, colorscheme names,
 contrast descriptions, and packaged dependency metadata (ARCH-DRY and
-ARCH-PURPOSE). Applying a theme runs through one boundary that records the
-active scheme, reapplies Parley's semantic highlight groups, and persists the
-selected id under Parley's state directory. Opening the picker snapshots the
-current scheme; Escape or cancellation restores that snapshot, while Enter or
-mouse selection keeps and persists the current candidate. A malformed or
-missing persisted id falls back to Moonfly without blocking startup
+ARCH-PURPOSE). Applying a preview runs through one boundary that records the
+active scheme and reapplies Parley's semantic highlight groups, but does not
+write state. Opening the picker snapshots both the current scheme and saved
+theme id; Escape or cancellation restores both snapshots, while Enter or mouse
+selection commits and persists the current candidate. A fifth `Restore startup
+theme` item applies the startup snapshot and commits the default/sentinel value.
+A malformed or missing persisted id falls back to Moonfly without blocking startup
 (ARCH-SECURE). Theme application is synchronous and bounded to the local
 Neovim process; it creates no background work or durable artifacts beyond the
 one state value (ARCH-CONSTRAINTS and ARCH-FUNERAL).
@@ -48,19 +49,22 @@ keyboard/mouse entry through the production command.
 ## Done when
 
 - `:ParleyTheme` opens the existing floating-picker style with the four packaged
-  options plus startup-theme restore.
+  options plus a fifth startup-theme restore action.
 - Moving the cursor or selecting with the mouse applies the highlighted full
   colorscheme immediately to the surrounding Neovim UI and Parley buffer.
-- Enter/mouse selection persists the theme; Escape/cancel restores the scheme
-  active when the picker opened.
+- Preview movement never persists. Enter/mouse selection persists the theme;
+  Escape/cancel restores both the scheme and saved id active when the picker
+  opened. Choosing startup restore commits the default/sentinel value.
 - A fresh packaged launch restores the saved selection and invalid state falls
   back safely to Moonfly.
 - Every packaged option is tested with Parley's semantic highlight groups,
-  syntax, float, and statusline surfaces.
+  representative syntax groups (`Normal`, `Comment`, `String`, `Identifier`,
+  and `Title`), float groups, and statusline surfaces.
 - User documentation names the startup theme and `:ParleyTheme` command.
 
 ## Plan
 
+- Durable implementation plan: `workshop/plans/000275-packaged-theme-picker-plan.md`.
 - [ ] Add the pure theme registry and persistence/apply seam with unit coverage.
 - [ ] Add packaged theme dependencies and startup restoration.
 - [ ] Add the `:ParleyTheme` picker with live preview, commit, and cancel restore.
@@ -77,3 +81,6 @@ keyboard/mouse entry through the production command.
 - ARCH decisions: one registry owns theme metadata (ARCH-DRY/PURPOSE), invalid
   persisted ids degrade to the default (ARCH-SECURE), local synchronous apply
   has a bounded lifecycle (ARCH-CONSTRAINTS/FUNERAL).
+- Spec review: preview and persistence are now separate; cancellation restores
+  both the visual scheme and saved id, startup restore is an explicit fifth
+  item, and compatibility acceptance names representative syntax groups.
