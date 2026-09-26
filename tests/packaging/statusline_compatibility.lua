@@ -36,6 +36,19 @@ local ok, err = pcall(function()
     vim.cmd.edit(vim.fn.stdpath('data') .. '/chats/welcome.md')
     vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.fn.readfile(vim.env.PARLEY_RUNTIME .. '/packaging/tutorials/welcome.md'))
     vim.api.nvim_win_set_cursor(0, { 3, 0 })
+    local diagnostic_ns = vim.api.nvim_create_namespace('ParleyAppGutterTest')
+    assert(vim.wo.signcolumn == 'yes', 'App must reserve the diagnostic gutter')
+    local function text_offset()
+        vim.cmd.redraw()
+        return vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff
+    end
+    local blank_offset = text_offset()
+    vim.diagnostic.set(diagnostic_ns, 0, {
+        { lnum = 0, col = 0, message = 'Footnote', severity = vim.diagnostic.severity.INFO },
+    }, { signs = true })
+    assert(text_offset() == blank_offset, 'Diagnostic shifted text right')
+    vim.diagnostic.reset(diagnostic_ns, 0)
+    assert(text_offset() == blank_offset, 'Removing diagnostic shifted text left')
     assert(vim.wait(1000, function() return #lualine.get_config().sections.lualine_x > 0 end, 10),
         'Parley model/activity component was not installed')
     local agent = assert(parley._state.agent, 'missing selected agent')

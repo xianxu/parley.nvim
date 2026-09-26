@@ -1,5 +1,8 @@
 # Start chatting with Parley
 
+The app keeps its diagnostic gutter visible so footnotes and other signs do not
+shift text as you type.
+
 This profile gives Parley its own configuration, chats and account login. Your
 ordinary Neovim configuration stays separate. It requires Neovim 0.11 or newer,
 Git, curl, and an internet connection. macOS supplies the image clipboard tools.

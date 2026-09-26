@@ -8,6 +8,7 @@ return {
         end
         assert(vim.o.wrap and vim.o.linebreak and vim.o.breakindent)
         assert(vim.o.termguicolors)
+        assert(vim.o.signcolumn == 'yes', 'App must reserve its diagnostic gutter')
         assert(vim.g.mapleader == ' ')
         assert(opts.checker.enabled == false)
         assert(spec[1].commit == '4ed07bc0c6083cdd547c63f5c245e02c068b0c45')

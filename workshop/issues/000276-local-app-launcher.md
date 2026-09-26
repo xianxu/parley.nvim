@@ -34,7 +34,8 @@ PARLEY_DEMO_DIR selects another profile; no user data is silently removed.
   alternate profile. Preserve demo data between launches and reject in-repo paths.
 - Packaged startup shows the mode prominently and keeps the status bar simple.
 - Tests assert actual launch arguments/cwd/environment and statusline rendering.
-- Statusline stays readable under all packaged theme variants.
+- Statusline stays readable under all packaged theme variants. The app reserves
+  its sign column so diagnostic appearance/disappearance never shifts chat text.
 - --tutorials opens and edits the source tutorial directory directly with state
   remaining in the demo; marked ancestors cannot enable repo mode.
 - --nuke deletes only an owned demo profile and exits; the next launch is fresh,
@@ -93,3 +94,15 @@ chat root while preserving isolated state.
   Shell syntax, starter artifact and changed Lua lint pass.
 - The operator is editing packaging/tutorials/welcome.md concurrently; that
   content is kept outside these implementation commits.
+
+### 2026-09-25 — stable gutter
+
+User observed footnote diagnostic signs disappearing during typing and shifting
+text. Set the app starter's signcolumn to yes; picker floats retain their own
+explicit no-gutter setting. The real-rendering regression failed before the
+setting and now verifies identical text offsets before/after diagnostic placement
+and removal. All 19 theme/statusline checks still pass.
+
+The in-progress review was deliberately interrupted to include this new request;
+its unknown verdict is an interruption, not a completed review or new finding.
+Re-run close on the complete change after the focused starter checks finish.
