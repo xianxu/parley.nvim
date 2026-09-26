@@ -51,6 +51,9 @@ choice or Escape to restore the opening colorscheme.
 The app's bottom bar clearly shows NORMAL, INSERT or VISUAL mode, the chat
 name, model/activity and cursor position, using the selected theme.
 
+The packaged app also supports **Option+f** to find chats and **Option+n** to
+create a new chat in Normal and Insert mode (Alt on other keyboards).
+
 To try the app from a checkout, run `./parley_app`. It loads the local starter
 outside repo mode, using a separate demo home and profile. Subsequent launches
 reuse that demo's chats, login and plugins. Its location is printed at startup;

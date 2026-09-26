@@ -171,7 +171,9 @@ recovery instead of stealing a competing initializer's work.
 loopback port 8317 and the `parley-local` client key, matching `define` defaults;
 no client-key file is created or read. Provider OAuth and proxy management
 credentials remain separate. The profile retains Ctrl+g and Alt key families plus finder-local controls
-from the default bindings and adds Alt+Enter for sending. Both chat memory
+from the default bindings and adds Alt+Enter for sending. App-only Alt+f/n
+alias chat finder/new chat; new question keeps Ctrl+g n without Alt+n to avoid
+a buffer-local collision. Both chat memory
 summaries and preference generation are disabled in this profile.
 `starter.start()` applies the policy, seeds missing bundled tutorials and reopens the welcome chat, and
 uses `:ParleyProxy connect` for account selection and login. The proxy command

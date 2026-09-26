@@ -29,8 +29,12 @@ Use the existing action modes and callbacks, including normal and insert mode.
 
 ## Plan
 
-- [ ] Update starter aliases, verify effective mappings in chat buffers, and document app shortcuts.
+- [x] Update starter aliases, verify effective mappings in chat buffers, and document app shortcuts.
 
 ## Log
 
 ### 2026-09-25
+
+- Regression first failed because Option+n invoked new-question in the real welcome buffer.
+- Starter suite passed (including normal/insert effective callback checks and unchanged plugin defaults); changed Lua lint and scoped whitespace checks pass.
+- ARCH-DRY: aliases use the registry callbacks via pure starter options; no remap layer.

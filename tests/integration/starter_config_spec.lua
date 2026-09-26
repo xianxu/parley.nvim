@@ -26,6 +26,11 @@ describe('isolated starter runtime', function()
         return async and process or process:wait(10000)
     end
 
+    it('routes app Option aliases through the existing chat actions in normal and insert mode', function()
+        local result = run(nil, { STARTER_CHAT_KEYS = '1' })
+        assert.equals(0, result.code, result.stderr)
+    end)
+
     it('reopens one durable welcome across independent launches', function()
         local first = run()
         assert.equals(0, first.code, first.stderr)

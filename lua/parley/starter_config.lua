@@ -57,6 +57,10 @@ function M.options(roots)
             end
         end
     end
+    -- App navigation: reserve Option+n for a new chat, not a new question.
+    options.chat_shortcut_new_question.shortcut = { '<C-g>n' }
+    table.insert(options.global_shortcut_new.shortcut, '<M-n>')
+    table.insert(options.global_shortcut_finder.shortcut, '<M-f>')
     return options
 end
 
