@@ -20,6 +20,18 @@ return {
             assert(plugin.commit == item.plugin.commit)
             assert(plugin.lazy == false)
         end
+        -- Materialize executable color files at the dependency boundary. The
+        -- production starter must load the saved preference itself; this fake
+        -- only models Lazy loading the configured startup colorscheme.
+        local colors = vim.env.PARLEY_RUNTIME .. '/colors'
+        vim.fn.mkdir(colors, 'p')
+        for _, item in ipairs(require('parley.theme').items()) do
+            vim.fn.writefile({ 'vim.cmd("highlight clear")',
+                'vim.g.colors_name = ' .. string.format('%q', item.colorscheme),
+                'vim.api.nvim_set_hl(0, "Normal", {fg = "#b0b0b0", bg = "#202020"})',
+            }, colors .. '/' .. item.colorscheme .. '.lua')
+        end
+        spec[1].config()
         local preview
         for _, plugin in ipairs(spec) do
             if plugin[1] == 'iamcco/markdown-preview.nvim' then preview = plugin end
@@ -77,8 +89,15 @@ return {
             return { start = function()
                 local relative = vim.api.nvim_win_get_config(0).relative
                 vim.wait(20)
+                local appearance = require('parley.theme').snapshot()
+                local restored
+                if vim.env.BOOTSTRAP_RESTORE_STARTUP then
+                    assert(require('parley.theme').apply('startup'))
+                    restored = require('parley.theme').snapshot()
+                end
                 vim.fn.writefile({ vim.json.encode({ runtime = runtime, lockfile = opts.lockfile,
-                    relative = relative, windows = #vim.api.nvim_list_wins() }) },
+                    relative = relative, windows = #vim.api.nvim_list_wins(),
+                    appearance = appearance, restored = restored }) },
                     vim.env.BOOTSTRAP_RESULT)
             end }
         end

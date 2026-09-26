@@ -389,3 +389,112 @@ findings:
     detail: |
       theme.apply changes vim.o.background at lua/parley/theme.lua:136-137 before the protected colorscheme call. When an optional scheme is unavailable, failure returns without restoring the prior mode or scheme, violating the plan's retain-prior-scheme contract. Restore the snapshot on failure and test this through the production command. ARCH-ORDER.
 ```
+
+---
+
+## Re-review — 2026-09-25T22:06:18-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 275 — Add a packaged Parley theme picker with live preview |
+| repo | parley.nvim |
+| issue file | workshop/issues/000275-packaged-theme-picker.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | d8da2fe2132dc4946ae02955b7431746139fb285..47debd2f6fbc8c699303019060742655df68a490 |
+| command | sdlc close --issue 275 |
+| reviewer | codex |
+| timestamp | 2026-09-25T22:06:18-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The implementation substantially resolves the reported bugs, and the focused tests pass. BR-4 remains open: packaged startup restoration is not tested through its production path, and the compatibility script passes even when OneDark variant selection is disabled. No new critical defect was established.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Selection notifications compare identities. Replacing identity comparison with row comparison makes the same-index filtering regression fail.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The starter consumes theme.packaged_plugins(); the bootstrap fixture asserts every registry dependency reaches Lazy with its pin and eager-loading setting.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Startup is captured separately before preference restoration. Hardcoding Moonfly again makes the custom-startup regression fail.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Preview, commit, cancel and mouse coverage now exist, but packaged restart restoration remains untested through production startup. The real-plugin compatibility script also never asserts colors_name or OneDark style; disabling variant selection still passes all 19 entries. Complete the acceptance matrix through production entry points and verify each oracle detects removal of its behavior. ARCH-PURPOSE, ARCH-MOCK.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Protected preference reads and the unreadable-file regression remain present; the focused test passes.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      README.md documents ParleyTheme, Moonfly startup, persistence and cancellation, matching command registration and picker callbacks.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Application sets the registry background mode. Removing that assignment for Solarized makes the production-command light-mode regression fail.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Failed application restores the previous snapshot. Removing rollback makes the partial-highlight-failure regression fail.
+```
+
+1. **Strengths**
+
+   - Dependency installation and picker choices derive from the registry.
+   - Filtering now follows selected identity through the shared picker boundary.
+   - Startup and opening snapshots have separate responsibilities.
+   - README, packaging guidance and atlas document the new surface.
+
+2. **Critical findings**
+
+   None remaining.
+
+3. **Important findings**
+
+   **BR-4 — incomplete acceptance coverage.** At `tests/integration/theme_picker_spec.lua:130`, the restart test manually invokes a fresh theme module; it does not exercise packaged startup or `parley.setup()` preference restoration. The bootstrap fixture replaces `parley.starter.start()` and records window/runtime metadata without asserting theme state.
+
+   At `tests/packaging/theme_compatibility.lua:21–30`, assertions cover background and highlight presence, but omit `vim.g.colors_name` and `vim.g.onedark_config.style`. An in-memory mutation removing variant selection still passed every entry.
+
+   Finish this existing finding by testing saved, absent and malformed preferences through fresh production startup, then asserting scheme identity and variant for every registry choice. Include command-path failed-preview rollback. These checks should fail when the corresponding behavior is removed.
+
+4. **Minor findings**
+
+   None newly raised.
+
+5. **Test coverage notes**
+
+   - Passed all **109 mapped tests**.
+   - Passed compatibility checks against installed plugins matching all registry pins.
+   - Independently checked **361 preview/restore pairs** for scheme, background, representative appearance and applicable OneDark style.
+   - Mutation checks detected removal of identity tracking, custom startup restoration, Solarized mode selection and failure rollback.
+   - Process-survivor verification was unavailable because the sandbox blocks `ps`.
+   - Repository files were unchanged.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** registry-derived dependency and picker consumers.
+   - **ARCH-PURE — pass:** deterministic registry operations are distinguishable from application/storage boundaries; revised classifications match.
+   - **ARCH-PURPOSE — flag:** BR-4 leaves required acceptance behavior insufficiently verified.
+   - **ARCH-MOCK — flag:** startup fixtures do not model persisted theme restoration; real-plugin checks lack identity oracles.
+   - **ARCH-CONSTRAINTS — pass:** fixed-size, synchronous local selection; no added network work.
+   - **ARCH-SECURE — pass:** persisted ids are validated and read/decode failures handled.
+   - **ARCH-ORDER — pass:** separate snapshots and synchronous rollback; existing picker owns dismissal and confirmation.
+   - **ARCH-FUNERAL — pass:** one rewritten preference file; picker resources use existing teardown.
+
+7. **Plan revision recommendations**
+
+   Append a `## Revisions` entry distinguishing helper-level restart coverage from production startup coverage. Reconcile the acceptance claims after adding scheme/variant assertions and fresh-start persistence tests, recording the mutations each detects.

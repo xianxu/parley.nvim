@@ -21,6 +21,10 @@ local ok, err = pcall(function()
     for _, spec in ipairs(theme.items()) do
         local applied, why = theme.apply(spec.id, { on_applied = parley.setup_highlight })
         assert(applied, spec.id .. ": " .. tostring(why))
+        assert(vim.g.colors_name == spec.colorscheme, spec.id .. ": incorrect colorscheme")
+        if spec.variant then
+            assert(vim.g.onedark_config.style == spec.variant, spec.id .. ": incorrect OneDark variant")
+        end
         assert(vim.o.background == spec.mode, spec.id .. ": incorrect background")
         for _, group in ipairs(groups) do
             local hl = vim.api.nvim_get_hl(0, { name = group, link = false })

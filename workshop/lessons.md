@@ -132,3 +132,6 @@ oracle, and the mutation that would make the test fail.
   and startup restore after a saved choice has loaded.
 - Run regression tests before requesting another boundary review; unused helper
   functions and passing command-registration tests do not prove the correction.
+- Theme compatibility must assert scheme identity and variant, not only the
+  presence of highlights. Persistence acceptance must enter fresh production
+  startup; calling load/apply directly cannot verify the startup wiring.

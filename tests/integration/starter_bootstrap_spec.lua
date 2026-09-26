@@ -46,6 +46,50 @@ describe('starter bootstrap', function()
     end)
     after_each(function() vim.fn.delete(root, 'rf') end)
 
+    local function preference(contents)
+        local persisted = root .. '/data/parley/parley/persisted'
+        vim.fn.mkdir(persisted, 'p')
+        vim.fn.writefile({ contents }, persisted .. '/theme.json')
+    end
+
+    local function startup_appearance(extra)
+        local result = run(nil, extra)
+        assert.equals(0, result.code, result.stderr)
+        assert.equals('', result.stderr, 'production starter reported an initialization error')
+        return vim.json.decode(table.concat(vim.fn.readfile(root .. '/result'), '\n'))
+    end
+
+    it('restores a saved light theme in a fresh production starter process', function()
+        preference('{"id":"dayfox"}')
+        local observed = startup_appearance()
+        assert.equals('dayfox', observed.appearance.colorscheme)
+        assert.equals('light', observed.appearance.mode)
+    end)
+
+    it('restores a saved OneDark variant and retains the real startup sentinel', function()
+        preference('{"id":"onedark-warmer"}')
+        local observed = startup_appearance({ BOOTSTRAP_RESTORE_STARTUP = '1' })
+        assert.equals('onedark', observed.appearance.colorscheme)
+        assert.equals('warmer', observed.appearance.onedark_config.style)
+        assert.equals('moonfly', observed.restored.colorscheme)
+        assert.equals('dark', observed.restored.mode)
+        assert.is_nil(observed.restored.onedark_config)
+    end)
+
+    it('keeps the packaged startup theme when no preference exists', function()
+        local observed = startup_appearance()
+        assert.equals('moonfly', observed.appearance.colorscheme)
+        assert.equals('dark', observed.appearance.mode)
+        assert.equals(0, vim.fn.filereadable(root .. '/data/parley/parley/persisted/theme.json'))
+    end)
+
+    it('starts with the packaged theme when the preference is malformed', function()
+        preference('{broken json')
+        local observed = startup_appearance()
+        assert.equals('moonfly', observed.appearance.colorscheme)
+        assert.equals('dark', observed.appearance.mode)
+    end)
+
     it('refuses another app name before creating profile files', function()
         local result = run('nvim')
         assert.matches('NVIM_APPNAME=parley', result.stderr)

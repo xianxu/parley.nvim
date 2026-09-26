@@ -170,3 +170,18 @@ Final entity classification (supersedes the unclassified concept tables):
 | `load` | INTEGRATION | `lua/parley/theme.lua` | new |
 | `theme_picker` | INTEGRATION | `lua/parley/theme_picker.lua` | new |
 | `set_selection` | INTEGRATION | `lua/parley/float_picker.lua` | modified |
+
+### 2026-09-25 — BR-4 production startup acceptance
+
+The earlier restart test exercised a fresh theme helper, not production startup.
+Fresh Neovim subprocess tests now execute the production starter with saved
+light and OneDark preferences, absent state, and malformed state. The dependency
+fixture supplies executable colors while the starter owns preference restoration.
+The real-plugin script asserts scheme identity and OneDark style for every entry;
+removing variant assignment fails on onedark-darker. Failed and missing schemes
+are now selected through :ParleyTheme, checking appearance and unchanged state.
+These strengthen the same acceptance contract (ARCH-PURPOSE, ARCH-MOCK).
+
+Verification: the 113-test mapped suite passes. Removing the production starter
+restoration line in a temporary copy fails both saved-choice tests (dayfox and
+OneDark); removing variant assignment fails real-plugin compatibility at darker.

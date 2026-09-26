@@ -153,11 +153,12 @@ describe(":ParleyTheme", function()
             "vim.api.nvim_set_hl(0, 'Normal', {fg=0xff0000})",
             "error('fixture colorscheme failed')",
         }, path)
-        local applied = theme.apply("nightfox")
+        vim.cmd("ParleyTheme")
+        query("nightfox")
         vim.fn.writefile(original, path)
-        assert.is_false(applied)
         assert.same(before, theme.snapshot())
         assert.same(normal, vim.api.nvim_get_hl(0, { name = "Normal", link = false }))
+        assert.is_nil(theme.load(parley.config.state_dir))
     end)
 
     it("keeps the opening theme when a package is absent", function()
@@ -165,10 +166,11 @@ describe(":ParleyTheme", function()
         local path = root .. "/runtime/colors/nightfox.lua"
         local original = vim.fn.readfile(path)
         vim.fn.delete(path)
-        local applied = theme.apply("nightfox")
+        vim.cmd("ParleyTheme")
+        query("nightfox")
         vim.fn.writefile(original, path)
-        assert.is_false(applied)
         assert.same(before, theme.snapshot())
+        assert.is_nil(theme.load(parley.config.state_dir))
     end)
 
     it("restores the exact OneDark variant when cancelling a different variant", function()

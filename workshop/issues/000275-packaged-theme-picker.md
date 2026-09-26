@@ -133,3 +133,16 @@ keyboard/mouse entry through the production command.
   reach the starter and are asserted; BR-3 startup captured before preferences;
   BR-4 committed production and real compatibility tests; BR-5 read-failure
   regression; BR-6 README; BR-7 explicit mode; BR-8 snapshot rollback on failure.
+
+### 2026-09-25 — BR-4 final acceptance evidence
+
+- Review identified that earlier restart coverage called helpers, and the earlier
+  real compatibility script did not assert OneDark style despite the log claim.
+- Fresh production starter subprocesses now verify saved dayfox, saved OneDark
+  warmer, absent and malformed preferences, and the captured startup sentinel.
+  Removing the starter restoration line makes both saved-choice tests fail.
+- Real pinned compatibility now asserts exact scheme and OneDark style for every
+  entry; removing variant assignment fails at onedark-darker.
+- Failed/missing scheme previews now enter through :ParleyTheme and preserve
+  the appearance and preference. Focused suite passes 113 tests; real-plugin
+  matrix passes all 19; changed test lint and git diff --check pass.

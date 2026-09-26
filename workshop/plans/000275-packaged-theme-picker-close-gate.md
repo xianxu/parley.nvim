@@ -145,6 +145,44 @@ rounds:
           round: 4
       recipe: milestone-review
       blocked: true
+    - "n": 5
+      timestamp: "2026-09-25T22:06:18-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Selection notifications compare identities. Replacing identity comparison with row comparison makes the same-index filtering regression fail.
+          round: 5
+        - id: BR-2
+          disposition: addressed
+          note: The starter consumes theme.packaged_plugins(); the bootstrap fixture asserts every registry dependency reaches Lazy with its pin and eager-loading setting.
+          round: 5
+        - id: BR-3
+          disposition: addressed
+          note: Startup is captured separately before preference restoration. Hardcoding Moonfly again makes the custom-startup regression fail.
+          round: 5
+        - id: BR-4
+          disposition: not-addressed
+          note: Preview, commit, cancel and mouse coverage now exist, but packaged restart restoration remains untested through production startup. The real-plugin compatibility script also never asserts colors_name or OneDark style; disabling variant selection still passes all 19 entries. Complete the acceptance matrix through production entry points and verify each oracle detects removal of its behavior. ARCH-PURPOSE, ARCH-MOCK.
+          round: 5
+        - id: BR-5
+          disposition: addressed
+          note: Protected preference reads and the unreadable-file regression remain present; the focused test passes.
+          round: 5
+        - id: BR-6
+          disposition: addressed
+          note: README.md documents ParleyTheme, Moonfly startup, persistence and cancellation, matching command registration and picker callbacks.
+          round: 5
+        - id: BR-7
+          disposition: addressed
+          note: Application sets the registry background mode. Removing that assignment for Solarized makes the production-command light-mode regression fail.
+          round: 5
+        - id: BR-8
+          disposition: addressed
+          note: Failed application restores the previous snapshot. Removing rollback makes the partial-highlight-failure regression fail.
+          round: 5
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#275 (boundary-review)
@@ -211,11 +249,19 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-8** [Critical] `failed-theme-application-rollback` Failed colorscheme loads leave the previous theme altered
   theme.apply changes vim.o.background at lua/parley/theme.lua:136-137 before the protected colorscheme call. When an optional scheme is unavailable, failure returns without restoring the prior mode or scheme, violating the plan's retain-prior-scheme contract. Restore the snapshot on failure and test this through the production command. ARCH-ORDER.
 
+## Round 5 — 2026-09-25T22:06:18-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Selection notifications compare identities. Replacing identity comparison with row comparison makes the same-index filtering regression fail.
+- BR-2 — addressed — The starter consumes theme.packaged_plugins(); the bootstrap fixture asserts every registry dependency reaches Lazy with its pin and eager-loading setting.
+- BR-3 — addressed — Startup is captured separately before preference restoration. Hardcoding Moonfly again makes the custom-startup regression fail.
+- BR-4 — not-addressed — Preview, commit, cancel and mouse coverage now exist, but packaged restart restoration remains untested through production startup. The real-plugin compatibility script also never asserts colors_name or OneDark style; disabling variant selection still passes all 19 entries. Complete the acceptance matrix through production entry points and verify each oracle detects removal of its behavior. ARCH-PURPOSE, ARCH-MOCK.
+- BR-5 — addressed — Protected preference reads and the unreadable-file regression remain present; the focused test passes.
+- BR-6 — addressed — README.md documents ParleyTheme, Moonfly startup, persistence and cancellation, matching command registration and picker callbacks.
+- BR-7 — addressed — Application sets the registry background mode. Removing that assignment for Solarized makes the production-command light-mode regression fail.
+- BR-8 — addressed — Failed application restores the previous snapshot. Removing rollback makes the partial-highlight-failure regression fail.
+
 ## Open findings
 
-- **BR-1** [Critical] `selection-identity-effects` Filtering changes the selected theme without updating its preview
-- **BR-2** [Critical] `registry-consumer-derivation` Packaged dependency metadata is maintained outside the theme registry
-- **BR-3** [Critical] `startup-snapshot-semantics` Restore startup theme always selects Moonfly
 - **BR-4** [Important] `production-path-coverage` Theme acceptance behavior lacks production-path tests
-- **BR-7** [Critical] `colorscheme-variant-selection` Solarized Light loads the dark variant when background is dark
-- **BR-8** [Critical] `failed-theme-application-rollback` Failed colorscheme loads leave the previous theme altered
