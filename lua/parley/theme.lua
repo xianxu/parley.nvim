@@ -130,6 +130,7 @@ end
 function M.apply(id, opts)
     opts = opts or {}
     local spec = M.find(id)
+    local previous_background = vim.o.background
     if spec.startup and opts.startup_scheme and opts.startup_scheme ~= "" then
         spec.colorscheme = opts.startup_scheme
     end
@@ -137,7 +138,10 @@ function M.apply(id, opts)
     if spec.mode == "dark" then vim.o.background = "dark" end
     local apply_colorscheme = opts.apply_colorscheme or vim.cmd.colorscheme
     local ok, err = pcall(apply_colorscheme, spec.colorscheme)
-    if not ok then return false, err end
+    if not ok then
+        vim.o.background = previous_background
+        return false, err
+    end
     if opts.on_applied then opts.on_applied(spec) end
     return true, spec
 end
