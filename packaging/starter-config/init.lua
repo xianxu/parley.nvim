@@ -129,6 +129,17 @@ local ok, err = xpcall(function()
         plugin.priority = i == 1 and 1000 or 999
     end
     local additional_plugins = {
+        { "nvim-lualine/lualine.nvim", commit = "221ce6b2d999187044529f49da6554a92f740a96",
+            lazy = false,
+            opts = {
+                options = { theme = "auto", icons_enabled = false, globalstatus = true,
+                    component_separators = "", section_separators = "" },
+                sections = { lualine_a = { "mode" }, lualine_b = {},
+                    lualine_c = { { "filename", path = 0 } },
+                    lualine_x = {}, lualine_y = {}, lualine_z = { "location" } },
+                inactive_sections = { lualine_a = {}, lualine_b = {}, lualine_c = {},
+                    lualine_x = {}, lualine_y = {}, lualine_z = {} },
+            } },
         { "nvim-lua/plenary.nvim", commit = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
         { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026" },
         { "iamcco/markdown-preview.nvim",

@@ -48,6 +48,13 @@ In the packaged app, `:ParleyTheme` opens a floating preview for the
 included themes, including all OneDark styles and Nightfox variants.
 Moonfly is the startup theme; press Enter to persist another
 choice or Escape to restore the opening colorscheme.
+The app's bottom bar clearly shows NORMAL, INSERT or VISUAL mode, the chat
+name, model/activity and cursor position, using the selected theme.
+
+To try the app from a checkout, run `./parley_app`. It loads the local starter
+outside repo mode, using a separate demo home and profile. Subsequent launches
+reuse that demo's chats, login and plugins. Its location is printed at startup;
+set `PARLEY_DEMO_DIR` to another directory to test a new profile.
 
 ## Editing while an answer is generated
 

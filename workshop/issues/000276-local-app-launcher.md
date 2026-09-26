@@ -24,6 +24,8 @@ the real packaged starter outside repo mode, and isolates HOME plus all XDG root
 Keep the launcher a thin shell wrapper (ARCH-DRY). Package pinned Lualine with
 a prominent mode block, chat name, existing Parley activity/model indicator and
 cursor position. Use automatic theme adaptation and no font-dependent separators.
+The default demo profile is reused under the caller cache directory. An explicit
+PARLEY_DEMO_DIR selects another profile; no user data is silently removed.
 
 ## Done when
 
@@ -34,9 +36,9 @@ cursor position. Use automatic theme adaptation and no font-dependent separators
 
 ## Plan
 
-- [ ] Add launcher and regression test for cwd/absolute-path isolation.
-- [ ] Add pinned Lualine defaults and production compatibility checks.
-- [ ] Document local testing and verify the focused suites.
+- [x] Add launcher and regression test for cwd/absolute-path isolation.
+- [x] Add pinned Lualine defaults and production compatibility checks.
+- [x] Document local testing and verify the focused suites.
 
 ## Log
 
@@ -44,3 +46,14 @@ cursor position. Use automatic theme adaptation and no font-dependent separators
 
 - User requested a one-command local app demo, then a simple prominent mode bar.
 - Theme-picker v2.6.0 was published separately before this follow-up.
+
+- Implemented root launcher with canonical paths, reusable isolated demo roots,
+  and explicit override. Tests cover spaces, caller cwd, all environment roots,
+  argument forwarding, retained state and rejecting an in-checkout profile.
+- Packaged Lualine uses plain separators, mode/name/location and existing Parley
+  model/activity integration. Production options rendered all 19 themes in
+  NORMAL/INSERT/VISUAL with contrasting mode blocks. Dependency/config tests
+  failed before the implementation.
+- Verification: launcher Python tests 2 pass; focused ui/themes 119 pass;
+  real statusline compatibility 19 pass; shell syntax, starter artifact,
+  changed Lua lint and git diff --check pass.

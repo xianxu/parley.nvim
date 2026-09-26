@@ -37,6 +37,10 @@ return {
             }, colors .. '/' .. item.colorscheme .. '.lua')
         end
         spec[1].config()
+        local statusline = assert(by_name['nvim-lualine/lualine.nvim'], 'App must ship a statusline')
+        assert(statusline.commit == '221ce6b2d999187044529f49da6554a92f740a96')
+        assert(statusline.lazy == false)
+        assert(statusline.opts.sections.lualine_a[1] == 'mode')
         local preview
         for _, plugin in ipairs(spec) do
             if plugin[1] == 'iamcco/markdown-preview.nvim' then preview = plugin end

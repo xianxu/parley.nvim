@@ -1,0 +1,18 @@
+#!/bin/sh
+# Run this checkout's app profile without entering repo mode.
+set -eu
+repo=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+demo=${PARLEY_DEMO_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/parley-app-demo}
+umask 077
+mkdir -p "$demo"
+demo=$(CDPATH= cd -- "$demo" && pwd -P)
+case "$demo/" in
+    "$repo/"*) echo 'parley_app: demo directory must be outside the checkout' >&2; exit 1 ;;
+esac
+mkdir -p "$demo/home"
+printf 'Parley demo profile: %s\n' "$demo" >&2
+cd "$demo"
+export HOME="$demo/home" NVIM_APPNAME=parley PARLEY_RUNTIME="$repo"
+export XDG_CONFIG_HOME="$demo/config" XDG_DATA_HOME="$demo/data"
+export XDG_STATE_HOME="$demo/state" XDG_CACHE_HOME="$demo/cache"
+exec nvim -u "$repo/packaging/starter-config/init.lua" "$@"

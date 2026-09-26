@@ -26,6 +26,18 @@ startup, even when the test process itself runs headless.
 
 ## Configuration ownership today
 
+`parley_app` is a development entry point into the same packaged starter. It
+resolves the checkout from the executable path, changes into a separate demo
+directory to avoid repo detection, and isolates HOME plus all XDG roots. The
+default `${XDG_CACHE_HOME:-$HOME/.cache}/parley-app-demo` is reused, bounding this
+helper to one profile; `PARLEY_DEMO_DIR` selects another operator-owned profile.
+Unlike the installed application, its HOME isolation separates credential files.
+
+The starter installs pinned Lualine with an automatic theme, prominent mode,
+chat name and cursor position. Existing `parley.lualine` integration supplies
+the model/activity section. `tests/packaging/statusline_compatibility.lua`
+exercises the production options with real Lualine and every packaged theme.
+
 | Owner | Responsibility |
 |---|---|
 | `lua/parley/config.lua` | Current plugin defaults consumed by `setup(opts)` |

@@ -22,6 +22,11 @@ app uses its own chat folder, separate from ordinary Neovim. Existing chats in
 the old `chats/welcome/` folder move into `chats/` with their attachments.
 You can edit `init.lua` to change your settings.
 
+The bottom status bar shows a clear **NORMAL**, **INSERT**, or **VISUAL** mode
+block, the chat filename, selected model and activity, and cursor position.
+Press `i` to type and Escape to return to NORMAL. Its colors follow
+`:ParleyTheme`; it uses plain separators and does not require a special font.
+
 1. If no account is connected, the floating provider picker opens automatically.
    Type to filter, select your provider, and press Enter. Then
    follow the account login in your browser. Parley downloads its managed proxy

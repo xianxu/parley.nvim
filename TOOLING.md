@@ -183,3 +183,12 @@ ln -sf "$(brew --prefix lua@5.4)/bin/luacheck-5.4" "$(brew --prefix)/bin/luachec
 
 Verify with `luacheck --version`. If `make test` still complains, ensure
 `luacheck` is on `PATH` ahead of any 5.5 install.
+
+## Local app experience
+
+Run `./parley_app` from the checkout to use the real packaged starter with the
+current local code. The helper launches outside repo mode and reuses a dedicated
+demo profile; `PARLEY_DEMO_DIR=/path/outside/repo ./parley_app` selects another.
+The first run downloads editor plugins. Normal Parley configuration is untouched.
+
+Verify the launcher boundary with `python3 tests/packaging/test_local_app.py`.
