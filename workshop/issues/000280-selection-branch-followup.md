@@ -28,6 +28,8 @@ plain branches, gathered quote prompts, parent anchors and existing single-line 
 - Selection branches contain the requested quoted draft and cursor lands on the empty line below it.
 - Normal branches/gathered quotes retain their format; selections preserve quotes, percent signs and custom user prefix.
 
+- Stacked app review corrections serialize competing launch/reset and preserve the shortcut architecture guard.
+
 ## Plan
 
 - [x] Update seed formatter and selection-only child layout/cursor placement; test content, saved parent and insertion landing.
