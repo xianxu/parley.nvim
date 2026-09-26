@@ -11,6 +11,7 @@ local DEFAULT = {
     mode = "dark",
     style = "subdued",
     startup = true,
+    plugin = { "bluz71/vim-moonfly-colors", name = "moonfly", commit = "4ed07bc0c6083cdd547c63f5c245e02c068b0c45" },
 }
 
 local CHOICES = {
@@ -20,6 +21,7 @@ local CHOICES = {
         colorscheme = "catppuccin-mocha",
         mode = "dark",
         style = "colorful",
+        plugin = { "catppuccin/nvim", name = "catppuccin", commit = "edefef779ab08ce1a4a404713e3012b0d202bd35" },
     },
     {
         id = "tokyonight-storm",
@@ -27,6 +29,7 @@ local CHOICES = {
         colorscheme = "tokyonight-storm",
         mode = "dark",
         style = "subdued",
+        plugin = { "folke/tokyonight.nvim", name = "tokyonight", commit = "cdc07ac78467a233fd62c493de29a17e0cf2b2b6" },
     },
     {
         id = "catppuccin-latte",
@@ -34,6 +37,7 @@ local CHOICES = {
         colorscheme = "catppuccin-latte",
         mode = "light",
         style = "colorful",
+        plugin = { "catppuccin/nvim", name = "catppuccin", commit = "edefef779ab08ce1a4a404713e3012b0d202bd35" },
     },
     {
         id = "solarized-light",
@@ -41,6 +45,7 @@ local CHOICES = {
         colorscheme = "solarized",
         mode = "light",
         style = "subdued",
+        plugin = { "altercation/vim-colors-solarized", name = "solarized", commit = "528a59f26d12278698bb946f8fb82a63711eec21" },
     },
 }
 
@@ -58,6 +63,17 @@ function M.items()
     local result = {}
     for _, spec in ipairs(CHOICES) do result[#result + 1] = copy(spec) end
     result[#result + 1] = M.default()
+    return result
+end
+
+function M.packaged_plugins()
+    local result, seen = {}, {}
+    for _, spec in ipairs({ DEFAULT, table.unpack(CHOICES) }) do
+        if spec.plugin and not seen[spec.plugin.name] then
+            seen[spec.plugin.name] = true
+            result[#result + 1] = vim.deepcopy(spec.plugin)
+        end
+    end
     return result
 end
 
