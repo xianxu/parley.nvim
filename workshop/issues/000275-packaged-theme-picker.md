@@ -7,6 +7,7 @@ created: 2026-09-25
 updated: 2026-09-25
 estimate_hours:
 started: 2026-09-25T18:16:29-07:00
+flow: {kind: quick, provenance: inferred, spec: "0fcfca21", done: "70554023"}
 ---
 
 # Add a packaged Parley theme picker with live preview
