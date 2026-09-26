@@ -29,8 +29,12 @@ a binary (ARCH-DRY). Keep credential/model validation and failure onboarding.
 
 ## Plan
 
-- [ ] Reproduce with the process-level proxy fake, remove premature discovery, and verify readiness/failure paths.
+- [x] Reproduce with the process-level proxy fake, remove premature discovery, and verify readiness/failure paths.
 
 ## Log
 
 ### 2026-09-25
+
+- Red: process-level regression reopened picker despite reachable proxy; green: 54 lifecycle cases pass, including repeated readiness, missing model and removed credential.
+- 183 starter cases pass in clean snapshot /tmp/parley-279-clean.log; live-tree suite hit operator tutorial edits, which were excluded and preserved. Changed Lua lint and scoped whitespace pass.
+- Fix removes duplicate executable precondition; ensure_running remains the owner of probe/spawn ordering (ARCH-DRY).

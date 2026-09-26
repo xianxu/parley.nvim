@@ -294,3 +294,7 @@ setup, and explicitly passes that project root. A Git repository is not required
 nested cwd, an unmarked global launch and the preserved plugin chat-dir override.
 
 The packaged editor uses `ignorecase` + `smartcase` for native `/` and `?` search.
+
+Onboarding delegates proxy availability to `cliproxy.ensure_running`: an existing
+server can serve the saved model even when the current profile has no executable.
+Credential and model checks still decide whether account/model setup is needed.

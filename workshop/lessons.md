@@ -148,3 +148,8 @@ oracle, and the mutation that would make the test fail.
 - Outside one checkout is not necessarily outside repo mode: parent markers
   elsewhere still count. Enforce the requested mode at production startup and
   test the real detector with marked default and alternate profile ancestry.
+
+## 2026-09-26 (#279 — proxy readiness)
+
+- Do not gate a service client on a locally installed server executable. Let the
+  service lifecycle owner probe an existing server before checking spawn prerequisites.
