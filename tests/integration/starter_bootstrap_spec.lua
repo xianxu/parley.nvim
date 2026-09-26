@@ -29,6 +29,7 @@ describe('starter bootstrap', function()
         vim.fn.writefile({ '#!/bin/sh',
             'if [ "$1" = "-C" ] && [ "$3" = "checkout" ]; then',
             '  printf "%s\\n" "$5" >> "$BOOTSTRAP_CALLS"',
+            '  case "$5" in v*) exec "' .. real_git .. '" "$@";; esac',
             '  exec "' .. real_git .. '" -C "$2" checkout --detach ' .. commit,
             'fi',
             'exec "' .. real_git .. '" "$@"',
@@ -41,9 +42,103 @@ describe('starter bootstrap', function()
             GIT_CONFIG_VALUE_0 = 'https://github.com/folke/lazy.nvim.git',
             BOOTSTRAP_CALLS = root .. '/calls', BOOTSTRAP_RESULT = root .. '/result',
             PARLEY_RUNTIME = root .. '/runtime', }
-        vim.fn.mkdir(env.PARLEY_RUNTIME, 'p')
+        vim.fn.mkdir(env.PARLEY_RUNTIME .. '/lua/parley', 'p')
+        vim.fn.writefile(vim.fn.readfile('lua/parley/theme.lua'), env.PARLEY_RUNTIME .. '/lua/parley/theme.lua')
     end)
     after_each(function() vim.fn.delete(root, 'rf') end)
+
+    local function preference(contents)
+        local persisted = root .. '/data/parley/parley/persisted'
+        vim.fn.mkdir(persisted, 'p')
+        vim.fn.writefile({ contents }, persisted .. '/theme.json')
+    end
+
+    local function startup_appearance(extra)
+        local result = run(nil, extra)
+        assert.equals(0, result.code, result.stderr)
+        assert.equals('', result.stderr, 'production starter reported an initialization error')
+        return vim.json.decode(table.concat(vim.fn.readfile(root .. '/result'), '\n'))
+    end
+
+    local function standalone_env()
+        local runtime_repo = root .. '/runtime'
+        git({ 'init', '-q', runtime_repo })
+        git({ '-C', runtime_repo, 'add', '.' })
+        git({ '-C', runtime_repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+            '-c', 'commit.gpgsign=false', 'commit', '-qm', 'runtime fixture' })
+        git({ '-C', runtime_repo, 'tag', 'v2.6.0' })
+        git({ '-C', runtime_repo, 'tag', 'v9.0.0-beta' })
+        return { PARLEY_RUNTIME = '', GIT_CONFIG_COUNT = '2',
+            GIT_CONFIG_KEY_1 = 'url.file://' .. runtime_repo .. '.insteadOf',
+            GIT_CONFIG_VALUE_1 = 'https://github.com/xianxu/parley.nvim.git' }
+    end
+
+    it('bootstraps and reuses the stable release without PARLEY_RUNTIME', function()
+        local extra = standalone_env()
+        preference('{"id":"dayfox"}')
+        for _ = 1, 2 do
+            local observed = startup_appearance(extra)
+            assert.equals('dayfox', observed.appearance.colorscheme)
+            assert.equals(root .. '/data/parley/lazy/parley.nvim', observed.runtime)
+            assert.equals(0, vim.fn.isdirectory(root .. '/data/parley/initializer.lock'))
+        end
+        assert.same({ 'v2.6.0', '85c7ff3711b730b4030d03144f6db6375044ae82' },
+            vim.fn.readfile(root .. '/calls'))
+    end)
+
+    it('cleans standalone staging when the published release lacks theme support', function()
+        local extra = standalone_env()
+        git({ '-C', root .. '/runtime', 'rm', 'lua/parley/theme.lua' })
+        git({ '-C', root .. '/runtime', '-c', 'user.name=Test', '-c', 'user.email=test@example.com',
+            '-c', 'commit.gpgsign=false', 'commit', '-qm', 'old runtime fixture' })
+        git({ '-C', root .. '/runtime', 'tag', '-f', 'v2.6.0' })
+        local result = run(nil, extra)
+        assert.matches('lacks theme support', result.stderr)
+        assert.equals(0, vim.fn.isdirectory(root .. '/data/parley/initializer.lock'))
+        assert.equals(0, vim.fn.isdirectory(root .. '/data/parley/lazy/parley.nvim'))
+    end)
+
+    it('reports an old standalone cache without altering it', function()
+        local extra = standalone_env()
+        local cached = root .. '/data/parley/lazy/parley.nvim'
+        vim.fn.mkdir(cached .. '/lua/parley', 'p')
+        vim.fn.writefile({ 'local changes' }, cached .. '/keep.txt')
+        local result = run(nil, extra)
+        assert.matches('cached Parley release lacks', result.stderr)
+        assert.same({ 'local changes' }, vim.fn.readfile(cached .. '/keep.txt'))
+        assert.equals(0, vim.fn.isdirectory(root .. '/data/parley/initializer.lock'))
+    end)
+
+    it('restores a saved light theme in a fresh production starter process', function()
+        preference('{"id":"dayfox"}')
+        local observed = startup_appearance()
+        assert.equals('dayfox', observed.appearance.colorscheme)
+        assert.equals('light', observed.appearance.mode)
+    end)
+
+    it('restores a saved OneDark variant and retains the real startup sentinel', function()
+        preference('{"id":"onedark-warmer"}')
+        local observed = startup_appearance({ BOOTSTRAP_RESTORE_STARTUP = '1' })
+        assert.equals('onedark', observed.appearance.colorscheme)
+        assert.equals('warmer', observed.appearance.onedark_config.style)
+        assert.equals('moonfly', observed.restored.colorscheme)
+        assert.equals('dark', observed.restored.mode)
+        assert.is_nil(observed.restored.onedark_config)
+    end)
+
+    it('keeps the packaged startup theme when no preference exists', function()
+        local observed = startup_appearance()
+        assert.equals('moonfly', observed.appearance.colorscheme)
+        assert.equals('dark', observed.appearance.mode)
+        assert.equals(0, vim.fn.filereadable(root .. '/data/parley/parley/persisted/theme.json'))
+    end)
+
+    it('starts with the packaged theme when the preference is malformed', function()
+        preference('{broken json')
+        local observed = startup_appearance()
+        assert.equals('moonfly', observed.appearance.colorscheme)
+        assert.equals('dark', observed.appearance.mode)
+    end)
 
     it('refuses another app name before creating profile files', function()
         local result = run('nvim')

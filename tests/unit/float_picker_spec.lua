@@ -397,6 +397,28 @@ describe("float_picker", function()
             end)
         end
 
+    it("reports effective selection changes without submitting", function()
+            local seen = {}
+            local picker = float_picker.open({
+                title = "Preview",
+                items = {
+                    { display = "alpha", value = "alpha" },
+                    { display = "beta", value = "beta" },
+                },
+                on_selection_change = function(item)
+                    seen[#seen + 1] = item.value
+                end,
+                on_select = function() error("preview must not submit") end,
+            })
+            seen = {}
+            local mapping = vim.fn.maparg("<C-j>", "i", false, true)
+            assert.equals("function", type(mapping.callback))
+            mapping.callback()
+            assert.same({ "beta" }, seen)
+        assert.is_false(picker.is_closed())
+    end)
+
+
         it("ignores confirm while a status row is active", function()
             local selected = false
             local cancelled = false

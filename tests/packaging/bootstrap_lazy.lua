@@ -11,8 +11,32 @@ return {
         assert(vim.g.mapleader == ' ')
         assert(opts.checker.enabled == false)
         assert(spec[1].commit == '4ed07bc0c6083cdd547c63f5c245e02c068b0c45')
-        assert(spec[2].commit == '74b06c6c75e4eeb3108ec01852001636d85a932b')
-        assert(spec[3].commit == 'a0bbec21143c7bc5f8bb02e0005fa0b982edc026')
+        local by_name = {}
+        for _, plugin in ipairs(spec) do by_name[plugin[1] or plugin.name] = plugin end
+        assert(by_name['nvim-lua/plenary.nvim'].commit == '74b06c6c75e4eeb3108ec01852001636d85a932b')
+        assert(by_name['nvim-telescope/telescope.nvim'].commit == 'a0bbec21143c7bc5f8bb02e0005fa0b982edc026')
+        for _, item in ipairs(require('parley.theme').items()) do
+            local plugin = assert(by_name[item.plugin[1]], 'Missing theme dependency: ' .. item.id)
+            assert(plugin.commit == item.plugin.commit)
+            assert(plugin.lazy == false)
+        end
+        -- Materialize executable color files at the dependency boundary. The
+        -- production starter must load the saved preference itself; this fake
+        -- only models Lazy loading the configured startup colorscheme.
+        local runtime = vim.env.PARLEY_RUNTIME
+        if not runtime or runtime == '' then
+            assert(by_name['xianxu/parley.nvim'].version == '*')
+            runtime = opts.root .. '/parley.nvim'
+        end
+        local colors = runtime .. '/colors'
+        vim.fn.mkdir(colors, 'p')
+        for _, item in ipairs(require('parley.theme').items()) do
+            vim.fn.writefile({ 'vim.cmd("highlight clear")',
+                'vim.g.colors_name = ' .. string.format('%q', item.colorscheme),
+                'vim.api.nvim_set_hl(0, "Normal", {fg = "#b0b0b0", bg = "#202020"})',
+            }, colors .. '/' .. item.colorscheme .. '.lua')
+        end
+        spec[1].config()
         local preview
         for _, plugin in ipairs(spec) do
             if plugin[1] == 'iamcco/markdown-preview.nvim' then preview = plugin end
@@ -46,7 +70,6 @@ return {
         vim.fn.writefile({'#!/bin/sh', 'echo 0.0.9'}, dir .. '/app/bin/' .. binary)
         local verified, verify_error = pcall(preview.build, {dir = dir})
         assert(not verified and tostring(verify_error):find('verification failed', 1, true))
-        local runtime
         for _, plugin in ipairs(spec) do
             if plugin.dir then runtime = plugin.dir end
         end
@@ -70,8 +93,15 @@ return {
             return { start = function()
                 local relative = vim.api.nvim_win_get_config(0).relative
                 vim.wait(20)
+                local appearance = require('parley.theme').snapshot()
+                local restored
+                if vim.env.BOOTSTRAP_RESTORE_STARTUP then
+                    assert(require('parley.theme').apply('startup'))
+                    restored = require('parley.theme').snapshot()
+                end
                 vim.fn.writefile({ vim.json.encode({ runtime = runtime, lockfile = opts.lockfile,
-                    relative = relative, windows = #vim.api.nvim_list_wins() }) },
+                    relative = relative, windows = #vim.api.nvim_list_wins(),
+                    appearance = appearance, restored = restored }) },
                     vim.env.BOOTSTRAP_RESULT)
             end }
         end

@@ -120,3 +120,25 @@ Incident detail belongs in the issue or plan that owns it.
 Before changing a shared Neovim or terminal surface, draw its state scopes and
 owners. Then name the production trigger, the callback's live anchor, the exact
 oracle, and the mutation that would make the test fail.
+
+## 2026-09-25 (#275 — theme release)
+
+- Reproduce startup with the exact copied profile before giving a launch command.
+  Homebrew wrappers can override environment variables; starter updates preserve
+  existing init.lua and publish init.lua.new, so fixing source does not repair
+  an existing copied profile.
+- A live picker effect follows selected identity across filtering, not row number.
+  Capture startup separately from picker-open state; verify both cancellation
+  and startup restore after a saved choice has loaded.
+- Run regression tests before requesting another boundary review; unused helper
+  functions and passing command-registration tests do not prove the correction.
+- Theme compatibility must assert scheme identity and variant, not only the
+  presence of highlights. Persistence acceptance must enter fresh production
+  startup; calling load/apply directly cannot verify the startup wiring.
+- Enumerate every preview exit: no-result confirmation and failed commits need
+  the same restoration semantics as cancellation. Test failure after a successful
+  preview, not only from the original appearance.
+
+- Starter dependencies used before the plugin manager initializes must be available
+  in both launcher-provided and documented standalone startup. Test both with
+  fresh processes and isolated data homes; never inject the runtime into every fixture.

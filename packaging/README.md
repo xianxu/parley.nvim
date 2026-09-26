@@ -17,6 +17,21 @@ Neovim setup. The app and plugin share provider logins in `~/.cli-proxy-api`. `p
 `~/.config/parley/init.lua` (or your configured XDG config directory).
 See the [starter guide](starter-config/README.md) for shortcuts and recovery.
 
+Run `:ParleyTheme` to preview packaged editor themes. Move through the picker
+to preview Catppuccin Mocha (dark/colorful), Tokyo Night Storm (dark/subdued),
+Catppuccin Latte (light/colorful), or Solarized Light (light/subdued). Press
+Enter to keep a choice; Escape restores the opening theme. The committed choice
+is restored on the next launch.
+
+The picker also includes all OneDark styles (dark, darker, cool, deep, warm,
+warmer, light) and all Nightfox variants (nightfox, dayfox, dawnfox, duskfox,
+nordfox, terafox, carbonfox).
+
+When upgrading an existing profile, adopt the theme dependency changes from
+`init.lua.new` to install the new choices. For release verification against
+installed pinned plugins, run `PARLEY_THEME_ROOT=/path/to/lazy nvim --headless
+-u NONE -l tests/packaging/theme_compatibility.lua` from the source checkout.
+
 ## Updates and removal
 
 ```sh

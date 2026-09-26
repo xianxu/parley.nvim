@@ -577,6 +577,7 @@ end
 ---   height     number   – desired results height (optional, #items by default)
 ---   on_select  function(item) – called on confirmation
 ---   on_cancel  function()    – called on cancel/dismiss (optional)
+---   on_selection_change function(item) – called after keyboard/mouse selection moves (optional)
 ---   on_query_change function(query) – called when prompt text changes (optional)
 ---   mappings   table    – list of { key: string|string[], fn: function(item, close_fn) }
 ---                         keys are mapped in the prompt (insert mode)
@@ -593,6 +594,7 @@ function M.open(opts)
     local title          = opts.title or "Select"
     local on_select      = opts.on_select or function() end
     local on_cancel      = opts.on_cancel or function() end
+    local on_selection_change = opts.on_selection_change or function() end
     local on_query_change = opts.on_query_change or function() end
     local extra_mappings = opts.mappings or {}
     local tag_bar_opts = opts.tag_bar  -- optional: { tags = [{label, enabled}], on_toggle = fn(label) }
@@ -1024,6 +1026,9 @@ function M.open(opts)
         return filtered[math.max(1, math.min(sel_idx, #filtered))]
     end
 
+    local selected_at_open = get_selected_item()
+    local notified_identity = selected_at_open and recall_id_fn(selected_at_open)
+    local selection_ready = false
     local function set_selection(idx, selection_opts)
         selection_opts = selection_opts or {}
         sel_idx = math.max(1, math.min(idx, math.max(1, #filtered)))
@@ -1074,6 +1079,12 @@ function M.open(opts)
                 end)
             end
         end
+        local current_item = filtered[sel_idx]
+        local identity = current_item and recall_id_fn(current_item)
+        if identity ~= notified_identity then
+            notified_identity = identity
+            if selection_ready and not closed and current_item then on_selection_change(current_item) end
+        end
     end
 
     local function move_selection(delta_rows)
@@ -1098,6 +1109,10 @@ function M.open(opts)
             return
         end
         local item = get_selected_item()
+        if not item then
+            dismiss()
+            return
+        end
         close_all()
         if item then
             if recall_key then
@@ -1276,6 +1291,7 @@ function M.open(opts)
     render_prompt()
     reflow_picker()
     apply_filter(true)
+    selection_ready = true
     on_query_change(query_text)
 
     local function nmap_r(key, fn)
