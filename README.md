@@ -46,7 +46,7 @@ and settings. Existing Neovim users can use the
 
 In the packaged app, `:ParleyTheme` opens a floating preview for the
 included themes, including all OneDark styles and Nightfox variants.
-Moonfly is the startup theme; press Enter to persist another
+Nordfox is the startup theme; press Enter to persist another
 choice or Escape to restore the opening colorscheme.
 The app's bottom bar clearly shows NORMAL, INSERT or VISUAL mode, the chat
 name, model/activity and cursor position, using the selected theme.

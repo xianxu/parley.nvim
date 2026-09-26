@@ -6,7 +6,7 @@ dayfox, dawnfox, duskfox, nordfox, terafox, carbonfox). Each variant has its
 own persisted picker identity. OneDark previews preserve the opening style
 when cancelled.
 
-The macOS starter ships Moonfly as its startup colorscheme and includes four
+The macOS starter ships Nordfox as its startup colorscheme and includes four
 optional themes in the dependency lock: Catppuccin Mocha, Tokyo Night Storm,
 Catppuccin Latte, and Solarized Light. `:ParleyTheme` opens the shared floating
 picker. Moving the cursor applies a live preview across Neovim, including
@@ -14,7 +14,7 @@ Parley's semantic highlight groups, without writing preference state.
 
 Enter commits the highlighted choice to the Parley profile and restores it on
 the next launch. Escape cancels the preview and restores the colorscheme that
-was active when the picker opened. The final row restores the launch theme (Moonfly in the app), captured before
+was active when the picker opened. The final row restores the launch theme (Nordfox in the app), captured before
 loading the saved preference. A missing or
 invalid preference falls back to the startup theme.
 

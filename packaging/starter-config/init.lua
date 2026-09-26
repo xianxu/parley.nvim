@@ -126,7 +126,7 @@ local ok, err = xpcall(function()
     end
     local main_window = vim.api.nvim_get_current_win()
     local theme_plugins = theme.packaged_plugins()
-    theme_plugins[1].config = function() vim.cmd.colorscheme("moonfly") end
+    theme_plugins[1].config = function() vim.cmd.colorscheme("nordfox") end
     for i, plugin in ipairs(theme_plugins) do
         plugin.lazy = false
         plugin.priority = i == 1 and 1000 or 999
