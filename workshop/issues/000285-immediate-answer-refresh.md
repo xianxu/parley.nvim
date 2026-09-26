@@ -40,3 +40,8 @@ ARCH-FUNERAL).
 
 - Root cause: response preparation currently waits for remote input before replacing the old answer (#266 boundary).
 - Implemented command-time answer removal with a pending document snapshot; focused document and chat response integration specs pass (9 and 42 cases).
+- Boundary review found that the request snapshot could retain tool blocks; it now clears the target answer in both parsed copies before payload construction.
+
+## Revisions
+
+- 2026-09-26: Ensure re-ask payloads exclude the replaced exchange's prior tool-call blocks as well as ordinary answer text (boundary review BR-1).
