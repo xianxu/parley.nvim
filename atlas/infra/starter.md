@@ -292,3 +292,5 @@ The app discovers `.parley` in the launch directory or its ancestors before
 setup, and explicitly passes that project root. A Git repository is not required.
 `starter_project_spec` exercises this using real marker-only fixture projects,
 nested cwd, an unmarked global launch and the preserved plugin chat-dir override.
+
+The packaged editor uses `ignorecase` + `smartcase` for native `/` and `?` search.

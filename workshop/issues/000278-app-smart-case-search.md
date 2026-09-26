@@ -27,8 +27,11 @@ Lowercase searches ignore case; searches containing uppercase match case.
 
 ## Plan
 
-- [ ] Set starter options, document behavior, and verify using Neovim search.
+- [x] Set starter options, document behavior, and verify using Neovim search.
 
 ## Log
 
 ### 2026-09-25
+
+- Verified production starter via /tmp/parley-278-search.lua: five native forward/backward searches prove lowercase matches all cases and uppercase matches exact case; all 19 real theme/statusline checks pass.
+- Two declarative options only; reused existing compatibility harness for a temporary behavioral smoke check. Starter lint/artifact and scoped whitespace checks pass.

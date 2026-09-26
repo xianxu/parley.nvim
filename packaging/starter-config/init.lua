@@ -10,6 +10,8 @@ end
 vim.g.mapleader = " "
 vim.opt.termguicolors = true
 vim.opt.signcolumn = "yes"
+vim.opt.ignorecase = true
+vim.opt.smartcase = true
 vim.opt.wrap = true
 vim.opt.linebreak = true
 vim.opt.breakindent = true

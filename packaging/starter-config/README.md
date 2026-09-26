@@ -1,7 +1,8 @@
 # Start chatting with Parley
 
 The app keeps its diagnostic gutter visible so footnotes and other signs do not
-shift text as you type.
+shift text as you type. Searches (`/` and `?`) ignore case unless you type an
+uppercase letter: `/parley` matches any casing, while `/Parley` matches that case.
 
 This profile gives Parley its own configuration, chats and account login. Your
 ordinary Neovim configuration stays separate. It requires Neovim 0.11 or newer,
