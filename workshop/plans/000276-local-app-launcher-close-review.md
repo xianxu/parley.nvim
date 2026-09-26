@@ -30,7 +30,7 @@ The statusline configuration and documentation are well scoped, and the focused 
 
 2. **Critical findings**
    - **`parley_app:9–14` — outside-checkout does not imply outside repo mode.** The guard accepts a demo directory containing `.parley`, or beneath an ancestor containing `.parley`, provided it is outside this checkout. Production startup then calls `detect_root()` at `lua/parley/starter.lua:171` and enables repo mode. I reproduced both cases through the launcher with a probe invoking the production detector; both launches succeeded and returned a repository root.
-     
+
      **Family enumeration:** a marker in the demo itself or any ancestor, reached through either `PARLEY_DEMO_DIR` or the default cache-derived location. Enforce non-repo startup explicitly or reject all marker-bearing ancestry. Add regression coverage crossing the launcher and production detection boundary, including a successful unmarked alternate profile. **ARCH-PURPOSE** is not yet satisfied.
 
 3. **Important findings:** None beyond the regression coverage required for the critical correction.
@@ -59,4 +59,72 @@ findings:
       Launcher accepts demo locations that enable repo mode
     detail: |
       parley_app:9–14 rejects only this checkout's descendants, while lua/parley/starter.lua:171 detects a .parley marker in the accepted cwd or its ancestors. Both cases reproduced through the launcher and production detector. The family covers markers in the demo or any ancestor, for both PARLEY_DEMO_DIR and cache-derived defaults. Explicitly enforce non-repo startup or reject marked ancestry, and add regression tests crossing the launcher/detection boundary plus a successful unmarked override. ARCH-PURPOSE: the promised non-repo app experience is not enforced.
+```
+
+---
+
+## Re-review — 2026-09-25T22:56:44-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 276 — Add local app onboarding launcher |
+| repo | parley.nvim |
+| issue file | workshop/issues/000276-local-app-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c231e52d3bfaab13eaec73983c1aa20ae2a4f8e3..1c3a67987111054c010810e2596c1616d9aa27a6 |
+| command | sdlc close --issue 276 |
+| reviewer | codex |
+| timestamp | 2026-09-25T22:56:44-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned change satisfies the issue’s launcher, isolation, tutorial editing, reset, and statusline contracts. BR-1 is addressed with a regression that fails when the fix is removed. No blocking findings remain.
+
+1. **Strengths**
+   - Launcher tests exercise path quoting, argument forwarding, profile reuse, and reset guards.
+   - Non-repo enforcement covers marked and unmarked default and alternate profiles.
+   - Statusline configuration reuses the existing Parley model/activity integration.
+   - README and atlas document the new surfaces.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** Trailing whitespace at `workshop/plans/000276-local-app-launcher-close-review.md:33`; the only instance reported by the pinned range’s whitespace check.
+
+5. **Test coverage**
+   - All six Python launcher tests passed.
+   - Removing `export PARLEY_REPO_MODE=0` in a scratch snapshot caused all four marked-location cases to fail.
+   - `make test-spec SPEC=infra/starter` passed against the pinned snapshot.
+   - Real Lualine rendering passed all 19 theme choices, three mode labels, and diagnostic gutter checks.
+   - Shell syntax passed. Process-survivor verification was unavailable because the harness could not use `ps`.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** shared starter, theme catalog, and statusline integration reused.
+   - **ARCH-PURE — pass:** changes remain thin process/startup glue and declarative configuration.
+   - **ARCH-PURPOSE — pass:** explicit startup enforcement resolves the entire marked-ancestry family.
+
+7. **Plan revisions:** None needed; existing revisions describe the delivered behavior.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      parley_app:56 exports PARLEY_REPO_MODE=0 and lua/parley/starter.lua:174–178 honors it. All six default/alternate and unmarked/demo-marker/ancestor-marker cases pass. Removing the launcher export in a pinned scratch snapshot makes all four marked cases fail with “demo entered repo mode.”
+findings:
+  - id: new
+    severity: Minor
+    family: whitespace-clean-review-artifacts
+    title: |
+      Generated review artifact contains trailing whitespace
+    detail: |
+      workshop/plans/000276-local-app-launcher-close-review.md:33 is the sole instance reported by git diff --check across this window. Remove the trailing spaces when the review artifact is next regenerated.
 ```

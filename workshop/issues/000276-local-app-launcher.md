@@ -1,6 +1,6 @@
 ---
 id: 000276
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-25
@@ -8,6 +8,7 @@ updated: 2026-09-25
 estimate_hours:
 started: 2026-09-25T22:30:00-07:00
 flow: {kind: quick, provenance: inferred, spec: "b24e62e0", done: "59419578"}
+actual_hours: 0.69
 ---
 
 # Add local app onboarding launcher
@@ -50,6 +51,7 @@ PARLEY_DEMO_DIR selects another profile; no user data is silently removed.
 ## Log
 
 ### 2026-09-25
+- 2026-09-25: closed — Six launcher tests pass; 182 starter assertions pass; 119 theme assertions pass; all19 real Lualine/theme checks pass including stable gutter text offsets with diagnostics added/removed. Scoped reset, direct source edits and marker ancestry covered by red-green tests. Previous review deliberately interrupted for user gutter request; full correction now ready. Lint/syntax/artifact checks pass.; review verdict: SHIP
 
 - User requested a one-command local app demo, then a simple prominent mode bar.
 - Theme-picker v2.6.0 was published separately before this follow-up.

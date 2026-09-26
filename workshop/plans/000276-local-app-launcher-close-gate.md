@@ -21,6 +21,23 @@ rounds:
       recipe: small-diff-review
       blocked: true
       protocol_error: no valid findings block
+    - "n": 3
+      timestamp: "2026-09-25T22:56:44-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: parley_app:56 exports PARLEY_REPO_MODE=0 and lua/parley/starter.lua:174–178 honors it. All six default/alternate and unmarked/demo-marker/ancestor-marker cases pass. Removing the launcher export in a pinned scratch snapshot makes all four marked cases fail with “demo entered repo mode.”
+          round: 3
+      findings:
+        - id: BR-2
+          severity: Minor
+          title: Generated review artifact contains trailing whitespace
+          detail: workshop/plans/000276-local-app-launcher-close-review.md:33 is the sole instance reported by git diff --check across this window. Remove the trailing spaces when the review artifact is next regenerated.
+          family: whitespace-clean-review-artifacts
+          round: 3
+      recipe: small-diff-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#276 (boundary-review)
@@ -39,6 +56,17 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 **Protocol error:** no valid findings block — this round contributed no findings.
 
+## Round 3 — 2026-09-25T22:56:44-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — parley_app:56 exports PARLEY_REPO_MODE=0 and lua/parley/starter.lua:174–178 honors it. All six default/alternate and unmarked/demo-marker/ancestor-marker cases pass. Removing the launcher export in a pinned scratch snapshot makes all four marked cases fail with “demo entered repo mode.”
+
+### Raised
+
+- **BR-2** [Minor] `whitespace-clean-review-artifacts` Generated review artifact contains trailing whitespace
+  workshop/plans/000276-local-app-launcher-close-review.md:33 is the sole instance reported by git diff --check across this window. Remove the trailing spaces when the review artifact is next regenerated.
+
 ## Open findings
 
-- **BR-1** [Critical] `enforce-non-repo-launch` Launcher accepts demo locations that enable repo mode
+- **BR-2** [Minor] `whitespace-clean-review-artifacts` Generated review artifact contains trailing whitespace
