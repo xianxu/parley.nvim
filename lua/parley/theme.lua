@@ -87,7 +87,9 @@ end
 function M.load(state_dir)
     local path = M.preference_path(state_dir)
     if vim.fn.filereadable(path) ~= 1 then return nil end
-    local ok, value = pcall(vim.json.decode, table.concat(vim.fn.readfile(path), "\n"))
+    local read_ok, lines = pcall(vim.fn.readfile, path)
+    if not read_ok then return DEFAULT.id end
+    local ok, value = pcall(vim.json.decode, table.concat(lines, "\n"))
     if not ok or type(value) ~= "table" then return DEFAULT.id end
     return M.valid_id(value.id)
 end
@@ -110,6 +112,9 @@ end
 function M.apply(id, opts)
     opts = opts or {}
     local spec = M.find(id)
+    if spec.startup and opts.startup_scheme and opts.startup_scheme ~= "" then
+        spec.colorscheme = opts.startup_scheme
+    end
     local apply_colorscheme = opts.apply_colorscheme or vim.cmd.colorscheme
     local ok, err = pcall(apply_colorscheme, spec.colorscheme)
     if not ok then return false, err end

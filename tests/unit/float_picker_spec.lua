@@ -397,7 +397,7 @@ describe("float_picker", function()
             end)
         end
 
-        it("reports effective selection changes without submitting", function()
+    it("reports effective selection changes without submitting", function()
             local seen = {}
             local picker = float_picker.open({
                 title = "Preview",
@@ -415,8 +415,9 @@ describe("float_picker", function()
             assert.equals("function", type(mapping.callback))
             mapping.callback()
             assert.same({ "beta" }, seen)
-            assert.is_false(picker.is_closed())
-        end)
+        assert.is_false(picker.is_closed())
+    end)
+
 
         it("ignores confirm while a status row is active", function()
             local selected = false

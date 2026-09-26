@@ -1029,6 +1029,7 @@ function M.open(opts)
     local function set_selection(idx, selection_opts)
         selection_opts = selection_opts or {}
         local previous_idx = sel_idx
+        local previous_item = filtered[sel_idx]
         sel_idx = math.max(1, math.min(idx, math.max(1, #filtered)))
         if vim.api.nvim_win_is_valid(results_win) then
             local target_row = visual_row_for_index(sel_idx)
@@ -1077,8 +1078,13 @@ function M.open(opts)
                 end)
             end
         end
-        if previous_idx ~= sel_idx and not closed and filtered[sel_idx] then
-            on_selection_change(filtered[sel_idx])
+        local current_item = filtered[sel_idx]
+        local changed_item = previous_item ~= current_item
+            and (not previous_item or not current_item
+                or previous_item.value ~= current_item.value
+                or previous_item.display ~= current_item.display)
+        if (previous_idx ~= sel_idx or changed_item) and not closed and current_item then
+            on_selection_change(current_item)
         end
     end
 
@@ -1708,6 +1714,7 @@ function M.open(opts)
     --- move the cursor under the operator.
     local function update(new_items, new_tag_bar_tags, next_selection)
         if closed then return end
+        local previous_item = get_selected_item()
         local next_identity
         if type(next_selection) == "string" then
             next_identity = next_selection
@@ -1745,6 +1752,11 @@ function M.open(opts)
                     break
                 end
             end
+        end
+        local current_item = get_selected_item()
+        if current_item and current_item ~= previous_item
+            and (not previous_item or recall_id_fn(current_item) ~= recall_id_fn(previous_item)) then
+            on_selection_change(current_item)
         end
     end
 

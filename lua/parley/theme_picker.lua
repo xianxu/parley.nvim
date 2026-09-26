@@ -10,8 +10,9 @@ local function item_index(items, id)
     return 1
 end
 
-local function apply(parley, id)
-    local ok, result = theme.apply(id, {
+local function apply(parley, id, startup_scheme)
+  local ok, result = theme.apply(id, {
+    startup_scheme = startup_scheme,
         on_applied = function()
             parley.setup_highlight()
         end,
@@ -56,10 +57,10 @@ function M.open(parley)
         initial_index = item_index(items, initial_id),
         recall_key = "parley.theme_picker",
         on_selection_change = function(item)
-            apply(parley, item.value)
+      apply(parley, item.value, opening_scheme)
         end,
         on_select = function(item)
-            if apply(parley, item.value) then
+      if apply(parley, item.value, opening_scheme) then
                 local saved, err = theme.save(parley.config.state_dir, item.value, parley.helpers)
                 if not saved then
                     vim.notify("Parley theme preference was not saved: " .. tostring(err), vim.log.levels.WARN)

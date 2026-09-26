@@ -111,3 +111,14 @@
 - The picker adds no persistent file beyond one validated theme id and removes no existing user configuration (ARCH-FUNERAL/ARCH-SECURE).
 - Theme metadata, picker items, startup validation, and compatibility enumeration derive from one registry (ARCH-DRY/ARCH-PURPOSE).
 - Existing users can continue to set any external colorscheme in their own config; `:ParleyTheme` only offers schemes that the packaged registry can load and provides startup restore as an explicit escape hatch.
+
+## Revisions
+
+### 2026-09-25 — boundary review fixes
+
+- Selection-change notifications now compare selected item identity across
+  repaints, so filtering cannot leave the visible row and preview out of sync.
+- Startup restore uses the colorscheme captured when the picker opened for
+  ordinary plugin use; the packaged startup still supplies Moonfly.
+- Preference reads treat filesystem races and unreadable state as the startup
+  fallback instead of allowing startup to raise.
