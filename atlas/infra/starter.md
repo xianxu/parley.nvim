@@ -32,6 +32,11 @@ directory to avoid repo detection, and isolates HOME plus all XDG roots. The
 default `${XDG_CACHE_HOME:-$HOME/.cache}/parley-app-demo` is reused, bounding this
 helper to one profile; `PARLEY_DEMO_DIR` selects another operator-owned profile.
 Unlike the installed application, its HOME isolation separates credential files.
+The launcher explicitly sets `PARLEY_REPO_MODE=0` so markers in any demo ancestor
+cannot enable repo mode. `--tutorials` sets `PARLEY_CHAT_DIR` to the checkout's
+source tutorials; the starter expands and canonicalizes that override. State and
+credentials remain in the demo. `--nuke` removes the owned demo profile and exits,
+leaving source tutorials untouched.
 
 The starter installs pinned Lualine with an automatic theme, prominent mode,
 chat name and cursor position. Existing `parley.lualine` integration supplies

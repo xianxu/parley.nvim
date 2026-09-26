@@ -168,7 +168,14 @@ function M.start()
     local parley = require('parley')
     local options = require('parley.starter_config').options(roots)
     migrate_auth(roots.data .. '/auth', vim.fn.expand(require('parley.config').cliproxy.auth_dir))
-    options.repo_root = require('parley.repo_mode').detect_root(vim.fn.getcwd(), require('parley.config').repo_marker)
+    if vim.env.PARLEY_CHAT_DIR and vim.env.PARLEY_CHAT_DIR ~= '' then
+        options.chat_dir = vim.fs.normalize(vim.fn.resolve(vim.fn.fnamemodify(vim.fn.expand(vim.env.PARLEY_CHAT_DIR), ':p')))
+    end
+    if vim.env.PARLEY_REPO_MODE == '0' then
+        options.repo_root = false
+    else
+        options.repo_root = require('parley.repo_mode').detect_root(vim.fn.getcwd(), require('parley.config').repo_marker)
+    end
     parley.setup(options)
     -- Attachment labels remain ordinary visible Markdown in the starter.
     local group = vim.api.nvim_create_augroup('ParleyStarter', { clear = true })

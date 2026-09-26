@@ -191,4 +191,9 @@ current local code. The helper launches outside repo mode and reuses a dedicated
 demo profile; `PARLEY_DEMO_DIR=/path/outside/repo ./parley_app` selects another.
 The first run downloads editor plugins. Normal Parley configuration is untouched.
 
+- `./parley_app --tutorials`: use this checkout's `packaging/tutorials/` as the
+  chat folder, so edits change the release's source documents directly.
+- `./parley_app --nuke`: delete only the owned demo profile and exit. Launch
+  again for first-run setup; this includes downloading editor plugins again.
+
 Verify the launcher boundary with `python3 tests/packaging/test_local_app.py`.

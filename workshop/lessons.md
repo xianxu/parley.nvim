@@ -142,3 +142,9 @@ oracle, and the mutation that would make the test fail.
 - Starter dependencies used before the plugin manager initializes must be available
   in both launcher-provided and documented standalone startup. Test both with
   fresh processes and isolated data homes; never inject the runtime into every fixture.
+
+## 2026-09-25 (#276 — local app launch)
+
+- Outside one checkout is not necessarily outside repo mode: parent markers
+  elsewhere still count. Enforce the requested mode at production startup and
+  test the real detector with marked default and alternate profile ancestry.

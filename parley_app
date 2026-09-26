@@ -2,17 +2,58 @@
 # Run this checkout's app profile without entering repo mode.
 set -eu
 repo=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+unset PARLEY_CHAT_DIR
+if [ "${1:-}" = "--tutorials" ]; then
+    export PARLEY_CHAT_DIR="$repo/packaging/tutorials"
+    shift
+fi
 demo=${PARLEY_DEMO_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/parley-app-demo}
+nuke=0
+if [ "${1:-}" = "--nuke" ]; then
+    nuke=1
+    shift
+    [ "$#" -eq 0 ] || { echo 'parley_app: --nuke takes no arguments' >&2; exit 1; }
+fi
+if [ -L "$demo" ]; then
+    echo 'parley_app: demo directory must not be a symlink' >&2; exit 1
+fi
+if [ "$nuke" -eq 1 ] && [ ! -e "$demo" ]; then exit 0; fi
 umask 077
 mkdir -p "$demo"
 demo=$(CDPATH= cd -- "$demo" && pwd -P)
 case "$demo/" in
     "$repo/"*) echo 'parley_app: demo directory must be outside the checkout' >&2; exit 1 ;;
 esac
+case "$repo/" in
+    "$demo/"*) echo 'parley_app: demo directory must not contain the checkout' >&2; exit 1 ;;
+esac
+marker="$demo/.parley-app-demo"
+if [ ! -f "$marker" ] || [ "$(cat "$marker")" != 'parley_app v1' ]; then
+    if [ "$nuke" -eq 1 ] || [ -n "$(ls -A "$demo")" ]; then
+        echo 'parley_app: refusing an unowned demo directory' >&2; exit 1
+    fi
+    printf 'parley_app v1\n' > "$marker"
+fi
+if [ -f "$demo/.nvim-pid" ]; then
+    pid=$(cat "$demo/.nvim-pid")
+    case "$pid" in
+        ''|*[!0-9]*) echo 'parley_app: invalid demo process marker' >&2; exit 1 ;;
+    esac
+    if kill -0 "$pid" 2>/dev/null; then
+        echo 'parley_app: demo is running; close it before retrying' >&2; exit 1
+    fi
+fi
+if [ "$nuke" -eq 1 ]; then
+    rm -rf -- "$demo"
+    printf 'Removed Parley demo profile: %s\n' "$demo" >&2
+    exit 0
+fi
+printf '%s\n' "$$" > "$demo/.nvim-pid"
 mkdir -p "$demo/home"
 printf 'Parley demo profile: %s\n' "$demo" >&2
 cd "$demo"
 export HOME="$demo/home" NVIM_APPNAME=parley PARLEY_RUNTIME="$repo"
+export PARLEY_REPO_MODE=0
 export XDG_CONFIG_HOME="$demo/config" XDG_DATA_HOME="$demo/data"
 export XDG_STATE_HOME="$demo/state" XDG_CACHE_HOME="$demo/cache"
 exec nvim -u "$repo/packaging/starter-config/init.lua" "$@"

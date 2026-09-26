@@ -55,6 +55,9 @@ To try the app from a checkout, run `./parley_app`. It loads the local starter
 outside repo mode, using a separate demo home and profile. Subsequent launches
 reuse that demo's chats, login and plugins. Its location is printed at startup;
 set `PARLEY_DEMO_DIR` to another directory to test a new profile.
+Use `./parley_app --tutorials` to edit `packaging/tutorials/` directly through
+the app. `./parley_app --nuke` removes the demo profile and exits; the next launch
+starts fresh. Source tutorials and the normal installed app profile are retained.
 
 ## Editing while an answer is generated
 
