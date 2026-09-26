@@ -31,8 +31,8 @@ ARCH-FUNERAL).
 
 ## Plan
 
-- [ ] Add a pending previous-answer lifecycle to document memory and clear it on all terminal paths.
-- [ ] Delete the old answer before response preparation, rebuild current geometry, and add regression coverage for immediate removal plus concurrent context.
+- [x] Add a pending previous-answer lifecycle to document memory and clear it on all terminal paths.
+- [x] Delete the old answer before response preparation, rebuild current geometry, and add regression coverage for immediate removal plus concurrent context.
 
 ## Log
 
