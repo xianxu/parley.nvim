@@ -708,3 +708,68 @@ findings:
 
 7. **Plan revision recommendation**
    - Append a `## Revisions` entry covering runtime discovery before registry consumption and standalone startup verification with `PARLEY_RUNTIME` absent. Preserve the documented copy-and-launch workflow.
+
+---
+
+## Re-review — 2026-09-25T22:25:57-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 275 — Add a packaged Parley theme picker with live preview |
+| repo | parley.nvim |
+| issue file | workshop/issues/000275-packaged-theme-picker.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | d8da2fe2132dc4946ae02955b7431746139fb285..5790d12c135afee9cb33ac7558c6d41dbc406fe2 |
+| command | sdlc close --issue 275 |
+| reviewer | codex |
+| timestamp | 2026-09-25T22:25:57-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range delivers the revised theme-picker contract. BR-10 is addressed with reachable startup code and regression tests that fail without the fix. No new blocking findings emerged. Repository files were left unchanged.
+
+```findings
+dispose:
+  - id: BR-10
+    disposition: addressed
+    note: |
+      packaging/starter-config/init.lua:80-104 establishes the standalone runtime before requiring the registry. Fresh/cached startup and failure-cleanup tests pass; replacing the starter with its parent revision in a scratch copy makes all three new regressions fail.
+```
+
+1. **Strengths**
+   - Standalone bootstrap reuses the existing lock, deadline, staging cleanup, and Git boundary.
+   - Tests verify stable-release selection, cache reuse, incompatible-cache preservation, and failed-install cleanup.
+   - Picker choices, dependency pins, validation, and compatibility enumeration derive from the theme registry.
+   - README, packaging guidance, atlas, and plan revisions cover the delivered surface.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Focused mapped suite: **119 passed**, zero failures.
+   - Real-plugin compatibility: **19 entries passed**; installed plugin commits match registry pins.
+   - BR-10 mutation: **three regressions failed** with the previous starter.
+   - Pinned-range `git diff --check`: passed.
+   - Limitation: process-survivor census was skipped because sandboxed `ps` was unavailable.
+
+6. **Architecture**
+   - **ARCH-DRY — Pass:** registry metadata feeds runtime and test consumers.
+   - **ARCH-PURE — Pass:** registry operations are deterministic; editor/filesystem effects reside in integration functions.
+   - **ARCH-PURPOSE — Pass:** expanded choices and both launcher/standalone startup paths are delivered.
+   - **ARCH-MOCK — Pass:** local Git repositories and the Lazy fixture exercise production bootstrap; real pinned themes provide compatibility evidence.
+   - **ARCH-CONSTRAINTS — Pass:** previews are synchronous/local; bootstrap retains bounded waits and its existing deadline.
+   - **ARCH-SECURE — Pass:** persisted ids are validated, Git uses argv, and incompatible caches are preserved with actionable errors.
+   - **ARCH-ORDER — Pass:** shared picker dismissal resolves cancellation; failed confirmation restores appearance. Bootstrap retains serialized publication.
+   - **ARCH-FUNERAL — Pass:** preference storage is rewritten, staging is cleaned, and runtime installation reuses one managed cache.
+
+7. **Plan revision recommendations:** None; appended revisions reconcile the final scope and BR-10 behavior.

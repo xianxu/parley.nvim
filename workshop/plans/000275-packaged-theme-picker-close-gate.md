@@ -277,6 +277,16 @@ rounds:
           round: 7
       recipe: milestone-review
       blocked: true
+    - "n": 8
+      timestamp: "2026-09-25T22:25:58-07:00"
+      agent: codex
+      dispose:
+        - id: BR-10
+          disposition: addressed
+          note: packaging/starter-config/init.lua:80-104 establishes the standalone runtime before requiring the registry. Fresh/cached startup and failure-cleanup tests pass; replacing the starter with its parent revision in a scratch copy makes all three new regressions fail.
+          round: 8
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#275 (boundary-review)
@@ -393,6 +403,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-10** [Critical] `dependency-bootstrap-order` Standalone starter requires Parley before installing or loading it
   packaging/starter-config/init.lua:9 unconditionally requires parley.theme before Lazy bootstrap. The documented standalone launch without PARLEY_RUNTIME fails immediately with module 'parley.theme' not found. Establish the Parley runtime before consuming its registry, retaining one metadata source, and add fresh/cached standalone startup regressions without PARLEY_RUNTIME (ARCH-PURPOSE).
 
+## Round 8 — 2026-09-25T22:25:58-07:00 (codex) — passed
+
+### Disposed
+
+- BR-10 — addressed — packaging/starter-config/init.lua:80-104 establishes the standalone runtime before requiring the registry. Fresh/cached startup and failure-cleanup tests pass; replacing the starter with its parent revision in a scratch copy makes all three new regressions fail.
+
 ## Open findings
 
-- **BR-10** [Critical] `dependency-bootstrap-order` Standalone starter requires Parley before installing or loading it
+(none — every finding has been disposed)

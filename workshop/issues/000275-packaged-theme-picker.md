@@ -1,13 +1,14 @@
 ---
 id: 000275
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-25
 updated: 2026-09-25
 estimate_hours:
 started: 2026-09-25T18:16:29-07:00
-flow: {kind: quick, provenance: inferred, spec: "0fcfca21", done: "70554023"}
+flow: {kind: full, provenance: inferred}
+actual_hours: 5.02
 ---
 
 # Add a packaged Parley theme picker with live preview
@@ -91,6 +92,8 @@ keyboard/mouse entry through the production command.
 ## Log
 
 ### 2026-09-25
+- 2026-09-25: closed — 119 mapped theme tests pass including fresh and cached standalone bootstrap without PARLEY_RUNTIME, safe old-cache refusal, and staging cleanup; red-green proof recorded. All 19 pinned themes verified, preview terminal outcomes and production persistence tested. Starter artifact check, lint and diff checks pass. User approved ship.; review verdict: SHIP
+- 2026-09-25: flow upgraded quick → full — 337 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Filed and claimed as #275. Approved design: full colorscheme switching with
   live preview in the existing floating picker; four packaged dark/light,
