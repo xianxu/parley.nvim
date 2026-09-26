@@ -26,6 +26,7 @@ end
 function M.open(parley)
     local saved_id = theme.load(parley.config.state_dir)
     local opening_scheme = vim.g.colors_name
+    local opening_background = vim.o.background
     local specs = theme.items()
     local items = {}
     for _, spec in ipairs(specs) do
@@ -47,7 +48,8 @@ function M.open(parley)
     local function restore()
         if opening_scheme and opening_scheme ~= "" then
             local ok = pcall(vim.cmd.colorscheme, opening_scheme)
-            if ok then parley.setup_highlight() end
+      if ok then parley.setup_highlight() end
+      vim.o.background = opening_background
         end
     end
 

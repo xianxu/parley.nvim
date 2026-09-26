@@ -1172,6 +1172,7 @@ function M.open(opts)
     end
 
     local function apply_filter(reset_selection)
+        local previous_item = get_selected_item()
         local query = query_text:gsub("^%s+", "")
         if query == "" then
             filtered = vim.deepcopy(items)
@@ -1260,6 +1261,11 @@ function M.open(opts)
                     tostring(initial_index)
                 ))
             end
+        end
+        local current_item = get_selected_item()
+        if reset_selection ~= false and current_item and current_item ~= previous_item
+            and (not previous_item or recall_id_fn(current_item) ~= recall_id_fn(previous_item)) then
+            on_selection_change(current_item)
         end
         highlight_matches(query)
     end
