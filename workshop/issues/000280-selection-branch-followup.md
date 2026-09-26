@@ -1,13 +1,14 @@
 ---
 id: 000280
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-26
 updated: 2026-09-26
 estimate_hours:
 started: 2026-09-26T00:04:13-07:00
-flow: {kind: quick, provenance: inferred, spec: "58bd1b89", done: "537e7912"}
+flow: {kind: full, provenance: inferred}
+actual_hours: N/A
 ---
 
 # Seed selection branches with a quoted follow-up question
@@ -45,6 +46,8 @@ plain branches, gathered quote prompts, parent anchors and existing single-line 
 ## Log
 
 ### 2026-09-26
+- 2026-09-26: closed — Selection behavior: 18 formatter and 63 branch-child cases pass. BR-1: 8 launcher tests pass, including deterministic competing launch/reset in both orders. BR-2: all 25 architecture cases, 7 starter option cases and 18 starter integration cases pass. Lua/shell lint and scoped whitespace pass. Operator tutorials preserved. Actual telemetry unavailable; N/A avoids fabricated hours.; review verdict: SHIP
+- 2026-09-26: flow upgraded quick → full — 123 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Red: selection child wording and insertion landing differed from requested draft.
 - Green: 18 branch-submit unit cases and 63 branch-child integration cases pass; exact layout/cursor, custom prefix, percent signs, parent durability and unchanged plain/gathered modes covered.

@@ -80,3 +80,71 @@ findings:
     detail: |
       lua/parley/starter_config.lua:61-63 introduces three accesses rejected by tests/arch/single_source_sweeps_spec.lua:662. The indexed pinned snapshot reports 24 passed and 1 failed; removing those accesses yields 25 passed. Integrate the overrides into option construction or explicitly justify the guard's supported exemption for configuration assembly, preserving runtime registry enforcement.
 ```
+
+---
+
+## Re-review — 2026-09-26T10:47:42-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 280 — Seed selection branches with a quoted follow-up question |
+| repo | parley.nvim |
+| issue file | workshop/issues/000280-selection-branch-followup.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c231e52d3bfaab13eaec73983c1aa20ae2a4f8e3..507a7b2fec9c3131d1eb6b57293d5af40de7014c |
+| command | sdlc close --issue 280 |
+| reviewer | codex |
+| timestamp | 2026-09-26T10:47:42-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range fulfills #280’s selection-draft contract and addresses both prior findings. Selection branches share the formatter, preserve parent durability, and land below the quote. Launcher ownership is serialized, and shortcut configuration passes the unchanged architecture guard. No blocking findings remain.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      parley_app holds a canonical sibling lock through validation, PID publication, and reset. All eight launcher tests pass. Restoring the pre-fix launcher makes the controlled race regressions fail, including reset incorrectly succeeding during launch.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      starter_config.lua assembles aliases inside the registry loop. The unchanged architecture suite passes 25 cases; restoring the prior implementation produces 24 passes and one failure identifying all three shortcut accesses. Starter unit and integration tests also pass.
+```
+
+1. **Strengths**
+   - `lua/parley/branch_submit.lua:48` keeps selection formatting pure and shared with lazy child creation; quote marks, percent signs, and multiline payloads have coverage.
+   - `lua/parley/init.lua:2370` preserves deferred-navigation checks while placing selection drafts on the empty typing line. Integration tests verify saved parent anchors and unchanged plain/gathered branches.
+   - `parley_app:28` places the operation lock outside the reset target. Tests control competing operations instead of relying on scheduler timing.
+   - README and atlas updates cover the new launcher, shortcuts, and selection behavior.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+   - Pinned scratch snapshot: **8 launcher tests and 185 targeted Lua tests passed**, covering architecture, branch formatting/navigation, starter configuration, and proxy lifecycle.
+   - Both prior fixes have independently verified failing regression evidence without their corrections.
+   - Mapped inline-branch tests and diff whitespace checks also passed.
+   - Full-suite and real-theme statusline checks were not rerun. The sandbox prevented the harness’s process census.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** selection consumers reuse the seed formatter; aliases use existing registry assembly.
+   - **ARCH-PURE — pass:** formatting remains free of IO; file and editor effects remain in integration callers. Core-concept classifications match the code.
+   - **ARCH-PURPOSE — pass:** documented layout, insertion landing, preservation requirements, and stacked corrections are delivered.
+   - **ARCH-MOCK — pass:** launcher tests use controllable process doubles; proxy tests exercise the existing stateful service fixture.
+   - **ARCH-CONSTRAINTS — pass:** competing profile operations fail promptly; selection formatting adds linear work over the existing bounded selection scope.
+   - **ARCH-SECURE — pass:** quoted arguments, ownership checks, isolated profile roots, and symlink/checkout exclusions protect the changed boundaries.
+   - **ARCH-ORDER — pass:** ownership checks and effects share the lock; deterministic tests cover competing launch/reset sequences.
+   - **ARCH-FUNERAL — pass:** normal paths remove locks; abandoned-lock recovery is documented. Profiles are reused and have an explicit reset path.
+
+7. **Plan revision recommendations:** None. The existing revisions and concept table match the implementation.
