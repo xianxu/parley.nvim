@@ -1558,6 +1558,10 @@ local function start_scoped_response(frame)
     -- The captured request excludes the answer being replaced. The old bytes
     -- have already been removed; preparation now installs the new shell.
     exchange.answer = nil
+    -- Keep the request snapshot aligned with the visible replacement.  This is
+    -- especially important for tool content blocks, which otherwise remain
+    -- eligible for the target exchange after its answer was cleared above.
+    if input_parsed.exchanges[index] then input_parsed.exchanges[index].answer = nil end
     local input_index = index
     if frame.input_rows then
         local source_parsed = input_parsed
