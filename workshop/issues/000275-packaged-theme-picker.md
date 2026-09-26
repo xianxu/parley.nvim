@@ -66,11 +66,11 @@ keyboard/mouse entry through the production command.
 ## Plan
 
 - Durable implementation plan: `workshop/plans/000275-packaged-theme-picker-plan.md`.
-- [ ] Add the pure theme registry and persistence/apply seam with unit coverage.
-- [ ] Add packaged theme dependencies and startup restoration.
-- [ ] Add the `:ParleyTheme` picker with live preview, commit, and cancel restore.
-- [ ] Add compatibility/integration tests and user documentation.
-- [ ] Run the focused suite and full required verification; log evidence.
+- [x] Add the pure theme registry and persistence/apply seam with unit coverage.
+- [x] Add packaged theme dependencies and startup restoration.
+- [x] Add the `:ParleyTheme` picker with live preview, commit, and cancel restore.
+- [x] Add compatibility/integration tests and user documentation.
+- [x] Run the focused suite and full required verification; log evidence.
 
 ## Log
 
@@ -85,3 +85,18 @@ keyboard/mouse entry through the production command.
 - Spec review: preview and persistence are now separate; cancellation restores
   both the visual scheme and saved id, startup restore is an explicit fifth
   item, and compatibility acceptance names representative syntax groups.
+- Implemented the registry, persisted preference, generic selection-change
+  callback, picker command, starter dependencies, startup restoration, atlas
+  map, and packaging documentation.
+- Focused verification passed: theme registry (5), float picker (81), and
+  production `:ParleyTheme` integration (1); `make lint PLENARY=/tmp/plenary.nvim`
+  passed with 0 warnings and 0 errors.
+- Loaded each pinned external colorscheme in a clean Neovim process and
+  reapplied Parley highlights: Catppuccin Mocha, Tokyo Night Storm, Catppuccin
+  Latte, and Solarized Light all passed representative `ParleyQuestion` and
+  `NormalFloat` checks.
+- Broader unit verification passed with no surviving test processes. The
+  parallel integration fan-out had unrelated environment-sensitive failures
+  (proxy/network, fresh-clone, starter bootstrap, and killed parity workers);
+  changed-path packaging, picker, sidecar, traceability, and single-source
+  checks passed when run serially.
