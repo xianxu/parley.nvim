@@ -185,3 +185,17 @@ These strengthen the same acceptance contract (ARCH-PURPOSE, ARCH-MOCK).
 Verification: the 113-test mapped suite passes. Removing the production starter
 restoration line in a temporary copy fails both saved-choice tests (dayfox and
 OneDark); removing variant assignment fails real-plugin compatibility at darker.
+
+### 2026-09-25 — BR-9 preview terminal outcomes
+
+Every closed theme session either saves a valid choice or restores its opening
+appearance (ARCH-ORDER). Empty confirmation uses the shared dismissal path; failed
+application or failed preference persistence restores in the theme adapter.
+Escape, interrupt, focus loss, resize-invalidated windows, and the public close
+handle already reach dismissal. Theme picker installs no custom close mappings.
+Status-row confirmation keeps the panel open. Successful keyboard/mouse selection
+commits; failed loads remain previews until confirmed or cancelled.
+
+Three production-command regressions reproduce empty confirmation, failed-load
+confirmation after an earlier preview, and failed preference writes. All three
+failed before the correction.

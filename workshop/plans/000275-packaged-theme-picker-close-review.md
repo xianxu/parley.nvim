@@ -498,3 +498,106 @@ dispose:
 7. **Plan revision recommendations**
 
    Append a `## Revisions` entry distinguishing helper-level restart coverage from production startup coverage. Reconcile the acceptance claims after adding scheme/variant assertions and fresh-start persistence tests, recording the mutations each detects.
+
+---
+
+## Re-review — 2026-09-25T22:12:18-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 275 — Add a packaged Parley theme picker with live preview |
+| repo | parley.nvim |
+| issue file | workshop/issues/000275-packaged-theme-picker.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | d8da2fe2132dc4946ae02955b7431746139fb285..7bc2cccb9004c1ae4f74b75df4cd54ea91f44d13 |
+| command | sdlc close --issue 275 |
+| reviewer | codex |
+| timestamp | 2026-09-25T22:12:18-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-4 is addressed: production-path coverage now exercises the requested behaviors, and all 113 mapped tests plus all 19 pinned-plugin compatibility cases pass. One newly reproduced correctness bug blocks shipping: confirming an empty search closes the picker while leaving an uncommitted preview active.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Production-command tests cover preview, commit, cancellation, mouse mappings, and failed loads. Fresh starter tests cover persisted choices and fallback. Independently removing startup restoration in a scratch copy fails both saved-choice tests. The real compatibility matrix passes all 19 entries against verified plugin pins.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Selection notifications compare item identity; the production filter-change regression passes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Starter dependencies derive from packaged_plugins(), with registry-derived dependency assertions in the bootstrap fixture.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Startup is captured before preference restoration; fresh-process saved-theme and startup-sentinel assertions pass.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Preference reads protect readfile with pcall; the unreadable-state regression passes.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      README.md now documents :ParleyTheme, Moonfly startup, Enter persistence, and Escape restoration, matching the implemented command.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Solarized declares light mode; both production-command and real-plugin checks pass.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Failed application restores the previous snapshot; production-command tests verify appearance and unchanged preference after partial failure and missing packages.
+findings:
+  - id: new
+    severity: Critical
+    family: preview-terminal-outcomes
+    title: |
+      Confirming no matches closes the picker without resolving its preview
+    detail: |
+      lua/parley/float_picker.lua:1111-1121 closes unconditionally but invokes on_select only when an item exists; it never invokes on_cancel for empty results. Reproduced through :ParleyTheme: preview dayfox, filter to no matches, press Enter. Both floats close and no preference is saved, but dayfox remains instead of the opening Moonfly. Enforce the rule that every preview-session exit commits a valid selection or restores the opening snapshot; alternatively keep empty confirmation open. Enumerate terminal paths and add a production-command regression (ARCH-ORDER, ARCH-PURPOSE).
+```
+
+1. **Strengths**
+   - Registry-derived packaging, picker choices, and validation share one authority.
+   - Startup and picker-opening snapshots correctly serve different purposes.
+   - Real-plugin compatibility verifies scheme identity, OneDark variant, background, and highlight groups.
+   - README and atlas updates cover the new user and architectural surfaces.
+
+2. **Critical findings**
+   - Empty confirmation strands the preview. The closing branch is at [float_picker.lua:1111](/Users/xianxu/workspace/parley.nvim/lua/parley/float_picker.lua:1111); restoration depends on `on_cancel` at [theme_picker.lua:70](/Users/xianxu/workspace/parley.nvim/lua/parley/theme_picker.lua:70). Route this outcome through cancellation or retain the open picker.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+   - Mapped suite: **113 passed**.
+   - Real compatibility matrix: **19 passed**; installed commit hashes match registry pins.
+   - Startup mutation: **two expected failures**, proving the saved-choice tests detect missing restoration.
+   - Added scratch reproduction: **11 existing cases passed, one new case failed**, observing `dayfox` instead of `moonfly` after empty confirmation.
+   - `git diff --check` passed. Process-leak census was unavailable because the harness could not use `ps`. Repository files were unchanged.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** consumers derive from the registry.
+   - **ARCH-PURE — pass:** registry queries remain deterministic; editor/filesystem operations are classified as integration.
+   - **ARCH-PURPOSE — flag:** the preview lifecycle remains incomplete for empty confirmation.
+   - **ARCH-MOCK — pass:** executable color fixtures exercise production loading; pinned real plugins provide compatibility evidence.
+   - **ARCH-CONSTRAINTS — pass:** fixed choice set and synchronous local application; no new background fan-out.
+   - **ARCH-SECURE — pass:** preference validation and isolated test state cover malformed/unreadable inputs.
+   - **ARCH-ORDER — flag:** a terminal path invokes neither commit nor cancellation.
+   - **ARCH-FUNERAL — pass:** one overwritten preference file; existing picker cleanup owns windows and callbacks.
+
+7. **Plan revision recommendation**
+   - Append a `## Revisions` entry defining empty-confirmation behavior and the invariant that every closed preview session resolves through commit or restoration. Include its production-path regression evidence.

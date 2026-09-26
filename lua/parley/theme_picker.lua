@@ -63,8 +63,11 @@ function M.open(parley)
             if apply(parley, item.value) then
                 local saved, err = theme.save(parley.config.state_dir, item.value, parley.helpers)
                 if not saved then
+                    restore()
                     vim.notify("Parley theme preference was not saved: " .. tostring(err), vim.log.levels.WARN)
                 end
+            else
+                restore()
             end
         end,
         on_cancel = restore,

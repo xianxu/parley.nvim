@@ -135,3 +135,6 @@ oracle, and the mutation that would make the test fail.
 - Theme compatibility must assert scheme identity and variant, not only the
   presence of highlights. Persistence acceptance must enter fresh production
   startup; calling load/apply directly cannot verify the startup wiring.
+- Enumerate every preview exit: no-result confirmation and failed commits need
+  the same restoration semantics as cancellation. Test failure after a successful
+  preview, not only from the original appearance.

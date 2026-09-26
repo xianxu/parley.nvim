@@ -93,6 +93,22 @@ describe(":ParleyTheme", function()
         assert.equals("carbonfox", theme.load(parley.config.state_dir))
     end)
 
+    it("restores the opening theme when confirming an empty search", function()
+        assert.is_true(theme.save(parley.config.state_dir, "startup", parley.helpers))
+        vim.cmd("ParleyTheme")
+        query("dayfox")
+        assert.equals("dayfox", vim.g.colors_name)
+        query("no-such-theme-xyz")
+        mapping(0, "i", "<CR>")()
+        settle()
+        assert.equals("moonfly", vim.g.colors_name)
+        assert.equals("dark", vim.o.background)
+        assert.equals("startup", theme.load(parley.config.state_dir))
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+            assert.equals("", vim.api.nvim_win_get_config(win).relative)
+        end
+    end)
+
     it("previews another filter result even when its index remains one", function()
         vim.cmd("ParleyTheme")
         query("carbonfox")
@@ -170,6 +186,32 @@ describe(":ParleyTheme", function()
         query("nightfox")
         vim.fn.writefile(original, path)
         assert.same(before, theme.snapshot())
+        assert.is_nil(theme.load(parley.config.state_dir))
+    end)
+
+    it("restores the opening theme when confirming a failed preview", function()
+        vim.cmd("ParleyTheme")
+        query("dayfox")
+        local path = root .. "/runtime/colors/nightfox.lua"
+        local original = vim.fn.readfile(path)
+        vim.fn.delete(path)
+        query("nightfox")
+        mapping(0, "i", "<CR>")()
+        settle()
+        vim.fn.writefile(original, path)
+        assert.equals("moonfly", vim.g.colors_name)
+        assert.is_nil(theme.load(parley.config.state_dir))
+    end)
+
+    it("restores the opening theme when saving the selection fails", function()
+        local save = parley.helpers.table_to_file_atomic
+        parley.helpers.table_to_file_atomic = function() return false, "fixture write failure" end
+        vim.cmd("ParleyTheme")
+        query("dayfox")
+        mapping(0, "i", "<CR>")()
+        settle()
+        parley.helpers.table_to_file_atomic = save
+        assert.equals("moonfly", vim.g.colors_name)
         assert.is_nil(theme.load(parley.config.state_dir))
     end)
 

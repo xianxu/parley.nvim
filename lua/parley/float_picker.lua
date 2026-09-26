@@ -1109,6 +1109,10 @@ function M.open(opts)
             return
         end
         local item = get_selected_item()
+        if not item then
+            dismiss()
+            return
+        end
         close_all()
         if item then
             if recall_key then

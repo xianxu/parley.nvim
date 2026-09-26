@@ -146,3 +146,11 @@ keyboard/mouse entry through the production command.
 - Failed/missing scheme previews now enter through :ParleyTheme and preserve
   the appearance and preference. Focused suite passes 113 tests; real-plugin
   matrix passes all 19; changed test lint and git diff --check pass.
+
+### 2026-09-25 — BR-9 terminal preview resolution
+
+- Review disposed BR-4 and reproduced empty-confirmation preview retention.
+- Enumerated all theme exit paths. Empty confirmation now dismisses/restores;
+  confirming an unavailable scheme or failed save restores the opening snapshot.
+- Three production-command regressions failed before the fix; mapped suite now
+  passes 116 tests (14 theme command tests), with lint and diff checks clean.

@@ -183,6 +183,51 @@ rounds:
           round: 5
       recipe: milestone-review
       blocked: false
+    - "n": 6
+      timestamp: "2026-09-25T22:12:18-07:00"
+      agent: codex
+      dispose:
+        - id: BR-4
+          disposition: addressed
+          note: Production-command tests cover preview, commit, cancellation, mouse mappings, and failed loads. Fresh starter tests cover persisted choices and fallback. Independently removing startup restoration in a scratch copy fails both saved-choice tests. The real compatibility matrix passes all 19 entries against verified plugin pins.
+          round: 6
+        - id: BR-1
+          disposition: addressed
+          note: Selection notifications compare item identity; the production filter-change regression passes.
+          round: 6
+        - id: BR-2
+          disposition: addressed
+          note: Starter dependencies derive from packaged_plugins(), with registry-derived dependency assertions in the bootstrap fixture.
+          round: 6
+        - id: BR-3
+          disposition: addressed
+          note: Startup is captured before preference restoration; fresh-process saved-theme and startup-sentinel assertions pass.
+          round: 6
+        - id: BR-5
+          disposition: addressed
+          note: Preference reads protect readfile with pcall; the unreadable-state regression passes.
+          round: 6
+        - id: BR-6
+          disposition: addressed
+          note: README.md now documents :ParleyTheme, Moonfly startup, Enter persistence, and Escape restoration, matching the implemented command.
+          round: 6
+        - id: BR-7
+          disposition: addressed
+          note: Solarized declares light mode; both production-command and real-plugin checks pass.
+          round: 6
+        - id: BR-8
+          disposition: addressed
+          note: Failed application restores the previous snapshot; production-command tests verify appearance and unchanged preference after partial failure and missing packages.
+          round: 6
+      findings:
+        - id: BR-9
+          severity: Critical
+          title: Confirming no matches closes the picker without resolving its preview
+          detail: 'lua/parley/float_picker.lua:1111-1121 closes unconditionally but invokes on_select only when an item exists; it never invokes on_cancel for empty results. Reproduced through :ParleyTheme: preview dayfox, filter to no matches, press Enter. Both floats close and no preference is saved, but dayfox remains instead of the opening Moonfly. Enforce the rule that every preview-session exit commits a valid selection or restores the opening snapshot; alternatively keep empty confirmation open. Enumerate terminal paths and add a production-command regression (ARCH-ORDER, ARCH-PURPOSE).'
+          family: preview-terminal-outcomes
+          round: 6
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#275 (boundary-review)
@@ -262,6 +307,24 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-7 — addressed — Application sets the registry background mode. Removing that assignment for Solarized makes the production-command light-mode regression fail.
 - BR-8 — addressed — Failed application restores the previous snapshot. Removing rollback makes the partial-highlight-failure regression fail.
 
+## Round 6 — 2026-09-25T22:12:18-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-4 — addressed — Production-command tests cover preview, commit, cancellation, mouse mappings, and failed loads. Fresh starter tests cover persisted choices and fallback. Independently removing startup restoration in a scratch copy fails both saved-choice tests. The real compatibility matrix passes all 19 entries against verified plugin pins.
+- BR-1 — addressed — Selection notifications compare item identity; the production filter-change regression passes.
+- BR-2 — addressed — Starter dependencies derive from packaged_plugins(), with registry-derived dependency assertions in the bootstrap fixture.
+- BR-3 — addressed — Startup is captured before preference restoration; fresh-process saved-theme and startup-sentinel assertions pass.
+- BR-5 — addressed — Preference reads protect readfile with pcall; the unreadable-state regression passes.
+- BR-6 — addressed — README.md now documents :ParleyTheme, Moonfly startup, Enter persistence, and Escape restoration, matching the implemented command.
+- BR-7 — addressed — Solarized declares light mode; both production-command and real-plugin checks pass.
+- BR-8 — addressed — Failed application restores the previous snapshot; production-command tests verify appearance and unchanged preference after partial failure and missing packages.
+
+### Raised
+
+- **BR-9** [Critical] `preview-terminal-outcomes` Confirming no matches closes the picker without resolving its preview
+  lua/parley/float_picker.lua:1111-1121 closes unconditionally but invokes on_select only when an item exists; it never invokes on_cancel for empty results. Reproduced through :ParleyTheme: preview dayfox, filter to no matches, press Enter. Both floats close and no preference is saved, but dayfox remains instead of the opening Moonfly. Enforce the rule that every preview-session exit commits a valid selection or restores the opening snapshot; alternatively keep empty confirmation open. Enumerate terminal paths and add a production-command regression (ARCH-ORDER, ARCH-PURPOSE).
+
 ## Open findings
 
-- **BR-4** [Important] `production-path-coverage` Theme acceptance behavior lacks production-path tests
+- **BR-9** [Critical] `preview-terminal-outcomes` Confirming no matches closes the picker without resolving its preview
