@@ -97,6 +97,12 @@ local ok, err = xpcall(function()
         { "bluz71/vim-moonfly-colors", name = "moonfly", lazy = false, priority = 1000,
             commit = "4ed07bc0c6083cdd547c63f5c245e02c068b0c45",
             config = function() vim.cmd.colorscheme("moonfly") end },
+        { "catppuccin/nvim", name = "catppuccin", lazy = false, priority = 999,
+            commit = "edefef779ab08ce1a4a404713e3012b0d202bd35" },
+        { "folke/tokyonight.nvim", name = "tokyonight", lazy = false, priority = 999,
+            commit = "cdc07ac78467a233fd62c493de29a17e0cf2b2b6" },
+        { "altercation/vim-colors-solarized", name = "solarized", lazy = false, priority = 999,
+            commit = "528a59f26d12278698bb946f8fb82a63711eec21" },
         { "nvim-lua/plenary.nvim", commit = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
         { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026" },
         { "iamcco/markdown-preview.nvim",
@@ -136,6 +142,8 @@ local ok, err = xpcall(function()
     local installer = package.loaded["lazy.view"]
     if installer and installer.visible() then installer.view:close() end
     vim.api.nvim_set_current_win(main_window)
+    local theme = require("parley.theme")
+    theme.apply(theme.load(data .. "/parley/persisted") or "startup")
     require("parley.starter").start()
 end, debug.traceback)
 timer:stop()

@@ -577,6 +577,7 @@ end
 ---   height     number   – desired results height (optional, #items by default)
 ---   on_select  function(item) – called on confirmation
 ---   on_cancel  function()    – called on cancel/dismiss (optional)
+---   on_selection_change function(item) – called after keyboard/mouse selection moves (optional)
 ---   on_query_change function(query) – called when prompt text changes (optional)
 ---   mappings   table    – list of { key: string|string[], fn: function(item, close_fn) }
 ---                         keys are mapped in the prompt (insert mode)
@@ -593,6 +594,7 @@ function M.open(opts)
     local title          = opts.title or "Select"
     local on_select      = opts.on_select or function() end
     local on_cancel      = opts.on_cancel or function() end
+    local on_selection_change = opts.on_selection_change or function() end
     local on_query_change = opts.on_query_change or function() end
     local extra_mappings = opts.mappings or {}
     local tag_bar_opts = opts.tag_bar  -- optional: { tags = [{label, enabled}], on_toggle = fn(label) }
@@ -1026,6 +1028,7 @@ function M.open(opts)
 
     local function set_selection(idx, selection_opts)
         selection_opts = selection_opts or {}
+        local previous_idx = sel_idx
         sel_idx = math.max(1, math.min(idx, math.max(1, #filtered)))
         if vim.api.nvim_win_is_valid(results_win) then
             local target_row = visual_row_for_index(sel_idx)
@@ -1073,6 +1076,9 @@ function M.open(opts)
                     vim.fn.winrestview({ topline = topline, leftcol = 0 })
                 end)
             end
+        end
+        if previous_idx ~= sel_idx and not closed and filtered[sel_idx] then
+            on_selection_change(filtered[sel_idx])
         end
     end
 

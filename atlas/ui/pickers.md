@@ -96,6 +96,7 @@ remain.
 
 ## Picker Types
 - **Agent** (`:ParleyAgent`): select active agent
+- **Theme** (`:ParleyTheme`): preview and commit a packaged editor colorscheme
 - **System Prompt** (`:ParleySystemPrompt`): select active system prompt
 - **Chat Finder** (`:ParleyChatFinder` / `<C-g>f`): asynchronously browse chats by recency, tags, and roots; joinable mtime-cached header prewarm; sticky filter fragments across reopens
 - **Note Finder** (`:ParleyNoteFinder` / `<C-n>f`): asynchronously browse recursive note metadata with joinable prewarm; special folders bypass recency

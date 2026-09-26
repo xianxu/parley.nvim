@@ -12,12 +12,12 @@
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `ThemeSpec` | `lua/parley/theme.lua` | new |
-| `ThemeRegistry` | `lua/parley/theme.lua` | new |
-| `ThemePreference` | `lua/parley/theme.lua` | new |
-| `ThemeApplier` | `lua/parley/theme.lua` | new |
-| `ThemePicker` | `lua/parley/theme_picker.lua` | new |
-| `FloatPickerSelectionChange` | `lua/parley/float_picker.lua` | modified |
+| `DEFAULT` | `lua/parley/theme.lua` | new |
+| `items` | `lua/parley/theme.lua` | new |
+| `valid_id` | `lua/parley/theme.lua` | new |
+| `apply` | `lua/parley/theme.lua` | new |
+| `open` | `lua/parley/theme_picker.lua` | new |
+| `set_selection` | `lua/parley/float_picker.lua` | modified |
 
 - `ThemeSpec` is an immutable registry row: id, display label, colorscheme command, dark/light mode, colorful/subdued style, and whether it is the startup default.
 - `ThemeRegistry` is the only enumeration of choices. It includes Moonfly as the startup/default scheme, the four packaged choices, and a sentinel restore row; callers derive picker items and validation from it (ARCH-DRY, ARCH-PURPOSE).
@@ -29,10 +29,10 @@
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `ThemeStateStore` | `lua/parley/theme.lua` | new | Parley `state_dir` filesystem |
-| `ThemeColorschemeLoader` | `packaging/starter-config/init.lua` | modified | lazy.nvim and pinned theme plugins |
-| `ParleyThemeCommand` | `lua/parley/init.lua` | modified | Neovim user command and current UI |
-| `FloatPickerSelectionChange` | `lua/parley/float_picker.lua` | modified | cursor/mouse selection events |
+| `save` | `lua/parley/theme.lua` | new | Parley `state_dir` filesystem |
+| `lazy` | `packaging/starter-config/init.lua` | modified | lazy.nvim and pinned theme plugins |
+| `Theme` | `lua/parley/init.lua` | modified | Neovim user command and current UI |
+| `set_selection` | `lua/parley/float_picker.lua` | modified | cursor/mouse selection events |
 
 - `ThemeStateStore` uses the existing atomic file helper or a dedicated one-line state file inside `config.state_dir`; it validates the read value before applying it. Tests use the existing isolated test state root, never the operator’s real profile.
 - `ThemeColorschemeLoader` adds pinned Catppuccin, Tokyo Night, and Solarized plugin specs to the packaged starter. Catppuccin supplies both Mocha and Latte; Tokyo Night supplies Storm; Solarized supplies Light. Moonfly remains the default. The adapter tolerates a missing optional scheme by notifying and retaining the prior scheme.

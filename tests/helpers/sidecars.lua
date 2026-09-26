@@ -19,6 +19,32 @@ local FakeProcess = require("tests.helpers.fake_process")
 
 return {
     {
+        reader = "lua/parley/theme.lua",
+        file = "theme.json",
+        writes = "rewrite", why = "app-owned theme preference; invalid ids fall back to startup",
+        wrong_shapes = {
+            { id = 3 },
+            { id = "unknown" },
+        },
+        exercise = function(parley)
+            local id = require("parley.theme").load(parley.config.state_dir)
+            assert(id == nil or type(id) == "string")
+        end,
+    },
+    {
+        reader = "lua/parley/theme_picker.lua",
+        file = "theme.json",
+        writes = "rewrite", why = "picker reads the same validated app-owned preference",
+        wrong_shapes = {
+            { id = 3 },
+            { id = "unknown" },
+        },
+        exercise = function(parley)
+            local id = require("parley.theme").load(parley.config.state_dir)
+            assert(id == nil or type(id) == "string")
+        end,
+    },
+    {
         reader = "lua/parley/init.lua",
         file = "state.json",
         writes = "rewrite", why = "app-owned settings; refresh_state persists the typed state",

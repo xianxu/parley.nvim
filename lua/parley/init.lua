@@ -36,6 +36,8 @@ chat_parser = require("parley.chat_parser"), -- chat file parser
 	system_prompt_picker = require("parley.system_prompt_picker"), -- system prompt selection UI
 	note_dir_picker = require("parley.note_dir_picker"), -- note root management UI
 	float_picker = require("parley.float_picker"), -- shared floating window picker
+	theme = require("parley.theme"), -- packaged full-colorscheme registry
+	theme_picker = require("parley.theme_picker"), -- live-preview theme picker
 }
 
 -- Chat slug module for filename slug generation and parsing
@@ -1335,6 +1337,13 @@ M.setup = function(opts)
 
 	-- set up buffer update handler
 	M.setup_buf_handler()
+	-- Restore a previously committed packaged theme after Parley has loaded its
+	-- configuration and semantic highlight definitions. Missing state preserves
+	-- the caller's existing colorscheme (the packaged starter applies Moonfly).
+	local persisted_theme = M.theme.load(M.config.state_dir)
+	if persisted_theme then
+		M.theme.apply(persisted_theme, { on_applied = M.setup_highlight })
+	end
 	-- Leaving Neovim kills every process Parley still owns (#261 M3). Only a
 	-- crash of Neovim itself leaves orphans, which then run to their own end.
 	vim.api.nvim_create_autocmd("VimLeavePre", {
@@ -5092,6 +5101,12 @@ M.cmd.NoteDirRemove = function(p) note_dirs.cmd_note_dir_remove(p) end
 --------------------------------------------------------------------------------
 -- Agent functionality
 --------------------------------------------------------------------------------
+
+-- Full Neovim colorscheme selection with live preview. The picker owns the
+-- preview/commit boundary; this command only enters that production surface.
+M.cmd.Theme = function()
+	M.theme_picker.open(M)
+end
 
 M.cmd.Agent = function(params)
 	local agent_name = string.gsub(params.args, "^%s*(.-)%s*$", "%1")
