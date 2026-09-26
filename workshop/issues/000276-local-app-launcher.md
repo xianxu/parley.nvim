@@ -108,3 +108,5 @@ and removal. All 19 theme/statusline checks still pass.
 The in-progress review was deliberately interrupted to include this new request;
 its unknown verdict is an interruption, not a completed review or new finding.
 Re-run close on the complete change after the focused starter checks finish.
+
+- 2026-09-26: #280 full boundary review found stale PID observations across competing launcher operations. Serialize launch/reset ownership checks and effects; add deterministic competing-launch and launch/reset tests (ARCH-ORDER).

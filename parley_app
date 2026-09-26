@@ -14,19 +14,35 @@ if [ "${1:-}" = "--nuke" ]; then
     shift
     [ "$#" -eq 0 ] || { echo 'parley_app: --nuke takes no arguments' >&2; exit 1; }
 fi
+umask 077
+# Lock beside the profile so reset cannot delete the lock. Canonicalize the
+# parent first, including for a not-yet-created profile and symlinked parents.
+leaf=$(basename -- "$demo")
+case "$leaf" in
+    .|..|/) echo 'parley_app: invalid demo directory' >&2; exit 1 ;;
+esac
+parent=$(dirname -- "$demo")
+mkdir -p "$parent"
+parent=$(CDPATH= cd -- "$parent" && pwd -P)
+demo="${parent%/}/$leaf"
+lock="$demo.launcher-lock"
+if ! mkdir "$lock" 2>/dev/null; then
+    echo "parley_app: profile locked: $lock; if abandoned, remove it after closing launchers" >&2
+    exit 1
+fi
+trap 'rmdir "$lock"' 0
+trap 'exit 1' HUP INT TERM
 if [ -L "$demo" ]; then
     echo 'parley_app: demo directory must not be a symlink' >&2; exit 1
 fi
 if [ "$nuke" -eq 1 ] && [ ! -e "$demo" ]; then exit 0; fi
-umask 077
-mkdir -p "$demo"
-demo=$(CDPATH= cd -- "$demo" && pwd -P)
 case "$demo/" in
     "$repo/"*) echo 'parley_app: demo directory must be outside the checkout' >&2; exit 1 ;;
 esac
 case "$repo/" in
     "$demo/"*) echo 'parley_app: demo directory must not contain the checkout' >&2; exit 1 ;;
 esac
+mkdir -p "$demo"
 marker="$demo/.parley-app-demo"
 if [ ! -f "$marker" ] || [ "$(cat "$marker")" != 'parley_app v1' ]; then
     if [ "$nuke" -eq 1 ] || [ -n "$(ls -A "$demo")" ]; then
@@ -56,4 +72,7 @@ export HOME="$demo/home" NVIM_APPNAME=parley PARLEY_RUNTIME="$repo"
 export PARLEY_REPO_MODE=0
 export XDG_CONFIG_HOME="$demo/config" XDG_DATA_HOME="$demo/data"
 export XDG_STATE_HOME="$demo/state" XDG_CACHE_HOME="$demo/cache"
+# The published PID stays live across exec; contenders now see a running app.
+rmdir "$lock"
+trap - 0 HUP INT TERM
 exec nvim -u "$repo/packaging/starter-config/init.lua" "$@"

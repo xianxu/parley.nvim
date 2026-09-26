@@ -153,3 +153,10 @@ oracle, and the mutation that would make the test fail.
 
 - Do not gate a service client on a locally installed server executable. Let the
   service lifecycle owner probe an existing server before checking spawn prerequisites.
+
+## 2026-09-26 (#280 — review of local app changes)
+
+- Serialize profile ownership checks with launch/reset effects; checking a PID
+  without a shared lock does not protect a concurrently launched editor.
+- Assemble app aliases inside the registry-derived options loop and run the
+  single-source architecture suite when changing shortcut configuration.

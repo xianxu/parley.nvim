@@ -32,6 +32,14 @@ plain branches, gathered quote prompts, parent anchors and existing single-line 
 
 - [x] Update seed formatter and selection-only child layout/cursor placement; test content, saved parent and insertion landing.
 
+## Core concepts
+
+| Entity | Kind | Location | Status |
+|---|---|---|---|
+| `seed_question` | PURE | lua/parley/branch_submit.lua | modified |
+| `create_child_chat` | INTEGRATION | lua/parley/init.lua | modified |
+| `open_branch_question` | INTEGRATION | lua/parley/init.lua | modified |
+
 ## Log
 
 ### 2026-09-26
@@ -39,3 +47,11 @@ plain branches, gathered quote prompts, parent anchors and existing single-line 
 - Red: selection child wording and insertion landing differed from requested draft.
 - Green: 18 branch-submit unit cases and 63 branch-child integration cases pass; exact layout/cursor, custom prefix, percent signs, parent durability and unchanged plain/gathered modes covered.
 - Changed Lua lint and scoped whitespace checks pass. Operator tutorial edits remain excluded.
+
+## Revisions
+
+- 2026-09-26: Full boundary review includes earlier stacked app changes. Correct the launch/reset race and assemble app aliases inside the existing registry loop; Option+i scope remains unchanged.
+
+- Architecture guard follow-up: record the modified child-creation API and cursor helper in Core concepts; no new implementation scope.
+
+- BR-1 corrected with sibling operation lock and deterministic competing-launch/reset regressions (8 launcher tests pass). BR-2 corrected by assembling all aliases in the registry loop; architecture suite 25 pass and starter option tests 7 pass.

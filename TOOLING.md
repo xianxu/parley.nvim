@@ -197,3 +197,7 @@ The first run downloads editor plugins. Normal Parley configuration is untouched
   again for first-run setup; this includes downloading editor plugins again.
 
 Verify the launcher boundary with `python3 tests/packaging/test_local_app.py`.
+
+Demo launch/reset operations serialize through a sibling `.launcher-lock`
+directory. A competing operation fails with its lock path. After a crashed
+launcher, close launchers and remove that empty lock directory before retrying.

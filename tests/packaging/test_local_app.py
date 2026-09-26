@@ -6,12 +6,131 @@ import shutil
 import shlex
 import subprocess
 import tempfile
+import time
 import unittest
 
 REPO = Path(__file__).resolve().parents[2]
 
 
 class LocalAppTest(unittest.TestCase):
+    def test_launch_serializes_with_competing_launch_and_reset(self):
+        for competing_args in ([], ["--nuke"]):
+            with self.subTest(args=competing_args), tempfile.TemporaryDirectory() as scratch:
+                root = Path(scratch).resolve()
+                demo = root / "demo"
+                demo.mkdir()
+                (demo / ".parley-app-demo").write_text("parley_app v1\n")
+                # A completed process gives us a genuinely stale PID.
+                stale = subprocess.Popen(["true"])
+                stale.wait()
+                (demo / ".nvim-pid").write_text(str(stale.pid))
+                bin_dir = root / "bin"
+                bin_dir.mkdir()
+                cat = bin_dir / "cat"
+                cat.write_text("#!/usr/bin/env python3\n"
+                               "import os, pathlib, sys, time\n"
+                               "value = pathlib.Path(sys.argv[1]).read_text()\n"
+                               "root = pathlib.Path(os.environ['RACE_ROOT'])\n"
+                               "if sys.argv[1].endswith('/.nvim-pid') and not (root / 'ready').exists():\n"
+                               "    (root / 'ready').touch()\n"
+                               "    while not (root / 'resume').exists(): time.sleep(.01)\n"
+                               "sys.stdout.write(value)\n")
+                cat.chmod(0o755)
+                editor = bin_dir / "nvim"
+                editor.write_text("#!/usr/bin/env python3\n"
+                                  "import os, pathlib, time\n"
+                                  "root = pathlib.Path(os.environ['RACE_ROOT'])\n"
+                                  "(root / 'editor').touch()\n"
+                                  "while not (root / 'stop').exists(): time.sleep(.01)\n")
+                editor.chmod(0o755)
+                env = dict(os.environ, PARLEY_DEMO_DIR=str(demo), RACE_ROOT=str(root),
+                           PATH=str(bin_dir) + os.pathsep + os.environ["PATH"])
+                command = [str(REPO / "parley_app")]
+                first = subprocess.Popen(command, env=env, text=True,
+                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                try:
+                    deadline = time.monotonic() + 5
+                    while not (root / "ready").exists() and time.monotonic() < deadline:
+                        time.sleep(.01)
+                    self.assertTrue((root / "ready").exists(), "launcher never reached PID check")
+                    second = subprocess.Popen(command + competing_args, env=env, text=True,
+                                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    try:
+                        _, error = second.communicate(timeout=2)
+                        self.assertNotEqual(0, second.returncode, error)
+                        self.assertIn("locked", error)
+                    finally:
+                        if second.poll() is None:
+                            second.terminate()
+                            second.communicate(timeout=5)
+                    self.assertTrue((demo / ".parley-app-demo").exists())
+                    (root / "resume").touch()
+                    deadline = time.monotonic() + 5
+                    while not (root / "editor").exists() and time.monotonic() < deadline:
+                        time.sleep(.01)
+                    self.assertTrue((root / "editor").exists())
+                    # Once launch unlocks, its published live PID still prevents reset.
+                    result = subprocess.run(command + ["--nuke"], env=env, text=True,
+                                            capture_output=True, timeout=5)
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("running", result.stderr)
+                finally:
+                    (root / "resume").touch()
+                    (root / "stop").touch()
+                    first.communicate(timeout=5)
+                self.assertEqual(0, first.returncode)
+                result = subprocess.run(command + ["--nuke"], env=env, text=True,
+                                        capture_output=True, timeout=5)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertFalse(demo.exists())
+
+    def test_reset_lock_survives_profile_deletion_and_is_not_stolen(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch).resolve()
+            demo = root / "demo"
+            demo.mkdir()
+            (demo / ".parley-app-demo").write_text("parley_app v1\n")
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            remove = bin_dir / "rm"
+            remove.write_text("#!/usr/bin/env python3\n"
+                              "import os, pathlib, shutil, sys, time\n"
+                              "shutil.rmtree(sys.argv[-1])\n"
+                              "root = pathlib.Path(os.environ['RACE_ROOT'])\n"
+                              "(root / 'deleted').touch()\n"
+                              "while not (root / 'resume').exists(): time.sleep(.01)\n")
+            remove.chmod(0o755)
+            env = dict(os.environ, PARLEY_DEMO_DIR=str(demo), RACE_ROOT=str(root),
+                       PATH=str(bin_dir) + os.pathsep + os.environ["PATH"])
+            command = [str(REPO / "parley_app")]
+            reset = subprocess.Popen(command + ["--nuke"], env=env, text=True,
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                deadline = time.monotonic() + 5
+                while not (root / "deleted").exists() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertTrue((root / "deleted").exists())
+                for args in ([], ["--nuke"]):
+                    result = subprocess.run(command + args, env=env, text=True,
+                                            capture_output=True, timeout=5)
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("locked", result.stderr)
+                    self.assertFalse(demo.exists())
+            finally:
+                (root / "resume").touch()
+                reset.communicate(timeout=5)
+            self.assertEqual(0, reset.returncode)
+            lock = root / "demo.launcher-lock"
+            self.assertFalse(lock.exists())
+            lock.mkdir()  # Simulate an abandoned lock: fail closed, never steal it.
+            for args in ([], ["--nuke"]):
+                result = subprocess.run(command + args, env=env, text=True,
+                                        capture_output=True, timeout=5)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("locked", result.stderr)
+                self.assertTrue(lock.exists())
+                self.assertFalse(demo.exists())
+
     def test_production_starter_stays_non_repo_for_marked_demo_ancestry(self):
         real_nvim = shutil.which("nvim")
         self.assertIsNotNone(real_nvim)
