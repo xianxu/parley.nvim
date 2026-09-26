@@ -148,6 +148,15 @@ describe('chat_respond: scoped session integration',function()
         Respond.respond({range=0})
         wait_for(function()return #calls==2 end)
     end
+    it('clears the pending previous answer when a re-ask is cancelled before output',function()
+        open({'💬: question','','🤖: original','valuable answer',''})
+        local session=submit()
+        local doc=require('parley.document').get(buf)
+        assert.is_true(require('parley.document')._previous_count(doc) > 0)
+        Respond.cancel_responses(buf)
+        wait_for(function()return Respond.response_snapshot(session).status=='terminal'end)
+        assert.equals(0,require('parley.document')._previous_count(doc))
+    end)
     -- Characterization: passes before #261 through the in-process retry cache.
     -- Kept because deleting that cache must not break the immediate retry.
     it('regenerates immediately after a revoked regeneration',function()
