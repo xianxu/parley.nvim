@@ -60,19 +60,24 @@ keyboard/mouse entry through the production command.
 
 ## Done when
 
-- `:ParleyTheme` opens the existing floating-picker style with the four packaged
-  options plus a fifth startup-theme restore action.
+- `:ParleyTheme` opens the existing floating-picker style with 18 packaged
+  variants plus a startup-theme restore action (19 entries total).
 - Moving the cursor or selecting with the mouse applies the highlighted full
   colorscheme immediately to the surrounding Neovim UI and Parley buffer.
 - Preview movement never persists. Enter/mouse selection persists the theme;
   Escape/cancel restores both the scheme and saved id active when the picker
-  opened. Choosing startup restore commits the default/sentinel value.
+  opened, including its OneDark variant and background mode. Choosing startup
+  restore commits the sentinel and uses the launch snapshot before preferences.
 - A fresh packaged launch restores the saved selection and invalid state falls
   back safely to Moonfly.
 - Every packaged option is tested with Parley's semantic highlight groups,
   representative syntax groups (`Normal`, `Comment`, `String`, `Identifier`,
   and `Title`), float groups, and statusline surfaces.
-- User documentation names the startup theme and `:ParleyTheme` command.
+- User documentation names the startup theme and `:ParleyTheme` command,
+  all seven OneDark styles and all seven Nightfox variants, and the upgrade
+  step for an existing copied starter configuration.
+- Failed scheme loads roll back appearance; filtering changes preview by
+  item identity even when the row index stays the same.
 
 ## Plan
 
