@@ -49,6 +49,28 @@ local CHOICES = {
     },
 }
 
+local onedark_plugin = { "navarasu/onedark.nvim", name = "onedark",
+    commit = "df4792accde9db0043121f32628bcf8e645d9aea" }
+for _, variant in ipairs({ "dark", "darker", "cool", "deep", "warm", "warmer", "light" }) do
+    CHOICES[#CHOICES + 1] = {
+        id = "onedark-" .. variant,
+        label = "OneDark " .. variant,
+        colorscheme = "onedark",
+        mode = variant == "light" and "light" or "dark",
+        variant = variant,
+        plugin = onedark_plugin,
+    }
+end
+local nightfox_plugin = { "EdenEast/nightfox.nvim", name = "nightfox",
+    commit = "4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a" }
+for _, name in ipairs({ "nightfox", "dayfox", "dawnfox", "duskfox", "nordfox", "terafox", "carbonfox" }) do
+    CHOICES[#CHOICES + 1] = {
+        id = name, label = name, colorscheme = name,
+        mode = (name == "dayfox" or name == "dawnfox") and "light" or "dark",
+        plugin = nightfox_plugin,
+    }
+end
+
 local function copy(spec)
     local result = {}
     for key, value in pairs(spec) do result[key] = value end
@@ -113,33 +135,49 @@ function M.load(state_dir)
 end
 
 function M.save(state_dir, id, helpers)
-    if helpers and helpers.prepare_dir then
-        helpers.prepare_dir(state_dir, "theme preference")
-    else
-        require("parley.fs").ensure_dir(state_dir)
-    end
-    local value = { id = M.valid_id(id) }
-    if helpers and helpers.table_to_file_atomic then
-        return helpers.table_to_file_atomic(value, M.preference_path(state_dir))
-    end
-    local ok, encoded = pcall(vim.json.encode, value)
-    if not ok then return false, encoded end
-    return vim.fn.writefile({ encoded }, M.preference_path(state_dir)) == 0
+    helpers = helpers or require("parley.helper")
+    local ok, err = pcall(require("parley.fs").ensure_dir, state_dir)
+    if not ok then return false, err end
+    return helpers.table_to_file_atomic({ id = M.valid_id(id) }, M.preference_path(state_dir))
+end
+
+local startup_snapshot
+
+function M.snapshot()
+    return { colorscheme = vim.g.colors_name or "default", mode = vim.o.background,
+        onedark_config = vim.deepcopy(vim.g.onedark_config) }
+end
+
+function M.capture_startup()
+    if not startup_snapshot then startup_snapshot = M.snapshot() end
+end
+
+function M.restore(snapshot)
+    vim.g.onedark_config = vim.deepcopy(snapshot.onedark_config)
+    vim.o.background = snapshot.mode
+    return pcall(vim.cmd.colorscheme, snapshot.colorscheme)
 end
 
 function M.apply(id, opts)
     opts = opts or {}
+    M.capture_startup()
     local spec = M.find(id)
-    local previous_background = vim.o.background
-    if spec.startup and opts.startup_scheme and opts.startup_scheme ~= "" then
-        spec.colorscheme = opts.startup_scheme
+    local previous = M.snapshot()
+    if spec.startup then
+        spec.colorscheme = startup_snapshot.colorscheme
+        spec.mode = startup_snapshot.mode
     end
-    if spec.mode == "light" then vim.o.background = "light" end
-    if spec.mode == "dark" then vim.o.background = "dark" end
-    local apply_colorscheme = opts.apply_colorscheme or vim.cmd.colorscheme
-    local ok, err = pcall(apply_colorscheme, spec.colorscheme)
+    local ok, err = pcall(function()
+        vim.o.background = spec.mode
+        if spec.startup then
+            vim.g.onedark_config = vim.deepcopy(startup_snapshot.onedark_config)
+        elseif spec.variant then
+            vim.g.onedark_config = vim.tbl_extend("force", vim.g.onedark_config or {}, { style = spec.variant })
+        end
+        (opts.apply_colorscheme or vim.cmd.colorscheme)(spec.colorscheme)
+    end)
     if not ok then
-        vim.o.background = previous_background
+        M.restore(previous)
         return false, err
     end
     if opts.on_applied then opts.on_applied(spec) end

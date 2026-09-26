@@ -120,3 +120,15 @@ Incident detail belongs in the issue or plan that owns it.
 Before changing a shared Neovim or terminal surface, draw its state scopes and
 owners. Then name the production trigger, the callback's live anchor, the exact
 oracle, and the mutation that would make the test fail.
+
+## 2026-09-25 (#275 — theme release)
+
+- Reproduce startup with the exact copied profile before giving a launch command.
+  Homebrew wrappers can override environment variables; starter updates preserve
+  existing init.lua and publish init.lua.new, so fixing source does not repair
+  an existing copied profile.
+- A live picker effect follows selected identity across filtering, not row number.
+  Capture startup separately from picker-open state; verify both cancellation
+  and startup restore after a saved choice has loaded.
+- Run regression tests before requesting another boundary review; unused helper
+  functions and passing command-registration tests do not prove the correction.

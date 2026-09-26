@@ -41,7 +41,8 @@ describe('starter bootstrap', function()
             GIT_CONFIG_VALUE_0 = 'https://github.com/folke/lazy.nvim.git',
             BOOTSTRAP_CALLS = root .. '/calls', BOOTSTRAP_RESULT = root .. '/result',
             PARLEY_RUNTIME = root .. '/runtime', }
-        vim.fn.mkdir(env.PARLEY_RUNTIME, 'p')
+        vim.fn.mkdir(env.PARLEY_RUNTIME .. '/lua/parley', 'p')
+        vim.fn.writefile(vim.fn.readfile('lua/parley/theme.lua'), env.PARLEY_RUNTIME .. '/lua/parley/theme.lua')
     end)
     after_each(function() vim.fn.delete(root, 'rf') end)
 

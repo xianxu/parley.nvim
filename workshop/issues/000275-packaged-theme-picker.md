@@ -14,6 +14,17 @@ flow: {kind: quick, provenance: inferred, spec: "0fcfca21", done: "70554023"}
 
 ## Problem
 
+## Revisions
+
+### 2026-09-25 — expand packaged choices at user request
+
+Add every style from navarasu/onedark.nvim and every variant from
+EdenEast/nightfox.nvim, preserving existing choices. Pinned source inspection
+found seven OneDark styles and seven fox variants. All 14 loaded in isolated
+Neovim with correct colorscheme/background, OneDark style, and resolved Normal,
+Comment, String, Identifier, Title, NormalFloat, FloatBorder, StatusLine and
+ParleyQuestion highlights. Theme registry unit tests pass (6).
+
 ## Spec
 
 Parley should expose `:ParleyTheme`, a compact floating picker that selects
@@ -100,3 +111,20 @@ keyboard/mouse entry through the production command.
   (proxy/network, fresh-clone, starter bootstrap, and killed parity workers);
   changed-path packaging, picker, sidecar, traceability, and single-source
   checks passed when run serially.
+
+### 2026-09-25 — release verification
+
+- User exercised expanded picker and explicitly approved shipping.
+- Final regression suite: 11 production picker cases, 7 real starter-bootstrap
+  fixture cases, 81 float-picker cases, 6 registry cases, and 4 sidecar checks.
+- Real pinned-plugin compatibility: all 19 entries passed syntax, Parley,
+  statusline, float, background and OneDark-variant checks.
+- Corrected earlier assertion that starter-bootstrap failure was unrelated: the
+  registry require and changed plugin ordering needed fixture updates; the
+  actual starter list assembly also had a parenthesis error, now fixed and
+  exercised through Lazy's setup contract. Earlier broad-suite claims are not
+  release evidence; the named focused checks above are.
+- BR-1 selection identity now has one notification owner; BR-2 registry pins
+  reach the starter and are asserted; BR-3 startup captured before preferences;
+  BR-4 committed production and real compatibility tests; BR-5 read-failure
+  regression; BR-6 README; BR-7 explicit mode; BR-8 snapshot rollback on failure.

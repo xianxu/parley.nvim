@@ -1340,6 +1340,7 @@ M.setup = function(opts)
 	-- Restore a previously committed packaged theme after Parley has loaded its
 	-- configuration and semantic highlight definitions. Missing state preserves
 	-- the caller's existing colorscheme (the packaged starter applies Moonfly).
+	M.theme.capture_startup()
 	local persisted_theme = M.theme.load(M.config.state_dir)
 	if persisted_theme then
 		M.theme.apply(persisted_theme, { on_applied = M.setup_highlight })

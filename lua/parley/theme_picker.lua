@@ -10,9 +10,8 @@ local function item_index(items, id)
     return 1
 end
 
-local function apply(parley, id, startup_scheme)
-  local ok, result = theme.apply(id, {
-    startup_scheme = startup_scheme,
+local function apply(parley, id)
+    local ok, result = theme.apply(id, {
         on_applied = function()
             parley.setup_highlight()
         end,
@@ -25,8 +24,9 @@ end
 
 function M.open(parley)
     local saved_id = theme.load(parley.config.state_dir)
-    local opening_scheme = vim.g.colors_name
-    local opening_background = vim.o.background
+    local opening = theme.snapshot()
+    local opening_scheme = opening.colorscheme
+    local opening_onedark = opening.onedark_config
     local specs = theme.items()
     local items = {}
     for _, spec in ipairs(specs) do
@@ -39,18 +39,16 @@ function M.open(parley)
 
     local initial_id = saved_id or "startup"
     for _, spec in ipairs(specs) do
-        if spec.colorscheme == opening_scheme then
+        if spec.colorscheme == opening_scheme
+            and (not spec.variant or spec.variant == (opening_onedark or {}).style) then
             initial_id = spec.id
             break
         end
     end
 
     local function restore()
-        if opening_scheme and opening_scheme ~= "" then
-            local ok = pcall(vim.cmd.colorscheme, opening_scheme)
-      if ok then parley.setup_highlight() end
-      vim.o.background = opening_background
-        end
+        local ok = theme.restore(opening)
+        if ok then parley.setup_highlight() end
     end
 
     return parley.float_picker.open({
@@ -59,10 +57,10 @@ function M.open(parley)
         initial_index = item_index(items, initial_id),
         recall_key = "parley.theme_picker",
         on_selection_change = function(item)
-      apply(parley, item.value, opening_scheme)
+            apply(parley, item.value)
         end,
         on_select = function(item)
-      if apply(parley, item.value, opening_scheme) then
+            if apply(parley, item.value) then
                 local saved, err = theme.save(parley.config.state_dir, item.value, parley.helpers)
                 if not saved then
                     vim.notify("Parley theme preference was not saved: " .. tostring(err), vim.log.levels.WARN)

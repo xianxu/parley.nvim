@@ -1,14 +1,17 @@
 local theme = require("parley.theme")
 
 describe("Parley theme registry", function()
-    it("derives the five picker choices from one registry", function()
+    it("derives all picker choices from one registry", function()
         local items = theme.items()
-        assert.equals(5, #items)
+        assert.equals(19, #items)
         assert.same({
             "catppuccin-mocha",
             "tokyonight-storm",
             "catppuccin-latte",
             "solarized-light",
+            "onedark-dark", "onedark-darker", "onedark-cool", "onedark-deep",
+            "onedark-warm", "onedark-warmer", "onedark-light",
+            "nightfox", "dayfox", "dawnfox", "duskfox", "nordfox", "terafox", "carbonfox",
             "startup",
         }, vim.tbl_map(function(item) return item.id end, items))
         assert.equals("moonfly", theme.default().colorscheme)

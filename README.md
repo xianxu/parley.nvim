@@ -44,8 +44,9 @@ See the [app guide](packaging/README.md) for updates and removal, or
 and settings. Existing Neovim users can use the
 [plugin setup guide](atlas/infra/config.md#install-as-a-neovim-plugin).
 
-In the packaged app, `:ParleyTheme` opens a floating preview for the four
-included themes. Moonfly is the startup theme; press Enter to persist another
+In the packaged app, `:ParleyTheme` opens a floating preview for the
+included themes, including all OneDark styles and Nightfox variants.
+Moonfly is the startup theme; press Enter to persist another
 choice or Escape to restore the opening colorscheme.
 
 ## Editing while an answer is generated

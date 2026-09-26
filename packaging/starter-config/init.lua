@@ -145,6 +145,7 @@ local ok, err = xpcall(function()
     local installer = package.loaded["lazy.view"]
     if installer and installer.visible() then installer.view:close() end
     vim.api.nvim_set_current_win(main_window)
+    theme.capture_startup()
     theme.apply(theme.load(data .. "/parley/persisted") or "startup")
     require("parley.starter").start()
 end, debug.traceback)

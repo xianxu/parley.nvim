@@ -1026,10 +1026,11 @@ function M.open(opts)
         return filtered[math.max(1, math.min(sel_idx, #filtered))]
     end
 
+    local selected_at_open = get_selected_item()
+    local notified_identity = selected_at_open and recall_id_fn(selected_at_open)
+    local selection_ready = false
     local function set_selection(idx, selection_opts)
         selection_opts = selection_opts or {}
-        local previous_idx = sel_idx
-        local previous_item = filtered[sel_idx]
         sel_idx = math.max(1, math.min(idx, math.max(1, #filtered)))
         if vim.api.nvim_win_is_valid(results_win) then
             local target_row = visual_row_for_index(sel_idx)
@@ -1079,12 +1080,10 @@ function M.open(opts)
             end
         end
         local current_item = filtered[sel_idx]
-        local changed_item = previous_item ~= current_item
-            and (not previous_item or not current_item
-                or previous_item.value ~= current_item.value
-                or previous_item.display ~= current_item.display)
-        if (previous_idx ~= sel_idx or changed_item) and not closed and current_item then
-            on_selection_change(current_item)
+        local identity = current_item and recall_id_fn(current_item)
+        if identity ~= notified_identity then
+            notified_identity = identity
+            if selection_ready and not closed and current_item then on_selection_change(current_item) end
         end
     end
 
@@ -1172,7 +1171,6 @@ function M.open(opts)
     end
 
     local function apply_filter(reset_selection)
-        local previous_item = get_selected_item()
         local query = query_text:gsub("^%s+", "")
         if query == "" then
             filtered = vim.deepcopy(items)
@@ -1262,11 +1260,6 @@ function M.open(opts)
                 ))
             end
         end
-        local current_item = get_selected_item()
-        if reset_selection ~= false and current_item and current_item ~= previous_item
-            and (not previous_item or recall_id_fn(current_item) ~= recall_id_fn(previous_item)) then
-            on_selection_change(current_item)
-        end
         highlight_matches(query)
     end
 
@@ -1294,6 +1287,7 @@ function M.open(opts)
     render_prompt()
     reflow_picker()
     apply_filter(true)
+    selection_ready = true
     on_query_change(query_text)
 
     local function nmap_r(key, fn)
@@ -1720,7 +1714,6 @@ function M.open(opts)
     --- move the cursor under the operator.
     local function update(new_items, new_tag_bar_tags, next_selection)
         if closed then return end
-        local previous_item = get_selected_item()
         local next_identity
         if type(next_selection) == "string" then
             next_identity = next_selection
@@ -1758,11 +1751,6 @@ function M.open(opts)
                     break
                 end
             end
-        end
-        local current_item = get_selected_item()
-        if current_item and current_item ~= previous_item
-            and (not previous_item or recall_id_fn(current_item) ~= recall_id_fn(previous_item)) then
-            on_selection_change(current_item)
         end
     end
 

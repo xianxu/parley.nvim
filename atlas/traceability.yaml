@@ -5,6 +5,7 @@ version: 1
 atlas:
   ui/themes:
     code:
+      - tests/packaging/theme_compatibility.lua
       - lua/parley/theme.lua
       - lua/parley/theme_picker.lua
       - lua/parley/float_picker.lua
@@ -12,6 +13,7 @@ atlas:
       - packaging/starter-config/init.lua
       - packaging/README.md
     tests:
+      - tests/integration/starter_bootstrap_spec.lua
       - tests/unit/theme_spec.lua
       - tests/unit/float_picker_spec.lua
       - tests/integration/theme_picker_spec.lua

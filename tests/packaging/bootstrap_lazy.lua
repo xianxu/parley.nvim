@@ -11,8 +11,15 @@ return {
         assert(vim.g.mapleader == ' ')
         assert(opts.checker.enabled == false)
         assert(spec[1].commit == '4ed07bc0c6083cdd547c63f5c245e02c068b0c45')
-        assert(spec[2].commit == '74b06c6c75e4eeb3108ec01852001636d85a932b')
-        assert(spec[3].commit == 'a0bbec21143c7bc5f8bb02e0005fa0b982edc026')
+        local by_name = {}
+        for _, plugin in ipairs(spec) do by_name[plugin[1] or plugin.name] = plugin end
+        assert(by_name['nvim-lua/plenary.nvim'].commit == '74b06c6c75e4eeb3108ec01852001636d85a932b')
+        assert(by_name['nvim-telescope/telescope.nvim'].commit == 'a0bbec21143c7bc5f8bb02e0005fa0b982edc026')
+        for _, item in ipairs(require('parley.theme').items()) do
+            local plugin = assert(by_name[item.plugin[1]], 'Missing theme dependency: ' .. item.id)
+            assert(plugin.commit == item.plugin.commit)
+            assert(plugin.lazy == false)
+        end
         local preview
         for _, plugin in ipairs(spec) do
             if plugin[1] == 'iamcco/markdown-preview.nvim' then preview = plugin end

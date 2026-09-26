@@ -10,14 +10,23 @@
 
 ## Core concepts
 
-| Name | Lives in | Status |
-|------|----------|--------|
-| `DEFAULT` | `lua/parley/theme.lua` | new |
-| `items` | `lua/parley/theme.lua` | new |
-| `valid_id` | `lua/parley/theme.lua` | new |
-| `apply` | `lua/parley/theme.lua` | new |
-| `open` | `lua/parley/theme_picker.lua` | new |
-| `set_selection` | `lua/parley/float_picker.lua` | modified |
+| Name | Kind | Lives in | Status |
+|---|---|---|---|
+| `DEFAULT` | PURE | `lua/parley/theme.lua` | new |
+| `default` | PURE | `lua/parley/theme.lua` | new |
+| `items` | PURE | `lua/parley/theme.lua` | new |
+| `valid_id` | PURE | `lua/parley/theme.lua` | new |
+| `find` | PURE | `lua/parley/theme.lua` | new |
+| `packaged_plugins` | PURE | `lua/parley/theme.lua` | new |
+| `preference_path` | PURE | `lua/parley/theme.lua` | new |
+| `load` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `save` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `apply` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `snapshot` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `capture_startup` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `restore` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `open` | INTEGRATION | `lua/parley/theme_picker.lua` | new |
+| `set_selection` | INTEGRATION | `lua/parley/float_picker.lua` | modified |
 
 - `ThemeSpec` is an immutable registry row: id, display label, colorscheme command, dark/light mode, colorful/subdued style, and whether it is the startup default.
 - `ThemeRegistry` is the only enumeration of choices. It includes Moonfly as the startup/default scheme, the four packaged choices, and a sentinel restore row; callers derive picker items and validation from it (ARCH-DRY, ARCH-PURPOSE).
@@ -122,3 +131,42 @@
   ordinary plugin use; the packaged startup still supplies Moonfly.
 - Preference reads treat filesystem races and unreadable state as the startup
   fallback instead of allowing startup to raise.
+
+### 2026-09-25 — final release scope and evidence reconciliation
+
+The operator approved shipping after exercising the local app. This revision
+supersedes the initial four-theme scope and the earlier opening-scheme restore
+interpretation. There are now 18 optional choices plus startup restore. The
+startup snapshot precedes preference restoration; picker opening has its own
+snapshot for cancellation. Selection notifications compare stable identities
+through the one set_selection boundary. Application failure restores the previous
+scheme, background and OneDark configuration. Solarized explicitly selects light.
+
+The earlier task checklists record the proposed TDD sequence; they are not
+claims that every proposed red-test step was performed. Final acceptance replaces
+those procedural rows with the executable checks below:
+
+- [x] Registry unit tests cover all 19 identities and corrupt/unreadable state.
+- [x] Production-command tests cover filter preview, commit, cancellation, mouse
+  mapping entry, OneDark variant identity, and startup versus opening state.
+- [x] Starter bootstrap fixture consumes the real registry and asserts each
+  dependency is present and pinned in Lazy setup.
+- [x] Real-plugin compatibility script loads every packaged variant and checks
+  syntax, Parley, float and statusline highlights and light/dark mode.
+
+Final entity classification (supersedes the unclassified concept tables):
+
+| Name | Kind | Lives in | Status |
+|---|---|---|---|
+| `theme` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `items` | PURE | `lua/parley/theme.lua` | new |
+| `valid_id` | PURE | `lua/parley/theme.lua` | new |
+| `packaged_plugins` | PURE | `lua/parley/theme.lua` | new |
+| `snapshot` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `capture_startup` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `restore` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `apply` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `save` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `load` | INTEGRATION | `lua/parley/theme.lua` | new |
+| `theme_picker` | INTEGRATION | `lua/parley/theme_picker.lua` | new |
+| `set_selection` | INTEGRATION | `lua/parley/float_picker.lua` | modified |
