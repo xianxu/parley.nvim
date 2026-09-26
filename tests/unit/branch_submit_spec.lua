@@ -8,8 +8,13 @@ local bs = require("parley.branch_submit")
 
 describe("branch_submit.seed_question", function()
     it("a visual selection asks the child to expand on it", function()
-        assert.are.equal('tell me more about "monad transformers"',
+        assert.are.equal('follow up question\n> monad transformers\n\n',
             bs.seed_question("define", "monad transformers"))
+    end)
+
+    it("quotes every line of a multiline payload", function()
+        assert.are.equal("follow up question\n> one\n> two\n\n",
+            bs.seed_question("define", "one\ntwo"))
     end)
 
     it("gathered quotes pass through — they are already a prompt", function()
@@ -26,7 +31,7 @@ describe("branch_submit.seed_question", function()
     -- and the model reads either. What must not happen is a crash or a mangled
     -- prompt. (Deviation from the plan's draft test, which expected escaping.)
     it("a selection containing quote marks is passed through, not escaped", function()
-        assert.are.equal('tell me more about "the "hard" problem"',
+        assert.are.equal('follow up question\n> the "hard" problem\n\n',
             bs.seed_question("define", 'the "hard" problem'))
     end)
 
@@ -34,13 +39,13 @@ describe("branch_submit.seed_question", function()
     -- value later reaches gsub as a REPLACEMENT. seed_question must not itself
     -- introduce one, and must not choke on one.
     it("a selection containing % survives intact", function()
-        assert.are.equal('tell me more about "50% off"', bs.seed_question("define", "50% off"))
-        assert.are.equal('tell me more about "%1 placeholder"',
+        assert.are.equal('follow up question\n> 50% off\n\n', bs.seed_question("define", "50% off"))
+        assert.are.equal('follow up question\n> %1 placeholder\n\n',
             bs.seed_question("define", "%1 placeholder"))
     end)
 
     it("whitespace around a selection is trimmed", function()
-        assert.are.equal('tell me more about "widget"', bs.seed_question("define", "  widget  "))
+        assert.are.equal('follow up question\n> widget\n\n', bs.seed_question("define", "  widget  "))
     end)
 end)
 

@@ -62,6 +62,9 @@ Use `./parley_app --tutorials` to edit `packaging/tutorials/` directly through
 the app. `./parley_app --nuke` removes the demo profile and exits; the next launch
 starts fresh. Source tutorials and the normal installed app profile are retained.
 
+Select text and press **Option+i** to start a linked follow-up chat. The draft
+quotes your selection and leaves the cursor on an empty line beneath it.
+
 ## Editing while an answer is generated
 
 You can write the next question while one or more answers stream elsewhere in

@@ -2346,9 +2346,9 @@ local function branch_inserters(buf, abs_link, owns_file)
 	--- rule to the path I am looking at" is what left insert_inline creating
 	--- orphans on markdown two rounds running (#214 BR-28).
 	--- @return boolean created
-	local function create_child_if_owned(file, topic, question)
+	local function create_child_if_owned(file, topic, question, opts)
 		if not owns_file then return false end
-		M.create_child_chat(file, topic, buf, question)
+		M.create_child_chat(file, topic, buf, question, opts)
 		return true
 	end
 
@@ -2367,7 +2367,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 		return ok
 	end
 
-	local function open_branch_question(file)
+	local function open_branch_question(file, question_offset)
 		local win = vim.api.nvim_get_current_win()
 		vim.schedule(function()
 			-- A deferred gesture must not steal focus after the user moves away.
@@ -2378,7 +2378,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 			local parsed = M.parse_chat(lines, M.chat_parser.find_header_end(lines))
 			local first = parsed.exchanges[1]
 			-- Custom templates without a question keep the old end-of-file fallback.
-			local row = first and first.question.line_start or #lines
+			local row = first and (first.question.line_start + (question_offset or 0)) or #lines
 			vim.api.nvim_win_set_cursor(win, { row, 0 })
 			vim.cmd("normal! $")
 			vim.cmd("startinsert!")
@@ -2607,13 +2607,13 @@ local function branch_inserters(buf, abs_link, owns_file)
 		-- the child is seeded with the instruction, not with `<topic>?`. One
 		-- place owns that wording — three call sites would each invent their own.
 		require("parley.buffer_edit").replace_user_lines(buf, start_line - 1, start_line, false, { spliced })
-		create_child_if_owned(new_chat_file, topic,
-			require("parley.branch_submit").seed_question("define", selected))
+		local question = require("parley.branch_submit").seed_question("define", selected)
+		create_child_if_owned(new_chat_file, topic, question, { inline_question = true })
 		M.highlight_chat_branch_refs(buf)
 		-- Open only after the inline anchor is durable, just like the plain path.
 		if not commit_reference() then return end
 		M.logger.debug("Created inline branch to new chat: " .. link .. " (" .. topic .. ")")
-		open_branch_question(new_chat_file)
+		open_branch_question(new_chat_file, #vim.split(question, "\n", { plain = true }) - 1)
 	end
 
 	-- Native user transactions decide which source survives; pending decoration
@@ -3593,7 +3593,8 @@ local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 				local br_submit = require("parley.branch_submit")
 				local topic = link.topic ~= "" and link.topic or "?"
 				M.create_child_chat(expanded, topic, parent_buf,
-					link.topic ~= "" and br_submit.seed_question("define", link.topic) or nil)
+					link.topic ~= "" and br_submit.seed_question("define", link.topic) or nil,
+					{ inline_question = true })
 				M.open_buf(expanded)
 				return "opened"
 			else
@@ -5290,7 +5291,8 @@ end
 --- @param topic string topic for the child chat header
 --- @param parent_buf number buffer handle of the parent chat
 --- @param question string|nil optional first question to insert
-M.create_child_chat = function(file_path, topic, parent_buf, question)
+--- @param opts table|nil inline_question keeps the first body line beside the user prefix
+M.create_child_chat = function(file_path, topic, parent_buf, question, opts)
 	local agent = M.get_agent()
 	M.helpers.prepare_dir(vim.fn.fnamemodify(file_path, ":h"))
 	local template = M.get_default_template(agent, file_path)
@@ -5331,12 +5333,12 @@ M.create_child_chat = function(file_path, topic, parent_buf, question)
 			-- one puts `💬:` on its own line and the body beneath, which is
 			-- exactly how chat_respond writes a gathered drill-in turn
 			-- (chat_respond.lua: `insert_lines = { "", user_prefix }` then the
-			-- block lines). The chord's promise is that the two agree.
+			-- block lines). Selection drafts opt into an inline first line so
+			-- their follow-up heading stays beside the user prefix.
 			local body = vim.split(question, "\n", { plain = true })
-			local turn = #body == 1 and { user_prefix .. " " .. body[1] } or { user_prefix }
-			if #body > 1 then
-				for _, line in ipairs(body) do turn[#turn + 1] = line end
-			end
+			local inline = #body == 1 or (opts and opts.inline_question)
+			local turn = inline and { user_prefix .. " " .. body[1] } or { user_prefix }
+			for i = inline and 2 or 1, #body do turn[#turn + 1] = body[i] end
 
 			local at = header_end + 2
 			table.insert(file_lines, at, "")

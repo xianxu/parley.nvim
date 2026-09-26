@@ -30,8 +30,12 @@ plain branches, gathered quote prompts, parent anchors and existing single-line 
 
 ## Plan
 
-- [ ] Update seed formatter and selection-only child layout/cursor placement; test content, saved parent and insertion landing.
+- [x] Update seed formatter and selection-only child layout/cursor placement; test content, saved parent and insertion landing.
 
 ## Log
 
 ### 2026-09-26
+
+- Red: selection child wording and insertion landing differed from requested draft.
+- Green: 18 branch-submit unit cases and 63 branch-child integration cases pass; exact layout/cursor, custom prefix, percent signs, parent durability and unchanged plain/gathered modes covered.
+- Changed Lua lint and scoped whitespace checks pass. Operator tutorial edits remain excluded.
