@@ -270,3 +270,18 @@ Delta:
   #200 was permanent drift. The plan keeps eager clearing only for folds the edit
   intersects (which Neovim corrupts) and keeps exact convergence when settled.
 
+### 2026-09-27 — Plan review round 1 folded in
+
+Reason: a fresh-context plan review found an undefined intersection rule (the obvious one
+would have kept the summary flicker), an unbounded `s.edited`, a duplicated VimL walk,
+`zc` mis-measuring nested groups, and post-splice dependency pruning that would usually
+return `stale`.
+
+Delta: the intersection rule counts only rows an edit *writes* (pure deletions never clear
+eagerly); `s.edited` is capped at 8 ranges and cleared at idle, reload and detach; the walk
+moves to `fold_native.lua` with a delete/inventory mode; inventory uses `zC`/`zO`;
+dependency pruning is computed before the splice (`prune_from`) and installed only on a
+mismatch; paths above `INTERACTIVE_ROWS` are unchanged. **Narrowed:** the Log's per-kind
+"confirmation stays intact below a summary" negative isn't asserted. The restart is
+bounded at the answer header instead (see the plan's "Deliberate narrowing").
+
