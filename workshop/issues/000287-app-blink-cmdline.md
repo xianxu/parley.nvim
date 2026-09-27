@@ -1,11 +1,12 @@
 ---
 id: 000287
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
+started: 2026-09-27T11:18:04-07:00
 ---
 
 # app: blink.cmp (lua matcher) for fuzzy cmdline completion and history search
@@ -61,10 +62,22 @@ covering both command names and command history.
 
 ## Plan
 
-- [ ] Check blink 1.10.x cmdline + history behavior with `implementation = "lua"`
-- [ ] Add the pinned plugin entry to the starter init.lua
-- [ ] Headless test: fuzzy cmdline completion; no insert-mode popup; no binary download
-- [ ] Starter README: completion + update note
+Quick flow (under 20 code lines, all in the app starter; the rest is tests and docs).
+
+- [ ] `packaging/starter-config/init.lua`: add blink.cmp pinned to v1.10.2 with
+      `fuzzy.implementation = "lua"`, `sources.default = {}`,
+      `keymap.preset = "none"` (insert mode claims no keys, #262), and cmdline
+      `preset = "cmdline"` minus `<Left>`/`<Right>` with `menu.auto_show`.
+- [ ] Same file: telescope spec gains `keys = { "<C-g>:" → builtin.command_history }`
+      for fuzzy history recall (blink has no history source; stock `<Up>`/`<Down>`
+      prefix history stays).
+- [ ] `tests/packaging/bootstrap_lazy.lua` (automated, via starter_bootstrap_spec):
+      assert blink's pin and opts, and that the `<C-g>:` key calls `command_history`.
+- [ ] `tests/packaging/completion_compatibility.lua`: release check against the
+      real pinned blink (`PARLEY_BLINK_RUNTIME`): run the production starter,
+      type `:mkpv`/`:thm` → menu shows `MarkdownPreview`/`ParleyTheme`; insert
+      mode → no items, no menu, no blink insert keymaps; no native library in blink's dir.
+- [ ] Starter README + `atlas/infra/starter.md` + `atlas/traceability.yaml`.
 
 ## Log
 
@@ -73,4 +86,14 @@ covering both command names and command history.
   `wildoptions+=fuzzy`, wilder.nvim, nvim-cmp, fzf-lua/snacks pickers); chose
   blink for the app. Companion: #288 (plugin nvim-cmp → blink), pair#334
   (audit of the draft nvim's completion).
+- Design (headless prototype against blink v1.10.2 with the `lua` matcher):
+  `:mkpv` → `MarkdownPreview`, `:thm` → `ParleyTheme`, and the menu shows on
+  typing; `fuzzy/download/init.lua:15` returns before any download for
+  `"lua"`. The default insert preset would claim `<C-n>`/`<C-p>`/`<C-k>`/
+  `<Tab>`… so `keymap.preset = "none"` (verified: zero insert maps, zero items).
+  The `cmdline` preset binds `<Left>`/`<Right>` to select_next/prev while the
+  menu is open (always, with auto_show), so both are dropped to keep cursor
+  movement. blink's cmdline sources are `buffer` + `cmdline` (getcompletion);
+  there is no history source, so history is telescope `command_history` on
+  `<C-g>:` (free key; telescope already packaged).
 
