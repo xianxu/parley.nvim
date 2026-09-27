@@ -1,6 +1,6 @@
 ---
 id: 000280
-status: codecomplete
+status: done
 deps: []
 github_issue:
 created: 2026-09-26
@@ -60,3 +60,11 @@ plain branches, gathered quote prompts, parent anchors and existing single-line 
 - Architecture guard follow-up: record the modified child-creation API and cursor helper in Core concepts; no new implementation scope.
 
 - BR-1 corrected with sibling operation lock and deterministic competing-launch/reset regressions (8 launcher tests pass). BR-2 corrected by assembling all aliases in the registry loop; architecture suite 25 pass and starter option tests 7 pass.
+
+## Manual shipment — 2026-09-26
+
+Closed and archived at the operator’s explicit direction as part of the completed local stack. Prior SDLC review records remain historical; no new gate verdict is claimed.
+
+Existing codecomplete review and acceptance evidence are retained; this shipment publishes the completed implementation.
+
+Final verification: lint passed all 656 Lua files; `make test` passed 391 spec files, with the remaining performance spec passing all three cases on a standalone normal-harness rerun. Both runs ended with no surviving test processes. Startup also passed 183 cases in a tracked isolated checkout.

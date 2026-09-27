@@ -1,10 +1,10 @@
 ---
 id: 000277
-status: codecomplete
+status: done
 deps: []
 github_issue:
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 estimate_hours:
 started: 2026-09-25T23:05:53-07:00
 flow: {kind: quick, provenance: inferred, spec: "bea912e4", done: "27d3bcad"}
@@ -40,3 +40,11 @@ Use the existing action modes and callbacks, including normal and insert mode.
 - Regression first failed because Option+n invoked new-question in the real welcome buffer.
 - Starter suite passed (including normal/insert effective callback checks and unchanged plugin defaults); changed Lua lint and scoped whitespace checks pass.
 - ARCH-DRY: aliases use the registry callbacks via pure starter options; no remap layer.
+
+## Manual shipment — 2026-09-26
+
+Closed and archived at the operator’s explicit direction as part of the completed local stack. Prior SDLC review records remain historical; no new gate verdict is claimed.
+
+Existing codecomplete review and acceptance evidence are retained; this shipment publishes the completed implementation.
+
+Final verification: lint passed all 656 Lua files; `make test` passed 391 spec files, with the remaining performance spec passing all three cases on a standalone normal-harness rerun. Both runs ended with no surviving test processes. Startup also passed 183 cases in a tracked isolated checkout.

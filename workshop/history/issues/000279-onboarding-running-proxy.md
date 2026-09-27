@@ -1,10 +1,10 @@
 ---
 id: 000279
-status: codecomplete
+status: done
 deps: []
 github_issue:
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 estimate_hours:
 started: 2026-09-25T23:48:38-07:00
 flow: {kind: quick, provenance: inferred, spec: "67a68b10", done: "4b6cf4f0"}
@@ -40,3 +40,11 @@ a binary (ARCH-DRY). Keep credential/model validation and failure onboarding.
 - Red: process-level regression reopened picker despite reachable proxy; green: 54 lifecycle cases pass, including repeated readiness, missing model and removed credential.
 - 183 starter cases pass in clean snapshot /tmp/parley-279-clean.log; live-tree suite hit operator tutorial edits, which were excluded and preserved. Changed Lua lint and scoped whitespace pass.
 - Fix removes duplicate executable precondition; ensure_running remains the owner of probe/spawn ordering (ARCH-DRY).
+
+## Manual shipment — 2026-09-26
+
+Closed and archived at the operator’s explicit direction as part of the completed local stack. Prior SDLC review records remain historical; no new gate verdict is claimed.
+
+Existing codecomplete review and acceptance evidence are retained; this shipment publishes the completed implementation.
+
+Final verification: lint passed all 656 Lua files; `make test` passed 391 spec files, with the remaining performance spec passing all three cases on a standalone normal-harness rerun. Both runs ended with no surviving test processes. Startup also passed 183 cases in a tracked isolated checkout.

@@ -1,6 +1,6 @@
 ---
 id: 000255
-status: codecomplete
+status: done
 deps: [254]
 github_issue:
 created: 2026-09-15
@@ -130,3 +130,11 @@ close review (#160).
   the active writer and original snapshot; only accepted refreshes may remove
   visible text. Add before/after-output duplicate regressions and document the
   pending-to-generation ownership transfer (ARCH-ORDER).
+
+## Manual shipment — 2026-09-26
+
+Closed and archived at the operator’s explicit direction as part of the completed local stack. Prior SDLC review records remain historical; no new gate verdict is claimed.
+
+The previous-answer behavior shipped in #261; this shipment closes its remaining record and verifies compatibility with immediate refresh.
+
+Final verification: lint passed all 656 Lua files; `make test` passed 391 spec files, with the remaining performance spec passing all three cases on a standalone normal-harness rerun. Both runs ended with no surviving test processes. Startup also passed 183 cases in a tracked isolated checkout.

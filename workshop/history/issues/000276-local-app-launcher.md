@@ -1,10 +1,10 @@
 ---
 id: 000276
-status: codecomplete
+status: done
 deps: []
 github_issue:
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 estimate_hours:
 started: 2026-09-25T22:30:00-07:00
 flow: {kind: quick, provenance: inferred, spec: "b24e62e0", done: "59419578"}
@@ -110,3 +110,11 @@ its unknown verdict is an interruption, not a completed review or new finding.
 Re-run close on the complete change after the focused starter checks finish.
 
 - 2026-09-26: #280 full boundary review found stale PID observations across competing launcher operations. Serialize launch/reset ownership checks and effects; add deterministic competing-launch and launch/reset tests (ARCH-ORDER).
+
+## Manual shipment — 2026-09-26
+
+Closed and archived at the operator’s explicit direction as part of the completed local stack. Prior SDLC review records remain historical; no new gate verdict is claimed.
+
+Existing codecomplete review and acceptance evidence are retained; this shipment publishes the completed implementation.
+
+Final verification: lint passed all 656 Lua files; `make test` passed 391 spec files, with the remaining performance spec passing all three cases on a standalone normal-harness rerun. Both runs ended with no surviving test processes. Startup also passed 183 cases in a tracked isolated checkout.
