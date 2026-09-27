@@ -8,7 +8,7 @@ updated: 2026-09-27
 estimate_hours:
 card_mirror: '682ed7ad110ba323ef797dfc4f705b6609e7ad6c' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-27T15:41:00-07:00
-flow: {kind: quick, provenance: inferred, spec: "0f28dc1a", done: "721b50ab"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Write each tool block in one append during streaming; fold tool blocks and summaries as written
@@ -167,6 +167,8 @@ Design notes (from reading the write path):
 ## Log
 
 ### 2026-09-27
+- 2026-09-27: closed — writer_folds_spec 5/5 e2e via chat_respond+real window: tool call/result (>4KiB, one edit) and summary folds closed in the write turn, incl. first call of two consecutive rounds after prose (BR-1; red without first_col skip); settled reconcile removed/created 0 and parser oracle agrees; tool_folds unit written_ranges 6 cases; response_tools_spec 84/84 incl. one-edit-per-block (red when block write disabled) and prose-still-4096-sliced; chat_respond 52/52, tool_folds 15/15; single_source_sweeps only fails on local-main-stale names (diff/restore_window/valid_target/walk from #264); 512 KiB timing in Log; review verdict: SHIP
+- 2026-09-27: flow upgraded quick → full — 107 added lines in code files (limit 100)
 - Filed from #281 (design decision A).
 - 2026-09-27: scope extended to streamed summaries (operator); `🧠:` excluded, since the
   default prompt no longer requests thinking blocks.
