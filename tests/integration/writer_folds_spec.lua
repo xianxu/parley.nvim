@@ -20,15 +20,24 @@ local Fixture=require('tests.helpers.respond_fixture')
 local policy=require('parley.fold_projection')
 local parser=require('parley.chat_parser')
 
-local function sse(id,path)
-    local events={
-        {type='message_start',message={id='msg_test',model='claude-sonnet-5'}},
-        {type='content_block_start',index=0,content_block={type='tool_use',id=id,name='read_file',input={}}},
-        {type='content_block_delta',index=0,delta={type='input_json_delta',partial_json='{"path":"'..path..'"}'}},
-        {type='content_block_stop',index=0},
+-- `text`, when given, is prose the model streams before its tool call.
+local function sse(id,path,text)
+    local events={{type='message_start',message={id='msg_test',model='claude-sonnet-5'}}}
+    local index=0
+    if text then
+        vim.list_extend(events,{
+            {type='content_block_start',index=0,content_block={type='text',text=''}},
+            {type='content_block_delta',index=0,delta={type='text_delta',text=text}},
+            {type='content_block_stop',index=0}})
+        index=1
+    end
+    vim.list_extend(events,{
+        {type='content_block_start',index=index,content_block={type='tool_use',id=id,name='read_file',input={}}},
+        {type='content_block_delta',index=index,delta={type='input_json_delta',partial_json='{"path":"'..path..'"}'}},
+        {type='content_block_stop',index=index},
         {type='message_delta',delta={stop_reason='tool_use'}},
         {type='message_stop'},
-    }
+    })
     local lines={}
     for _,ev in ipairs(events) do
         lines[#lines+1]='event: '..ev.type;lines[#lines+1]='data: '..vim.json.encode(ev);lines[#lines+1]=''
@@ -142,6 +151,32 @@ describe('writer folds (#290)',function()
         for _,marker in ipairs({'🔧:','📎:'}) do
             local row=row_of(buf,marker);assert.equals(row,vim.fn.foldclosed(row))
         end
+    end)
+
+    -- A round's first call is written after the answer's prose: its first byte
+    -- continues the prose row, which is not part of the block (close review BR-1).
+    it('folds the first call of each round when prose precedes it',function()
+        local path=tmp_dir..'/writer-folds-prose.txt';files[#files+1]=path
+        vim.fn.writefile({'fixture content'},path)
+        local session=submit()
+        for round=1,2 do
+            local call=calls[round]
+            output(call,'Let me check round '..round..'.')
+            parley.tasker.get_query(call.id).raw_response=sse('tool-prose-'..round,path,'Let me check round '..round..'.')
+            call.running=false;call.complete(call.id)
+            wait_for(function()return #calls==round+1 end)
+        end
+        local blocks=written()
+        assert.equals(4,#blocks,'call and result of both rounds')
+        for i,marker in ipairs({'🔧:','📎:','🔧:','📎:'}) do
+            local range=blocks[i].ranges[1]
+            assert.equals(marker,blocks[i].lines[range[1]+1]:sub(1,#marker))
+            assert.same({range[1],range[2]},blocks[i].closed[1],marker..' of block '..i..' closed in its write turn')
+        end
+        output(calls[3],'finished');complete(session,calls[3])
+        local removed,created=reconciled()
+        assert.equals(0,removed);assert.equals(0,created)
+        oracle()
     end)
 
     it('folds a summary from the write that completes its split prefix and keeps it closed',function()

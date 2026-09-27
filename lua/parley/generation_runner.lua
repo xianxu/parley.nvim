@@ -392,8 +392,10 @@ local function start_operation(s,effect)
 end
 -- Presentation receives copied receipt facts after accounting, never mutation
 -- capabilities or payloads. Its failure cannot change an accepted prefix.
--- An appended write also reports `first_row`, the row its first byte landed
--- on, so a host can present exactly the rows it wrote (#290).
+-- An appended write also reports where its first byte landed, `first_row` and
+-- `first_col`, so a host can present exactly the rows it wrote (#290): a write
+-- starting at column 0 wrote that row; a later column only continued it.
+-- `first_col` is nil when the index cannot place that byte yet.
 local function written(s,effect,result,bytes)
     local accepted,removed=result.accepted_bytes or 0,result.removed_bytes or 0
     if not s.written or accepted+removed==0 or s.detached or s.terminal then return end
@@ -401,10 +403,12 @@ local function written(s,effect,result,bytes)
     local tip=grant and grant.status~='revoked' and D.byte_position(s.doc,grant.last)
     if tip then tip.byte=grant.last end
     local first_row=tip and bytes and tip.row-select(2,bytes:sub(1,accepted):gsub('\n',''))
+    local start=first_row and D.byte_position(s.doc,grant.last-accepted)
+    local first_col=start and start.row==first_row and start.col or nil
     s.written_serial=(s.written_serial or 0)+1
     local receipt={id=s.prefix..':written:'..s.written_serial,
         kind=effect.type=='write' and 'output' or effect.type=='manual_append' and 'append' or 'replace',
-        status=result.status,accepted_bytes=accepted,removed_bytes=removed,tip=tip,first_row=first_row}
+        status=result.status,accepted_bytes=accepted,removed_bytes=removed,tip=tip,first_row=first_row,first_col=first_col}
     local ctx={epoch=s.epoch,generation=s.generation,operation=effect.operation,grant=effect.grant,
         entity=effect.entity or (grant and grant.entity) or s.entity,exchange=s.entity}
     s.notifying=true

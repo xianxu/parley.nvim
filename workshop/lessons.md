@@ -3,6 +3,16 @@
 Compact rules distilled from Parley.nvim's review and integration history.
 Incident detail belongs in the issue or plan that owns it.
 
+## 2026-09-27 (#290 — writer fold fast path)
+
+- #290 close review BR-1: an append's first row may be one it only continued. A
+  consumer that presents "the rows a write produced" must know whether the write
+  began that row (its first byte's column), and its tests must include a write
+  that starts mid-row: text before a round's first tool call, in more than one round.
+- #290: check a spec's editor-behavior premise in headless Neovim before building on
+  it. "Text appended inside a manual fold keeps it folded" was false; set_text
+  deletes the fold.
+
 ## 2026-09-22 (#220 — fixture process lifecycle)
 
 - #220 M2 review: an argument mentioning an owned path is not process ownership.

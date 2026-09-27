@@ -434,30 +434,25 @@ local function ensure(buf)
     mark(s,0,Document.size(doc).rows)
     return s
 end
---- The writer's fast path (#290): fold what a streamed write produced in the
---- turn it lands, so it is never shown open while repair catches up. It is not
---- the authority (#193/#200): it folds exactly the range the confirmed
---- projection will, so the reconcile finds a match and leaves it alone, and
---- corrects any disagreement. An appended tool block folds from its marker to
---- its last non-blank row; streamed prose folds each `summary` row from `seen`,
---- the caller's high-water row, on. A prefix split across writes is caught when
---- its row is written again. Writing into a row deletes a manual fold over it
---- (nvim_buf_set_text re-inserts the row), so the row still being streamed is
---- re-folded in the same turn, before any redraw can show it open.
---- Rows are classified by the tokens the append already lexed into the shared
---- index (#254: never re-read from the buffer); an opaque row is left to the
---- reconcile. Returns the new `seen`.
-function M.fold_written(buf,receipt,seen)
+--- The rows a streamed write should fold, and the new `seen` (#290). Pure:
+--- `kind(row)` names a row's lexed kind, or nil when the index has none yet.
+--- An appended tool block folds from its marker to its last non-blank row. Its
+--- first row counts only when the write began it (`first_col` 0): a round's
+--- first call is written after the answer's prose, so its first byte continues
+--- that prose row, which is never part of the block; with the column unknown,
+--- nothing is folded and the reconcile does it. Streamed prose folds each
+--- `summary` row from `seen`, the caller's high-water row, on; a continued row
+--- is rechecked, which catches a prefix split across writes, and re-folds the
+--- row still being streamed (writing into a row deletes a manual fold over it,
+--- as nvim_buf_set_text re-inserts the row).
+function M.written_ranges(receipt,seen,kind)
     seen=seen or -1
-    if not receipt.tip or not receipt.first_row or not vim.api.nvim_buf_is_valid(buf) then return seen end
-    local s=ensure(buf);if not s then return seen end
-    local function kind(row)
-        local span=Document.query(s.doc,row,row+1)[1]
-        return span and not span.opaque and span.metadata and span.metadata.token and span.metadata.token.kind
-    end
     local ranges={}
+    if not receipt.tip or not receipt.first_row then return ranges,seen end
     local first,last=receipt.first_row,receipt.tip.row
     if receipt.kind=='append' then
+        if receipt.first_col==nil then return ranges,seen end
+        if receipt.first_col>0 then first=first+1 end
         while first<=last and kind(first)=='blank' do first=first+1 end
         while last>first and kind(last)=='blank' do last=last-1 end
         local anchor=first<=last and kind(first)
@@ -467,6 +462,23 @@ function M.fold_written(buf,receipt,seen)
             if kind(row)=='summary' then ranges[#ranges+1]={row,row};seen=row end
         end
     end
+    return ranges,seen
+end
+--- The writer's fast path (#290): fold what a streamed write produced in the
+--- turn it lands, so it is never shown open while repair catches up. It is not
+--- the authority (#193/#200): it folds exactly the range the confirmed
+--- projection will, so the reconcile finds a match and leaves it alone, and
+--- corrects any disagreement. Rows are classified by the tokens the append
+--- already lexed into the shared index (#254: never re-read from the buffer).
+--- Returns the new `seen`.
+function M.fold_written(buf,receipt,seen)
+    if not vim.api.nvim_buf_is_valid(buf) then return seen end
+    local s=ensure(buf);if not s then return seen end
+    local ranges
+    ranges,seen=M.written_ranges(receipt,seen,function(row)
+        local span=Document.query(s.doc,row,row+1)[1]
+        return span and not span.opaque and span.metadata and span.metadata.token and span.metadata.token.kind or nil
+    end)
     if #ranges==0 then return seen end
     for _,win in ipairs(vim.fn.win_findbuf(buf)) do
         if vim.api.nvim_get_option_value('foldmethod',{win=win})=='manual' then

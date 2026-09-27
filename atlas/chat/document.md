@@ -137,12 +137,14 @@ body edits with surviving context let Neovim move folds without rebuilding them.
 Structural changes preserve each window's view, open state, and fold enablement
 while reconciling affected groups.
 The stream writer is a fast path in front of this (#290): each `written` receipt
-names its rows (`first_row`..`tip.row`), and `tool_folds.fold_written` folds, in the
-write's own turn, an appended tool block (marker to last non-blank row) and each
-streamed `summary` row, classified from the tokens the append lexed into the index.
-It folds exactly what the projection will, so the reconcile finds a match and leaves
-it; any disagreement is the reconcile's to correct. Writing into a row deletes a
-manual fold over it, so a summary row still streaming is re-folded each write.
+names where its first byte landed (`first_row`, `first_col`) and its tip, and
+`tool_folds.fold_written` folds, in the write's own turn, an appended tool block
+(marker to last non-blank row, skipping the prose row a round's first call only
+continues) and each streamed `summary` row, classified from the tokens the append
+lexed into the index (`written_ranges` is the pure part). It folds exactly what the
+projection will, so the reconcile finds a match and leaves it; any disagreement is the
+reconcile's to correct. Writing into a row deletes a manual fold over it, so a summary
+row still streaming is re-folded each write.
 Native application costs scale with changed fold groups and are counted separately.
 Reconciliation applies at most 64 groups per timer turn (a single larger connected
 region is applied whole). Above 50,000 affected rows, uncertainty still clears the

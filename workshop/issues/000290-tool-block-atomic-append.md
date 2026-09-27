@@ -95,6 +95,8 @@ consumer then has to tolerate.
 | `BLOCK_LIMIT` | new | `document/init.lua` | ceiling of a whole-block append (1 MiB, the runner's staging limit) |
 | `block` | new | `D.append` intent | a tool block written in one edit; lifts the 4096-byte/255-row slice limits |
 | `first_row` | new | runner `written` receipt | the row an appended write's first byte landed on |
+| `first_col` | new | runner `written` receipt | that byte's column: 0 means the write began the row, more means it continued one |
+| `written_ranges` | new | `tool_folds.lua` | pure: the rows a written receipt should fold, from each row's lexed kind |
 | `fold_written` | new | `tool_folds.lua` | writer fast path: folds a written tool block / summary row in the write's turn |
 
 ## Plan
@@ -140,6 +142,27 @@ Design notes (from reading the write path):
 - [x] Measure a 512 KiB append on a large chat; log it
 - [x] Existing streaming, stop-generation and tool-fold suites green (24 files in isolation; `make test` failures are environmental, see Log)
 
+## Revisions
+
+### 2026-09-27 — close review round 1 (BR-1, BR-2)
+- **Reason:** the parser, the authority, disagrees with two Spec predictions (see Log), and
+  the close review found the writer missed a round's first call after prose.
+- **Delta, Spec (Summaries):** "A summary can continue onto later lines … the reconcile
+  grows the fold" is replaced by: the parser folds only a summary's marker row, so the
+  writer's one-row fold is already exact. "A `📝:` the model writes inside a code block
+  would be folded by mistake; the reconcile removes it" is replaced by: the parser also
+  folds that row, so writer and parse agree and nothing is removed. "Text appended to a
+  line inside a fold keeps it folded" is wrong: appending deletes the fold, so the writer
+  re-folds the row it is still streaming, in the same turn.
+- **Delta, Done when:** clause 3's "reshapes (not reopens) a multi-line one" and clause 4
+  ("folded by the writer and then removed by the reconcile") are replaced by: after
+  settling, the writer's summary folds equal the parser oracle's and the reconcile removes
+  and creates nothing.
+- **Delta, Plan:** the receipt field is `first_row` plus `first_col` (the plan said
+  `from`). An appended block counts its first row only when the write began it
+  (`first_col` 0): a round's first call continues the answer's prose row (BR-1). The range
+  computation is the pure `written_ranges`.
+
 ## Log
 
 ### 2026-09-27
@@ -176,4 +199,11 @@ Design notes (from reading the write path):
   tabled); (b) one random spec per run dies at plenary's 50 s deadline under 8-way load
   (`highlight_typing`, `response_tools`: 5–10 s alone). The base commit a26cd3bc shows the
   same thing (`document_semantic_spec`).
+- 2026-09-27: close review round 1 → REWORK. BR-1 (Critical): with prose before a round's
+  first call, the append began mid-row and the anchor was the prose row, so no fold. Fixed
+  via `first_col`; e2e test covers the first call of two consecutive rounds after prose
+  (red without the fix), with unit cases for `written_ranges`. BR-2: Revisions entry above.
+  Minor (pure core): done, `written_ranges`. Minor (shared window wrapper): not done here;
+  the duplicate lives in #264's reconcile `apply`, and merging them means restructuring that
+  code, which would be a separate change.
 
