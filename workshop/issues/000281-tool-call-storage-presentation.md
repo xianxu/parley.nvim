@@ -160,9 +160,9 @@ Follow-ups under A:
 
 ## Plan
 
-- [ ] Trace how streamed tool content reaches serialization, parsing and folding; reproduce the reported display instability.
-- [ ] Evaluate per-chat payload files and compact transcript references against inline fences.
-- [ ] Record the design decision, lifecycle/compatibility rules and verification plan.
+- [x] Trace how streamed tool content reaches serialization, parsing and folding; reproduce the reported display instability.
+- [x] Evaluate per-chat payload files and compact transcript references against inline fences.
+- [x] Record the design decision, lifecycle/compatibility rules and verification plan.
 
 ## Log
 
@@ -176,4 +176,11 @@ Follow-ups under A:
   scratch-only; its shape is recorded in Findings 1, to be committed as a
   regression test under #264. Design recorded above; waiting for the
   operator to decide between A and B, and whether to amend the target.
+- **Decision (operator, 2026-09-27): A.** Tool payloads stay inline; the
+  whole-truth target is unchanged. Follow-ups: #264 extended to the streaming
+  append path, with the repro as its regression test (see its Revisions);
+  #290 (one write per tool block); #291 (serializer-level escape for column-0
+  markers in results, reversing the bounded-exception decision). B (per-chat
+  result files) is not pursued; its design and costs stay in Options above in
+  case transcript size becomes the problem.
 
