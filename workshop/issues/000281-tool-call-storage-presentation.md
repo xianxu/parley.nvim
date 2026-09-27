@@ -7,6 +7,7 @@ created: 2026-09-26
 updated: 2026-09-27
 estimate_hours:
 started: 2026-09-27T11:38:12-07:00
+flow: {kind: quick, provenance: inferred, spec: "517ebd22", done: "24251552"}
 ---
 
 # Rethink tool-call storage and streaming presentation
@@ -183,4 +184,15 @@ Follow-ups under A:
   markers in results, reversing the bounded-exception decision). B (per-chat
   result files) is not pursued; its design and costs stay in Options above in
   case transcript size becomes the problem.
+- Done-when coverage: (1) the streaming problem is in Findings 1 (reproduced)
+  and the complexity of inline payloads in Findings 2-3; (2) alternatives A/B/C
+  are compared in Options, including the image-asset pattern (Findings 5);
+  (3) for A the transcript format is unchanged: inline blocks paired by `id=`,
+  context rebuilt verbatim, the existing lifecycle kept (no new files), the
+  compatibility rule for #291's escape (old chats parse as before) in #291;
+  (4) verification lives in the follow-ups: partial streams and stable
+  display in #264's regression test and #290, fence-like and hostile content
+  in #291's fixtures, and interruption/reopen already handled (unterminated
+  block → synthetic dangling result, `chat_respond.lua:646`) and exercised by
+  #290's one-write rule, which removes the half-written state.
 
