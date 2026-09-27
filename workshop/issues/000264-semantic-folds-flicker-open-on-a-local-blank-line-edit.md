@@ -122,7 +122,7 @@ Durable plan: `workshop/plans/000264-semantic-fold-flicker-plan.md`.
 
 - [x] M1 — reconcile in place: continuity spec (red), pure `fold_diff`, inventory plus a
       single reconcile phase in `apply`, uncertainty clears only edit-intersected folds.
-- [ ] M2 — local restart: extent spec (red), and `after_fragment` falls back to a restart at
+- [x] M2 — local restart: extent spec (red), and `after_fragment` falls back to a restart at
       the edit's answer header (not row 0) when a fragment's end state changes.
 
 ## Log
@@ -417,4 +417,23 @@ tool-block control and, contrary to the plan's prediction, the question-edit cas
 fragment fast path handles a question-role blank without falling back). It stays as a
 regression guard. Each case also compares the settled parse with a cold parse
 (handle-free semantic fields plus fold ranges).
+
+### 2026-09-27 — M2 Task 7: local restart (measurements)
+
+- Extent spec 5/5 (each settled parse equals a cold parse on handle-free fields and
+  fold ranges); with the local restart disabled, 3 go red again. `make test` rc=0,
+  396/396 files (an earlier run's one failure, `response_target_spec`'s GC-retention
+  case, passed standalone twice and on rerun; its fixture never takes the fragment
+  path and both stores are weak-keyed, so it's load flakiness).
+- Scale case (issue Log, 242 rows / 40 summaries, blank under the last summary):
+  `uncertain {0,241}` and 401 repair steps → `{235,241}` and **10** steps.
+- Per-keystroke cost of `prune_from` (2000-row chat, 300 body-line keystrokes): base
+  0.50 ms/key, branch 0.48 ms/key; no regression.
+- Blank delete plus re-insert under summaries ×20: 26.5 s → 18.6 s. The gain is smaller
+  than the scale case, so the *re-insert* half probably still takes a slower path;
+  possible follow-up, not in #264's scope.
+- Plan deviation: `before_fragment` calls the shared `restart_point(w,first)` rather than
+  reusing its captured `header`. Same result, one code path.
+- Smoke-tested by the operator in `./parley_app` (2026-09-27): typing a new question no
+  longer blinks the last summary open (it did on `main`).
 
