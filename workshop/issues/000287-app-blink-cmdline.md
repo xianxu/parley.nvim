@@ -1,11 +1,12 @@
 ---
 id: 000287
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
+started: 2026-09-27T11:18:04-07:00
 ---
 
 # app: blink.cmp (lua matcher) for fuzzy cmdline completion and history search
