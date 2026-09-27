@@ -27,6 +27,28 @@ notification overlay. The welcome chat remains the onboarding source of truth.
 
 - [x] Remove the duplicate notification and keep starter onboarding intact.
 
+## Core concepts
+
+The landing review includes the stacked #280 and #285 changes; these entries
+record their public surface for the branch-wide architecture check.
+
+| Entity | Kind | Location | Status |
+|---|---|---|---|
+| `create_child_chat` | INTEGRATION | `lua/parley/init.lua` | modified |
+| `set_pending_previous_answer` | INTEGRATION | `lua/parley/document/init.lua` | new |
+| `clear_pending_previous_answer` | INTEGRATION | `lua/parley/document/init.lua` | new |
+
 ## Log
 
 ### 2026-09-26
+
+- Closure verification: all 183 starter and 302 shortcut-slice cases pass;
+  eight local launcher cases pass. Startup asserts the welcome buffer opens
+  without the redundant notification. The tutorial probe now accepts the
+  operator's multi-exchange examples while still requiring a practice question.
+
+## Revisions
+
+- 2026-09-26: User requested closing and landing the accumulated completed work.
+  Record the stacked branch surface and add a startup regression asserting both
+  the welcome buffer and absence of the duplicate notification (ARCH-PURPOSE).

@@ -12,6 +12,12 @@ describe('starter project discovery', function()
     local function run(cwd, marker, plugin_override)
         if marker then vim.fn.writefile({}, scratch .. '/project/.parley') end
         local probe = [[
+            local notifications = {}
+            local notify = vim.notify
+            vim.notify = function(message, ...)
+                notifications[#notifications + 1] = tostring(message)
+                return notify(message, ...)
+            end
             local p = require('parley')
             if vim.env.PLUGIN_OVERRIDE then
                 local opts = {chat_dir = vim.env.GLOBAL_CHAT, state_dir = vim.fn.stdpath('state')}
@@ -20,7 +26,15 @@ describe('starter project discovery', function()
                         require('parley.config').repo_marker)
                 end
                 p.setup(opts)
-            else require('parley.starter').start() end
+            else
+                require('parley.starter').start()
+                assert(vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ':t') == 'welcome.md',
+                    'no-argument startup did not open welcome.md')
+                for _, message in ipairs(notifications) do
+                    assert(not message:find('Welcome to Parley!', 1, true),
+                        'duplicate welcome notification: ' .. message)
+                end
+            end
             assert(vim.fs.normalize(p.config.chat_dir) == vim.fs.normalize(vim.env.EXPECTED_CHAT),
                 'wrong primary chat dir: ' .. p.config.chat_dir)
             if vim.env.EXPECTED_PROJECT then

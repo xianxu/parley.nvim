@@ -33,12 +33,19 @@ configuration and help remain consistent. (ARCH-DRY)
 
 ## Plan
 
-- [ ] Add the registry/config entry and buffer callback.
-- [ ] Add focused integration coverage, run it, and verify the full relevant test slice.
+- [x] Add the registry/config entry and buffer callback.
+- [x] Add focused integration coverage, run it, and verify the full relevant test slice.
 
 ## Log
 
 ### 2026-09-26
+
+- Closure audit: corrected the obsolete prune default assertion after Option+p
+  moved to private notes. The complete ui/keybindings slice now passes,
+  including private prefix, configuration, registry and architecture checks.
+- Added real Normal/Insert keystroke coverage with a custom prefix: all three
+  private-note tests pass, preserving adjacent text and cursor placement.
+  Hardcoding the default prefix makes both new tests fail.
 
 - Discovered `<M-p>` was already the shipped chat-prune primary. Moved prune to
   its stable `<C-g>b` binding so private-note insertion has one meaning.
