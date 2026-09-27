@@ -52,15 +52,20 @@ wrong in only two ways:
    cleared eagerly (M1 Task 4).
 
    **Intersection rule (precise).** An edit event carries post-edit `first_row`/`last_row`
-   and pre-edit `old_last_row`. Only rows the edit *wrote* can corrupt a fold:
-   post-edit `[first_row, last_row)` when `last_row>first_row`. A **pure deletion**
-   (`last_row==first_row`) writes nothing. Neovim shrinks any fold that lost rows onto the
-   surviving text, so the fold stays attached to real content and the diff reconcile fixes
-   its extent. Deletions therefore never trigger the eager clear. This is what keeps the
-   issue's main case (deleting the blank under a `📝:` or `🧠:`) flicker-free, and it also
-   covers deleting a fold's own last rows (e.g. a tool result's closing fence).
-   Only `semantic_changed` edits are recorded: non-semantic edits schedule no repair today
-   and Neovim already moves folds correctly for them.
+   and pre-edit `old_last_row`. A manual fold can absorb rows that aren't its own **only
+   when the edit adds net rows**: `last_row-first_row > old_last_row-first_row`. (Verified
+   headless on nvim 0.11.7 in plan review round 2: a brute-force sweep of every
+   `set_lines`/`set_text` edit against a fold, plus native Backspace-at-column-0, `J`, `o` and
+   `O`. Edits that keep or lower the row count only shrink a fold onto its own surviving
+   text or rewrite it in place.) So only a net-growing edit is recorded, as its written rows
+   post-edit `[first_row, last_row)`, and intersection is measured against **post-edit**
+   fold extents. (A line inserted directly above a fold's first row with `set_lines` is
+   absorbed into the fold, so post-edit extents are what show that.)
+   Consequences: pure deletions **and joins** (Backspace at column 0 or `J` on the blank
+   under a `📝:`/`🧠:`, and Delete at end of line) never clear eagerly. That's the issue's
+   main case. Deleting a fold's own last rows (e.g. a tool result's closing fence) doesn't
+   either; the diff reconcile fixes the extent. Only `semantic_changed` edits are recorded:
+   non-semantic edits schedule no repair today.
 2. **The structure changed without touching the fold's rows** (for example, a marker typed
    above it changes how its rows parse). → The old fold stays briefly: stale in meaning,
    but stable in position, over exactly the rows it covered. The diff reconcile removes or
@@ -197,12 +202,22 @@ end
   - Negative: after settling, the existing settled oracle still holds (copy `oracle()` from
     `tests/integration/tool_folds_spec.lua:33-45` into this file's helpers).
 
+  Real keystrokes (not only `set_lines`), because joins take a different edit shape. Drive
+  them with `vim.api.nvim_feedkeys(keys,'xt',false)` on a window showing the buffer, cursor
+  placed first:
+  - Backspace at column 0 of the blank under a summary, and under a thinking block (insert
+    mode: `i<BS><Esc>`);
+  - `J` on the summary row with a blank below;
+  - Delete at end of line (`A<Del><Esc>`) on the summary row.
+  Watch the summary/thinking row: it must never open.
+
   Boundary cases for the intersection rule (Task 4):
   - deleting a tool result's closing fence (a pure deletion of the fold's own last row): the
     fold is never eagerly cleared, and the settled state equals the oracle;
-  - typing a character into a closed tool result's body (a written row inside the fold):
-    the fold *is* cleared before repair and reconciled after (eager behaviour kept where
-    Neovim corrupts the fold). This case is excluded from the continuity watch.
+  - a **net insertion inside** a closed tool result (`nvim_buf_set_lines(buf,r,r,false,{'x'})`
+    with `r` inside the body), which really does grow the fold: the fold *is* cleared
+    before repair and the settled state equals the oracle. This case is excluded from the
+    continuity watch.
 
 - [ ] **Step 2: Run and confirm it fails.**
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/document_fold_continuity_spec.lua" -c "qa!"`
@@ -258,8 +273,11 @@ end
   nested]` (nested: any row in the group with `foldlevel>1`), `zO` if `was_open`, then move
   past the group (`foldclosedend+1`). It returns `folds,next_row,done`. Unit test
   `tests/unit/fold_native_spec.lua`: three groups (open, closed, and nested with the inner
-  fold on the outer's first row) → exact outer extents, `nested` flags, and open/closed state
-  unchanged afterwards (`foldclosed` per row compared before vs after).
+  fold on the outer's first row) → exact outer extents and `nested` flags; the *outer*
+  open/closed state is unchanged afterwards for every group. The inner state of a nested
+  group isn't preserved (`zC`/`zO` reopens inner folds). That's acceptable because a nested
+  group is never an exact match: `FoldDiff` always removes and recreates it, restoring the
+  open state from the `capture` phase, which runs first.
 - [ ] **Step 3: Single reconcile phase.** In `apply`, replace phases `clear`/`create` with
   `inventory` (accumulate over slices) → `reconcile`: compute
   `require('parley.fold_diff').diff(existing,plan.ranges,BATCH_GROUPS)` once, then per
@@ -292,11 +310,13 @@ end
   document subscriber in `ensure`, :480-505)
 
 - [ ] **Step 1:** Track written rows: in the `edit` branch, **only when
-  `event.semantic_changed` and `event.last_row>event.first_row`** (the intersection rule),
-  record `{first=event.first_row,last=event.last_row}` in `s.edited`. Shift entries by the row
+  `event.semantic_changed` and the edit adds net rows**
+  (`event.last_row-event.first_row > event.old_last_row-event.first_row`; the intersection
+  rule), record `{first=event.first_row,last=event.last_row}` in `s.edited`. Shift entries by the row
   delta exactly as `s.first`/`s.last` are shifted. Bound it: keep at most 8 ranges, merging
   the two nearest when a ninth arrives (the union can only widen the eager clear, which is
-  the conservative direction). Clear `s.edited` whenever `M.step` returns `'idle'` (settled
+  the conservative direction; count merges with `line_reader.record_work(buf,{fold_edit_merges=1})`
+  so an unexpected rise is visible, since with the net-growth filter merging should be rare). Clear `s.edited` whenever `M.step` returns `'idle'` (settled
   or nothing to do), on `reload`, and on `detach`. Unit test: 1000 semantic single-row
   inserts leave `#s.edited<=8`; a settle empties it.
 - [ ] **Step 2:** In `clear_uncertainty`, for scopes ≤ `INTERACTIVE_ROWS`, replace the
@@ -334,9 +354,10 @@ end
   `range==nil or range.first>=expected_first`. (The range stays `{restart, EOF}`: bounded
   below, not local to the block. That meets the Done-when bullet "not whole-document".)
   Then drain and assert the settled document equals a **cold parse** of the same lines: a
-  fresh `D.attach` on a copy buffer, compared row by row on
-  `metadata.semantic` (role, section kind, section start), `metadata.confirmed`, and
-  `D.folds` ranges.
+  fresh `D.attach` on a copy buffer, compared row by row on **handle-free fields only**:
+  `metadata.semantic.role`, `.section_kind`, `.section_start`, `metadata.confirmed`, and
+  `D.folds` row ranges. (Other `metadata.semantic` fields, e.g. `preface_origin`, hold handles
+  that differ between buffers.)
   Cases and `expected_first`:
   - blank after a summary, first exchange → the `🤖:` header row;
   - blank after thinking → the `🤖:` header row;
@@ -371,10 +392,17 @@ end
   preceding `metadata.after`, **don't** prepare a local restart (keep restart 0). Then
   `pruned=w.deps:prune_from(<handle at restart>,{budget=dep_budget,before_rank=...})`, while
   every handle still ranks. If it's not `ok` (budget), don't prepare a local restart. Store
-  `captured.local_restart={restart=restart,checkpoint=checkpoint,roots=pruned.roots,serial=w.serial}`.
+  `captured.local_restart={restart=restart,checkpoint=checkpoint,roots=pruned.roots,
+  deps=w.deps,base_roots=w.deps.roots}`. This now runs on every admitted local fragment (the
+  per-keystroke path): record `prune_from`'s node visits in the fragment's `work`, and compare
+  the per-keystroke work counts before and after in `tests/unit/document_splice_admission_spec.lua`
+  (log the numbers in the issue).
 - [ ] **Step 3: Use it only on an end-state mismatch.** In `after_fragment`, **only** at the
   end-checkpoint comparison (:492-495) and only if `captured.local_restart` exists:
-  `w.deps:install(captured.local_restart.roots)`, then build evidence with **every** field
+  first guard in O(1) that the index is the one pruned (with `r=captured.local_restart`):
+  `w.deps==r.deps and w.deps.roots==r.base_roots` (the `serial` check doesn't prove this,
+  because `deps:add` doesn't bump `serial`); if it fails, take the restart-0 path. Otherwise
+  `w.deps:install(r.roots)`, then build evidence with **every** field
   `after_splice` reads: `{worker=worker, restart=r.restart, checkpoint=r.checkpoint,
   serial=w.serial, fallback=false, active_scope=captured.active}` (`captured.active` is
   re-certified by `after_splice`'s existing `validate_certificate` check), register it in
