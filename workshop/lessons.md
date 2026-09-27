@@ -180,3 +180,14 @@ oracle, and the mutation that would make the test fail.
   for every spec with a trigger except the deliberately lazy MarkdownPreview.
 - A test that swaps a global (`package.loaded[...]`) must restore it through
   `pcall`, or a failing call leaks the fake into later assertions.
+
+## 2026-09-27 (#281 — tool-call storage investigation)
+
+- Reproduce a UI symptom before redesigning the data it's blamed on. #281
+  assumed inline tool payloads caused fold flicker; stepping the deferred
+  fold work one scheduler turn at a time (`tool_folds.step`, probing
+  `foldclosed` after each step) showed the cause was clear-before-create in
+  repair, which a storage change wouldn't have fixed.
+- Settled-state fold tests can't see a flicker. When work is split across
+  event-loop turns, assert the invariant after every step, not only after
+  `flush`.

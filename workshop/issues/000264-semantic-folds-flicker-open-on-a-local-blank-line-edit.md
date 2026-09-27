@@ -222,3 +222,30 @@ Still ARCH-PURPOSE: fix the class. But "local to the affected block" now has a
 per-kind proof obligation attached, and the tests should assert the negative —
 an edit below a `summary` / fenced tool block leaves its confirmation intact —
 not merely that the flicker stopped.
+
+## Revisions
+
+### 2026-09-27 — Scope extended to the streaming append path (from #281)
+
+Reason: #281's headless repro shows the same clear-before-create flicker on
+ordinary streaming appends, not only after a blank-line edit.
+
+Delta:
+- Second site: `apply()` (`tool_folds.lua:323`) clears every fold in the
+  exchange in one turn (`zD`, :375-382) and recreates them in the next
+  (:383-400). An earlier, closed, *unchanged* `🔧`/`📎` fold reads
+  `foldclosed == -1` for exactly one step after each structural append: once
+  per whole-block write, twice when a result's closing fence arrives in a
+  later 4 KB write (#290 removes that second case).
+- The fix direction is unchanged: create the replacement before removing
+  anything, and leave folds whose topology didn't change untouched. It must
+  cover `apply()` as well as `clear_uncertainty`.
+- New regression test (must fail before the fix): open a chat with a closed
+  tool pair, append a second tool block (whole, split across two writes, and
+  as a one-line result), drain the document, then call `tool_folds.step`
+  repeatedly, asserting after every step that the earlier fold's
+  `foldclosed` never becomes -1. Repeat for thinking and summary (fix the
+  class). The repro harness is `D.attach(buf,{schedule=false})`, then
+  `F.setup`, then `nvim_buf_set_lines` appends, then `D.drain`, then a loop of
+  `F.step`, probing `vim.fn.foldclosed(row)`.
+
