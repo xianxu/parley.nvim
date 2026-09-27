@@ -14,7 +14,7 @@ describe("Parley theme registry", function()
             "nightfox", "dayfox", "dawnfox", "duskfox", "nordfox", "terafox", "carbonfox",
             "startup",
         }, vim.tbl_map(function(item) return item.id end, items))
-        assert.equals("moonfly", theme.default().colorscheme)
+        assert.equals("nordfox", theme.default().colorscheme)
     end)
 
     it("validates persisted ids and falls back to startup", function()

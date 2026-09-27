@@ -244,6 +244,44 @@ describe("cliproxy IO lifecycle", function()
             assert.equals(0, #cliproxy.spawned_pids()) -- did NOT spawn
         end)
 
+        it("keeps a selected model ready across submissions without a local binary", function()
+            local port = ready_port.free_port()
+            set_endpoint(port)
+            local auth = SPEC_DATA_DIR .. "/onboarding-auth"
+            vim.fn.mkdir(auth, "p")
+            vim.fn.writefile({ '{"type":"codex","email":"test@example.com"}' }, auth .. "/codex-test.json")
+            local handle = fixture_process.spawn(FAKE, { "--port", tostring(port),
+                "--management-key", cliproxy.management_key(), "--auth-store", auth })
+            assert(handle)
+            ready_port.wait_listening(port)
+            assert.is_nil(cliproxy.discover_binary(), "fixture must have no discoverable executable")
+            local picks = 0
+            local app = { _state = { agent = "saved" },
+                agents = { saved = { provider = "cliproxyapi", model = { model = "gpt-5.6-sol" } } },
+                agent_picker = { agent_picker = function(_, opts)
+                    picks = picks + 1
+                    opts.on_cancel()
+                end } }
+            local function ready()
+                return await(function(done)
+                    require("parley.starter_onboarding").ensure_ready(app,
+                        function() done(true) end, function() done(false) end)
+                end)
+            end
+            assert.is_true(ready())
+            assert.is_true(ready())
+            assert.equals(0, picks)
+            assert.equals(0, #cliproxy.spawned_pids())
+            app.agents.saved.model.model = "unavailable-model"
+            assert.is_false(ready())
+            assert.equals(1, picks)
+            app.agents.saved.model.model = "gpt-5.6-sol"
+            -- Removing the account must still offer setup on the next submission.
+            vim.fn.delete(auth .. "/codex-test.json")
+            assert.is_false(ready())
+            assert.equals(2, picks)
+        end)
+
         it("writes the rendered config 0600 with the resolved secret on disk", function()
             local port = ready_port.free_port()
             set_endpoint(port) -- adds vault secret "testkey"

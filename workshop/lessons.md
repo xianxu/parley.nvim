@@ -142,3 +142,32 @@ oracle, and the mutation that would make the test fail.
 - Starter dependencies used before the plugin manager initializes must be available
   in both launcher-provided and documented standalone startup. Test both with
   fresh processes and isolated data homes; never inject the runtime into every fixture.
+
+## 2026-09-25 (#276 — local app launch)
+
+- Outside one checkout is not necessarily outside repo mode: parent markers
+  elsewhere still count. Enforce the requested mode at production startup and
+  test the real detector with marked default and alternate profile ancestry.
+
+## 2026-09-26 (#279 — proxy readiness)
+
+- Do not gate a service client on a locally installed server executable. Let the
+  service lifecycle owner probe an existing server before checking spawn prerequisites.
+
+## 2026-09-26 (#280 — review of local app changes)
+
+- Serialize profile ownership checks with launch/reset effects; checking a PID
+  without a shared lock does not protect a concurrently launched editor.
+- Assemble app aliases inside the registry-derived options loop and run the
+  single-source architecture suite when changing shortcut configuration.
+
+## 2026-09-26 (#255/#285 — refresh admission)
+
+- Reject duplicate submissions before deleting visible output or publishing a
+  replacement snapshot. Test duplicates while waiting, before output, during
+  streaming, and after the question moves; verify the existing writer survives.
+- Snapshot ownership has both pending and admitted phases. Keep documentation
+  and cleanup tests aligned with both phases when moving work before admission.
+- Closing stacked issues repeats the entire branch review window. Establish one
+  shipment boundary before invoking close; never let concurrent reviewers run
+  test harnesses in the same checkout, where process cleanup kills peer tests.

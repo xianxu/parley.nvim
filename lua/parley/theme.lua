@@ -4,14 +4,17 @@
 -- the same picker rows and validation set.
 local M = {}
 
+local nightfox_plugin = { "EdenEast/nightfox.nvim", name = "nightfox",
+    commit = "4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a" }
+
 local DEFAULT = {
     id = "startup",
     label = "Restore startup theme",
-    colorscheme = "moonfly",
+    colorscheme = "nordfox",
     mode = "dark",
     style = "subdued",
     startup = true,
-    plugin = { "bluz71/vim-moonfly-colors", name = "moonfly", commit = "4ed07bc0c6083cdd547c63f5c245e02c068b0c45" },
+    plugin = nightfox_plugin,
 }
 
 local CHOICES = {
@@ -61,8 +64,6 @@ for _, variant in ipairs({ "dark", "darker", "cool", "deep", "warm", "warmer", "
         plugin = onedark_plugin,
     }
 end
-local nightfox_plugin = { "EdenEast/nightfox.nvim", name = "nightfox",
-    commit = "4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a" }
 for _, name in ipairs({ "nightfox", "dayfox", "dawnfox", "duskfox", "nordfox", "terafox", "carbonfox" }) do
     CHOICES[#CHOICES + 1] = {
         id = name, label = name, colorscheme = name,

@@ -58,7 +58,15 @@ local ok, why = pcall(function()
             assert(vim.fn.filereadable(path) == 1, 'bundled tutorial was not seeded: ' .. path)
             local tutorial = vim.fn.readfile(path)
             local lesson = parser.parse_chat(tutorial, parser.find_header_end(tutorial), p.config)
-            assert(#lesson.exchanges == 1, 'tutorial must contain one practice question')
+            assert(#lesson.exchanges >= 1, 'tutorial must contain a practice question: ' .. path)
+            for _, line in ipairs(tutorial) do
+                for target in line:gmatch('%]%(([^%s%)]+%.md)%)') do
+                    if not target:match('^%a[%w+.-]*:') then
+                        assert(vim.fn.filereadable(data .. '/chats/' .. target) == 1,
+                            'tutorial links to an unseeded chat: ' .. target)
+                    end
+                end
+            end
         end
         assert(parser.is_chat_filename('advanced.md'))
         local basics_buf = vim.fn.bufadd(basics_path)
@@ -107,6 +115,22 @@ local ok, why = pcall(function()
         assert(request.provider == 'cliproxyapi' and request.model == 'claude-opus-5',
             'resumed request retained the placeholder model')
         onboarding.ensure_ready, vim.api.nvim_list_uis, p.dispatcher.query = saved_ready, saved_uis, saved_query
+    end
+    if vim.env.STARTER_CHAT_KEYS then
+        local called
+        p.cmd.ChatNew = function() called = 'new' end
+        p.cmd.ChatFinder = function() called = 'finder' end
+        for _, mode in ipairs({ 'n', 'i' }) do
+            for shortcut, action in pairs({ ['<M-n>'] = 'new', ['<C-g>c'] = 'new',
+                ['<M-f>'] = 'finder', ['<C-g>f'] = 'finder' }) do
+                local mapping = vim.fn.maparg(shortcut, mode, false, true)
+                assert(type(mapping.callback) == 'function', shortcut .. ' missing in ' .. mode)
+                called = nil
+                mapping.callback()
+                assert(called == action, shortcut .. ' ran wrong action in ' .. mode)
+            end
+            assert(vim.fn.maparg('<C-g>n', mode) ~= '', 'new question must remain available')
+        end
     end
     if vim.env.STARTER_CONNECT_MODE then
         dofile(vim.env.STARTER_REPO .. '/tests/packaging/starter_connect_probe.lua')

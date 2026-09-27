@@ -180,9 +180,9 @@ describe("key bindings help", function()
         setup_parley()
 
         local lines = parley._keybinding_help_lines("chat")
-        -- #214: prune moved to the alt family as <M-p>, keeping <C-g>b as a
-        -- legacy alias. The help shows the PRIMARY, so it now reads <M-p>.
-        assert.is_true(has_line(lines, "<M-p>", "Prune"))
+        -- <M-p> is reserved for private-note insertion; prune remains on its
+        -- stable <C-g>b chord.
+        assert.is_true(has_line(lines, "<C-g>b", "Prune"))
         assert.is_false(has_line(lines, "<M-p>", "Toggle tool folds"))
         assert.is_false(has_line(lines, "", "Toggle tool folds"))
     end)
@@ -282,13 +282,12 @@ describe("keybinding registry", function()
         local by_id = {}
         for _, entry in ipairs(reg.entries) do by_id[entry.id] = entry end
 
-        -- #214: `keys` is the FULL resolved list. chat_prune gained <M-p> with
-        -- <C-g>b kept as a legacy alias, so this asserts the list, not a single
-        -- key — an assertion that took only keys[1] would have stayed green
-        -- while the alias silently vanished.
+        -- `keys` is the FULL resolved list. chat_prune keeps its stable
+        -- <C-g>b binding, so this asserts the resolved value rather than a
+        -- registry default.
         for _, expected in ipairs({
             { id = "super_repo_toggle", keys = { "<C-g>p" }, modes = { "n", "i" } },
-            { id = "chat_prune", keys = { "<M-p>", "<C-g>b" }, modes = { "n" } },
+            { id = "chat_prune", keys = { "<C-g>b" }, modes = { "n" } },
         }) do
             local entry = by_id[expected.id]
             assert.is_nil(entry.default_key)
@@ -301,7 +300,7 @@ describe("keybinding registry", function()
         local tool_keys = reg.resolve_keys(by_id.chat_toggle_tool_folds, parley.config)
         assert.is_nil(tool_keys)
         assert.is_true(has_line(parley._keybinding_help_lines("other"), "<C-g>p", "super-repo"))
-        assert.is_true(has_line(parley._keybinding_help_lines("chat"), "<M-p>", "Prune"))
+        assert.is_true(has_line(parley._keybinding_help_lines("chat"), "<C-g>b", "Prune"))
     end)
 
     it("registers tool folds only when a non-empty shortcut is configured", function()
@@ -357,8 +356,8 @@ describe("branch/prune chords (#214 M1)", function()
             "the legacy alias is no longer advertised: " .. tostring(shown))
     end)
 
-    it("prune keeps <C-g>b as a legacy alias alongside <M-p>", function()
-        assert.same({ "<M-p>", "<C-g>b" }, reg.resolve_keys(entry("chat_prune"), parley.config))
+    it("prune stays on <C-g>b while <M-p> belongs to private notes", function()
+        assert.same({ "<C-g>b" }, reg.resolve_keys(entry("chat_prune"), parley.config))
     end)
 
     it("branch_ref has a config_key, so M2 cannot revoke these chords", function()
@@ -372,7 +371,7 @@ describe("branch/prune chords (#214 M1)", function()
         local shipped = dofile("lua/parley/config.lua")
         assert.same({ "<M-i>", "<C-g>i" },
             shipped.chat_shortcut_branch_ref.shortcut)
-        assert.same({ "<M-p>", "<C-g>b" }, shipped.chat_shortcut_prune.shortcut)
+        assert.equals("<C-g>b", shipped.chat_shortcut_prune.shortcut)
     end)
 
     -- BR-12: asserting only the ABSENCE of <M-S-CR> would pass with <C-g>i first.
@@ -868,7 +867,7 @@ end)
 
 -- #214: open_file follows a link — a 🌿: reference to a sub-chat, an inline
 -- [🌿:…](file), an @@path@@ — joining the alt family that already means "act on
--- this transcript". Same migration shape as M1's <M-p>/<M-i>: the alt spelling
+-- this transcript". Same migration shape as M1's <M-i>: the alt spelling
 -- leads because the help float renders keys[1], and the <C-g> spelling stays a
 -- legacy alias rather than being revoked.
 --
@@ -1075,10 +1074,10 @@ describe("open_file joins the alt family (#214)", function()
 
     it("the documented <C-g>/alt lead split is what the registry actually ships", function()
         local cg, alt = lead_split(parley.config)
-        -- atlas/ui/keybindings.md "Resolution" and the comment on
-        -- chat_shortcut_new_question in config.lua both name these six.
+        -- atlas/ui/keybindings.md "Resolution" and the comments on the
+        -- migrated shortcuts in config.lua name these groups.
         assert.same({ "chat_drill_in", "new_question", "outline" }, cg)
-        assert.same({ "branch_ref", "chat_prune", "open_file" }, alt)
+        assert.same({ "branch_ref", "open_file" }, alt)
     end)
 
     it("and the derivation reads keys[1], which is what help renders", function()
@@ -1088,7 +1087,7 @@ describe("open_file joins the alt family (#214)", function()
         flipped.chat_shortcut_outline = { modes = { "n", "i" }, shortcut = { "<M-t>", "<C-g>t" } }
         local cg, alt = lead_split(flipped)
         assert.same({ "chat_drill_in", "new_question" }, cg)
-        assert.same({ "branch_ref", "chat_prune", "open_file", "outline" }, alt)
+        assert.same({ "branch_ref", "open_file", "outline" }, alt)
     end)
 
     it("and the prefix scan really would catch a delaying chord", function()

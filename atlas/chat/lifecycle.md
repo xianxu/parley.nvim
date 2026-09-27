@@ -135,7 +135,7 @@ There is no dedicated user command for moving just one chat. The Lua helper
 but does not perform tree-wide reference rewriting; it is an implementation API,
 not the behavior of `:ParleyChatMove`.
 
-## Branching / Pruning (`<M-p>`, legacy `<C-g>b`)
+## Branching / Pruning (`<C-g>b`)
 Splits current exchange + following into a new child chat with `🌿:` links. Async LLM topic generation.
 
 The tool-fold toggle remains configurable as
@@ -197,13 +197,20 @@ answer it replaces.
 - A request whose context includes that exchange — a later question in the
   same chat, or a sub-chat whose ancestors include it — carries the previous
   answer, whole, rather than the header or partial text now in the buffer.
-- It is captured from the command-time parse and held on the document
-  coordinator (`D.set_previous_answer` / `D.previous_answers`) from the top of
-  `prepare_input`, before preparation removes a byte.
+- An accepted refresh captures it from the command-time parse before removing
+  visible output. The document coordinator holds it under the submission owner
+  (`D.set_pending_previous_answer`), then transfers it to the admitted generation
+  (`D.set_previous_answer`). `D.previous_answers` exposes both phases.
 - It is substituted in the tick the command reads the chat, because
   `build()` runs later.
 
-It lives exactly as long as that generation holds its grant:
+Pending memory is cleared when its owning submission is rejected or cancelled.
+The response registry reserves the selected question before snapshot publication
+or deletion. Duplicate submissions preserve the running response; document
+captures track waiting questions and generation identities track admitted ones.
+Reservations are released with the response, and terminal responses do not block
+a later refresh.
+After admission it lives as long as that generation holds its grant:
 - it ends when the generation ends, in success or failure, since both are
   recorded in the transcript;
 - an edit that revokes it, reload, detach, or deleting the question also end

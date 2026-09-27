@@ -1486,6 +1486,29 @@ local function start_scoped_response(frame)
         refuse('start', nil, 'no question selected'); return nil, 'no question selected'
     end
     local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(config)})
+    -- Reserve the command's question before removing an answer. Runner grant
+    -- admission happens later; a duplicate must not revoke that existing writer
+    -- by deleting its output first. Capture only the question marker so the
+    -- writer's insertion at the question end cannot invalidate its reservation.
+    -- The capture follows edits above it and dies when the marker is replaced.
+    local selected_marker = D.query(doc, exchange.question.line_start - 1, exchange.question.line_start)[1]
+    for active in pairs(responses[buf] or {}) do
+        local snapshot = active.session and Session.snapshot(active.session)
+        local status = snapshot and snapshot.status
+        if active.doc == doc and active.question_source and status ~= 'terminal' and status ~= 'cancelled' then
+            local source = D.resolve_user(doc, active.question_source)
+            local generation = snapshot and snapshot.generation
+            local owned = generation and selected_marker and generation.exchange == selected_marker.handle
+            if owned or source and source.regions[1].first.row == exchange.question.line_start - 1 then
+                refuse('start', nil, 'overlap'); return nil, 'overlap'
+            end
+        end
+    end
+    local question_source, source_reason = D.capture_user(doc, {operation = 'respond-question', regions = {
+        {first = {row = exchange.question.line_start - 1, col = 0},
+            last = {row = exchange.question.line_start - 1, col = #config.chat_user_prefix}},
+    }})
+    if not question_source then refuse('start', nil, source_reason); return nil, source_reason end
     -- #261/#255: an earlier exchange still being regenerated contributes its
     -- previous answer, not the header or partial text now in the buffer. Here,
     -- in the tick the command read the lines — build() runs later, after
@@ -1496,10 +1519,42 @@ local function start_scoped_response(frame)
     -- This exchange's own answer, from the command-time parse: the grant this
     -- response acquires guarantees it is exactly what preparation will remove.
     local replaced_answer = exchange.answer and PrevAnswer.capture(frame.parsed.exchanges[index]) or nil
+    local footer = trailing_footnote_boundary(frame.lines, exchange.question.line_end)
+    local pending_entity
+    local pending_owner = replaced_answer and {} or nil
+    local input_parsed = vim.deepcopy(parsed)
+    if replaced_answer then
+        -- Publish the old answer before changing the transcript.  The pending
+        -- slot is adopted by the generation once it acquires its grant, so a
+        -- concurrent question can still use this snapshot during readiness.
+        local live_marker = D.query(doc, exchange.question.line_start - 1, exchange.question.line_start)[1]
+        pending_entity = live_marker and live_marker.handle
+        if not pending_entity then
+            D.cancel_user(doc, question_source)
+            refuse('start', nil, 'question identity unavailable'); return nil, 'question identity unavailable'
+        end
+        D.set_pending_previous_answer(doc, {entity = pending_entity, value = replaced_answer, owner = pending_owner})
+        local delete_last = exchange.answer.line_end - 1
+        if footer then delete_last = math.min(delete_last, footer - 1) end
+        require('parley.buffer_edit').delete_answer(buf, exchange.question.line_end, delete_last, config)
+        local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local current_header = require('parley.chat_parser').find_header_end(current_lines)
+        if current_header then
+            local current = require('parley.chat_parser').parse_chat(current_lines, current_header, config)
+            if current.exchanges[index] then
+                parsed = current
+                exchange = parsed.exchanges[index]
+            end
+        end
+    end
     local question = exchange.question
     local last = exchange.answer and exchange.answer.line_end or question.line_end
-    local footer = trailing_footnote_boundary(frame.lines, question.line_end)
-    if footer then last = math.max(question.line_end, math.min(last, footer)) end
+    local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    footer = trailing_footnote_boundary(current_lines, question.line_end)
+    -- Footnotes live outside the replaceable answer span.  Once the old answer
+    -- is removed, the new shell starts directly after the question and leaves
+    -- surviving annotations and the footer in place.
+    if footer then last = question.line_end end
     local agent = vim.deepcopy(_parley.get_agent())
     local selected_record = (_parley.agents or {})[agent.name]
     local model_name = type(agent.model) == 'table' and agent.model.model or agent.model
@@ -1508,7 +1563,7 @@ local function start_scoped_response(frame)
     local root_policy = frame.params.root_policy or require('parley.neighborhood').policy_for_buf(buf)
     info.root_policy = root_policy
     local source = {}
-    for row = question.line_end + 1, last do source[#source + 1] = frame.lines[row] end
+    for row = question.line_end + 1, last do source[#source + 1] = current_lines[row] end
     local first_byte = vim.api.nvim_buf_get_offset(buf, question.line_end)
     local function preparation_plan()
         local prefix = config.chat_assistant_prefix
@@ -1524,13 +1579,18 @@ local function start_scoped_response(frame)
     local spec = {operation = 'respond', question = {first = {row = question.line_start - 1, col = 0}, last = point},
         output = {first = point, last = {row = last - 1, col = #frame.lines[last]}},
         preparation = plan, input = {selection = index}, input_prefix = true}
-    -- The captured request excludes the answer being replaced. Its old bytes
-    -- remain in the editor until preparation has acquired every mutable gap.
+    -- The captured request excludes the answer being replaced. The old bytes
+    -- have already been removed; preparation now installs the new shell.
     exchange.answer = nil
-    local input_parsed, input_index = parsed, index
+    -- Keep the request snapshot aligned with the visible replacement.  This is
+    -- especially important for tool content blocks, which otherwise remain
+    -- eligible for the target exchange after its answer was cleared above.
+    if input_parsed.exchanges[index] then input_parsed.exchanges[index].answer = nil end
+    local input_index = index
     if frame.input_rows then
-        input_parsed = vim.deepcopy(parsed); input_parsed.exchanges = {}
-        for i, item in ipairs(parsed.exchanges) do
+        local source_parsed = input_parsed
+        input_parsed = vim.deepcopy(source_parsed); input_parsed.exchanges = {}
+        for i, item in ipairs(source_parsed.exchanges) do
             if item.question and frame.input_rows[item.question.line_start] then
                 input_parsed.exchanges[#input_parsed.exchanges + 1] = vim.deepcopy(item)
                 if i == index then input_index = #input_parsed.exchanges end
@@ -1540,7 +1600,10 @@ local function start_scoped_response(frame)
     local group = responses[buf] or {}; responses[buf] = group
     response_order = response_order + 1
     local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order, batch = frame.batch,
+        question_source = question_source,
         label = (frame.lines[question.line_start] or 'Response'):sub(1, 256)}; group[entry] = true
+    entry.pending_previous_entity = pending_entity
+    entry.pending_previous_owner = pending_owner
     local latest, messages, final_payload, topic_source, topic_parent, failure_notice, completion_failure
     local message_lead = 0
     local topic_attempted, main_finished, topic_finished = false, false, true
@@ -1557,6 +1620,12 @@ local function start_scoped_response(frame)
     end
     local function release()
         if not main_finished or not topic_finished then return end
+        if entry.question_source then D.cancel_user(doc, entry.question_source); entry.question_source = nil end
+        if entry.pending_previous_entity then
+            D.clear_pending_previous_answer(doc, entry.pending_previous_entity, entry.pending_previous_owner)
+            entry.pending_previous_entity = nil
+            entry.pending_previous_owner = nil
+        end
         if topic_source then D.cancel_user(doc, topic_source); topic_source = nil end
         if topic_parent then D.cancel_user(doc, topic_parent); topic_parent = nil end
         group[entry] = nil
@@ -1619,7 +1688,7 @@ local function start_scoped_response(frame)
         -- after its input is ready, so the slot is in place first (#261/#255).
         if replaced_answer then
             D.set_previous_answer(doc, {epoch = ctx.epoch, entity = ctx.entity,
-                generation = ctx.generation, value = replaced_answer})
+                generation = ctx.generation, value = replaced_answer, owner = pending_owner})
         end
         local operation = {cancelled = false, resolved = false}
         local function resolve()

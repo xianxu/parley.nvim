@@ -31,12 +31,13 @@ reference at the cursor** and creates the child it points at:
 
 | context | what happens | the child gets |
 |---|---|---|
-| visual selection | the selection becomes an inline `[🌿:…](child)` anchor, in place | `tell me more about "<sel>"` |
+| visual selection | the selection becomes an inline `[🌿:…](child)` anchor, in place | `💬: follow up question`, then `> <sel>` and an empty typing line |
 | pending `<M-q>` markers | the markers are gathered and stripped; a `🌿:` line lands at the cursor | those quote blocks as its first question |
 | neither | a bare `🌿:` line at the cursor — a **placeholder** — and the child opens for you to type in | nothing |
 
-All chat creation paths open the child at the end of its first question header
-line in Insert mode, including the seeded visual-selection question. The parent
+Selection branches open on the empty line below the quoted selection in Insert
+mode, with a blank separator above the cursor. Other branch creation paths open
+at the end of the first question header line. The parent
 reference must be saved first. `open_branch_question` owns the scheduled landing;
 it cancels if the originating window closes, loses focus, or changes buffers
 before navigation runs (#248).

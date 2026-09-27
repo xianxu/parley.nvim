@@ -16,7 +16,7 @@ for _, spec in ipairs(theme.items()) do
     }, root .. "/runtime/colors/" .. spec.colorscheme .. ".lua")
 end
 vim.opt.runtimepath:prepend(root .. "/runtime")
-vim.cmd.colorscheme("moonfly")
+vim.cmd.colorscheme("nordfox")
 parley.setup({
     chat_dir = root .. "/chats",
     state_dir = root .. "/state",
@@ -54,7 +54,7 @@ describe(":ParleyTheme", function()
     before_each(function()
         close_floats()
         vim.fn.delete(theme.preference_path(parley.config.state_dir))
-        vim.cmd.colorscheme("moonfly")
+        vim.cmd.colorscheme("nordfox")
     end)
     after_each(function() close_floats(); settle() end)
 
@@ -80,7 +80,7 @@ describe(":ParleyTheme", function()
         assert.is_nil(theme.load(parley.config.state_dir))
         mapping(0, "n", "<Esc>")()
         settle()
-        assert.equals("moonfly", vim.g.colors_name)
+        assert.equals("nordfox", vim.g.colors_name)
         assert.is_nil(theme.load(parley.config.state_dir))
     end)
 
@@ -101,7 +101,7 @@ describe(":ParleyTheme", function()
         query("no-such-theme-xyz")
         mapping(0, "i", "<CR>")()
         settle()
-        assert.equals("moonfly", vim.g.colors_name)
+        assert.equals("nordfox", vim.g.colors_name)
         assert.equals("dark", vim.o.background)
         assert.equals("startup", theme.load(parley.config.state_dir))
         for _, win in ipairs(vim.api.nvim_list_wins()) do
@@ -135,7 +135,7 @@ describe(":ParleyTheme", function()
         assert.is_true(theme.apply(theme.load(parley.config.state_dir)))
         vim.cmd("ParleyTheme")
         query("Restore startup")
-        assert.equals("moonfly", vim.g.colors_name)
+        assert.equals("nordfox", vim.g.colors_name)
         -- Preview must leave the previous durable preference untouched.
         assert.equals("carbonfox", theme.load(parley.config.state_dir))
         mapping(0, "i", "<CR>")()
@@ -199,7 +199,7 @@ describe(":ParleyTheme", function()
         mapping(0, "i", "<CR>")()
         settle()
         vim.fn.writefile(original, path)
-        assert.equals("moonfly", vim.g.colors_name)
+        assert.equals("nordfox", vim.g.colors_name)
         assert.is_nil(theme.load(parley.config.state_dir))
     end)
 
@@ -211,7 +211,7 @@ describe(":ParleyTheme", function()
         mapping(0, "i", "<CR>")()
         settle()
         parley.helpers.table_to_file_atomic = save
-        assert.equals("moonfly", vim.g.colors_name)
+        assert.equals("nordfox", vim.g.colors_name)
         assert.is_nil(theme.load(parley.config.state_dir))
     end)
 

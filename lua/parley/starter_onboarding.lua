@@ -51,7 +51,6 @@ function M.ensure_ready(parley, on_ready, on_cancel)
     local function connect()
         return M.connect(parley, on_ready, on_cancel)
     end
-    if not proxy.discover_binary() then return M.connect(parley, on_ready, on_cancel) end
     proxy.ensure_running(function()
         local model = agent and agent.model
         if type(model) == 'table' then model = model.model end

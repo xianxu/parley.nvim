@@ -39,10 +39,8 @@ local M = {}
 ---
 --- A selection carrying its own quote marks is passed through rather than
 --- escaped: backslashes would leak a code convention into chat prose and the
---- model reads either form. A `%` is likewise passed through — this function
---- introduces no gsub, and the one place a topic reaches gsub as a REPLACEMENT
---- (`create_child_chat`) uses a function replacement for exactly that reason
---- (#214 BR-21).
+--- model reads either form. Percent signs pass through unchanged: payload text
+--- never becomes a gsub replacement string (#214 BR-21).
 ---
 --- @param case string  "define" | "quotes" | "question"
 --- @param payload string
@@ -51,7 +49,7 @@ function M.seed_question(case, payload)
     payload = payload or ""
     if case == "define" then
         local trimmed = payload:gsub("^%s+", ""):gsub("%s+$", "")
-        return 'tell me more about "' .. trimmed .. '"'
+        return "follow up question\n> " .. trimmed:gsub("\n", "\n> ") .. "\n\n"
     end
     -- "quotes" is already a formatted prompt (drill_in.format_blocks output) and
     -- "question" is the user's own text. Neither is ours to rewrite.

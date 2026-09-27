@@ -46,8 +46,30 @@ and settings. Existing Neovim users can use the
 
 In the packaged app, `:ParleyTheme` opens a floating preview for the
 included themes, including all OneDark styles and Nightfox variants.
-Moonfly is the startup theme; press Enter to persist another
+Nordfox is the startup theme; press Enter to persist another
 choice or Escape to restore the opening colorscheme.
+The app's bottom bar clearly shows NORMAL, INSERT or VISUAL mode, the chat
+name, model/activity and cursor position, using the selected theme.
+
+The packaged app also supports **Option+f** to find chats and **Option+n** to
+create a new chat in Normal and Insert mode (Alt on other keyboards).
+
+In chat and Markdown buffers, **Option+p** inserts a new private-note line
+starting with `🔒:` and leaves you typing after the prefix. It works in Normal
+and Insert mode. Configure the binding with `chat_shortcut_private_note` and
+the prefix with `chat_local_prefix`. Chat pruning remains on **Ctrl+g b**;
+Option+p now inserts private notes instead of pruning.
+
+To try the app from a checkout, run `./parley_app`. It loads the local starter
+outside repo mode, using a separate demo home and profile. Subsequent launches
+reuse that demo's chats, login and plugins. Its location is printed at startup;
+set `PARLEY_DEMO_DIR` to another directory to test a new profile.
+Use `./parley_app --tutorials` to edit `packaging/tutorials/` directly through
+the app. `./parley_app --nuke` removes the demo profile and exits; the next launch
+starts fresh. Source tutorials and the normal installed app profile are retained.
+
+Select text and press **Option+i** to start a linked follow-up chat. The draft
+quotes your selection and leaves the cursor on an empty line beneath it.
 
 ## Editing while an answer is generated
 
@@ -55,8 +77,10 @@ You can write the next question while one or more answers stream elsewhere in
 this chat. Their requests run at the same time, but answers are written one at a
 time: a later answer waits, showing which answer it is waiting for, then appears
 in full once the earlier one finishes or pauses — so an undo step never mixes two
-answers. An answer's header appears with its first output; regenerating keeps the
-old answer visible until the new one starts arriving. Editing generated output
+answers. An answer's header appears with its first output. An accepted refresh
+removes the old answer immediately, while keeping its complete content in memory
+for concurrent questions until the replacement finishes. Submitting a question
+that is already generating leaves its current response running. Editing generated output
 preserves your edit and stops that region's writer. Deleting an exchange
 invalidates its writers; reloading the file invalidates all active writes. Undo
 and redo remain native Neovim edits and can also revoke a writer; undo does not

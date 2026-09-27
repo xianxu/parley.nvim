@@ -41,6 +41,15 @@ describe('document prev_answer slot', function()
         D.detach(doc)
     end)
 
+    it('lists a pending slot before generation admission and clears it explicitly', function()
+        local doc = attach(); local entity = D.query(doc, 0, 1)[1].handle
+        assert.is_true(D.set_pending_previous_answer(doc, { entity = entity, value = VALUE }))
+        assert.same({ { row = 0, generation = nil, value = VALUE } }, D.previous_answers(doc))
+        assert.is_true(D.clear_pending_previous_answer(doc, entity))
+        assert.same({}, D.previous_answers(doc))
+        D.detach(doc)
+    end)
+
     it('refuses a slot without a grant, or from a stale epoch', function()
         local doc = attach()
         local entity = D.query(doc, 0, 1)[1].handle
@@ -49,6 +58,25 @@ describe('document prev_answer slot', function()
         local g2, e2 = regenerate(doc, 0)
         assert.is_false(set(doc, g2, e2, 'stale-epoch'))
         assert.same({}, D.previous_answers(doc))
+        D.detach(doc)
+    end)
+
+    it('only the matching attempt can clear or adopt a pending answer', function()
+        local doc = attach(); local g, entity = regenerate(doc, 0)
+        local older, newer = {}, {}
+        local replacement = { answer = { content = 'newer snapshot' } }
+        assert.is_true(D.set_pending_previous_answer(doc, { entity = entity, value = VALUE, owner = older }))
+        assert.is_true(D.set_pending_previous_answer(doc, { entity = entity, value = replacement, owner = newer }))
+        assert.is_false(D.clear_pending_previous_answer(doc, entity, older))
+        assert.is_false(D.set_previous_answer(doc, { epoch = D.snapshot(doc).epoch, entity = entity,
+            generation = g, value = VALUE, owner = older }))
+        assert.same({ { row = 0, value = replacement } }, D.previous_answers(doc))
+        assert.is_true(D.set_previous_answer(doc, { epoch = D.snapshot(doc).epoch, entity = entity,
+            generation = g, value = replacement, owner = newer }))
+        assert.is_false(D.clear_pending_previous_answer(doc, entity, newer))
+        assert.same({ { row = 0, generation = g, value = replacement } }, D.previous_answers(doc))
+        D.transition(doc, { kind = 'finish_generation', generation = g })
+        assert.equals(0, D._previous_count(doc))
         D.detach(doc)
     end)
 

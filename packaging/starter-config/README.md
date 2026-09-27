@@ -1,5 +1,9 @@
 # Start chatting with Parley
 
+The app keeps its diagnostic gutter visible so footnotes and other signs do not
+shift text as you type. Searches (`/` and `?`) ignore case unless you type an
+uppercase letter: `/parley` matches any casing, while `/Parley` matches that case.
+
 This profile gives Parley its own configuration, chats and account login. Your
 ordinary Neovim configuration stays separate. It requires Neovim 0.11 or newer,
 Git, curl, and an internet connection. macOS supplies the image clipboard tools.
@@ -22,6 +26,11 @@ app uses its own chat folder, separate from ordinary Neovim. Existing chats in
 the old `chats/welcome/` folder move into `chats/` with their attachments.
 You can edit `init.lua` to change your settings.
 
+The bottom status bar shows a clear **NORMAL**, **INSERT**, or **VISUAL** mode
+block, the chat filename, selected model and activity, and cursor position.
+Press `i` to type and Escape to return to NORMAL. Its colors follow
+`:ParleyTheme`; it uses plain separators and does not require a special font.
+
 1. If no account is connected, the floating provider picker opens automatically.
    Type to filter, select your provider, and press Enter. Then
    follow the account login in your browser. Parley downloads its managed proxy
@@ -34,7 +43,11 @@ You can edit `init.lua` to change your settings.
    Alt+t opens the conversation outline. Press Escape and type `:wq` to save
    and quit. Use `:ParleyChatNew` for a new conversation.
 
-The starter keeps all Ctrl+g-prefixed shortcuts and Alt chords, plus finder-local
+Option+f (Alt+f) finds chats; Option+n (Alt+n) creates a new chat, in both
+NORMAL and INSERT mode. Ctrl+g f/c remain available; Ctrl+g n inserts a new
+question within the current chat.
+
+The starter keeps Ctrl+g-prefixed shortcuts and Alt chords, plus finder-local
 controls such as Ctrl+d to delete the selected chat after confirmation. Press Ctrl+g,
 then `f` to find chats, `c` to create one, or `?` for shortcut help. Press Ctrl+g
 twice to send. Other global/editor shortcut families remain disabled.

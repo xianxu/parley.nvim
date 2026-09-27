@@ -10,7 +10,7 @@ local ok, err = pcall(function()
         vim.opt.runtimepath:append(path)
     end
     vim.o.termguicolors = true
-    vim.cmd.colorscheme("moonfly")
+    vim.cmd.colorscheme("nordfox")
     local parley = require("parley")
     local scratch = vim.fn.tempname()
     parley.setup({ chat_dir = scratch .. "/chats", state_dir = scratch .. "/state",

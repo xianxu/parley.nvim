@@ -1,12 +1,13 @@
 ---
 id: 000255
-status: working
+status: done
 deps: [254]
 github_issue:
 created: 2026-09-15
-updated: 2026-09-19
+updated: 2026-09-26
 estimate_hours:
 started: 2026-09-19T17:46:24-07:00
+actual_hours: 1.79
 ---
 
 # Use previous completed answers in context during refresh
@@ -77,6 +78,8 @@ incomplete, use that exchange's previous completed answer when available.
 
 ## Log
 
+
+- 2026-09-26: closed — All 1019 lifecycle tests pass, including onboarding live-row capture, synchronous duplicate rejection and shared refusal vocabulary; 113 transcript truth tests passed. README and atlas updated. Final process-inspection-enabled rerun is logged at /tmp/parley-final-lifecycle-unrestricted.log.; review verdict: SHIP
 ### 2026-09-15
 
 Filed at the user's request after #254 reached codecomplete. Agreed policy:
@@ -113,3 +116,25 @@ and the `#255` cases in `tests/integration/chat_respond_spec.lua`; mapped in
 Nothing is left to build here. The status flip to `done` needs
 `sdlc close --issue 255`, since the binary writes `codecomplete` only through a
 close review (#160).
+
+## Revisions
+
+- 2026-09-26: Resolved closure BR-1 with command-time duplicate admission using
+  existing document captures and generation identity; 52 chat-response cases
+  pass, including waiting/streaming/moved duplicates and later resubmission.
+  BR-2: README and atlas now describe pending and admitted snapshot ownership.
+
+- 2026-09-26: Closure of the stacked app work includes #285's immediate visible
+  answer removal. Previous-answer memory now has a pending phase owned by the
+  submission before generation admission. A duplicate submission must preserve
+  the active writer and original snapshot; only accepted refreshes may remove
+  visible text. Add before/after-output duplicate regressions and document the
+  pending-to-generation ownership transfer (ARCH-ORDER).
+
+## Manual shipment — 2026-09-26
+
+Closed and archived at the operator’s explicit direction as part of the completed local stack. Prior SDLC review records remain historical; no new gate verdict is claimed.
+
+The previous-answer behavior shipped in #261; this shipment closes its remaining record and verifies compatibility with immediate refresh.
+
+Final verification: lint passed all 656 Lua files; `make test` passed 391 spec files, with the remaining performance spec passing all three cases on a standalone normal-harness rerun. Both runs ended with no surviving test processes. Startup also passed 183 cases in a tracked isolated checkout.

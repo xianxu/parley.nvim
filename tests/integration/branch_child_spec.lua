@@ -49,6 +49,15 @@ describe("branched child lifecycle (#214)", function()
         assert.are.equal("widget", header_of(child).topic)
     end)
 
+    it("formats selection drafts with a custom user prefix", function()
+        parley.config.chat_user_prefix = "USER:"
+        local child = tmpdir .. "/2026-09-06.10-02-01.000.md"
+        parley.create_child_chat(child, "50% off", parent_buf,
+            require("parley.branch_submit").seed_question("define", "50% off"), { inline_question = true })
+        local body = table.concat(vim.fn.readfile(child), "\n")
+        assert.is_truthy(body:find("USER: follow up question\n> 50% off\n\n", 1, true))
+    end)
+
     it("the child carries a resolvable parent back-link", function()
         local child = tmpdir .. "/2026-09-06.10-03-00.000.md"
         parley.create_child_chat(child, "?", parent_buf, nil)
@@ -722,7 +731,7 @@ describe("visual branch seeds the child with an instruction (#214 M3)", function
         local body = table.concat(vim.fn.readfile(created), "\n")
         assert.is_truthy(body:find("topic: monad transformers", 1, true),
             "the topic should name the subject, not a question about it")
-        assert.is_truthy(body:find('tell me more about "monad transformers"', 1, true),
+        assert.is_truthy(body:find('follow up question\n> monad transformers', 1, true),
             "the child was not seeded with the instruction")
     end)
 
@@ -1010,8 +1019,14 @@ describe("branch creation lands on the first question (#248)", function()
             for row, line in ipairs(lines) do
                 if line:find(parley.config.chat_user_prefix, 1, true) == 1 then first = row; break end
             end
-            assert.are.equal(first, landing.cursor[1], "landed on the trailing template question")
-            assert.are.equal(math.max(0, #lines[first] - 1), landing.cursor[2])
+            if mode == "v" then
+                assert.are.same({ parley.config.chat_user_prefix .. " follow up question", "> selected words", "", "" },
+                    vim.list_slice(lines, first, first + 3))
+                assert.are.same({ first + 3, 0 }, landing.cursor, "typing must start below the quote")
+            else
+                assert.are.equal(first, landing.cursor[1], "landed on the trailing template question")
+                assert.are.equal(math.max(0, #lines[first] - 1), landing.cursor[2])
+            end
         end)
         it(label .. " stays put if the parent cannot be saved", function()
             vim.bo[buf].readonly = true

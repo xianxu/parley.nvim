@@ -26,6 +26,23 @@ startup, even when the test process itself runs headless.
 
 ## Configuration ownership today
 
+`parley_app` is a development entry point into the same packaged starter. It
+resolves the checkout from the executable path, changes into a separate demo
+directory to avoid repo detection, and isolates HOME plus all XDG roots. The
+default `${XDG_CACHE_HOME:-$HOME/.cache}/parley-app-demo` is reused, bounding this
+helper to one profile; `PARLEY_DEMO_DIR` selects another operator-owned profile.
+Unlike the installed application, its HOME isolation separates credential files.
+The launcher explicitly sets `PARLEY_REPO_MODE=0` so markers in any demo ancestor
+cannot enable repo mode. `--tutorials` sets `PARLEY_CHAT_DIR` to the checkout's
+source tutorials; the starter expands and canonicalizes that override. State and
+credentials remain in the demo. `--nuke` removes the owned demo profile and exits,
+leaving source tutorials untouched.
+
+The starter installs pinned Lualine with an automatic theme, prominent mode,
+chat name and cursor position. Existing `parley.lualine` integration supplies
+the model/activity section. `tests/packaging/statusline_compatibility.lua`
+exercises the production options with real Lualine and every packaged theme.
+
 | Owner | Responsibility |
 |---|---|
 | `lua/parley/config.lua` | Current plugin defaults consumed by `setup(opts)` |
@@ -154,7 +171,9 @@ recovery instead of stealing a competing initializer's work.
 loopback port 8317 and the `parley-local` client key, matching `define` defaults;
 no client-key file is created or read. Provider OAuth and proxy management
 credentials remain separate. The profile retains Ctrl+g and Alt key families plus finder-local controls
-from the default bindings and adds Alt+Enter for sending. Both chat memory
+from the default bindings and adds Alt+Enter for sending. App-only Alt+f/n
+alias chat finder/new chat; new question keeps Ctrl+g n without Alt+n to avoid
+a buffer-local collision. Both chat memory
 summaries and preference generation are disabled in this profile.
 `starter.start()` applies the policy, seeds missing bundled tutorials and reopens the welcome chat, and
 uses `:ParleyProxy connect` for account selection and login. The proxy command
@@ -273,3 +292,12 @@ The app discovers `.parley` in the launch directory or its ancestors before
 setup, and explicitly passes that project root. A Git repository is not required.
 `starter_project_spec` exercises this using real marker-only fixture projects,
 nested cwd, an unmarked global launch and the preserved plugin chat-dir override.
+
+The packaged editor uses `ignorecase` + `smartcase` for native `/` and `?` search.
+
+Onboarding delegates proxy availability to `cliproxy.ensure_running`: an existing
+server can serve the saved model even when the current profile has no executable.
+Credential and model checks still decide whether account/model setup is needed.
+
+The demo launcher uses a canonical sibling directory lock across ownership
+validation, PID publication and reset; reset cannot delete the active lock.

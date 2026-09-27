@@ -8,6 +8,10 @@ parley.setup({chat_dir=root,state_dir=root..'/state',providers={},api_keys={},de
  {name='OtherFixture',provider='openai',model={model='other-model'},system_prompt='Other prompt',tools={}}}})
 local function wait(predicate)assert.is_true(vim.wait(3000,predicate,1),'onboarding response did not settle')end
 local function text(buf)return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n')end
+local function row(buf,wanted)
+    for i,line in ipairs(vim.api.nvim_buf_get_lines(buf,0,-1,false))do if line==wanted then return i-1 end end
+    error('missing fixture line: '..wanted)
+end
 describe('captured response onboarding',function()
     local buf,other,session,ready,calls,old_defer,old_query,old_stop
     before_each(function()
@@ -40,7 +44,8 @@ describe('captured response onboarding',function()
     end)
     it('uses the explicitly selected model and shell while preserving the captured question across focus and draft edits',function()
         session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
-        vim.api.nvim_buf_set_text(buf,9,5,9,5,{' edited'})
+        local draft=row(buf,'draft')
+        vim.api.nvim_buf_set_text(buf,draft,#'draft',draft,#'draft',{' edited'})
         other=vim.api.nvim_create_buf(true,false);vim.api.nvim_set_current_buf(other)
         vim.api.nvim_buf_set_lines(other,0,-1,false,{'other buffer'})
         parley._state.agent='SelectedFixture';ready();wait(function()return #calls==1 end)
@@ -102,7 +107,7 @@ describe('captured response onboarding',function()
     end)
     it('never recaptures a deleted origin when onboarding finishes',function()
         session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
-        vim.api.nvim_buf_set_lines(buf,4,7,false,{})
+        vim.api.nvim_buf_set_lines(buf,row(buf,'💬: first'),row(buf,'💬: next'),false,{})
         parley._state.agent='SelectedFixture';ready()
         wait(function()return Respond.response_snapshot(session).status=='terminal'end)
         assert.equals(0,#calls);assert.truthy(text(buf):find('💬: next',1,true))

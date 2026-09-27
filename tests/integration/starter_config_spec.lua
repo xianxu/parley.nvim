@@ -15,7 +15,7 @@ describe('isolated starter runtime', function()
         local command = { vim.v.progpath, '--headless', '-n', '-i', 'NONE', '-u', 'NONE',
             '-c', 'lua vim.opt.runtimepath:prepend(' .. string.format('%q', root) .. ')',
             '-c', 'lua dofile(' .. string.format('%q', root .. '/tests/packaging/starter_launch.lua') .. ')',
-            '-c', 'lua dofile(' .. string.format('%q', root .. '/tests/packaging/starter_probe.lua') .. ')' }
+            '-c', 'lua dofile(' .. string.format('%q', root .. '/tests/packaging/' .. ((extra or {}).STARTER_CHAT_OVERRIDE and 'starter_chat_probe.lua' or 'starter_probe.lua')) .. ')' }
         vim.list_extend(command, args or {})
         local process = vim.system(command, { text = true, cwd = scratch, clear_env = true, env = vim.tbl_extend('force', {
             PATH = vim.env.PATH, HOME = scratch .. '/home', NVIM_APPNAME = 'parley',
@@ -25,6 +25,11 @@ describe('isolated starter runtime', function()
         }, extra or {}) })
         return async and process or process:wait(10000)
     end
+
+    it('routes app Option aliases through the existing chat actions in normal and insert mode', function()
+        local result = run(nil, { STARTER_CHAT_KEYS = '1' })
+        assert.equals(0, result.code, result.stderr)
+    end)
 
     it('reopens one durable welcome across independent launches', function()
         local first = run()
@@ -38,6 +43,21 @@ describe('isolated starter runtime', function()
         assert.same(before, vim.fn.readfile(chats[1]))
         assert.same({ "error('separate nvim config was sourced')" }, vim.fn.readfile(scratch .. '/config/nvim/init.lua'))
         assert.is_nil(uv.fs_stat(scratch .. '/home/.cli-proxy-api'))
+    end)
+
+    it('edits an explicit tutorial source directly while keeping app state isolated', function()
+        local source = scratch .. '/home/tutorial source'
+        vim.fn.mkdir(source, 'p')
+        for _, name in ipairs({ 'welcome.md', 'basics.md', 'advanced.md' }) do
+            vim.fn.writefile(vim.fn.readfile(root .. '/packaging/tutorials/' .. name), source .. '/' .. name)
+        end
+        vim.fn.mkdir(scratch .. '/.parley', 'p')
+        local result = run(nil, { STARTER_CHAT_OVERRIDE = source,
+            PARLEY_CHAT_DIR = '~/tutorial source', PARLEY_REPO_MODE = '0' })
+        assert.equals(0, result.code, result.stderr)
+        assert.equals('Edited tutorial source', vim.fn.readfile(source .. '/welcome.md')[7])
+        assert.equals(0, vim.fn.filereadable(scratch .. '/data/parley/chats/welcome.md'))
+        assert.equals(0, vim.fn.isdirectory(scratch .. '/workshop/parley'))
     end)
 
     it('seeds all tutorials and preserves edited lessons on later launches', function()

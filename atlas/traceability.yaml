@@ -47,6 +47,10 @@ atlas:
 
   infra/starter:
     code:
+      - parley_app
+      - tests/packaging/test_local_app.py
+      - tests/packaging/statusline_compatibility.lua
+      - tests/packaging/starter_chat_probe.lua
       - lua/parley/cliproxy_login_ui.lua
       - lua/parley/dispatcher.lua
       - lua/parley/fs.lua
@@ -1144,6 +1148,7 @@ atlas:
     tests:
       - tests/unit/new_question_spec.lua
       - tests/integration/new_question_spec.lua
+      - tests/integration/private_note_prefix_spec.lua
       - tests/unit/keybindings_spec.lua
       - tests/unit/config_tools_spec.lua
       - tests/unit/branch_ref_spec.lua

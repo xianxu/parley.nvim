@@ -353,8 +353,21 @@ function M.set_previous_answer(doc,spec)
     local s=state(doc)
     if s.dead or type(spec)~='table' or spec.epoch~=s.epoch or spec.value==nil
         or not State.holds(s.authority,spec.generation,spec.entity) then return false end
-    s.previous[spec.entity]={generation=spec.generation,value=spec.value}
+    local prior=s.previous[spec.entity]
+    if prior and prior.generation==nil and prior.owner~=nil and prior.owner~=spec.owner then return false end
+    s.previous[spec.entity]={generation=spec.generation,value=spec.value,owner=spec.owner or prior and prior.owner}
     return true
+end
+function M.set_pending_previous_answer(doc,spec)
+    local s=state(doc)
+    if s.dead or type(spec)~='table' or spec.entity==nil or spec.value==nil then return false end
+    s.previous[spec.entity]={generation=nil,value=spec.value,owner=spec.owner}
+    return true
+end
+function M.clear_pending_previous_answer(doc,entity,owner)
+    local s=state(doc); local slot=s.previous[entity]
+    if slot and slot.generation==nil and (owner==nil or slot.owner==owner) then s.previous[entity]=nil; return true end
+    return false
 end
 --- Every still-valid slot as `{row=<0-based 💬: row>, generation, value}`;
 --- removes the rest (a revoked grant or a deleted marker has no other hook).
@@ -362,7 +375,7 @@ function M.previous_answers(doc)
     local s=state(doc); local out={}
     if s.dead then return out end
     for entity,slot in pairs(s.previous) do
-        local marker=State.holds(s.authority,slot.generation,entity) and M.lookup(doc,entity)
+        local marker=(slot.generation==nil or State.holds(s.authority,slot.generation,entity)) and M.lookup(doc,entity)
         if marker then out[#out+1]={row=marker.start_row,generation=slot.generation,value=slot.value}
         else s.previous[entity]=nil end
     end

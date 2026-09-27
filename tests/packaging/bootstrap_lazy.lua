@@ -8,9 +8,10 @@ return {
         end
         assert(vim.o.wrap and vim.o.linebreak and vim.o.breakindent)
         assert(vim.o.termguicolors)
+        assert(vim.o.signcolumn == 'yes', 'App must reserve its diagnostic gutter')
         assert(vim.g.mapleader == ' ')
         assert(opts.checker.enabled == false)
-        assert(spec[1].commit == '4ed07bc0c6083cdd547c63f5c245e02c068b0c45')
+        assert(spec[1].commit == '4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a')
         local by_name = {}
         for _, plugin in ipairs(spec) do by_name[plugin[1] or plugin.name] = plugin end
         assert(by_name['nvim-lua/plenary.nvim'].commit == '74b06c6c75e4eeb3108ec01852001636d85a932b')
@@ -37,6 +38,10 @@ return {
             }, colors .. '/' .. item.colorscheme .. '.lua')
         end
         spec[1].config()
+        local statusline = assert(by_name['nvim-lualine/lualine.nvim'], 'App must ship a statusline')
+        assert(statusline.commit == '221ce6b2d999187044529f49da6554a92f740a96')
+        assert(statusline.lazy == false)
+        assert(statusline.opts.sections.lualine_a[1] == 'mode')
         local preview
         for _, plugin in ipairs(spec) do
             if plugin[1] == 'iamcco/markdown-preview.nvim' then preview = plugin end

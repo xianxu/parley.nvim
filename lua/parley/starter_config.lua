@@ -34,6 +34,7 @@ function M.options(roots)
         end
         return true
     end
+    local aliases = { chat_respond = '<M-CR>', chat_new = '<M-n>', chat_finder = '<M-f>' }
     for _, entry in ipairs(registry.entries) do
         if entry.config_key then
             local keys, modes = registry.resolve_keys(entry, defaults)
@@ -45,7 +46,9 @@ function M.options(roots)
                     selected[#selected + 1] = keybinding
                 end
             end
-            if entry.id == 'chat_respond' then selected[#selected + 1] = '<M-CR>' end
+            -- App navigation reserves Option+n for a new chat.
+            if entry.id == 'new_question' then selected = { '<C-g>n' } end
+            if aliases[entry.id] then selected[#selected + 1] = aliases[entry.id] end
             if #selected > 0 then
                 local parts = vim.split(entry.config_key, '.', { plain = true })
                 local target = options

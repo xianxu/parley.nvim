@@ -8,6 +8,10 @@ parley.setup({chat_dir=root,state_dir=root..'/state',providers={},api_keys={},
         {name='ScopedFixture',provider='openai',model={model='fixture'},system_prompt='Fixture',tools={}}}})
 local function wait(predicate)assert.is_true(vim.wait(5000,predicate,1),'response did not settle')end
 local function text(buf)return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n')end
+local function row(buf,wanted)
+    for i,line in ipairs(vim.api.nvim_buf_get_lines(buf,0,-1,false))do if line==wanted then return i-1 end end
+    error('missing fixture line: '..wanted)
+end
 
 describe('public scoped response command',function()
     local old_query,old_stop,buf,calls
@@ -60,8 +64,7 @@ describe('public scoped response command',function()
     end)
     it('rejects a second writer to the same answer before provider IO',function()
         local a=submit('first');wait(function()return #calls==1 end)
-        local b=submit('first');assert.is_not_nil(b)
-        wait(function()return Respond.response_snapshot(b).status=='cancelled'end)
+        local b=submit('first');assert.is_nil(b)
         assert.equals(1,#calls);assert.is_true(calls[1].running)
         calls[1].output(calls[1].id,'kept');calls[1].complete(calls[1].id)
         wait(function()return Respond.response_snapshot(a).status=='terminal'end)
@@ -83,10 +86,11 @@ describe('public scoped response command',function()
         local session=submit('first')
         wait(function()return ready~=nil end)
         local doc=D.get(buf);assert.is_not_nil(doc)
-        vim.api.nvim_buf_set_lines(buf,4,7,false,{})
+        vim.api.nvim_buf_set_lines(buf,row(buf,'💬: first'),row(buf,'💬: second'),false,{})
         ready({});Respond.resolve_remote_references=old
         wait(function()return Respond.response_snapshot(session).status=='terminal'end)
         assert.equals(0,#calls)
+        assert.is_truthy(text(buf):find('💬: second',1,true))
     end)
     it('stops captured response owners without invoking global transport cancellation',function()
         local session=submit('first');wait(function()return #calls==1 end)
