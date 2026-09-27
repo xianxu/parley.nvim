@@ -53,6 +53,39 @@ describe("document dependency index", function()
         assert.equals("stale", index:add(h[2], h[15]).status)
     end)
 
+    -- #264: prune before a splice (while every handle ranks), install after.
+    it("prunes without committing, and installs exactly what remove_from would", function()
+        local index, h = coordinates(12)
+        ok(index:add(h[2], h[4]))
+        ok(index:add(h[5], h[8]))
+        ok(index:add(h[9], h[11]))
+        local base = index.roots
+        local pruned = ok(index:prune_from(h[5]))
+        assert.equals(2, pruned.removed)
+        assert.equals(base, index.roots, "prune_from must not commit")
+        assert.equals(h[5], ok(index:restart_origin(6, 6)).origin)
+        -- The deleted rows' handles stop ranking after the splice; the pruned
+        -- roots only keep origins before h[5], so installing them is still valid.
+        index:install(pruned.roots)
+        assert.is_nil(ok(index:restart_origin(6, 6)).origin)
+        assert.equals(h[2], ok(index:restart_origin(3, 3)).origin)
+        local twin, th = coordinates(12)
+        ok(twin:add(th[2], th[4])); ok(twin:add(th[5], th[8])); ok(twin:add(th[9], th[11]))
+        assert.equals(2, ok(twin:remove_from(th[5])).removed)
+        assert.is_nil(ok(twin:restart_origin(6, 6)).origin)
+        assert.equals(th[2], ok(twin:restart_origin(3, 3)).origin)
+    end)
+
+    it("reports budget from prune_from and leaves the index unchanged", function()
+        local index, h = coordinates(100)
+        for i = 1, 99, 2 do ok(index:add(h[i], h[i + 1])) end
+        local base = index.roots
+        local pruned = index:prune_from(h[20], { budget = 1 })
+        assert.equals("budget", pruned.status)
+        assert.is_nil(pruned.roots)
+        assert.equals(base, index.roots)
+    end)
+
     it("keeps mutations atomic when their node budget is exhausted", function()
         local index, h = coordinates(100)
         for i = 1, 99, 2 do ok(index:add(h[i], h[i + 1])) end

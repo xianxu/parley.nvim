@@ -168,8 +168,11 @@ function Index:add(origin, last, opts)
         return {}
     end)
 end
---- Retire all suffix records atomically across the fixed channel forest.
-function Index:remove_from(origin, opts)
+--- Compute the roots that retire every suffix record, without committing them.
+--- The trees are persistent, so the result stays valid while `self.roots` is
+--- unchanged: a caller can prune while every handle still ranks and install
+--- later (#264), guarding with identity on `self.roots`.
+function Index:prune_from(origin, opts)
     return operation(self, opts, function(ctx)
         local roots, removed, position = {}, 0, ctx:rank(origin)
         for _, channel in ipairs(selected(nil, true)) do
@@ -177,9 +180,19 @@ function Index:remove_from(origin, opts)
             roots[channel] = root
             removed = removed + count(self.roots[channel]) - count(root)
         end
-        self.roots = roots
-        return { removed = removed }
+        return { roots = roots, removed = removed }
     end)
+end
+function Index:install(roots)
+    assert(type(roots) == "table", "roots required")
+    self.roots = roots
+end
+--- Retire all suffix records atomically across the fixed channel forest.
+function Index:remove_from(origin, opts)
+    local pruned = self:prune_from(origin, opts)
+    if pruned.roots then self:install(pruned.roots) end
+    pruned.roots = nil
+    return pruned
 end
 --- Aligned trigger/origin intervals retain the ordinary logarithmic descent.
 --- Arbitrary nonmonotonic triggers can exhaust the explicit node budget; no
