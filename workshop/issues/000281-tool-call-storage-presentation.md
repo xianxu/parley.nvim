@@ -1,6 +1,6 @@
 ---
 id: 000281
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-26
@@ -8,6 +8,7 @@ updated: 2026-09-27
 estimate_hours:
 started: 2026-09-27T11:38:12-07:00
 flow: {kind: quick, provenance: inferred, spec: "517ebd22", done: "24251552"}
+actual_hours: 0.11
 ---
 
 # Rethink tool-call storage and streaming presentation
@@ -172,6 +173,7 @@ Follow-ups under A:
 - 2026-09-26: Filed at user request. Preferred direction to investigate is storing tool results beside the chat, analogous to image assets; no implementation or migration authorized by this task capture.
 
 ### 2026-09-27
+- 2026-09-27: closed — Design investigation, docs-only. Flicker reproduced headless (scratch spec: document + tool_folds.step per turn): an unchanged closed tool fold reads open 1 step per structural append (2 when a result spans two writes, 1 for a one-line reference) -> cause is fold repair, not storage. Operator chose design A (inline). Follow-ups filed: #290, #291; #264 revised with the streaming repro as its regression test. No code changed.; review verdict: SHIP
 - Claimed. Two read-only exploration digests (tool pipeline; assets,
   lifecycle and authority) plus a headless fold repro. The repro spec was
   scratch-only; its shape is recorded in Findings 1, to be committed as a
@@ -190,6 +192,9 @@ Follow-ups under A:
   (3) for A the transcript format is unchanged: inline blocks paired by `id=`,
   context rebuilt verbatim, the existing lifecycle kept (no new files), the
   compatibility rule for #291's escape (old chats parse as before) in #291;
+  result inspection is unchanged: each call's arguments (`🔧` JSON), result
+  (`📎` body), status and errors (`error=true` on the `📎` header, failure text as
+  the body) stay in folded inline blocks, opened in place;
   (4) verification lives in the follow-ups: partial streams and stable
   display in #264's regression test and #290, fence-like and hostile content
   in #291's fixtures, and interruption/reopen already handled (unterminated

@@ -29,7 +29,7 @@ consumer then has to tolerate.
   a tool block as a single append, rather than slicing it at 4096 bytes like
   streamed prose.
 - The size is already bounded at the source: results are capped by the byte
-  budget in `dispatcher.lua:261-266` (100 KB default, 512 KB max) and calls at
+  budget in `lua/parley/tools/dispatcher.lua:261-266` (100 KB default, 512 KB max) and calls at
   64 KB. Record that bound as the reason a single write is safe
   (ARCH-CONSTRAINTS), and measure the time of one 512 KB append on a large
   chat.
