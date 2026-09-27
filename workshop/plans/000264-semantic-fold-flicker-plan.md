@@ -82,7 +82,13 @@ reshaped in one turn (remove plus create together), never left open between turn
 
 Chats over `INTERACTIVE_ROWS` (50,000 affected rows) keep today's uncertainty path exactly
 (a frontier-to-EOF clear with `foldenable` suspended). Folds are disabled, so invisible, for
-the whole job there, so it can't flicker.
+the whole job there, so it can't flicker. `apply` has **one** path at every size: suspended
+windows run the same `inventory`→`reconcile` phases under `foldenable=false` (the old
+`clear`/`create` phases are deleted). Inventory walks folds with `zj`, which needs
+`foldenable` on, so `fold_native.walk` sets it inside the slice (as `clear_folds_in_span` does
+today) and the slice's `restore_window` puts it back.
+`document_fold_batches_spec.lua` and `document_fold_uncertainty_retirement_spec.lua` must
+pass unchanged; if a work-count assertion changes, log why.
 
 ## Core concepts
 
@@ -238,7 +244,13 @@ end
 - Create: `lua/parley/fold_diff.lua`
 - Test: `tests/unit/fold_diff_spec.lua`
 
-- [ ] **Step 1: Failing unit tests**, table-driven:
+- [ ] **Step 1: Failing unit tests.** Primary strategy: a **property test** over seeded
+  random existing/desired interval sets (nested, overlapping, adjacent, identical;
+  200 seeds, sizes 0-20), checked against an oracle. Simulate applying every batch to the
+  existing set; the result must equal the desired set exactly. Exact matches must never
+  appear in any batch. Each overlap-connected component of changed folds must lie in exactly
+  one batch. Every batch holds ≤ `limit` groups unless it is a single component (see Step 3).
+  Plus named regression cases, table-driven:
   - identical existing/desired → no batches;
   - one desired fold grows (`{5,9}` → `{5,12}`) → one batch `{remove={5..9},create={5..12}}`;
   - removal only (existing with no desired overlap) → remove-only batch;
@@ -252,8 +264,11 @@ end
   `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/fold_diff_spec.lua" -c "qa!"`
 - [ ] **Step 3: Implement.** Sweep both lists sorted by `start_0`; build regions as
   connected components of the overlap graph restricted to non-matching folds (exact matches
-  excluded first); emit regions in row order and pack them into batches of ≤`limit` groups.
-  Target under 80 lines.
+  excluded first); emit regions in row order and pack them into batches of ≤`limit` groups. A single
+  connected region larger than `limit` becomes **its own batch** and exceeds `limit`: it
+  can't be split without leaving part of a region unfolded between turns. Bound: such a
+  region is at most the plan span's folds, and plan spans ≤ `INTERACTIVE_ROWS` (larger ones
+  take the suspended path, where folds are invisible). Target under 80 lines.
 - [ ] **Step 4: Run, confirm PASS.**
 - [ ] **Step 5: Commit.** `#264 M1: fold_diff: pure diff of native vs desired folds`
 
@@ -287,7 +302,12 @@ end
   `require('parley.fold_diff').diff(existing,plan.ranges,BATCH_GROUPS)` once, then per
   slice apply one batch: for each removal, **re-check** that `foldlevel(start)>0` and
   `foldclosed`-start still equals the inventoried start (user `zf`/`zd`/`zE` between slices
-  doesn't bump `changedtick`); if not, discard the plan and return `'more'` (re-plan). Then
+  doesn't bump `changedtick`); if not, discard the plan and return `'more'` (re-plan).
+  Before creating, check that each creation's rows have `foldlevel==0` after the batch's
+  removals (a user `zf` inside the region between slices would otherwise nest the new
+  fold); if not, discard the plan and re-plan. (ARCH-ORDER: user fold commands can
+  interleave between slices; both checks are O(1) per group and put the stale-inventory
+  case on the existing re-plan path instead of relying on the order of turns.) Then
   `zD` each removal (top to bottom, re-checking `current()` after each command as today),
   then `N,Mfold` each creation, then `foldopen` where `window.opened[identity]`. Keep
   `record_work` counters (`native_fold_ops`, `fold_groups_visited`), suspension and
@@ -379,11 +399,15 @@ end
   budget-exhausted prune reports a non-`ok` status and installs nothing.
 - [ ] **Step 2: Prepare the local restart before the splice.** In `before_fragment`, after
   the transfer is admitted (it has proved `affected.origin==nil` over `changed` channels),
-  compute a local restart exactly as `before_splice` does (:255-263) from pre-splice rows:
-  `restart=first`; if the row before `restart` has `metadata.answer_header`, pull back to
-  that header's row (a question-role edit has no header, so the restart stays `first`);
-  `checkpoint` = that preceding row's `metadata.after`; if `restart>0` and there is no
-  preceding `metadata.after`, **don't** prepare a local restart (keep restart 0). Then
+  compute a local restart with a helper **extracted** from `before_splice` (:255-264, ARCH-DRY):
+  `local function restart_point(w,row)` returns `restart,checkpoint` by pulling `row` back to
+  the preceding row's `metadata.answer_header` row (a question-role edit has no header, so
+  the restart stays `row`) and reading the preceding row's `metadata.after`, or `0` and
+  `G.initial()` when that's missing. `before_splice` calls it with its
+  `min(first, dependency origin, global)` row, with identical behaviour (its existing tests
+  pin that); `before_fragment` calls it with `first`, reusing the `header` it already
+  captured (:388) instead of re-reading it. If the helper returns restart 0 for a `first>0`
+  (no preceding `metadata.after`), **don't** prepare a local restart. Then
   `pruned=w.deps:prune_from(<handle at restart>,{budget=dep_budget,before_rank=...})`, while
   every handle still ranks. If it's not `ok` (budget), don't prepare a local restart. Store
   `captured.local_restart={restart=restart,checkpoint=checkpoint,roots=pruned.roots,
