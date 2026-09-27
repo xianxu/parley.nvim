@@ -1,0 +1,52 @@
+---
+id: '000045'
+status: done
+created: 2026-03-31
+updated: 2026-04-03
+actual_hours: N/A
+---
+
+# create memory summarization system
+
+## Problem
+
+All the chats are in local drive, it's very easy to create memory summarization, so parley becomes personal. Chats have tags, so we can summarized for each [tag] and overall. 
+
+The memory system aim to keep a per tag user preference based on past chat history. To get summary (level 1) of past chat, we can just grep lines starting with 📝 for some glaces of what is discussed (with 📝 removed). For chats without such lines, we will just have empty summary lines. So we have:
+
+[] [tag1] [tag2] summary line 1
+[] [tag1] [tag2] summary line 2
+[] [tag1] summary line 3
+
+[] here is a placeholder. those liens should be sorted based on last modify time.
+
+then we do a map reduce to generate for each tag the summary lines:
+
+[] summary line 1
+[] summary line 2
+[] summary line 3
+[tag1] summary line 1
+[tag1] summary line 2
+[tag1] summary line 3
+[tag2] summary line 1
+[tag2] summary line 2
+
+Then, for each tag, we pick last N lines, then send to LLM to generate a user preference string. so:
+
+[] LLM(["summary line 1", "summary line 2", "summary line 3"])
+[tag1] LLM(["summary line 1", "summary line 2", "summary line 3"])
+[tag2] LLM(["summary line 1", "summary line 2"])
+
+Use the following prompt to generate: "Based on user chat history, generate a concise user preference profile that is suited to be used for Claude/ChatGPT's system prompt"
+
+then such user preference is stored in a file. 
+
+The generated additional "preference prompt" would be appended to system prompt, based on the tags of a chat. 
+
+We are into how do we organize system_prompt territory. The current structure is simple, just a string. but in the future, there should be:
+
+1. "structural prompt": e.g. as LLM to generate 🧠:, 📝: lines.
+2. "user preference": e.g. what user may initially put in. 
+3. "discovered user preference": based on above memory mechanism.
+
+In parley, for now 1 and 2 are modeled as system_prompt. and 3 is what we described above.
