@@ -301,3 +301,16 @@ are always recreated from `capture`); M2 gains an O(1) guard that the dependency
 the one pruned (`serial` doesn't cover `deps:add`), per-keystroke work accounting for
 `prune_from`, and a handle-free comparison against the cold parse.
 
+### 2026-09-27 — Operator direction: Parley owns folds; drop the eager clear
+
+Reason: the operator pointed out that users never create folds (Parley makes every one), so
+human edits almost never need a fold changed; and that the stream writer knows when a
+write is foldable.
+
+Delta: M1 Task 4 no longer clears any native fold on uncertainty (below 50k rows). Neovim
+carries folds with their text, and the diff reconcile fixes the rare fold a net insertion
+grew, one repair later. The edited-rows tracking is removed. New **zero-touch**
+assertions: a plain streamed append and ordinary human edits remove no native fold
+(`removed==0`, via the reconcile notify). Folding a block as the writer writes it moves
+to #290 (now depends on #264 M1).
+
