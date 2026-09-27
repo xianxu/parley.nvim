@@ -121,7 +121,6 @@ pass unchanged; if a work-count assertion changes, log why.
 | `apply` (phases) | `lua/parley/tool_folds.lua` | modified | native fold commands |
 | `clear_uncertainty` | `lua/parley/tool_folds.lua` | modified | native fold commands |
 | `Deps:prune_from` / `Deps:install` | `lua/parley/document/dependencies.lua` | new | dependency index (persistent trees) |
-| `prune_from`, `install` | `lua/parley/document/dependencies.lua` | new | (the two methods above, by symbol) |
 | `_state` | `lua/parley/document/semantic.lua` | new (test seam) | worker state, for the local-restart guard test |
 | `after_fragment` fallback | `lua/parley/document/semantic.lua` | modified | dependency index |
 
