@@ -1,11 +1,12 @@
 ---
 id: 000264
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-16
-updated: 2026-09-16
+updated: 2026-09-27
 estimate_hours:
+started: 2026-09-27T11:51:45-07:00
 ---
 
 # Semantic folds flicker open on a local blank-line edit
@@ -96,8 +97,12 @@ the fix and its tests must cover the class.
 
 ## Plan
 
-- [ ] Design pending — run `sdlc start-plan` and author the durable plan via
-      `superpowers-writing-plans` before implementing.
+Durable plan: `workshop/plans/000264-semantic-fold-flicker-plan.md`.
+
+- [ ] M1 — reconcile in place: continuity spec (red), pure `fold_diff`, inventory plus a
+      single reconcile phase in `apply`, uncertainty clears only edit-intersected folds.
+- [ ] M2 — local restart: extent spec (red), and `after_fragment` falls back to a restart at
+      the edit's answer header (not row 0) when a fragment's end state changes.
 
 ## Log
 
@@ -248,4 +253,20 @@ Delta:
   class). The repro harness is `D.attach(buf,{schedule=false})`, then
   `F.setup`, then `nvim_buf_set_lines` appends, then `D.drain`, then a loop of
   `F.step`, probing `vim.fn.foldclosed(row)`.
+
+### 2026-09-27 — Design (plan authored)
+
+Reason: claimed for implementation after #281; the plan needed the mechanism behind
+defect (a).
+
+Delta:
+- Defect (a) located: every blank-line case (summary, thinking, second exchange) reaches
+  `semantic.after_fragment`'s end-checkpoint mismatch (:494-495), whose prepared fallback is
+  hard-coded to restart 0 with a dependency rebuild (`before_fragment` :406-407), even
+  though `before_fragment` already proved no earlier row depends on the edit. A tool block
+  followed by a blank reports no uncertainty, which is consistent with the bounded-extent
+  argument.
+- #193/#200 checked: #193 required never rebuilding folds outside the rewritten span, and
+  #200 was permanent drift. The plan keeps eager clearing only for folds the edit
+  intersects (which Neovim corrupts) and keeps exact convergence when settled.
 
