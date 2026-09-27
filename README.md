@@ -54,6 +54,12 @@ name, model/activity and cursor position, using the selected theme.
 The packaged app also supports **Option+f** to find chats and **Option+n** to
 create a new chat in Normal and Insert mode (Alt on other keyboards).
 
+In chat and Markdown buffers, **Option+p** inserts a new private-note line
+starting with `🔒:` and leaves you typing after the prefix. It works in Normal
+and Insert mode. Configure the binding with `chat_shortcut_private_note` and
+the prefix with `chat_local_prefix`. Chat pruning remains on **Ctrl+g b**;
+Option+p now inserts private notes instead of pruning.
+
 To try the app from a checkout, run `./parley_app`. It loads the local starter
 outside repo mode, using a separate demo home and profile. Subsequent launches
 reuse that demo's chats, login and plugins. Its location is printed at startup;

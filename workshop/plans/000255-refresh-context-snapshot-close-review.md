@@ -72,3 +72,87 @@ findings:
     detail: |
       README.md:74–75 promises old-answer visibility until replacement output, whereas chat_respond.lua:1515 deletes it immediately. atlas/chat/transcript_truth.md:59 omits pending previous-answer ownership before generation admission. Update both passages to match the corrected lifecycle.
 ```
+
+---
+
+## Re-review — 2026-09-26T20:24:55-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 255 — Use previous completed answers in context during refresh |
+| repo | parley.nvim |
+| issue file | workshop/issues/000255-refresh-context-snapshot.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c231e52d3bfaab13eaec73983c1aa20ae2a4f8e3..f77163e9b3dbd997c3c4a66041a7f6ba9b72e347 |
+| command | sdlc close --issue 255 |
+| reviewer | codex |
+| timestamp | 2026-09-26T20:24:55-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Both prior findings are addressed. Duplicate submissions now preserve active output and snapshot ownership, and the documentation matches that lifecycle. However, the broader lifecycle suite has four failures requiring two small corrections before close.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      chat_respond.lua:1494–1505 rejects duplicates before snapshot publication or deletion. All five duplicate regressions pass on HEAD and fail when this guard is removed in a scratch copy.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      README.md:74–78 now describes immediate removal on accepted refresh and preservation on duplicate submission. atlas/chat/transcript_truth.md:59 documents pending ownership, adoption, and cleanup, matching chat_respond.lua and document/init.lua.
+findings:
+  - id: new
+    severity: Important
+    family: refusal-vocabulary-registration
+    title: |
+      New identity refusal bypasses the shared refusal vocabulary
+    detail: |
+      lua/parley/chat_respond.lua:1534 introduces "exchange identity unavailable", which refusal.lua does not recognize; it falls through to the generic unexpected-error message. tests/arch/refusal_vocabulary_spec.lua:117 fails. Reuse the existing "question identity unavailable" token or register an appropriate explanation and recovery action (ARCH-DRY).
+  - id: new
+    severity: Important
+    family: regression-suite-contract-drift
+    title: |
+      Existing lifecycle tests still assume the superseded submission timing
+    detail: |
+      tests/integration/chat_onboarding_capture_spec.lua:43 uses a row removed by immediate refresh, and :105 deletes the following question because its fixed range is now stale. tests/integration/chat_scoped_response_spec.lua:63 expects duplicates to return a session, although they now return nil immediately. All three fail on HEAD and pass with BASE chat_respond.lua restored in scratch. Resolve fixture rows from current content and assert immediate rejection while retaining the writer-preservation checks.
+```
+
+1. **Strengths**
+   - Duplicate regressions cover waiting, streaming, movement, and marker-boundary edits.
+   - Snapshot tests preserve structured answers, exchange identity, and immutable captured context.
+   - Pending-answer cleanup covers cancellation, rejected admission, and owner-specific adoption.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** The unregistered refusal and three stale lifecycle tests detailed above.
+
+4. **Minor findings:** None raised.
+
+5. **Test coverage**
+   - Lifecycle mapping: **1,015 passed, 4 failed**, across 72 spec files.
+   - Transcript-truth mapping passed.
+   - Previous-answer tests: **9 pure + 10 integration passed**.
+   - Launcher suite: **8 passed**.
+   - Removing the duplicate guard caused **all five regressions to fail**.
+   - Process-orphan verification was unavailable because the harness could not access `ps`.
+
+6. **Architecture**
+   - **ARCH-DRY — flag:** reuse/register the shared refusal vocabulary.
+   - **ARCH-PURE — pass:** snapshot transformation remains pure.
+   - **ARCH-PURPOSE — pass:** previous-answer substitution covers the intended consumers.
+   - **ARCH-MOCK — pass:** controllable stateful transport and proxy fixtures.
+   - **ARCH-CONSTRAINTS — pass:** no additional blocking issue identified.
+   - **ARCH-SECURE — pass:** launcher ownership checks and isolated fixtures.
+   - **ARCH-ORDER — pass:** duplicate admission and cleanup have deterministic sequence coverage.
+   - **ARCH-FUNERAL — pass:** pending snapshots have explicit cleanup paths; demo profiles have explicit removal.
+
+7. **Plan revision recommendation:** Append a `## Revisions` entry recording the vocabulary correction and migration of existing lifecycle tests; rerun the lifecycle mapping before close.

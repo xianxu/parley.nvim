@@ -1531,7 +1531,7 @@ local function start_scoped_response(frame)
         pending_entity = live_marker and live_marker.handle
         if not pending_entity then
             D.cancel_user(doc, question_source)
-            refuse('start', nil, 'exchange identity unavailable'); return nil, 'exchange identity unavailable'
+            refuse('start', nil, 'question identity unavailable'); return nil, 'question identity unavailable'
         end
         D.set_pending_previous_answer(doc, {entity = pending_entity, value = replaced_answer, owner = pending_owner})
         local delete_last = exchange.answer.line_end - 1

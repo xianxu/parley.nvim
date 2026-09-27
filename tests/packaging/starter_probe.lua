@@ -59,6 +59,14 @@ local ok, why = pcall(function()
             local tutorial = vim.fn.readfile(path)
             local lesson = parser.parse_chat(tutorial, parser.find_header_end(tutorial), p.config)
             assert(#lesson.exchanges >= 1, 'tutorial must contain a practice question: ' .. path)
+            for _, line in ipairs(tutorial) do
+                for target in line:gmatch('%]%(([^%s%)]+%.md)%)') do
+                    if not target:match('^%a[%w+.-]*:') then
+                        assert(vim.fn.filereadable(data .. '/chats/' .. target) == 1,
+                            'tutorial links to an unseeded chat: ' .. target)
+                    end
+                end
+            end
         end
         assert(parser.is_chat_filename('advanced.md'))
         local basics_buf = vim.fn.bufadd(basics_path)

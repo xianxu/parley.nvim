@@ -175,3 +175,102 @@ Add a `## Revisions` entry documenting:
 - pending snapshot ownership per response attempt, including overlapping re-asks and late completion ordering;
 - regression coverage for tool-call payload exclusion;
 - regression coverage for failed admission cleanup.
+
+---
+
+## Re-review — 2026-09-26T20:25:17-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 285 — remove stale answer immediately on re-ask |
+| repo | parley.nvim |
+| issue file | workshop/issues/000285-immediate-answer-refresh.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c231e52d3bfaab13eaec73983c1aa20ae2a4f8e3..f77163e9b3dbd997c3c4a66041a7f6ba9b72e347 |
+| command | sdlc close --issue 285 |
+| reviewer | codex |
+| timestamp | 2026-09-26T20:25:17-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The four prior findings are addressed, with regression evidence. Immediate removal, concurrent context, and duplicate protection work in the focused tests. Two Important issues remain: an unregistered refusal token and an existing test that still expects asynchronous duplicate rejection. The lifecycle test command fails.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      chat_respond_spec.lua:160 verifies stale tool calls/results are absent. Removing the payload-snapshot clearing in memory makes this regression fail at line 174.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Production cancellation and source-edit admission rejection have coverage. Removing pending cleanup in memory makes the rejection regression fail at chat_respond_spec.lua:190 with one orphaned snapshot.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Owner checks prevent mismatched clearing/adoption; duplicate submissions are rejected before mutation across five tested phases. Disabling owner matching in memory makes document_previous_answer_spec.lua:70 fail.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      The initial footer value now bounds deletion before reassignment. make lint passes with zero warnings and errors across 656 files.
+findings:
+  - id: new
+    severity: Important
+    family: refusal-producers-use-shared-vocabulary
+    title: |
+      New refusal token is absent from the shared vocabulary
+    detail: |
+      lua/parley/chat_respond.lua:1534 emits exchange identity unavailable, which lua/parley/refusal.lua does not register. tests/arch/refusal_vocabulary_spec.lua:117 fails. Reuse the existing question identity unavailable token or register actionable wording. ARCH-DRY.
+  - id: new
+    severity: Important
+    family: regression-tests-follow-public-contract
+    title: |
+      Existing duplicate-submission test contradicts the new admission contract
+    detail: |
+      tests/integration/chat_scoped_response_spec.lua:63 requires a non-nil second session and later cancellation, but chat_respond.lua:1504 now rejects synchronously. Update the expectation to immediate refusal while retaining assertions that no second provider call occurs and the original writer completes.
+```
+
+1. **Strengths**
+
+   - Payload clearing covers structured tool content, with a regression that demonstrably fails without the fix.
+   - Duplicate tests preserve output and previous-answer memory during waiting, streaming, and question movement.
+   - README and lifecycle atlas describe immediate removal and pending ownership.
+   - Launcher tests exercise competing launch/reset operations deterministically.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** The two failures above must be resolved before rerunning the boundary review.
+
+4. **Minor findings:** None raised.
+
+5. **Test coverage**
+
+   - Response integration: **52 passed**.
+   - Previous-answer document integration: **10 passed**.
+   - Launcher: **8 passed**.
+   - Lint: **passed**.
+   - `make test-spec SPEC=chat/lifecycle`: **failed**, including both reported failures.
+   - Three in-memory mutation checks made the corresponding BR-1/BR-2/BR-3 regressions fail; repository source remained unchanged.
+   - Process census was unavailable because the harness could not use `ps`.
+
+6. **Architecture**
+
+   | Principle | Assessment |
+   |---|---|
+   | ARCH-DRY | **Flag:** refusal producer bypasses the shared vocabulary. |
+   | ARCH-PURE | **Pass:** formatting logic remains separate from editor and transport effects. |
+   | ARCH-PURPOSE | **Pass:** immediate removal and concurrent previous-answer context are delivered. |
+   | ARCH-MOCK | **Pass:** response ordering uses controllable transport fixtures; launcher races use stateful fixtures. |
+   | ARCH-CONSTRAINTS | **Pass:** no new unbounded background concurrency identified. |
+   | ARCH-SECURE | **Pass:** launcher ownership/path checks and isolated test storage remain intact. |
+   | ARCH-ORDER | **Pass:** owner matching and pre-mutation duplicate rejection have ordering coverage. |
+   | ARCH-FUNERAL | **Pass:** pending snapshots and reservations have terminal cleanup paths. |
+
+7. **Plan revisions:** No scope revision needed. Update verification evidence after correcting both failures and rerunning the lifecycle tests.

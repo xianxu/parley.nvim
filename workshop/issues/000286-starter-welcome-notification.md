@@ -22,6 +22,9 @@ notification overlay. The welcome chat remains the onboarding source of truth.
 ## Done when
 
 - A no-argument starter launch opens `welcome.md` without the redundant welcome notification.
+- Startup continues to seed the edited multi-exchange tutorials; the stacked
+  launcher, shortcuts, and response lifecycle pass their focused suites before
+  the accumulated completed issues are landed.
 
 ## Plan
 

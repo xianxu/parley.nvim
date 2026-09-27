@@ -103,7 +103,7 @@ interesting side questions I could explore in a separate chat.
 A rainbow forms when sunlight enters water droplets in the air. The light **bends** as it enters, **reflects** off the droplet’s inner surface, and bends again as it leaves. These bends separate white sunlight into its component colors, creating the familiar arc when the Sun is behind you and rain is in front of you.
 
 Two side questions:
-1. [🌿:Why do rainbows appear as arcs, and can you ever reach the end of one?](2026-09-25.23-31-14.108_why-do-rainbows-appear-as.md)
+1. Why do rainbows appear as arcs, and can you ever reach the end of one?
 2. How do double rainbows form, and why are their colors reversed?
 
 📝: you asked about how rainbows form and requested two side questions, I answered with the roles of refraction, internal reflection, and dispersion, plus questions about color order and double rainbows
