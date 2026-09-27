@@ -450,3 +450,14 @@ regression guard. Each case also compares the settled parse with a cold parse
   asserts restart row 0 (it goes red when the guard is removed), and a positive unit test
   asserting restart at the answer header.
 
+### 2026-09-27 — Pre-close full-suite runs (machine under load, avg 5-9)
+
+`make test` was run five times after M2. Each run failed a *different* 1-4 files, and
+none repeated across runs: `perf_ownership` and `document_fold_batches` (killed
+mid-file), `response_target` (GC retention), `document_dependencies` (killed after 8/15),
+`packaging_launcher` and `starter_config` (process races), `document_retention` (GC
+retention), `branch_child`, `document_fold_uncertainty_retirement` (SIGTERM). Every one
+passes standalone. `document_retention`, the one in the changed area, passed 5/5 on the
+branch and 5/5 on `main`. Two runs passed fully (395/395 and 396/396 files). The one
+real failure found this way was the arch test's plan-table row, which is fixed.
+
