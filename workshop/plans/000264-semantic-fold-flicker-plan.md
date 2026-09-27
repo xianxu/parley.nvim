@@ -4,7 +4,7 @@
 
 **Goal:** Closed semantic folds (thinking, summary, tool_use, tool_result) never visibly open during fold repair, whether it follows a local edit or a streamed append; and a local edit no longer marks the whole document as uncertain.
 
-**Architecture:** M1 changes *how* native folds are reconciled: diff the existing native folds against the confirmed projection, leave exact matches untouched, and remove and create changed ones in the same scheduler turn. Uncertainty no longer clears native folds eagerly, except folds the edit itself intersects. M2 changes *how far* uncertainty reaches: when the parser's local fragment transfer fails its end-state comparison, it restarts at the edit (or its answer header) instead of at row 0.
+**Architecture:** M1 changes *how* native folds are reconciled: diff the existing native folds against the confirmed projection, leave exact matches untouched, and remove and create changed ones in the same scheduler turn. Uncertainty no longer clears native folds at all (below the 50k-row suspension threshold): Parley owns every fold, Neovim carries folds with their text, and the diff reconcile corrects the rare fold an edit distorted, one repair later. M2 changes *how far* uncertainty reaches: when the parser's local fragment transfer fails its end-state comparison, it restarts at the edit (or its answer header) instead of at row 0.
 
 **Tech Stack:** Lua (Neovim 0.10+), plenary busted specs, `make test-spec SPEC=chat/document`.
 
@@ -42,47 +42,47 @@
     earlier fold reads `foldclosed==-1` for one `F.step` (two if the result arrives in two
     writes).
 
-## Why deferring the clear is safe (the invariant that replaces eager clearing)
+## Why dropping the eager clear is safe (the invariant that replaces it)
 
 The eager clear guards against a fold displayed at a wrong position during repair (#193,
-#200). Neovim keeps manual folds attached to their text across edits; a fold's extent goes
-wrong in only two ways:
-1. **The edit writes rows inside the fold.** Neovim grows, or shrinks to its first line, a
-   manual fold whose rows were replaced or inserted into (#193 Spec). → Such folds are still
-   cleared eagerly (M1 Task 4).
+#200). Two facts make it unnecessary:
+- **Parley owns every fold.** Users don't create folds (they only open and close them), so
+  every native fold is one Parley made from a confirmed projection.
+- **Neovim carries manual folds with their text.** Verified headless on nvim 0.11.7 in
+  plan review round 2 (a brute-force sweep of every `set_lines`/`set_text` edit against a
+  fold, plus native Backspace at column 0, `J`, `o` and `O`): edits that keep or lower the
+  row count only shrink a fold onto its own surviving text or rewrite it in place. A fold
+  absorbs rows that aren't its own **only** when an edit adds net rows inside it (or
+  directly above its first row via `set_lines`).
 
-   **Intersection rule (precise).** An edit event carries post-edit `first_row`/`last_row`
-   and pre-edit `old_last_row`. A manual fold can absorb rows that aren't its own **only
-   when the edit adds net rows**: `last_row-first_row > old_last_row-first_row`. (Verified
-   headless on nvim 0.11.7 in plan review round 2: a brute-force sweep of every
-   `set_lines`/`set_text` edit against a fold, plus native Backspace-at-column-0, `J`, `o` and
-   `O`. Edits that keep or lower the row count only shrink a fold onto its own surviving
-   text or rewrite it in place.) So only a net-growing edit is recorded, as its written rows
-   post-edit `[first_row, last_row)`, and intersection is measured against **post-edit**
-   fold extents. (A line inserted directly above a fold's first row with `set_lines` is
-   absorbed into the fold, so post-edit extents are what show that.)
-   Consequences: pure deletions **and joins** (Backspace at column 0 or `J` on the blank
-   under a `📝:`/`🧠:`, and Delete at end of line) never clear eagerly. That's the issue's
-   main case. Deleting a fold's own last rows (e.g. a tool result's closing fence) doesn't
-   either; the diff reconcile fixes the extent. Only `semantic_changed` edits are recorded:
-   non-semantic edits schedule no repair today.
-2. **The structure changed without touching the fold's rows** (for example, a marker typed
-   above it changes how its rows parse). → The old fold stays briefly: stale in meaning,
-   but stable in position, over exactly the rows it covered. The diff reconcile removes or
-   reshapes it as soon as the confirmed projection is ready.
+So after any edit, a native fold is either still right, or (for that rare net insertion)
+briefly covers one extra written row. Either way it stays stable in position. The diff
+reconcile then makes native folds equal the confirmed projection, touching only the
+differences. With folds closed, human insertions rarely land inside one: `o` and `p` on a
+closed fold put text *after* it. The remaining writer-side case, streaming into a block,
+goes away with #290 (one write per block, folded as it is written).
+
+A structural edit elsewhere (a marker or fence typed above a fold) can change a fold's
+*meaning* without touching its rows. The old fold then stays briefly, stale in meaning but
+stable in position, until the confirmed projection removes or reshapes it.
 
 #200's failure was *permanent* drift (a reconcile that never removed unwanted folds). The diff
 reconcile keeps the settled-state guarantee: after settling, native folds equal the confirmed
 projection exactly (the existing `oracle` in `tests/integration/tool_folds_spec.lua`).
 
-**Replacement invariant:** *a fold not intersected by an edit is never removed until a
-confirmed projection is ready, and is left untouched if that projection contains it with the
-same extent.*
+**Replacement invariant:** *no native fold is removed until a confirmed projection is ready,
+and a fold the projection contains with the same extent is never touched.* Its common case
+is **zero-touch**: a plain streamed append or an ordinary human edit removes no native fold
+at all (Task 1 asserts this with a counter).
 
 Per kind (the issue's bounded-extent argument): `summary`, `tool_use` and `tool_result` are
 closed from within, so an edit below them never changes their extent, and the diff reconcile
 keeps them. `thinking` can legitimately grow or shrink when blanks below it change; it is
 reshaped in one turn (remove plus create together), never left open between turns.
+
+Chats over `INTERACTIVE_ROWS` (50,000 affected rows) keep today's uncertainty path exactly
+(a frontier-to-EOF clear with `foldenable` suspended). Folds are disabled, so invisible, for
+the whole job there, so it can't flicker.
 
 ## Core concepts
 
@@ -101,8 +101,7 @@ reshaped in one turn (remove plus create together), never left open between turn
   Batches hold at most `limit` groups, and a region is never split.
   - **Relationships:** pure function; called by `tool_folds.apply`. 1 call per window per plan.
   - **DRY rationale:** replaces two separate phases (`clear` walks everything; `create`
-    re-adds everything) with one decision in one place. It is also reused by M1 Task 4's
-    edit-intersection clear (a batch with only `remove`).
+    re-adds everything) with one decision in one place.
   - **Future extensions:** nested user folds (currently always removed with their group,
     as `zD` does today).
   - Tests: `tests/unit/fold_diff_spec.lua`, no Neovim state.
@@ -137,9 +136,8 @@ reshaped in one turn (remove plus create together), never left open between turn
   `reconcile` (for each batch from `FoldDiff`, in one slice: `zD` each removal, then
   `N,Mfold` each creation, then restore open state). The `clear` and `create` phases are
   deleted. Large-scope suspension (>`INTERACTIVE_ROWS`) keeps its current behaviour.
-- **clear_uncertainty** — for scopes ≤ `INTERACTIVE_ROWS`, no longer clears the
-  frontier-to-EOF span. It clears only folds that intersect a written row (the rule above),
-  and widens `s.first`/`s.last` to the uncertain scope so the next plan covers it (as it does
+- **clear_uncertainty** — for scopes ≤ `INTERACTIVE_ROWS`, does **no native work**. It only
+  widens `s.first`/`s.last` to the uncertain scope so the next plan covers it (as it does
   today). **Above `INTERACTIVE_ROWS` it keeps today's behaviour exactly** (frontier-to-EOF
   delete walk with `foldenable` suspended). Folds are disabled, and so invisible, for the
   whole job there, so it can't flicker, and
@@ -211,19 +209,25 @@ end
   - Delete at end of line (`A<Del><Esc>`) on the summary row.
   Watch the summary/thinking row: it must never open.
 
-  Boundary cases for the intersection rule (Task 4):
-  - deleting a tool result's closing fence (a pure deletion of the fold's own last row): the
-    fold is never eagerly cleared, and the settled state equals the oracle;
+  Edge cases (settled state must equal the oracle; the watched fold must never open):
+  - deleting a tool result's closing fence (a pure deletion of the fold's own last row);
   - a **net insertion inside** a closed tool result (`nvim_buf_set_lines(buf,r,r,false,{'x'})`
-    with `r` inside the body), which really does grow the fold: the fold *is* cleared
-    before repair and the settled state equals the oracle. This case is excluded from the
-    continuity watch.
+    with `r` inside the body), which grows the native fold for one repair; after settling,
+    the fold equals the projection again.
+
+  **Zero-touch cases** (the common path): extend `notify({phase='reconcile',...})` (Task 3)
+  with `removed=<count>` and `created=<count>`, and capture events through `F._observer`.
+  Assert `removed==0` summed over the whole repair for: a whole-block streamed tool append;
+  a thinking plus summary append; each real-keystroke join; typing a character in a
+  question; and Enter inside a question. Assert `created==1` for a streamed append of one
+  foldable block, and `created==0` for the human edits.
 
 - [ ] **Step 2: Run and confirm it fails.**
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/document_fold_continuity_spec.lua" -c "qa!"`
   Expected: FAIL with `row N opened at step 3` (or similar) in the summary, thinking,
-  second-exchange and streaming cases. **Expected to PASS today (controls):** the blank
-  matrix after a tool pair (no uncertainty, no structural apply) and both boundary cases.
+  second-exchange and streaming cases, and a nil-field error in the zero-touch cases
+  (`removed` isn't reported yet). **Expected to PASS today (controls):** the blank matrix
+  after a tool pair (no uncertainty, no structural apply).
   Record which cases were red in the issue Log, so Task 3/4 can show each one turning green.
 
 - [ ] **Step 3: Commit.** `#264 M1: continuity spec for fold repair (red)`
@@ -286,8 +290,9 @@ end
   doesn't bump `changedtick`); if not, discard the plan and return `'more'` (re-plan). Then
   `zD` each removal (top to bottom, re-checking `current()` after each command as today),
   then `N,Mfold` each creation, then `foldopen` where `window.opened[identity]`. Keep
-  `record_work` counters (`native_fold_ops`, `fold_groups_visited`),
-  `notify({phase='reconcile',...})`, suspension and `restore_window` exactly as today.
+  `record_work` counters (`native_fold_ops`, `fold_groups_visited`), suspension and
+  `restore_window` exactly as today; `notify({phase='reconcile',...})` gains
+  `removed`/`created` counts (the zero-touch assertions read them).
 - [ ] **Step 4:** Run the continuity spec. Expected: the streaming cases now PASS;
   blank-line cases may still fail at `clear_uncertainty` (Task 4).
 - [ ] **Step 5:** Run `make test-spec SPEC=chat/document` and each of:
@@ -303,35 +308,24 @@ end
   implementation detail; note each such change in the issue Log with the reason.
 - [ ] **Step 6: Commit.** `#264 M1: reconcile native folds by diff in one phase`
 
-### Task 4: Uncertainty clears only edit-intersected folds
+### Task 4: Uncertainty does no native work
 
 **Files:**
-- Modify: `lua/parley/tool_folds.lua` (`clear_uncertainty` :257-310; the `edit` branch of the
-  document subscriber in `ensure`, :480-505)
+- Modify: `lua/parley/tool_folds.lua` (`clear_uncertainty` :257-310)
 
-- [ ] **Step 1:** Track written rows: in the `edit` branch, **only when
-  `event.semantic_changed` and the edit adds net rows**
-  (`event.last_row-event.first_row > event.old_last_row-event.first_row`; the intersection
-  rule), record `{first=event.first_row,last=event.last_row}` in `s.edited`. Shift entries by the row
-  delta exactly as `s.first`/`s.last` are shifted. Bound it: keep at most 8 ranges, merging
-  the two nearest when a ninth arrives (the union can only widen the eager clear, which is
-  the conservative direction; count merges with `line_reader.record_work(buf,{fold_edit_merges=1})`
-  so an unexpected rise is visible, since with the net-growth filter merging should be rare). Clear `s.edited` whenever `M.step` returns `'idle'` (settled
-  or nothing to do), on `reload`, and on `detach`. Unit test: 1000 semantic single-row
-  inserts leave `#s.edited<=8`; a settle empties it.
-- [ ] **Step 2:** In `clear_uncertainty`, for scopes ≤ `INTERACTIVE_ROWS`, replace the
-  frontier-to-EOF delete walk with: widen `s.first`/`s.last` to the scope (as now); inventory
-  (`fold_native.walk` mode `'inventory'`) only over the `s.edited` ranges; remove the groups
-  intersecting them (remove-only `FoldDiff` batches). Above `INTERACTIVE_ROWS`, keep the
+- [ ] **Step 1:** In `clear_uncertainty`, for scopes ≤ `INTERACTIVE_ROWS`, remove the
+  frontier-to-EOF delete walk: keep only the widening of `s.first`/`s.last` to the scope and
+  mark it handled (`s.uncertainty_cleared=true`). Above `INTERACTIVE_ROWS`, keep the
   existing delete walk and suspension unchanged.
-- [ ] **Step 3:** Continuity spec: all cases PASS, including both intersection-rule boundary
-  cases from Task 1.
-- [ ] **Step 4:** Full fold and document suites green (the Task 3 Step 5 list), plus
+- [ ] **Step 2:** Continuity spec: all cases PASS, including the edge and zero-touch cases.
+- [ ] **Step 3:** Full fold and document suites green (the Task 3 Step 5 list), plus
   `tests/integration/chat_stop_generation_spec.lua` and
   `tests/integration/response_tools_spec.lua` (streaming writes). The #193/#194/#195/#200
   behaviours are defended by `tool_folds_spec.lua` (oracle, question never folded),
-  `fold_invariants_spec.lua` and `document_folds_spec.lua` in that list.
-- [ ] **Step 5: Commit.** `#264 M1: uncertainty clears only folds the edit touched`
+  `fold_invariants_spec.lua` and `document_folds_spec.lua` in that list. If any spec
+  asserted that folds are cleared *before* repair (the old eager behaviour), change it to
+  assert the settled oracle plus continuity, and note it in the issue Log with the reason.
+- [ ] **Step 4: Commit.** `#264 M1: uncertainty no longer clears native folds`
 
 ### Task 5: M1 atlas and close
 
@@ -430,8 +424,8 @@ end
   command bound. Reconcile cost is O(changed folds): an append to an exchange with k
   unchanged folds does 0 native operations on them (today: 2k).
 - M2 turns an O(document) re-parse after a blank-line edit into O(rows from the answer
-  header to convergence). There's no new durable state; `s.edited` dies with the plan
-  (ARCH-FUNERAL: in-memory, cleared on settle and on detach).
+  header to convergence). There's no new durable state (ARCH-FUNERAL: the plan and its
+  inventory are in-memory and die with the plan).
 
 ## Deliberate narrowing (recorded in the issue's Revisions)
 
@@ -444,6 +438,8 @@ evidence the parser doesn't have yet. It's worth a follow-up only if settle time
 answers shows up in measurements.
 
 ## Out of scope
+
+- Folding a block as the writer writes it (so new blocks never appear unfolded): #290.
 
 - Writing tool blocks in one piece (#290) and marker escaping (#291).
 - Changing `INTERACTIVE_ROWS`/`BATCH_GROUPS` or the >50k-row suspension behaviour.
