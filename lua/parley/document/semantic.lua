@@ -217,6 +217,22 @@ function M.is_confirmed(worker,handle)
 end
 M.confirmed=M.is_confirmed
 
+-- One restart rule for both repair entries (#264): pull `row` back to its
+-- answer header (answer sections are repaired from the header) and resume from
+-- the preceding row's checkpoint. Without that checkpoint, restart at row 0.
+local function restart_point(w,row)
+    local restart=row
+    local preceding=restart>0 and S.at(w.seq,restart-1) or nil
+    if preceding and preceding.metadata and preceding.metadata.answer_header then
+        local header=S.rank(w.seq,preceding.metadata.answer_header)
+        if header then restart=math.min(restart,header.row) end
+    end
+    preceding=restart>0 and S.at(w.seq,restart-1) or nil
+    local checkpoint=preceding and preceding.metadata and preceding.metadata.after
+    if restart>0 and not checkpoint then return 0,G.initial() end
+    return restart,checkpoint or G.initial()
+end
+
 -- Query while old endpoint handles are live. If this cheap safety check runs
 -- out of budget, discard the dependency root after the edit and repair from0.
 -- This path never delays or rejects a human text edit.
@@ -253,15 +269,7 @@ function M.before_splice(worker,first,last,opts)
     dep_visits=dep_visits+query.work.dependency_nodes_visited
     if query.status~='ok' then return evidence(0,G.initial(),true) end
     local affected=query.origin and S.rank(w.seq,query.origin)
-    local restart=math.min(first,affected and affected.row or first,position(w,w.global))
-    local preceding=restart>0 and S.at(w.seq,restart-1) or nil
-    if preceding and preceding.metadata and preceding.metadata.answer_header then
-        local header=S.rank(w.seq,preceding.metadata.answer_header)
-        if header then restart=math.min(restart,header.row) end
-    end
-    preceding=restart>0 and S.at(w.seq,restart-1) or nil
-    local checkpoint=preceding and preceding.metadata and preceding.metadata.after or G.initial()
-    if restart>0 and not (preceding and preceding.metadata and preceding.metadata.after) then restart=0; checkpoint=G.initial() end
+    local restart,checkpoint=restart_point(w,math.min(first,affected and affected.row or first,position(w,w.global)))
     local origin=S.at(w.seq,restart)
     local removed=w.deps:remove_from(origin and origin.handle or S.eof(w.seq),
         {budget=dep_budget,before_rank=before_rank})
@@ -401,6 +409,20 @@ function M.before_fragment(worker,first,last,new_spans,opts)
     if affected.status~='ok' or affected.origin then return fallback() end
     local normal={status='budget',restart_row=0,budget_exhausted=true}
     evidence_store[normal]={worker=worker,restart=0,checkpoint=G.initial(),serial=w.serial,fallback=true}
+    -- #264: if the transfer later fails only its end-state comparison, restart
+    -- at the edit's answer header instead of row 0. `affected.origin==nil`
+    -- above proved no earlier row depends on the edited rows. Prune the
+    -- dependency index now, while every handle still ranks; install it only then.
+    local local_restart
+    local restart,checkpoint=restart_point(w,first)
+    if restart>0 then
+        local origin=S.at(w.seq,restart)
+        local pruned=w.deps:prune_from(origin and origin.handle or S.eof(w.seq),{budget=dep_budget})
+        visits=visits+pruned.work.dependency_nodes_visited
+        if pruned.status=='ok' then
+            local_restart={restart=restart,checkpoint=checkpoint,roots=pruned.roots,deps=w.deps,base_roots=w.deps.roots}
+        end
+    end
     local active=w.queue[1]
     local active_valid=active and active.scope_proof and S.validate_certificate(w.seq,active.scope_proof)
     local token={status='local'}
@@ -408,7 +430,7 @@ function M.before_fragment(worker,first,last,new_spans,opts)
         before=before,after=after,section_before=section_before,section_after=section_after,header=header,
         left=left and left.handle,right=right and right.handle or S.eof(w.seq),removed=removed,
         global=w.global,global_checkpoint=w.global.checkpoint,global_next=w.global.next,
-        active=active_valid and active or nil,nodes=nodes,entries=entries}
+        active=active_valid and active or nil,nodes=nodes,entries=entries,local_restart=local_restart}
     token.work=fragment_work(w.seq,initial,0,visits)
     return token
 end
@@ -490,7 +512,20 @@ function M.after_fragment(worker,token,first,newlast)
         section=projected and projected.checkpoint or nil
     end
     if not G.same_checkpoint(checkpoint,captured.after)
-        or (section and not G.same_checkpoint(section,captured.section_after)) then return fallback() end
+        or (section and not G.same_checkpoint(section,captured.section_after)) then
+        -- The fragment's own assumptions held; only its end state moved (e.g. a
+        -- blank count). Restart locally when the pruned index is still current:
+        -- `serial` alone can't prove that, since `deps:add` doesn't bump it.
+        local r=captured.local_restart
+        if not r or w.deps~=r.deps or w.deps.roots~=r.base_roots then return fallback() end
+        w.deps:install(r.roots)
+        local evidence={status='ready',restart_row=r.restart,budget_exhausted=false}
+        evidence_store[evidence]={worker=worker,restart=r.restart,checkpoint=r.checkpoint,serial=w.serial,
+            fallback=false,active_scope=captured.active}
+        local result=M.after_splice(worker,evidence,first,newlast)
+        result.work=fragment_work(w.seq,initial)
+        return result
+    end
     assert(S.project_many(w.seq,updates))
     if captured.active then
         local header=S.rank(w.seq,captured.active.header)
