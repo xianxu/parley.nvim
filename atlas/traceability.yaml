@@ -445,6 +445,7 @@ atlas:
       - tests/integration/document_fold_retirement_spec.lua
       - tests/integration/document_fold_uncertainty_retirement_spec.lua
       - tests/integration/document_fold_continuity_spec.lua
+      - tests/integration/document_uncertainty_extent_spec.lua
       - tests/unit/fold_diff_spec.lua
       - lua/parley/fold_diff.lua
       - lua/parley/fold_native.lua

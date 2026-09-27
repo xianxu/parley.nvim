@@ -409,3 +409,12 @@ to #290 (now depends on #264 M1).
   implementation (property test, oversize batch rule, interleaving checks, one apply
   path; the shared restart helper is in M2 Task 7).
 
+### 2026-09-27 — M2 Task 6: uncertainty extent spec (red)
+
+`tests/integration/document_uncertainty_extent_spec.lua`: 3 red ("uncertain from 0")
+for a blank after a summary, after thinking, and in a second exchange. Green today: the
+tool-block control and, contrary to the plan's prediction, the question-edit case (the
+fragment fast path handles a question-role blank without falling back). It stays as a
+regression guard. Each case also compares the settled parse with a cold parse
+(handle-free semantic fields plus fold ranges).
+
