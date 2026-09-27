@@ -28,6 +28,10 @@ ARCH-FUNERAL).
 - Re-asking clears the old answer before remote/readiness work begins.
 - A concurrent request still receives the captured old answer from memory.
 - Cancellation or failed admission does not leave an orphaned snapshot.
+- Replacement payloads omit the target's prior tool calls/results; an older
+  attempt cannot clear or adopt a successor's pending answer.
+- Duplicate submission before or during streaming preserves the active writer,
+  its visible output, and its original previous-answer snapshot.
 
 ## Plan
 
@@ -37,6 +41,12 @@ ARCH-FUNERAL).
 ## Log
 
 ### 2026-09-26
+
+- Closure audit: 46 chat-response and 10 document previous-answer cases pass.
+  Added production regressions for stale tool payloads, source-edit admission
+  rejection, and late termination of an older re-ask. Each regression fails
+  with its matching fix disabled in an isolated snapshot. Owner adoption and
+  generation completion are also covered (ARCH-ORDER, ARCH-FUNERAL).
 
 - Root cause: response preparation currently waits for remote input before replacing the old answer (#266 boundary).
 - Implemented command-time answer removal with a pending document snapshot; focused document and chat response integration specs pass (9 and 42 cases).
@@ -48,3 +58,8 @@ ARCH-FUNERAL).
 - 2026-09-26: Ensure re-ask payloads exclude the replaced exchange's prior tool-call blocks as well as ordinary answer text (boundary review BR-1).
 - 2026-09-26: Add production cancellation coverage for pending snapshot cleanup (boundary review BR-2).
 - 2026-09-26: Give each pending snapshot an owner token so overlapping re-asks cannot retire one another's memory (boundary review BR-3).
+- 2026-09-26: The stacked #255 closure review reproduced deletion before
+  duplicate admission. Reserve the selected question through the existing
+  response lifecycle before publishing a snapshot or deleting output; cover
+  waiting and streaming duplicates and refresh after completion. Update README
+  and both lifecycle atlas pages to include pending ownership (ARCH-ORDER).

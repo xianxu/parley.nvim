@@ -113,3 +113,12 @@ and the `#255` cases in `tests/integration/chat_respond_spec.lua`; mapped in
 Nothing is left to build here. The status flip to `done` needs
 `sdlc close --issue 255`, since the binary writes `codecomplete` only through a
 close review (#160).
+
+## Revisions
+
+- 2026-09-26: Closure of the stacked app work includes #285's immediate visible
+  answer removal. Previous-answer memory now has a pending phase owned by the
+  submission before generation admission. A duplicate submission must preserve
+  the active writer and original snapshot; only accepted refreshes may remove
+  visible text. Add before/after-output duplicate regressions and document the
+  pending-to-generation ownership transfer (ARCH-ORDER).
