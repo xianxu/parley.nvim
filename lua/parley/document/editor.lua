@@ -205,8 +205,9 @@ local function apply(self,plan,validate,user)
     if self.in_callback or self.operation then return {status='busy',receipts={}} end
     if self.dead or not self.attached or plan.epoch~=self.epoch then return {status='stale',receipts={}} end
     assert(type(validate)=='function','authority validator required')
+    local limit=math.max(LIMIT,plan.limit or 0)
     for _,patch in ipairs(plan.patches) do
-        if #patch.text>LIMIT or #patch.expected_old>LIMIT then return {status='chunkneeded',receipts={}} end
+        if #patch.text>limit or #patch.expected_old>LIMIT then return {status='chunkneeded',receipts={}} end
     end
     local operation={receipts={},validate=validate,plan=plan,user=user and {} or nil}
     self.operation=operation

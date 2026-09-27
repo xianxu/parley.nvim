@@ -212,25 +212,43 @@ describe('production concurrent tool round composition',function()
         end,'missing frozen tool response')
     end)
 
-    -- Task 3.2c Step 2: one result larger than a 4 KiB slice is written over
-    -- several steps; the next call block must wait for all of it.
-    it('never starts the next block while a multi-slice result is still being written',function()
-        local f=setup();f.round(calls)
-        local first,second=unpack(f.producer.started)
-        second.events.outcome('known',{content='second'});second.events.resolved()
-        first.events.outcome('known',{content=string.rep('x',10000)});first.events.resolved()
-        local saw_partial=false
-        for _=1,400 do
-            f.step(1)
-            local body=select(2,text(f):gsub('x',''))
-            if body>0 and body<10000 then
-                saw_partial=true
-                assert.is_nil(at(f,'🔧:','b'),'call b landed inside result a')
-            end
-            if at(f,'📎:','b') then break end
+    -- Every native edit's inserted text, in order: the document writes through
+    -- the editor's set_text, so this sees each write exactly as the buffer does.
+    local function record_edits(f)
+        local edits,set_text={},f.editor.driver.set_text
+        f.editor.driver.set_text=function(buf,sr,sc,er,ec,lines)
+            edits[#edits+1]=table.concat(lines,'\n');return set_text(buf,sr,sc,er,ec,lines)
         end
-        assert.is_true(saw_partial,'the result must actually be written in slices')
+        return edits
+    end
+    -- #290: a result larger than a 4 KiB slice reaches the buffer in one edit,
+    -- so no scheduler turn ever sees its block unterminated (#281 Findings 1).
+    it('writes a result over 4 KiB in one edit carrying both of its fences',function()
+        local f=setup();f.round(calls)
+        local edits=record_edits(f)
+        local first,second=unpack(f.producer.started)
+        local body=string.rep('y',9000)..'\n'..string.rep('z',9000)
+        second.events.outcome('known',{content='second'});second.events.resolved()
+        first.events.outcome('known',{content=body});first.events.resolved();f.drain()
+        local carrying={}
+        for i,edit in ipairs(edits) do if edit:find('y',1,true) or edit:find('z',1,true) then carrying[#carrying+1]=i end end
+        assert.equals(1,#carrying,'the result block was split across edits')
+        local edit=edits[carrying[1]]
+        assert.truthy(edit:find('📎: read_file id=a\n```\n'..body..'\n```\n',1,true),'opener, body and closing fence together')
         assert.is_true(at(f,'📎:','a')<at(f,'🔧:','b'))
+    end)
+    -- Streamed prose is unchanged by #290: it still lands in 4096-byte slices.
+    it('still writes streamed prose in 4096-byte slices',function()
+        local f=setup()
+        local edits=record_edits(f)
+        local req=f.requests[#f.requests]
+        assert.is_true(req.cb.output(string.rep('p',10000)));f.drain()
+        local total,largest=0,0
+        for _,edit in ipairs(edits) do
+            local _,n=edit:gsub('p','');total=total+n;largest=math.max(largest,#edit)
+        end
+        assert.equals(10000,total)
+        assert.equals(4096,largest,'prose is sliced at 4096 bytes')
     end)
 
     it('joins out-of-order result writes in declared order and preserves a human draft',function()

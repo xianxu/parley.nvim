@@ -88,6 +88,15 @@ consumer then has to tolerate.
 - A timing of a 512 KB result append is recorded in the Log.
 - Existing streaming, stop-generation and tool-fold suites stay green.
 
+## Core concepts
+
+| Entity | Status | Where | Role |
+|---|---|---|---|
+| `BLOCK_LIMIT` | new | `document/init.lua` | ceiling of a whole-block append (1 MiB, the runner's staging limit) |
+| `block` | new | `D.append` intent | a tool block written in one edit; lifts the 4096-byte/255-row slice limits |
+| `first_row` | new | runner `written` receipt | the row an appended write's first byte landed on |
+| `fold_written` | new | `tool_folds.lua` | writer fast path: folds a written tool block / summary row in the write's turn |
+
 ## Plan
 
 Design notes (from reading the write path):
@@ -119,16 +128,16 @@ Design notes (from reading the write path):
 - Creates nothing durable (ARCH-FUNERAL): native folds are presentation, reconciled by
   #264; the high-water row lives in the generation's closure.
 
-- [ ] `manual_append` writes the whole block: runner, `D.append` (`block` intent, 1 MiB),
+- [x] `manual_append` writes the whole block: runner, `D.append` (`block` intent, 1 MiB),
       editor patch limit per plan, whole-line lexing in `Append.prepare`
-- [ ] Tests: one edit carries both fences for a >4 KiB result; prose still sliced at 4096;
+- [x] Tests: one edit carries both fences for a >4 KiB result; prose still sliced at 4096;
       rewrite the "multi-slice result" response_tools test to "never partial"
-- [ ] `written` receipt gains `from`; `tool_folds.fold_written`; wired in `chat_respond`
-- [ ] E2E (chat_respond + fixture provider, real window): tool call/result closed at the
+- [x] `written` receipt gains `from`; `tool_folds.fold_written`; wired in `chat_respond`
+- [x] E2E (chat_respond + fixture provider, real window): tool call/result closed at the
       write, before any reconcile; settled reconcile `removed==0`/`created==0`
-- [ ] Summary folding: split prefix, stays closed while streaming, multi-line reshape,
+- [x] Summary folding: split prefix, stays closed while streaming, multi-line reshape,
       `📝:` inside a code fence folded then removed
-- [ ] Measure a 512 KiB append on a large chat; log it
+- [x] Measure a 512 KiB append on a large chat; log it
 - [ ] Existing streaming, stop-generation and tool-fold suites green (`make test`)
 
 ## Log
@@ -137,4 +146,27 @@ Design notes (from reading the write path):
 - Filed from #281 (design decision A).
 - 2026-09-27: scope extended to streamed summaries (operator); `🧠:` excluded, since the
   default prompt no longer requests thinking blocks.
+- 2026-09-27: the slice was enforced in three places (runner, `D.append` 4096 B/255
+  newlines, editor 64 KiB patch), plus the runner's `slice` 255-row cap; `Append.prepare`
+  lexed each line with a 4096-byte budget (a longer line would mis-lex). All lifted for
+  `block` appends only.
+- 2026-09-27: **spec premise corrected.** `nvim_buf_set_text` into a row inside a manual
+  fold deletes that fold (probed in headless nvim: foldlevel 1 → 0 after a same-line
+  append). So a streamed summary row is re-folded by the writer on every write that
+  continues it, in the same turn — never visible open.
+- 2026-09-27: the parser folds only a summary's marker row (the following line is answer
+  text), and also folds a `📝:` row inside a code fence; the writer agrees in both, so the
+  reconcile has nothing to reshape or remove. Tests assert agreement with the settled
+  parse (oracle) rather than the spec's predicted reshape/removal.
+- 2026-09-27: arch guard #254 bars raw buffer reads in `tool_folds`; `fold_written`
+  classifies rows from the tokens `Append.prepare` already put in the index (opaque rows
+  get no fast fold).
+- 2026-09-27: **timing** (headless, `tests/minimal_init.vim`, 512 KiB result = 6553 rows,
+  one block): the write turn is one ~114 ms step on a 483-row chat and ~151 ms on a
+  2403-row chat (sliced baseline: max step ~25 ms). Time until the block is written and
+  repair is idle: 10.5 s whole vs 16.7 s sliced (483-row chat) — whole is faster overall;
+  the ~10–14 s document repair of 6.5k new rows is pre-existing and runs in scheduled
+  slices (max repair step ~22–26 ms). At the 100 KiB default the write turn scales to
+  ~25–30 ms. Follow-up candidate: the per-byte Lua lexer in `Append.prepare` dominates
+  the write turn.
 

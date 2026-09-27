@@ -1791,6 +1791,8 @@ local function start_scoped_response(frame)
         return operation
     end
     local last_cursor = frame.cursor
+    -- The highest row this generation folded as a summary (#290).
+    local summary_row
     local session, reason = Session.start(doc, spec, {buf = buf, agent = info.display_name,
         dispatcher = _parley.dispatcher, tasker = _parley.tasker,
         page_limit = config.tool_result_page_lines,
@@ -1817,6 +1819,8 @@ local function start_scoped_response(frame)
             end
         end,
         written = function(_, receipt)
+            -- Before following, so the fold's view restore cannot undo the follow.
+            summary_row = require('parley.tool_folds').fold_written(buf, receipt, summary_row)
             if receipt.kind ~= 'output' or not receipt.tip or not is_follow_cursor_enabled(frame.follow) then return end
             if not vim.api.nvim_win_is_valid(frame.win) or vim.api.nvim_get_current_win() ~= frame.win
                 or vim.api.nvim_win_get_buf(frame.win) ~= buf or vim.api.nvim_get_mode().mode:match('^[iR]') then return end

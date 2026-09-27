@@ -392,16 +392,19 @@ local function start_operation(s,effect)
 end
 -- Presentation receives copied receipt facts after accounting, never mutation
 -- capabilities or payloads. Its failure cannot change an accepted prefix.
-local function written(s,effect,result)
+-- An appended write also reports `first_row`, the row its first byte landed
+-- on, so a host can present exactly the rows it wrote (#290).
+local function written(s,effect,result,bytes)
     local accepted,removed=result.accepted_bytes or 0,result.removed_bytes or 0
     if not s.written or accepted+removed==0 or s.detached or s.terminal then return end
     local grant=D.snapshot(s.doc).grants[effect.grant]
     local tip=grant and grant.status~='revoked' and D.byte_position(s.doc,grant.last)
     if tip then tip.byte=grant.last end
+    local first_row=tip and bytes and tip.row-select(2,bytes:sub(1,accepted):gsub('\n',''))
     s.written_serial=(s.written_serial or 0)+1
     local receipt={id=s.prefix..':written:'..s.written_serial,
         kind=effect.type=='write' and 'output' or effect.type=='manual_append' and 'append' or 'replace',
-        status=result.status,accepted_bytes=accepted,removed_bytes=removed,tip=tip}
+        status=result.status,accepted_bytes=accepted,removed_bytes=removed,tip=tip,first_row=first_row}
     local ctx={epoch=s.epoch,generation=s.generation,operation=effect.operation,grant=effect.grant,
         entity=effect.entity or (grant and grant.entity) or s.entity,exchange=s.entity}
     s.notifying=true
@@ -415,14 +418,18 @@ local function write(s,effect)
     local generation=G.snapshot(s.machine)
     local grant=not s.detached and D.snapshot(s.doc).grants[effect.grant]
     if grant then effect.entity=grant.entity end
-    local attempted=slice(contents(value),effect.offset+1,math.min(4096,effect.bytes))
+    -- A tool block (`ctx.append`, #290) is written in one edit so its closing
+    -- fence lands with its opener; streamed prose keeps 4096-byte slices.
+    local block=effect.type=='manual_append'
+    local attempted=block and contents(value):sub(effect.offset+1)
+        or slice(contents(value),effect.offset+1,math.min(4096,effect.bytes))
     local result
     if not grant or grant.status=='revoked' or generation.phase=='stopping' then
         result={status='stale',accepted_bytes=0}
     elseif grant.status=='suspended' then return true,'waiting'
     else
         result=D.append(s.doc,{epoch=s.epoch,generation=s.generation,operation=effect.operation,entity=grant.entity,
-            grant=effect.grant,revision=grant.revision,bytes=attempted})
+            grant=effect.grant,revision=grant.revision,bytes=attempted,block=block})
     end
     if result.status=='more' or result.status=='busy' then return true end
     if result.status=='waiting' then return true,'waiting' end
@@ -431,12 +438,12 @@ local function write(s,effect)
     if effect.type=='write' then
         dispatch(s,{type='write_result',write=effect.id,attempted_bytes=#attempted,
             committed_bytes=result.accepted_bytes,status=status})
-        written(s,effect,result)
+        written(s,effect,result,attempted)
         return false
     end
     effect.offset=effect.offset+result.accepted_bytes;effect.bytes=effect.bytes-result.accepted_bytes
     effect.accepted=effect.accepted+result.accepted_bytes
-    written(s,effect,result)
+    written(s,effect,result,attempted)
     if effect.bytes>0 and (status=='applied' or status=='suspended') then return true,status=='suspended' and 'waiting' end
     release(s,effect.blob_ref)
     effect.done({status=effect.bytes==0 and 'applied' or status,accepted_bytes=effect.accepted})

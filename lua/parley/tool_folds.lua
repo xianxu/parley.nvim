@@ -434,6 +434,64 @@ local function ensure(buf)
     mark(s,0,Document.size(doc).rows)
     return s
 end
+--- The writer's fast path (#290): fold what a streamed write produced in the
+--- turn it lands, so it is never shown open while repair catches up. It is not
+--- the authority (#193/#200): it folds exactly the range the confirmed
+--- projection will, so the reconcile finds a match and leaves it alone, and
+--- corrects any disagreement. An appended tool block folds from its marker to
+--- its last non-blank row; streamed prose folds each `summary` row from `seen`,
+--- the caller's high-water row, on. A prefix split across writes is caught when
+--- its row is written again. Writing into a row deletes a manual fold over it
+--- (nvim_buf_set_text re-inserts the row), so the row still being streamed is
+--- re-folded in the same turn, before any redraw can show it open.
+--- Rows are classified by the tokens the append already lexed into the shared
+--- index (#254: never re-read from the buffer); an opaque row is left to the
+--- reconcile. Returns the new `seen`.
+function M.fold_written(buf,receipt,seen)
+    seen=seen or -1
+    if not receipt.tip or not receipt.first_row or not vim.api.nvim_buf_is_valid(buf) then return seen end
+    local s=ensure(buf);if not s then return seen end
+    local function kind(row)
+        local span=Document.query(s.doc,row,row+1)[1]
+        return span and not span.opaque and span.metadata and span.metadata.token and span.metadata.token.kind
+    end
+    local ranges={}
+    local first,last=receipt.first_row,receipt.tip.row
+    if receipt.kind=='append' then
+        while first<=last and kind(first)=='blank' do first=first+1 end
+        while last>first and kind(last)=='blank' do last=last-1 end
+        local anchor=first<=last and kind(first)
+        if (anchor=='tool_use' or anchor=='tool_result') and kind(last) then ranges[1]={first,last} end
+    elseif receipt.kind=='output' then
+        for row=math.max(first,seen),last do
+            if kind(row)=='summary' then ranges[#ranges+1]={row,row};seen=row end
+        end
+    end
+    if #ranges==0 then return seen end
+    for _,win in ipairs(vim.fn.win_findbuf(buf)) do
+        if vim.api.nvim_get_option_value('foldmethod',{win=win})=='manual' then
+            setting_foldenable=setting_foldenable+1
+            local ok,err=pcall(vim.api.nvim_win_call,win,function()
+                local view,enabled=vim.fn.winsaveview(),vim.wo.foldenable
+                -- `:fold` sets 'foldenable'; restored so the operator's setting holds.
+                local created,failure=pcall(function()
+                    for _,range in ipairs(ranges) do
+                        if vim.fn.foldlevel(range[1]+1)==0 and vim.fn.foldlevel(range[2]+1)==0 then
+                            line_reader.record_work(buf,{native_fold_ops=1})
+                            vim.cmd(string.format('%d,%dfold',range[1]+1,range[2]+1))
+                        end
+                    end
+                end)
+                restore_window(buf,win,enabled,view)
+                if not created then error(failure,0) end
+            end)
+            setting_foldenable=setting_foldenable-1
+            if not ok then error(err,0) end
+        end
+    end
+    notify({phase='written',ranges=ranges})
+    return seen
+end
 -- Deterministic test/explicit maintenance seam; ordinary callbacks use step.
 function M.flush(buf,limit)
     for _=1,limit or 10000 do
