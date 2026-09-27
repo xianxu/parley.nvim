@@ -168,3 +168,6 @@ oracle, and the mutation that would make the test fail.
   streaming, and after the question moves; verify the existing writer survives.
 - Snapshot ownership has both pending and admitted phases. Keep documentation
   and cleanup tests aligned with both phases when moving work before admission.
+- Closing stacked issues repeats the entire branch review window. Establish one
+  shipment boundary before invoking close; never let concurrent reviewers run
+  test harnesses in the same checkout, where process cleanup kills peer tests.

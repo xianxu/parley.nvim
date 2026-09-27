@@ -156,3 +156,79 @@ findings:
    - **ARCH-FUNERAL — pass:** pending snapshots have explicit cleanup paths; demo profiles have explicit removal.
 
 7. **Plan revision recommendation:** Append a `## Revisions` entry recording the vocabulary correction and migration of existing lifecycle tests; rerun the lifecycle mapping before close.
+
+---
+
+## Re-review — 2026-09-26T21:11:22-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 255 — Use previous completed answers in context during refresh |
+| repo | parley.nvim |
+| issue file | workshop/issues/000255-refresh-context-snapshot.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c231e52d3bfaab13eaec73983c1aa20ae2a4f8e3..241ca4f08e6fdf7deb99a95b0076b8de0fc5529b |
+| command | sdlc close --issue 255 |
+| reviewer | codex |
+| timestamp | 2026-09-26T21:11:22-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies #255’s snapshot contract. Both open findings are addressed, with scratch reversions confirming the regression checks fail without the corrections. No new blocking findings emerged from the snapshot or stacked app changes.
+
+```findings
+dispose:
+  - id: BR-3
+    disposition: addressed
+    note: |
+      chat_respond.lua:1534 now uses the registered "question identity unavailable" token. All six refusal vocabulary checks pass; restoring the prior token makes the vocabulary check fail.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Onboarding and scoped-response suites pass all 19 cases. Restoring the prior fixtures reproduces both onboarding failures and the duplicate-submission failure; writer-preservation assertions remain.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Duplicate admission precedes deletion. Passing regressions cover waiting, streaming, moved markers, snapshot preservation, continued output, and later resubmission.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      README.md describes immediate removal and duplicate preservation; atlas/chat/lifecycle.md and transcript_truth.md describe pending ownership, generation adoption, and cleanup consistently with the implementation.
+```
+
+1. **Strengths**
+   - Context substitution preserves complete previous answers and immutable captured requests.
+   - Duplicate submissions preserve both the active writer and its snapshot.
+   - Ownership tests cover cancellation, rejection, stale generations, deletion, reload, and detach.
+   - README and atlas document the changed lifecycle and added app surfaces.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - **96 focused Lua tests passed**, plus **8 launcher tests**.
+   - Scratch reversions reproduced BR-3 and all three BR-4 failures.
+   - The architecture suite passed after supplying its required scratch Git index.
+   - Full repository suite was not run.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** shared refusal vocabulary and answer projection reused.
+   - **ARCH-PURE — pass:** answer capture/substitution remains directly tested without IO.
+   - **ARCH-PURPOSE — pass:** same-chat and ancestor context paths retain the snapshot contract.
+   - **ARCH-MOCK — pass:** controllable provider/editor doubles exercise lifecycle behavior.
+   - **ARCH-CONSTRAINTS — pass:** no new unbounded concurrency or external work on submission.
+   - **ARCH-SECURE — pass:** identity validation and launcher ownership checks remain intact.
+   - **ARCH-ORDER — pass:** tests control admission, streaming, cancellation, completion, and duplicate ordering.
+   - **ARCH-FUNERAL — pass:** pending snapshots and reservations have cleanup paths; demo profiles have owned reset.
+
+7. **Plan revision recommendations:** None; existing revisions describe the delivered pending-to-generation lifecycle.

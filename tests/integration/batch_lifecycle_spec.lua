@@ -93,7 +93,7 @@ describe('public batch membership lifetime',function()
                 if outcome=='cancel'then Respond.cancel_responses(buf)end
                 calls[1].abort('fixture failure')
                 wait(function()return mode=='batch' and Respond.batch_snapshot(first).phase=='paused' and not Respond.batch_snapshot(first).active
-                    or mode=='single' and Respond.response_snapshot(first).generation.phase=='terminal' end)
+                    or mode=='single' and Respond.response_snapshot(first).status=='terminal' end)
                 vim.api.nvim_win_set_cursor(0,{5,0})
                 if mode=='batch'then assert.is_true(Respond.resume_batch({}).accepted)
                 else assert.is_not_nil(Respond.respond({args='',range=0}))end

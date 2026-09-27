@@ -172,6 +172,12 @@ describe('public asynchronous chat tools',function()
         assert.is_nil(buffer_text(buf):find('must not execute',1,true))
     end)
     it('scopes Stop to one generation and retains unknown conflicts while disjoint work proceeds',function()
+        -- This scenario tests resource contention, not replacement of input
+        -- already consumed by a later request. Leave the third question
+        -- unanswered before any request captures the conversation.
+        cursor('third');local third=vim.api.nvim_win_get_cursor(0)[1]
+        cursor('next');local next_question=vim.api.nvim_win_get_cursor(0)[1]
+        vim.api.nvim_buf_set_lines(buf,third,next_question-1,false,{''})
         register_held()
         local first=submit('first');wait(function()return #providers()==1 end)
         tool_round(providers()[1],{{id='a',name='held_fixture',input={file_path=root..'/one/a'}}})
@@ -213,6 +219,20 @@ describe('public asynchronous chat tools',function()
         finish(disjoint,7)
         assert.is_not_nil(buffer_text(buf):find('DISJOINT_RESULT',1,true))
         assert.is_nil(buffer_text(buf):find('LATE_FIRST_RESULT',1,true))
+    end)
+    it('pauses a tool continuation when refreshing an earlier answer invalidates its captured context',function()
+        register_held()
+        local dependent=submit('second');wait(function()return #providers()==1 end)
+        tool_round(providers()[1],{{id='dependent',name='held_fixture',input={file_path=root..'/two/b'}}})
+        wait(function()return #held==1 end)
+        local refresh=submit('first');wait(function()return #providers()==2 end)
+        assert.is_nil(buffer_text(buf):find('old one',1,true))
+        known(held[1],'CONFIRMED_RESULT')
+        wait(function()return Respond.response_snapshot(dependent).generation.phase=='paused'end)
+        assert.is_true(Respond.response_snapshot(dependent).generation.stale_input)
+        assert.equals(2,#providers(),'stale input must not start the automatic tool continuation')
+        finish(refresh,2)
+        assert.equals('paused',Respond.response_snapshot(dependent).generation.phase)
     end)
     -- #266 M3 (operator): a crashed tool is a plain failure. Its answer gets an
     -- error result and goes on, and once the tool's process has ended it holds

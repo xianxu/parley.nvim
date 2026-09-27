@@ -83,6 +83,49 @@ rounds:
           round: 3
       recipe: milestone-review
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-26T21:13:33-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Target answers are cleared from the payload snapshot; the tool-call/result regression passes.
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: Production cancellation and source-edit admission rejection tests pass and verify snapshot removal.
+          round: 4
+        - id: BR-3
+          disposition: addressed
+          note: Owner matching and duplicate-admission protection are present; document ownership and production duplicate tests pass.
+          round: 4
+        - id: BR-4
+          disposition: addressed
+          note: The initial footer result bounds deletion, and the recalculated result bounds replacement geometry.
+          round: 4
+        - id: BR-5
+          disposition: addressed
+          note: chat_respond.lua:1534 uses the registered question identity unavailable token. The vocabulary test passes; restoring the old token in memory makes it fail at the reported producer.
+          round: 4
+        - id: BR-6
+          disposition: addressed
+          note: chat_scoped_response_spec.lua:67 now expects immediate refusal while retaining provider-count and original-writer completion assertions. The spec passes.
+          round: 4
+      findings:
+        - id: BR-7
+          severity: Important
+          title: Remaining submission tests contradict the new admission and deletion behavior
+          detail: 'tests/integration/batch_lifecycle_spec.lua:96-99 retries when generation.phase is terminal but the public session is still running; both single-response cases fail with overlap. tests/integration/chat_async_tools_spec.lua:199-212 refreshes an earlier answered question after a later request captured its context, then expects uninterrupted completion despite immediate deletion invalidating that context. This is the 2nd finding in family regression-tests-follow-public-contract: state and sweep the rule across submission tests, rather than fixing another isolated assertion. Await public session termination for retries; make the disjoint-tools fixture context-independent and separately assert the intended context-invalidation behavior. ARCH-PURPOSE, ARCH-ORDER.'
+          family: regression-tests-follow-public-contract
+          round: 4
+        - id: BR-8
+          severity: Important
+          title: Starter path expansion lacks the required provenance declaration
+          detail: lua/parley/starter.lua:172 adds vim.fn.expand(vim.env.PARLEY_CHAT_DIR), failing tests/arch/untrusted_path_spec.lua:215. Register the precise operator-derived argument with its provenance, or use the guarded path helper with explicit failure handling. This is a demonstrated architecture-check failure, not evidence of model-controlled command injection. ARCH-SECURE.
+          family: command-executing-sinks-declare-provenance
+          round: 4
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#285 (boundary-review)
@@ -129,7 +172,25 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-6** [Important] `regression-tests-follow-public-contract` Existing duplicate-submission test contradicts the new admission contract
   tests/integration/chat_scoped_response_spec.lua:63 requires a non-nil second session and later cancellation, but chat_respond.lua:1504 now rejects synchronously. Update the expectation to immediate refusal while retaining assertions that no second provider call occurs and the original writer completes.
 
+## Round 4 — 2026-09-26T21:13:33-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Target answers are cleared from the payload snapshot; the tool-call/result regression passes.
+- BR-2 — addressed — Production cancellation and source-edit admission rejection tests pass and verify snapshot removal.
+- BR-3 — addressed — Owner matching and duplicate-admission protection are present; document ownership and production duplicate tests pass.
+- BR-4 — addressed — The initial footer result bounds deletion, and the recalculated result bounds replacement geometry.
+- BR-5 — addressed — chat_respond.lua:1534 uses the registered question identity unavailable token. The vocabulary test passes; restoring the old token in memory makes it fail at the reported producer.
+- BR-6 — addressed — chat_scoped_response_spec.lua:67 now expects immediate refusal while retaining provider-count and original-writer completion assertions. The spec passes.
+
+### Raised
+
+- **BR-7** [Important] `regression-tests-follow-public-contract` Remaining submission tests contradict the new admission and deletion behavior
+  tests/integration/batch_lifecycle_spec.lua:96-99 retries when generation.phase is terminal but the public session is still running; both single-response cases fail with overlap. tests/integration/chat_async_tools_spec.lua:199-212 refreshes an earlier answered question after a later request captured its context, then expects uninterrupted completion despite immediate deletion invalidating that context. This is the 2nd finding in family regression-tests-follow-public-contract: state and sweep the rule across submission tests, rather than fixing another isolated assertion. Await public session termination for retries; make the disjoint-tools fixture context-independent and separately assert the intended context-invalidation behavior. ARCH-PURPOSE, ARCH-ORDER.
+- **BR-8** [Important] `command-executing-sinks-declare-provenance` Starter path expansion lacks the required provenance declaration
+  lua/parley/starter.lua:172 adds vim.fn.expand(vim.env.PARLEY_CHAT_DIR), failing tests/arch/untrusted_path_spec.lua:215. Register the precise operator-derived argument with its provenance, or use the guarded path helper with explicit failure handling. This is a demonstrated architecture-check failure, not evidence of model-controlled command injection. ARCH-SECURE.
+
 ## Open findings
 
-- **BR-5** [Important] `refusal-producers-use-shared-vocabulary` New refusal token is absent from the shared vocabulary
-- **BR-6** [Important] `regression-tests-follow-public-contract` Existing duplicate-submission test contradicts the new admission contract
+- **BR-7** [Important] `regression-tests-follow-public-contract` Remaining submission tests contradict the new admission and deletion behavior
+- **BR-8** [Important] `command-executing-sinks-declare-provenance` Starter path expansion lacks the required provenance declaration

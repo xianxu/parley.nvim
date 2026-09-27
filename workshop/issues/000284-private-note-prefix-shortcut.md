@@ -40,6 +40,11 @@ configuration and help remain consistent. (ARCH-DRY)
 
 ### 2026-09-26
 
+- Closure review corrections: README documents Normal/Insert private-note
+  insertion, both configuration keys, and the Ctrl+g b prune migration. Restore
+  the generated rainbow side question to plain text so the shipped tutorial
+  does not depend on an untracked chat; startup checks seeded link destinations.
+
 - Closure audit: corrected the obsolete prune default assertion after Option+p
   moved to private notes. The complete ui/keybindings slice now passes,
   including private prefix, configuration, registry and architecture checks.

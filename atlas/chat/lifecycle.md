@@ -135,7 +135,7 @@ There is no dedicated user command for moving just one chat. The Lua helper
 but does not perform tree-wide reference rewriting; it is an implementation API,
 not the behavior of `:ParleyChatMove`.
 
-## Branching / Pruning (`<M-p>`, legacy `<C-g>b`)
+## Branching / Pruning (`<C-g>b`)
 Splits current exchange + following into a new child chat with `🌿:` links. Async LLM topic generation.
 
 The tool-fold toggle remains configurable as

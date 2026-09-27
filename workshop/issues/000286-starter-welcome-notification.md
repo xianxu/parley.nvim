@@ -45,6 +45,13 @@ record their public surface for the branch-wide architecture check.
 
 ### 2026-09-26
 
+- Boundary follow-up: an isolated tracked worktree at 241ca4f0 passes all 183
+  starter cases with process inspection enabled and no surviving test processes
+  (`/tmp/parley-final-starter.log`). The concurrent welcome-creator case passes;
+  the review's repair failure was not reproduced in this environment. Earlier
+  root execution also passed 183/183 with a clean census. README now documents
+  the private-note shortcut and pruning migration.
+
 - Closure verification: all 183 starter and 302 shortcut-slice cases pass;
   eight local launcher cases pass. Startup asserts the welcome buffer opens
   without the redundant notification. The tutorial probe now accepts the

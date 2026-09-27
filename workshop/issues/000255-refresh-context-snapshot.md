@@ -1,12 +1,13 @@
 ---
 id: 000255
-status: working
+status: codecomplete
 deps: [254]
 github_issue:
 created: 2026-09-15
-updated: 2026-09-19
+updated: 2026-09-26
 estimate_hours:
 started: 2026-09-19T17:46:24-07:00
+actual_hours: 1.79
 ---
 
 # Use previous completed answers in context during refresh
@@ -77,6 +78,8 @@ incomplete, use that exchange's previous completed answer when available.
 
 ## Log
 
+
+- 2026-09-26: closed — All 1019 lifecycle tests pass, including onboarding live-row capture, synchronous duplicate rejection and shared refusal vocabulary; 113 transcript truth tests passed. README and atlas updated. Final process-inspection-enabled rerun is logged at /tmp/parley-final-lifecycle-unrestricted.log.; review verdict: SHIP
 ### 2026-09-15
 
 Filed at the user's request after #254 reached codecomplete. Agreed policy:

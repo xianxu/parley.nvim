@@ -81,3 +81,78 @@ findings:
     detail: |
       packaging/tutorials/basics.md:106 links to a file absent from the pinned tree, and lua/parley/starter.lua:127 seeds only the three tutorials. Restore plain text or package and seed the destination so fresh installations can follow the example. ARCH-PURPOSE.
 ```
+
+---
+
+## Re-review — 2026-09-26T21:14:10-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 284 — Add private note prefix shortcut |
+| repo | parley.nvim |
+| issue file | workshop/issues/000284-private-note-prefix-shortcut.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c231e52d3bfaab13eaec73983c1aa20ae2a4f8e3..241ca4f08e6fdf7deb99a95b0076b8de0fc5529b |
+| command | sdlc close --issue 284 |
+| reviewer | codex |
+| timestamp | 2026-09-26T21:14:10-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The shortcut implementation meets #284’s contract, and both prior findings are addressed. One remaining atlas passage still advertises Option+p for pruning, so the documentation migration is incomplete.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      README.md:57-61 now documents insertion, Normal/Insert support, both configuration keys, and retained Ctrl+g b pruning; these match config.lua and the registered callbacks.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The pinned correction replaces the missing branch link at packaging/tutorials/basics.md:106 with plain text. Remaining tutorial destinations match the three files seeded by starter.lua:127.
+findings:
+  - id: new
+    severity: Important
+    family: user-surface-documentation
+    title: |
+      Lifecycle atlas still advertises Option+p for pruning
+    detail: |
+      atlas/chat/lifecycle.md:138 labels pruning as "<M-p>, legacy <C-g>b", contradicting config.lua:414-419: Option+p now inserts a note. This is the 2nd finding in family user-surface-documentation. ARCH-PURPOSE: apply the rule that every current description of a migrated binding must match the registry/config; sweep README, atlas, packaged documentation, and help descriptions together rather than patching only this instance. The sweep found one remaining obsolete pruning advertisement.
+```
+
+1. **Strengths**
+   - Chat and Markdown share the same insertion helper and registry entry.
+   - Real Normal/Insert keystroke tests verify custom prefixes, adjacent-text preservation, and cursor placement.
+   - Prune remains available through its existing Ctrl+g b chord.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** The stale pruning heading at [atlas/chat/lifecycle.md:138](/Users/xianxu/workspace/parley.nvim/atlas/chat/lifecycle.md:138), detailed above.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Keybinding slice: **304 passed** on the complete rerun, including all three private-note tests. The first invocation exited nonzero; its cause was not established.
+   - Launcher suite: **8 passed**.
+   - Process-orphan checking was unavailable because the sandbox denied `ps`.
+   - Both prior corrections were verified through their concrete before/after passages; neither requires a wording-presence test.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** shared helper and registry wiring.
+   - **ARCH-PURE — pass:** insertion is a small editor-boundary operation.
+   - **ARCH-PURPOSE — flag:** documentation migration still has an unswept consumer.
+   - **ARCH-MOCK — pass:** launcher interactions use stateful subprocess fixtures.
+   - **ARCH-CONSTRAINTS — pass:** shortcut performs one localized edit.
+   - **ARCH-SECURE — pass:** no new credential or external-input boundary in the shortcut.
+   - **ARCH-ORDER — pass:** shortcut adds no asynchronous state; adjacent response changes include lifecycle regression coverage.
+   - **ARCH-FUNERAL — pass:** shortcut creates no separate durable artifact; launcher profile cleanup is explicit.
+
+7. **Plan revision recommendation:** Append a timestamped `## Revisions` entry recording the complete binding-documentation sweep and its verification.

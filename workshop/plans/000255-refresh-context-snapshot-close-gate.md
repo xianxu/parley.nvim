@@ -48,6 +48,28 @@ rounds:
           round: 2
       recipe: milestone-review
       blocked: true
+    - "n": 3
+      timestamp: "2026-09-26T21:11:22-07:00"
+      agent: codex
+      dispose:
+        - id: BR-3
+          disposition: addressed
+          note: chat_respond.lua:1534 now uses the registered "question identity unavailable" token. All six refusal vocabulary checks pass; restoring the prior token makes the vocabulary check fail.
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: Onboarding and scoped-response suites pass all 19 cases. Restoring the prior fixtures reproduces both onboarding failures and the duplicate-submission failure; writer-preservation assertions remain.
+          round: 3
+        - id: BR-1
+          disposition: addressed
+          note: Duplicate admission precedes deletion. Passing regressions cover waiting, streaming, moved markers, snapshot preservation, continued output, and later resubmission.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: README.md describes immediate removal and duplicate preservation; atlas/chat/lifecycle.md and transcript_truth.md describe pending ownership, generation adoption, and cleanup consistently with the implementation.
+          round: 3
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#255 (boundary-review)
@@ -78,7 +100,15 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Important] `regression-suite-contract-drift` Existing lifecycle tests still assume the superseded submission timing
   tests/integration/chat_onboarding_capture_spec.lua:43 uses a row removed by immediate refresh, and :105 deletes the following question because its fixed range is now stale. tests/integration/chat_scoped_response_spec.lua:63 expects duplicates to return a session, although they now return nil immediately. All three fail on HEAD and pass with BASE chat_respond.lua restored in scratch. Resolve fixture rows from current content and assert immediate rejection while retaining the writer-preservation checks.
 
+## Round 3 — 2026-09-26T21:11:22-07:00 (codex) — passed
+
+### Disposed
+
+- BR-3 — addressed — chat_respond.lua:1534 now uses the registered "question identity unavailable" token. All six refusal vocabulary checks pass; restoring the prior token makes the vocabulary check fail.
+- BR-4 — addressed — Onboarding and scoped-response suites pass all 19 cases. Restoring the prior fixtures reproduces both onboarding failures and the duplicate-submission failure; writer-preservation assertions remain.
+- BR-1 — addressed — Duplicate admission precedes deletion. Passing regressions cover waiting, streaming, moved markers, snapshot preservation, continued output, and later resubmission.
+- BR-2 — addressed — README.md describes immediate removal and duplicate preservation; atlas/chat/lifecycle.md and transcript_truth.md describe pending ownership, generation adoption, and cleanup consistently with the implementation.
+
 ## Open findings
 
-- **BR-3** [Important] `refusal-vocabulary-registration` New identity refusal bypasses the shared refusal vocabulary
-- **BR-4** [Important] `regression-suite-contract-drift` Existing lifecycle tests still assume the superseded submission timing
+(none — every finding has been disposed)

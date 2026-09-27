@@ -274,3 +274,103 @@ findings:
    | ARCH-FUNERAL | **Pass:** pending snapshots and reservations have terminal cleanup paths. |
 
 7. **Plan revisions:** No scope revision needed. Update verification evidence after correcting both failures and rerunning the lifecycle tests.
+
+---
+
+## Re-review — 2026-09-26T21:13:33-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 285 — remove stale answer immediately on re-ask |
+| repo | parley.nvim |
+| issue file | workshop/issues/000285-immediate-answer-refresh.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c231e52d3bfaab13eaec73983c1aa20ae2a4f8e3..241ca4f08e6fdf7deb99a95b0076b8de0fc5529b |
+| command | sdlc close --issue 285 |
+| reviewer | codex |
+| timestamp | 2026-09-26T21:13:33-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-5 and BR-6 are addressed, and the focused refresh tests pass. Two Important findings remain: other integration tests still assume the previous submission behavior, and the starter introduces an unregistered path-expansion sink. Both require correction before closing this boundary.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Target answers are cleared from the payload snapshot; the tool-call/result regression passes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Production cancellation and source-edit admission rejection tests pass and verify snapshot removal.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Owner matching and duplicate-admission protection are present; document ownership and production duplicate tests pass.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      The initial footer result bounds deletion, and the recalculated result bounds replacement geometry.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      chat_respond.lua:1534 uses the registered question identity unavailable token. The vocabulary test passes; restoring the old token in memory makes it fail at the reported producer.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      chat_scoped_response_spec.lua:67 now expects immediate refusal while retaining provider-count and original-writer completion assertions. The spec passes.
+findings:
+  - id: new
+    severity: Important
+    family: regression-tests-follow-public-contract
+    title: |
+      Remaining submission tests contradict the new admission and deletion behavior
+    detail: |
+      tests/integration/batch_lifecycle_spec.lua:96-99 retries when generation.phase is terminal but the public session is still running; both single-response cases fail with overlap. tests/integration/chat_async_tools_spec.lua:199-212 refreshes an earlier answered question after a later request captured its context, then expects uninterrupted completion despite immediate deletion invalidating that context. This is the 2nd finding in family regression-tests-follow-public-contract: state and sweep the rule across submission tests, rather than fixing another isolated assertion. Await public session termination for retries; make the disjoint-tools fixture context-independent and separately assert the intended context-invalidation behavior. ARCH-PURPOSE, ARCH-ORDER.
+  - id: new
+    severity: Important
+    family: command-executing-sinks-declare-provenance
+    title: |
+      Starter path expansion lacks the required provenance declaration
+    detail: |
+      lua/parley/starter.lua:172 adds vim.fn.expand(vim.env.PARLEY_CHAT_DIR), failing tests/arch/untrusted_path_spec.lua:215. Register the precise operator-derived argument with its provenance, or use the guarded path helper with explicit failure handling. This is a demonstrated architecture-check failure, not evidence of model-controlled command injection. ARCH-SECURE.
+```
+
+1. **Strengths**
+   - Duplicate admission precedes deletion, preserving the active writer and snapshot across waiting, streaming, and question movement.
+   - Pending snapshots have owner-aware adoption and cleanup.
+   - README and lifecycle atlas describe immediate deletion and pending ownership.
+   - Stateful transport tests exercise cancellation, rejected admission, and concurrent context.
+
+2. **Critical findings:** None confirmed.
+
+3. **Important findings:** The two findings above.
+
+4. **Minor findings:** No additional findings.
+
+5. **Test coverage**
+   - Passed: response, scoped-response, previous-answer, and refusal-vocabulary specs; launcher’s eight Python tests.
+   - Retry failures reproduced independently. Changing only the wait to public session termination in memory yielded **8/8 passing**.
+   - Async-tool failure reproduced independently. Using the base response module yielded **9/9 passing**; keeping current code and making the earlier fixture question unanswered also yielded **9/9 passing**.
+   - Full integration run failed. Additional sandbox restrictions and killed processes prevent treating its other incomplete results as confirmed regressions. Process census was unavailable.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** shared refusal vocabulary and annotation handling reused.
+   - **ARCH-PURE — pass:** payload/layout logic remains separate from editor integration.
+   - **ARCH-PURPOSE — flag:** submission-contract test sweep remains incomplete.
+   - **ARCH-MOCK — pass:** stateful transport and process seams exercised.
+   - **ARCH-CONSTRAINTS — pass:** no new unbounded concurrency identified.
+   - **ARCH-SECURE — flag:** missing path-sink provenance declaration.
+   - **ARCH-ORDER — flag:** remaining tests confuse generation termination with session retirement and omit immediate-deletion consequences.
+   - **ARCH-FUNERAL — pass:** pending memory has rejection, cancellation, completion, and document-lifecycle cleanup.
+
+7. **Plan revision recommendation**
+   - Append a dated `## Revisions` entry naming the submission-test sweep: public-session retry eligibility and earlier-answer deletion invalidating already-captured context.
