@@ -171,3 +171,12 @@ oracle, and the mutation that would make the test fail.
 - Closing stacked issues repeats the entire branch review window. Establish one
   shipment boundary before invoking close; never let concurrent reviewers run
   test harnesses in the same checkout, where process cleanup kills peer tests.
+
+## 2026-09-27 (#287 — app blink cmdline)
+
+- In a lazy.nvim spec, adding `keys`/`cmd`/`event`/`ft` silently makes the plugin
+  lazy. Giving an eagerly loaded plugin a key binding removed `:Telescope` at
+  startup. Set `lazy = false` with the trigger; the starter test now requires it
+  for every spec with a trigger except the deliberately lazy MarkdownPreview.
+- A test that swaps a global (`package.loaded[...]`) must restore it through
+  `pcall`, or a failing call leaks the fake into later assertions.

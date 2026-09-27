@@ -144,7 +144,9 @@ local ok, err = xpcall(function()
                     lualine_x = {}, lualine_y = {}, lualine_z = {} },
             } },
         { "nvim-lua/plenary.nvim", commit = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
+        -- `keys` would make Lazy defer loading; keep :Telescope available at startup.
         { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026",
+            lazy = false,
             keys = { { "<C-g>:", function() require("telescope.builtin").command_history() end,
                 desc = "Search command history" } } },
         -- Fuzzy command-line completion only. The Lua matcher downloads no

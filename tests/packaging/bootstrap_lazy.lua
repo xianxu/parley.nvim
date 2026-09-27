@@ -22,9 +22,19 @@ return {
         local builtin = package.loaded['telescope.builtin']
         local searched = false
         package.loaded['telescope.builtin'] = { command_history = function() searched = true end }
-        history_key[2]()
+        local called, call_error = pcall(history_key[2])
         package.loaded['telescope.builtin'] = builtin
+        assert(called, call_error)
         assert(searched, '<C-g>: must open the command history picker')
+        -- Lazy defers any spec with a load trigger unless it says lazy = false.
+        -- Only MarkdownPreview is meant to load on demand.
+        for _, plugin in ipairs(spec) do
+            local name = plugin[1] or plugin.name
+            if plugin.keys or plugin.cmd or plugin.event or plugin.ft then
+                assert(plugin.lazy == false or name == 'iamcco/markdown-preview.nvim',
+                    name .. ' gained a load trigger without lazy = false')
+            end
+        end
         local blink = assert(by_name['saghen/blink.cmp'], 'App must ship command-line completion')
         assert(blink.commit == '78336bc89ee5365633bcf754d93df01678b5c08f')
         assert(blink.lazy == false)
