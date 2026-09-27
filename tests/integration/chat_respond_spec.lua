@@ -157,6 +157,88 @@ describe('chat_respond: scoped session integration',function()
         wait_for(function()return Respond.response_snapshot(session).status=='terminal'end)
         assert.equals(0,require('parley.document')._previous_count(doc))
     end)
+    it('excludes the replaced tool call and result from the re-ask payload (#285 BR-1)',function()
+        open({'💬: question','','🤖: original','🔧: read_file id=stale-tool-id',
+            '```json','{"path":"stale-tool-path"}','```',
+            '📎: read_file id=stale-tool-id','```','stale-tool-result','```',''})
+        local parser=require('parley.chat_parser')
+        local lines=vim.api.nvim_buf_get_lines(buf,0,-1,false)
+        local parsed=parser.parse_chat(lines,parser.find_header_end(lines),parley.config)
+        local kinds={}
+        for _,block in ipairs(parsed.exchanges[1].answer.content_blocks)do kinds[block.type]=true end
+        assert.is_true(kinds.tool_use);assert.is_true(kinds.tool_result)
+        submit()
+        local payload=vim.json.encode(calls[1].payload)
+        assert.truthy(payload:find('question',1,true))
+        for _,stale in ipairs({'stale-tool-id','stale-tool-path','stale-tool-result'})do
+            assert.is_nil(payload:find(stale,1,true),payload)
+            assert.is_false(buffer_contains(buf,stale))
+        end
+    end)
+    it('clears a pending answer when source edits reject admission (#285 BR-2)',function()
+        open({'💬: question','','🤖: original','valuable answer',''})
+        local session=assert(Respond.respond({range=0}))
+        local D=require('parley.document');local doc=D.get(buf)
+        assert.equals('waiting',Respond.response_snapshot(session).status)
+        assert.equals(1,D._previous_count(doc))
+        -- Editing the captured question before the scheduled target step makes
+        -- the real source guard reject admission, before provider IO exists.
+        vim.api.nvim_buf_set_text(buf,4,#('💬: '),4,#('💬: question'),{'changed question'})
+        wait_for(function()return Respond.response_snapshot(session).status=='cancelled'end)
+        assert.is_nil(Respond.response_snapshot(session).generation)
+        assert.equals(0,#calls)
+        assert.equals(0,D._previous_count(doc))
+    end)
+    for _,phase in ipairs({'waiting','before output','streaming','moved question','marker boundary'})do
+    it('preserves the active writer and snapshot on duplicate submit '..phase,function()
+        open({'💬: question','','🤖: original','first answer',''})
+        local D=require('parley.document')
+        local doc=D.get(buf) or D.attach(buf,{patterns=require('parley.highlight_structure').patterns(parley.config)})
+        D.drain(doc,1000)
+        local first=assert(Respond.respond({range=0}))
+        if phase~='waiting'then wait_for(function()return #calls==1 end)end
+        if phase=='streaming' or phase=='moved question' or phase=='marker boundary'then
+            output(calls[1],'partial replacement')
+            wait_for(function()return buffer_contains(buf,'partial replacement')end)
+        end
+        if phase=='moved question'then vim.api.nvim_buf_set_lines(buf,3,3,false,{''})end
+        if phase=='marker boundary'then vim.api.nvim_buf_set_lines(buf,4,4,false,{''})end
+        D.drain(doc,1000)
+        local before=vim.api.nvim_buf_get_lines(buf,0,-1,false)
+        local previous=vim.deepcopy(D.previous_answers(doc))
+        assert.equals(1,#previous)
+        vim.api.nvim_win_set_cursor(0,{assert(find_line_number(buf,'💬: question')),0})
+        local duplicate=Respond.respond({range=0})
+        assert.is_nil(duplicate)
+        assert.same(before,vim.api.nvim_buf_get_lines(buf,0,-1,false))
+        assert.same(previous,D.previous_answers(doc))
+        wait_for(function()return #calls==1 end)
+        output(calls[1],' still writing')
+        wait_for(function()return buffer_contains(buf,' still writing')end)
+        assert.equals('success',complete(first,calls[1]).outcome)
+        assert.equals(1,#calls)
+    end)
+    end
+    for _,ending in ipairs({'completed','cancelled'})do
+    it('allows immediate re-ask after the prior response is '..ending,function()
+        open({'💬: question','','🤖: original','first answer',''})
+        local first=submit()
+        output(calls[1],'replacement answer')
+        wait_for(function()return buffer_contains(buf,'replacement answer')end)
+        if ending=='completed'then complete(first,calls[1])
+        else
+            Respond.cancel_responses(buf)
+            wait_for(function()return Respond.response_snapshot(first).status=='terminal'end)
+        end
+        vim.api.nvim_win_set_cursor(0,{5,0})
+        local second=Respond.respond({range=0})
+        assert.is_not_nil(second)
+        assert.is_false(buffer_contains(buf,'replacement answer'))
+        wait_for(function()return #calls==2 end)
+        output(calls[2],'latest answer')
+        assert.equals('success',complete(second,calls[2]).outcome)
+    end)
+    end
     -- Characterization: passes before #261 through the in-process retry cache.
     -- Kept because deleting that cache must not break the immediate retry.
     it('regenerates immediately after a revoked regeneration',function()

@@ -1486,6 +1486,29 @@ local function start_scoped_response(frame)
         refuse('start', nil, 'no question selected'); return nil, 'no question selected'
     end
     local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(config)})
+    -- Reserve the command's question before removing an answer. Runner grant
+    -- admission happens later; a duplicate must not revoke that existing writer
+    -- by deleting its output first. Capture only the question marker so the
+    -- writer's insertion at the question end cannot invalidate its reservation.
+    -- The capture follows edits above it and dies when the marker is replaced.
+    local selected_marker = D.query(doc, exchange.question.line_start - 1, exchange.question.line_start)[1]
+    for active in pairs(responses[buf] or {}) do
+        local snapshot = active.session and Session.snapshot(active.session)
+        local status = snapshot and snapshot.status
+        if active.doc == doc and active.question_source and status ~= 'terminal' and status ~= 'cancelled' then
+            local source = D.resolve_user(doc, active.question_source)
+            local generation = snapshot and snapshot.generation
+            local owned = generation and selected_marker and generation.exchange == selected_marker.handle
+            if owned or source and source.regions[1].first.row == exchange.question.line_start - 1 then
+                refuse('start', nil, 'overlap'); return nil, 'overlap'
+            end
+        end
+    end
+    local question_source, source_reason = D.capture_user(doc, {operation = 'respond-question', regions = {
+        {first = {row = exchange.question.line_start - 1, col = 0},
+            last = {row = exchange.question.line_start - 1, col = #config.chat_user_prefix}},
+    }})
+    if not question_source then refuse('start', nil, source_reason); return nil, source_reason end
     -- #261/#255: an earlier exchange still being regenerated contributes its
     -- previous answer, not the header or partial text now in the buffer. Here,
     -- in the tick the command read the lines — build() runs later, after
@@ -1507,6 +1530,7 @@ local function start_scoped_response(frame)
         local live_marker = D.query(doc, exchange.question.line_start - 1, exchange.question.line_start)[1]
         pending_entity = live_marker and live_marker.handle
         if not pending_entity then
+            D.cancel_user(doc, question_source)
             refuse('start', nil, 'exchange identity unavailable'); return nil, 'exchange identity unavailable'
         end
         D.set_pending_previous_answer(doc, {entity = pending_entity, value = replaced_answer, owner = pending_owner})
@@ -1576,6 +1600,7 @@ local function start_scoped_response(frame)
     local group = responses[buf] or {}; responses[buf] = group
     response_order = response_order + 1
     local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order, batch = frame.batch,
+        question_source = question_source,
         label = (frame.lines[question.line_start] or 'Response'):sub(1, 256)}; group[entry] = true
     entry.pending_previous_entity = pending_entity
     entry.pending_previous_owner = pending_owner
@@ -1595,6 +1620,7 @@ local function start_scoped_response(frame)
     end
     local function release()
         if not main_finished or not topic_finished then return end
+        if entry.question_source then D.cancel_user(doc, entry.question_source); entry.question_source = nil end
         if entry.pending_previous_entity then
             D.clear_pending_previous_answer(doc, entry.pending_previous_entity, entry.pending_previous_owner)
             entry.pending_previous_entity = nil

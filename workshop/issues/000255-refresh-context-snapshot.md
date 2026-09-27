@@ -116,6 +116,11 @@ close review (#160).
 
 ## Revisions
 
+- 2026-09-26: Resolved closure BR-1 with command-time duplicate admission using
+  existing document captures and generation identity; 52 chat-response cases
+  pass, including waiting/streaming/moved duplicates and later resubmission.
+  BR-2: README and atlas now describe pending and admitted snapshot ownership.
+
 - 2026-09-26: Closure of the stacked app work includes #285's immediate visible
   answer removal. Previous-answer memory now has a pending phase owned by the
   submission before generation admission. A duplicate submission must preserve

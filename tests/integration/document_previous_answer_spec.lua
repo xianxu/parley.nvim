@@ -61,6 +61,25 @@ describe('document prev_answer slot', function()
         D.detach(doc)
     end)
 
+    it('only the matching attempt can clear or adopt a pending answer', function()
+        local doc = attach(); local g, entity = regenerate(doc, 0)
+        local older, newer = {}, {}
+        local replacement = { answer = { content = 'newer snapshot' } }
+        assert.is_true(D.set_pending_previous_answer(doc, { entity = entity, value = VALUE, owner = older }))
+        assert.is_true(D.set_pending_previous_answer(doc, { entity = entity, value = replacement, owner = newer }))
+        assert.is_false(D.clear_pending_previous_answer(doc, entity, older))
+        assert.is_false(D.set_previous_answer(doc, { epoch = D.snapshot(doc).epoch, entity = entity,
+            generation = g, value = VALUE, owner = older }))
+        assert.same({ { row = 0, value = replacement } }, D.previous_answers(doc))
+        assert.is_true(D.set_previous_answer(doc, { epoch = D.snapshot(doc).epoch, entity = entity,
+            generation = g, value = replacement, owner = newer }))
+        assert.is_false(D.clear_pending_previous_answer(doc, entity, newer))
+        assert.same({ { row = 0, generation = g, value = replacement } }, D.previous_answers(doc))
+        D.transition(doc, { kind = 'finish_generation', generation = g })
+        assert.equals(0, D._previous_count(doc))
+        D.detach(doc)
+    end)
+
     it('reads a revoked slot as absent and removes it', function()
         local doc = attach(); local g, entity, grant = regenerate(doc, 0)
         set(doc, g, entity)

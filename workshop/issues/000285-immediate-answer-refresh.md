@@ -42,6 +42,13 @@ ARCH-FUNERAL).
 
 ### 2026-09-26
 
+- Duplicate-admission correction: 52 response cases pass. Submissions now
+  reserve the selected question before snapshot publication/deletion, using
+  existing document captures and admitted generation identities. Duplicate
+  requests preserve output and previous memory while waiting, before output,
+  during streaming, and across question movement. Completion/cancellation
+  permits a fresh re-ask. The pre-fix duplicate cases fail as expected.
+
 - Closure audit: 46 chat-response and 10 document previous-answer cases pass.
   Added production regressions for stale tool payloads, source-edit admission
   rejection, and late termination of an older re-ask. Each regression fails

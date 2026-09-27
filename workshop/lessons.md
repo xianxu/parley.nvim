@@ -160,3 +160,11 @@ oracle, and the mutation that would make the test fail.
   without a shared lock does not protect a concurrently launched editor.
 - Assemble app aliases inside the registry-derived options loop and run the
   single-source architecture suite when changing shortcut configuration.
+
+## 2026-09-26 (#255/#285 — refresh admission)
+
+- Reject duplicate submissions before deleting visible output or publishing a
+  replacement snapshot. Test duplicates while waiting, before output, during
+  streaming, and after the question moves; verify the existing writer survives.
+- Snapshot ownership has both pending and admitted phases. Keep documentation
+  and cleanup tests aligned with both phases when moving work before admission.

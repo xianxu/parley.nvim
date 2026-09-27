@@ -205,6 +205,11 @@ answer it replaces.
   `build()` runs later.
 
 Pending memory is cleared when its owning submission is rejected or cancelled.
+The response registry reserves the selected question before snapshot publication
+or deletion. Duplicate submissions preserve the running response; document
+captures track waiting questions and generation identities track admitted ones.
+Reservations are released with the response, and terminal responses do not block
+a later refresh.
 After admission it lives as long as that generation holds its grant:
 - it ends when the generation ends, in success or failure, since both are
   recorded in the transcript;
