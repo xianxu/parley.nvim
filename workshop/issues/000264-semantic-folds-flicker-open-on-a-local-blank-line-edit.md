@@ -285,3 +285,19 @@ mismatch; paths above `INTERACTIVE_ROWS` are unchanged. **Narrowed:** the Log's 
 "confirmation stays intact below a summary" negative isn't asserted. The restart is
 bounded at the answer header instead (see the plan's "Deliberate narrowing").
 
+### 2026-09-27 — Plan review round 2 folded in
+
+Reason: the round-2 reviewer tested Neovim's manual-fold behaviour headless (brute-force
+edit sweep plus native keys) and found that joins (Backspace at column 0, `J`, Delete at
+end of line on the blank under a summary) rewrite the summary row. The round-1 rule would
+have cleared that fold eagerly and kept the flicker.
+
+Delta: only edits that add **net rows** are recorded for eager clearing (the only edits that
+can make a fold absorb rows that aren't its own), measured against post-edit extents; the
+continuity spec gains real-keystroke join cases; the "typing into a tool result" boundary
+case is replaced by a net insertion inside it (the only kind that really grows a fold);
+the nested-group inventory test no longer claims inner open state survives (nested groups
+are always recreated from `capture`); M2 gains an O(1) guard that the dependency index is
+the one pruned (`serial` doesn't cover `deps:add`), per-keystroke work accounting for
+`prune_from`, and a handle-free comparison against the cold parse.
+
