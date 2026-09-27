@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-08
 updated: 2026-09-08
 estimate_hours:
+card_mirror: '91f11821bf0aca2f7c4fe1c5f4760588b02355ad' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Guard the sdlc resolve spawn behind an in-flight check

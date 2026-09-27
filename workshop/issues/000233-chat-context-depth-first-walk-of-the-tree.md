@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-10
 updated: 2026-09-10
 estimate_hours:
+card_mirror: 'c01661e7ab6970b7df64d40b9680648b5d44354a' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree

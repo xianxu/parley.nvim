@@ -4,9 +4,12 @@ status: open
 deps: []
 created: 2026-05-06
 updated: 2026-05-06
+card_mirror: 'b7bd095eaeefbc39a8cc97d94b5ef2f6a12e59b0' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # chat_finder: sort by real last-modified time
+
+## Problem
 
 The chat finder list order is currently surprising — chats whose filename creation timestamp is older than other chats sometimes appear "newer" in the list, with their bracket date `[YYYY-MM-DD]` not matching the filename's leading timestamp.
 

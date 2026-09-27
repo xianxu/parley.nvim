@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-01
 updated: 2026-09-01
 estimate_hours:
+card_mirror: '32ac740920f554bdd1d1aa69778cfa286a4c768e' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Produce Parley introduction video

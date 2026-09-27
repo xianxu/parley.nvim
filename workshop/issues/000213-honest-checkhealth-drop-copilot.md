@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-02
 updated: 2026-09-11
 estimate_hours:
+card_mirror: '15b1de96a356641865fb44972066d4d091350943' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # make checkhealth honest and remove the copilot adapter

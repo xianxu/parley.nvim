@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-07
 updated: 2026-09-07
 estimate_hours:
+card_mirror: '90503b22ff0f1c5ac27f64e359f84b9c6ed709fd' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Lift a definition into a sub-chat with <M-i>

@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-02
 updated: 2026-09-02
 estimate_hours:
+card_mirror: 'baa5038222466c9c975f3c0b157fe84ee1ce682c' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # consent model for write-capable tools

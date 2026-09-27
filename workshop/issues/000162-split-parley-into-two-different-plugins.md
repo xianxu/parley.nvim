@@ -6,6 +6,7 @@ github_issue:
 created: 2026-07-07
 updated: 2026-07-07
 estimate_hours:
+card_mirror: 'e2a86bb2ac28d096c87c8989fc6d14afe6490973' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # split parley into two different plugins

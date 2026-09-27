@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
+card_mirror: '355e603d77d02f35b93e6fdd5664e175e520d45e' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Add tutorial 4: VIM Basics for newcomers

@@ -6,6 +6,7 @@ github_issue:
 created: 2026-06-29
 updated: 2026-06-29
 estimate_hours:
+card_mirror: 'e12dd728b8306000c9372321677a22af0751b45f' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # local browser-backed web fetch tool

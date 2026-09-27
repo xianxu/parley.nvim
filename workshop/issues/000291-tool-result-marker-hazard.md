@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
+card_mirror: '1e7e43fcf2710f1819fee4897c58844945ef0932' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Close the column-0 marker hazard in tool results (ls/find/stderr)

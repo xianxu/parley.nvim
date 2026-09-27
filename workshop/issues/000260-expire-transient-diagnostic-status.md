@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-15
 updated: 2026-09-15
 estimate_hours:
+card_mirror: 'd7f27d745aee308a3546ad357421d02370e2f8eb' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Expire transient diagnostic status messages

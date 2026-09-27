@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-19
 updated: 2026-09-19
 estimate_hours:
+card_mirror: '673bf62cce2680d6e1fe0148b91a22e6688283b4' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Markdown export writes Astro posts to a chosen destination

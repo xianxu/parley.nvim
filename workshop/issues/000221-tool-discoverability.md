@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-07
 updated: 2026-09-07
 estimate_hours:
+card_mirror: '939423881c37d42452c0298b93d8d0dc9d7789f0' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Tool discoverability: @all should mean @all public

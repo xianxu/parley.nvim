@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-02
 updated: 2026-09-11
 estimate_hours:
+card_mirror: 'b106c56f5601b2ebcde2cddbaeb56dc28656c990' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # remove personal configuration from product defaults

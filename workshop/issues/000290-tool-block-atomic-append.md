@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
+card_mirror: 'f771ea562f7659848607e4f822156fbf4e2db402' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Write each tool block in one append during streaming; fold tool blocks and summaries as written

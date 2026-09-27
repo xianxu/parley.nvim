@@ -4,9 +4,12 @@ status: open
 deps: [000116, 000186]
 created: 2026-04-30
 updated: 2026-07-14
+card_mirror: '20171fc96507c3a0e64067faed6670b52d127282' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Faceted typed finder (find artifacts of interest, by type)
+
+## Problem
 
 > Reframed 2026-06-11 from "improve `<C-g>m`" — see `## Revisions`. The original
 > goal (find datatype artifacts, filter out noise) is realized properly by a

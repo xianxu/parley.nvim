@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-05
 updated: 2026-09-05
 estimate_hours:
+card_mirror: 'cbf88cf89bad915db3570d556e5073418964adce' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Release shakedown: walk the Tier 1/2 inventory and record the punch list

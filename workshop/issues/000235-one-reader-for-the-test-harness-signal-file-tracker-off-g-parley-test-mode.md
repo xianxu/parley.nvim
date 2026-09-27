@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-10
 updated: 2026-09-10
 estimate_hours:
+card_mirror: '85f309cafa6784e2b641c6765968e36dad444aef' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # One reader for the test-harness signal: file_tracker off g:parley_test_mode

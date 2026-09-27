@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-16
 updated: 2026-09-16
 estimate_hours:
+card_mirror: 'ccb3984feb2ebf77217c1be2aef12eda7b7fe609' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Unify buffer_edit refusal handling across chat command call sites

@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-18
 updated: 2026-09-18
 estimate_hours:
+card_mirror: '5dc6b9119faa5dfd250611308a73b6e21d59b673' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # tool_resources_spec dies silently under parallel load in its JIT-off call-hook case

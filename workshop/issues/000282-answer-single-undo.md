@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-26
 updated: 2026-09-26
 estimate_hours:
+card_mirror: '6988bfd1f7b726c581a0f60e8daf419d4ce826b6' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Make each answer one undo history entry

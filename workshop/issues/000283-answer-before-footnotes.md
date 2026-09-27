@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-26
 updated: 2026-09-26
 estimate_hours:
+card_mirror: '954734050655b7873d053e6b7f7cd7640f596a50' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Keep generated answers before trailing footnotes

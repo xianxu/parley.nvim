@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-15
 updated: 2026-09-16
 estimate_hours:
+card_mirror: '284909c6672040708a1bc8c056a9eaabe679fc92' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Ship compact spell and buffer completion in Parley

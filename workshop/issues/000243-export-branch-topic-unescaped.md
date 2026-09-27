@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours:
+card_mirror: '2b77dfc2af7677f168303b5c3907c3f008d10f2b' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # HTML export: branch topic is inserted unescaped by make_branch_div

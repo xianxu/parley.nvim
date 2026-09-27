@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-19
 updated: 2026-09-19
 estimate_hours:
+card_mirror: '88e01b3191a3ec048c3e55049c2ad7e08d78437e' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Generated topic and filename slug drift apart

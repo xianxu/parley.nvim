@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-07
 updated: 2026-09-07
 estimate_hours:
+card_mirror: '725630ae521e1af5d4821c849778c5a572382097' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Footnote id comes from the model's term, not the selected phrase

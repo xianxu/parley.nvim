@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-12
 updated: 2026-09-12
 estimate_hours:
+card_mirror: '3e15f3dc01bff0b08ad37ddf3c35a6fe5c16173e' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Catalog conformance cases cannot pass with the fabricated credential

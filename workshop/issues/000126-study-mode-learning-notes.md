@@ -6,6 +6,7 @@ github_issue:
 created: 2026-06-08
 updated: 2026-06-08
 estimate_hours:
+card_mirror: '65d7fa5639368e24c4e214fefa862f104b5ccc85' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # study mode — per-subject note convention + course-material bridge + auto-quiz

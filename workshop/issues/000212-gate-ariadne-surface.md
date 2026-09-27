@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-02
 updated: 2026-09-02
 estimate_hours:
+card_mirror: '2ee32a77853c821076cd71cef13b496a33251409' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # gate the ariadne surface behind repo detection

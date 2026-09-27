@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-19
 updated: 2026-09-19
 estimate_hours:
+card_mirror: 'dd780ac75bac1fb45577faeee46a444819abd589' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Define refuses with 'overlapping patches' when the buffer ends in two or more blank lines

@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-12
 updated: 2026-09-12
 estimate_hours:
+card_mirror: 'c2a909bff4d7abc7285f40553f1125caf597a4d0' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Model-generated images: save to the chat assets folder, link from the answer

@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-12
 updated: 2026-09-12
 estimate_hours:
+card_mirror: 'b0e1569ebd29ea3348c3419bff1d85f31f7a2d59' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Retrofit ARCH-MOCK to the chat providers: one stateful fake per provider at the curl seam, integration tests through it, and a live conformance check that re-records the fixtures

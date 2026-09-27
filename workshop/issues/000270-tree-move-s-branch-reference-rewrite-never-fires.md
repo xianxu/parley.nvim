@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-19
 updated: 2026-09-19
 estimate_hours:
+card_mirror: '384f12df20957740e333a1339017cf0062f4d5d7' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Tree move's branch-reference rewrite never fires

@@ -6,6 +6,7 @@ github_issue:
 created: 2026-08-30
 updated: 2026-08-30
 estimate_hours:
+card_mirror: 'ec984c147db4534851721c1d5a3964ed5eb3dcbe' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # a config change to api_keys silently does not take effect: the defaults table is replaced, and the vault pins the first secret it saw

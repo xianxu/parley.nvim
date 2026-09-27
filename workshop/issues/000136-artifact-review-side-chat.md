@@ -6,6 +6,7 @@ github_issue:
 created: 2026-06-25
 updated: 2026-06-25
 estimate_hours:
+card_mirror: '239204c04f2d06be4743ab4d19155e4b59a880a5' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # artifact review as side chat transcript

@@ -7,6 +7,7 @@ target: transcript-is-the-whole-truth
 created: 2026-09-18
 updated: 2026-09-18
 estimate_hours:
+card_mirror: '7308422abc8bea4c6cd651036e5c28d5f0f61212' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Round-trip provenance: a chat file should reproduce its answers

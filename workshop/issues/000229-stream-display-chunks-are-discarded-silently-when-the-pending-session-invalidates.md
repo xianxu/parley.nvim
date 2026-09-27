@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-10
 updated: 2026-09-10
 estimate_hours:
+card_mirror: 'bd560dddbdf6af86d508937f3aa4f90fced440f2' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Stream display chunks are discarded silently when the pending session invalidates

@@ -6,6 +6,7 @@ github_issue:
 created: 2026-06-11
 updated: 2026-06-11
 estimate_hours:
+card_mirror: '31e8843a7edc109e07688f69e2cb7b723f5f3e1c' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Capability-based tool permission model for skills

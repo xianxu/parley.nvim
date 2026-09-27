@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-10
 updated: 2026-09-10
 estimate_hours:
+card_mirror: '879a7c85617f318358eb0102202b39641e821f35' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Route the render walk's reasoning transitions through leave_row

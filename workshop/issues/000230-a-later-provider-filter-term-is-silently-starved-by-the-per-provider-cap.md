@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-10
 updated: 2026-09-10
 estimate_hours:
+card_mirror: '993b816c4ae7fe54de0ab76554473f84908d76e7' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # a later provider filter term is silently starved by the per-provider cap

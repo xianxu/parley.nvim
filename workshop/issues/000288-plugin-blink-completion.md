@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
+card_mirror: '3acac38b61220e50e637cd49a3796ec3b214bacc' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # plugin: move completion from nvim-cmp to blink (neighborhood paths, spelling)

@@ -7,6 +7,7 @@ created: 2026-09-02
 updated: 2026-09-13
 estimate_hours:
 started: 2026-09-13T13:08:24-07:00
+card_mirror: '0cb6ccf4f0b144e0d97dc9ab7e672b9da119ca18' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # safe-by-default posture for a public release

@@ -6,6 +6,7 @@ github_issue:
 created: 2026-09-15
 updated: 2026-09-15
 estimate_hours:
+card_mirror: '6b15f99347dc3b6306431cb5c35f30e5e7ab8fee' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Remove conflicting branch shortcut alias
