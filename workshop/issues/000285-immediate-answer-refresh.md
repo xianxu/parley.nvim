@@ -47,3 +47,4 @@ ARCH-FUNERAL).
 
 - 2026-09-26: Ensure re-ask payloads exclude the replaced exchange's prior tool-call blocks as well as ordinary answer text (boundary review BR-1).
 - 2026-09-26: Add production cancellation coverage for pending snapshot cleanup (boundary review BR-2).
+- 2026-09-26: Give each pending snapshot an owner token so overlapping re-asks cannot retire one another's memory (boundary review BR-3).
