@@ -82,6 +82,7 @@ function M.walk(buf, win, first_0, last_0, command_limit, remember, current, own
             execute %d
             let s:guard = 0
             let s:eof = 0
+            let s:broken = 0
             let s:states = []
             let s:groups = 0
             let s:ops = 0
@@ -101,7 +102,7 @@ function M.walk(buf, win, first_0, last_0, command_limit, remember, current, own
                   if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
                   let s:fs = foldclosed(line('.'))
                   let s:fe = foldclosedend(line('.'))
-                  if s:fs == -1 | break | endif
+                  if s:fs == -1 | let s:broken = line('.') | break | endif
                   let s:outer_open = s:before_s == -1 || s:before_s != s:fs || s:before_e != s:fe
                   silent! normal! zo
                   execute s:fs
@@ -149,6 +150,7 @@ function M.walk(buf, win, first_0, last_0, command_limit, remember, current, own
             let b:parley_fold_clear_iters = s:guard
             let b:parley_fold_clear_work = [s:groups, s:ops]
             let b:parley_fold_clear_next = line('.')
+            let b:parley_fold_inventory_broken = s:broken
             let b:parley_fold_clear_done = s:eof || (s:guard < s:limit && s:ops + 2 < s:limit) || line('.') > %d
             endif
         ]], buf, win, tick, owner_generation, first_row, command_limit or (last_row - first_row + 2) * 2, last_row,
@@ -168,6 +170,10 @@ function M.walk(buf, win, first_0, last_0, command_limit, remember, current, own
         local work = vim.b[buf].parley_fold_clear_work
         line_reader.record_work(buf, { fold_groups_visited = work[1], native_fold_ops = work[2] })
         if mode == 'inventory' then
+            -- A fold that zC can't close (e.g. a non-manual foldmethod) would
+            -- otherwise end the walk early while reporting it done.
+            local broken = vim.b[buf].parley_fold_inventory_broken
+            if broken and broken ~= 0 then error('fold inventory could not close the fold at row '..broken, 0) end
             folds = {}
             for _,entry in ipairs(vim.b[buf].parley_fold_clear_states or {}) do
                 folds[#folds+1] = { start_0 = entry[1], end_0 = entry[2], open = entry[3] == 1, nested = entry[4] == 1 }

@@ -127,6 +127,8 @@ Durable plan: `workshop/plans/000264-semantic-fold-flicker-plan.md`.
 
 ## Log
 
+
+- 2026-09-27: closed M1 — continuity spec 31/31 (asserts after every interleaved document+fold repair step; red 23/31 before, eager-clear restore turns 22 red); fold_diff property test 200 seeds + 3 mutations red; fold_native inventory unit tests; make test rc=0 395/395 files; heavy fold specs faster (fold_batches 83s->28s); review verdict: SHIP
 ### 2026-09-16
 
 Reproduced headlessly against the real `document` + `tool_folds` modules.
@@ -398,4 +400,12 @@ to #290 (now depends on #264 M1).
   mid-file under 8-way parallel load. Standalone they pass, and they're faster on the
   branch than on the base (fold_batches 83s → 28s, perf_ownership 33s → 25s: unchanged
   folds are no longer deleted and recreated). Rerun: `make test` rc=0, 395/395 files.
+- M1 review (SHIP) minors: (1) inventory truncation on a failed `zC` is fixed (the walk
+  now raises instead of reporting done; not unit-tested, because no deterministic way
+  to make `zC` fail was found, and a conditional test would be vacuous); (2) the
+  duplicated scope expression in `clear_uncertainty` is fixed; (3) the removal guard
+  checks only the start row. Accepted: same reach as the pre-#264 clear walk, not a
+  regression. The 5 carried plan-gate minors were folded into the plan before
+  implementation (property test, oversize batch rule, interleaving checks, one apply
+  path; the shared restart helper is in M2 Task 7).
 

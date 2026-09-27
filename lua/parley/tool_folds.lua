@@ -144,7 +144,7 @@ local function clear_uncertainty(s)
         return false
     end
     if not job then
-        job={first=math.max(scope.first,s.owned_first or scope.first),last=scope.last,windows={},index=1}
+        job={first=first,last=scope.last,windows={},index=1}
         for _,win in ipairs(vim.fn.win_findbuf(s.buf)) do
             job.windows[#job.windows+1]={win=win,row=job.first,
                 enabled=vim.api.nvim_get_option_value('foldenable',{win=win}),
