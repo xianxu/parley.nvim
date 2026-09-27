@@ -54,7 +54,13 @@ local previous-nonblank lookup.
 Classified Enter/join fragments transfer complete global and answer-section
 checkpoints over only the changed rows. Matching output checkpoints and relevant
 facts permit reuse of the untouched suffix. Changed reasoning termination,
-adjacency, markers, or uncertain inputs take the conservative repair path.
+adjacency, markers, or uncertain inputs take the conservative repair path. When a
+fragment's own assumptions hold and only its end checkpoint moves (a blank-count
+change under a summary or thinking block), repair restarts at the edit's answer
+header, not row 0 (#264). That's sound because admission already proved that no
+earlier row depends on the edited rows; the dependency index is pruned before the
+splice (`prune_from`, while every handle still ranks) and installed only on that
+fallback, guarded by identity on the index roots.
 
 Sequence traversal workers are module-level functions with explicit state.
 This prevents LuaJIT traces from retaining operation-local closures over detached
