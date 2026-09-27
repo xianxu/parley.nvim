@@ -25,7 +25,7 @@ notification overlay. The welcome chat remains the onboarding source of truth.
 
 ## Plan
 
-- [ ] Remove the duplicate notification and keep starter onboarding intact.
+- [x] Remove the duplicate notification and keep starter onboarding intact.
 
 ## Log
 

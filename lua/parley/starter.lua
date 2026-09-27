@@ -185,10 +185,6 @@ function M.start()
     if vim.fn.argc() == 0 then
         welcome(parley, roots)
         vim.wo.conceallevel = 0
-        vim.notify('Welcome to Parley!\n:ParleyProxy connect — log in, then :ParleyAgent to choose a model\n'
-            .. 'i — type   Esc — finish typing   Alt+Enter — send\n'
-            .. 'Ctrl+g f — find chats   Ctrl+g c — new chat   Ctrl+g ? — shortcuts\n'
-            .. 'Alt+v — paste image   Alt+t — outline   :wq — save and quit', vim.log.levels.INFO)
         require('parley.starter_onboarding').start(parley)
     end
 end
