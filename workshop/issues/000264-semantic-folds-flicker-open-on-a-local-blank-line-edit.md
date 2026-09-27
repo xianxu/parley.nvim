@@ -128,6 +128,8 @@ Durable plan: `workshop/plans/000264-semantic-fold-flicker-plan.md`.
 ## Log
 
 
+
+- 2026-09-27: closed M2 — extent spec 5/5 incl. cold-parse equality (3 red before; disabling local restart turns 3 red); dependencies prune_from/install unit tests; make test rc=0 396/396; scale case uncertain {0,241}->{235,241}, 401->10 repair steps; per-key typing 0.50->0.48 ms (no regression); operator smoke test in parley_app passed; review verdict: SHIP
 - 2026-09-27: closed M1 — continuity spec 31/31 (asserts after every interleaved document+fold repair step; red 23/31 before, eager-clear restore turns 22 red); fold_diff property test 200 seeds + 3 mutations red; fold_native inventory unit tests; make test rc=0 395/395 files; heavy fold specs faster (fold_batches 83s->28s); review verdict: SHIP
 ### 2026-09-16
 
@@ -436,4 +438,15 @@ regression guard. Each case also compares the settled parse with a cold parse
   reusing its captured `header`. Same result, one code path.
 - Smoke-tested by the operator in `./parley_app` (2026-09-27): typing a new question no
   longer blinks the last summary open (it did on `main`).
+- M2 review (SHIP), findings fixed at the class level (the gate flagged two repeat families):
+  (1) reuse-existing-helper: every builder of the restart evidence `after_splice` reads
+  (`before_splice`'s `evidence`, the fragment's restart-0 `normal`, and the new local
+  restart) now goes through one `splice_evidence` constructor; (2)
+  preserved-path-underspecified: **plan deviation logged**. `before_fragment` calls
+  `prune_from` without the plan's `before_rank`, matching that path's own
+  `restart_origin` call; cost stays bounded by `dep_budget`, and a budget miss just skips
+  the local restart; (3) guard-branch-untested: a `Semantic._state` test seam plus a unit
+  test that swaps the dependency roots between `before_fragment` and `after_fragment` and
+  asserts restart row 0 (it goes red when the guard is removed), and a positive unit test
+  asserting restart at the answer header.
 

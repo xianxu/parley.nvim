@@ -202,6 +202,10 @@ end
 
 -- Live snapshots below this frontier can use their copied confirmed flag.
 -- Section repair changes that flag without moving the global frontier.
+-- Test seam (#264): lets a unit test change the dependency index between
+-- before_fragment and after_fragment to exercise the local restart's guard.
+M._state=state
+
 function M.confirmed_frontier(worker)
     local w=state(worker)
     return w.global_done and S.size(w.seq).rows or position(w,w.global)
@@ -216,6 +220,16 @@ function M.is_confirmed(worker,handle)
     return row and row.metadata and row.metadata.confirmed==true or false
 end
 M.confirmed=M.is_confirmed
+
+-- The one constructor for the restart evidence `after_splice` consumes (#264):
+-- every builder goes through here, so a field `after_splice` reads can't be
+-- missing from one of them.
+local function splice_evidence(worker,w,restart,checkpoint,fallback,active_scope,status)
+    local token={status=status or (fallback and 'budget' or 'ready'),restart_row=restart,budget_exhausted=fallback or false}
+    evidence_store[token]={worker=worker,restart=restart,checkpoint=checkpoint,serial=w.serial,fallback=fallback or false,
+        active_scope=active_scope}
+    return token
+end
 
 -- One restart rule for both repair entries (#264): pull `row` back to its
 -- answer header (answer sections are repaired from the header) and resume from
@@ -244,9 +258,7 @@ function M.before_splice(worker,first,last,opts)
     local reserve=S.navigation_budget(w.seq)
     local dep_visits=0
     local function evidence(restart,checkpoint,exhausted)
-        local token={status=exhausted and 'budget' or 'ready',restart_row=restart,budget_exhausted=exhausted or false}
-        evidence_store[token]={worker=worker,restart=restart,checkpoint=checkpoint,serial=w.serial,fallback=exhausted,
-            active_scope=not exhausted and w.queue[1] or nil}
+        local token=splice_evidence(worker,w,restart,checkpoint,exhausted,not exhausted and w.queue[1] or nil)
         local work=S.stats(w.seq)
         for k,v in pairs(work) do work[k]=v-(initial[k] or 0) end
         work.dependency_nodes_visited=dep_visits
@@ -407,8 +419,7 @@ function M.before_fragment(worker,first,last,new_spans,opts)
     local affected=w.deps:restart_origin(first,last,{channels=changed,budget=dep_budget})
     visits=visits+affected.work.dependency_nodes_visited
     if affected.status~='ok' or affected.origin then return fallback() end
-    local normal={status='budget',restart_row=0,budget_exhausted=true}
-    evidence_store[normal]={worker=worker,restart=0,checkpoint=G.initial(),serial=w.serial,fallback=true}
+    local normal=splice_evidence(worker,w,0,G.initial(),true,nil)
     -- #264: if the transfer later fails only its end-state comparison, restart
     -- at the edit's answer header instead of row 0. `affected.origin==nil`
     -- above proved no earlier row depends on the edited rows. Prune the
@@ -519,10 +530,7 @@ function M.after_fragment(worker,token,first,newlast)
         local r=captured.local_restart
         if not r or w.deps~=r.deps or w.deps.roots~=r.base_roots then return fallback() end
         w.deps:install(r.roots)
-        local evidence={status='ready',restart_row=r.restart,budget_exhausted=false}
-        evidence_store[evidence]={worker=worker,restart=r.restart,checkpoint=r.checkpoint,serial=w.serial,
-            fallback=false,active_scope=captured.active}
-        local result=M.after_splice(worker,evidence,first,newlast)
+        local result=M.after_splice(worker,splice_evidence(worker,w,r.restart,r.checkpoint,false,captured.active),first,newlast)
         result.work=fragment_work(w.seq,initial)
         return result
     end

@@ -290,6 +290,28 @@ describe('document semantic worker',function()
         assert.equals(evidence.restart_row,Semantic.confirmed_frontier(worker))
     end)
 
+    -- #264 M2: a blank-count change under a summary fails only the fragment's
+    -- end-state comparison; repair restarts at the answer header, not row 0.
+    local summary_lines={'💬: q','🤖: a','body','📝: summary','','','💬: next',''}
+    it('restarts at the answer header when only a fragment end state changes',function()
+        local seq=sequence(summary_lines)
+        local worker=Semantic.new(seq); settle(worker)
+        local result=fragment(seq,worker,4,5,{})
+        assert.equals(1,result.restart_row)
+        settle(worker)
+    end)
+    it('falls back to row 0 when the dependency index changed after pruning',function()
+        local seq=sequence(summary_lines)
+        local worker=Semantic.new(seq); settle(worker)
+        local evidence=Semantic.before_fragment(worker,4,5,{},{rows=256,bytes=65536,nodes=65536,entries=65536})
+        -- Any change to the roots invalidates the pruned copy prepared above.
+        local deps=Semantic._state(worker).deps
+        local roots={};for k,v in pairs(deps.roots) do roots[k]=v end
+        deps:install(roots)
+        S.splice(seq,4,5,{})
+        assert.equals(0,Semantic.after_fragment(worker,evidence,4,4).restart_row)
+        settle(worker)
+    end)
     it('reuses confirmed question and answer suffixes after Enter and Backspace',function()
         for _,lines in ipairs({{'💬: q','question body','question tail'},
             {'💬: q','🤖: a','answer body','answer tail'}}) do

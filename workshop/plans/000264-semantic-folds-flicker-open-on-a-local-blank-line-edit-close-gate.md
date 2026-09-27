@@ -74,6 +74,52 @@ rounds:
       boundary: M1
       recipe: milestone-review
       blocked: false
+    - "n": 3
+      timestamp: "2026-09-27T15:04:50-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: tests/unit/fold_diff_spec.lua:67 property test over 200 seeds (exact matches untouched, regions whole, desired reached).
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: fold_diff.lua:11 and plan Step 3 state an oversized connected region forms its own batch exceeding limit, bounded by the plan span.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: semantic.lua:220 restart_point shared by before_splice (:272) and before_fragment (:417); header reuse replaced by the helper, deviation logged.
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: tool_folds.lua reconcile re-verifies each batch before applying it (removals still folded, creation rows fold-free) and discards the plan when stale.
+          round: 3
+        - id: BR-5
+          disposition: addressed
+          note: Suspended scopes run the same inventory+reconcile with paged walks (tool_folds.lua:257,262); the old clear/create phases are gone.
+          round: 3
+      findings:
+        - id: BR-9
+          severity: Minor
+          title: evidence_store entries are hand-built at three sites; one constructor should own the shape after_splice reads
+          detail: This is the 2nd finding in family reuse-existing-helper. The rule is that a record read by one consumer (after_splice) is built by one constructor next to it. before_splice evidence() (:246), before_fragment normal (:410) and the new after_fragment local restart (:520) should all build through it, rather than fixing this one site.
+          family: reuse-existing-helper
+          round: 3
+        - id: BR-10
+          severity: Minor
+          title: prune_from in before_fragment omits the before_rank the plan specified; the deviation is unlogged
+          detail: This is the 2nd finding in family preserved-path-underspecified. The rule is that every plan-specified option that the implementation drops is recorded in the Log with its reason. The call matches the fragment path's own restart_origin call, and cost stays bounded by dep_budget.
+          family: preserved-path-underspecified
+          round: 3
+        - id: BR-11
+          severity: Minor
+          title: No test reaches after_fragment's failing guard branch (index changed since prune)
+          detail: semantic.lua:519 falls back to row 0 when w.deps or its roots changed. No fixture mutates the index between before_fragment and after_fragment, so the guard is defensive and unexercised. A unit test that calls deps:add between the two calls would pin it.
+          family: guard-branch-untested
+          round: 3
+      boundary: M2
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#264 (boundary-review)
@@ -111,13 +157,30 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-8** [Minor] `stale-inventory-guard-precision` reconcile removal guard checks foldlevel at the start row only, not the inventoried extent
   A user fold at the same start row but a different extent, made between slices, would be zD'd. The pre-#264 clear walk had the same reach, so this is not a regression.
 
+## Round 3 — 2026-09-27T15:04:50-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — tests/unit/fold_diff_spec.lua:67 property test over 200 seeds (exact matches untouched, regions whole, desired reached).
+- BR-2 — addressed — fold_diff.lua:11 and plan Step 3 state an oversized connected region forms its own batch exceeding limit, bounded by the plan span.
+- BR-3 — addressed — semantic.lua:220 restart_point shared by before_splice (:272) and before_fragment (:417); header reuse replaced by the helper, deviation logged.
+- BR-4 — addressed — tool_folds.lua reconcile re-verifies each batch before applying it (removals still folded, creation rows fold-free) and discards the plan when stale.
+- BR-5 — addressed — Suspended scopes run the same inventory+reconcile with paged walks (tool_folds.lua:257,262); the old clear/create phases are gone.
+
+### Raised
+
+- **BR-9** [Minor] `reuse-existing-helper` evidence_store entries are hand-built at three sites; one constructor should own the shape after_splice reads
+  This is the 2nd finding in family reuse-existing-helper. The rule is that a record read by one consumer (after_splice) is built by one constructor next to it. before_splice evidence() (:246), before_fragment normal (:410) and the new after_fragment local restart (:520) should all build through it, rather than fixing this one site.
+- **BR-10** [Minor] `preserved-path-underspecified` prune_from in before_fragment omits the before_rank the plan specified; the deviation is unlogged
+  This is the 2nd finding in family preserved-path-underspecified. The rule is that every plan-specified option that the implementation drops is recorded in the Log with its reason. The call matches the fragment path's own restart_origin call, and cost stays bounded by dep_budget.
+- **BR-11** [Minor] `guard-branch-untested` No test reaches after_fragment's failing guard branch (index changed since prune)
+  semantic.lua:519 falls back to row 0 when w.deps or its roots changed. No fixture mutates the index between before_fragment and after_fragment, so the guard is defensive and unexercised. A unit test that calls deps:add between the two calls would pin it.
+
 ## Open findings
 
-- **BR-1** [Minor] `test-strategy-not-enumeration` fold_diff tests are an enumerated case list with no property/fuzz strategy for the riskiest pure function
-- **BR-2** [Minor] `pure-contract-underspecified` FoldDiff says batches hold at most limit groups AND a region is never split - contradictory for a region larger than limit
-- **BR-3** [Minor] `reuse-existing-helper` M2 local restart re-implements before_splice's restart/checkpoint derivation instead of extracting a shared helper (ARCH-DRY)
-- **BR-4** [Minor] `interleaving-unmodeled` Reconcile re-check guards removals only; user zf/zd between inventory slices or inside a creation region is unaddressed (ARCH-ORDER)
-- **BR-5** [Minor] `preserved-path-underspecified` apply above INTERACTIVE_ROWS "keeps current behaviour" while the clear/create phases it uses are deleted
 - **BR-6** [Minor] `walk-early-exit-reports-done` fold_native inventory can break on zC failure yet report done=true, truncating the inventory
 - **BR-7** [Minor] `duplicated-expression` clear_uncertainty computes first then recomputes the same expression for job.first
 - **BR-8** [Minor] `stale-inventory-guard-precision` reconcile removal guard checks foldlevel at the start row only, not the inventoried extent
+- **BR-9** [Minor] `reuse-existing-helper` evidence_store entries are hand-built at three sites; one constructor should own the shape after_splice reads
+- **BR-10** [Minor] `preserved-path-underspecified` prune_from in before_fragment omits the before_rank the plan specified; the deviation is unlogged
+- **BR-11** [Minor] `guard-branch-untested` No test reaches after_fragment's failing guard branch (index changed since prune)
