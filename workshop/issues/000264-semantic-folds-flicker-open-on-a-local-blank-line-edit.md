@@ -5,8 +5,9 @@ deps: []
 github_issue:
 created: 2026-09-16
 updated: 2026-09-27
-estimate_hours:
+estimate_hours: 3.71
 started: 2026-09-27T11:51:45-07:00
+flow: {kind: full, provenance: inferred}
 ---
 
 # Semantic folds flicker open on a local blank-line edit
@@ -94,6 +95,26 @@ the fix and its tests must cover the class.
 - No regression in `#193` (fold at wrong place), `#194` (preserve folds during
   inline comment submission), `#195` (reconcile semantic folds exactly),
   `#200` (user question is folded).
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
+Design ×0.2 (thorough plan doc resolves the decisions), +15% buffer; impl at 40% of the v2
+table; familiarity ×1.5 (heavily guarded fold/parser code, new to this session). The
+calibration doc is flagged stale (#127), so treat as provisional.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.5
+item: lua-neovim        design=0.4 impl=0.4
+item: lua-neovim        design=0.4 impl=0.4
+item: lua-neovim        design=0.4 impl=0.4
+item: milestone-review  design=0.0 impl=0.14
+item: milestone-review  design=0.0 impl=0.14
+item: atlas-docs        design=0.03 impl=0.05
+design-buffer: 0.15
+total: 3.71
+```
 
 ## Plan
 
