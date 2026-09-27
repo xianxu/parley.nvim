@@ -1,12 +1,13 @@
 ---
 id: 000290
-status: open
+status: working
 deps: [000264]
 github_issue:
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
-card_mirror: 'f771ea562f7659848607e4f822156fbf4e2db402' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '682ed7ad110ba323ef797dfc4f705b6609e7ad6c' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-27T15:41:00-07:00
 ---
 
 # Write each tool block in one append during streaming; fold tool blocks and summaries as written
@@ -88,11 +89,46 @@ consumer then has to tolerate.
 
 ## Plan
 
-- [ ] Find where tool-block effects inherit the 4096-byte slice, and give them a whole-block write
-- [ ] Tests: one write per block over 4 KB; prose still sliced
-- [ ] Writer creates the closed fold in the same turn; tests for immediate closure and zero reconcile work
-- [ ] Text writer folds a streamed `📝:` line as soon as its prefix is complete (split-prefix, multi-line and code-block cases)
-- [ ] Measure a 512 KB append; log it
+Design notes (from reading the write path):
+- The 4096-byte slice is enforced in three places, not one: the runner
+  (`generation_runner.lua` `write`), `D.append` (`document/init.lua`: >4096 bytes or >255
+  newlines is refused) and the editor (`document/editor.lua`: a patch >64 KiB is
+  `chunkneeded`). A tool block needs all three to allow one bounded whole-block append.
+  `ctx.append` (effect `manual_append`) has one user, `response_tools.insert_tool`, so
+  `manual_append` *is* the block-append effect: the runner passes `block=true` and the
+  whole blob; streamed prose (`write`) keeps its 4096-byte slices.
+- Bound (ARCH-CONSTRAINTS): a block append is at most `D.BLOCK_LIMIT` = 1 MiB, the runner's
+  staging ceiling (`generation.lua` `staged_bytes`), which already bounds every blob; in
+  practice the call cap (64 KiB) and the result budget (≤512 KiB + header/fences) bound it.
+  The row limit does not apply to a block; its bytes bound its rows.
+- `Append.prepare` lexes each line with a 4096-byte budget; a longer line (a one-line JSON
+  result) would be mis-lexed, so a line is lexed whole.
+- Writer folds use the runner's existing `written` receipt, which gains `from` (the
+  position of the first written byte). `chat_respond`'s `written` hook calls
+  `tool_folds.fold_written(buf, receipt, state)`:
+  - `append` receipt: the first non-blank written row, if it classifies as
+    `tool_use`/`tool_result` (the parser's own line classifier), through the last non-blank
+    written row — the projection's trim rule.
+  - `output` receipt: each written row after the last folded row whose line classifies as
+    `summary` (one-row fold; a split prefix is caught when the row is rechecked on the next
+    write). Rows are monotonic, so "once per line" is a high-water row, not a set.
+  - Created only in windows with `foldmethod=manual` where neither end row is already
+    folded; `foldenable` is set for the `:fold` and restored (same guard counter as the
+    reconcile), so the operator's setting is untouched.
+- Creates nothing durable (ARCH-FUNERAL): native folds are presentation, reconciled by
+  #264; the high-water row lives in the generation's closure.
+
+- [ ] `manual_append` writes the whole block: runner, `D.append` (`block` intent, 1 MiB),
+      editor patch limit per plan, whole-line lexing in `Append.prepare`
+- [ ] Tests: one edit carries both fences for a >4 KiB result; prose still sliced at 4096;
+      rewrite the "multi-slice result" response_tools test to "never partial"
+- [ ] `written` receipt gains `from`; `tool_folds.fold_written`; wired in `chat_respond`
+- [ ] E2E (chat_respond + fixture provider, real window): tool call/result closed at the
+      write, before any reconcile; settled reconcile `removed==0`/`created==0`
+- [ ] Summary folding: split prefix, stays closed while streaming, multi-line reshape,
+      `📝:` inside a code fence folded then removed
+- [ ] Measure a 512 KiB append on a large chat; log it
+- [ ] Existing streaming, stop-generation and tool-fold suites green (`make test`)
 
 ## Log
 
