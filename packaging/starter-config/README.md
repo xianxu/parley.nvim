@@ -140,3 +140,21 @@ are not required. A failed install can be retried with
 `:Lazy build markdown-preview.nvim`. The preview renders Markdown, so Parley's
 chat markers remain visible as text. This is an app dependency; installing the
 parley.nvim plugin alone does not install MarkdownPreview.
+
+## Find commands and repeat them
+
+Typing a command after `:` opens a menu of matching commands as you type.
+Matching is fuzzy, so `:mkpv` finds `MarkdownPreview` and `:thm` finds
+`ParleyTheme`. Press Tab and Shift-Tab to move through the menu, Enter to run
+what is on the line, and Escape to cancel. The arrow keys still move the cursor
+and walk earlier commands as usual. Chats get no completion menu while you type.
+
+Press `Ctrl-g :` in normal mode to search every command you have run before.
+Type part of one, then press Enter to run it again.
+
+The app includes `saghen/blink.cmp` for this, pinned with the other editor
+plugins and configured with its built-in Lua matcher, so installation downloads
+no native binary. When a release pins a newer version, copy the change from
+`init.lua.new` into your `init.lua`, then run `:Lazy update blink.cmp`.
+This is an app dependency; installing the parley.nvim plugin alone does not
+install it.

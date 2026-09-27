@@ -31,6 +31,10 @@ When upgrading an existing profile, adopt the theme dependency changes from
 `init.lua.new` to install the new choices. For release verification against
 installed pinned plugins, run `PARLEY_THEME_ROOT=/path/to/lazy nvim --headless
 -u NONE -l tests/packaging/theme_compatibility.lua` from the source checkout.
+When a release changes the pinned blink.cmp, also run
+`PARLEY_RUNTIME="$PWD" PARLEY_BLINK_RUNTIME=/path/to/lazy/blink.cmp NVIM_APPNAME=parley
+nvim --headless -u NONE -i NONE -c 'luafile tests/packaging/completion_compatibility.lua'`
+with isolated XDG directories; it checks fuzzy `:` completion against the real plugin.
 
 ## Updates and removal
 

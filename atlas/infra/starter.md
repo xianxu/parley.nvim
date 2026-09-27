@@ -43,6 +43,12 @@ chat name and cursor position. Existing `parley.lualine` integration supplies
 the model/activity section. `tests/packaging/statusline_compatibility.lua`
 exercises the production options with real Lualine and every packaged theme.
 
+It also pins blink.cmp (#287) for fuzzy `:` completion only: the Lua matcher
+(no native download), no insert-mode sources, and no insert keys. Telescope's
+`command_history` is bound to `<C-g>:`, since blink offers no history source.
+`tests/packaging/completion_compatibility.lua` runs the production options
+through the real pinned blink.
+
 | Owner | Responsibility |
 |---|---|
 | `lua/parley/config.lua` | Current plugin defaults consumed by `setup(opts)` |
