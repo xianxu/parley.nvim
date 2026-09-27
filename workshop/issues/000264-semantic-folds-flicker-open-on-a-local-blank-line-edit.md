@@ -120,7 +120,7 @@ total: 3.71
 
 Durable plan: `workshop/plans/000264-semantic-fold-flicker-plan.md`.
 
-- [ ] M1 — reconcile in place: continuity spec (red), pure `fold_diff`, inventory plus a
+- [x] M1 — reconcile in place: continuity spec (red), pure `fold_diff`, inventory plus a
       single reconcile phase in `apply`, uncertainty clears only edit-intersected folds.
 - [ ] M2 — local restart: extent spec (red), and `after_fragment` falls back to a restart at
       the edit's answer header (not row 0) when a fragment's end state changes.
