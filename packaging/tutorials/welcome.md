@@ -33,7 +33,8 @@ can also navigate to that file by putting cursor on ./basics.md, and press
 `option+o`.
 
 One last thing: try command `:ParleyTheme` (in NORMAL mode), to switch to a
-theme you love!
+theme you love! Once you are in COMMAND mode (press `:`), you can just type
+part of a command name; for example, `parthem` matches ParleyTheme.
 
 💬: Hello! What is Parley, and How do I use it? Keep it concise.
 
