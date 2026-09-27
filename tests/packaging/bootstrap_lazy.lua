@@ -15,7 +15,26 @@ return {
         local by_name = {}
         for _, plugin in ipairs(spec) do by_name[plugin[1] or plugin.name] = plugin end
         assert(by_name['nvim-lua/plenary.nvim'].commit == '74b06c6c75e4eeb3108ec01852001636d85a932b')
-        assert(by_name['nvim-telescope/telescope.nvim'].commit == 'a0bbec21143c7bc5f8bb02e0005fa0b982edc026')
+        local telescope = by_name['nvim-telescope/telescope.nvim']
+        assert(telescope.commit == 'a0bbec21143c7bc5f8bb02e0005fa0b982edc026')
+        local history_key = assert(telescope.keys and telescope.keys[1], 'App must bind command history search')
+        assert(history_key[1] == '<C-g>:')
+        local builtin = package.loaded['telescope.builtin']
+        local searched = false
+        package.loaded['telescope.builtin'] = { command_history = function() searched = true end }
+        history_key[2]()
+        package.loaded['telescope.builtin'] = builtin
+        assert(searched, '<C-g>: must open the command history picker')
+        local blink = assert(by_name['saghen/blink.cmp'], 'App must ship command-line completion')
+        assert(blink.commit == '78336bc89ee5365633bcf754d93df01678b5c08f')
+        assert(blink.lazy == false)
+        assert(blink.opts.fuzzy.implementation == 'lua', 'blink must not download its native matcher')
+        assert(vim.deep_equal(blink.opts.sources.default, {}), 'Chat buffers must get no completion popup')
+        assert(blink.opts.keymap.preset == 'none', 'Insert mode must claim no keys')
+        assert(blink.opts.cmdline.keymap.preset == 'cmdline')
+        assert(vim.deep_equal(blink.opts.cmdline.keymap['<Left>'], {}))
+        assert(vim.deep_equal(blink.opts.cmdline.keymap['<Right>'], {}))
+        assert(blink.opts.cmdline.completion.menu.auto_show == true)
         for _, item in ipairs(require('parley.theme').items()) do
             local plugin = assert(by_name[item.plugin[1]], 'Missing theme dependency: ' .. item.id)
             assert(plugin.commit == item.plugin.commit)

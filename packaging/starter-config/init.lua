@@ -144,7 +144,23 @@ local ok, err = xpcall(function()
                     lualine_x = {}, lualine_y = {}, lualine_z = {} },
             } },
         { "nvim-lua/plenary.nvim", commit = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
-        { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026" },
+        { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026",
+            keys = { { "<C-g>:", function() require("telescope.builtin").command_history() end,
+                desc = "Search command history" } } },
+        -- Fuzzy command-line completion only. The Lua matcher downloads no
+        -- binary; insert mode gets no sources and claims no keys (#262).
+        { "saghen/blink.cmp", commit = "78336bc89ee5365633bcf754d93df01678b5c08f", -- v1.10.2
+            lazy = false,
+            opts = {
+                fuzzy = { implementation = "lua" },
+                sources = { default = {} },
+                keymap = { preset = "none" },
+                cmdline = {
+                    -- The preset would bind the arrows to menu selection; keep cursor movement.
+                    keymap = { preset = "cmdline", ["<Left>"] = {}, ["<Right>"] = {} },
+                    completion = { menu = { auto_show = true } },
+                },
+            } },
         { "iamcco/markdown-preview.nvim",
             commit = "a923f5fc5ba36a3b17e289dc35dc17f66d0548ee",
             cmd = { "MarkdownPreview", "MarkdownPreviewToggle", "MarkdownPreviewStop" },

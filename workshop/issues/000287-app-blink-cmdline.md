@@ -65,20 +65,20 @@ covering both command names and command history.
 
 Quick flow (under 20 code lines, all in the app starter; the rest is tests and docs).
 
-- [ ] `packaging/starter-config/init.lua`: add blink.cmp pinned to v1.10.2 with
+- [x] `packaging/starter-config/init.lua`: add blink.cmp pinned to v1.10.2 with
       `fuzzy.implementation = "lua"`, `sources.default = {}`,
       `keymap.preset = "none"` (insert mode claims no keys, #262), and cmdline
       `preset = "cmdline"` minus `<Left>`/`<Right>` with `menu.auto_show`.
-- [ ] Same file: telescope spec gains `keys = { "<C-g>:" → builtin.command_history }`
+- [x] Same file: telescope spec gains `keys = { "<C-g>:" → builtin.command_history }`
       for fuzzy history recall (blink has no history source; stock `<Up>`/`<Down>`
       prefix history stays).
-- [ ] `tests/packaging/bootstrap_lazy.lua` (automated, via starter_bootstrap_spec):
+- [x] `tests/packaging/bootstrap_lazy.lua` (automated, via starter_bootstrap_spec):
       assert blink's pin and opts, and that the `<C-g>:` key calls `command_history`.
-- [ ] `tests/packaging/completion_compatibility.lua`: release check against the
+- [x] `tests/packaging/completion_compatibility.lua`: release check against the
       real pinned blink (`PARLEY_BLINK_RUNTIME`): run the production starter,
       type `:mkpv`/`:thm` → menu shows `MarkdownPreview`/`ParleyTheme`; insert
       mode → no items, no menu, no blink insert keymaps; no native library in blink's dir.
-- [ ] Starter README + `atlas/infra/starter.md` + `atlas/traceability.yaml`.
+- [x] Starter README + `atlas/infra/starter.md` + `atlas/traceability.yaml`.
 
 ## Log
 
@@ -97,4 +97,13 @@ Quick flow (under 20 code lines, all in the app starter; the rest is tests and d
   movement. blink's cmdline sources are `buffer` + `cmdline` (getcompletion);
   there is no history source, so history is telescope `command_history` on
   `<C-g>:` (free key; telescope already packaged).
+- Implemented. Verification: `make test-spec SPEC=infra/starter` green (16
+  files, 183 cases, 0 failed); bootstrap_lazy assertions go red on
+  `implementation = "prefer_rust"` and on the history key calling another
+  picker. `completion_compatibility.lua` against real blink v1.10.2 passes
+  (`:mkpv`→MarkdownPreview, `:thm`→ParleyTheme, insert quiet) and goes red on
+  each mutation: insert preset `default` (claims `<Up>`…), insert sources on,
+  arrows kept, auto_show off. A real launch of the starter with real Lazy in
+  an isolated profile installed blink at `78336bc8`, with the `lua` matcher, 0
+  native libraries, and `<C-g>:` mapped.
 
