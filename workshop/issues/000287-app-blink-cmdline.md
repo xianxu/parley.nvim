@@ -1,6 +1,6 @@
 ---
 id: 000287
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-27
@@ -8,6 +8,7 @@ updated: 2026-09-27
 estimate_hours:
 started: 2026-09-27T11:18:04-07:00
 flow: {kind: quick, provenance: inferred, spec: "18130a19", done: "6d797046"}
+actual_hours: 1.13
 ---
 
 # app: blink.cmp (lua matcher) for fuzzy cmdline completion and history search
@@ -83,6 +84,7 @@ Quick flow (under 20 code lines, all in the app starter; the rest is tests and d
 ## Log
 
 ### 2026-09-27
+- 2026-09-27: closed — make test-spec SPEC=infra/starter green (0 failed); bootstrap_lazy + completion_compatibility mutation-checked (7 mutations all red, incl. telescope losing lazy=false); real blink v1.10.2: :mkpv->MarkdownPreview, :thm->ParleyTheme, insert quiet; real starter launch with real Lazy: blink at 78336bc8, lua matcher, 0 native libs, <C-g>: mapped, :Telescope present at startup. Review round 1 BR-1 fixed (lazy=false + class rule), minors fixed.; review verdict: SHIP
 - Filed from a session comparing cmdline fuzzy options (built-in
   `wildoptions+=fuzzy`, wilder.nvim, nvim-cmp, fzf-lua/snacks pickers); chose
   blink for the app. Companion: #288 (plugin nvim-cmp → blink), pair#334
