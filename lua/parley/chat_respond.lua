@@ -1498,6 +1498,7 @@ local function start_scoped_response(frame)
     local replaced_answer = exchange.answer and PrevAnswer.capture(frame.parsed.exchanges[index]) or nil
     local footer = trailing_footnote_boundary(frame.lines, exchange.question.line_end)
     local pending_entity
+    local pending_owner = replaced_answer and {} or nil
     local input_parsed = vim.deepcopy(parsed)
     if replaced_answer then
         -- Publish the old answer before changing the transcript.  The pending
@@ -1508,12 +1509,11 @@ local function start_scoped_response(frame)
         if not pending_entity then
             refuse('start', nil, 'exchange identity unavailable'); return nil, 'exchange identity unavailable'
         end
-        D.set_pending_previous_answer(doc, {entity = pending_entity, value = replaced_answer})
+        D.set_pending_previous_answer(doc, {entity = pending_entity, value = replaced_answer, owner = pending_owner})
         local delete_last = exchange.answer.line_end - 1
         if footer then delete_last = math.min(delete_last, footer - 1) end
         require('parley.buffer_edit').delete_answer(buf, exchange.question.line_end, delete_last, config)
         local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        footer = trailing_footnote_boundary(current_lines, exchange.question.line_end)
         local current_header = require('parley.chat_parser').find_header_end(current_lines)
         if current_header then
             local current = require('parley.chat_parser').parse_chat(current_lines, current_header, config)
@@ -1578,6 +1578,7 @@ local function start_scoped_response(frame)
     local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order, batch = frame.batch,
         label = (frame.lines[question.line_start] or 'Response'):sub(1, 256)}; group[entry] = true
     entry.pending_previous_entity = pending_entity
+    entry.pending_previous_owner = pending_owner
     local latest, messages, final_payload, topic_source, topic_parent, failure_notice, completion_failure
     local message_lead = 0
     local topic_attempted, main_finished, topic_finished = false, false, true
@@ -1595,8 +1596,9 @@ local function start_scoped_response(frame)
     local function release()
         if not main_finished or not topic_finished then return end
         if entry.pending_previous_entity then
-            D.clear_pending_previous_answer(doc, entry.pending_previous_entity)
+            D.clear_pending_previous_answer(doc, entry.pending_previous_entity, entry.pending_previous_owner)
             entry.pending_previous_entity = nil
+            entry.pending_previous_owner = nil
         end
         if topic_source then D.cancel_user(doc, topic_source); topic_source = nil end
         if topic_parent then D.cancel_user(doc, topic_parent); topic_parent = nil end
@@ -1660,7 +1662,7 @@ local function start_scoped_response(frame)
         -- after its input is ready, so the slot is in place first (#261/#255).
         if replaced_answer then
             D.set_previous_answer(doc, {epoch = ctx.epoch, entity = ctx.entity,
-                generation = ctx.generation, value = replaced_answer})
+                generation = ctx.generation, value = replaced_answer, owner = pending_owner})
         end
         local operation = {cancelled = false, resolved = false}
         local function resolve()
