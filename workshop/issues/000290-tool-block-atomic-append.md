@@ -1,7 +1,7 @@
 ---
 id: 000290
 status: open
-deps: ["#264"]
+deps: [000264]
 github_issue:
 created: 2026-09-27
 updated: 2026-09-27
