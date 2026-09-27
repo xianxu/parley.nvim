@@ -138,7 +138,7 @@ Design notes (from reading the write path):
 - [x] Summary folding: split prefix, stays closed while streaming, multi-line reshape,
       `📝:` inside a code fence folded then removed
 - [x] Measure a 512 KiB append on a large chat; log it
-- [ ] Existing streaming, stop-generation and tool-fold suites green (`make test`)
+- [x] Existing streaming, stop-generation and tool-fold suites green (24 files in isolation; `make test` failures are environmental, see Log)
 
 ## Log
 
@@ -169,4 +169,11 @@ Design notes (from reading the write path):
   slices (max repair step ~22–26 ms). At the 100 KiB default the write turn scales to
   ~25–30 ms. Follow-up candidate: the per-byte Lua lexer in `Append.prepare` dominates
   the write turn.
+- 2026-09-27: verification. 24 streaming/stop/fold/response/generation spec files green
+  in isolation. `make test` failures are environmental: (a) `single_source_sweeps` names
+  #264's exports because local `main` is 51 commits behind `origin/main` (against the
+  `origin/main` branch point the added exports are `BLOCK_LIMIT` and `fold_written`, both
+  tabled); (b) one random spec per run dies at plenary's 50 s deadline under 8-way load
+  (`highlight_typing`, `response_tools`: 5–10 s alone). The base commit a26cd3bc shows the
+  same thing (`document_semantic_spec`).
 
