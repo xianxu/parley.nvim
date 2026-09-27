@@ -54,7 +54,13 @@ local previous-nonblank lookup.
 Classified Enter/join fragments transfer complete global and answer-section
 checkpoints over only the changed rows. Matching output checkpoints and relevant
 facts permit reuse of the untouched suffix. Changed reasoning termination,
-adjacency, markers, or uncertain inputs take the conservative repair path.
+adjacency, markers, or uncertain inputs take the conservative repair path. When a
+fragment's own assumptions hold and only its end checkpoint moves (a blank-count
+change under a summary or thinking block), repair restarts at the edit's answer
+header, not row 0 (#264). That's sound because admission already proved that no
+earlier row depends on the edited rows; the dependency index is pruned before the
+splice (`prune_from`, while every handle still ranks) and installed only on that
+fallback, guarded by identity on the index roots.
 
 Sequence traversal workers are module-level functions with explicit state.
 This prevents LuaJIT traces from retaining operation-local closures over detached
@@ -115,16 +121,23 @@ long rows. Local edits discard intersecting presentation pages. Uncertain region
 use neutral/local lexical styling; stale semantic roles and fence/footer/draft
 context cannot authorize presentation.
 
-Fold queries return at most eight ranges per page. Uncertainty invalidation
-clears semantic folds in the unconfirmed suffix independently of recreation.
-Only a complete, confirmed, still-valid projection can recreate them. Ordinary
+Fold queries return at most eight ranges per page. Parley owns every native fold,
+and Neovim carries manual folds with their text, so uncertainty removes no fold
+(#264): old folds stay stable in position until a complete, confirmed, still-valid
+projection is ready. Reconciliation (`fold_native.lua` reads, `fold_diff.lua`
+decides) inventories a window's folds without changing them, then removes and
+creates only the folds that differ, never splitting a connected region across timer
+turns. A fold the
+projection already has is never touched, so a closed fold never blinks open during
+repair; `document_fold_continuity_spec` checks this after every step. Ordinary
 body edits with surviving context let Neovim move folds without rebuilding them.
 Structural changes preserve each window's view, open state, and fold enablement
 while reconciling affected groups.
-Native application costs scale with affected fold groups and are counted separately.
-Creation applies at most 64 groups per timer turn. Above 50,000 affected rows,
-cleanup also caps each native fold-jump batch at 64 groups and temporarily disables
-fold display in affected windows. Completion, cancellation, reload, and detach
+Native application costs scale with changed fold groups and are counted separately.
+Reconciliation applies at most 64 groups per timer turn (a single larger connected
+region is applied whole). Above 50,000 affected rows, uncertainty still clears the
+unconfirmed suffix natively; that cleanup caps each native fold-jump batch at 64
+groups and temporarily disables fold display in affected windows. Completion, cancellation, reload, and detach
 restore operator fold preferences. Each yield revalidates the projection; edits
 that invalidate it abort and rederive the remaining plan. A deferred ordinary join
 can avoid native fold work when unchanged topology is confirmed before

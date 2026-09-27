@@ -191,3 +191,9 @@ oracle, and the mutation that would make the test fail.
 - Settled-state fold tests can't see a flicker. When work is split across
   event-loop turns, assert the invariant after every step, not only after
   `flush`.
+- #264 M2 review: a record read by one consumer gets one constructor beside it. Three
+  builders of `after_splice`'s evidence drifted in which fields they set; the fix was
+  `splice_evidence`, not patching the newest builder.
+- #264 M2 review: when an implementation drops an option the plan specified, log the
+  deviation and its reason as it happens; an unlogged deviation reads as an oversight in
+  review.

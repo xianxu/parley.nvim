@@ -1,6 +1,6 @@
 ---
 id: 000264
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-16
@@ -8,6 +8,7 @@ updated: 2026-09-27
 estimate_hours: 3.71
 started: 2026-09-27T11:51:45-07:00
 flow: {kind: full, provenance: inferred}
+actual_hours: 2.46
 ---
 
 # Semantic folds flicker open on a local blank-line edit
@@ -118,11 +119,21 @@ total: 3.71
 
 ## Plan
 
-- [ ] Design pending — run `sdlc start-plan` and author the durable plan via
-      `superpowers-writing-plans` before implementing.
+Durable plan: `workshop/plans/000264-semantic-fold-flicker-plan.md`.
+
+- [x] M1 — reconcile in place: continuity spec (red), pure `fold_diff`, inventory plus a
+      single reconcile phase in `apply`, uncertainty clears only edit-intersected folds.
+- [x] M2 — local restart: extent spec (red), and `after_fragment` falls back to a restart at
+      the edit's answer header (not row 0) when a fragment's end state changes.
 
 ## Log
 
+
+
+
+- 2026-09-27: closed — M1+M2 shipped (both milestone reviews SHIP). continuity spec 31/31 incl. interleaved doc+fold steps (eager-clear mutation turns 22 red); extent spec 5/5 with cold-parse equality; fold_diff property test; fold_native, dependencies and semantic guard unit tests; make test fully green twice (395 and 396 files), other runs only load flakes in unrelated files that pass standalone (document_retention 5/5 branch and main); scale case 401->10 repair steps; per-key 0.50->0.48 ms; operator smoke test in parley_app passed (typing a question no longer blinks the last summary; main does); review verdict: SHIP
+- 2026-09-27: closed M2 — extent spec 5/5 incl. cold-parse equality (3 red before; disabling local restart turns 3 red); dependencies prune_from/install unit tests; make test rc=0 396/396; scale case uncertain {0,241}->{235,241}, 401->10 repair steps; per-key typing 0.50->0.48 ms (no regression); operator smoke test in parley_app passed; review verdict: SHIP
+- 2026-09-27: closed M1 — continuity spec 31/31 (asserts after every interleaved document+fold repair step; red 23/31 before, eager-clear restore turns 22 red); fold_diff property test 200 seeds + 3 mutations red; fold_native inventory unit tests; make test rc=0 395/395 files; heavy fold specs faster (fold_batches 83s->28s); review verdict: SHIP
 ### 2026-09-16
 
 Reproduced headlessly against the real `document` + `tool_folds` modules.
@@ -270,4 +281,186 @@ Delta:
   class). The repro harness is `D.attach(buf,{schedule=false})`, then
   `F.setup`, then `nvim_buf_set_lines` appends, then `D.drain`, then a loop of
   `F.step`, probing `vim.fn.foldclosed(row)`.
+
+### 2026-09-27 — Design (plan authored)
+
+Reason: claimed for implementation after #281; the plan needed the mechanism behind
+defect (a).
+
+Delta:
+- Defect (a) located: every blank-line case (summary, thinking, second exchange) reaches
+  `semantic.after_fragment`'s end-checkpoint mismatch (:494-495), whose prepared fallback is
+  hard-coded to restart 0 with a dependency rebuild (`before_fragment` :406-407), even
+  though `before_fragment` already proved no earlier row depends on the edit. A tool block
+  followed by a blank reports no uncertainty, which is consistent with the bounded-extent
+  argument.
+- #193/#200 checked: #193 required never rebuilding folds outside the rewritten span, and
+  #200 was permanent drift. The plan keeps eager clearing only for folds the edit
+  intersects (which Neovim corrupts) and keeps exact convergence when settled.
+
+### 2026-09-27 — Plan review round 1 folded in
+
+Reason: a fresh-context plan review found an undefined intersection rule (the obvious one
+would have kept the summary flicker), an unbounded `s.edited`, a duplicated VimL walk,
+`zc` mis-measuring nested groups, and post-splice dependency pruning that would usually
+return `stale`.
+
+Delta: the intersection rule counts only rows an edit *writes* (pure deletions never clear
+eagerly); `s.edited` is capped at 8 ranges and cleared at idle, reload and detach; the walk
+moves to `fold_native.lua` with a delete/inventory mode; inventory uses `zC`/`zO`;
+dependency pruning is computed before the splice (`prune_from`) and installed only on a
+mismatch; paths above `INTERACTIVE_ROWS` are unchanged. **Narrowed:** the Log's per-kind
+"confirmation stays intact below a summary" negative isn't asserted. The restart is
+bounded at the answer header instead (see the plan's "Deliberate narrowing").
+
+### 2026-09-27 — Plan review round 2 folded in
+
+Reason: the round-2 reviewer tested Neovim's manual-fold behaviour headless (brute-force
+edit sweep plus native keys) and found that joins (Backspace at column 0, `J`, Delete at
+end of line on the blank under a summary) rewrite the summary row. The round-1 rule would
+have cleared that fold eagerly and kept the flicker.
+
+Delta: only edits that add **net rows** are recorded for eager clearing (the only edits that
+can make a fold absorb rows that aren't its own), measured against post-edit extents; the
+continuity spec gains real-keystroke join cases; the "typing into a tool result" boundary
+case is replaced by a net insertion inside it (the only kind that really grows a fold);
+the nested-group inventory test no longer claims inner open state survives (nested groups
+are always recreated from `capture`); M2 gains an O(1) guard that the dependency index is
+the one pruned (`serial` doesn't cover `deps:add`), per-keystroke work accounting for
+`prune_from`, and a handle-free comparison against the cold parse.
+
+### 2026-09-27 — Operator direction: Parley owns folds; drop the eager clear
+
+Reason: the operator pointed out that users never create folds (Parley makes every one), so
+human edits almost never need a fold changed; and that the stream writer knows when a
+write is foldable.
+
+Delta: M1 Task 4 no longer clears any native fold on uncertainty (below 50k rows). Neovim
+carries folds with their text, and the diff reconcile fixes the rare fold a net insertion
+grew, one repair later. The edited-rows tracking is removed. New **zero-touch**
+assertions: a plain streamed append and ordinary human edits remove no native fold
+(`removed==0`, via the reconcile notify). Folding a block as the writer writes it moves
+to #290 (now depends on #264 M1).
+
+### 2026-09-27 — M1 Task 1: continuity spec (red)
+
+`tests/integration/document_fold_continuity_spec.lua`: 23 red, 8 green.
+- Red with "row N opened at step 3" (the flicker): summary and thinking blank matrix
+  (12), second exchange, Backspace at column 0 under a summary and a thinking block, `J`
+  and Delete at end of line on the summary row (confirming review round 2's join
+  finding with real keys), all three streaming appends, and typing or Enter in a
+  question.
+- Red with "reconcile must report removed" (zero-touch counters not implemented yet):
+  thinking and summary appended below a closed summary (its fold never opened; only the
+  counter is missing).
+- Green controls: the tool-pair blank matrix (6; no uncertainty) and both edge cases.
+
+### 2026-09-27 — M1 Tasks 2-3: fold_diff, fold_native, single reconcile phase
+
+- `fold_diff` is property-tested (200 seeds); mutations that touch exact matches,
+  split regions or keep nested groups each go red.
+- The walk moved to `fold_native.lua` unchanged (all fold, stop and streaming suites green),
+  then gained `inventory` mode. Implementation note: `zC` runs before the extent is
+  read, and the outer open state is inferred from the pre-`zC` closed extent, so an
+  open outer fold with a closed inner fold on its first row reports the outer extent and
+  stays open. Nesting is found with `zo` plus `zj` (O(1)), not a row scan. A one-line
+  `if … | normal! … | endif` breaks in VimL (`normal!` swallows `| endif`), so those
+  are multi-line.
+- `apply` now runs capture, inventory, then reconcile (one `fold_diff` batch per
+  slice; removals are re-checked for `foldlevel>0`, and creations need `foldlevel==0`
+  at both ends, else re-plan). Continuity spec: 30/31 green.
+- Pinned-count change: `tests/unit/tool_folds_spec.lua` "work accounting" now expects
+  4 groups / 14 commands (inventory plus reconcile) instead of 2 / 5 (clear walk). Its
+  intent, that a nested group counts as one outer group, holds.
+- Test correction: the split-write streaming case allows the block *being written* to be
+  reshaped once (`removed<=1`) when its closing fence arrives; earlier folds are watched
+  for continuity. #290 removes this case.
+- Remaining red: Delete at end of the summary row, which opens at step 1
+  (`clear_uncertainty`'s eager clear); Task 4.
+
+### 2026-09-27 — M1 Task 4: uncertainty does no native work (below 50k rows)
+
+- `clear_uncertainty` now only widens the repair scope below `INTERACTIVE_ROWS`; the
+  path above the threshold is unchanged.
+- **Harness fix, found by mutation:** with the eager clear restored, the continuity spec
+  stayed 31/31 green, because `repair()` drained the document before stepping folds,
+  which hid the uncertainty window. It now interleaves one document repair step with
+  one fold step, as the scheduled callbacks do. With that, restoring the eager clear
+  turns 22 cases red ("opened at step 1"); the fix is 31/31.
+- **Test correction:** Delete at end of the summary row. `A<Del><Esc>` on a closed fold's
+  line opens it in stock Neovim with no parley loaded, so that's the user opening it,
+  not flicker. The case now asserts repair leaves it a fold, open, with nothing removed.
+- **Tests that pinned the old eager clear, changed to the new invariant** (the approved
+  design): `document_folds_spec` "clears affected folds while uncertain" now keeps
+  them through uncertainty and removes them once settled; "restores open suffix folds
+  after uncertainty" now keeps them, open, through it; `document_fold_join_spec`'s
+  deferred join asserts the fold survives (`foldlevel==1`); and
+  `document_presentation_reentrant_spec`'s superseded-slice case now drives the
+  reconcile's inventory slice (still asserting that foldenable and the view are restored
+  and the edit happened).
+- Plan Core-concepts table names `diff`, `walk`, `valid_target` and `restore_window` (the
+  arch single-source test).
+- `make test`: first run, 4 files red. Two were the arch table and the reentrant test
+  (fixed above). Two heavy files (`perf_ownership`, `document_fold_batches`) died
+  mid-file under 8-way parallel load. Standalone they pass, and they're faster on the
+  branch than on the base (fold_batches 83s → 28s, perf_ownership 33s → 25s: unchanged
+  folds are no longer deleted and recreated). Rerun: `make test` rc=0, 395/395 files.
+- M1 review (SHIP) minors: (1) inventory truncation on a failed `zC` is fixed (the walk
+  now raises instead of reporting done; not unit-tested, because no deterministic way
+  to make `zC` fail was found, and a conditional test would be vacuous); (2) the
+  duplicated scope expression in `clear_uncertainty` is fixed; (3) the removal guard
+  checks only the start row. Accepted: same reach as the pre-#264 clear walk, not a
+  regression. The 5 carried plan-gate minors were folded into the plan before
+  implementation (property test, oversize batch rule, interleaving checks, one apply
+  path; the shared restart helper is in M2 Task 7).
+
+### 2026-09-27 — M2 Task 6: uncertainty extent spec (red)
+
+`tests/integration/document_uncertainty_extent_spec.lua`: 3 red ("uncertain from 0")
+for a blank after a summary, after thinking, and in a second exchange. Green today: the
+tool-block control and, contrary to the plan's prediction, the question-edit case (the
+fragment fast path handles a question-role blank without falling back). It stays as a
+regression guard. Each case also compares the settled parse with a cold parse
+(handle-free semantic fields plus fold ranges).
+
+### 2026-09-27 — M2 Task 7: local restart (measurements)
+
+- Extent spec 5/5 (each settled parse equals a cold parse on handle-free fields and
+  fold ranges); with the local restart disabled, 3 go red again. `make test` rc=0,
+  396/396 files (an earlier run's one failure, `response_target_spec`'s GC-retention
+  case, passed standalone twice and on rerun; its fixture never takes the fragment
+  path and both stores are weak-keyed, so it's load flakiness).
+- Scale case (issue Log, 242 rows / 40 summaries, blank under the last summary):
+  `uncertain {0,241}` and 401 repair steps → `{235,241}` and **10** steps.
+- Per-keystroke cost of `prune_from` (2000-row chat, 300 body-line keystrokes): base
+  0.50 ms/key, branch 0.48 ms/key; no regression.
+- Blank delete plus re-insert under summaries ×20: 26.5 s → 18.6 s. The gain is smaller
+  than the scale case, so the *re-insert* half probably still takes a slower path;
+  possible follow-up, not in #264's scope.
+- Plan deviation: `before_fragment` calls the shared `restart_point(w,first)` rather than
+  reusing its captured `header`. Same result, one code path.
+- Smoke-tested by the operator in `./parley_app` (2026-09-27): typing a new question no
+  longer blinks the last summary open (it did on `main`).
+- M2 review (SHIP), findings fixed at the class level (the gate flagged two repeat families):
+  (1) reuse-existing-helper: every builder of the restart evidence `after_splice` reads
+  (`before_splice`'s `evidence`, the fragment's restart-0 `normal`, and the new local
+  restart) now goes through one `splice_evidence` constructor; (2)
+  preserved-path-underspecified: **plan deviation logged**. `before_fragment` calls
+  `prune_from` without the plan's `before_rank`, matching that path's own
+  `restart_origin` call; cost stays bounded by `dep_budget`, and a budget miss just skips
+  the local restart; (3) guard-branch-untested: a `Semantic._state` test seam plus a unit
+  test that swaps the dependency roots between `before_fragment` and `after_fragment` and
+  asserts restart row 0 (it goes red when the guard is removed), and a positive unit test
+  asserting restart at the answer header.
+
+### 2026-09-27 — Pre-close full-suite runs (machine under load, avg 5-9)
+
+`make test` was run five times after M2. Each run failed a *different* 1-4 files, and
+none repeated across runs: `perf_ownership` and `document_fold_batches` (killed
+mid-file), `response_target` (GC retention), `document_dependencies` (killed after 8/15),
+`packaging_launcher` and `starter_config` (process races), `document_retention` (GC
+retention), `branch_child`, `document_fold_uncertainty_retirement` (SIGTERM). Every one
+passes standalone. `document_retention`, the one in the changed area, passed 5/5 on the
+branch and 5/5 on `main`. Two runs passed fully (395/395 and 396/396 files). The one
+real failure found this way was the arch test's plan-table row, which is fixed.
 

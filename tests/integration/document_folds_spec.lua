@@ -39,13 +39,15 @@ describe('document indexed fold reconciliation',function()
         assert.equals(1,vim.fn.foldlevel(3));assert.equals(-1,vim.fn.foldclosed(3))
         assert.equals(6,vim.fn.foldclosed(6))
     end)
-    it('clears affected folds while the structure is uncertain',function()
+    -- #264: uncertainty no longer clears folds early. The old fold stays,
+    -- stable in position, until the confirmed projection removes it.
+    it('keeps affected folds while the structure is uncertain, then removes them',function()
         vim.api.nvim_buf_set_lines(buf,2,3,false,{'plain marker replacement'})
         F.flush(buf)
-        assert.equals(0,vim.fn.foldlevel(3))
+        assert.equals(1,vim.fn.foldlevel(3))
         D.drain(doc);F.flush(buf)
         assert.equals(0,vim.fn.foldlevel(3))
-    end)    it('preserves a proven prefix and restores open suffix folds after uncertainty',function()
+    end)    it('preserves a proven prefix and keeps open suffix folds through uncertainty',function()
         vim.api.nvim_buf_set_lines(buf,0,-1,false,{
             '💬: first','🤖: a','🧠: one','body','🧠:[END]',
             '💬: second','🤖: b','body','📝: summary','summary body',
@@ -61,7 +63,8 @@ describe('document indexed fold reconciliation',function()
         assert.is_true(D.uncertain_range(doc).first>=5)
         F.flush(buf)
         assert.equals(1,vim.fn.foldlevel(3));assert.equals(-1,vim.fn.foldclosed(3))
-        assert.equals(0,vim.fn.foldlevel(9));assert.equals(0,vim.fn.foldlevel(13))
+        -- #264: suffix folds are no longer cleared early; they keep their open state.
+        assert.equals(1,vim.fn.foldlevel(13));assert.equals(-1,vim.fn.foldclosed(13))
         D.drain(doc);F.flush(buf)
         assert.equals(1,vim.fn.foldlevel(13));assert.equals(-1,vim.fn.foldclosed(13))
     end)
