@@ -335,3 +335,16 @@ assertions: a plain streamed append and ordinary human edits remove no native fo
 (`removed==0`, via the reconcile notify). Folding a block as the writer writes it moves
 to #290 (now depends on #264 M1).
 
+### 2026-09-27 — M1 Task 1: continuity spec (red)
+
+`tests/integration/document_fold_continuity_spec.lua`: 23 red, 8 green.
+- Red with "row N opened at step 3" (the flicker): summary and thinking blank matrix
+  (12), second exchange, Backspace at column 0 under a summary and a thinking block, `J`
+  and Delete at end of line on the summary row (confirming review round 2's join
+  finding with real keys), all three streaming appends, and typing or Enter in a
+  question.
+- Red with "reconcile must report removed" (zero-touch counters not implemented yet):
+  thinking and summary appended below a closed summary (its fold never opened; only the
+  counter is missing).
+- Green controls: the tool-pair blank matrix (6; no uncertainty) and both edge cases.
+
