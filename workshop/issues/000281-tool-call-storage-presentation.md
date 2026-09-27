@@ -1,11 +1,12 @@
 ---
 id: 000281
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-26
-updated: 2026-09-26
+updated: 2026-09-27
 estimate_hours:
+started: 2026-09-27T11:38:12-07:00
 ---
 
 # Rethink tool-call storage and streaming presentation
