@@ -131,6 +131,18 @@ local function clear_uncertainty(s)
     if not scope then discard_uncertainty(s);return false end
     if s.uncertainty_cleared then return false end
     local job=s.uncertainty
+    -- #264: below the suspension threshold, uncertainty removes no native fold.
+    -- Parley owns every fold and Neovim carries folds with their text, so the
+    -- old folds stay stable until the confirmed projection is ready; the diff
+    -- reconcile then changes only what differs. Clearing here, a turn before
+    -- any replacement existed, is what made closed folds blink open.
+    local first=math.max(scope.first,s.owned_first or scope.first)
+    if not job and scope.last-first<=INTERACTIVE_ROWS then
+        s.first=math.min(s.first or first,first)
+        s.last=math.max(s.last or scope.last,scope.last)
+        s.uncertainty_cleared=true
+        return false
+    end
     if not job then
         job={first=math.max(scope.first,s.owned_first or scope.first),last=scope.last,windows={},index=1}
         for _,win in ipairs(vim.fn.win_findbuf(s.buf)) do

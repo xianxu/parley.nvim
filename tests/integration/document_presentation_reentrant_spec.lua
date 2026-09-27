@@ -118,7 +118,9 @@ describe('native presentation publication ownership',function()
         assert.is_true(result.edited);assert.equals('idle',result.second);assert.equals(1,result.level)
     end)
 
-    it('restores operator state when native uncertainty clearing is superseded',function()
+    -- #264: below the suspension threshold uncertainty no longer clears folds, so
+    -- the superseded native slice is now the reconcile's inventory walk.
+    it('restores operator state when a native reconcile slice is superseded',function()
         local result=exec([[
             local D=require('parley.document');local F=require('parley.tool_folds')
             local buf=vim.api.nvim_get_current_buf()
@@ -130,6 +132,7 @@ describe('native presentation publication ownership',function()
             vim.api.nvim_create_autocmd('OptionSet',{pattern='foldenable',callback=function()
                 if not edited then edited=true;vim.api.nvim_buf_set_text(buf,5,0,5,1,{'p'})end
             end})
+            D.drain(doc,1000)
             F.flush(buf,10)
             return {edited=edited,enabled=vim.wo.foldenable,before=before,view=vim.fn.winsaveview()}
         ]])

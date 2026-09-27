@@ -96,7 +96,7 @@ pass unchanged; if a work-count assertion changes, log why.
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `FoldDiff` | `lua/parley/fold_diff.lua` | new |
+| `diff` (FoldDiff) | `lua/parley/fold_diff.lua` | new |
 
 - **FoldDiff** — given the *existing* native folds in a span
   (`{start_0,end_0,open,nested}`) and the *desired* ranges (`{start_0,end_0,identity}`),
@@ -116,7 +116,8 @@ pass unchanged; if a work-count assertion changes, log why.
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `fold_native.walk` | `lua/parley/fold_native.lua` | new (moved from `tool_folds.clear_folds_in_span`) | Neovim native manual folds (VimL walk) |
+| `fold_native.walk` (`walk`) | `lua/parley/fold_native.lua` | new (moved from `tool_folds.clear_folds_in_span`) | Neovim native manual folds (VimL walk) |
+| `valid_target`, `restore_window` | `lua/parley/fold_native.lua` | modified (moved from `tool_folds.lua`, now exported for it) | window/buffer validity; per-slice view and `foldenable` restore |
 | `apply` (phases) | `lua/parley/tool_folds.lua` | modified | native fold commands |
 | `clear_uncertainty` | `lua/parley/tool_folds.lua` | modified | native fold commands |
 | `Deps:prune_from` / `Deps:install` | `lua/parley/document/dependencies.lua` | new | dependency index (persistent trees) |

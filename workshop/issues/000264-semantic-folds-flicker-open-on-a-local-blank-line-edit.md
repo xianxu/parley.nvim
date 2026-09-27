@@ -371,3 +371,31 @@ to #290 (now depends on #264 M1).
 - Remaining red: Delete at end of the summary row, which opens at step 1
   (`clear_uncertainty`'s eager clear); Task 4.
 
+### 2026-09-27 — M1 Task 4: uncertainty does no native work (below 50k rows)
+
+- `clear_uncertainty` now only widens the repair scope below `INTERACTIVE_ROWS`; the
+  path above the threshold is unchanged.
+- **Harness fix, found by mutation:** with the eager clear restored, the continuity spec
+  stayed 31/31 green, because `repair()` drained the document before stepping folds,
+  which hid the uncertainty window. It now interleaves one document repair step with
+  one fold step, as the scheduled callbacks do. With that, restoring the eager clear
+  turns 22 cases red ("opened at step 1"); the fix is 31/31.
+- **Test correction:** Delete at end of the summary row. `A<Del><Esc>` on a closed fold's
+  line opens it in stock Neovim with no parley loaded, so that's the user opening it,
+  not flicker. The case now asserts repair leaves it a fold, open, with nothing removed.
+- **Tests that pinned the old eager clear, changed to the new invariant** (the approved
+  design): `document_folds_spec` "clears affected folds while uncertain" now keeps
+  them through uncertainty and removes them once settled; "restores open suffix folds
+  after uncertainty" now keeps them, open, through it; `document_fold_join_spec`'s
+  deferred join asserts the fold survives (`foldlevel==1`); and
+  `document_presentation_reentrant_spec`'s superseded-slice case now drives the
+  reconcile's inventory slice (still asserting that foldenable and the view are restored
+  and the edit happened).
+- Plan Core-concepts table names `diff`, `walk`, `valid_target` and `restore_window` (the
+  arch single-source test).
+- `make test`: first run, 4 files red. Two were the arch table and the reentrant test
+  (fixed above). Two heavy files (`perf_ownership`, `document_fold_batches`) died
+  mid-file under 8-way parallel load. Standalone they pass, and they're faster on the
+  branch than on the base (fold_batches 83s → 28s, perf_ownership 33s → 25s: unchanged
+  folds are no longer deleted and recreated). Rerun: `make test` rc=0, 395/395 files.
+

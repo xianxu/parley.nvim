@@ -47,16 +47,25 @@ describe('fold continuity across repair',function()
     end
     -- Steps repair to idle, asserting after every step that each watched row
     -- is inside a closed fold. Returns the reconcile totals for zero-touch checks.
+    -- Document repair and fold repair interleave one step at a time, as their
+    -- scheduled callbacks do in the editor. Draining the document first would
+    -- hide the uncertainty window this spec exists to observe.
     local function repair(watch)
-        D.drain(doc,100000)
-        for step=1,500 do
-            local status=F.step(buf)
+        local function check(step)
             for _,row in ipairs(watch) do
                 assert.are_not.equals(-1,vim.fn.foldclosed(row),('row %d opened at step %d'):format(row,step))
             end
-            if status=='idle' then break end
-            if status=='pending' then D.drain(doc,100000) end
         end
+        local folds,document='more','more'
+        for step=1,2000 do
+            if folds~='idle' then folds=F.step(buf);check(step) end
+            if document~='idle' then document=D.repair_step(doc).status;check(step) end
+            if folds=='idle' and document=='idle' then
+                folds=F.step(buf);check(step)
+                if folds=='idle' then break end
+            end
+        end
+        assert.equals('idle',folds);assert.equals('idle',D.drain(doc,100000).status)
     end
     local function totals()
         local removed,created=0,0
@@ -121,11 +130,17 @@ describe('fold continuity across repair',function()
             oracle()
             local removed=totals();assert.equals(0,removed)
         end)
+        -- Editing on a closed fold's own line opens it: that's Neovim itself
+        -- (reproduced with no parley loaded), i.e. the user opening it. Repair
+        -- must then leave it exactly as the user left it: still a fold, still
+        -- open, and no fold removed.
         it('Delete at end of the summary row',function()
             open(lines);closed({4})
             keys(4,0,'A<Del><Esc>')
-            repair({4})
+            assert.equals(-1,vim.fn.foldclosed(4))
+            repair({})
             oracle()
+            assert.equals(1,vim.fn.foldlevel(4));assert.equals(-1,vim.fn.foldclosed(4))
             local removed=totals();assert.equals(0,removed)
         end)
     end)
