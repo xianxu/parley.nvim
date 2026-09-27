@@ -4,82 +4,134 @@ file: basics.md
 tags:
 ---
 
+@@More Basics@@
 # A Bit More Basics
 
 You can use Parley as a collection of conversations, and branch a conversation
-when you want to explore a side question. Let's practice with this chat.
+when you want to drill in. Let's practice with this chat.
 
-Press `ESC` before trying each shortcut below. `ctrl+g` then `f` means hold
-Control and press g, release both keys, then press f. Option is the Alt key
-on a Mac keyboard.
+> In you are new to VIM, remember the check what mode you are in at button left
+> corner. In ./welcome.md, we covered NORMAL, INSERT, COMMAND modes.
 
 ## About these filenames
 
 This lesson is `basics.md`; the first lesson is `welcome.md`. These tutorial
 files have stable names so they are easy to recognize and refer to.
-Ordinary new chats use a timestamp followed by a topic slug in their filename,
-so separate conversations can have the same topic without sharing a file.
-Chat Finder shows the topic from the header, such as "2. A Bit More Basics".
-Changing this tutorial's topic does not rename `basics.md`.
+Ordinary new chats use a time stamp followed by a topic slug as file name.
 
 ## 1. Find your chats
 
-Chat Finder searches your saved conversations, so you do not need to remember
-which file you put something in.
+Chat Finder helps you search past conversations.
 
-1. Press `ctrl+g` then `f`, or run `:ParleyChatFinder`.
-2. Type `Welcome`, select "1. Welcome to Parley", and press Return to open it.
-3. Open Chat Finder again, type `Basics`, and return to this chat.
+1. Press `option+f`
+2. Use Up/Down arrow key to select. You can also select using mouse.
+3. Or type `Welco` to filter down based on file name.
+4. Press `return` to open the file. Mouse double click also works. 
+5. Then open Chat Finder (`option+f`) again, select `Basics` to return to here.
 
-For a new conversation, press `ctrl+g` then `c`, or run `:ParleyChatNew`.
-Parley autosaves your edits about a second after you leave INSERT mode.
-Press `ESC` when you finish typing; `:w` is optional for saving immediately.
+## 2. Create a chat
 
-## 2. Navigate with the outline
+Use `option+n` to create a new Parley conversation. Parley autosaves your edits
+about a second after you leave INSERT mode. You can always save using `:w`
+command in NORMAL mode.
 
-A long conversation is easier to explore with an outline. In chats it lists questions,
-linked branches, and named outline markers. Markdown headings appear in the
-outline for ordinary Markdown files, but not chat transcripts.
+@@Navigate with outline@@
+## 3. Navigate with the outline
 
-1. Press Option+t, or run `:ParleyOutline`.
-2. Type `Try it`, select that marker, and press Return to jump there.
-3. Send the question below with Option+Enter and wait for the answer.
+It is easier to explore a long conversation with `outline`. In chats it lists 
+questions, linked branches, and named outline markers. 
+
+1. Press option+t to open outline.
+2. Select the marker "→Try it", press `return` or double click with mouse.
+3. Send the question below it with `option+return` and wait for the answer.
 4. Open the outline again to find your question or return to another section.
 
-The outline also works across linked chat branches, so it can help you return
-to the main conversation after following a side topic.
+@@How to Tag@@
 
-## 3. Explore a side question with a branch
+You can take with @@tag@@ at start of a line to create a short cut in the
+outline. Those tags help you navigate. A particular kind of tag right before
+a question: @@_@@ hides the question from outline.
 
-A branch is a separate chat linked to the current one. Use it when an answer
-raises an interesting question and you want to explore it without losing your
-place in the main discussion.
+Try to use `option+t` outline to navigate around.
+
+@@Exploring with branches@@
+## 4. Explore a side question with a branch 🌿:
+
+A branch 🌿: is a separate chat linked to the current one. Use it when answers
+raise more questions and you want to explore them without losing your place in 
+the main thread. This is a core Parley function.
 
 After sending the rainbow question below, try this:
 
-1. Press `ESC` and move the cursor to the part of the answer you want to explore.
-2. Press `Option+i`, or `ctrl+g` then `i`. Parley creates and opens a linked chat.
-3. The child opens ready for typing. Type a follow-up after its question marker,
-   for example: "Why do different colors bend by different amounts?"
-4. Send with `Option+return`. You can keep asking questions in this branch.
-5. Press `Option+t` to open the outline and select an item in "2. A Bit More
-   Basics" to return to the main chat.
+1. Read the answer, and find where you have more questions. Or just take the
+   side questions AI *should* suggest. 
+2. Select the text where you have question, or just select the AI suggested
+   side question.
+3. Press `option+i`. Parley creates and opens a linked chat with selected text
+   as part of questions. If no text is selected, the linked chat is inserted in
+   the next line. 
+4. The child opens ready for your question with previous selected text quoted.
+5. Send with `option+return`. You can keep asking questions in that branch, 
+   or further branching out from that branch.
+6. Press `option+t` to open the outline, and you can come back here by selecting
+   "→Exploring with branches". 
 
 The main chat keeps a branch link marked with a leaf. Put the cursor on that
-link and press `Option+o` to open the child again. You can also find either chat
-through Chat Finder.
+link and press `option+o` to open the child again. In the child chat, a back
+link to parent chat is automatically inserted when a branch is created.
 
-Later, try selecting a phrase in an answer with your mouse, then pressing `Option+i`.
-Parley uses that selection to start a branch asking for more about the phrase.
-
-Continue with [3. Advanced](./advanced.md) for project folders, local tools,
-transcript context, and pasting images. Remember alternatively, `Option+o`
+Continue with [3. Advanced](advanced.md) for project folders, local tools,
+transcript context, and pasting images. Remember alternatively, `option+o`
 over ./advanced.md opens it as well.
 
 @@Try it@@
 
-Place the cursor on the question below and press Option+Enter. You can replace
-it with a subject you are curious about: this is your editable conversation.
+Place the cursor on the question below and press `option+return`. You can replace
+it with a subject you are curious about: this is your editable conversation. 
+`option+return` on a question already with answer, like the following one, will
+ask AI to answer that single question again, replacing existing answer.
 
-💬: How does a rainbow form? Give me a short explanation and suggest one
-interesting side question I could explore in a separate chat.
+💬: How does a rainbow form? Give me a short explanation and suggest two
+interesting side questions I could explore in a separate chat.
+
+🤖:[gpt-5.6-terra*]
+
+### Plan
+- Explain the three key optical steps concisely: refraction, reflection, and color separation.
+- Suggest two focused questions that build naturally from the explanation.
+
+A rainbow forms when sunlight enters water droplets in the air. The light **bends** as it enters, **reflects** off the droplet’s inner surface, and bends again as it leaves. These bends separate white sunlight into its component colors, creating the familiar arc when the Sun is behind you and rain is in front of you.
+
+Two side questions:
+1. [🌿:Why do rainbows appear as arcs, and can you ever reach the end of one?](2026-09-25.23-31-14.108_why-do-rainbows-appear-as.md)
+2. How do double rainbows form, and why are their colors reversed?
+
+📝: you asked about how rainbows form and requested two side questions, I answered with the roles of refraction, internal reflection, and dispersion, plus questions about color order and double rainbows
+
+💬: what determines the width of each color band in a rainbow? is it always fixed proportion? for example how big is the red band vs yellow band. 
+
+🤖:[gpt-5.6-terra*]
+The color-band widths are **not fixed proportions** in a strict sense.
+
+For the primary rainbow, each color exits raindrops at a slightly different angle because water bends different wavelengths by different amounts:
+
+- **Red** is seen at about **42°** from the antisolar point.
+- **Violet** is seen at about **40°**.
+- So the entire visible primary rainbow is roughly **2° wide** in angular radius.
+
+The bands do not have sharp physical boundaries. Sunlight contains a continuous spectrum, but our eyes and brain divide it into named colors—red, orange, yellow, and so on. That means asking for “the width of yellow” requires choosing an arbitrary wavelength range for yellow.
+
+A useful approximation is that colors are distributed unevenly across the rainbow because water’s refractive index changes unevenly with wavelength. **Blue and violet tend to be spread over a somewhat larger angular range per unit of wavelength than red**, but the apparent widths also depend on:
+
+- the size distribution of raindrops (small drops blur colors),
+- the Sun’s apparent size,
+- overlapping light from neighboring wavelengths,
+- atmospheric haze and your visual perception.
+
+So: the **red-to-violet angular span is fairly stable** for ordinary water droplets, but the perceived width of each named color band is not universally fixed.
+
+📝: you asked what determines rainbow color-band widths and whether their proportions are fixed; I explained that wavelength-dependent refraction sets a roughly 2° red-to-violet span, while individual named bands have non-fixed, perception- and conditions-dependent widths.
+
+💬:
+
+

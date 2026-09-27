@@ -1,42 +1,43 @@
 ---
-topic: 3. Advanced
+topic: 3. Advanced Topics
 file: advanced.md
 tags:
 ---
 
-# Advanced
+# Advanced Topics
 
 Parley keeps your conversation in an editable document. This lesson explains
 what the AI sees, how to navigate a growing conversation, and how to use a
 project folder for chats, notes, and images.
 
-Like `welcome.md` and `basics.md`, this tutorial has a stable filename.
-Chat Finder displays its topic, "3. Advanced".
+Like `welcome.md` and `basics.md`, this tutorial has a stable file name.
+Chat Finder displays its topic, "3. Advanced Topics".
 
 ## 1. Transcripts, turns, and what the AI sees
 
-A transcript is the record of a conversation. A question after the speech-bubble
-marker and the answer after the robot marker form an exchange. Each message
-sent or received is a turn. You can edit earlier text and ask again.
+A transcript is the record of a conversation. A question after the 💬: marker 
+and the answer after the 🤖: marker form an exchange. Each message sent or 
+received is a turn. You can edit earlier text and ask again.
 
 Sending does not upload the entire file unchanged. Parley builds a request from
 the question at your cursor and the relevant conversation leading up to it,
-including earlier answers. It also supplies the selected system instructions
-and any included file contents, images, or tool results needed for that request.
-Later questions below the selected exchange are not future knowledge for the AI.
+including earlier questions and answers. It also supplies the selected system
+instructions, any included file contents, images, or tool results needed for
+that request. When the question asked is in a branched chat, all the exchanges 
+on the path from that question to the root of the first question are included.
 
 The text before the first question is not sent. That is why these tutorial
-instructions can live above a real question without becoming part of it.
+instructions live above the first question without becoming part of it
+conversation. The span before first question can be used for Markdown style
+notes.
 
 A line beginning with the lock marker is a local note, excluded from the chat
-text sent to the model. For example:
+text sent to the model, even if that line appears in the question/answer
+exchange. For example:
 
-    🔒: Remember to check this answer with my teacher.
-
-Only that line is excluded. The lock does not hide the following paragraph.
-Put the marker on each line you want kept out of the conversation context.
-It is not encryption: the note is still in the local Markdown file, and asking
-a file-reading tool to read that file can return its contents.
+@@Private notes@@
+🔒: Remember to check this answer with my teacher; this is not included in
+🔒: AI conversation.
 
 Editing the transcript changes what a later request can see; it does not erase
 anything already sent to a provider. Use a fresh chat when you want a new topic
@@ -44,30 +45,36 @@ without the preceding conversation.
 
 ## 2. Outline, branches, and markers
 
-Press Option+t or run `:ParleyOutline`. The chat outline includes questions,
-outline markers, and branches across the linked tree. Selecting a branch opens
-its child file at the start; selecting a question or marker jumps to its line. A branch lets you explore a side question separately
-while keeping a link back to the main conversation.
+Press `option+t`. The chat outline includes questions, outline markers, and 
+branches across the linked tree of chat. Selecting a branch opens its child 
+file at the start; selecting a question or marker jumps to that line. A branch 
+lets you explore a side question separately while keeping a link back to the
+main conversation.
 
-You can also put an outline marker on its own line, using `@@tag@@` syntax:
+You can also put an outline marker using `@@tag@@` syntax, at a new line.
 
 @@Rainbow research@@
 
 Open the outline now and look for "Rainbow research". This is a navigation
 marker, not the `tags:` metadata at the top of the file.
 
-The same `@@...@@` syntax can refer to a local file for context. Use a descriptive
-label for an outline marker; use a real path only when you mean to reference a
-file. Markdown headings can label sections visually, but they are not chat-outline entries.
-
-To make a branch, put the cursor where it belongs and press Option+i. Type and
-send your side question in the new chat. Option+t helps you return to the main
-thread. Option+o follows a branch link or an ordinary Markdown navigation link.
+The same `@@...@@` syntax can refer to a local file for context. Use a 
+descriptive label for an outline marker; use a real path only when you mean to
+reference a file. 
 
 ## 3. A project folder: repo mode
 
-A project folder gives related chats and working files one home. To try it,
-close Parley, then run these commands in your terminal:
+When Parley is first installed, all chats created are at a common global 
+folder. For advanced users who want to control more precisely where files 
+are placed, enter the `repo mode`. 
+
+A `repo`, or repository, is just a folder with a marker file `.parley` at its
+root. When `parley` command is started from such a directory or its sub-
+directories, chats go in `workshop/parley/` inside this folder. This folder
+can be put in source control systems such as git, thus becomes a repository 
+of your chats. This is also the origin of the `repo mode`.
+
+To try it, close Parley, then run these commands in your terminal:
 
 ```sh
 mkdir -p ~/parley-practice
@@ -75,75 +82,48 @@ cd ~/parley-practice
 touch .parley
 parley
 ```
-
-The `.parley` file marks this directory as a Parley project. You do not need
-a Git repository or a configuration file. Project chats go in
-`workshop/parley/` inside this folder. Use `ctrl+g` then `c` to start a chat there.
-
-In repo mode, the repo root is the directory containing `.parley`. File paths
-in requests to the AI's file tools are relative to that root:
-
-- `notes.md` means `~/parley-practice/notes.md`.
-- `research/rainbows.md` means `~/parley-practice/research/rainbows.md`.
-- `workshop/parley/` is the project's chat directory.
-
-The chat being inside `workshop/parley/` does not move that base directory.
-Ordinary Markdown navigation links follow document-relative rules instead:
-`[Basics](./basics.md)` points beside the file containing the link.
+One advanced topic is that by default, `Parley` is granted access to all files
+in the repository, in `repo mode`. 
 
 ## 4. Local files as working material
 
 Your chats are local Markdown files. Notes and other project files can be read
-by you, by an editor, and by Parley's file tools. This lets a conversation produce
-something useful beyond an answer on screen.
+by you, by an editor, and by Parley's local tools. This gives a conversation 
+additional context of those files, and lets a conversation produce something
+useful beyond an answer on screen. You can ask AI to for example: 
 
-In your project chat, try asking:
+  "Can you summarize what we talked about rainbows in research/rainbow.md?"
 
-> Create `research/rainbows.md` with a short explanation and three questions
-> I could investigate. Then read the file back and tell me where it was saved.
-
-The app provides file reading, directory listing, search, writing and editing
-without a configuration step. In repo mode, default tool access stays inside
-this project. Neighboring projects are not included automatically. Outside repo
-mode, the chat's own directory is the base for file tools.
-
-Local storage does not mean a local AI model. Text and images sent in requests,
-including file contents returned by tools, go to your selected provider.
+Parley will be able to generate that file, and summarize based on the 
+conversation history.
 
 ## 5. Local tool calls and searching past chats
 
-The model cannot inspect your disk just by thinking about it. It can request a
-tool call; Parley runs the tool locally and returns the result to the model.
-You can see tool calls and results in the transcript, marked with the wrench
-and paperclip symbols.
+Parley support local memory through the same mechanism. Your chat history are
+stored as files on your computer. When you ask: "did you remember the time
+we talked about rainbow?", AI works with Parley to search your local files 
+for such a conversation. Your AI becomes personal this way, and you have full
+control of it.
 
-For example, ask: "What did we discuss about rainbows in this project? Search
-our saved chats and point me to the matching conversation."
-
-The `chat_history_search` tool searches saved chat text for words or patterns.
-It returns matching excerpts and file references from allowed chat folders;
-the AI uses those results to answer. It is not perfect recall, so a specific
-keyword helps. In repo mode, the default search scope stays in this project.
-
-This search is different from automatically generated memory summaries or
-preference profiles. Those automatic memory features remain off in the app.
-You can still ask it to search previous chats whenever you need them.
+With such local tool call mechanism, Parley gain agentic capabilities. Though
+Parley foremost stays a research tool, not intended for full agentic workflows.
 
 ## 6. Paste an image into a question
 
-Start a new chat with `ctrl+g` then `c` for this exercise. New chats have a unique
-timestamp that also identifies their attachment folder.
+A picture is worth a thousand words, oftentimes it is easier to ask the AI
+about things by sending question with a picture. Parley support this workflow,
+try the following:
 
-1. Copy an image to the clipboard, such as a screenshot or a diagram.
-2. In the new chat, type a question: "Explain what this diagram shows."
-3. Put the cursor in that question and press Option+v.
+1. Copy an image to the clipboard, such as a screenshot or a diagram. On Mac
+   you can do this easily with `shift+control+command+4` then drag select.
+2. Type a question: "Tell me what's in the picture".
+3. Put the cursor in that question and press `option+v`.
 4. Parley saves the image and inserts a Markdown image link into the question.
-5. Choose a model that supports images, then press Option+Enter to send.
+5. Choose a model that supports images, then press `option+return` to send.
 
-The image is stored beside the chat under `assets/<chat-id>/`, not merely kept
-in the clipboard. Keep the chat and its linked assets together when moving or
-sharing them. Pasting attaches the image locally; sending the question submits
-the included image to the selected provider.
+The image is stored beside the chat under `assets/<chat-id>/`. Pasting attaches
+the image locally; sending the question submits the included image to the 
+selected AI provider.
 
 `:MarkdownPreview` opens a browser preview of the Markdown, including images.
 `:MarkdownPreviewStop` stops the preview. You can keep editing in Parley.

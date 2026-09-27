@@ -7,24 +7,33 @@ tags:
 # Welcome to Parley
 
 Parley is a chat workspace built on Neovim. This Markdown document is your
-transcript. You ask questions after 💬:; the AI answers after 🤖:.
-Everything is editable.
+transcript. You ask questions after 💬: - the AI answers after 🤖:.
 
-VIM crash course:
-1. `ESC` to enter NORMAL mode, where you press `:` to issue commands, like
-   `:ParleyProxy connect` and press `return` key.
-2. `i` to enter INSERT mode at current cursor, and you can then just type.
-3. To exit, be in NORMAL mode (so `ESC`), then issue command `:q` and `return`.
+For those new to VIM, a crash course:
+1. Press `ESC` to enter **NORMAL** mode, where pressing key moves cursor instead
+   of inserting text. When in NORMAL mode, press `:` to enter i**COMMAND** mode.
+2. Press `i` to enter **INSERT** mode at current cursor, then just type text in.
+3. To exit parley, in NORMAL mode (so `ESC`), issue command `:q` and `return`.
 
-To start chatting, connect an AI account:
+For VIM users, all the usual keybindings work the same. You may also want to
+install the parley.nvim plugin within your own Neovim configurations.
+
+To start chatting, connect an AI account. You need a paid subscription.
 
 1. Connect a provider when prompted. You can also run `:ParleyProxy connect`.
-2. Choose a model when the picker opens, or use `:ParleyAgent`.
+2. Choose a model when prompted, or use `:ParleyAgent`.
 3. Press `i` to type after the question marker 💬: below.
-4. Press Option+Enter to send. `:ParleyChatRespond` also works.
+4. Press `option+return` to send. `:ParleyChatRespond` also works.
 
-To learn more: press `ctrl+g` then `f`, and select chat [Basics](./basics.md).
-You can also navigate to that file by putting cursor on ./basics.md, and press
-`Option+o`.
+Parley packages its own help and allow AI to query it through what's called a
+tool call. That's why you can just ask in Parley, about how to use Parley!
 
-💬: Hello! What is Parley, and How do I use it?
+To learn more: press `option+f`, select next chat: [Basics](basics.md). You 
+can also navigate to that file by putting cursor on ./basics.md, and press
+`option+o`.
+
+One last thing: try command `:ParleyTheme` (in NORMAL mode), to switch to a
+theme you love!
+
+💬: Hello! What is Parley, and How do I use it? Keep it concise.
+
