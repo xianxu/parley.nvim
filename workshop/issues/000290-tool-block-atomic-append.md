@@ -8,6 +8,7 @@ updated: 2026-09-27
 estimate_hours:
 card_mirror: '682ed7ad110ba323ef797dfc4f705b6609e7ad6c' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-27T15:41:00-07:00
+flow: {kind: quick, provenance: inferred, spec: "0f28dc1a", done: "721b50ab"}
 ---
 
 # Write each tool block in one append during streaming; fold tool blocks and summaries as written
