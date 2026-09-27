@@ -224,8 +224,8 @@ M.confirmed=M.is_confirmed
 -- The one constructor for the restart evidence `after_splice` consumes (#264):
 -- every builder goes through here, so a field `after_splice` reads can't be
 -- missing from one of them.
-local function splice_evidence(worker,w,restart,checkpoint,fallback,active_scope,status)
-    local token={status=status or (fallback and 'budget' or 'ready'),restart_row=restart,budget_exhausted=fallback or false}
+local function splice_evidence(worker,w,restart,checkpoint,fallback,active_scope)
+    local token={status=fallback and 'budget' or 'ready',restart_row=restart,budget_exhausted=fallback or false}
     evidence_store[token]={worker=worker,restart=restart,checkpoint=checkpoint,serial=w.serial,fallback=fallback or false,
         active_scope=active_scope}
     return token

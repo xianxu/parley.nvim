@@ -120,6 +120,43 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: false
+    - "n": 4
+      timestamp: "2026-09-27T15:20:39-07:00"
+      agent: claude
+      dispose:
+        - id: BR-6
+          disposition: not-addressed
+          note: Code fix present (fold_native.lua:105,176) but untested; Log claims no deterministic trigger, yet foldminlines=1 plus a one-row fold (3,3fold) makes zC fail deterministically (verified headless). Add that fold_native_spec case.
+          round: 4
+        - id: BR-7
+          disposition: addressed
+          note: tool_folds.lua:139 computes first once; job.first=first at :147 (pure refactor, no behaviour change).
+          round: 4
+        - id: BR-8
+          disposition: withdrawn
+          note: 'Accepted in the Log (M1 review minors item 3): same reach as the pre-#264 clear walk, not a regression; a re-plan converges.'
+          round: 4
+        - id: BR-9
+          disposition: addressed
+          note: splice_evidence (semantic.lua:227) is the sole evidence_store writer (:229); before_splice, before_fragment normal and after_fragment local restart all use it.
+          round: 4
+        - id: BR-10
+          disposition: addressed
+          note: Plan deviation (prune_from without before_rank) is logged in the issue M2 review entry with its reason.
+          round: 4
+        - id: BR-11
+          disposition: addressed
+          note: document_semantic_spec guard test; reverting the guard at semantic.lua:531 in a scratch copy turns it red (21/22).
+          round: 4
+      findings:
+        - id: BR-12
+          severity: Minor
+          title: splice_evidence takes a status parameter no caller passes
+          detail: 'semantic.lua:227: every caller passes nil, so status is always derived from fallback. Drop the parameter so the constructor''s surface matches its use.'
+          family: preserved-path-underspecified
+          round: 4
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#264 (boundary-review)
@@ -176,11 +213,23 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-11** [Minor] `guard-branch-untested` No test reaches after_fragment's failing guard branch (index changed since prune)
   semantic.lua:519 falls back to row 0 when w.deps or its roots changed. No fixture mutates the index between before_fragment and after_fragment, so the guard is defensive and unexercised. A unit test that calls deps:add between the two calls would pin it.
 
+## Round 4 — 2026-09-27T15:20:39-07:00 (claude) — passed
+
+### Disposed
+
+- BR-6 — not-addressed — Code fix present (fold_native.lua:105,176) but untested; Log claims no deterministic trigger, yet foldminlines=1 plus a one-row fold (3,3fold) makes zC fail deterministically (verified headless). Add that fold_native_spec case.
+- BR-7 — addressed — tool_folds.lua:139 computes first once; job.first=first at :147 (pure refactor, no behaviour change).
+- BR-8 — withdrawn — Accepted in the Log (M1 review minors item 3): same reach as the pre-#264 clear walk, not a regression; a re-plan converges.
+- BR-9 — addressed — splice_evidence (semantic.lua:227) is the sole evidence_store writer (:229); before_splice, before_fragment normal and after_fragment local restart all use it.
+- BR-10 — addressed — Plan deviation (prune_from without before_rank) is logged in the issue M2 review entry with its reason.
+- BR-11 — addressed — document_semantic_spec guard test; reverting the guard at semantic.lua:531 in a scratch copy turns it red (21/22).
+
+### Raised
+
+- **BR-12** [Minor] `preserved-path-underspecified` splice_evidence takes a status parameter no caller passes
+  semantic.lua:227: every caller passes nil, so status is always derived from fallback. Drop the parameter so the constructor's surface matches its use.
+
 ## Open findings
 
 - **BR-6** [Minor] `walk-early-exit-reports-done` fold_native inventory can break on zC failure yet report done=true, truncating the inventory
-- **BR-7** [Minor] `duplicated-expression` clear_uncertainty computes first then recomputes the same expression for job.first
-- **BR-8** [Minor] `stale-inventory-guard-precision` reconcile removal guard checks foldlevel at the start row only, not the inventoried extent
-- **BR-9** [Minor] `reuse-existing-helper` evidence_store entries are hand-built at three sites; one constructor should own the shape after_splice reads
-- **BR-10** [Minor] `preserved-path-underspecified` prune_from in before_fragment omits the before_rank the plan specified; the deviation is unlogged
-- **BR-11** [Minor] `guard-branch-untested` No test reaches after_fragment's failing guard branch (index changed since prune)
+- **BR-12** [Minor] `preserved-path-underspecified` splice_evidence takes a status parameter no caller passes

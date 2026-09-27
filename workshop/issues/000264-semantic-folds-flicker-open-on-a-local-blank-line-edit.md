@@ -1,6 +1,6 @@
 ---
 id: 000264
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-16
@@ -8,6 +8,7 @@ updated: 2026-09-27
 estimate_hours: 3.71
 started: 2026-09-27T11:51:45-07:00
 flow: {kind: full, provenance: inferred}
+actual_hours: 2.46
 ---
 
 # Semantic folds flicker open on a local blank-line edit
@@ -129,6 +130,8 @@ Durable plan: `workshop/plans/000264-semantic-fold-flicker-plan.md`.
 
 
 
+
+- 2026-09-27: closed — M1+M2 shipped (both milestone reviews SHIP). continuity spec 31/31 incl. interleaved doc+fold steps (eager-clear mutation turns 22 red); extent spec 5/5 with cold-parse equality; fold_diff property test; fold_native, dependencies and semantic guard unit tests; make test fully green twice (395 and 396 files), other runs only load flakes in unrelated files that pass standalone (document_retention 5/5 branch and main); scale case 401->10 repair steps; per-key 0.50->0.48 ms; operator smoke test in parley_app passed (typing a question no longer blinks the last summary; main does); review verdict: SHIP
 - 2026-09-27: closed M2 — extent spec 5/5 incl. cold-parse equality (3 red before; disabling local restart turns 3 red); dependencies prune_from/install unit tests; make test rc=0 396/396; scale case uncertain {0,241}->{235,241}, 401->10 repair steps; per-key typing 0.50->0.48 ms (no regression); operator smoke test in parley_app passed; review verdict: SHIP
 - 2026-09-27: closed M1 — continuity spec 31/31 (asserts after every interleaved document+fold repair step; red 23/31 before, eager-clear restore turns 22 red); fold_diff property test 200 seeds + 3 mutations red; fold_native inventory unit tests; make test rc=0 395/395 files; heavy fold specs faster (fold_batches 83s->28s); review verdict: SHIP
 ### 2026-09-16
