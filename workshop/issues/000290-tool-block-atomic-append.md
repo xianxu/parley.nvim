@@ -77,13 +77,14 @@ consumer then has to tolerate.
   probing `foldclosed` right after the write (before any fold repair step) reads closed;
   and after settling, #264's reconcile reports `removed==0`/`created==0` for them (the
   writer's fold matched the projection exactly).
+- A streamed tool call is folded in the write turn even when prose precedes it, for the
+  first call of every round (revised 2026-09-27, BR-1).
 - A streamed summary is folded closed from the turn its `📝:` prefix lands (probe
   `foldclosed` on that row after the write, before any repair step), including when the
   prefix arrives split across two writes, and stays closed while the rest of the line
-  streams. After settling, the reconcile reports `removed==0` for a one-line summary and
-  reshapes (not reopens) a multi-line one.
-- A `📝:` inside a fenced code block in the answer is folded by the writer and then
-  removed by the reconcile (the settled oracle has no fold there).
+  streams. After settling, the writer's summary folds equal the parser oracle's and the
+  reconcile removes and creates nothing (revised 2026-09-27: the parser folds only the
+  marker row, and folds a `📝:` row inside a code fence too; see Revisions).
 - Streamed prose still writes in 4096-byte slices (regression test).
 - A timing of a 512 KB result append is recorded in the Log.
 - Existing streaming, stop-generation and tool-fold suites stay green.
