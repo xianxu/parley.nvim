@@ -448,6 +448,7 @@ atlas:
       - tests/unit/fold_diff_spec.lua
       - lua/parley/fold_diff.lua
       - lua/parley/fold_native.lua
+      - tests/unit/fold_native_spec.lua
       - tests/integration/document_fold_native_spec.lua
       - tests/integration/document_folds_spec.lua
       - tests/integration/highlighter_document_spec.lua

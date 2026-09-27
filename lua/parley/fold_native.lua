@@ -25,13 +25,18 @@ function M.restore_window(buf,win,enabled,view,owner)
     if not ok then error(err,0) end
 end
 
-function M.walk(buf, win, first_0, last_0, command_limit, remember, current, owner)
+-- mode 'delete' (default) removes every fold group in the span with zD.
+-- mode 'inventory' changes nothing and returns each top-level group as
+-- {start_0,end_0,open,nested} (#264): the outer fold's open state is preserved;
+-- a nested group's inner folds are not (FoldDiff always recreates nested groups).
+function M.walk(buf, win, first_0, last_0, command_limit, remember, current, owner, mode)
+    mode = mode or 'delete'
     -- Reset first: an early return must not leave a previous call's count
     -- readable as if it described this one.
     M.last_iters = nil
     if not valid_target(buf, win) then return end
     if first_0 == nil or last_0 == nil or last_0 < first_0 then return end
-    local next_row,done
+    local next_row,done,folds
     local tick=vim.api.nvim_buf_get_changedtick(buf)
     local owner_generation=vim.b[buf].parley_fold_generation or 0
     local function live()
@@ -76,6 +81,7 @@ function M.walk(buf, win, first_0, last_0, command_limit, remember, current, own
             if bufnr() == s:owner_buf && win_getid() == s:owner_win && b:changedtick == s:owner_tick && get(b:, 'parley_fold_generation', 0) == s:owner_generation
             execute %d
             let s:guard = 0
+            let s:eof = 0
             let s:states = []
             let s:groups = 0
             let s:ops = 0
@@ -88,6 +94,33 @@ function M.walk(buf, win, first_0, last_0, command_limit, remember, current, own
               if s:level > 0
                 let s:groups += 1
                 let s:ops += 1
+                if %s
+                  let s:before_s = foldclosed(line('.'))
+                  let s:before_e = foldclosedend(line('.'))
+                  silent! normal! zC
+                  if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
+                  let s:fs = foldclosed(line('.'))
+                  let s:fe = foldclosedend(line('.'))
+                  if s:fs == -1 | break | endif
+                  let s:outer_open = s:before_s == -1 || s:before_s != s:fs || s:before_e != s:fe
+                  silent! normal! zo
+                  execute s:fs
+                  let s:nested = foldlevel(s:fs) > 1
+                  if !s:nested
+                    silent! normal! zj
+                    if line('.') > s:fs && line('.') <= s:fe | let s:nested = 1 | endif
+                    execute s:fs
+                  endif
+                  if !s:outer_open
+                    silent! normal! zC
+                  endif
+                  if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
+                  let s:ops += 4
+                  call add(s:states, [s:fs - 1, s:fe - 1, s:outer_open, s:nested])
+                  if s:fe >= line('$') | execute s:fe | let s:eof = 1 | break | endif
+                  execute (s:fe + 1)
+                  continue
+                endif
                 let s:was_open = foldclosed(line('.')) == -1
                 if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
                 if s:was_open
@@ -116,9 +149,10 @@ function M.walk(buf, win, first_0, last_0, command_limit, remember, current, own
             let b:parley_fold_clear_iters = s:guard
             let b:parley_fold_clear_work = [s:groups, s:ops]
             let b:parley_fold_clear_next = line('.')
-            let b:parley_fold_clear_done = (s:guard < s:limit && s:ops + 2 < s:limit) || line('.') > %d
+            let b:parley_fold_clear_done = s:eof || (s:guard < s:limit && s:ops + 2 < s:limit) || line('.') > %d
             endif
-        ]], buf, win, tick, owner_generation, first_row, command_limit or (last_row - first_row + 2) * 2, last_row, last_row)
+        ]], buf, win, tick, owner_generation, first_row, command_limit or (last_row - first_row + 2) * 2, last_row,
+            mode == 'inventory' and 1 or 0, last_row)
         local ok, err = pcall(vim.api.nvim_exec2, command, {})
         -- Restore both even if the walk fails; its temporary editor state must
         -- not become the reader's new position or folding preference.
@@ -133,12 +167,18 @@ function M.walk(buf, win, first_0, last_0, command_limit, remember, current, own
         -- Nested folds deleted together by zD constitute one outer group.
         local work = vim.b[buf].parley_fold_clear_work
         line_reader.record_work(buf, { fold_groups_visited = work[1], native_fold_ops = work[2] })
-        if remember then
+        if mode == 'inventory' then
+            folds = {}
+            for _,entry in ipairs(vim.b[buf].parley_fold_clear_states or {}) do
+                folds[#folds+1] = { start_0 = entry[1], end_0 = entry[2], open = entry[3] == 1, nested = entry[4] == 1 }
+            end
+        elseif remember then
             for _,entry in ipairs(vim.b[buf].parley_fold_clear_states or {}) do remember(entry[1],entry[2]==1) end
         end
         next_row=vim.b[buf].parley_fold_clear_next-1
         done=vim.b[buf].parley_fold_clear_done==1
     end)
+    if mode == 'inventory' then return folds, next_row, done end
     return next_row,done
 end
 

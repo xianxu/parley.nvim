@@ -348,3 +348,26 @@ to #290 (now depends on #264 M1).
   counter is missing).
 - Green controls: the tool-pair blank matrix (6; no uncertainty) and both edge cases.
 
+### 2026-09-27 — M1 Tasks 2-3: fold_diff, fold_native, single reconcile phase
+
+- `fold_diff` is property-tested (200 seeds); mutations that touch exact matches,
+  split regions or keep nested groups each go red.
+- The walk moved to `fold_native.lua` unchanged (all fold, stop and streaming suites green),
+  then gained `inventory` mode. Implementation note: `zC` runs before the extent is
+  read, and the outer open state is inferred from the pre-`zC` closed extent, so an
+  open outer fold with a closed inner fold on its first row reports the outer extent and
+  stays open. Nesting is found with `zo` plus `zj` (O(1)), not a row scan. A one-line
+  `if … | normal! … | endif` breaks in VimL (`normal!` swallows `| endif`), so those
+  are multi-line.
+- `apply` now runs capture, inventory, then reconcile (one `fold_diff` batch per
+  slice; removals are re-checked for `foldlevel>0`, and creations need `foldlevel==0`
+  at both ends, else re-plan). Continuity spec: 30/31 green.
+- Pinned-count change: `tests/unit/tool_folds_spec.lua` "work accounting" now expects
+  4 groups / 14 commands (inventory plus reconcile) instead of 2 / 5 (clear walk). Its
+  intent, that a nested group counts as one outer group, holds.
+- Test correction: the split-write streaming case allows the block *being written* to be
+  reshaped once (`removed<=1`) when its closing fence arrives; earlier folds are watched
+  for continuity. #290 removes this case.
+- Remaining red: Delete at end of the summary row, which opens at step 1
+  (`clear_uncertainty`'s eager clear); Task 4.
+

@@ -16,7 +16,7 @@ end)
 
 
 describe("tool_folds work accounting", function()
-    it("counts outer groups and native commands in the real clear walk", function()
+    it("counts outer groups and native commands in the real inventory and reconcile", function()
         local buf = vim.api.nvim_create_buf(false, true)
         local previous = vim.api.nvim_get_current_buf()
         vim.api.nvim_set_current_buf(buf)
@@ -36,8 +36,11 @@ describe("tool_folds work accounting", function()
         reader.clear_observer(buf, token)
         vim.api.nvim_set_current_buf(previous)
         vim.api.nvim_buf_delete(buf, { force = true })
-        assert.equals(2, work.fold_groups_visited)
-        -- One zj before each group, two zD commands, and the final failed zj.
-        assert.equals(5, work.native_fold_ops)
+        -- #264: two outer groups (the nested 3,4 counts inside 3,5), each
+        -- inventoried once and removed once by the diff reconcile.
+        assert.equals(4, work.fold_groups_visited)
+        -- Inventory: a zj before each group plus five commands per group (count,
+        -- zC, zo, zj, restore); reconcile: one zD per removed group.
+        assert.equals(14, work.native_fold_ops)
     end)
 end)

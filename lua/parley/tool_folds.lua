@@ -4,6 +4,7 @@ local M={}
 local line_reader=require('parley.line_reader')
 local Document=require('parley.document')
 local Native=require('parley.fold_native')
+local Diff=require('parley.fold_diff')
 local valid_target=Native.valid_target
 local buffers={}
 local setting_foldenable=0
@@ -240,34 +241,62 @@ local function apply(buf,s,plan)
                 end
                 window.index=last+1
                 if window.index>#plan.ranges then
-                    window.phase='clear';window.clear_row=plan.first
+                    window.phase='inventory';window.inventory_row=plan.first;window.existing={}
                     if plan.last-plan.first>INTERACTIVE_ROWS then window.suspended=true end
                 end
-            elseif window.phase=='clear' then
-                -- At most 50k affected rows retain the measured native-clear
-                -- exception. Larger scopes visit bounded fold groups per slice.
-                local next_row,done=clear_folds_in_span(buf,win,window.clear_row,plan.last-1,
-                    window.suspended and BATCH_GROUPS*2 or nil,nil,current,window)
-                if not current() then return end
-                window.clear_row=next_row
-                if done then window.phase='create';window.index=1 end
-            elseif window.phase=='create' then
-                local last=math.min(#plan.ranges,window.index+BATCH_GROUPS-1)
-                for index=window.index,last do
-                    local range=plan.ranges[index]
-                    line_reader.record_work(buf,{native_fold_ops=1,fold_groups_visited=1})
-                    vim.cmd(string.format('%d,%dfold',range.start_0+1,range.end_0+1))
-                    if not current() or not valid_target(buf,win) then return end
-                    if window.opened[range.identity] then
-                        line_reader.record_work(buf,{native_fold_ops=1})
-                        vim.cmd(string.format('%dfoldopen',range.start_0+1))
+            elseif window.phase=='inventory' then
+                -- Read the native folds without changing any (#264). At most 50k
+                -- affected rows keep the single-walk exception; larger scopes page.
+                local folds,next_row,done=Native.walk(buf,win,window.inventory_row,plan.last-1,
+                    window.suspended and BATCH_GROUPS*2 or nil,nil,current,window,'inventory')
+                if not current() or not folds then return end
+                vim.list_extend(window.existing,folds)
+                window.inventory_row=next_row
+                if done then
+                    window.batches=Diff.diff(window.existing,plan.ranges,BATCH_GROUPS)
+                    window.batch,window.removed,window.created=1,0,0
+                    window.phase='reconcile'
+                end
+            elseif window.phase=='reconcile' then
+                -- One batch per slice: its removals and creations cover one or
+                -- more whole regions, so no region is unfolded between turns, and
+                -- a fold the projection already has is never touched.
+                local batch=window.batches[window.batch]
+                if batch then
+                    -- User fold commands (zf/zd/zE) between slices don't bump
+                    -- changedtick; a stale inventory re-plans instead of guessing.
+                    for _,fold in ipairs(batch.remove) do
+                        if vim.fn.foldlevel(fold.start_0+1)==0 then discard_plan(s,plan);return end
+                    end
+                    for _,fold in ipairs(batch.remove) do
+                        line_reader.record_work(buf,{native_fold_ops=1,fold_groups_visited=1})
+                        vim.api.nvim_win_set_cursor(win,{fold.start_0+1,0})
+                        vim.cmd('silent! normal! zD')
                         if not current() or not valid_target(buf,win) then return end
                     end
+                    for _,range in ipairs(batch.create) do
+                        if vim.fn.foldlevel(range.start_0+1)>0 or vim.fn.foldlevel(range.end_0+1)>0 then
+                            discard_plan(s,plan);return
+                        end
+                    end
+                    for _,range in ipairs(batch.create) do
+                        line_reader.record_work(buf,{native_fold_ops=1,fold_groups_visited=1})
+                        vim.cmd(string.format('%d,%dfold',range.start_0+1,range.end_0+1))
+                        if not current() or not valid_target(buf,win) then return end
+                        if window.opened[range.identity] then
+                            line_reader.record_work(buf,{native_fold_ops=1})
+                            vim.cmd(string.format('%dfoldopen',range.start_0+1))
+                            if not current() or not valid_target(buf,win) then return end
+                        end
+                    end
+                    window.removed=window.removed+#batch.remove
+                    window.created=window.created+#batch.create
+                    window.batch=window.batch+1
                 end
-                window.index=last+1
-                if window.index>#plan.ranges then
+                if window.batch>#window.batches then
                     window.phase='done';s.windows[win]=true
-                    notify({phase='reconcile',win=win,ranges=plan.ranges})
+                    notify({phase='reconcile',win=win,ranges=plan.ranges,
+                        removed=window.removed,created=window.created})
                 end
             end
         end)
