@@ -96,7 +96,10 @@ repair in scheduled slices. Deleting marker bytes retires their identity even
 when the replacement text is identical. Surviving markers move with the index.
 
 A generation receives grants over confirmed byte ranges; a tool round appends its
-blocks through the answer's own grant, with none of its own (#266 M2). A grant is
+blocks through the answer's own grant, with none of its own (#266 M2). Each tool
+block is one append (#290): streamed prose is written in 4096-byte, 255-row slices,
+but a block goes whole (`block` intent, at most `BLOCK_LIMIT` = 1 MiB, the runner's
+staging ceiling), so its closing fence never lands in a later turn. A grant is
 one closed range, disjoint from every other live grant and never carved out of
 one (#266 M4), so an insertion at its boundary is inside it. A continuation first
 narrows its answer's grant to the tail (`reclaim_tail`). Editing
@@ -133,6 +136,15 @@ repair; `document_fold_continuity_spec` checks this after every step. Ordinary
 body edits with surviving context let Neovim move folds without rebuilding them.
 Structural changes preserve each window's view, open state, and fold enablement
 while reconciling affected groups.
+The stream writer is a fast path in front of this (#290): each `written` receipt
+names where its first byte landed (`first_row`, `first_col`) and its tip, and
+`tool_folds.fold_written` folds, in the write's own turn, an appended tool block
+(marker to last non-blank row, skipping the prose row a round's first call only
+continues) and each streamed `summary` row, classified from the tokens the append
+lexed into the index (`written_ranges` is the pure part). It folds exactly what the
+projection will, so the reconcile finds a match and leaves it; any disagreement is the
+reconcile's to correct. Writing into a row deletes a manual fold over it, so a summary
+row still streaming is re-folded each write.
 Native application costs scale with changed fold groups and are counted separately.
 Reconciliation applies at most 64 groups per timer turn (a single larger connected
 region is applied whole). Above 50,000 affected rows, uncertainty still clears the

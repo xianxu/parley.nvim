@@ -10,6 +10,12 @@ local User=require('parley.document.user_edits')
 local Append=require('parley.document.append')
 local Replacement=require('parley.document.replacement')
 local M={}
+-- One tool block is appended whole (#290). Its size is already bounded before
+-- it gets here: a call by the 64 KiB argument cap, a result by the tool byte
+-- budget (at most 512 KiB, plus header and fences), and every staged blob by the
+-- runner's 1 MiB staging limit. This ceiling is that staging limit, so a block
+-- can never be refused here for a size the runner admitted.
+M.BLOCK_LIMIT=1048576
 local buffers={}
 local documents=setmetatable({},{__mode='k'})
 local next_epoch=0
@@ -570,11 +576,13 @@ local function append(doc,intent)
     local operation=type(intent)=='table' and intent.operation
     local valid_operation=type(operation)=='string' and #operation>0 and #operation<=256
         or type(operation)=='number' and operation>=0 and operation<math.huge and operation%1==0
-    if type(intent)~='table' or type(intent.bytes)~='string' or #intent.bytes>4096 or not valid_operation then
+    local limit=type(intent)=='table' and intent.block==true and M.BLOCK_LIMIT or 4096
+    if type(intent)~='table' or type(intent.bytes)~='string' or #intent.bytes>limit or not valid_operation then
         return reject('refused','invalid append intent')
     end
+    -- A block's rows are bounded by its bytes; prose slices keep the row limit.
     local _,newlines=intent.bytes:gsub('\n','')
-    if newlines>255 then return reject('refused','row slice limit') end
+    if newlines>255 and not intent.block then return reject('refused','row slice limit') end
     local snapshot=State.snapshot(s.authority)
     local grant=snapshot.grants[intent.grant]
     if not grant then return reject('stale','grant') end
@@ -592,7 +600,8 @@ local function append(doc,intent)
     if prepared.status~='ready' then return prepared end
     s.append_busy=true
     local result=M.apply(doc,{epoch=intent.epoch,generation=intent.generation,operation=prepared.prepared.receipt_operation,
-        grant=intent.grant,entity=intent.entity,revision=intent.revision,patches={prepared.patch}})
+        grant=intent.grant,entity=intent.entity,revision=intent.revision,patches={prepared.patch},
+        limit=intent.block and M.BLOCK_LIMIT or nil})
     s.append_busy=false
     local accepted=prepared.prepared.accepted and #intent.bytes or 0
     local after=State.snapshot(s.authority).grants[intent.grant]

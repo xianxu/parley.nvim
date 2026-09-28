@@ -50,7 +50,8 @@ function M.prepare(owner,document,reader,grant,intent)
     while true do
         local ending=intent.bytes:find('\n',at,true)
         local part=intent.bytes:sub(at,ending and ending-1 or -1)
-        Lex.lex_step(cursor,part,false,{bytes=4096})
+        -- Whole: a block's line (a one-line JSON result) can exceed 4096 bytes.
+        Lex.lex_step(cursor,part,false,{bytes=#part})
         local token=Lex.lex_token(cursor)
         spans[#spans+1]={rows=1,bytes=token.bytes+1,metadata={token=token}}
         if not ending then break end
