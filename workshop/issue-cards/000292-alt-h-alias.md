@@ -1,6 +1,6 @@
 ---
 id: 000292
-status: codecomplete
+status: done
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: be93eb1b5d121443b1604f7fafa1700d585236a3
         evidence_commit: 29f9726139356d89532197eeb74b33e5c8370038
+        landed_commit: 9a6ea9858d7625153e3358b82184e37352017ee3
 ---
 
 # Alt+h as an alias of <C-g>? (keybinding help)
