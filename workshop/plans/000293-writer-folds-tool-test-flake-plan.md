@@ -18,6 +18,13 @@
 - Highlighter: 350 redraws x 2 passes (256 + 64 rows) per run, because `botrow` spans the closed 303-row fold. A throwaway fold-aware prototype cut query results ~3x.
 - ~10% of runs are pathological on this arm64 macOS machine: LuaJIT reports `failed to allocate mcode memory` and flushes its trace cache ~1000 times; >98% of samples are in the trace compiler, per-step time ~55ms. Raising `maxmcode` did not help (4/40 still thrash) — it's the arm64 branch-range allocation under ASLR, an environmental amplifier we cannot fix. Less work per step is the only lever: it shrinks both the normal and the thrash case.
 
+## Non-goals
+
+- The grant gate stays: a round still continues only after repair confirms the written block.
+- Repair's step count (~660 for 303 rows) and per-row repair algorithm are unchanged; only the work *inside* a step and around redraws shrinks.
+- LuaJIT's arm64 mcode allocation is not ours to fix, and Parley will not set process-wide `jit.opt` values (`maxmcode` was tried: 4/40 runs still thrashed).
+- `Document.query` keeps copying metadata at its API boundary (consumers may mutate what they get); M3 reduces how many rows are asked for instead.
+
 ## Core concepts
 
 ### Pure entities
@@ -29,6 +36,7 @@
 | `until_progress` | `tests/helpers/await.lua` | new |
 
 - **combine / combine_projection** — fold two node summaries into a parent summary. Today each call copies both operands and the result (`copy(s, s.combine(copy(a), copy(b)))`). New contract, documented on `sequence.new`: the supplied `combine`/`combine_projection` are pure — they never mutate their operands and always return a fresh table. The sequence then calls them without copies. The two shipped implementations (`grammar.merge_summary`, `projection.combine`) already satisfy this; a unit test pins it.
+  - **Invariant move (PQ-2):** `copy()` also enforces the bounded schema (≤256 summary values) and value types (no functions/userdata/threads). For combine *outputs* those checks move from runtime into the unit test: a property check over random summaries asserts the shipped combines return only scalar keys and plain values within the bound. Metadata entering the sequence (insert/replace) keeps its runtime `copy()` and checks — that is where untrusted shapes enter.
   - **Relationships:** 1 sequence : 1 combine pair, supplied by `structure.lua:new_sequence`.
   - **DRY rationale:** one purity contract replaces three defensive copies per call site.
   - **Future extensions:** the same contract can later cover `find_walk`'s `may_match`/`matches` predicates (Task 5 measures whether it's worth it).
@@ -45,6 +53,7 @@
 | `compute_window_decorations` | `lua/parley/highlighter.lua` | modified | `Document.query`, line reads |
 
 - **on_win** — asks Neovim for fold ends (`foldclosedend` in the window) and passes them to `visible_spans`; computes decorations per span. Tests drive it through a real window with a real closed fold (no mocks).
+  - **Cache key gains fold state (PQ-3):** the per-window decoration cache is keyed today on `toprow/end_row/leftcol/skipcol`. Skipping fold interiors makes decorations depend on which folds are closed, so the key also carries a fold signature — the `visible_spans` list serialized (`"0-10,313-330"`). Opening or closing a fold (`zo`/`zc`/`zR`, or tool_folds closing a block) changes the signature on the next `on_win`, which rebuilds the cache and decorates the newly drawn rows.
 - **compute_window_decorations** — gains a `margin` argument so the prefetch margin applies after the last visible span only, not after every span.
 
 ## Chunk 1: Guards first
@@ -54,8 +63,8 @@
 **Files:**
 - Create: `tests/integration/repair_work_budget_spec.lua`
 
-- [ ] **Step 1: Write the spec.** Set up a chat buffer like `writer_folds_spec` (same `parley.setup`, `F.setup`), write a 303-row `📎:` block (marker, fences, 300 body rows) with `nvim_buf_set_lines`, reset counters with `D.stats(doc, true)`, then `D.drain(doc)` synchronously (no redraw can run). Read `D.stats(doc)` and assert `summary_values_copied` and `metadata_values_copied` are below budgets.
-- [ ] **Step 2: Measure baseline.** Temporarily print the two counters; record the numbers in the spec's header comment and in the issue Log. Set each budget to baseline / 5 (the combine change removes ~3 of every 3-4 copies on the rebuild path).
+- [ ] **Step 1: Write the spec.** Set up a chat buffer like `writer_folds_spec` (same `parley.setup`, `F.setup`), write a 303-row `📎:` block (marker, fences, 300 body rows) with `nvim_buf_set_lines`, reset counters with `D.stats(doc, true)`, then `D.drain(doc)` synchronously (no redraw can run). Read `D.stats(doc)`.
+- [ ] **Step 2: Measure baseline, budget per counter and per milestone (PQ-1).** Record `summary_values_copied` and `metadata_values_copied` in the spec header and the issue Log. The index case budgets **only `summary_values_copied`** — that is the counter the combine copies increment (`copy(..., summary=true)`), so M2 turns it green; set it to baseline / 5. `metadata_values_copied` is driven by query snapshots and `find_walk` predicates: it gets its own budget only if Task 4 extends the contract (then set from Task 4's measurement); otherwise it is logged, not asserted. The highlighter case (Step 4) budgets rows queried, which M3 moves.
 - [ ] **Step 3: Run; expect FAIL** on the budgets.
   Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/repair_work_budget_spec.lua" -c "qa!"`
 - [ ] **Step 4: Highlighter budget case.** Same buffer in a real window; close a fold over the block (`vim.cmd(first..','..last..'fold')`); spy `Document.query` to sum requested rows during one `M._compute_window_decorations`-driven redraw (`vim.api.nvim__redraw({win=w, valid=false, flush=true})`). Assert rows queried ≤ window height + `HIGHLIGHT_VIEWPORT_MARGIN` + 1. Expect FAIL (today: 320).
@@ -114,7 +123,7 @@ end
 - Modify: `lua/parley/highlighter.lua` (new local + `M._visible_spans` test seam)
 - Test: `tests/unit/highlighter_visible_spans_spec.lua`
 
-- [ ] **Step 1: Failing tests** — no folds → one span `{first,last}`; a closed fold `[10,312]` inside `[0,330]` → `{0,10},{313,330}`; fold starting at `first`; fold running past `last`; adjacent folds.
+- [ ] **Step 1: Failing test** — property check against a brute-force filter: over seeded random fold layouts within `[first,last]`, the rows covered by `visible_spans` equal `{r : r not strictly inside a closed fold}` (a fold's first row is drawn), spans are ascending and disjoint.
 - [ ] **Step 2: Implement**
 ```lua
 -- Rows a window draws between first and last: a closed fold shows only its
@@ -143,7 +152,8 @@ end
 - Modify: `lua/parley/highlighter.lua` `compute_window_decorations` (add `margin` param, default `HIGHLIGHT_VIEWPORT_MARGIN`), `on_win` (~line 1064-1100)
 
 - [ ] **Step 1:** In `on_win`, inside `nvim_win_call`, build `fold_end_of = function(row) local e = vim.fn.foldclosedend(row + 1); return e ~= -1 and e - 1 or nil end`, take `visible_spans(cache.next_row, botrow, fold_end_of)`, and call `compute_window_decorations` per span with `margin = 0` except the last span. Keep the 256-row-per-redraw cap by summing span rows and stopping (setting `cache.next_row`) when it's reached.
-- [ ] **Step 2:** Run the budget spec's highlighter case → PASS; run `tests/integration/*highlight*`, `tool_folds`, `writer_folds_spec`, `decoration` helpers' specs → PASS.
+- [ ] **Step 2: Fold-toggle case (PQ-3).** Add to the budget spec: with the block folded, redraw; then `zo` the fold and redraw; assert rows inside the block now carry decorations (e.g. a `ParleyReference`-matching `[x]` placed on an interior row gets its extmark highlight), and after `zc` the query is bounded again.
+- [ ] **Step 3:** Include the fold signature in the `on_win` cache key. Run the budget spec's highlighter + toggle cases → PASS; run `tests/integration/*highlight*`, `tool_folds`, `writer_folds_spec`, `decoration` helpers' specs → PASS.
 - [ ] **Step 3: Commit** `#293 M3: highlight only drawn rows`.
 
 - [ ] M3 — highlighter bounded by drawn rows; `sdlc milestone-close --issue 293 --milestone M3`
@@ -151,6 +161,16 @@ end
 ## Verification (Done when)
 
 - [ ] `writer_folds_spec` 50/50 consecutive runs alone (loop in the issue Log), and green inside `make test`.
+- [ ] **If mcode thrash still breaks 50/50** after M3: re-measure per-step time in thrash runs (the `J`-state profile share and steps/sec); if a thrash run still needs >40s of repair, stop and surface to the operator with the numbers — the next lever would be fewer repair steps per written block (writer-supplied structure for a block written whole), which is a separate design, not a longer wait.
 - [ ] Budget spec green with the recorded baselines and new numbers in the Log.
 - [ ] Settle time for the 303-row case re-measured (report median/p90 before → after).
 - [ ] `atlas/chat/document.md`: the combine purity contract; `atlas/ui/` highlighter note: decorations computed for drawn rows only. `workshop/lessons.md`: "a fixed-timeout wait on repair-gated state hides a work-volume defect; measure counters" and the LuaJIT arm64 mcode thrash as an environmental amplifier.
+
+## Revisions
+
+### 2026-09-27 — plan-quality round 1
+- PQ-1: budgets split per counter; index case asserts `summary_values_copied` only.
+- PQ-2: combine-output bound/type checks move from runtime `copy()` to a property unit test; insert/replace keep runtime checks.
+- PQ-3: `on_win` cache key includes a fold signature; fold-toggle spec case added.
+- Minors: Non-goals section; escalation path if thrash persists; `visible_spans` property test.
+
