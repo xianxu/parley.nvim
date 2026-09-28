@@ -121,6 +121,8 @@ bundled originals here:
    outline, and branching into a side question.
 3. [Advanced](packaging/tutorials/advanced.md) — what the model sees, project
    folders, local tools, chat-history search, and images.
+4. [VIM Basics](packaging/tutorials/vim-basics.md) — modes, Back/Forward navigation,
+   undo/redo, smart search, selection, clipboard editing, and saving.
 
 To label a question in the outline, put `@@label@@` immediately above its question
 line, with no blank line between them. `@@_@@` hides that question from the outline.

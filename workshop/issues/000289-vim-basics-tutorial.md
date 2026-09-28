@@ -96,6 +96,16 @@ undo/redo, smart-case search, Visual copy/cut/paste and saving. The clipboard
 provider is stateful in memory, so the probe does not alter the host clipboard.
 Reproduction is documented in atlas/infra/starter.md.
 
+### 2026-09-28 — boundary review corrections
+
+Round 1 requested two prose corrections: BR-1 restricts wrapped Up/Down movement
+claims to Normal/Visual, matching the actual starter mappings and the reviewer's
+packaged-mode probe; BR-2 adds the fourth lesson to README's user-facing catalog.
+Both are corrected. Swept the remaining tutorial inventories: updated an old
+three-lesson help comment and finder metadata expectation. The isolated finder
+suite passed all 58 tests. Existing documentation link coverage resolves the
+new README target; it is the same packaged file already verified by the suite.
+
 ## Revisions
 
 ### 2026-09-28 — implementation scope

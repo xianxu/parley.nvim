@@ -25,8 +25,8 @@ hold Control and press o; `gg` means press g twice.
 
 ## Move around
 
-Use the arrow keys in Normal or Insert. In this app, Up/Down follow the visible
-wrapped lines. In Normal, `w` moves to the next word, `b` to the previous word,
+Use the arrow keys in Normal or Insert. In Normal and Visual, Up/Down follow
+visible wrapped lines; in Insert, they move between text lines. In Normal, `w` moves to the next word, `b` to the previous word,
 `0` to the start of a text line, and `$` to its end. `gg` goes to the top of the
 chat; `G` (Shift+g) goes to the bottom.
 

@@ -233,3 +233,7 @@ oracle, and the mutation that would make the test fail.
   green without the key because each redraw recomputes spans anyway. Say what a
   test actually proves.
 
+
+- Tutorial keyboard claims must name the mapping modes: test Normal, Insert and
+  Visual separately before generalizing wrapped-line movement. When adding a
+  lesson, sweep README discovery as well as runtime catalogs (#289 review).
