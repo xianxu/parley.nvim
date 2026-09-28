@@ -8,6 +8,7 @@ updated: 2026-09-28
 estimate_hours:
 card_mirror: '7266608d9423fa7744968468654a3f9e346582f7' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-28T14:55:58-07:00
+flow: {kind: quick, provenance: inferred, spec: "1d87dc59", done: "e3574f5d"}
 ---
 
 # Continue private note prefixes on Return
