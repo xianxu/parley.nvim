@@ -1,12 +1,14 @@
 ---
 id: 000292
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
-card_mirror: 'c4ad001d46ea04d9bef9a9313eebb77caebcfcb1' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '034361583d96b408d54a1b21aef35d777890c506' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-27T17:48:02-07:00
+flow: {kind: quick, provenance: inferred, spec: "1d496094", done: "322345ea"}
 ---
 
 # Alt+h as an alias of <C-g>? (keybinding help)
