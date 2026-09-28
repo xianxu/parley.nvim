@@ -96,8 +96,8 @@ end
 ---     swallowing the remainder, so malformed input over-forks instead of
 ---     silently losing exchanges;
 ---   * a tool body's close must also fall before the next column-0 structural
----     marker (#203) — see body_close_of for why that bound is safe and where
----     it is not total.
+---     marker (#203) — see body_close_of for why that bound is safe: results
+---     Parley writes escape their structural lines (#291).
 ---
 --- @param lines string[]                         1-based
 --- @param is_tool_marker fun(line, row):boolean  true for 🔧:/📎: at column 0
@@ -133,18 +133,14 @@ function M.scan(lines, is_tool_marker, is_structural)
     -- unrelated bare fence, and every 💬: in between stops starting an exchange
     -- — the rest of the chat collapses into one, silently.
     --
-    -- The bound is safe because a marker inside a body means the content did not
-    -- come from a parley tool: the content-echoing tools all prefix their output
-    -- (read_file `%5d  `, grep/ack `-H` giving `file:line:`, chat_history_search
-    -- `{label}/path:line:`). So the body is hand-edited, truncated, or pasted,
-    -- and forking there is the visible degradation chosen over silent swallowing.
-    --
-    -- NOT a total invariant, and the claim is bounded rather than chased: the
-    -- path-echoing tools (ls, find) emit a column-0 marker for a file NAMED like
-    -- one, and the shell tools splice raw stderr on error. Both degrade to
-    -- over-forking, which is the accepted direction.
-    -- tests/integration/tool_output_prefix_spec.lua guards the producer half over
-    -- a tool x call-shape product, and records those two exceptions.
+    -- The bound is safe because no result Parley writes has a column-0 marker
+    -- in its body: serialize.render_result escapes any structural line (#291),
+    -- whatever the tool returned (ls/find echoing a marker-named file, raw
+    -- stderr). A marker inside a body therefore means the block was hand-edited,
+    -- pasted, or written before #291, and forking there is the visible
+    -- degradation chosen over silent swallowing.
+    -- tests/integration/tool_output_prefix_spec.lua runs every tool's real output
+    -- through the serializer and asserts this.
     local function body_close_of(open_len, from)
         for row = from, #lines do
             if M.closes(lines[row], open_len) then return row end

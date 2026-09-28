@@ -3,6 +3,13 @@
 Compact rules distilled from Parley.nvim's review and integration history.
 Incident detail belongs in the issue or plan that owns it.
 
+## 2026-09-27 (#291 — writer and reader under one config)
+
+- #291 close review BR-1: `require("parley.config")` is the defaults module, not the
+  user's configuration. A writer that must agree with the parser has to read the same
+  live config (`highlight_structure.live_patterns()`); test at least one custom prefix,
+  since default-only tests cannot tell the two apart.
+
 ## 2026-09-27 (#290 — writer fold fast path)
 
 - #290 close review BR-1: an append's first row may be one it only continued. A

@@ -30,7 +30,7 @@ function M.foldtext()
     -- chat_tool_use_prefix (etc.) silently fell through to the preview branch —
     -- the same branch that rendered "💬: q (4 lines)" and made #200 look like
     -- ordinary text instead of a corrupt fold.
-    local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
+    local patterns = require("parley.highlight_structure").live_patterns()
 
     local tool_use = patterns.tool_use_prefix
     local tool_result = patterns.tool_result_prefix
@@ -386,7 +386,7 @@ end
 local function ensure(buf)
     local hit=buffers[buf];if hit then return hit end
     local doc=Document.get(buf) or Document.attach(buf,{
-        patterns=require('parley.highlight_structure').patterns(require('parley.config'))})
+        patterns=require('parley.highlight_structure').live_patterns()})
     if not doc then return nil end
     local s={buf=buf,doc=doc,windows={},opened={}};buffers[buf]=s
     s.unsubscribe=Document.subscribe(doc,function(event)

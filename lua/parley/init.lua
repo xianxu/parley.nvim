@@ -4217,7 +4217,7 @@ M.dump_model = function()
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local chat_parser = require("parley.chat_parser")
 	local header_end = chat_parser.find_header_end(lines) or 0
-	local parsed = chat_parser.parse_chat(lines, header_end, require("parley.config"))
+	local parsed = chat_parser.parse_chat(lines, header_end, M.config)
 	local em = require("parley.exchange_model")
 	local model = em.from_parsed_chat(parsed)
 	local out = { "=== Model (buf=" .. buf .. ", " .. #lines .. " lines, header=" .. model.header_lines .. ") ===" }
@@ -4252,7 +4252,7 @@ M.check_buffer = function()
 		print("Not a chat buffer (no header separator found)")
 		return
 	end
-	local parsed = chat_parser.parse_chat(lines, header_end, require("parley.config"))
+	local parsed = chat_parser.parse_chat(lines, header_end, M.config)
 	local serialize = require("parley.tools.serialize")
 	local issues = {}
 

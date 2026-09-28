@@ -6,6 +6,21 @@ local STRUCTURAL_TOKENS = lexical.structural_tokens()
 local copy_state = lexical.copy_state
 M.STRUCTURAL_KINDS = lexical.STRUCTURAL_KINDS
 M.patterns = lexical.patterns
+
+--- The live configuration: the user's, once `setup` has run, else the defaults.
+--- `require("parley.config")` is the pristine defaults module, so reading
+--- prefixes from it made a writer and the parser disagree under a custom
+--- `chat_*_prefix` (#291 BR-1). Read through `package.loaded` so a pure module
+--- can resolve it without loading the plugin.
+function M.live_config()
+    local parley = package.loaded["parley"]
+    return type(parley) == "table" and parley.config or require("parley.config")
+end
+
+--- Marker patterns under the live configuration.
+function M.live_patterns()
+    return lexical.patterns(M.live_config())
+end
 M.classify = lexical.classify
 M.fingerprint = lexical.fingerprint
 M.is_structural_kind = lexical.is_structural_kind
