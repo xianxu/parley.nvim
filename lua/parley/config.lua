@@ -377,7 +377,7 @@ local config = {
 	-- chose to retire chat_search for it, so <C-g>n is the gesture being taught
 	-- and help must advertise it first (the float renders keys[1]); <M-n> rides
 	-- along as the alt-family twin. This is not an exception -- the split is even.
-	-- <C-g>-leading: outline, chat_drill_in, new_question. Alt-leading, where
+	-- <C-g>-leading: outline, chat_drill_in, new_question, help. Alt-leading, where
 	-- terminal portability is the point: open_file, branch_ref, chat_prune.
 	--
 	-- Overriding `shortcut` REPLACES the list -- name both if you want both.
@@ -445,7 +445,9 @@ local config = {
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_review = { modes = { "n" }, shortcut = "<C-g>C" },
 	global_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>f" },
-	global_shortcut_keybindings = { modes = { "n", "i" }, shortcut = "<C-g>?" },
+	-- #292: <M-h> joins the alt family as the help twin; <C-g>? leads because it
+	-- is the key the docs and every finder footer already teach.
+	global_shortcut_keybindings = { modes = { "n", "i" }, shortcut = { "<C-g>?", "<M-h>" } },
 	-- shortcut for adding chat references in markdown files
 	global_shortcut_add_chat_ref = { modes = { "n", "i" }, shortcut = "<C-g>a" },
 	-- global shortcuts for note taking

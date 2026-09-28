@@ -37,9 +37,24 @@ keybinding help (`global_shortcut_keybindings`, `lua/parley/config.lua:448`, mod
 
 ## Plan
 
-- [ ] Alias in `global_shortcut_keybindings`; mapping test; collision check
-- [ ] Atlas
+- [x] Alias in `global_shortcut_keybindings`; mapping test; collision check
+- [x] Atlas
 
 ## Log
 
 ### 2026-09-27
+
+- `<M-h>` was unbound anywhere in lua/, tests, atlas; the starter app's family
+  filter passes `<M-*>` keys through, so it ships there too (starter test updated).
+- Registry `default_key` and `config.lua` both became `{ "<C-g>?", "<M-h>" }`;
+  `<C-g>?` leads (it is what docs and finder footers teach), so `help` joins the
+  `<C-g>`-leading group in the lead-split test and the atlas.
+- Mapping test: `keybinding_agreement_spec` fires each key's installed `maparg`
+  callback in n and i and asserts `cmd.KeyBindings` runs; also checks
+  `default_keymaps = false` leaves `<M-h>` unmapped.
+- Env: `single_source_sweeps_spec` fails because local `main` is stale
+  (c87a3775 vs origin d25dfcfc), so its merge-base spans other issues; this diff
+  adds no exports. Parallel `make test` shows a rotating flaky spec under load
+  (document_dependencies / document_semantic / branch_child / perf_ownership),
+  each passing alone.
+
