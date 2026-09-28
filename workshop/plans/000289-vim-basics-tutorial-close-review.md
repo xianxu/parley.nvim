@@ -64,3 +64,61 @@ findings:
     detail: |
       README.md:118-123 lists Welcome, Basics, and Advanced but omits the newly shipped VIM Basics lesson; README is unchanged in the pinned range. Family enumeration: the new fourth lesson is the sole added user surface missing from this catalog. Add its packaged-content link and a concise description.
 ```
+
+---
+
+## Re-review — 2026-09-28T12:04:14-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 289 — Add tutorial 4: VIM Basics for newcomers |
+| repo | parley.nvim |
+| issue file | workshop/issues/000289-vim-basics-tutorial.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 28bef17ae32a381473fdef81c5c1141b3065ba89..f8598aefdb403f1b5f7bfca908e54d796c44b7ef |
+| command | sdlc close --issue 289 |
+| reviewer | codex |
+| timestamp | 2026-09-28T12:04:14-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Both prior findings are addressed by accurate prose corrections. The pinned implementation delivers the fourth tutorial through seeding, Finder, navigation, and help while preserving edited lessons. No new blocking findings.
+
+1. **Strengths**
+   - `lua/parley/tutorials.lua:3` centralizes tutorial names across all four runtime consumers.
+   - `tests/integration/starter_config_spec.lua:77` covers adding the missing fourth lesson while preserving existing edits.
+   - `tests/packaging/vim_basics_compatibility.lua:24` exercises actual keyboard input with a stateful clipboard fake.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None remaining.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes:** Read-only Neovim checks passed for registry membership, the 256/257 help-topic boundary, and retrieval of all four packaged tutorials. Inspected startup preservation and keyboard regression tests; did not rerun the filesystem-writing integration suite or packaged-app probe.
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass.** Seeding, recognition, help discovery, and Finder diagnostics derive from the registry.
+   - **ARCH-PURE: pass.** Registry construction and membership are deterministic; filesystem operations remain in existing integration boundaries.
+   - **ARCH-PURPOSE: pass.** The lesson covers the specified everyday actions, with corrected mode instructions and complete discovery documentation.
+
+7. **Plan revision recommendations:** None.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The pinned correction at packaging/tutorials/vim-basics.md:28-29 explicitly distinguishes Normal/Visual wrapped-line movement from Insert text-line movement for both Up and Down. This matches packaging/starter-config/init.lua:20-24, whose mappings apply only to n/x modes. The correction changes prose only.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      README.md:124-125 now links the fourth lesson and describes its contents. The target packaging/tutorials/vim-basics.md exists and covers the listed topics; read-only help retrieval also passed. The correction changes prose only.
+```

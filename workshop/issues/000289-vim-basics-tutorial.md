@@ -78,6 +78,7 @@ should make everyday Parley use easier for people coming from stock editors.
 The explicitly requested anchors are Ctrl+o/Ctrl+i, u/Ctrl+r, and smart search.
 
 ### 2026-09-28 — implementation and verification
+- 2026-09-28: closed — 184 starter tests and 58 isolated finder tests passed; real ./parley_app keyboard probe passed jump history, undo/redo, smart search, clipboard and save. BR-1 movement prose now matches Normal/Visual mappings; BR-2 README links the existing verified fourth tutorial. Existing edited lessons survive upgrades.; review verdict: SHIP
 
 Added the fourth lesson and links from the three existing lessons. A pure
 registry supplies starter seeding, help topics, chat filename recognition and
