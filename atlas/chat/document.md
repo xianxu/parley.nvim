@@ -79,6 +79,14 @@ never means “no closer.” Negative results retain dependency evidence through
 searched boundary. Broad structural changes may require a long repair, performed
 in bounded slices. Query results identify uncertain semantic regions during it.
 
+Node summaries are folded by the grammar's `merge_summary` and the projection's
+`combine`, which are pure: they never mutate operands and return a fresh table.
+The sequence relies on that and passes stored summaries through without copying
+(#293) — defensive copies there cost ~480k values to repair one 300-row block.
+Values still enter through `copy()` when an entry is summarized and leave through
+it at query snapshots; `document_sequence_spec` pins the combines' purity and
+bounded plain-value shape, and `repair_work_budget_spec` budgets the copies.
+
 ## Verification
 
 `make test-spec SPEC=chat/document` maps the pure index, grammar, lexical worker,

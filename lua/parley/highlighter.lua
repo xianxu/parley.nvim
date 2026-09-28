@@ -934,15 +934,42 @@ local function window_view(win, buf)
     return {}
 end
 
+-- Rows a window draws in [first, last], as ascending disjoint { first, last }
+-- spans (#293). A closed fold shows one row -- the first of it the walk reaches
+-- -- and hides the rest, so a closed 300-row tool block costs one row of
+-- decoration, not 300 on every redraw. fold_end_of(row) is the last row of the
+-- closed fold holding row, or nil.
+local function visible_spans(first, last, fold_end_of)
+    local spans, row = {}, first
+    while row <= last do
+        local start, stop = row, row
+        while true do
+            local fold_end = fold_end_of(stop)
+            if fold_end then row = fold_end + 1; break end
+            if stop == last then row = last + 1; break end
+            stop = stop + 1
+        end
+        local previous = spans[#spans]
+        if previous and previous[2] + 1 == start then previous[2] = stop
+        else spans[#spans + 1] = { start, stop } end
+    end
+    return spans
+end
+M._visible_spans = visible_spans
+-- Rows decorated per redraw; the rest resume from next_row on a scheduled
+-- redraw. A test seam so a small window can exercise the resume path.
+M._redraw_row_budget = 256
+
 -- Production compute seam: bounded viewport snapshots and bounded text reads.
-local function compute_window_decorations(winid, buf, toprow, botrow, reader, structure)
+-- margin: rows prefetched past botrow (default HIGHLIGHT_VIEWPORT_MARGIN).
+local function compute_window_decorations(winid, buf, toprow, botrow, reader, structure, margin)
     reader = reader or require("parley.line_reader").for_buffer(buf)
     local buf_type = _parley._parley_bufs[buf]
     structure = structure or require("parley.document").get(buf)
     if not structure then return nil end
     local start_line = toprow + 1
     local line_count = vim.api.nvim_buf_line_count(buf)
-    local end_line = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, line_count, toprow + 256)
+    local end_line = math.min(botrow + 1 + (margin or HIGHLIGHT_VIEWPORT_MARGIN), line_count, toprow + 256)
     if not structure.fingerprints and not structure.document_rows then
         local rows = require("parley.document").query(structure, toprow, end_line, { presentation = true })
         local viewport = {}
@@ -995,6 +1022,7 @@ local function compute_window_decorations(winid, buf, toprow, botrow, reader, st
 end
 
 M._compute_window_decorations = compute_window_decorations
+M._VIEWPORT_MARGIN = HIGHLIGHT_VIEWPORT_MARGIN -- test seam: rows prefetched past the window (#293)
 
 -- Kept as the lifecycle entry point: attaching requests bounded shared repair.
 function M.rebuild_structure(buf)
@@ -1072,18 +1100,49 @@ M.setup_buf_handler = function()
             end
             local end_row = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, vim.api.nvim_buf_line_count(bufnr))
             local view = window_view(winid, bufnr)
+            -- Only rows the window draws (#293): botrow runs through closed
+            -- folds, and a folded 300-row tool block would otherwise be
+            -- queried and highlighted in full on every redraw.
+            local spans = vim.api.nvim_win_call(winid, function()
+                return visible_spans(toprow, end_row - 1, function(row)
+                    local fold_end = vim.fn.foldclosedend(row + 1)
+                    if fold_end ~= -1 then return fold_end - 1 end
+                end)
+            end)
+            local parts = {}
+            for i, span in ipairs(spans) do parts[i] = span[1] .. "-" .. span[2] end
+            -- Folds decide which rows a pass decorates. Each redraw recomputes
+            -- the current spans anyway; the key keeps a pass that resumes from
+            -- next_row (past the per-redraw row budget) from skipping rows a
+            -- fold change just revealed above it.
+            local spans_key = table.concat(parts, ",")
             local cache = _decor_cache[winid]
             if not cache or cache.bufnr ~= bufnr or cache.document ~= document
                 or cache.toprow ~= toprow or cache.end_row ~= end_row
-                or cache.leftcol ~= view.leftcol or cache.skipcol ~= view.skipcol then
+                or cache.leftcol ~= view.leftcol or cache.skipcol ~= view.skipcol
+                or cache.spans_key ~= spans_key then
                 cache = { bufnr = bufnr, document = document, rows = {}, toprow = toprow,
-                    end_row = end_row, next_row = toprow, leftcol = view.leftcol, skipcol = view.skipcol }
+                    end_row = end_row, next_row = toprow, leftcol = view.leftcol, skipcol = view.skipcol,
+                    spans_key = spans_key }
                 _decor_cache[winid] = cache
             end
             local line_reader = require("parley.line_reader")
             local reader = line_reader.for_buffer(bufnr)
             local row_map, next_row = line_reader.with_phase(bufnr, "decoration_redraw", function()
-                return compute_window_decorations(winid, bufnr, cache.next_row, botrow, reader, document)
+                -- At most 256 rows per redraw, as before; the rest continue
+                -- from next_row on the scheduled redraw below.
+                local out, budget, resume = {}, M._redraw_row_budget, end_row
+                for _, span in ipairs(spans) do
+                    if span[2] >= cache.next_row then
+                        local first = math.max(span[1], cache.next_row)
+                        local map, stop = compute_window_decorations(winid, bufnr, first,
+                            math.min(span[2], first + budget - 1), reader, document, 0)
+                        for row, highlights in pairs(map or {}) do out[row] = highlights end
+                        budget = budget - (stop - first)
+                        if stop <= span[2] or budget <= 0 then resume = stop; break end
+                    end
+                end
+                return out, resume
             end)
             for row, highlights in pairs(row_map or {}) do cache.rows[row] = highlights end
             cache.next_row = next_row < end_row and next_row or toprow

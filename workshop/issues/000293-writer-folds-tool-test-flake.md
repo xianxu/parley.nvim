@@ -1,12 +1,14 @@
 ---
 id: 000293
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-27
 updated: 2026-09-27
-estimate_hours:
-card_mirror: '584e88471ceeb0175e9b3a885f63039eb1e0eefb' # card fields mirrored from issue-cards; edit via sdlc
+estimate_hours: 4.14
+card_mirror: '4da3ad18c5c48e51bc2778854bc523f065bb28d5' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-27T18:27:58-07:00
+flow: {kind: full, provenance: inferred}
 ---
 
 # writer_folds tool test flakes: tool round continuation sometimes misses the 5s wait
@@ -42,11 +44,100 @@ rows, the real tool's async IO under load) or sometimes never issued (a race in 
 
 ## Plan
 
-- [ ] Instrument and capture a failing run
-- [ ] Fix at the root cause; deterministic test if it is a race
-- [ ] 50-run loop
+Durable plan: `workshop/plans/000293-writer-folds-tool-test-flake-plan.md`.
+
+- [x] M1 — guards: deterministic repair work-budget spec (red) + progress-aware wait in writer_folds_spec
+- [x] M2 — sequence combine without defensive copies (purity contract); re-measure find_walk predicates
+- [x] M3 — highlighter computes only rows a window draws (skip closed-fold interiors)
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A primitives + Method B sketch on the diagnosis (6 decision points: race vs slow, pump vs document scheduler, GC vs JIT, maxmcode, highlighter vs index share, purity contract).*
+
+- M1 guards (budget spec + progress wait, helper already drafted): lua-neovim, low design (plan done), impl v2 1.0 → 0.4.
+- M2 sequence combine contract + property test: lua-neovim, impl v2 0.8 → 0.3.
+- M3 visible_spans + per-span on_win + fold-signature cache key + toggle spec: lua-neovim, impl v2 1.2 → 0.5.
+- Re-plan mid-flight (quick-flow → full-flow): scope-pivot.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: method-b-decisions     design=0.9 impl=0.0
+item: scope-pivot            design=0.35 impl=0.14
+item: lua-neovim             design=0.2 impl=0.4
+item: lua-neovim             design=0.2 impl=0.3
+item: lua-neovim             design=0.3 impl=0.5
+item: atlas-docs             design=0.05 impl=0.05
+item: milestone-review       design=0.0 impl=0.15
+item: milestone-review       design=0.0 impl=0.15
+item: milestone-review       design=0.0 impl=0.15
+design-buffer: 0.15
+total: 4.14
+```
 
 ## Log
 
 ### 2026-09-27
+- 2026-09-27: closed — Root cause (Log): continuation gated on repair of the written 303-row block; repair slow from defensive summary copies (483057 -> 26224, M2) and highlighter re-reading closed-fold rows every redraw (256 -> drawn rows, M3); ~10% runs amplified by LuaJIT arm64 mcode thrash (environmental). writer_folds_spec 50/50 alone; settle median 3180 -> 814ms, p90 ~4940 -> 1002ms; budget spec (4 cases incl. mutation-pinned fold-key resume) green; full unit green, integration green bar 180s load-sensitive corpus specs that pass alone; review verdict: SHIP
+- 2026-09-27: closed M3 — repair_work_budget_spec drawn-rows (closed 303-row fold: 256 -> <= drawn+margin rows queried) and fold-toggle cases green; visible_spans property spec (500 seeded layouts) green; writer_folds_spec 50/50 alone; settle median 3180 -> 814ms, p90 ~4940 -> 1002ms; full unit green, integration green bar load-sensitive document_fold_batches (passes alone); review verdict: SHIP
+- 2026-09-27: closed M2 — repair_work_budget_spec summary budget now enabled and green (483057 -> 26224 summary copies, drain ~350-580ms -> ~290ms); document_sequence_spec no-copy + purity/bounded-shape property tests pass; make test-spec SPEC=chat/document 36/36 files green; full-suite load flakes (document_semantic, perf_document) pass alone; single_source_sweeps red only on visible_spans, which M3 defines; review verdict: SHIP
+- 2026-09-27: closed M1 — repair_work_budget_spec measures baseline (483057 summary copies; 256 rows queried to draw 9) with both budget cases pending for M2/M3; writer_folds_spec (5s stall window) + await_helper_spec (fake-clock stall/ceiling/progress cases) pass; lint clean; review verdict: SHIP
 - 2026-09-27: filed during #291 close (operator request).
+- 2026-09-27 diagnosis (probes in the spec, jit.profile, document stats):
+  - Not a missed continuation. After `first.complete` the result block is written in
+    ~50ms; the round then sits in `executing_tools` with `grant_status=suspended`
+    until document repair confirms the written region. The continuation is
+    gated on that (generation.lua `grant_status=='valid'`).
+  - Repair of the 303-row block = ~658-670 productive `repair_step`s, driven by the
+    document's own scheduler (document/init.lua `schedule`, 2ms per timer turn).
+    A `repair_slice` in the response pumps changed nothing — they are not the driver
+    (tried and reverted).
+  - Normal runs: 1.9-5.2s (median 3.2s) vs the 5s wait. Each run copies 6-11 MILLION
+    metadata values and ~75-160k query results during that repair (`D.stats`), mostly
+    `sequence.lua` `copy()` under `query_walk`/`snapshot`, reached from the
+    highlighter's per-redraw viewport query (highlighter.lua:947) and update_rebuild.
+  - ~10% of runs are pathological: same copies per step, but ~55ms/step instead of
+    ~3ms, so repair needs 35s+ and the file hits plenary's 50s timeout. Cause of the
+    per-step blow-up not yet identified (GC heap pressure from the copy volume is the
+    leading, UNVERIFIED hypothesis).
+  - A progress-aware wait (tests/helpers/await.lua `until_progress`, WIP, uncommitted)
+    fixes the "slow" half but cannot meet 50/50 against the pathological runs.
+  - Conclusion: the root cause is a document-index performance defect (copy volume
+    per repair step), outside this issue's quick-flow shell. Needs a re-plan.
+- M1 baselines (tests/integration/repair_work_budget_spec.lua, synchronous drain of a
+  303-row block, no redraw): summary_values_copied=483057, metadata_values_copied=230111.
+  Highlighter over a closed fold on that block: 256 rows queried to draw 9.
+  Budget cases committed `pending`; M2 enables the summary budget (96000 = 1/5), M3 the
+  drawn-rows budget. writer_folds_spec waits via Await.until_progress on productive
+  repair steps (stall 1s, ceiling 40s — below plenary's 50s kill).
+- Estimate note: `method-b-decisions design=0.9` is diagnosis time already spent inside
+  the claim window, not future design.
+- M2: sequence combines take stored summaries without copies. Synchronous drain of the
+  303-row block: summary_values_copied 483057 → 26224 (18x); drain 350-580ms → ~290ms.
+  metadata_values_copied unchanged at 230111: ~2200 of ~2500 top-level copy calls are
+  `M.at` snapshots at the API boundary (plan non-goal); find_walk predicates ~320 calls
+  (<20%) → Task 4 contract extension skipped (YAGNI).
+- M2 full suite: document_semantic_spec (180s-deadline corpus) and perf_document_spec
+  failed only under parallel load, pass alone (the rotating load-flake set seen pre-#293).
+  single_source_sweeps: fixed `_VIEWPORT_MARGIN` row + traceability routing; its
+  `visible_spans` row stays red until M3 defines it.
+- M3: on_win decorates only drawn rows (`visible_spans`, fold-keyed cache). Closed fold over
+  the block: 256 rows queried to draw 9 → within drawn + margin (budget spec green).
+  Fold-toggle case added; mutation showed per-redraw span recompute carries it (plan Revisions).
+- Verification: writer_folds_spec 50/50 alone (163s). Continuation settle after
+  `complete` (25 runs, timed scratch copy): median 3180 → 814ms, p90 ~4940 → 1002ms; worst
+  run 16.6s is a LuaJIT mcode-thrash process (was >35s → 50s kill), inside the 40s ceiling,
+  so no escalation. Full unit suite green; integration green except the sweep guard (fixed:
+  `_visible_spans` row + spec routing) and document_fold_batches (180s load-sensitive, passes alone).
+
+## Revisions
+
+### 2026-09-27 — re-planned as full-flow performance work (operator: "re-plan #293")
+- Reason: diagnosis showed no race; the continuation is gated on document repair of the
+  303-row block, and repair is slow from work volume (millions of defensive metadata/summary
+  copies; highlighter recomputing hidden fold rows every redraw). ~10% of runs are further
+  amplified by LuaJIT `failed to allocate mcode memory` trace-flush thrash (arm64, environmental).
+- Delta: Spec's "if only slow, fix the test wait" is kept (M1) but no longer the fix; the root
+  cause fix is M2 (index copies) + M3 (highlighter drawn rows). Plan moved to milestones and a
+  durable plan file.
+

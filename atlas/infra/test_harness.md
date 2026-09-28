@@ -223,3 +223,16 @@ preference restoration. The semantic corpus checks Enter/join scaling through 50
 bootstraps can exceed 50 seconds under parallel load. The override applies to the
 exact repository files and is shared by mapped,
 full-suite, and direct `PlenaryBustedFile` invocations.
+
+### Waiting on work that converges (#293)
+
+`tests/helpers/await.lua` `until_progress(predicate, progress, stall_ms, ceiling_ms)`
+waits while a progress signal keeps changing and fails as `stalled` when it stops,
+or at a per-wait ceiling (default 40s). The ceiling bounds one wait, not the
+file: it lets a single stuck wait report before the 50-second file deadline,
+but several slow waits in one file can still reach it. Choose `stall_ms` no
+tighter than the fixed budget being replaced. Use it where the wait is gated on bounded
+repair work (e.g. a tool round's continuation waits for the document to repair
+the written block): a fixed `vim.wait` budget cannot tell slow from stuck.
+`tests/integration/repair_work_budget_spec.lua` guards that repair work with
+deterministic counters (`Document.stats`), not wall time.

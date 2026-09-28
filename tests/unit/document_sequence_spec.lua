@@ -10,6 +10,82 @@ describe("document sequence", function()
     it("provides the pure sequence module", function() assert.is_true(ok) end)
     if not ok then return end
 
+    -- #293: supplied combines are pure, so the sequence hands them its stored
+    -- summaries directly. Copying around every call cost three deep copies per
+    -- leaf/branch rebuild -- ~480k summary values to repair one 300-row block.
+    it("hands combine its stored summaries without copying them (#293)", function()
+        local outputs, reused = setmetatable({}, { __mode = "k" }), 0
+        local seq = S.new(rows(300), {
+            summarize = function() return { n = 1 } end,
+            combine = function(a, b)
+                if outputs[a] or outputs[b] then reused = reused + 1 end
+                local out = { n = (a.n or 0) + (b.n or 0) }
+                outputs[out] = true
+                return out
+            end,
+            empty_summary = { n = 0 },
+        })
+        assert.is_true(reused > 0, "every combine operand was a copy of a stored summary")
+        reused = 0
+        S.update(seq, S.query(seq, 150, 151)[1].handle, { id = -1 })
+        assert.is_true(reused > 0, "the rebuild after an update copied every operand")
+    end)
+
+    -- The purity contract the no-copy path relies on, and the bounded-schema and
+    -- value-type checks copy() used to apply to combine outputs at runtime.
+    it("the shipped combines are pure and return bounded plain values (#293)", function()
+        local grammar = require("parley.document.grammar")
+        local projection = require("parley.document.projection")
+        local function plain(v, budget)
+            budget.n = budget.n - 1
+            assert(budget.n >= 0, "summary exceeds 256 values")
+            local t = type(v)
+            assert(t ~= "function" and t ~= "userdata" and t ~= "thread", "summary holds a " .. t)
+            if t == "table" then
+                for k, x in pairs(v) do
+                    assert(type(k) == "string" or type(k) == "number", "non-scalar key")
+                    plain(x, budget)
+                end
+            end
+        end
+        local flags = { "fence", "question", "answer", "tool", "summary", "memo", "draft" }
+        math.randomseed(293)
+        local function random_grammar()
+            local out = { flags = {} }
+            for _, f in ipairs(flags) do if math.random() < 0.4 then out.flags[f] = true end end
+            if math.random() < 0.5 then
+                out.close_min = math.random(3, 6); out.close_max = out.close_min + math.random(0, 3)
+            end
+            return out
+        end
+        local function random_projection()
+            local out = {}
+            for _, f in ipairs(flags) do if math.random() < 0.4 then out[f] = true end end
+            return out
+        end
+        for _ = 1, 200 do
+            for _, case in ipairs({ { grammar.merge_summary, random_grammar }, { projection.combine, random_projection } }) do
+                local combine, gen = case[1], case[2]
+                local a, b = gen(), gen()
+                local a0, b0 = vim.deepcopy(a), vim.deepcopy(b)
+                local out = combine(a, b)
+                assert.same(a0, a, "combine mutated its first operand")
+                assert.same(b0, b, "combine mutated its second operand")
+                local shared = {}
+                local function mark(t) if type(t) == "table" then shared[t] = true; for _, v in pairs(t) do mark(v) end end end
+                local function aliased(t)
+                    if type(t) ~= "table" then return false end
+                    if shared[t] then return true end
+                    for _, v in pairs(t) do if aliased(v) then return true end end
+                    return false
+                end
+                mark(a); mark(b)
+                assert.is_false(aliased(out), "combine output shares a table with an operand")
+                plain(out, { n = 256 })
+            end
+        end
+    end)
+
     it("locates byte boundaries and opaque interiors with bounded navigation", function()
         assert.is_function(S.at_byte)
         local seq=S.new({{rows=1,bytes=5,metadata={text="UTF8"}},{rows=10,bytes=100,opaque=true}})

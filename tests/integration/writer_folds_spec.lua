@@ -19,6 +19,8 @@ local F=require('parley.tool_folds')
 local Fixture=require('tests.helpers.respond_fixture')
 local policy=require('parley.fold_projection')
 local parser=require('parley.chat_parser')
+local D=require('parley.document')
+local Await=require('tests.helpers.await')
 
 -- `text`, when given, is prose the model streams before its tool call.
 local function sse(id,path,text)
@@ -44,7 +46,6 @@ local function sse(id,path,text)
     end
     return table.concat(lines,'\n')
 end
-local function wait_for(predicate)assert.is_true(vim.wait(5000,predicate,1),'did not settle')end
 local function row_of(buf,prefix)
     for index,line in ipairs(vim.api.nvim_buf_get_lines(buf,0,-1,false)) do
         if line:sub(1,#prefix)==prefix then return index end
@@ -52,7 +53,17 @@ local function row_of(buf,prefix)
 end
 
 describe('writer folds (#290)',function()
-    local buf,calls,restore,events,files
+    local buf,calls,restore,events,files,repairs,unsubscribe
+    -- #293: a tool round's continuation waits for the document to repair the
+    -- written block, and a 303-row result takes ~650 repair steps plus a redraw
+    -- per turn — 2-5s under load, so a fixed 5s wait flaked. Wait while repair
+    -- keeps moving; a round that never continues stops it and still fails. The
+    -- 5s stall window is the old fixed budget, so waits not gated on repair
+    -- (calls>0, terminal, flush idle) are no tighter than before.
+    local function wait_for(predicate)
+        local ok,why=Await.until_progress(predicate,function()return repairs end,5000)
+        assert.is_true(ok,'did not settle: '..tostring(why))
+    end
     before_each(function()
         files={}
         calls,restore=Fixture.install(parley)
@@ -62,6 +73,11 @@ describe('writer folds (#290)',function()
         vim.api.nvim_buf_set_lines(buf,0,-1,false,{'# topic: Folds','- file: fixture.md','---','','💬: question',''})
         vim.api.nvim_win_set_cursor(0,{5,0})
         F.setup(buf)
+        repairs=0
+        unsubscribe=D.subscribe(assert(D.get(buf)),function(event)
+            -- Productive steps only: an idle pump polls repair every turn.
+            if event.kind=='repair' and event.result.status=='more' then repairs=repairs+1 end
+        end)
         events={}
         -- A `written` event is emitted inside the write's own turn, before any
         -- scheduled repair step can run: probe the window's folds right there.
@@ -77,7 +93,7 @@ describe('writer folds (#290)',function()
         end
     end)
     after_each(function()
-        F._observer=nil
+        F._observer=nil;unsubscribe()
         Respond.cancel_responses(buf);restore()
         if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf,{force=true}) end
         for _,path in ipairs(files) do vim.fn.delete(path) end
