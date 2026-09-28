@@ -52,3 +52,25 @@ rows, the real tool's async IO under load) or sometimes never issued (a race in 
 
 ### 2026-09-27
 - 2026-09-27: filed during #291 close (operator request).
+- 2026-09-27 diagnosis (probes in the spec, jit.profile, document stats):
+  - Not a missed continuation. After `first.complete` the result block is written in
+    ~50ms; the round then sits in `executing_tools` with `grant_status=suspended`
+    until document repair confirms the written region. The continuation is
+    gated on that (generation.lua `grant_status=='valid'`).
+  - Repair of the 303-row block = ~658-670 productive `repair_step`s, driven by the
+    document's own scheduler (document/init.lua `schedule`, 2ms per timer turn).
+    A `repair_slice` in the response pumps changed nothing — they are not the driver
+    (tried and reverted).
+  - Normal runs: 1.9-5.2s (median 3.2s) vs the 5s wait. Each run copies 6-11 MILLION
+    metadata values and ~75-160k query results during that repair (`D.stats`), mostly
+    `sequence.lua` `copy()` under `query_walk`/`snapshot`, reached from the
+    highlighter's per-redraw viewport query (highlighter.lua:947) and update_rebuild.
+  - ~10% of runs are pathological: same copies per step, but ~55ms/step instead of
+    ~3ms, so repair needs 35s+ and the file hits plenary's 50s timeout. Cause of the
+    per-step blow-up not yet identified (GC heap pressure from the copy volume is the
+    leading, UNVERIFIED hypothesis).
+  - A progress-aware wait (tests/helpers/await.lua `until_progress`, WIP, uncommitted)
+    fixes the "slow" half but cannot meet 50/50 against the pathological runs.
+  - Conclusion: the root cause is a document-index performance defect (copy volume
+    per repair step), outside this issue's quick-flow shell. Needs a re-plan.
+
