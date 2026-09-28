@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000292-alt-h-alias.md
         source_blob: ba72ea356d8d6b3d8d78f94730a4401a6f1bb584
         destination: workshop/issues/000292-alt-h-alias.md
+        main_commit: f621567a57761faad9b0fc920f3ce50afeff2e0c
 ---
 
 # Alt+h as an alias of <C-g>? (keybinding help)
