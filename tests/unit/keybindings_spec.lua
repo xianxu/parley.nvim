@@ -1076,7 +1076,7 @@ describe("open_file joins the alt family (#214)", function()
         local cg, alt = lead_split(parley.config)
         -- atlas/ui/keybindings.md "Resolution" and the comments on the
         -- migrated shortcuts in config.lua name these groups.
-        assert.same({ "chat_drill_in", "new_question", "outline" }, cg)
+        assert.same({ "chat_drill_in", "help", "new_question", "outline" }, cg)
         assert.same({ "branch_ref", "open_file" }, alt)
     end)
 
@@ -1086,7 +1086,7 @@ describe("open_file joins the alt family (#214)", function()
         local flipped = vim.tbl_extend("force", {}, parley.config)
         flipped.chat_shortcut_outline = { modes = { "n", "i" }, shortcut = { "<M-t>", "<C-g>t" } }
         local cg, alt = lead_split(flipped)
-        assert.same({ "chat_drill_in", "new_question" }, cg)
+        assert.same({ "chat_drill_in", "help", "new_question" }, cg)
         assert.same({ "branch_ref", "open_file", "outline" }, alt)
     end)
 

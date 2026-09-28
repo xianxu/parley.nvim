@@ -661,3 +661,32 @@ describe("published shortcut reference agrees with bindings (#206, #214 BR-61)",
         end
     end)
 end)
+
+-- #292: <M-h> is an alias of <C-g>? — both keys, in Normal and Insert, must
+-- reach the help action through the installed mapping, not just the registry.
+describe("<M-h> aliases <C-g>? (#292)", function()
+    it("both keys open key-binding help in n and i", function()
+        setup()
+        local orig = parley.cmd.KeyBindings
+        local calls = {}
+        parley.cmd.KeyBindings = function(...) calls[#calls + 1] = { ... } end
+        local ok, err = pcall(function()
+            for _, key in ipairs({ "<C-g>?", "<M-h>" }) do
+                for _, mode in ipairs({ "n", "i" }) do
+                    local m = vim.fn.maparg(key, mode, false, true)
+                    assert.is_function(m.callback, key .. " has no " .. mode .. "-mode mapping")
+                    local before = #calls
+                    m.callback()
+                    assert.equals(before + 1, #calls, key .. " (" .. mode .. ") did not open help")
+                end
+            end
+        end)
+        parley.cmd.KeyBindings = orig
+        assert.is_true(ok, tostring(err))
+    end)
+
+    it("goes quiet with the default_keymaps master switch", function()
+        setup({ default_keymaps = false })
+        assert.same({}, vim.fn.maparg("<M-h>", "n", false, true))
+    end)
+end)

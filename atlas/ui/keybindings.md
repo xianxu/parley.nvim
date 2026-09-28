@@ -1,7 +1,7 @@
 # Spec: Key Bindings Help
 
 ## Command
-`:ParleyKeyBindings` (`<C-g>?`): centered floating window showing context-scoped
+`:ParleyKeyBindings` (`<C-g>?`, alias `<M-h>`, #292): centered floating window showing context-scoped
 shortcuts. Press Ctrl+g, then `?`. Help is built when opened from the current
 Parley configuration, including aliases and disabled bindings. It does not
 inspect arbitrary `vim.keymap.set()` overrides made elsewhere.
@@ -19,7 +19,7 @@ The shipped defaults put frequent actions on Alt/Option (`<M-…>`): visual
 from Normal/Insert mode and defines a selected term in Visual mode; `<M-i>`
 creates and opens a sub-chat; `<M-p>` starts a private-note line below the
 cursor; Normal-mode `<C-g>b` moves the current exchange and following exchanges
-into a child chat. `<C-g>?` opens current help. Normal `gf`
+into a child chat. `<C-g>?` (or `<M-h>`) opens current help. Normal `gf`
 follows a file or recognized artifact reference; `<M-o>` also follows Parley
 branch references before falling back to smart `gf`. See [Branching](../chat/inline_branch_links.md)
 and [Drill-In](../chat/drill_in.md) for placement and selection details.
@@ -134,14 +134,15 @@ reject, branch, outline, skill picker (`<M-s>`), paste an image as an
 attachment (`<M-v>`, `paste_image`, #231), and follow-a-link
 (`<M-o>`, #225 — one key for "go to what I'm looking at", falling through to
 smart `gf` when the cursor is not on a parley reference).
-`<M-n>` (new question, #263) joins that family. `<C-g>` is
+`<M-n>` (new question, #263) and `<M-h>` (help, #292) join that family. `<C-g>` is
 the prefix surface for everything else.
 
-Which of a pair leads is **not** uniform, and the split is even. Measured over
-the registry, three entries lead with `<C-g>` — `outline` (`<C-g>t`/`<M-t>`),
-`chat_drill_in` (`<C-g>q`/`<M-q>`) and `new_question` (`<C-g>n`/`<M-n>`, #263,
+Which of a pair leads is **not** uniform. Measured over
+the registry, four entries lead with `<C-g>` — `outline` (`<C-g>t`/`<M-t>`),
+`chat_drill_in` (`<C-g>q`/`<M-q>`), `new_question` (`<C-g>n`/`<M-n>`, #263,
 because the operator asked for `<C-g>n` by name and retired `chat_search` to
-free it) — and two lead with the alt key, where portability is the point:
+free it) and `help` (`<C-g>?`/`<M-h>`, #292, the key the docs and finder
+footers already teach) — and two lead with the alt key, where portability is the point:
 `open_file` (`<M-o>`/`<C-g>o`) and `branch_ref` (`<M-i>`/`<C-g>i`). `keys[1]` is
 what the help float advertises, so
 the order in `config.lua` *is* the decision. Read "the portable key leads" as

@@ -112,7 +112,7 @@ M.entries = {
 	{
 		id = "help",
 		config_key = "global_shortcut_keybindings",
-		default_key = "<C-g>?",
+		default_key = { "<C-g>?", "<M-h>" },
 		default_modes = { "n", "i" },
 		scope = "global",
 		desc = "Show Parley key bindings",
