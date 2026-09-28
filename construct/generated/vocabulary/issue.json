@@ -25,9 +25,67 @@
     },
     "discovery": {
         "home": "workshop/issues",
+        "cards": "workshop/issue-cards",
+        "tracker": "issue-tracker",
         "glob": "*.md",
         "archive": "workshop/history",
         "plans": "workshop/plans"
+    },
+    "card": {
+        "fields": [
+            {
+                "name": "id",
+                "kind": "id",
+                "required": true,
+                "setter": "sdlc issue new"
+            },
+            {
+                "name": "status",
+                "kind": "status",
+                "required": true,
+                "setter": "sdlc issue set-status"
+            },
+            {
+                "name": "started",
+                "kind": "timestamp",
+                "setter": "sdlc claim"
+            },
+            {
+                "name": "created",
+                "kind": "date",
+                "setter": "sdlc issue new"
+            },
+            {
+                "name": "updated",
+                "kind": "date",
+                "setter": "sdlc issue set-status"
+            },
+            {
+                "name": "estimate_hours",
+                "kind": "estimate",
+                "setter": "sdlc issue set-estimate"
+            },
+            {
+                "name": "actual_hours",
+                "kind": "actual",
+                "setter": "sdlc close"
+            },
+            {
+                "name": "github_issue",
+                "kind": "github",
+                "setter": "sdlc issue set-github"
+            },
+            {
+                "name": "title",
+                "kind": "title",
+                "required": true,
+                "setter": "sdlc issue set-title"
+            }
+        ],
+        "internal": {
+            "field": "tracker",
+            "version": 1
+        }
     },
     "scaffold": {
         "sections": [

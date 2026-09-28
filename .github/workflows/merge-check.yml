@@ -1,17 +1,5 @@
-# ariadne base-layer CI shim (#52). Thin and stable on purpose: it clones the
-# base-layer peers, computes the PR range, and hands off to
-# scripts/run-merge-checks.sh, which runs this repo's own
-# scripts/merge-checks.d/* checks. The logic lives in the (symlinked,
-# propagating) runner + the repo-local checks — not here.
-#
-# Seeded (a real file per repo, not a symlink) because GitHub Actions does not
-# discover symlinked workflow files. The runner may be a sibling symlink into
-# the base layer (../<upstream>) — absent in an isolated CI checkout — so the
-# workflow first runs ./bootstrap.sh (CLONE_ONLY) to clone the upstream peer
-# chain as siblings, the way any ariadne-style repo bootstraps its deps. (In the
-# root repo, which has no upstream peers, the step is a guarded no-op.) Job name
-# `merge-check` is stable so a branch-protection required-status-check can
-# reference it generically.
+# Seeded as a real file because GitHub Actions does not discover symlinked
+# workflows. Compile first: generated helpers must exist before checks run.
 name: merge-check
 
 on:
@@ -24,35 +12,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0          # full history so merge-base + the range resolve
-      - name: Clone base-layer peers (resolve the symlinked runner)
+          fetch-depth: 0
+      - uses: Homebrew/actions/setup-homebrew@main
+      - name: Build candidate gateway for ariadne source CI
         run: |
           set -euo pipefail
-          # scripts/run-merge-checks.sh is a sibling symlink into the base layer,
-          # which this isolated checkout doesn't have. bootstrap.sh clones the
-          # upstream peer chain as siblings (transitively); CLONE_ONLY skips the
-          # heavy `make bootstrap` handoff (refresh/build/install). Peer URLs are
-          # derived from origin (public base layer → no token needed). Guarded so
-          # the root repo (no upstream peers) is a no-op.
-          if [ -x ./bootstrap.sh ]; then
-            BOOTSTRAP_CLONE_ONLY=1 ./bootstrap.sh
+          # The source repo tests this change's CLI before it is published.
+          # Consumer repos use the published formula through bootstrap.sh,
+          # or a source-built candidate while the tap is unpublished (#250).
+          if [ -f go.mod ] && grep -Eq '^module[[:space:]]+github.com/xianxu/ariadne[[:space:]]*$' go.mod; then
+            brew bundle --file=Brewfile
+            mkdir -p "$RUNNER_TEMP/weave-candidate"
+            go build -o "$RUNNER_TEMP/weave-candidate/weave" ./cmd/weave
+            echo "$RUNNER_TEMP/weave-candidate" >> "$GITHUB_PATH"
+          elif ! brew tap xianxu/ariadne; then
+            # Until #241 publishes the tap, consumers build the same candidate
+            # from ariadne's public source; the branch goes dormant after.
+            echo "::warning::Homebrew tap xianxu/ariadne is not published yet (#241); building weave from ariadne source"
+            src="$RUNNER_TEMP/ariadne-source"
+            git clone --depth 1 https://github.com/xianxu/ariadne.git "$src"
+            brew bundle --file="$src/Brewfile"
+            mkdir -p "$RUNNER_TEMP/weave-candidate"
+            (cd "$src" && go build -o "$RUNNER_TEMP/weave-candidate/weave" ./cmd/weave)
+            echo "$RUNNER_TEMP/weave-candidate" >> "$GITHUB_PATH"
           fi
-      - name: Select the declared Go toolchain
-        id: go-module
+      - name: Prepare dependencies and compile composition
         run: |
           set -euo pipefail
-          if [ -f go.mod ]; then
-            echo 'path=go.mod' >> "$GITHUB_OUTPUT"
-          elif [ -f ../ariadne/go.mod ]; then
-            echo 'path=../ariadne/go.mod' >> "$GITHUB_OUTPUT"
-          else
-            echo 'No Go module found for the merge-check toolchain; bootstrap ariadne.' >&2
-            exit 1
-          fi
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: ${{ steps.go-module.outputs.path }}
-          cache: false
+          ./bootstrap.sh
       - name: Set up repository checks
         run: |
           set -euo pipefail
@@ -64,14 +51,5 @@ jobs:
           set -euo pipefail
           base_tip="${{ github.event.pull_request.base.sha }}"
           head="${{ github.event.pull_request.head.sha }}"
-          # merge-base so a two-dot base..head diff == exactly the PR's changes
           base="$(git merge-base "$base_tip" "$head")"
-          if [ -f scripts/run-merge-checks.sh ]; then
-            runner=scripts/run-merge-checks.sh
-          elif [ -f ../ariadne/scripts/run-merge-checks.sh ]; then
-            runner=../ariadne/scripts/run-merge-checks.sh
-          else
-            echo 'Merge-check runner unavailable; bootstrap ariadne first.' >&2
-            exit 1
-          fi
-          bash "$runner" "$base" "$head"
+          bash scripts/run-merge-checks.sh "$base" "$head"

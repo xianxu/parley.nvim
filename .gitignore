@@ -1,3 +1,99 @@
+# BEGIN weave generated
+/.agents/skills/superpowers-brainstorming
+/.agents/skills/superpowers-dispatching-parallel-agents
+/.agents/skills/superpowers-executing-plans
+/.agents/skills/superpowers-finishing-a-development-branch
+/.agents/skills/superpowers-receiving-code-review
+/.agents/skills/superpowers-requesting-code-review
+/.agents/skills/superpowers-subagent-driven-development
+/.agents/skills/superpowers-systematic-debugging
+/.agents/skills/superpowers-test-driven-development
+/.agents/skills/superpowers-using-git-worktrees
+/.agents/skills/superpowers-using-superpowers
+/.agents/skills/superpowers-verification-before-completion
+/.agents/skills/superpowers-writing-plans
+/.agents/skills/superpowers-writing-skills
+/.agents/skills/xx-datatype
+/.agents/skills/xx-fix
+/.agents/skills/xx-interview-feedback
+/.agents/skills/xx-introspect
+/.agents/skills/xx-issues
+/.agents/skills/xx-sdlc
+/.agents/skills/xx-session-retro
+/.agents/skills/xx-vocabulary
+/.agents/skills/xx-voice-apply
+/.agents/skills/xx-voice-gen
+/.claude/settings.ariadne.json
+/.claude/settings.json
+/.claude/skills/superpowers-brainstorming
+/.claude/skills/superpowers-dispatching-parallel-agents
+/.claude/skills/superpowers-executing-plans
+/.claude/skills/superpowers-finishing-a-development-branch
+/.claude/skills/superpowers-receiving-code-review
+/.claude/skills/superpowers-requesting-code-review
+/.claude/skills/superpowers-subagent-driven-development
+/.claude/skills/superpowers-systematic-debugging
+/.claude/skills/superpowers-test-driven-development
+/.claude/skills/superpowers-using-git-worktrees
+/.claude/skills/superpowers-using-superpowers
+/.claude/skills/superpowers-verification-before-completion
+/.claude/skills/superpowers-writing-plans
+/.claude/skills/superpowers-writing-skills
+/.claude/skills/xx-datatype
+/.claude/skills/xx-fix
+/.claude/skills/xx-interview-feedback
+/.claude/skills/xx-introspect
+/.claude/skills/xx-issues
+/.claude/skills/xx-sdlc
+/.claude/skills/xx-session-retro
+/.claude/skills/xx-vocabulary
+/.claude/skills/xx-voice-apply
+/.claude/skills/xx-voice-gen
+/.codex/config.toml
+/.colima/Makefile
+/.colima/colima.sh
+/.colima/vm-rc.sh
+/.colima/vm-setup.sh
+/.colima/vnc-setup.sh
+/.openshell/Makefile
+/.openshell/dotfiles
+/.openshell/overlay
+/.openshell/policy.yaml
+/.openshell/sandbox.sh
+/.openshell/ssh-bin
+/.openshell/ssh_wrapper.sh
+/.tart/Makefile
+/.tart/scripts
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/Makefile.workflow
+/atlas/workflow
+/construct/dev-aliases.sh
+/construct/generated/datatype/SKILL.md
+/construct/generated/vocabulary/.source-sha
+/construct/generated/vocabulary/SKILL.md
+/construct/generated/vocabulary/finding.json
+/construct/generated/vocabulary/fleet-policy.json
+/construct/generated/vocabulary/issue.json
+/construct/generated/vocabulary/pensive.json
+/construct/generated/vocabulary/project.json
+/construct/generated/vocabulary/verdict.json
+/construct/generated/weave/
+/construct/scripts/apply-gitignore-entries.sh
+/construct/scripts/clone-data-deps.sh
+/construct/scripts/lib-deps.sh
+/construct/scripts/list-peers.sh
+/construct/scripts/vm-log.sh
+/scripts/close-issue.py
+/scripts/docflow.sh
+/scripts/lib.sh
+/scripts/merge-checks.d/40-duplicate-issue-id.sh
+/scripts/parallel-checks.sh
+/scripts/pre-merge-checks.sh
+/scripts/run-merge-checks.sh
+/scripts/sdlc-install.sh
+# END weave generated
 **/.claude/settings.local.json
 .aider*
 tasks/*
@@ -20,7 +116,6 @@ vision
 
 # weave-composed agentic context (written by `weave compile` on apply in the VM;
 # no longer the tracked symlink to ../ariadne/AGENTS.md — the #95 cutover bug).
-/AGENTS.md
 .openshell/.base-image-digest
 .DS_Store
 /bin/sdlc
@@ -30,13 +125,6 @@ bin/
 # above): skill symlinks, the merged settings.json (#100 accept-transience), the
 # .colima symlinks, and the vm-log.sh symlink. Regenerated on every weave, so
 # untracked + ignored keeps `make weave` zero-churn.
-/.claude/skills/
-/.claude/settings.json
-/.colima/
-/construct/scripts/vm-log.sh
-/CLAUDE.md
-/GEMINI.md
-/.agents/skills/
 
 # agent scratch debug files
 .mdbg*
@@ -91,4 +179,3 @@ bin/
 /scripts/run-merge-checks.sh
 /scripts/sdlc-install.sh
 /scripts/merge-checks.d/40-duplicate-issue-id.sh
-/construct/generated/
