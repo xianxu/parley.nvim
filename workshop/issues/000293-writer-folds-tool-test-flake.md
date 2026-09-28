@@ -44,9 +44,11 @@ rows, the real tool's async IO under load) or sometimes never issued (a race in 
 
 ## Plan
 
-- [ ] Instrument and capture a failing run
-- [ ] Fix at the root cause; deterministic test if it is a race
-- [ ] 50-run loop
+Durable plan: `workshop/plans/000293-writer-folds-tool-test-flake-plan.md`.
+
+- [ ] M1 — guards: deterministic repair work-budget spec (red) + progress-aware wait in writer_folds_spec
+- [ ] M2 — sequence combine without defensive copies (purity contract); re-measure find_walk predicates
+- [ ] M3 — highlighter computes only rows a window draws (skip closed-fold interiors)
 
 ## Log
 
@@ -73,4 +75,15 @@ rows, the real tool's async IO under load) or sometimes never issued (a race in 
     fixes the "slow" half but cannot meet 50/50 against the pathological runs.
   - Conclusion: the root cause is a document-index performance defect (copy volume
     per repair step), outside this issue's quick-flow shell. Needs a re-plan.
+
+## Revisions
+
+### 2026-09-27 — re-planned as full-flow performance work (operator: "re-plan #293")
+- Reason: diagnosis showed no race; the continuation is gated on document repair of the
+  303-row block, and repair is slow from work volume (millions of defensive metadata/summary
+  copies; highlighter recomputing hidden fold rows every redraw). ~10% of runs are further
+  amplified by LuaJIT `failed to allocate mcode memory` trace-flush thrash (arm64, environmental).
+- Delta: Spec's "if only slow, fix the test wait" is kept (M1) but no longer the fix; the root
+  cause fix is M2 (index copies) + M3 (highlighter drawn rows). Plan moved to milestones and a
+  durable plan file.
 
