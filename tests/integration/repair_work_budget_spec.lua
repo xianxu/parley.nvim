@@ -25,7 +25,7 @@ local function block()
 end
 
 describe("repair work budget for a large written block (#293)", function()
-    local buf, win, document
+    local buf, win, document, foldmethod
 
     before_each(function()
         buf = vim.api.nvim_create_buf(false, true)
@@ -33,12 +33,14 @@ describe("repair work budget for a large written block (#293)", function()
             { "# topic: Budget", "- file: budget.md", "---", "", "💬: question", "", "🤖:[Agent]", "" })
         parley._parley_bufs[buf] = "chat"
         win = vim.api.nvim_get_current_win()
+        foldmethod = vim.wo[win].foldmethod
         vim.api.nvim_win_set_buf(win, buf)
         document = highlighter.rebuild_structure(buf)
         assert.equals("idle", D.drain(document).status)
     end)
 
     after_each(function()
+        if vim.api.nvim_win_is_valid(win) then vim.wo[win].foldmethod = foldmethod end
         if buf and vim.api.nvim_buf_is_valid(buf) then
             parley._parley_bufs[buf] = nil
             highlighter.clear_structure(buf)
@@ -82,9 +84,9 @@ describe("repair work budget for a large written block (#293)", function()
     end)
 
     -- PQ-3: opening a fold without scrolling must decorate its interior on the
-    -- next redraw; closing it bounds the query again. (Each redraw recomputes
-    -- the current spans, which carries this; the cache's fold key covers a pass
-    -- resuming over 256+ drawn rows, which a 22-row test window cannot reach.)
+    -- next redraw; closing it bounds the query again. Highlights are ephemeral
+    -- extmarks and cannot be read back, so the observable is which rows each
+    -- redraw queries. (The resume case below pins the cache's fold key.)
     it("decorates a fold's interior once it is opened, and stops once closed", function()
         write_and_repair()
         local first = vim.api.nvim_buf_line_count(buf) - #block() + 1
@@ -115,6 +117,40 @@ describe("repair work budget for a large written block (#293)", function()
             vim.cmd(("%dfoldclose"):format(first))
             assert.is_false(redraw(), "the re-closed fold's interior was queried again")
         end)
+        D.query = query
+        assert.is_true(ok, tostring(err))
+    end)
+
+    -- A pass over more rows than one redraw's budget resumes from next_row. If
+    -- a fold opens between those redraws, the rows it reveals above next_row
+    -- must not be skipped: the page cache is keyed on the visible spans. The
+    -- buffer fits the window, so end_row cannot change and only that key can
+    -- restart the pass (mutation: drop `spans_key` and this goes red).
+    it("restarts a resumed pass when a fold opens above where it resumes", function()
+        vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "a", "b", "c", "d", "e", "f", "g", "h" })
+        assert.equals("idle", D.drain(document).status)
+        assert.is_true(vim.api.nvim_buf_line_count(buf) < vim.api.nvim_win_get_height(win))
+        vim.wo[win].foldmethod = "manual"
+        vim.cmd("3,11fold") -- 0-based rows 2..10 hidden behind row 2
+        vim.api.nvim_win_set_cursor(win, { 1, 0 })
+        local query, ranges, budget = D.query, {}, highlighter._redraw_row_budget
+        D.query = function(doc, a, b, opts)
+            ranges[#ranges + 1] = { a, b }
+            return query(doc, a, b, opts)
+        end
+        local ok, err = pcall(function()
+            highlighter._redraw_row_budget = 4
+            -- drawn rows 0,1,2 then 11: the budget runs out and the pass will
+            -- resume from row 12
+            vim.api.nvim__redraw({ win = win, valid = false, flush = true })
+            vim.cmd("3foldopen")
+            ranges = {}
+            vim.api.nvim__redraw({ win = win, valid = false, flush = true })
+            local revealed = false
+            for _, r in ipairs(ranges) do if 3 >= r[1] and 3 < r[2] then revealed = true end end
+            assert.is_true(revealed, "the resumed pass skipped rows the opened fold revealed")
+        end)
+        highlighter._redraw_row_budget = budget
         D.query = query
         assert.is_true(ok, tostring(err))
     end)

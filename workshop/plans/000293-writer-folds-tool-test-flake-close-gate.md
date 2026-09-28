@@ -83,6 +83,31 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: false
+    - "n": 4
+      timestamp: "2026-09-27T21:03:32-07:00"
+      agent: claude
+      findings:
+        - id: BR-8
+          severity: Minor
+          title: spans_key cache guard has no test; only reachable past 256 drawn rows
+          detail: Mutation showed the toggle test stays green without the key (acknowledged in Revisions). A test seam for the 256-row per-redraw budget in on_win would let a small window exercise resume-across-fold-change and pin the key.
+          family: untested-guard
+          round: 4
+        - id: BR-9
+          severity: Minor
+          title: fold-toggle case asserts query coverage, not the applied decoration Task 6 Step 2 specified
+          detail: tests/integration/repair_work_budget_spec.lua checks D.query ranges cover the interior row; the plan asked for an interior row to carry its extmark highlight, which would also pin cache.rows population after the spans_key rebuild. Log the deviation or tighten the assertion.
+          family: plan-deviation-unlogged
+          round: 4
+        - id: BR-10
+          severity: Minor
+          title: budget spec sets foldmethod=manual on the shared current window without restoring it
+          detail: after_each deletes the buffer but leaves vim.wo[win].foldmethod changed for later cases on the same window.
+          family: test-window-option-residue
+          round: 4
+      boundary: M3
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#293 (boundary-review)
@@ -121,7 +146,21 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-7** [Minor] `purity-test-shallow-alias` Purity property test checks only top-level freshness, not nested aliasing of combine outputs
   document_sequence_spec.lua checks out ~= a and out ~= b; a combine that returns {flags=a.flags} would pass and alias stored summaries. Walk out and assert no nested table is also reachable from a or b.
 
+## Round 4 — 2026-09-27T21:03:32-07:00 (claude) — passed
+
+### Raised
+
+- **BR-8** [Minor] `untested-guard` spans_key cache guard has no test; only reachable past 256 drawn rows
+  Mutation showed the toggle test stays green without the key (acknowledged in Revisions). A test seam for the 256-row per-redraw budget in on_win would let a small window exercise resume-across-fold-change and pin the key.
+- **BR-9** [Minor] `plan-deviation-unlogged` fold-toggle case asserts query coverage, not the applied decoration Task 6 Step 2 specified
+  tests/integration/repair_work_budget_spec.lua checks D.query ranges cover the interior row; the plan asked for an interior row to carry its extmark highlight, which would also pin cache.rows population after the spans_key rebuild. Log the deviation or tighten the assertion.
+- **BR-10** [Minor] `test-window-option-residue` budget spec sets foldmethod=manual on the shared current window without restoring it
+  after_each deletes the buffer but leaves vim.wo[win].foldmethod changed for later cases on the same window.
+
 ## Open findings
 
 - **BR-6** [Minor] `doc-overclaims-guarantee` Plan says the combine purity contract is documented on sequence.new; it is only on the private helper
 - **BR-7** [Minor] `purity-test-shallow-alias` Purity property test checks only top-level freshness, not nested aliasing of combine outputs
+- **BR-8** [Minor] `untested-guard` spans_key cache guard has no test; only reachable past 256 drawn rows
+- **BR-9** [Minor] `plan-deviation-unlogged` fold-toggle case asserts query coverage, not the applied decoration Task 6 Step 2 specified
+- **BR-10** [Minor] `test-window-option-residue` budget spec sets foldmethod=manual on the shared current window without restoring it

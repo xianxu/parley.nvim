@@ -956,6 +956,9 @@ local function visible_spans(first, last, fold_end_of)
     return spans
 end
 M._visible_spans = visible_spans
+-- Rows decorated per redraw; the rest resume from next_row on a scheduled
+-- redraw. A test seam so a small window can exercise the resume path.
+M._redraw_row_budget = 256
 
 -- Production compute seam: bounded viewport snapshots and bounded text reads.
 -- margin: rows prefetched past botrow (default HIGHLIGHT_VIEWPORT_MARGIN).
@@ -1110,8 +1113,8 @@ M.setup_buf_handler = function()
             for i, span in ipairs(spans) do parts[i] = span[1] .. "-" .. span[2] end
             -- Folds decide which rows a pass decorates. Each redraw recomputes
             -- the current spans anyway; the key keeps a pass that resumes from
-            -- next_row (over 256 drawn rows) from skipping rows a fold change
-            -- just revealed above it.
+            -- next_row (past the per-redraw row budget) from skipping rows a
+            -- fold change just revealed above it.
             local spans_key = table.concat(parts, ",")
             local cache = _decor_cache[winid]
             if not cache or cache.bufnr ~= bufnr or cache.document ~= document
@@ -1128,7 +1131,7 @@ M.setup_buf_handler = function()
             local row_map, next_row = line_reader.with_phase(bufnr, "decoration_redraw", function()
                 -- At most 256 rows per redraw, as before; the rest continue
                 -- from next_row on the scheduled redraw below.
-                local out, budget, resume = {}, 256, end_row
+                local out, budget, resume = {}, M._redraw_row_budget, end_row
                 for _, span in ipairs(spans) do
                     if span[2] >= cache.next_row then
                         local first = math.max(span[1], cache.next_row)
