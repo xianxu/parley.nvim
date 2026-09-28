@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000294-parallel-load-spec-failures.md
         source_blob: 51434e6761b17ded2e50835e35657ab3819494db
         destination: workshop/issues/000294-parallel-load-spec-failures.md
+        main_commit: 95277ed34bbff206dc1f9e85924827f18c001963
 ---
 
 # Heavy specs fail only under parallel make test (document_semantic, perf_document, document_fold_batches)
