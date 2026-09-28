@@ -1,6 +1,6 @@
 ---
 id: 000293
-status: open
+status: working
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
@@ -17,6 +17,7 @@ tracker:
         source_blob: bb45103a6b4311525cd512b8e7537a3c23175b23
         destination: workshop/issues/000293-writer-folds-tool-test-flake.md
         main_commit: a2c570cfce394456a549c323a27b25b6c43ba3c9
+started: 2026-09-27T18:27:58-07:00
 ---
 
 # writer_folds tool test flakes: tool round continuation sometimes misses the 5s wait
