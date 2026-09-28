@@ -5,10 +5,10 @@ deps: []
 github_issue:
 created: 2026-09-27
 updated: 2026-09-27
-estimate_hours:
-card_mirror: 'f141e629991c356945b95802fc26a0095bd8659f' # card fields mirrored from issue-cards; edit via sdlc
+estimate_hours: 4.14
+card_mirror: '4da3ad18c5c48e51bc2778854bc523f065bb28d5' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-27T18:27:58-07:00
-flow: {kind: quick, provenance: inferred, spec: "a7b282ae", done: "b7dadaf2"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # writer_folds tool test flakes: tool round continuation sometimes misses the 5s wait
@@ -49,6 +49,31 @@ Durable plan: `workshop/plans/000293-writer-folds-tool-test-flake-plan.md`.
 - [ ] M1 — guards: deterministic repair work-budget spec (red) + progress-aware wait in writer_folds_spec
 - [ ] M2 — sequence combine without defensive copies (purity contract); re-measure find_walk predicates
 - [ ] M3 — highlighter computes only rows a window draws (skip closed-fold interiors)
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A primitives + Method B sketch on the diagnosis (6 decision points: race vs slow, pump vs document scheduler, GC vs JIT, maxmcode, highlighter vs index share, purity contract).*
+
+- M1 guards (budget spec + progress wait, helper already drafted): lua-neovim, low design (plan done), impl v2 1.0 → 0.4.
+- M2 sequence combine contract + property test: lua-neovim, impl v2 0.8 → 0.3.
+- M3 visible_spans + per-span on_win + fold-signature cache key + toggle spec: lua-neovim, impl v2 1.2 → 0.5.
+- Re-plan mid-flight (quick-flow → full-flow): scope-pivot.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: method-b-decisions     design=0.9 impl=0.0
+item: scope-pivot            design=0.35 impl=0.14
+item: lua-neovim             design=0.2 impl=0.4
+item: lua-neovim             design=0.2 impl=0.3
+item: lua-neovim             design=0.3 impl=0.5
+item: atlas-docs             design=0.05 impl=0.05
+item: milestone-review       design=0.0 impl=0.15
+item: milestone-review       design=0.0 impl=0.15
+item: milestone-review       design=0.0 impl=0.15
+design-buffer: 0.15
+total: 4.14
+```
 
 ## Log
 
