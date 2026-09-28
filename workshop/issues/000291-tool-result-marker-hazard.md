@@ -98,6 +98,7 @@ Design:
 ## Log
 
 ### 2026-09-27
+- 2026-09-27: closed — tools_serialize_spec 29/29 incl custom chat_user_prefix Q: escape + parse_chat no fork (red when reading defaults, BR-1); tool_output_prefix_spec 10/10 every tool real output through render_result incl ls marker-named file + stderr fixture (red without escape); chat_parser_tools 36/36; chat_respond 53/53 e2e real ls tool round escaped, no fork, follow-up payload unescaped (red without escape); tool_folds, diagnostic_refresh, highlighter_document, fold continuity, buffer_mutation arch green; make test integration 177 pass, only single_source_sweeps from stale local main; writer_folds #290 tool test flakes 2/25 on origin/main too (pre-existing); review verdict: SHIP
 - Filed from #281 (design decision A).
 - 2026-09-27: implemented as planned (flagged `\` escape; user approved the scheme).
   Tests: `tools_serialize_spec` round-trips six hostile shapes (marker-named listing,
