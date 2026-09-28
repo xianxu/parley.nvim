@@ -48,7 +48,7 @@ describe('isolated starter runtime', function()
     it('edits an explicit tutorial source directly while keeping app state isolated', function()
         local source = scratch .. '/home/tutorial source'
         vim.fn.mkdir(source, 'p')
-        for _, name in ipairs({ 'welcome.md', 'basics.md', 'advanced.md' }) do
+        for _, name in ipairs({ 'welcome.md', 'basics.md', 'advanced.md', 'vim-basics.md' }) do
             vim.fn.writefile(vim.fn.readfile(root .. '/packaging/tutorials/' .. name), source .. '/' .. name)
         end
         vim.fn.mkdir(scratch .. '/.parley', 'p')
@@ -64,7 +64,7 @@ describe('isolated starter runtime', function()
         local first = run()
         assert.equals(0, first.code, first.stderr)
         local dir = scratch .. '/data/parley/chats/'
-        for _, name in ipairs({ 'welcome.md', 'basics.md', 'advanced.md' }) do
+        for _, name in ipairs({ 'welcome.md', 'basics.md', 'advanced.md', 'vim-basics.md' }) do
             local lines = vim.fn.readfile(dir .. name)
             table.insert(lines, 7, 'My personal lesson note')
             vim.fn.writefile(lines, dir .. name)
@@ -72,6 +72,19 @@ describe('isolated starter runtime', function()
             assert.equals(0, again.code, again.stderr)
             assert.same(lines, vim.fn.readfile(dir .. name))
         end
+    end)
+
+    it('adds the fourth lesson to an existing profile without replacing edited lessons', function()
+        assert.equals(0, run().code)
+        local dir = scratch .. '/data/parley/chats/'
+        vim.fn.delete(dir .. 'vim-basics.md')
+        local lines = vim.fn.readfile(dir .. 'basics.md')
+        table.insert(lines, 7, 'My existing notes')
+        vim.fn.writefile(lines, dir .. 'basics.md')
+        local result = run()
+        assert.equals(0, result.code, result.stderr)
+        assert.equals(1, vim.fn.filereadable(dir .. 'vim-basics.md'))
+        assert.same(lines, vim.fn.readfile(dir .. 'basics.md'))
     end)
 
     it('seeds tutorials when state and chats are on different filesystems', function()

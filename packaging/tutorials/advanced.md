@@ -133,6 +133,10 @@ selected AI provider.
 Use the question below for a guided explanation, or open a project chat and try
 one of the exercises above.
 
+New to Vim? Open [4. VIM Basics](vim-basics.md) for navigation, undo, search,
+and everyday editing. In Normal mode, put the cursor on the link and press
+`option+o`.
+
 💬: Help me understand how Parley turns this transcript into a request to the AI.
 Then suggest a small project where I can practice research a topic, saving a note,
 searching an earlier chat, and discussing an image.

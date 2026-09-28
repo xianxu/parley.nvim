@@ -124,7 +124,7 @@ local function welcome(parley, roots)
         migrate_welcome(parley, chat_dir)
         local source = debug.getinfo(1, 'S').source:sub(2)
         local runtime = assert(source:match('^(.*)/lua/parley/starter%.lua$'), 'Cannot locate bundled tutorials')
-        for _, name in ipairs({ 'welcome.md', 'basics.md', 'advanced.md' }) do
+        for _, name in ipairs(require('parley.tutorials').filenames) do
             local path = chat_dir .. '/' .. name
             local stat = uv.fs_lstat(path)
             if not stat then

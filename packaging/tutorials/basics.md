@@ -91,6 +91,10 @@ it with a subject you are curious about: this is your editable conversation.
 `option+return` on a question already with answer, like the following one, will
 ask AI to answer that single question again, replacing existing answer.
 
+New to Vim? Open [4. VIM Basics](vim-basics.md) for navigation, undo, search,
+and everyday editing. In Normal mode, put the cursor on the link and press
+`option+o`.
+
 💬: How does a rainbow form? Give me a short explanation and suggest two
 interesting side questions I could explore in a separate chat.
 

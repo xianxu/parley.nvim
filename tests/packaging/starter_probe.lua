@@ -54,7 +54,7 @@ local ok, why = pcall(function()
         vim.fn.writefile({ '# topic: Finder test', '- file: ' .. ordinary_path, '---', '', 'Hello' }, ordinary_path)
         local basics_path = data .. '/chats/basics.md'
         local advanced_path = data .. '/chats/advanced.md'
-        for _, path in ipairs({ basics_path, advanced_path }) do
+        for _, path in ipairs({ basics_path, advanced_path, data .. '/chats/vim-basics.md' }) do
             assert(vim.fn.filereadable(path) == 1, 'bundled tutorial was not seeded: ' .. path)
             local tutorial = vim.fn.readfile(path)
             local lesson = parser.parse_chat(tutorial, parser.find_header_end(tutorial), p.config)
@@ -69,6 +69,8 @@ local ok, why = pcall(function()
             end
         end
         assert(parser.is_chat_filename('advanced.md'))
+        assert(parser.is_chat_filename('vim-basics.md'))
+        assert(not parser.is_chat_filename('random-notes.md'))
         local basics_buf = vim.fn.bufadd(basics_path)
         vim.fn.bufload(basics_buf)
         assert(p.not_chat(basics_buf, basics_path) == nil, 'named tutorial must be recognized as a chat')
@@ -80,6 +82,8 @@ local ok, why = pcall(function()
             'chat finder did not discover the welcome chat')
         assert(vim.wait(3000, function() return finder.get_cache()[ordinary_path] ~= nil end, 10),
             'chat finder did not discover the ordinary chat')
+        assert(vim.wait(3000, function() return finder.get_cache()[data .. '/chats/vim-basics.md'] ~= nil end, 10),
+            'chat finder did not discover vim-basics.md')
         assert(vim.wait(3000, function() return finder.get_cache()[basics_path] ~= nil end, 10),
             'chat finder did not discover basics.md')
         assert(vim.wait(3000, function() return finder.get_cache()[advanced_path] ~= nil end, 10),

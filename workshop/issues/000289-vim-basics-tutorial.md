@@ -65,9 +65,9 @@ mechanisms (ARCH-DRY); this task adds teaching content, not new editor behavior.
 
 ## Plan
 
-- [ ] Write the concise tutorial and connect it to the existing lessons.
-- [ ] Include it in starter seeding and help discovery, with regression coverage.
-- [ ] Walk through the exercises in `./parley_app` and verify fresh/existing profiles.
+- [x] Write the concise tutorial and connect it to the existing lessons.
+- [x] Include it in starter seeding and help discovery, with regression coverage.
+- [x] Walk through the exercises in `./parley_app` and verify fresh/existing profiles.
 
 ## Log
 
@@ -88,3 +88,22 @@ missing only the fourth lesson while preserving edited copies. Verify keyboard
 exercises through the packaged profile; no new mappings or external services.
 The existing seed-once lifecycle owns the one additional user-editable file
 (ARCH-FUNERAL); no new state machine, background job or growing cache is added.
+
+### 2026-09-28 — implementation and verification
+
+Added the fourth lesson and links from the three existing lessons. A pure
+registry supplies starter seeding, help topics, chat filename recognition and
+finder diagnostics. Upgrade tests remove only the fourth lesson and verify
+re-seeding preserves edited older copies.
+
+Verified `make test-spec SPEC=infra/starter` (exit 0, no orphan processes),
+including fresh/existing profiles, help retrieval, links and finder discovery.
+The initial tests failed before implementation. Corrected a misplaced Welcome
+link caught by the practice-question parser assertion, then reran the suite.
+
+Ran `tests/packaging/vim_basics_compatibility.lua` via the real `./parley_app`
+with isolated demo data and copied packaged dependency checkouts (no user
+credentials). Actual fed keys passed navigation history, Ctrl+i/Tab, typing,
+undo/redo, smart-case search, Visual copy/cut/paste and saving. The clipboard
+provider is stateful in memory, so the probe does not alter the host clipboard.
+Reproduction is documented in atlas/infra/starter.md.
