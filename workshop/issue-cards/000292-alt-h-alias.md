@@ -1,10 +1,12 @@
 ---
 id: 000292
-status: working
+status: codecomplete
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
 github_issue:
+started: 2026-09-27T17:48:02-07:00
+actual_hours: 0.22
 tracker:
     version: 1
     handoff:
@@ -17,7 +19,11 @@ tracker:
         source_blob: ba72ea356d8d6b3d8d78f94730a4401a6f1bb584
         destination: workshop/issues/000292-alt-h-alias.md
         main_commit: f621567a57761faad9b0fc920f3ce50afeff2e0c
-started: 2026-09-27T17:48:02-07:00
+    completion:
+        token: close-4cf0c44b4ec6
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: be93eb1b5d121443b1604f7fafa1700d585236a3
+        evidence_commit: 29f9726139356d89532197eeb74b33e5c8370038
 ---
 
 # Alt+h as an alias of <C-g>? (keybinding help)
