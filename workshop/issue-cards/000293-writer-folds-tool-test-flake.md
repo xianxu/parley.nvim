@@ -1,6 +1,6 @@
 ---
 id: 000293
-status: codecomplete
+status: done
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours: 4.14
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: aa389df3b499279dce269eeddb273faa6f205339
         evidence_commit: a1ff7d03eec35e2dd3a23975aac3634dc5276a87
+        landed_commit: 3659fa7924b7149f5a1dbcb42d25ed2e1a9865ff
 ---
 
 # writer_folds tool test flakes: tool round continuation sometimes misses the 5s wait
