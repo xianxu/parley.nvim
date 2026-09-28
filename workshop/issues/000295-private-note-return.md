@@ -59,3 +59,9 @@ A probe found that Neovim cannot represent every custom prefix as a comment lead
 
 ### 2026-09-28 — implementation and verification
 Native comment continuation is configured only for regular chat buffers. Keyboard regressions cover repeated Return, splitting, literal custom prefixes, native undo, existing Return maps, spell typeahead, prompt exclusion, non-chat isolation, and unsupported native leaders. Red runs confirmed missing prefixes and unsupported-prefix setup failure before implementation. Spec review approved the clarified native-comment scope; lessons and atlas updated. Verification: mapped ui/keybindings suite and lint (0 warnings/errors); final close review follows.
+
+### 2026-09-28 — boundary review revisions
+BR-1 identified native leader precedence: private prefixes must precede existing shorter single-line, nested, block, and user-defined comment leaders so continuation retains private classification (ARCH-PURPOSE). Add keyboard coverage for all those overlap classes. BR-2 adds the user-facing README instructions. BR-3 expands repeated-empty-line, split, and no-space cases across default/custom prefixes, and verifies prompt Return reaches ChatRespond. The reviewer could not complete the mapped suite in its sandbox; the main-session suite passed with process cleanup and is rerun after these changes.
+
+### 2026-09-28 — boundary review corrections verified
+BR-1: red matrix reproduced all six overlapping leader classes; prepending the private leader preserves the complete prefix and existing definitions. BR-2: README explains Return and leaving notes. BR-3: nine prefixes now each exercise repeated/empty Return, split text, and no-space continuation; prompt Return is observed at ChatRespond. `make test-spec SPEC=ui/keybindings` passed with clean process census; `make lint` reports zero warnings/errors; `git diff --check` passes. Re-submit all three findings for boundary review.

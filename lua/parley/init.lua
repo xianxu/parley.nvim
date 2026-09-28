@@ -2675,8 +2675,9 @@ M.prep_chat = function(buf, file_name)
 	if not M.config.chat_prompt_buf_type and note_prefix and note_prefix ~= "" then
 		local leader = ":" .. note_prefix:gsub(",", "\\,")
 		local comments = vim.bo[buf].comments
+		-- First match wins: shorter Markdown/user leaders must not strip privacy.
 		local ok = pcall(vim.api.nvim_set_option_value, "comments",
-			comments == "" and leader or comments .. "," .. leader, { buf = buf })
+			comments == "" and leader or leader .. "," .. comments, { buf = buf })
 		if ok then
 			vim.opt_local.formatoptions:append("r")
 		else

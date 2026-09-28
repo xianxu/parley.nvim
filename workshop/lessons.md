@@ -246,3 +246,8 @@ oracle, and the mutation that would make the test fail.
 - Custom text must cross a native option's grammar safely. `comments` accepts
   escaped commas but not every backslash/comma combination; validate through the
   option API and preserve chat setup when a leader cannot be represented.
+- #295 BR-1: native comment matching is ordered. Put the private leader before
+  shorter existing single-line, nested, block, and user-defined leaders; test
+  resulting text still carries the entire private marker across that matrix.
+- #295 BR-2/BR-3: sweep README entry points with atlas docs, parameterize stated
+  default/custom boundary cases, and prove prompt submission through Return.
