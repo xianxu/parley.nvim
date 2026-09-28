@@ -1,6 +1,6 @@
 ---
 id: 000295
-status: open
+status: working
 created: 2026-09-28
 updated: 2026-09-28
 estimate_hours:
@@ -17,6 +17,7 @@ tracker:
         source_blob: e895e52de290e60e0d279bc10c86e73d34bed6b3
         destination: workshop/issues/000295-private-note-return.md
         main_commit: 2f03ab371596a55a05e0ac9f73978fc75a6bceb0
+started: 2026-09-28T14:55:58-07:00
 ---
 
 # Continue private note prefixes on Return
