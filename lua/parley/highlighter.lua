@@ -934,6 +934,29 @@ local function window_view(win, buf)
     return {}
 end
 
+-- Rows a window draws in [first, last], as ascending disjoint { first, last }
+-- spans (#293). A closed fold shows one row -- the first of it the walk reaches
+-- -- and hides the rest, so a closed 300-row tool block costs one row of
+-- decoration, not 300 on every redraw. fold_end_of(row) is the last row of the
+-- closed fold holding row, or nil.
+local function visible_spans(first, last, fold_end_of)
+    local spans, row = {}, first
+    while row <= last do
+        local start, stop = row, row
+        while true do
+            local fold_end = fold_end_of(stop)
+            if fold_end then row = fold_end + 1; break end
+            if stop == last then row = last + 1; break end
+            stop = stop + 1
+        end
+        local previous = spans[#spans]
+        if previous and previous[2] + 1 == start then previous[2] = stop
+        else spans[#spans + 1] = { start, stop } end
+    end
+    return spans
+end
+M._visible_spans = visible_spans
+
 -- Production compute seam: bounded viewport snapshots and bounded text reads.
 local function compute_window_decorations(winid, buf, toprow, botrow, reader, structure)
     reader = reader or require("parley.line_reader").for_buffer(buf)
