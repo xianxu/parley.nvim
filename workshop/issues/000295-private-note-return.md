@@ -19,14 +19,14 @@ Private notes are single-line annotations. Pressing Return currently leaves the 
 
 ## Spec
 
-In regular chat buffers, Insert-mode Return on a private-note line continues the configured `chat_local_prefix` (default `🔒:`) on the new line. Splitting note text keeps both pieces private; repeated Return continues empty note lines too. Delete the new prefix to leave private notes. Ordinary lines and non-chat buffers keep their existing behavior; prompt buffers retain Return-to-submit.
+In regular chat buffers, Insert-mode Return on a private-note line continues the configured `chat_local_prefix` (default `🔒:`) on the new line. Splitting note text keeps both pieces private; repeated Return continues empty note lines too. Delete the new prefix to leave private notes. Ordinary prose and non-chat buffers keep their existing behavior; prompt buffers retain Return-to-submit.
 
 Use buffer-local native comment continuation during chat preparation, preserving existing comment definitions and Return mappings. This reuses Neovim editing/undo and composes with spell completion (ARCH-DRY); no per-keystroke scanning or new persistent state. Test actual keyboard input, custom prefixes and mapping coexistence. User explicitly requested creation followed by implementation; proceed within this small scope.
 
 ## Done when
 
 - Return continues default and custom note prefixes, including mid-line splits and repeated empty note lines.
-- Ordinary text and non-chat buffers are unchanged; prompt and existing Return mappings retain ownership.
+- Ordinary prose and non-chat buffers are unchanged; prompt and existing Return mappings retain ownership.
 - Production keyboard regressions and mapped keybinding suite pass; atlas describes the behavior.
 
 
@@ -39,3 +39,8 @@ Use buffer-local native comment continuation during chat preparation, preserving
 ## Log
 
 ### 2026-09-28
+
+## Revisions
+
+### 2026-09-28 — native continuation semantics
+Spec review identified that `formatoptions=r` also continues existing comment leaders and indented leaders. Accept Neovim's native comment behavior in chat buffers rather than replacing users' Return mappings; ordinary prose remains unchanged. Only column-one private-note prefixes are private according to the existing parser; this change does not broaden privacy classification.
