@@ -7,6 +7,6 @@ estimate_hours:
 github_issue:
 ---
 
-# Alt+h as an alias of <C-g>h
+# Alt+h as an alias of <C-g>? (keybinding help)
 
 ## Problem
