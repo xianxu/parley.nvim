@@ -1,12 +1,13 @@
 ---
 id: 000291
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
-card_mirror: '1e7e43fcf2710f1819fee4897c58844945ef0932' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '722e583dc774753d47df52c81b858ca16b917583' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-27T17:15:59-07:00
 ---
 
 # Close the column-0 marker hazard in tool results (ls/find/stderr)
@@ -58,10 +59,31 @@ in inline results is worth closing instead of bounding.
 
 ## Plan
 
-- [ ] Choose the escape; round-trip property tests in `tools_serialize_spec`
-- [ ] Serializer escape plus parser unescape; context rebuild uses the original content
-- [ ] Hostile-content fixtures through the parser, message building and folds
-- [ ] Atlas and `fence.lua` comment
+Design:
+- **Escape = a leading `\`, flagged per block.** `render_result` escapes a body line when
+  the shared lexer classifies it as structural (`lexical.is_structural_kind`, the same
+  predicate `fence.scan` bounds bodies with, under the configured prefixes). When any
+  line is escaped, the header gains ` escaped=true`, and inside that block every line
+  that is structural **or already starts with `\`** gets one `\` prepended; with the flag,
+  `parse_result` strips one leading `\` from each line that has one. This round-trips
+  exactly, including lines that start with the escape.
+- **Compatibility by construction:** a block without the flag is written byte-for-byte as
+  today and parsed as today (no unescaping), so every old transcript and every harmless
+  result is unchanged. Only results that would have forked carry the flag.
+- Every reader goes through `parse_result` (`chat_parser`, `chat_respond`, `init`), so
+  the provider context gets the original content; live rounds use frozen results.
+- Creates nothing durable (ARCH-FUNERAL): a header token and a byte per escaped line.
+
+- [ ] Round-trip property tests in `tools_serialize_spec` (hostile lines, lines starting
+      with `\`, no-flag byte-identity, old unflagged block with `\` lines unchanged)
+- [ ] `render_result` escape + flag; `parse_result` unescape under the flag
+- [ ] `tool_output_prefix_spec`: assert every tool's *rendered* block has no column-0
+      structural line and round-trips; `ls`/`find` exercised with a marker-named file;
+      stderr-shaped fixture; the two exceptions removed
+- [ ] Chat-level fixture: hostile results parse without forking, rebuild provider
+      messages with the original content; an old unescaped transcript parses as before
+- [ ] Atlas (`providers/tool_use.md`) and `fence.lua` comment: invariant total for
+      results written by Parley
 
 ## Log
 
