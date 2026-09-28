@@ -37,6 +37,33 @@ rounds:
       boundary: M1
       recipe: milestone-review
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-27T20:20:11-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: writer_folds_spec.lua wait_for now passes stall_ms=5000 (old fixed budget); helper case "no progress at all gets exactly the stall window" pins the contract.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: until_progress takes env{now,wait}; await_helper_spec drives it with a fake clock and asserts exact times (350, 300, 5000); 4/4 pass.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: highlighter.lua exports _VIEWPORT_MARGIN = HIGHLIGHT_VIEWPORT_MARGIN; spec uses drawn + highlighter._VIEWPORT_MARGIN + 1.
+          round: 2
+        - id: BR-4
+          disposition: addressed
+          note: atlas/infra/test_harness.md now states the ceiling bounds one wait, not the file, and several slow waits can still reach 50s.
+          round: 2
+        - id: BR-5
+          disposition: addressed
+          note: VimLeavePre deletes tmp_dir; a run on HEAD left no new parley-test-repair-budget dir (the remaining ones predate the fix commit).
+          round: 2
+      boundary: M1
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#293 (boundary-review)
@@ -56,10 +83,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Minor] `doc-overclaims-guarantee` atlas says the 40s ceiling prevents silent kills, but it only holds per wait, not per file
 - **BR-5** [Minor] `test-residue-cleanup` repair_work_budget_spec creates a tmp_dir per run and never removes it (ARCH-FUNERAL)
 
+## Round 2 — 2026-09-27T20:20:11-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — writer_folds_spec.lua wait_for now passes stall_ms=5000 (old fixed budget); helper case "no progress at all gets exactly the stall window" pins the contract.
+- BR-2 — addressed — until_progress takes env{now,wait}; await_helper_spec drives it with a fake clock and asserts exact times (350, 300, 5000); 4/4 pass.
+- BR-3 — addressed — highlighter.lua exports _VIEWPORT_MARGIN = HIGHLIGHT_VIEWPORT_MARGIN; spec uses drawn + highlighter._VIEWPORT_MARGIN + 1.
+- BR-4 — addressed — atlas/infra/test_harness.md now states the ceiling bounds one wait, not the file, and several slow waits can still reach 50s.
+- BR-5 — addressed — VimLeavePre deletes tmp_dir; a run on HEAD left no new parley-test-repair-budget dir (the remaining ones predate the fix commit).
+
 ## Open findings
 
-- **BR-1** [Important] `wait-budget-tightened-for-ungated-waits` writer_folds wait_for applies a 1s repair-stall window to waits not gated on repair
-- **BR-2** [Important] `wall-clock-test-oracle` await_helper_spec depends on real-timer and wall-clock margins of 100ms (ARCH-ORDER)
-- **BR-3** [Minor] `restated-constant` repair_work_budget_spec hard-codes 21 for HIGHLIGHT_VIEWPORT_MARGIN + 1 (ARCH-DRY)
-- **BR-4** [Minor] `doc-overclaims-guarantee` atlas says the 40s ceiling prevents silent kills, but it only holds per wait, not per file
-- **BR-5** [Minor] `test-residue-cleanup` repair_work_budget_spec creates a tmp_dir per run and never removes it (ARCH-FUNERAL)
+(none — every finding has been disposed)

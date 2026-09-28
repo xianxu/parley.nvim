@@ -95,3 +95,79 @@ findings:
     title: |
       repair_work_budget_spec creates a tmp_dir per run and never removes it (ARCH-FUNERAL)
 ```
+
+---
+
+## Re-review — 2026-09-27T20:20:11-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 293 — writer_folds tool test flakes: tool round continuation sometimes misses the 5s wait |
+| repo | parley.nvim |
+| issue file | workshop/issues/000293-writer-folds-tool-test-flake.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | fbade52193d887f1fc9cb91597b34cb3532ddf69..d19dcba53ca6bc3b3e86857795f286960f379ff6 |
+| command | sdlc milestone-close --issue 293 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-27T20:20:11-07:00 |
+| verdict | SHIP |
+
+## Review
+
+I've checked all five open findings against the code and run the affected specs. The dispositions follow.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All five prior findings are fixed at HEAD `d19dcba`. `writer_folds_spec` now waits with a 5000 ms stall window, the same as the old fixed budget. `until_progress` takes an injectable clock and wait (`env`), so its unit spec runs on a fake clock and its asserted times are exact. The margin constant is now exposed as `highlighter._VIEWPORT_MARGIN` and the spec uses it. The atlas now says the 40 s ceiling bounds one wait, not the whole file. The budget spec deletes its tmp dir on `VimLeavePre`.
+
+I ran the specs on HEAD: `await_helper_spec` passes 4/4, `writer_folds_spec` passes 5/5, and `repair_work_budget_spec` has 2 pending cases, as designed. That run left no new `parley-test-repair-budget-*` directory. The four leftover directories in `$TMPDIR/claude` are timestamped 20:15–20:17, before the fix commit at 20:19. I found no new problems.
+
+1. **Strengths**
+   - `tests/helpers/await.lua:51-63`: the `env` seam defaults to libuv `now` and `vim.wait`. The production path and the test path go through the same function, so the spec checks real logic rather than a mock (ARCH-ORDER, ARCH-MOCK).
+   - `tests/unit/await_helper_spec.lua:48-53`: a new case pins the contract behind the BR-1 fix: a wait that sees no progress gets exactly the stall window (5000 ms on the fake clock).
+   - `writer_folds_spec.lua:57-66`: the comment explains why the stall window is 5 s, so a later edit is unlikely to tighten it again by accident.
+   - `highlighter.lua:998`: the test seam points at the single source of the constant instead of restating it (ARCH-DRY).
+
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor:** none new. The shared `$TMPDIR/claude/parley-test-*-os.time()` naming, found in 23 other specs, predates this work. The harness's per-run `TMPDIR` sweep covers those specs, so I'm not raising it.
+5. **Test coverage:** `until_progress` has four deterministic cases covering settle, stall, ceiling and no progress. Nothing tests the specific 5000 value in `writer_folds_spec`. It is a test-configuration choice, and the helper contract it relies on is tested. The budget cases stay pending as guards for M2 and M3; the prior round showed they fail at the recorded baselines.
+6. **Architecture:**
+   - ARCH-DRY: passes.
+   - ARCH-PURE: passes.
+   - ARCH-PURPOSE: passes. M1 is the guards milestone, and M2/M3 carry the root-cause fix.
+   - ARCH-MOCK: passes (N/A in substance). There is no external dependency, and the fake clock sits behind the production seam.
+   - ARCH-CONSTRAINTS: passes.
+   - ARCH-SECURE: N/A. This is test-only code with no untrusted input or secrets.
+   - ARCH-ORDER: passes. The helper spec no longer depends on scheduler timing.
+   - ARCH-FUNERAL: passes. The subscription is removed in `after_each`, and the tmp dir is deleted at exit (checked by my run).
+   - For M3: add the mid-buffer fold and toggle cases that PQ-3 planned.
+7. **Plan revisions:** none beyond what `d19dcba` already added.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      writer_folds_spec.lua wait_for now passes stall_ms=5000 (old fixed budget); helper case "no progress at all gets exactly the stall window" pins the contract.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      until_progress takes env{now,wait}; await_helper_spec drives it with a fake clock and asserts exact times (350, 300, 5000); 4/4 pass.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      highlighter.lua exports _VIEWPORT_MARGIN = HIGHLIGHT_VIEWPORT_MARGIN; spec uses drawn + highlighter._VIEWPORT_MARGIN + 1.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      atlas/infra/test_harness.md now states the ceiling bounds one wait, not the file, and several slow waits can still reach 50s.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      VimLeavePre deletes tmp_dir; a run on HEAD left no new parley-test-repair-budget dir (the remaining ones predate the fix commit).
+```
