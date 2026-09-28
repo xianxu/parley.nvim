@@ -108,6 +108,32 @@ rounds:
       boundary: M3
       recipe: milestone-review
       blocked: false
+    - "n": 5
+      timestamp: "2026-09-27T21:07:02-07:00"
+      agent: claude
+      dispose:
+        - id: BR-6
+          disposition: addressed
+          note: sequence.lua:182-184 states the purity requirement on the M.new header (the public entry point).
+          round: 5
+        - id: BR-7
+          disposition: addressed
+          note: document_sequence_spec now marks all tables reachable from a and b and walks out recursively (aliased), catching nested aliasing.
+          round: 5
+        - id: BR-8
+          disposition: addressed
+          note: _redraw_row_budget seam plus the resume-across-fold-open case; scratch mutation (cache.spans_key check removed) turned that case red, 3/4 passed.
+          round: 5
+        - id: BR-9
+          disposition: addressed
+          note: 'Plan Revisions (M3 boundary review) logs the deviation: ephemeral extmarks are not readable, so query coverage is asserted instead.'
+          round: 5
+        - id: BR-10
+          disposition: addressed
+          note: before_each saves vim.wo[win].foldmethod and after_each restores it when the window is still valid.
+          round: 5
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#293 (boundary-review)
@@ -157,10 +183,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-10** [Minor] `test-window-option-residue` budget spec sets foldmethod=manual on the shared current window without restoring it
   after_each deletes the buffer but leaves vim.wo[win].foldmethod changed for later cases on the same window.
 
+## Round 5 — 2026-09-27T21:07:02-07:00 (claude) — passed
+
+### Disposed
+
+- BR-6 — addressed — sequence.lua:182-184 states the purity requirement on the M.new header (the public entry point).
+- BR-7 — addressed — document_sequence_spec now marks all tables reachable from a and b and walks out recursively (aliased), catching nested aliasing.
+- BR-8 — addressed — _redraw_row_budget seam plus the resume-across-fold-open case; scratch mutation (cache.spans_key check removed) turned that case red, 3/4 passed.
+- BR-9 — addressed — Plan Revisions (M3 boundary review) logs the deviation: ephemeral extmarks are not readable, so query coverage is asserted instead.
+- BR-10 — addressed — before_each saves vim.wo[win].foldmethod and after_each restores it when the window is still valid.
+
 ## Open findings
 
-- **BR-6** [Minor] `doc-overclaims-guarantee` Plan says the combine purity contract is documented on sequence.new; it is only on the private helper
-- **BR-7** [Minor] `purity-test-shallow-alias` Purity property test checks only top-level freshness, not nested aliasing of combine outputs
-- **BR-8** [Minor] `untested-guard` spans_key cache guard has no test; only reachable past 256 drawn rows
-- **BR-9** [Minor] `plan-deviation-unlogged` fold-toggle case asserts query coverage, not the applied decoration Task 6 Step 2 specified
-- **BR-10** [Minor] `test-window-option-residue` budget spec sets foldmethod=manual on the shared current window without restoring it
+(none — every finding has been disposed)
