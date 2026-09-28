@@ -1,12 +1,14 @@
 ---
 id: 000289
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-09-28
 estimate_hours:
-card_mirror: '355e603d77d02f35b93e6fdd5664e175e520d45e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'e744defd8e959eb840e7ffd5476fdafc6802da69' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-28T10:52:38-07:00
+flow: {kind: quick, provenance: inferred, spec: "9f48bafd", done: "3ce9d79f"}
 ---
 
 # Add tutorial 4: VIM Basics for newcomers
@@ -74,3 +76,15 @@ mechanisms (ARCH-DRY); this task adds teaching content, not new editor behavior.
 Filed at the user's request. Welcome already covers exiting Vim; this lesson
 should make everyday Parley use easier for people coming from stock editors.
 The explicitly requested anchors are Ctrl+o/Ctrl+i, u/Ctrl+r, and smart search.
+
+## Revisions
+
+### 2026-09-28 — implementation scope
+
+Use one pure tutorial-name registry for starter seeding, filename recognition,
+help discovery and finder diagnostics (ARCH-DRY, ARCH-PURE). Add vim-basics.md
+with mode-labelled examples and a practice question. Test upgrading a profile
+missing only the fourth lesson while preserving edited copies. Verify keyboard
+exercises through the packaged profile; no new mappings or external services.
+The existing seed-once lifecycle owns the one additional user-editable file
+(ARCH-FUNERAL); no new state machine, background job or growing cache is added.
