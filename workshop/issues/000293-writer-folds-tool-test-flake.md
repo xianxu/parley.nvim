@@ -119,6 +119,14 @@ total: 4.14
   failed only under parallel load, pass alone (the rotating load-flake set seen pre-#293).
   single_source_sweeps: fixed `_VIEWPORT_MARGIN` row + traceability routing; its
   `visible_spans` row stays red until M3 defines it.
+- M3: on_win decorates only drawn rows (`visible_spans`, fold-keyed cache). Closed fold over
+  the block: 256 rows queried to draw 9 → within drawn + margin (budget spec green).
+  Fold-toggle case added; mutation showed per-redraw span recompute carries it (plan Revisions).
+- Verification: writer_folds_spec 50/50 alone (163s). Continuation settle after
+  `complete` (25 runs, timed scratch copy): median 3180 → 814ms, p90 ~4940 → 1002ms; worst
+  run 16.6s is a LuaJIT mcode-thrash process (was >35s → 50s kill), inside the 40s ceiling,
+  so no escalation. Full unit suite green; integration green except the sweep guard (fixed:
+  `_visible_spans` row + spec routing) and document_fold_batches (180s load-sensitive, passes alone).
 
 ## Revisions
 

@@ -62,6 +62,12 @@ horizontal scrolling and wrapped-line offsets, so a long first row cannot starve
 later rows. Tall windows advance through pages. Edits intersecting cached pages
 invalidate those pages; disjoint edits do not restart their progress.
 
+Pages cover only rows the window draws (#293). A closed fold shows one row, so
+its interior is neither queried nor highlighted; `visible_spans` splits the
+viewport around closed folds, and the page cache is keyed on those spans.
+Repair redraws after every step that changes rows, so before this a folded
+300-row tool block was re-read in full on each of hundreds of redraws.
+
 Confirmed inert edits transfer local checkpoints and retain the suffix. Broad or
 structural changes become uncertain and repair in bounded scheduled slices.
 Unconfirmed regions use neutral or local lexical styling. Surviving row identity

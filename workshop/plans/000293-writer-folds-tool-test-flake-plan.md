@@ -32,7 +32,7 @@
 | Name | Lives in | Status |
 |------|----------|--------|
 | `combine` / `combine_projection` (sequence internals) | `lua/parley/document/sequence.lua` | modified |
-| `visible_spans` | `lua/parley/highlighter.lua` | new |
+| `visible_spans` (exported as the `_visible_spans` test seam) | `lua/parley/highlighter.lua` | new |
 | `until_progress` | `tests/helpers/await.lua` | new |
 | `_VIEWPORT_MARGIN` (test seam) | `lua/parley/highlighter.lua` | new |
 
@@ -180,4 +180,7 @@ end
 - BR-1: writer_folds stall window 5s (the old fixed budget), so waits not gated on repair are no tighter than before.
 - BR-2: `until_progress` takes injected `now`/`wait`; its unit tests run on a fake clock.
 - Minors: `highlighter._VIEWPORT_MARGIN` seam replaces the literal 21; atlas states the ceiling is per wait; budget spec removes its tmp dir on exit.
+
+### 2026-09-27 — M3 PQ-3 disposition
+- Mutation check: removing the fold-signature cache key leaves the toggle case green, because `on_win` recomputes the current visible spans on every redraw (and opening a fold also moves `botrow`). The toggle case guards the user-visible behavior; the key is kept for the resume-from-`next_row` path across a fold change, reachable only past 256 drawn rows (not in a 22-row test window). Stated in the code comment rather than claimed by the test.
 

@@ -214,3 +214,22 @@ oracle, and the mutation that would make the test fail.
 - #264 M2 review: when an implementation drops an option the plan specified, log the
   deviation and its reason as it happens; an unlogged deviation reads as an oversight in
   review.
+
+## 2026-09-27 (#293 — repair-gated tool round latency)
+
+- A fixed-timeout wait on state gated by bounded background work (repair, fold
+  batches) hides a work-volume defect behind a "flaky test". Before touching the
+  timeout, record where the work stands when it expires and count the work
+  (`Document.stats`): #293 was 480k defensive summary copies per 300-row write,
+  not a race. Budget the counters in a spec; counters don't flake, wall time does.
+- On this arm64 macOS machine LuaJIT sometimes cannot place compiled code near
+  its VM (`failed to allocate mcode memory`), flushes its trace cache ~1000x and
+  runs 15x slower per step, at random per process (ASLR). `maxmcode` does not
+  help. Profile VM states (`jit.profile` vm arg: J=compiler, N=compiled) before
+  blaming GC; the only lever is less work per step.
+- A contract a plan says is "documented on X" must be stated at X, the public
+  entry callers read (M2 review: purity was only on a private helper).
+- Mutation-check a guard before claiming it: #293's fold-key cache test stayed
+  green without the key because each redraw recomputes spans anyway. Say what a
+  test actually proves.
+

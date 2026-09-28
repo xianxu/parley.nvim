@@ -61,8 +61,8 @@ describe("repair work budget for a large written block (#293)", function()
             ("summary_values_copied %d > %d"):format(work.summary_values_copied or 0, SUMMARY_BUDGET))
     end)
 
-    -- Baseline before #293 M3: 256 rows queried to draw 9. Enabled by M3.
-    pending("decorates a closed fold over the block by querying only drawn rows", function()
+    -- Baseline before #293 M3: 256 rows queried to draw 9.
+    it("decorates a closed fold over the block by querying only drawn rows", function()
         write_and_repair()
         local first = vim.api.nvim_buf_line_count(buf) - #block() + 1
         vim.wo[win].foldmethod = "manual"
@@ -79,5 +79,43 @@ describe("repair work budget for a large written block (#293)", function()
         local drawn = vim.api.nvim_buf_line_count(buf) - #block() + 1 -- rows before the fold + its first row
         assert.is_true(queried > 0, "the decoration provider did not run")
         assert.is_true(queried <= drawn + highlighter._VIEWPORT_MARGIN + 1, ("queried %d rows to draw %d"):format(queried, drawn))
+    end)
+
+    -- PQ-3: opening a fold without scrolling must decorate its interior on the
+    -- next redraw; closing it bounds the query again. (Each redraw recomputes
+    -- the current spans, which carries this; the cache's fold key covers a pass
+    -- resuming over 256+ drawn rows, which a 22-row test window cannot reach.)
+    it("decorates a fold's interior once it is opened, and stops once closed", function()
+        write_and_repair()
+        local first = vim.api.nvim_buf_line_count(buf) - #block() + 1
+        -- The block starts inside the 22-row window, so opening its fold shows
+        -- this row without any scroll: only the fold state changes.
+        local interior = first - 1 + 5 -- 0-based
+        vim.wo[win].foldmethod = "manual"
+        vim.cmd(("%d,%dfold"):format(first, vim.api.nvim_buf_line_count(buf)))
+        vim.api.nvim_win_set_cursor(win, { 1, 0 })
+        local query, ranges = D.query, {}
+        D.query = function(doc, a, b, opts)
+            ranges[#ranges + 1] = { a, b }
+            return query(doc, a, b, opts)
+        end
+        local function redraw()
+            ranges = {}
+            vim.api.nvim__redraw({ win = win, valid = false, flush = true })
+            local covered = false
+            for _, r in ipairs(ranges) do if interior >= r[1] and interior < r[2] then covered = true end end
+            return covered
+        end
+        local ok, err = pcall(function()
+            assert.is_false(redraw(), "a closed fold's interior was queried")
+            local top = vim.api.nvim_win_call(win, function() return vim.fn.line("w0") end)
+            vim.cmd(("%dfoldopen"):format(first))
+            assert.equals(top, vim.api.nvim_win_call(win, function() return vim.fn.line("w0") end), "the view scrolled")
+            assert.is_true(redraw(), "the opened fold's interior was not decorated")
+            vim.cmd(("%dfoldclose"):format(first))
+            assert.is_false(redraw(), "the re-closed fold's interior was queried again")
+        end)
+        D.query = query
+        assert.is_true(ok, tostring(err))
     end)
 end)

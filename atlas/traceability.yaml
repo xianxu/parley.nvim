@@ -455,6 +455,7 @@ atlas:
       - tests/integration/document_fold_native_spec.lua
       - tests/integration/document_folds_spec.lua
       - tests/integration/highlighter_document_spec.lua
+      - tests/unit/highlighter_visible_spans_spec.lua
 
   chat/parsing:
     code:
