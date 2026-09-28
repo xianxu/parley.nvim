@@ -995,6 +995,7 @@ local function compute_window_decorations(winid, buf, toprow, botrow, reader, st
 end
 
 M._compute_window_decorations = compute_window_decorations
+M._VIEWPORT_MARGIN = HIGHLIGHT_VIEWPORT_MARGIN -- test seam: rows prefetched past the window (#293)
 
 -- Kept as the lifecycle entry point: attaching requests bounded shared repair.
 function M.rebuild_structure(buf)

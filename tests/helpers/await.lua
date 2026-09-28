@@ -35,24 +35,31 @@ end
 --- budget can't tell a slow convergence from a stuck one: long repair after a
 --- large write can take seconds under load, and a longer blind timeout only
 --- hides a real stall for longer. This fails when progress has not moved for
---- `stall_ms`, or at `ceiling_ms` whatever progress reports.
+--- `stall_ms`, or at `ceiling_ms` whatever progress reports. Pick `stall_ms` no
+--- tighter than the fixed budget it replaces: waits that see no progress at all
+--- get exactly `stall_ms`.
+---
+--- `env` injects the clock and the wait (defaults: libuv `now`, `vim.wait`), so
+--- the helper's own tests run on a fake clock instead of scheduler timing.
 ---@param predicate fun(): boolean
 ---@param progress fun(): any # a value that changes while work is advancing
 ---@param stall_ms integer
----@param ceiling_ms? integer # default 60000
+---@param ceiling_ms? integer # default 40000, below plenary's 50s file deadline
+---@param env? { now: fun(): number, wait: fun(ms: integer, predicate: fun(): boolean): boolean }
 ---@return boolean settled
 ---@return string? why # "stalled" or "ceiling" when not settled
-function M.until_progress(predicate, progress, stall_ms, ceiling_ms)
+function M.until_progress(predicate, progress, stall_ms, ceiling_ms, env)
     local uv = vim.uv or vim.loop
-    local start = uv.now()
-    local last, moved = progress(), uv.now()
+    local now = env and env.now or function() uv.update_time(); return uv.now() end
+    local wait = env and env.wait or function(ms, pred) return vim.wait(ms, pred, 1) end
+    local start = now()
+    local last, moved = progress(), start
     while true do
-        if vim.wait(math.min(50, stall_ms), predicate, 1) then return true end
-        uv.update_time()
-        local now, current = uv.now(), progress()
-        if current ~= last then last, moved = current, now end
-        if now - moved >= stall_ms then return false, "stalled" end
-        if now - start >= (ceiling_ms or 60000) then return false, "ceiling" end
+        if wait(math.min(50, stall_ms), predicate) then return true end
+        local t, current = now(), progress()
+        if current ~= last then last, moved = current, t end
+        if t - moved >= stall_ms then return false, "stalled" end
+        if t - start >= (ceiling_ms or 40000) then return false, "ceiling" end
     end
 end
 

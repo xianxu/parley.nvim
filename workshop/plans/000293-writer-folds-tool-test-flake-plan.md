@@ -174,3 +174,9 @@ end
 - PQ-3: `on_win` cache key includes a fold signature; fold-toggle spec case added.
 - Minors: Non-goals section; escalation path if thrash persists; `visible_spans` property test.
 
+### 2026-09-27 — M1 boundary review
+- Task 1 red confirmed by running both cases unpended before committing them `pending`: 483057 summary copies (budget 96000); 256 rows queried to draw 9.
+- BR-1: writer_folds stall window 5s (the old fixed budget), so waits not gated on repair are no tighter than before.
+- BR-2: `until_progress` takes injected `now`/`wait`; its unit tests run on a fake clock.
+- Minors: `highlighter._VIEWPORT_MARGIN` seam replaces the literal 21; atlas states the ceiling is per wait; budget spec removes its tmp dir on exit.
+

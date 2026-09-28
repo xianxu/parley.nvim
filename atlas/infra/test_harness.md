@@ -228,8 +228,10 @@ full-suite, and direct `PlenaryBustedFile` invocations.
 
 `tests/helpers/await.lua` `until_progress(predicate, progress, stall_ms, ceiling_ms)`
 waits while a progress signal keeps changing and fails as `stalled` when it stops,
-or at a ceiling kept below the 50-second file deadline so a stuck run reports
-instead of being killed silently. Use it where the wait is gated on bounded
+or at a per-wait ceiling (default 40s). The ceiling bounds one wait, not the
+file: it lets a single stuck wait report before the 50-second file deadline,
+but several slow waits in one file can still reach it. Choose `stall_ms` no
+tighter than the fixed budget being replaced. Use it where the wait is gated on bounded
 repair work (e.g. a tool round's continuation waits for the document to repair
 the written block): a fixed `vim.wait` budget cannot tell slow from stuck.
 `tests/integration/repair_work_budget_spec.lua` guards that repair work with

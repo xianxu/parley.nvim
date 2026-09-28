@@ -57,9 +57,11 @@ describe('writer folds (#290)',function()
     -- #293: a tool round's continuation waits for the document to repair the
     -- written block, and a 303-row result takes ~650 repair steps plus a redraw
     -- per turn — 2-5s under load, so a fixed 5s wait flaked. Wait while repair
-    -- keeps moving; a round that never continues stops it and still fails.
+    -- keeps moving; a round that never continues stops it and still fails. The
+    -- 5s stall window is the old fixed budget, so waits not gated on repair
+    -- (calls>0, terminal, flush idle) are no tighter than before.
     local function wait_for(predicate)
-        local ok,why=Await.until_progress(predicate,function()return repairs end,1000,40000)
+        local ok,why=Await.until_progress(predicate,function()return repairs end,5000)
         assert.is_true(ok,'did not settle: '..tostring(why))
     end
     before_each(function()

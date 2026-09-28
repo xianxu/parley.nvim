@@ -7,6 +7,7 @@
 local parley = require("parley")
 local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-repair-budget-" .. os.time()
 parley.setup({ chat_dir = tmp_dir, state_dir = tmp_dir .. "/state", providers = {}, api_keys = {} })
+vim.api.nvim_create_autocmd("VimLeavePre", { callback = function() vim.fn.delete(tmp_dir, "rf") end })
 local highlighter = require("parley.highlighter")
 local D = require("parley.document")
 
@@ -78,6 +79,6 @@ describe("repair work budget for a large written block (#293)", function()
         assert.is_true(ok, tostring(err))
         local drawn = vim.api.nvim_buf_line_count(buf) - #block() + 1 -- rows before the fold + its first row
         assert.is_true(queried > 0, "the decoration provider did not run")
-        assert.is_true(queried <= drawn + 21, ("queried %d rows to draw %d"):format(queried, drawn))
+        assert.is_true(queried <= drawn + highlighter._VIEWPORT_MARGIN + 1, ("queried %d rows to draw %d"):format(queried, drawn))
     end)
 end)
