@@ -1,12 +1,14 @@
 ---
 id: 000293
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
-card_mirror: '584e88471ceeb0175e9b3a885f63039eb1e0eefb' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'f141e629991c356945b95802fc26a0095bd8659f' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-27T18:27:58-07:00
+flow: {kind: quick, provenance: inferred, spec: "a7b282ae", done: "b7dadaf2"}
 ---
 
 # writer_folds tool test flakes: tool round continuation sometimes misses the 5s wait
