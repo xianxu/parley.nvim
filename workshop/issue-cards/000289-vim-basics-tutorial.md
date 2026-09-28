@@ -1,11 +1,19 @@
 ---
 id: 000289
-status: working
+status: codecomplete
 created: 2026-09-27
 updated: 2026-09-28
 estimate_hours:
 github_issue:
 started: 2026-09-28T10:52:38-07:00
+actual_hours: 1.82
+tracker:
+    version: 1
+    completion:
+        token: close-c998923fb4b3
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: f8598aefdb403f1b5f7bfca908e54d796c44b7ef
+        evidence_commit: 00d356f095c70ce758a0a9215c270382f266275d
 ---
 
 # Add tutorial 4: VIM Basics for newcomers
