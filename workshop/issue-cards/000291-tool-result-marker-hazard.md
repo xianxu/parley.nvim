@@ -1,11 +1,19 @@
 ---
 id: 000291
-status: working
+status: codecomplete
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
 github_issue:
 started: 2026-09-27T17:15:59-07:00
+actual_hours: 0.40
+tracker:
+    version: 1
+    completion:
+        token: close-7897dee542cf
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 80f10ce3fe13fb77ba783f101bbc5b2964e6c27c
+        evidence_commit: 78f0c426dc5a1b4caa715e4bf59dc70050dc23e6
 ---
 
 # Close the column-0 marker hazard in tool results (ls/find/stderr)
