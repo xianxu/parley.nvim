@@ -1,6 +1,6 @@
 ---
 id: 000292
-status: open
+status: working
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
@@ -17,6 +17,7 @@ tracker:
         source_blob: ba72ea356d8d6b3d8d78f94730a4401a6f1bb584
         destination: workshop/issues/000292-alt-h-alias.md
         main_commit: f621567a57761faad9b0fc920f3ce50afeff2e0c
+started: 2026-09-27T17:48:02-07:00
 ---
 
 # Alt+h as an alias of <C-g>? (keybinding help)
