@@ -34,7 +34,7 @@
 -- backtick count as a matching pair, unambiguously surviving LLM
 -- output that contains ``` or longer fences.
 --
--- PURE apart from reading the configured marker prefixes: no filesystem,
+-- PURE apart from reading the live marker prefixes: no filesystem,
 -- no side effects. Safe to call from any context.
 
 local M = {}
@@ -101,23 +101,28 @@ end
 local ESCAPE = "\\"
 local ESCAPED = "escaped=true"
 
--- The same predicate fence.scan bounds a body with, under the configured prefixes.
-local function structural(line)
+-- The same predicate fence.scan bounds a body with, under the live prefixes
+-- the parser uses (#291 BR-1).
+local function structural_predicate()
     local structure = require("parley.highlight_structure")
-    local patterns = structure.patterns(require("parley.config"))
-    return structure.is_structural_kind(structure.classify(line, patterns).kind)
+    local patterns = structure.live_patterns()
+    return function(line)
+        return structure.is_structural_kind(structure.classify(line, patterns).kind)
+    end
 end
 
 --- `content` with its structural lines escaped, or nil when none needs it.
 local function escape(content)
+    local structural = structural_predicate()
     local lines = vim.split(content, "\n", { plain = true })
-    local needed = false
-    for _, line in ipairs(lines) do
-        if structural(line) then needed = true; break end
+    local marked, needed = {}, false
+    for i, line in ipairs(lines) do
+        marked[i] = structural(line)
+        needed = needed or marked[i]
     end
     if not needed then return nil end
     for i, line in ipairs(lines) do
-        if structural(line) or line:sub(1, #ESCAPE) == ESCAPE then lines[i] = ESCAPE .. line end
+        if marked[i] or line:sub(1, #ESCAPE) == ESCAPE then lines[i] = ESCAPE .. line end
     end
     return table.concat(lines, "\n")
 end

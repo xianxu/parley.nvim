@@ -210,7 +210,7 @@ function M.refresh(buf,opts)
     if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then return end
     local s=buffers[buf]
     if not s then
-        local doc=Document.get(buf) or Document.attach(buf,{patterns=require('parley.document.lexical').patterns(require('parley.config'))})
+        local doc=Document.get(buf) or Document.attach(buf,{patterns=require('parley.highlight_structure').live_patterns()})
         if not doc then return end
         s={buf=buf,doc=doc,opts=opts or {},dirty=true};buffers[buf]=s
         s.pump=require('parley.deferred_work').new(function()

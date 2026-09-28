@@ -64,6 +64,8 @@ in inline results is worth closing instead of bounding.
 |---|---|---|---|
 | `render_result` | changed | `tools/serialize.lua` | escapes structural body lines, flags the block `escaped=true` |
 | `parse_result` | changed | `tools/serialize.lua` | strips one leading `\` per line of a flagged block |
+| `live_config` | new | `highlight_structure.lua` | the user's config after setup, else the defaults module |
+| `live_patterns` | new | `highlight_structure.lua` | marker patterns under `live_config`; the one resolver for writers |
 
 ## Plan
 
@@ -109,4 +111,13 @@ Design:
   written escaped, the answer doesn't fork, and the follow-up question's provider payload
   carries the unescaped listing (red without the escape). The existing "forks on a
   column-0 question marker" case pins old unflagged transcripts.
+- 2026-09-27: close review round 1 → FIX-THEN-SHIP. BR-1 (Important): `render_result` read
+  prefixes from `require("parley.config")`, the pristine defaults, while `parse_chat` runs
+  under the user's `parley.config`; with `chat_user_prefix = "Q:"` an `ls` line
+  `Q: notes.md` went unescaped and forked. Fixed as a class: `highlight_structure.live_patterns()`
+  (via `package.loaded`, so pure modules need not load the plugin) now serves the
+  serializer, `tool_folds` foldtext and document attach, and `diagnostic_refresh`'s attach;
+  `init.lua`'s two debug `parse_chat` calls use `M.config`. Custom-prefix test in
+  `tools_serialize_spec` (red with the defaults read). Minors: patterns built once per
+  `render_result`; `fence.lua` `scan` doc updated.
 

@@ -282,8 +282,9 @@ What belongs here is the shape and the consumers:
 
 The bound is safe because **no result Parley writes has a column-0 marker in its
 body** (#291). `serialize.render_result` escapes any body line the shared lexer
-classifies as structural (`lexical.is_structural_kind`, under the configured
-prefixes, the same predicate `fence.scan` bounds with): such a block's header gains
+classifies as structural (`lexical.is_structural_kind`, under the user's live
+prefixes from `highlight_structure.live_patterns()`, the same predicate
+`fence.scan` bounds with): such a block's header gains
 ` escaped=true`, and inside it every structural line, and every line already
 starting with `\`, gets one `\` prepended. `parse_result` strips one leading `\`
 per line of a flagged block, so every reader (the chat parser, the provider-message

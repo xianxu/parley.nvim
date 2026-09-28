@@ -96,8 +96,8 @@ end
 ---     swallowing the remainder, so malformed input over-forks instead of
 ---     silently losing exchanges;
 ---   * a tool body's close must also fall before the next column-0 structural
----     marker (#203) — see body_close_of for why that bound is safe and where
----     it is not total.
+---     marker (#203) — see body_close_of for why that bound is safe: results
+---     Parley writes escape their structural lines (#291).
 ---
 --- @param lines string[]                         1-based
 --- @param is_tool_marker fun(line, row):boolean  true for 🔧:/📎: at column 0

@@ -264,3 +264,27 @@ describe("serialize: structural lines in a result body (#291)", function()
         assert.equals("\\x", parsed.content)
     end)
 end)
+
+-- #291 BR-1: the writer must escape under the prefixes the parser reads with —
+-- the user's live config, not the defaults module.
+describe("serialize: escaping under a custom prefix (#291 BR-1)", function()
+    local saved
+    local config = vim.tbl_extend("force", vim.deepcopy(require("parley.config")), { chat_user_prefix = "Q:" })
+    before_each(function()
+        saved = package.loaded["parley"]
+        package.loaded["parley"] = { config = config }
+    end)
+    after_each(function() package.loaded["parley"] = saved end)
+
+    it("escapes a line that is a marker only under the user's prefix, and the chat does not fork", function()
+        local content = "a.md\nQ: notes.md"
+        local rendered = serialize.render_result({ id = "r1", name = "ls", content = content })
+        assert.truthy(rendered:find("\n\\Q: notes.md\n", 1, true), rendered)
+        assert.equals(content, serialize.parse_result(rendered).content)
+        local parser = require("parley.chat_parser")
+        local lines = { "---", "topic: t", "file: f.md", "---", "", "Q: q1", "", "🤖: [A]" }
+        vim.list_extend(lines, vim.split(rendered, "\n", { plain = true }))
+        vim.list_extend(lines, { "", "Q: q2" })
+        assert.equals(2, #parser.parse_chat(lines, 4, config).exchanges)
+    end)
+end)
