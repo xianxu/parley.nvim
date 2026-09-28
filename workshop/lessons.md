@@ -237,3 +237,17 @@ oracle, and the mutation that would make the test fail.
 - Tutorial keyboard claims must name the mapping modes: test Normal, Insert and
   Visual separately before generalizing wrapped-line movement. When adding a
   lesson, sweep README discovery as well as runtime catalogs (#289 review).
+
+## 2026-09-28 (#295 — private-note Return)
+
+- Native option flags have buffer-wide effects: enabling `formatoptions=r`
+  continues every configured comment leader. State that scope explicitly, and
+  test actual keys, undo, and pre-existing mappings when reusing native editing.
+- Custom text must cross a native option's grammar safely. `comments` accepts
+  escaped commas but not every backslash/comma combination; validate through the
+  option API and preserve chat setup when a leader cannot be represented.
+- #295 BR-1: native comment matching is ordered. Put the private leader before
+  shorter existing single-line, nested, block, and user-defined leaders; test
+  resulting text still carries the entire private marker across that matrix.
+- #295 BR-2/BR-3: sweep README entry points with atlas docs, parameterize stated
+  default/custom boundary cases, and prove prompt submission through Return.

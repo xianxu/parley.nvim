@@ -59,6 +59,9 @@ starting with `🔒:` and leaves you typing after the prefix. It works in Normal
 and Insert mode. Configure the binding with `chat_shortcut_private_note` and
 the prefix with `chat_local_prefix`. Chat pruning remains on **Ctrl+g b**;
 Option+p now inserts private notes instead of pruning.
+In regular chat buffers, pressing Return continues the private-note prefix on
+the next line, so you can keep taking notes across multiple lines. Delete the
+new prefix to resume ordinary text. Prompt buffers keep Return-to-submit.
 
 To try the app from a checkout, run `./parley_app`. It loads the local starter
 outside repo mode, using a separate demo home and profile. Subsequent launches
