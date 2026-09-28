@@ -31,4 +31,29 @@ function M.await(fn, ms)
     return result
 end
 
+--- Wait for `predicate` while `progress()` keeps changing (#293). A fixed
+--- budget can't tell a slow convergence from a stuck one: long repair after a
+--- large write can take seconds under load, and a longer blind timeout only
+--- hides a real stall for longer. This fails when progress has not moved for
+--- `stall_ms`, or at `ceiling_ms` whatever progress reports.
+---@param predicate fun(): boolean
+---@param progress fun(): any # a value that changes while work is advancing
+---@param stall_ms integer
+---@param ceiling_ms? integer # default 60000
+---@return boolean settled
+---@return string? why # "stalled" or "ceiling" when not settled
+function M.until_progress(predicate, progress, stall_ms, ceiling_ms)
+    local uv = vim.uv or vim.loop
+    local start = uv.now()
+    local last, moved = progress(), uv.now()
+    while true do
+        if vim.wait(math.min(50, stall_ms), predicate, 1) then return true end
+        uv.update_time()
+        local now, current = uv.now(), progress()
+        if current ~= last then last, moved = current, now end
+        if now - moved >= stall_ms then return false, "stalled" end
+        if now - start >= (ceiling_ms or 60000) then return false, "ceiling" end
+    end
+end
+
 return M

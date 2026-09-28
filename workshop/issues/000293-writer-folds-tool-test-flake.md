@@ -100,6 +100,14 @@ total: 4.14
     fixes the "slow" half but cannot meet 50/50 against the pathological runs.
   - Conclusion: the root cause is a document-index performance defect (copy volume
     per repair step), outside this issue's quick-flow shell. Needs a re-plan.
+- M1 baselines (tests/integration/repair_work_budget_spec.lua, synchronous drain of a
+  303-row block, no redraw): summary_values_copied=483057, metadata_values_copied=230111.
+  Highlighter over a closed fold on that block: 256 rows queried to draw 9.
+  Budget cases committed `pending`; M2 enables the summary budget (96000 = 1/5), M3 the
+  drawn-rows budget. writer_folds_spec waits via Await.until_progress on productive
+  repair steps (stall 1s, ceiling 40s — below plenary's 50s kill).
+- Estimate note: `method-b-decisions design=0.9` is diagnosis time already spent inside
+  the claim window, not future design.
 
 ## Revisions
 
