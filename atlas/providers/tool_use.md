@@ -278,36 +278,36 @@ What belongs here is the shape and the consumers:
   stops there rather than latching onto a later bare fence belonging to another
   pair, which used to swallow every exchange in between, silently.
 
-#### The producer-side invariant that rule rests on
+#### The serializer invariant that rule rests on
 
-The bound is safe because **the content-echoing tools never emit a column-0
-marker**: each prefixes its output — `read_file` `%5d  `, `grep`/`ack` `-H`
-giving `file:line:`, `chat_history_search` `{label}/path:line:`, and the write
-tools return status messages. So a column-0 marker inside a body means the
-content did not come from a parley tool — hand-edited, truncated, or pasted —
-and forking there is the visible degradation chosen over silent swallowing.
+The bound is safe because **no result Parley writes has a column-0 marker in its
+body** (#291). `serialize.render_result` escapes any body line the shared lexer
+classifies as structural (`lexical.is_structural_kind`, under the configured
+prefixes, the same predicate `fence.scan` bounds with): such a block's header gains
+` escaped=true`, and inside it every structural line, and every line already
+starting with `\`, gets one `\` prepended. `parse_result` strips one leading `\`
+per line of a flagged block, so every reader (the chat parser, the provider-message
+rebuild, `chat_respond`) gets the original bytes, and the model never sees the
+escape. The invariant holds whatever a tool returns: `ls`/`find` echoing a file
+*named* `💬: notes.md`, and raw stderr spliced into error results, were the two
+accepted exceptions before #291 and are now covered.
 
-`grep`/`ack` pass `-H` unconditionally rather than leaving it to the caller
-(#203 BR-12): both omit the filename on a **single-file** search, so
-`grep pattern=💬 path=chat.md` used to return bare transcript lines and fork a
-well-formed body.
+**Compatibility:** an unflagged block is written and parsed byte-for-byte as before.
+That includes every result with no structural line and every transcript written
+before #291. So a column-0 marker in an unflagged body still means the content did
+not come from Parley (hand-edited, pasted, or an older result), and forking there
+stays the visible degradation.
 
-**The invariant is not total, and the claim is bounded rather than chased.** Two
-exceptions, both degrading to over-forking:
+Tools still prefix their content lines (`read_file` `%5d  `, `grep`/`ack` `-H`,
+`chat_history_search` `{label}/path:line:`); that is for the model's benefit now,
+not the parser's.
 
-- **path-echoing tools** — for `ls`/`find` the path IS the output, so a file
-  *named* `💬: notes.md` yields a column-0 marker and no flag prevents it;
-- **error paths** — `grep`/`ack`/`ls`/`find` splice raw stderr after a prefixed
-  first line, so a hostile message can carry one.
-
-This is a *producer* obligation the *parser* depends on, so it is guarded where
-it is produced: `tests/integration/tool_output_prefix_spec.lua` derives its
-subjects from `tools.BUILTIN_NAMES` + `OPTIONAL_NAMES`, so a new builtin is
-covered by construction, and drives each over a **call-shape product** (single
-file and directory) — one shape per tool is how its first draft passed while
-`grep` on a single file was emitting column-0 markers. A missing builtin fails;
-an absent OPTIONAL tool (`ack`) is reported `pending` rather than skipped
-silently, so green never means "never checked".
+`tests/integration/tool_output_prefix_spec.lua` runs each registered tool's real
+output (subjects derived from `tools.BUILTIN_NAMES` + `OPTIONAL_NAMES`, over a
+call-shape product, `ls`/`find` against a marker-named file) plus a stderr fixture
+through the serializer, and asserts the written block has no column-0 marker and
+round-trips. An absent OPTIONAL tool (`ack`) is reported `pending`, so green never
+means "never checked".
 
 
 **Which markers the depth rule covers** is stated once, in

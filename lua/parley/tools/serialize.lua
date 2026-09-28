@@ -14,10 +14,18 @@
 --   <input_json>
 --   ```
 --
---   📎: <tool_name> id=<id>[ error=true]
+--   📎: <tool_name> id=<id>[ error=true][ escaped=true]
 --   ```<fence-length-backticks>
 --   <body>
 --   ```<fence-length-backticks>
+--
+-- A body line the lexer reads as a structural marker (💬:, 🔧:, 📎: … at
+-- column 0) would end the body early (fence.scan), so render_result escapes
+-- it (#291): the block is flagged `escaped=true`, and in a flagged block every
+-- such line, and every line already starting with `\`, gets one `\`
+-- prepended. parse_result strips one from each line of a flagged block. An
+-- unflagged block, and every block written before #291, is byte-for-byte
+-- unchanged, so no producer needs to know about markers.
 --
 -- The fence length is dynamic: strictly longer than the longest run
 -- of backticks in the body (minimum 3). The OPENING fence may carry
@@ -26,8 +34,8 @@
 -- backtick count as a matching pair, unambiguously surviving LLM
 -- output that contains ``` or longer fences.
 --
--- PURE: no filesystem, no vim state, no side effects. Safe to call
--- from any context.
+-- PURE apart from reading the configured marker prefixes: no filesystem,
+-- no side effects. Safe to call from any context.
 
 local M = {}
 
@@ -90,13 +98,47 @@ function M.parse_call(text)
     return { id = id, name = name, input = input }
 end
 
+local ESCAPE = "\\"
+local ESCAPED = "escaped=true"
+
+-- The same predicate fence.scan bounds a body with, under the configured prefixes.
+local function structural(line)
+    local structure = require("parley.highlight_structure")
+    local patterns = structure.patterns(require("parley.config"))
+    return structure.is_structural_kind(structure.classify(line, patterns).kind)
+end
+
+--- `content` with its structural lines escaped, or nil when none needs it.
+local function escape(content)
+    local lines = vim.split(content, "\n", { plain = true })
+    local needed = false
+    for _, line in ipairs(lines) do
+        if structural(line) then needed = true; break end
+    end
+    if not needed then return nil end
+    for i, line in ipairs(lines) do
+        if structural(line) or line:sub(1, #ESCAPE) == ESCAPE then lines[i] = ESCAPE .. line end
+    end
+    return table.concat(lines, "\n")
+end
+
+local function unescape(content)
+    local lines = vim.split(content, "\n", { plain = true })
+    for i, line in ipairs(lines) do
+        if line:sub(1, #ESCAPE) == ESCAPE then lines[i] = line:sub(#ESCAPE + 1) end
+    end
+    return table.concat(lines, "\n")
+end
+
 --- Render a ToolResult into its buffer representation.
 --- @param result ToolResult { id, content, is_error?, name? }
 --- @return string block
 function M.render_result(result)
     local content = require("parley.tools.result_evidence").publish(result).content
+    local escaped = escape(content)
+    content = escaped or content
     local pair = fence_for(content)
-    local err_tag = result.is_error and " error=true" or ""
+    local err_tag = (result.is_error and " error=true" or "") .. (escaped and " " .. ESCAPED or "")
     return string.format(
         "📎: %s id=%s%s\n%s\n%s\n%s",
         result.name or "",
@@ -120,8 +162,11 @@ function M.parse_result(text)
     -- is_error is encoded on the header line only.
     local header = text:match("^([^\n]*)") or ""
     local is_error = header:find("error=true", 1, true) ~= nil
+    -- A flag token after the id, never the name field.
+    local escaped = (" " .. (header:match("id=%S+(.*)$") or "") .. " "):find(" " .. ESCAPED .. " ", 1, true) ~= nil
 
     local body = fenced_body(text)
+    if body and escaped then body = unescape(body) end
 
     return {
         id = id,

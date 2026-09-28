@@ -58,6 +58,13 @@ in inline results is worth closing instead of bounding.
 - Old unescaped transcripts parse exactly as before (regression fixture).
 - Atlas updated.
 
+## Core concepts
+
+| Entity | Status | Where | Role |
+|---|---|---|---|
+| `render_result` | changed | `tools/serialize.lua` | escapes structural body lines, flags the block `escaped=true` |
+| `parse_result` | changed | `tools/serialize.lua` | strips one leading `\` per line of a flagged block |
+
 ## Plan
 
 Design:
@@ -75,19 +82,31 @@ Design:
   the provider context gets the original content; live rounds use frozen results.
 - Creates nothing durable (ARCH-FUNERAL): a header token and a byte per escaped line.
 
-- [ ] Round-trip property tests in `tools_serialize_spec` (hostile lines, lines starting
+- [x] Round-trip property tests in `tools_serialize_spec` (hostile lines, lines starting
       with `\`, no-flag byte-identity, old unflagged block with `\` lines unchanged)
-- [ ] `render_result` escape + flag; `parse_result` unescape under the flag
-- [ ] `tool_output_prefix_spec`: assert every tool's *rendered* block has no column-0
+- [x] `render_result` escape + flag; `parse_result` unescape under the flag
+- [x] `tool_output_prefix_spec`: assert every tool's *rendered* block has no column-0
       structural line and round-trips; `ls`/`find` exercised with a marker-named file;
       stderr-shaped fixture; the two exceptions removed
-- [ ] Chat-level fixture: hostile results parse without forking, rebuild provider
+- [x] Chat-level fixture: hostile results parse without forking, rebuild provider
       messages with the original content; an old unescaped transcript parses as before
-- [ ] Atlas (`providers/tool_use.md`) and `fence.lua` comment: invariant total for
+- [x] Atlas (`providers/tool_use.md`) and `fence.lua` comment: invariant total for
       results written by Parley
 
 ## Log
 
 ### 2026-09-27
 - Filed from #281 (design decision A).
+- 2026-09-27: implemented as planned (flagged `\` escape; user approved the scheme).
+  Tests: `tools_serialize_spec` round-trips six hostile shapes (marker-named listing,
+  spliced stderr, every structural marker, escape-led lines, last line, trailing
+  newline), no-flag byte identity, an old unflagged block with `\` lines unchanged, and
+  a tool named `escaped=true`. `tool_output_prefix_spec` now runs every tool's real output
+  through the serializer; `ls` and a stderr fixture go red without the escape. `find`
+  stays green either way: it echoes full paths, which never start with a marker.
+  `chat_parser_tools_spec`: rendered hostile results don't fork and parse to the original
+  bytes. `chat_respond_spec` e2e: a real `ls` of a marker-named file in a tool round is
+  written escaped, the answer doesn't fork, and the follow-up question's provider payload
+  carries the unescaped listing (red without the escape). The existing "forks on a
+  column-0 question marker" case pins old unflagged transcripts.
 

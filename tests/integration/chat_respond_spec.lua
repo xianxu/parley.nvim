@@ -598,6 +598,45 @@ describe('chat_respond: scoped session integration',function()
         output(calls[2],'finished');assert.equals('success',complete(session,calls[2]).outcome)
     end)
     end
+    -- #291: an ls of a marker-NAMED file is echoed at column 0. The written
+    -- result escapes it, the answer does not fork, and the next question's
+    -- provider context carries the original, unescaped listing.
+    it('keeps a marker-named file listing inside its result and sends it unescaped',function()
+        local dir=tmp_dir..'/marker-listing-'..math.random(1000000);vim.fn.mkdir(dir,'p')
+        files[#files+1]=dir..'/💬: notes.md';vim.fn.writefile({'x'},dir..'/💬: notes.md')
+        open({'💬: list the directory',''})
+        local session=submit();local first=calls[1]
+        local events={}
+        for _,ev in ipairs({
+            {type='message_start',message={id='msg_test',model='claude-sonnet-5'}},
+            {type='content_block_start',index=0,content_block={type='tool_use',id='tool-ls',name='ls',input={}}},
+            {type='content_block_delta',index=0,delta={type='input_json_delta',partial_json=vim.json.encode({path=dir})}},
+            {type='content_block_stop',index=0},{type='message_delta',delta={stop_reason='tool_use'}},{type='message_stop'},
+        })do vim.list_extend(events,{'event: '..ev.type,'data: '..vim.json.encode(ev),''})end
+        parley.tasker.get_query(first.id).raw_response=table.concat(events,'\n')
+        first.running=false;first.complete(first.id)
+        wait_for(function()return #calls==2 end)
+        assert.is_true(buffer_contains(buf,'\n\\💬: notes.md\n'),'written escaped')
+        output(calls[2],'listed');complete(session,calls[2])
+        local lines=vim.api.nvim_buf_get_lines(buf,0,-1,false)
+        local parser=require('parley.chat_parser')
+        local parsed=parser.parse_chat(lines,parser.find_header_end(lines),parley.config)
+        assert.equals(2,#parsed.exchanges,'the listing forked the answer')
+        local row;for i=#lines,1,-1 do if lines[i]:match('^💬:')then row=i;break end end
+        vim.api.nvim_buf_set_lines(buf,row-1,row,false,{'💬: and now?'})
+        vim.api.nvim_win_set_cursor(0,{row,0})
+        submit();wait_for(function()return #calls==3 end)
+        local sent
+        for _,message in ipairs(calls[3].payload.messages)do
+            for _,block in ipairs(type(message.content)=='table' and message.content or {})do
+                if block.type=='tool_result' then sent=block.content end
+            end
+        end
+        assert.is_not_nil(sent,'the tool result reached the next request')
+        sent=type(sent)=='table' and sent[1].text or sent
+        assert.truthy(('\n'..sent):find('\n💬: notes.md',1,true),sent)
+        assert.is_nil(sent:find('\\💬',1,true),'the escape leaked to the provider')
+    end)
     it('refuses files outside the chat directory and malformed headers before provider IO',function()
         vim.api.nvim_buf_set_name(buf,vim.fn.tempname()..'.md')
         open({'💬: question'})
