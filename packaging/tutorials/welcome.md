@@ -4,6 +4,12 @@ file: welcome.md
 tags:
 ---
 
+@@Table of Contents@@
+[Welcome to Parley](welcome.md)
+[Parley Basics](basics.md)
+[Parley Advanced](advanced.md)
+[VIM Basics](vim-basics.md)
+
 # Welcome to Parley
 
 Parley is a chat workspace built on Neovim. This Markdown document is your

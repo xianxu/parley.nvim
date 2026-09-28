@@ -4,6 +4,12 @@ file: advanced.md
 tags:
 ---
 
+@@Table of Contents@@
+[Welcome to Parley](welcome.md)
+[Parley Basics](basics.md)
+[Parley Advanced](advanced.md)
+[VIM Basics](vim-basics.md)
+
 # Advanced Topics
 
 Parley keeps your conversation in an editable document. This lesson explains
@@ -132,10 +138,6 @@ selected AI provider.
 
 Use the question below for a guided explanation, or open a project chat and try
 one of the exercises above.
-
-New to Vim? Open [4. VIM Basics](vim-basics.md) for navigation, undo, search,
-and everyday editing. In Normal mode, put the cursor on the link and press
-`option+o`.
 
 💬: Help me understand how Parley turns this transcript into a request to the AI.
 Then suggest a small project where I can practice research a topic, saving a note,
