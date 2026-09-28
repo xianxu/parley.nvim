@@ -24,6 +24,15 @@ follows a file or recognized artifact reference; `<M-o>` also follows Parley
 branch references before falling back to smart `gf`. See [Branching](../chat/inline_branch_links.md)
 and [Drill-In](../chat/drill_in.md) for placement and selection details.
 
+In a regular chat buffer, Insert-mode Return continues the private-note prefix
+(`🔒:` by default, configurable with `chat_local_prefix`). It also works when
+splitting a note mid-line or adding an empty note line. Delete the new prefix
+to resume ordinary text. This uses native comment continuation and undo, without
+replacing Return mappings; existing comment leaders also continue. Prompt
+buffers retain Return-to-submit. Private notes must start at column one to be
+withheld from the model. A custom prefix rejected by Neovim's comment option
+produces a warning and keeps manual note entry available.
+
 Structural editing uses text objects rather than one-off delete commands:
 `ae`/`ie` select the entity at the cursor (a markdown section, a paragraph, or
 a whole `💬:` exchange) and `aE` extends it through the end of the question, so

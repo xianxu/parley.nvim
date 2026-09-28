@@ -23,6 +23,12 @@ In regular chat buffers, Insert-mode Return on a private-note line continues the
 
 Use buffer-local native comment continuation during chat preparation, preserving existing comment definitions and Return mappings. This reuses Neovim editing/undo and composes with spell completion (ARCH-DRY); no per-keystroke scanning or new persistent state. Test actual keyboard input, custom prefixes and mapping coexistence. User explicitly requested creation followed by implementation; proceed within this small scope.
 
+### Core concepts
+
+| Symbol | Location | Status |
+| --- | --- | --- |
+| `prep_chat` | `lua/parley/init.lua` | modified |
+
 ## Done when
 
 - Return continues default and custom note prefixes, including mid-line splits and repeated empty note lines.
@@ -32,8 +38,8 @@ Use buffer-local native comment continuation during chat preparation, preserving
 
 ## Plan
 
-- [ ] Add failing keyboard regressions, configure native chat continuation, and verify mapped tests.
-- [ ] Document behavior and close through the SDLC review gate.
+- [x] Add failing keyboard regressions, configure native chat continuation, and verify mapped tests.
+- [x] Document behavior; submit implementation to the SDLC close review gate.
 
 
 ## Log
@@ -44,3 +50,12 @@ Use buffer-local native comment continuation during chat preparation, preserving
 
 ### 2026-09-28 — native continuation semantics
 Spec review identified that `formatoptions=r` also continues existing comment leaders and indented leaders. Accept Neovim's native comment behavior in chat buffers rather than replacing users' Return mappings; ordinary prose remains unchanged. Only column-one private-note prefixes are private according to the existing parser; this change does not broaden privacy classification.
+
+### 2026-09-28 — test contract
+The mapped architecture guard requires a Core concepts row even for quick-flow changes; added the existing prep_chat owner. Red keyboard tests demonstrate missing prefixes for default/custom markers, repeated Return, splits, and spell typeahead.
+
+### 2026-09-28 — unsupported native leaders
+A probe found that Neovim cannot represent every custom prefix as a comment leader (for example a backslash immediately followed by a comma). Preserve chat preparation and report a warning if native option validation rejects the prefix; those unusual prefixes remain manually usable. The standard prefix and tested literal colon/comma/backslash variants continue automatically.
+
+### 2026-09-28 — implementation and verification
+Native comment continuation is configured only for regular chat buffers. Keyboard regressions cover repeated Return, splitting, literal custom prefixes, native undo, existing Return maps, spell typeahead, prompt exclusion, non-chat isolation, and unsupported native leaders. Red runs confirmed missing prefixes and unsupported-prefix setup failure before implementation. Spec review approved the clarified native-comment scope; lessons and atlas updated. Verification: mapped ui/keybindings suite and lint (0 warnings/errors); final close review follows.

@@ -2669,6 +2669,21 @@ M.prep_chat = function(buf, file_name)
 
 	M.prep_md(buf)
 
+	-- Native continuation preserves Return mappings and keeps splits in the
+	-- user's undo transaction. Prompt buffers reserve Return for submission.
+	local note_prefix = M.config.chat_local_prefix
+	if not M.config.chat_prompt_buf_type and note_prefix and note_prefix ~= "" then
+		local leader = ":" .. note_prefix:gsub(",", "\\,")
+		local comments = vim.bo[buf].comments
+		local ok = pcall(vim.api.nvim_set_option_value, "comments",
+			comments == "" and leader or comments .. "," .. leader, { buf = buf })
+		if ok then
+			vim.opt_local.formatoptions:append("r")
+		else
+			M.logger.warning("Private note continuation: chat_local_prefix is not a valid native comment leader")
+		end
+	end
+
 	-- Spellcheck + as-you-type spell-suggestion typeahead (config.chat_spell).
 	-- The spell <CR> map shadows interview's global <CR> map buffer-locally, so we
 	-- inject interview.cr_keys as the no-popup base to keep timestamp insertion (#134).
