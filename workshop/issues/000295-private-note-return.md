@@ -45,6 +45,7 @@ Use buffer-local native comment continuation during chat preparation, preserving
 ## Log
 
 ### 2026-09-28
+- 2026-09-28: closed — After BR-1/2/3 fixes: make test-spec SPEC=ui/keybindings passed with clean process census; nine-prefix Return/split/empty-line matrix and real prompt submission passed; make lint 0 warnings/errors; git diff --check clean; README and atlas updated. Logs: /tmp/parley-295-review-green.log and /tmp/parley-295-lint.log.; review verdict: SHIP
 
 ## Revisions
 

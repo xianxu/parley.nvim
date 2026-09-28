@@ -74,3 +74,71 @@ findings:
     detail: |
       tests/integration/private_note_prefix_spec.lua:78-96 exercises repeated empty lines and mid-line splits only with the default prefix; custom cases cover only end-of-line Return. Lines 119-123 assert prompt options without pressing Return or observing submission. These are the missing cases in the stated Done-when matrix. Parameterize split/repeated-line cases across default and custom prefixes, and drive prompt Return through its real callback with an observable submission boundary.
 ```
+
+---
+
+## Re-review — 2026-09-28T15:12:44-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 295 — Continue private note prefixes on Return |
+| repo | parley.nvim |
+| issue file | workshop/issues/000295-private-note-return.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 2f03ab371596a55a05e0ac9f73978fc75a6bceb0..7a42de80e07e2000196340d5ee7fcf1bf85e25b4 |
+| command | sdlc close --issue 295 |
+| reviewer | codex |
+| timestamp | 2026-09-28T15:12:44-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+All three prior findings are addressed, with no new defects found in the pinned range. The private-note regressions pass and detect deliberately reverted behavior. Confidence is limited by an incomplete mapped-suite run in this sandbox.
+
+1. **Strengths**
+   - Private leaders take precedence while preserving existing comment definitions (`lua/parley/init.lua:2678`).
+   - Keyboard tests cover nine prefixes across repeated Return, empty lines, splits, and whitespace boundaries.
+   - Native undo, existing mappings, spell typeahead, and prompt submission are exercised.
+   - README and atlas document continuation, exit behavior, and scope.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Private-note suite: **37 passed**.
+   - Scratch mutation restoring old leader order: **19 failures**, confirming regression sensitivity.
+   - Scratch mutation removing prompt submission: **the prompt test fails**.
+   - Lint: **0 warnings/errors**; pinned diff whitespace check passes.
+   - `make test-spec SPEC=ui/keybindings` exited nonzero; `branch_child_spec.lua` produced no completion summary. Full-suite success remains independently unverified. Process census was unavailable because sandboxed `ps` could not run.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** reuses native continuation and undo.
+   - **ARCH-PURE — pass:** change remains thin editor-option configuration.
+   - **ARCH-PURPOSE — pass:** precedence correction covers the enumerated overlap family and preserves complete private prefixes.
+
+7. **Plan revisions:** None required; existing revisions describe the implemented scope and corrections.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      lua/parley/init.lua:2678 prepends the private leader. Tests at tests/integration/private_note_prefix_spec.lua:79-109 cover shorter single-line, nested, block, and user-defined leaders; reverting precedence in a scratch copy causes 19 failures.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      README.md:62-64 now documents Return continuation, deleting the prefix to exit, and regular-chat versus prompt scope, consistent with prep_chat and the passing keyboard tests.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      tests/integration/private_note_prefix_spec.lua:79-103 parameterizes repeated-empty-line and split cases across nine prefixes; lines 132-143 drive actual Return through prompt submission. Removing the production submission callback in a scratch copy makes that test fail.
+```
