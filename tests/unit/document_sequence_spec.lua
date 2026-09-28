@@ -71,7 +71,16 @@ describe("document sequence", function()
                 local out = combine(a, b)
                 assert.same(a0, a, "combine mutated its first operand")
                 assert.same(b0, b, "combine mutated its second operand")
-                assert.is_true(out ~= a and out ~= b, "combine returned an operand, not a fresh table")
+                local shared = {}
+                local function mark(t) if type(t) == "table" then shared[t] = true; for _, v in pairs(t) do mark(v) end end end
+                local function aliased(t)
+                    if type(t) ~= "table" then return false end
+                    if shared[t] then return true end
+                    for _, v in pairs(t) do if aliased(v) then return true end end
+                    return false
+                end
+                mark(a); mark(b)
+                assert.is_false(aliased(out), "combine output shares a table with an operand")
                 plain(out, { n = 256 })
             end
         end

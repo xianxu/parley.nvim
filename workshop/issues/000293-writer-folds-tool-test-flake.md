@@ -47,7 +47,7 @@ rows, the real tool's async IO under load) or sometimes never issued (a race in 
 Durable plan: `workshop/plans/000293-writer-folds-tool-test-flake-plan.md`.
 
 - [x] M1 — guards: deterministic repair work-budget spec (red) + progress-aware wait in writer_folds_spec
-- [ ] M2 — sequence combine without defensive copies (purity contract); re-measure find_walk predicates
+- [x] M2 — sequence combine without defensive copies (purity contract); re-measure find_walk predicates
 - [ ] M3 — highlighter computes only rows a window draws (skip closed-fold interiors)
 
 ## Estimate
@@ -78,6 +78,7 @@ total: 4.14
 ## Log
 
 ### 2026-09-27
+- 2026-09-27: closed M2 — repair_work_budget_spec summary budget now enabled and green (483057 -> 26224 summary copies, drain ~350-580ms -> ~290ms); document_sequence_spec no-copy + purity/bounded-shape property tests pass; make test-spec SPEC=chat/document 36/36 files green; full-suite load flakes (document_semantic, perf_document) pass alone; single_source_sweeps red only on visible_spans, which M3 defines; review verdict: SHIP
 - 2026-09-27: closed M1 — repair_work_budget_spec measures baseline (483057 summary copies; 256 rows queried to draw 9) with both budget cases pending for M2/M3; writer_folds_spec (5s stall window) + await_helper_spec (fake-clock stall/ceiling/progress cases) pass; lint clean; review verdict: SHIP
 - 2026-09-27: filed during #291 close (operator request).
 - 2026-09-27 diagnosis (probes in the spec, jit.profile, document stats):

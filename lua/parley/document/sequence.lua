@@ -179,6 +179,9 @@ local function build(s, values, stamp)
     return assemble(s,leaves,1,#leaves)
 end
 
+-- opts.combine / opts.combine_projection must be pure: never mutate an operand,
+-- and return a fresh table sharing no nested table with either operand. The
+-- sequence passes its stored summaries to them uncopied (#293).
 function M.new(values, opts)
     opts = opts or {}
     assert((opts.summarize == nil) == (opts.combine == nil), "summarize and combine are paired")

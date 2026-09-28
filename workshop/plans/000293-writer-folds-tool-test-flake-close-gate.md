@@ -64,6 +64,25 @@ rounds:
       boundary: M1
       recipe: milestone-review
       blocked: false
+    - "n": 3
+      timestamp: "2026-09-27T20:35:31-07:00"
+      agent: claude
+      findings:
+        - id: BR-6
+          severity: Minor
+          title: Plan says the combine purity contract is documented on sequence.new; it is only on the private helper
+          detail: 'This is the 2nd finding in family doc-overclaims-guarantee. Rule: a contract the plan says is "documented on X" must appear at X, the public entry point callers read. Add a one-line purity requirement to the M.new header (sequence.lua:182) instead of rewording the plan.'
+          family: doc-overclaims-guarantee
+          round: 3
+        - id: BR-7
+          severity: Minor
+          title: Purity property test checks only top-level freshness, not nested aliasing of combine outputs
+          detail: document_sequence_spec.lua checks out ~= a and out ~= b; a combine that returns {flags=a.flags} would pass and alias stored summaries. Walk out and assert no nested table is also reachable from a or b.
+          family: purity-test-shallow-alias
+          round: 3
+      boundary: M2
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#293 (boundary-review)
@@ -93,6 +112,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-4 — addressed — atlas/infra/test_harness.md now states the ceiling bounds one wait, not the file, and several slow waits can still reach 50s.
 - BR-5 — addressed — VimLeavePre deletes tmp_dir; a run on HEAD left no new parley-test-repair-budget dir (the remaining ones predate the fix commit).
 
+## Round 3 — 2026-09-27T20:35:31-07:00 (claude) — passed
+
+### Raised
+
+- **BR-6** [Minor] `doc-overclaims-guarantee` Plan says the combine purity contract is documented on sequence.new; it is only on the private helper
+  This is the 2nd finding in family doc-overclaims-guarantee. Rule: a contract the plan says is "documented on X" must appear at X, the public entry point callers read. Add a one-line purity requirement to the M.new header (sequence.lua:182) instead of rewording the plan.
+- **BR-7** [Minor] `purity-test-shallow-alias` Purity property test checks only top-level freshness, not nested aliasing of combine outputs
+  document_sequence_spec.lua checks out ~= a and out ~= b; a combine that returns {flags=a.flags} would pass and alias stored summaries. Walk out and assert no nested table is also reachable from a or b.
+
 ## Open findings
 
-(none — every finding has been disposed)
+- **BR-6** [Minor] `doc-overclaims-guarantee` Plan says the combine purity contract is documented on sequence.new; it is only on the private helper
+- **BR-7** [Minor] `purity-test-shallow-alias` Purity property test checks only top-level freshness, not nested aliasing of combine outputs
