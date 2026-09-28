@@ -8,6 +8,7 @@ updated: 2026-09-27
 estimate_hours:
 card_mirror: '722e583dc774753d47df52c81b858ca16b917583' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-27T17:15:59-07:00
+flow: {kind: quick, provenance: inferred, spec: "3fc96155", done: "48107c15"}
 ---
 
 # Close the column-0 marker hazard in tool results (ls/find/stderr)
