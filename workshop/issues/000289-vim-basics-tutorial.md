@@ -77,18 +77,6 @@ Filed at the user's request. Welcome already covers exiting Vim; this lesson
 should make everyday Parley use easier for people coming from stock editors.
 The explicitly requested anchors are Ctrl+o/Ctrl+i, u/Ctrl+r, and smart search.
 
-## Revisions
-
-### 2026-09-28 — implementation scope
-
-Use one pure tutorial-name registry for starter seeding, filename recognition,
-help discovery and finder diagnostics (ARCH-DRY, ARCH-PURE). Add vim-basics.md
-with mode-labelled examples and a practice question. Test upgrading a profile
-missing only the fourth lesson while preserving edited copies. Verify keyboard
-exercises through the packaged profile; no new mappings or external services.
-The existing seed-once lifecycle owns the one additional user-editable file
-(ARCH-FUNERAL); no new state machine, background job or growing cache is added.
-
 ### 2026-09-28 — implementation and verification
 
 Added the fourth lesson and links from the three existing lessons. A pure
@@ -107,3 +95,16 @@ credentials). Actual fed keys passed navigation history, Ctrl+i/Tab, typing,
 undo/redo, smart-case search, Visual copy/cut/paste and saving. The clipboard
 provider is stateful in memory, so the probe does not alter the host clipboard.
 Reproduction is documented in atlas/infra/starter.md.
+
+## Revisions
+
+### 2026-09-28 — implementation scope
+
+Use one pure tutorial-name registry for starter seeding, filename recognition,
+help discovery and finder diagnostics (ARCH-DRY, ARCH-PURE). Add vim-basics.md
+with mode-labelled examples and a practice question. Test upgrading a profile
+missing only the fourth lesson while preserving edited copies. Verify keyboard
+exercises through the packaged profile; no new mappings or external services.
+The existing seed-once lifecycle owns the one additional user-editable file
+(ARCH-FUNERAL); no new state machine, background job or growing cache is added.
+
