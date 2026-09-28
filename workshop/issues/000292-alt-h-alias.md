@@ -43,6 +43,7 @@ keybinding help (`global_shortcut_keybindings`, `lua/parley/config.lua:448`, mod
 ## Log
 
 ### 2026-09-27
+- 2026-09-27: closed — keybindings_spec, starter_config_spec, keybinding_agreement_spec (new #292 maparg test: <C-g>? and <M-h> in n/i both invoke cmd.KeyBindings; default_keymaps=false leaves <M-h> unmapped) pass. Full suite: rotating load-flaky specs each pass alone; single_source_sweeps fails only because local main ref is stale (diff vs origin/main adds no exports). Atlas keybindings.md updated.; review verdict: FIX-THEN-SHIP
 
 - `<M-h>` was unbound anywhere in lua/, tests, atlas; the starter app's family
   filter passes `<M-*>` keys through, so it ships there too (starter test updated).
