@@ -1,10 +1,11 @@
 ---
 id: 000289
-status: open
+status: working
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-09-28
 estimate_hours:
 github_issue:
+started: 2026-09-28T10:52:38-07:00
 ---
 
 # Add tutorial 4: VIM Basics for newcomers
