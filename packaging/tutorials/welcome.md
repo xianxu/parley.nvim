@@ -4,6 +4,12 @@ file: welcome.md
 tags:
 ---
 
+@@Table of Contents@@
+[Welcome to Parley](welcome.md)
+[Parley Basics](basics.md)
+[Parley Advanced](advanced.md)
+[VIM Basics](vim-basics.md)
+
 # Welcome to Parley
 
 Parley is a chat workspace built on Neovim. This Markdown document is your
@@ -35,6 +41,10 @@ can also navigate to that file by putting cursor on ./basics.md, and press
 One last thing: try command `:ParleyTheme` (in NORMAL mode), to switch to a
 theme you love! Once you are in COMMAND mode (press `:`), you can just type
 part of a command name; for example, `parthem` matches ParleyTheme.
+
+New to Vim? Open [4. VIM Basics](vim-basics.md) for navigation, undo, search,
+and everyday editing. In Normal mode, put the cursor on the link and press
+`option+o`.
 
 💬: Hello! What is Parley, and How do I use it? Keep it concise.
 

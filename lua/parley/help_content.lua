@@ -7,7 +7,7 @@ function M.parse(readme, atlas)
     if not overview or not overview:match('%S') then return nil, 'README introduction is missing' end
     local docs = {overview = overview:match('^%s*(.-)%s*$'), topics = {'README', 'atlas/index'},
         paths = {README = 'README.md', ['atlas/index'] = 'atlas/index.md'}}
-    for _, name in ipairs({'welcome', 'basics', 'advanced'}) do
+    for _, name in ipairs(require('parley.tutorials').names) do
         local topic = 'tutorials/' .. name
         docs.topics[#docs.topics + 1] = topic
         docs.paths[topic] = 'packaging/tutorials/' .. name .. '.md'

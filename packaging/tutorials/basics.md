@@ -4,6 +4,12 @@ file: basics.md
 tags:
 ---
 
+@@Table of Contents@@
+[Welcome to Parley](welcome.md)
+[Parley Basics](basics.md)
+[Parley Advanced](advanced.md)
+[VIM Basics](vim-basics.md)
+
 @@More Basics@@
 # A Bit More Basics
 

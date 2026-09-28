@@ -1,12 +1,14 @@
 ---
 id: 000289
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-27
-updated: 2026-09-27
+updated: 2026-09-28
 estimate_hours:
-card_mirror: '355e603d77d02f35b93e6fdd5664e175e520d45e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'e744defd8e959eb840e7ffd5476fdafc6802da69' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-28T10:52:38-07:00
+flow: {kind: quick, provenance: inferred, spec: "9f48bafd", done: "3ce9d79f"}
 ---
 
 # Add tutorial 4: VIM Basics for newcomers
@@ -63,9 +65,9 @@ mechanisms (ARCH-DRY); this task adds teaching content, not new editor behavior.
 
 ## Plan
 
-- [ ] Write the concise tutorial and connect it to the existing lessons.
-- [ ] Include it in starter seeding and help discovery, with regression coverage.
-- [ ] Walk through the exercises in `./parley_app` and verify fresh/existing profiles.
+- [x] Write the concise tutorial and connect it to the existing lessons.
+- [x] Include it in starter seeding and help discovery, with regression coverage.
+- [x] Walk through the exercises in `./parley_app` and verify fresh/existing profiles.
 
 ## Log
 
@@ -74,3 +76,46 @@ mechanisms (ARCH-DRY); this task adds teaching content, not new editor behavior.
 Filed at the user's request. Welcome already covers exiting Vim; this lesson
 should make everyday Parley use easier for people coming from stock editors.
 The explicitly requested anchors are Ctrl+o/Ctrl+i, u/Ctrl+r, and smart search.
+
+### 2026-09-28 — implementation and verification
+- 2026-09-28: closed — 184 starter tests and 58 isolated finder tests passed; real ./parley_app keyboard probe passed jump history, undo/redo, smart search, clipboard and save. BR-1 movement prose now matches Normal/Visual mappings; BR-2 README links the existing verified fourth tutorial. Existing edited lessons survive upgrades.; review verdict: SHIP
+
+Added the fourth lesson and links from the three existing lessons. A pure
+registry supplies starter seeding, help topics, chat filename recognition and
+finder diagnostics. Upgrade tests remove only the fourth lesson and verify
+re-seeding preserves edited older copies.
+
+Verified `make test-spec SPEC=infra/starter` (exit 0, no orphan processes),
+including fresh/existing profiles, help retrieval, links and finder discovery.
+The initial tests failed before implementation. Corrected a misplaced Welcome
+link caught by the practice-question parser assertion, then reran the suite.
+
+Ran `tests/packaging/vim_basics_compatibility.lua` via the real `./parley_app`
+with isolated demo data and copied packaged dependency checkouts (no user
+credentials). Actual fed keys passed navigation history, Ctrl+i/Tab, typing,
+undo/redo, smart-case search, Visual copy/cut/paste and saving. The clipboard
+provider is stateful in memory, so the probe does not alter the host clipboard.
+Reproduction is documented in atlas/infra/starter.md.
+
+### 2026-09-28 — boundary review corrections
+
+Round 1 requested two prose corrections: BR-1 restricts wrapped Up/Down movement
+claims to Normal/Visual, matching the actual starter mappings and the reviewer's
+packaged-mode probe; BR-2 adds the fourth lesson to README's user-facing catalog.
+Both are corrected. Swept the remaining tutorial inventories: updated an old
+three-lesson help comment and finder metadata expectation. The isolated finder
+suite passed all 58 tests. Existing documentation link coverage resolves the
+new README target; it is the same packaged file already verified by the suite.
+
+## Revisions
+
+### 2026-09-28 — implementation scope
+
+Use one pure tutorial-name registry for starter seeding, filename recognition,
+help discovery and finder diagnostics (ARCH-DRY, ARCH-PURE). Add vim-basics.md
+with mode-labelled examples and a practice question. Test upgrading a profile
+missing only the fourth lesson while preserving edited copies. Verify keyboard
+exercises through the packaged profile; no new mappings or external services.
+The existing seed-once lifecycle owns the one additional user-editable file
+(ARCH-FUNERAL); no new state machine, background job or growing cache is added.
+

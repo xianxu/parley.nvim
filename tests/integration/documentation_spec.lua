@@ -16,7 +16,7 @@ describe('published documentation (#206)', function()
             assert.truthy(('\n' .. topics .. '\n'):find('\n' .. topic .. '\n', 1, true), path)
             assert.is_string(help.read(topic))
         end
-        for _, name in ipairs({'welcome', 'basics', 'advanced'}) do
+        for _, name in ipairs({'welcome', 'basics', 'advanced', 'vim-basics'}) do
             local text = assert(help.read('tutorials/' .. name))
             assert.equals(table.concat(vim.fn.readfile('packaging/tutorials/' .. name .. '.md'), '\n') .. '\n', text)
         end

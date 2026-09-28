@@ -400,7 +400,7 @@ local function discovery_snapshot()
 		roots = roots,
 		recursion = false,
 		max_depth = 1,
-        pattern = "YYYY-MM-DD*.md|welcome.md|basics.md|advanced.md",
+        pattern = "YYYY-MM-DD*.md|" .. table.concat(require("parley.tutorials").filenames, "|"),
 		backend = { source = "libuv", header_lines = 10 },
 	})
 end

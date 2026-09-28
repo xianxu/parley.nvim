@@ -70,7 +70,7 @@ intent rather than providing a second configuration to copy.
 | Surface | Release contract |
 |---|---|
 | Storage | Profile-local config/data/state/cache; chats directly in `chats/`, including `welcome.md`; no personal iCloud or blog paths |
-| First use | Missing welcome, basics and advanced tutorials are seeded without overwriting edits; the welcome preamble explains connection, model selection and sending and is excluded from the LLM question |
+| First use | Missing welcome, basics, advanced and Vim Basics tutorials are seeded without overwriting edits; the welcome preamble explains connection, model selection and sending and is excluded from the LLM question |
 | LLM setup | Missing setup opens the shared agent picker, including logged-out providers; login returns to that picker and model selection resumes the pending action |
 | Setup cancellation | Cancel aborts the pending action; changed source requires retry; headless mode never opens a picker |
 | Proxy | Managed CLIProxyAPI on loopback port 8317 with client key `parley-local`; account credentials share `~/.cli-proxy-api` with the plugin |
@@ -221,8 +221,8 @@ preservation, private permissions and refusal of redirected credential roots.
 The default app model receives `parley_help`, a read-only tool for this release's
 README, bundled tutorials and Markdown documents linked from `atlas/index.md`.
 Calling it without a topic lists IDs; `README` or `atlas/infra/starter` reads a
-document. Tutorial IDs are `tutorials/welcome`, `tutorials/basics` and
-`tutorials/advanced`. Lua source is
+document. Tutorial IDs are `tutorials/welcome`, `tutorials/basics`,
+`tutorials/advanced` and `tutorials/vim-basics`. Lua source is
 already packaged for Neovim to execute, but the help tool does not expose it.
 
 README's marked introduction is also appended after chat prompt resolution, with
@@ -274,16 +274,30 @@ isolated profile, fetch its local HTML and stop it without opening a browser.
 
 ## Stable tutorial filenames
 
-`welcome.md`, `basics.md` and `advanced.md` are recognized chat filenames without timestamps.
+`welcome.md`, `basics.md`, `advanced.md` and `vim-basics.md` are recognized chat filenames without timestamps.
 The topic header provides their displayed titles (for example, “2. A Bit More
 Basics”); changing that title does not rename these files. Ordinary new chats
 retain timestamp-plus-topic filenames. The shared chat filename predicate owns
 recognition for both attachment and Finder. Starter integration tests verify
 `basics.md` is discoverable and skipped by automatic topic-slug renaming.
-The three lessons ship in `packaging/tutorials/` and are seeded together under
+`lua/parley/tutorials.lua` owns the ordered names used by seeding, help discovery,
+chat recognition and finder diagnostics.
+The four lessons ship in `packaging/tutorials/` and are seeded together under
 the existing initializer lock using atomic hard links. Existing files are never
 overwritten, so edited lessons survive upgrades. Seed text contains only the
 authored preamble and first practice question, without private AI responses.
+
+The VIM Basics keyboard exercise is executable against the real app profile:
+
+```sh
+PARLEY_DEMO_DIR=/tmp/parley-vim-basics-check ./parley_app --headless -i NONE \
+  -c "luafile $PWD/tests/packaging/vim_basics_compatibility.lua"
+```
+
+Use a new disposable demo path; startup may install the packaged dependencies.
+The probe edits only the seeded copy and supplies an in-memory clipboard provider.
+It checks jump history (including Tab), undo/redo, smart-case search, selection,
+copy/cut/paste and explicit save with the packaged mappings loaded.
 
 ## Paths in repo mode
 

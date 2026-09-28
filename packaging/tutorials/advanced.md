@@ -4,6 +4,12 @@ file: advanced.md
 tags:
 ---
 
+@@Table of Contents@@
+[Welcome to Parley](welcome.md)
+[Parley Basics](basics.md)
+[Parley Advanced](advanced.md)
+[VIM Basics](vim-basics.md)
+
 # Advanced Topics
 
 Parley keeps your conversation in an editable document. This lesson explains

@@ -51,6 +51,7 @@ atlas:
       - tests/packaging/test_local_app.py
       - tests/packaging/statusline_compatibility.lua
       - tests/packaging/completion_compatibility.lua
+      - tests/packaging/vim_basics_compatibility.lua
       - tests/packaging/starter_chat_probe.lua
       - lua/parley/cliproxy_login_ui.lua
       - lua/parley/dispatcher.lua
@@ -58,6 +59,7 @@ atlas:
       - packaging/starter-config/init.lua
       - lua/parley/starter.lua
       - README.md
+      - lua/parley/tutorials.lua
       - lua/parley/help_content.lua
       - lua/parley/help.lua
       - lua/parley/tools/builtin/parley_help.lua
