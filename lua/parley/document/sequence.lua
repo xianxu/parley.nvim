@@ -24,13 +24,19 @@ local function copy(s, value, summary, remaining)
     end
     return out
 end
+-- Supplied combines are pure: they never mutate their operands and return a
+-- fresh table (#293). So stored summaries go in as they are and the result is
+-- kept as returned. Copying around every call cost three deep copies per
+-- leaf/branch rebuild -- ~480k summary values to repair one 300-row block.
+-- Summaries still enter through copy() when an entry is summarized; the
+-- combine outputs' bound and value types are pinned by the purity unit test.
 local function combine(s, a, b)
     if not s.combine then return nil end
-    return copy(s, s.combine(copy(s, a, true), copy(s, b, true)), true)
+    return s.combine(a, b)
 end
 local function combine_projection(s, a, b)
     if not s.combine_projection then return nil end
-    return copy(s, s.combine_projection(copy(s,a,true), copy(s,b,true)), true)
+    return s.combine_projection(a, b)
 end
 local function same(s,a,b,summary)
     count(s,summary and "summary_values_compared" or "metadata_values_compared")

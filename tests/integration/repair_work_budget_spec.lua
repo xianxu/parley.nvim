@@ -55,8 +55,7 @@ describe("repair work budget for a large written block (#293)", function()
         return D.stats(document)
     end
 
-    -- Enabled by #293 M2.
-    pending("repairs the block within the summary-copy budget", function()
+    it("repairs the block within the summary-copy budget", function()
         local work = write_and_repair()
         assert.is_true((work.summary_values_copied or 0) <= SUMMARY_BUDGET,
             ("summary_values_copied %d > %d"):format(work.summary_values_copied or 0, SUMMARY_BUDGET))

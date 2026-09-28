@@ -418,6 +418,7 @@ atlas:
       - tests/unit/document_write_turn_spec.lua
       - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/unit/document_sequence_spec.lua
+      - tests/integration/repair_work_budget_spec.lua
       - tests/unit/document_lexical_spec.lua
       - tests/unit/document_grammar_spec.lua
       - tests/unit/document_lexer_spec.lua
@@ -634,6 +635,7 @@ atlas:
       - tests/helpers/fresh_clone_probe.lua
       - tests/minimal_init.vim
       - tests/helpers/ready_port.lua
+      - tests/helpers/await.lua
       - tests/helpers/spec_runner.lua
       - tests/helpers/fixture_process.lua
       - tests/helpers/exit_with_parent.lua
@@ -654,6 +656,7 @@ atlas:
       - tests/arch/superseded_comment_spec.lua
       - tests/arch/fixture_lifecycle_spec.lua
       - tests/unit/ready_port_spec.lua
+      - tests/unit/await_helper_spec.lua
       - tests/unit/spec_runner_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/fixture_reaping_spec.lua

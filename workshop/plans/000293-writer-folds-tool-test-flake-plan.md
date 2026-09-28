@@ -34,6 +34,7 @@
 | `combine` / `combine_projection` (sequence internals) | `lua/parley/document/sequence.lua` | modified |
 | `visible_spans` | `lua/parley/highlighter.lua` | new |
 | `until_progress` | `tests/helpers/await.lua` | new |
+| `_VIEWPORT_MARGIN` (test seam) | `lua/parley/highlighter.lua` | new |
 
 - **combine / combine_projection** — fold two node summaries into a parent summary. Today each call copies both operands and the result (`copy(s, s.combine(copy(a), copy(b)))`). New contract, documented on `sequence.new`: the supplied `combine`/`combine_projection` are pure — they never mutate their operands and always return a fresh table. The sequence then calls them without copies. The two shipped implementations (`grammar.merge_summary`, `projection.combine`) already satisfy this; a unit test pins it.
   - **Invariant move (PQ-2):** `copy()` also enforces the bounded schema (≤256 summary values) and value types (no functions/userdata/threads). For combine *outputs* those checks move from runtime into the unit test: a property check over random summaries asserts the shipped combines return only scalar keys and plain values within the bound. Metadata entering the sequence (insert/replace) keeps its runtime `copy()` and checks — that is where untrusted shapes enter.

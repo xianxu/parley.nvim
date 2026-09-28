@@ -109,6 +109,15 @@ total: 4.14
   repair steps (stall 1s, ceiling 40s — below plenary's 50s kill).
 - Estimate note: `method-b-decisions design=0.9` is diagnosis time already spent inside
   the claim window, not future design.
+- M2: sequence combines take stored summaries without copies. Synchronous drain of the
+  303-row block: summary_values_copied 483057 → 26224 (18x); drain 350-580ms → ~290ms.
+  metadata_values_copied unchanged at 230111: ~2200 of ~2500 top-level copy calls are
+  `M.at` snapshots at the API boundary (plan non-goal); find_walk predicates ~320 calls
+  (<20%) → Task 4 contract extension skipped (YAGNI).
+- M2 full suite: document_semantic_spec (180s-deadline corpus) and perf_document_spec
+  failed only under parallel load, pass alone (the rotating load-flake set seen pre-#293).
+  single_source_sweeps: fixed `_VIEWPORT_MARGIN` row + traceability routing; its
+  `visible_spans` row stays red until M3 defines it.
 
 ## Revisions
 
