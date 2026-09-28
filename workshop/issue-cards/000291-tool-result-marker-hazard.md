@@ -1,10 +1,11 @@
 ---
 id: 000291
-status: open
+status: working
 created: 2026-09-27
 updated: 2026-09-27
 estimate_hours:
 github_issue:
+started: 2026-09-27T17:15:59-07:00
 ---
 
 # Close the column-0 marker hazard in tool results (ls/find/stderr)
