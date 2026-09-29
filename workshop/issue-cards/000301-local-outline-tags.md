@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000301-local-outline-tags.md
         source_blob: fe9c54197037a0f285c0b6e34494e458feae0463
         destination: workshop/issues/000301-local-outline-tags.md
+        main_commit: fd920d9709f1000023955c8c6bbe33e515d4d2ff
 ---
 
 # Keep outline tags out of model context
