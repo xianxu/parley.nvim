@@ -1,6 +1,6 @@
 ---
 id: 000303
-status: codecomplete
+status: done
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours:
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: a16021b7cc2909bacd16ec2c100e3178db9b706c
         evidence_commit: e896c1dfa28f16b8388b7ee3ec21b2a495491674
+        landed_commit: aedd9d660936e1c9fc83f6d734063ce66f1c39d3
 ---
 
 # Use familiar keys for app completion
