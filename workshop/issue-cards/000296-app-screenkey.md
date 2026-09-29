@@ -1,6 +1,6 @@
 ---
 id: 000296
-status: open
+status: working
 created: 2026-09-28
 updated: 2026-09-28
 estimate_hours:
@@ -17,6 +17,7 @@ tracker:
         source_blob: f4a04675643ca1a6f7aef0c3f208a11256d443fc
         destination: workshop/issues/000296-app-screenkey.md
         main_commit: 47faad3428db20cdcb41676918a81d9f9be6d842
+started: 2026-09-28T17:32:50-07:00
 ---
 
 # Package Screenkey for app recordings
