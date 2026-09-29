@@ -50,6 +50,7 @@ all affected consumers rather than disabling Screenkey (ARCH-PURPOSE).
 ## Log
 
 ### 2026-09-28
+- 2026-09-28: closed — Five regressions failed on wrong destination windows before the fix; actual Option+O mappings and outline root callbacks now preserve overlays and select editing windows. 101 reference tests and 226 outline tests pass, lint 669 files clean, git diff --check clean; isolated parent-link probe now opens root in main window.; review verdict: SHIP
 
 - Root paths resolve correctly. A headless root-link probe opened the parent
   inside the nonfocusable float while leaving the child in the main window.
