@@ -140,15 +140,22 @@ end)
 
 
 describe("ancestor preface ownership", function()
-    it("prefixes anonymous and labelled questions including an empty question", function()
+    it("keeps the last fenced literal with its ancestor question when the next turn ends the fence", function()
+        local parsed = require("parley.chat_parser").parse_chat({ "---", "💬: ```",
+            "@@literal@@", "💬: Next" }, 1, { chat_user_prefix = "💬:" })
+        assert.is_nil(parsed.exchanges[2].preface)
+        assert.are.same({ { role = "user", content = "```\n@@literal@@" },
+            { role = "user", content = "Next" } },
+            build({ { exchanges = parsed.exchanges, branch_after = 2 } }))
+    end)
+    it("omits local prefaces and skips an otherwise empty question", function()
         local first = exchange("Ask", "Answer")
         first.preface = { content = "@@topic@@" }
         local second = exchange("")
         second.preface = { content = "@@_@@" }
         assert.are.same({
-            { role = "user", content = "@@topic@@\nAsk" },
+            { role = "user", content = "Ask" },
             { role = "assistant", content = "Answer" },
-            { role = "user", content = "@@_@@" },
         }, build({ { exchanges = { first, second }, branch_after = 2 } }))
     end)
 end)

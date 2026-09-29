@@ -53,3 +53,14 @@ See [parsing](parsing.md) for the validation boundary.
 `lua/parley/chat_parser.lua` owns header/tag parsing and filename recognition;
 `lua/parley/init.lua` (`not_chat`) validates chat buffers. See
 `tests/unit/parse_chat_spec.lua` and `tests/unit/chat_finder_records_spec.lua`.
+
+## Local outline labels
+
+Strict whole-line `@@label@@` and `@@_@@` labels organize the local outline and
+are excluded as entire lines from model context, including history. File/URL
+references keep their existing context-loading behavior. Inline, indented,
+trailing-text and fenced examples remain literal. Classification precedes speaker
+prefix removal and whitespace trimming; parsed text remains intact for rendering.
+Association and context projection share fence classification: backtick and tilde
+fences close only with the same character, sufficient width and no trailing text.
+A speaker-line opener starts a fence; a new turn boundary ends an unmatched fence.

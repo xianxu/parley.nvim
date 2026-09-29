@@ -147,7 +147,7 @@ Typing a command after `:` opens a menu of matching commands as you type.
 Matching is fuzzy, so `:mkpv` finds `MarkdownPreview` and `:thm` finds
 `ParleyTheme`. Press Tab and Shift-Tab to move through the menu, Enter to run
 what is on the line, and Escape to cancel. The arrow keys still move the cursor
-and walk earlier commands as usual. Chats get no completion menu while you type.
+and walk earlier commands as usual.
 
 Press `Ctrl-g :` in normal mode to search every command you have run before.
 Type part of one, then press Enter to run it again.
@@ -158,3 +158,16 @@ no native binary. When a release pins a newer version, copy the change from
 `init.lua.new` into your `init.lua`, then run `:Lazy update blink.cmp`.
 This is an app dependency; installing the parley.nvim plugin alone does not
 install it.
+
+## Complete words while typing
+
+After two characters, the app suggests words from the current buffer (including
+conversation text). Use `Tab` / `Down` to select the next suggestion and `Up`
+to select the previous one. `Enter` accepts the selection (or the first suggestion
+if none is selected); `Esc` dismisses the menu and stays in Insert mode. With no
+menu, these keys keep their normal behavior, including Enter for a newline and
+Esc to leave Insert mode. `Ctrl-n` / `Ctrl-p`, `Ctrl-y` and `Ctrl-e` remain
+alternative selection, acceptance and dismissal keys. Selection does not insert
+text until accepted. Other open buffers
+do not contribute words. To disable this, set Blink’s `sources.default = {}` in
+your app `init.lua`.

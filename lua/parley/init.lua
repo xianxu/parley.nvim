@@ -2829,6 +2829,11 @@ M.prep_chat = function(buf, file_name)
 		buf,
 		M.config,
 		{
+			pair_at = function()
+				-- Command callbacks observe inserted typeahead; expression maps can run early.
+				local keys = require("parley.at_pair").keys(vim.api.nvim_get_current_line(), vim.fn.col(".") - 1)
+				vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "in", false)
+			end,
 			-- parley_buffer scope (shared with markdown)
 			open_file = M.cmd.OpenFileUnderCursor,
 			resolve_ref_gf = M.cmd.ResolveRefOrGotoFile,
@@ -4447,10 +4452,10 @@ M.cmd.ChatPrune = function()
 		local ex = parsed_chat.exchanges[idx]
 		if ex.question then
 			table.insert(topic_msgs, { role = "user", content = require("parley.question_tags").compose_question(
-				ex.preface and ex.preface.content, ex.question.content) })
+				ex.preface and ex.preface.content, require("parley.question_tags").content(ex.question)) })
 		end
 		if ex.answer then
-			table.insert(topic_msgs, { role = "assistant", content = ex.answer.content })
+			table.insert(topic_msgs, { role = "assistant", content = require("parley.question_tags").content(ex.answer) })
 		end
 	end
 

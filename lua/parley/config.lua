@@ -416,6 +416,7 @@ local config = {
 	-- <M-i> is the portable primary; <C-g>i remains the legacy alias.
 	chat_shortcut_branch_ref = { modes = { "n", "i", "v" }, shortcut = { "<M-i>", "<C-g>i" } },
 	-- Private note: start a new line with the local-note prefix, ready for typing.
+	chat_shortcut_pair_at = { modes = { "i" }, shortcut = "@" },
 	chat_shortcut_private_note = { modes = { "n", "i" }, shortcut = "<M-p>" },
 	-- #231: paste the clipboard image as an attachment. <M-v> — v for paste,
 	-- free, joins the alt family. (<M-i> was the request; it is branch_ref.)

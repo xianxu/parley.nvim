@@ -141,7 +141,7 @@ describe("generate_topic", function()
 end)
 
 describe("ChatPrune topic generation failure", function()
-    local saved_generate_topic
+    local saved_generate_topic, saved_query
 
     local function write_parent(name)
         local path = tmp_dir .. "/" .. name
@@ -167,10 +167,12 @@ describe("ChatPrune topic generation failure", function()
 
     before_each(function()
         saved_generate_topic = chat_respond.generate_topic
+        saved_query = parley.dispatcher.query
     end)
 
     after_each(function()
         chat_respond.generate_topic = saved_generate_topic
+        parley.dispatcher.query = saved_query
         for _, buf in ipairs(vim.api.nvim_list_bufs()) do
             local name = vim.api.nvim_buf_get_name(buf)
             if name:find(tmp_dir, 1, true) then
@@ -180,6 +182,41 @@ describe("ChatPrune topic generation failure", function()
         for _, path in ipairs(vim.fn.glob(tmp_dir .. "/*.md", false, true)) do
             vim.fn.delete(path)
         end
+    end)
+
+    it("projects pruned question and answer tags before sending the topic request", function()
+        local parent = write_parent("2026-07-12-120010-parent-topic-tags.md")
+        local question = { "💬: prune inline @@question literal@@", "@@private question label@@",
+            "```text", "@@question fenced literal@@", "```" }
+        local answer = { "pruned inline @@answer literal@@", "@@private answer label@@", "@@_@@",
+            "```text", "@@answer fenced literal@@", "```" }
+        local tail = { "@@private preface@@" }
+        vim.list_extend(tail, question)
+        vim.list_extend(tail, { "", "🤖: fixture" })
+        vim.list_extend(tail, answer)
+        vim.api.nvim_buf_set_lines(0, 9, -1, false, tail)
+        vim.api.nvim_win_set_cursor(0, { 11, 0 })
+        local captured
+        parley.dispatcher.query = function(_buf, _provider, payload, _output, _complete, _cb, _prog, abort)
+            captured = vim.deepcopy(payload)
+            abort("topic generation aborted")
+        end
+
+        parley.cmd.ChatPrune()
+
+        assert.is_not_nil(captured, "ChatPrune must issue its topic request")
+        assert.equals("prune inline @@question literal@@\n```text\n@@question fenced literal@@\n```",
+            captured.messages[1].content)
+        assert.equals("user", captured.messages[1].role)
+        assert.equals("pruned inline @@answer literal@@\n```text\n@@answer fenced literal@@\n```",
+            captured.messages[2].content)
+        assert.equals("assistant", captured.messages[2].role)
+        assert.equals(parley.config.chat_topic_gen_prompt, captured.messages[3].content)
+        local children = vim.fn.glob(tmp_dir .. "/*.md", false, true)
+        local child = children[1] == parent and children[2] or children[1]
+        local child_text = table.concat(vim.fn.readfile(child), "\n")
+        assert.is_truthy(child_text:find("@@private question label@@", 1, true))
+        assert.is_truthy(child_text:find("@@private answer label@@", 1, true))
     end)
 
     it("moves the preface with the pruned question", function()

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cast Viewer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/asciinema-player@3.17.0/dist/bundle/asciinema-player.css">
+<style>
+  :root { --bg: #16181d; --fg: #d8dbe2; --muted: #8a90a0; --panel: #1f232b; --accent: #7aa2f7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
+  header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 16px; background: var(--panel); }
+  header .time { font: 600 20px ui-monospace, monospace; color: var(--accent); min-width: 110px; }
+  header .hint { color: var(--muted); font-size: 12px; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  #caption { min-height: 2.8em; margin-top: 10px; padding: 8px 12px; background: var(--panel);
+             border-left: 3px solid var(--accent); font-size: 17px; }
+  #caption:empty { visibility: hidden; }
+  aside { display: flex; flex-direction: column; gap: 8px; }
+  textarea { flex: 1; min-height: 360px; width: 100%; background: var(--panel); color: var(--fg);
+             border: 1px solid #333a46; padding: 8px; font: 13px/1.5 ui-monospace, monospace; resize: vertical; }
+  button, label.btn { background: #2a303b; color: var(--fg); border: 1px solid #3a4250; padding: 5px 10px;
+                      border-radius: 4px; cursor: pointer; font: inherit; }
+  input[type=file] { display: none; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+</style>
+</head>
+<body>
+<header>
+  <span class="time" id="time">0:00.0</span>
+  <label class="btn">Open .cast<input type="file" id="file" accept=".cast,.json,.txt"></label>
+  <label><input type="checkbox" id="pauseOnMarkers"> pause at captions</label>
+  <span class="hint" id="src"></span>
+  <span id="load-status" role="status"></span>
+  <span class="hint">Player: space pause · ←/→ seek · . step frame (paused) · [ ] prev/next caption</span>
+</header>
+<main>
+  <section>
+    <div id="player"></div>
+    <div id="caption"></div>
+  </section>
+  <aside>
+    <div class="row">
+      <button id="stamp" title="Alt+T">Insert time (Alt+T)</button>
+      <button id="download">Download notes</button>
+    </div>
+    <textarea id="notes" spellcheck="true" placeholder="~0:05  Parley installs its plugins on first launch.&#10;~0:42  Branch off to ask about radiators."></textarea>
+    <span class="hint">This browser keeps the 20 most recently saved page-URL drafts; older drafts are removed. Opening local files shares this page’s draft. Download notes to keep them permanently. Insert time pauses the player and adds a ~m:ss.s line.</span>
+    <span id="draft-status" role="status"></span>
+  </aside>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/asciinema-player@3.17.0/dist/bundle/asciinema-player.min.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  const $ = id => document.getElementById(id);
+  const DRAFT_KEY = 'cast-viewer-drafts:v1';
+  const LEGACY_PREFIX = 'cast-viewer-notes:';
+  const draftId = params.get('cast') || 'default';
+  const MAX_DRAFTS = 20;
+  let selectionGeneration = 0;
+  let player = null;
+  let source = null; // string URL or { data }
+
+  const fmt = t => {
+    const m = Math.floor(t / 60), s = t - m * 60;
+    return `${m}:${s.toFixed(1).padStart(4, '0')}`;
+  };
+
+  function load(src, label) {
+    source = src;
+    $('src').textContent = label;
+    $('caption').textContent = '';
+    if (player) player.dispose();
+    $('player').innerHTML = '';
+    player = AsciinemaPlayer.create(src, $('player'), {
+      fit: 'width',
+      pauseOnMarkers: $('pauseOnMarkers').checked,
+    });
+    player.addEventListener('marker', ({ label }) => { $('caption').textContent = label || ''; });
+    player.addEventListener('seeked', () => { $('caption').textContent = ''; });
+  }
+
+  async function currentTime() {
+    if (!player) return 0;
+    const t = await Promise.resolve(player.getCurrentTime());
+    return typeof t === 'number' ? t : 0;
+  }
+
+  setInterval(async () => { $('time').textContent = fmt(await currentTime()); }, 100);
+
+  $('file').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const generation = ++selectionGeneration;
+    $('load-status').textContent = 'Loading ' + f.name + '…';
+    try {
+      const data = await f.text();
+      if (generation !== selectionGeneration) return;
+      load({ data }, f.name);
+      $('load-status').textContent = '';
+    } catch {
+      if (generation === selectionGeneration) {
+        $('load-status').textContent = 'Could not open ' + f.name + '. Choose a file to retry.';
+      }
+    }
+  });
+
+  $('pauseOnMarkers').addEventListener('change', () => { if (source) load(source, $('src').textContent); });
+
+  // One bounded entry, oldest first. Read failures never overwrite unseen drafts.
+  function readDrafts() {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    const drafts = raw === null ? [] : JSON.parse(raw);
+    if (!Array.isArray(drafts) || drafts.some(d => !d || typeof d.id !== 'string' || typeof d.text !== 'string')) {
+      throw new Error('Invalid stored drafts');
+    }
+    const legacyKeys = [];
+    const legacy = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(LEGACY_PREFIX)) {
+        legacyKeys.push(key);
+        legacy.push({ id: key.slice(LEGACY_PREFIX.length), text: localStorage.getItem(key) || '' });
+      }
+    }
+    // Legacy entries have no timestamps; use browser enumeration order, then modern saved order.
+    const combined = new Map();
+    for (const draft of [...legacy, ...drafts]) {
+      combined.delete(draft.id);
+      combined.set(draft.id, draft);
+    }
+    return { drafts: [...combined.values()], legacyKeys };
+  }
+
+  function writeDrafts(drafts, legacyKeys) {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts.slice(-MAX_DRAFTS)));
+    // Preserve legacy data if persistence failed. Cleanup can be retried on the next edit/load.
+    for (const key of legacyKeys) localStorage.removeItem(key);
+    $('draft-status').textContent = 'Saved in this browser.';
+  }
+
+  function unsaved() {
+    $('draft-status').textContent = 'Unsaved: browser storage is unavailable or full. Keep this page open and download notes.';
+  }
+
+  try {
+    const { drafts, legacyKeys } = readDrafts();
+    $('notes').value = drafts.find(d => d.id === draftId)?.text || '';
+    if (legacyKeys.length || drafts.length > MAX_DRAFTS) writeDrafts(drafts, legacyKeys);
+    else $('draft-status').textContent = 'Browser draft ready.';
+  } catch { unsaved(); }
+  $('notes').addEventListener('input', () => {
+    try {
+      const { drafts, legacyKeys } = readDrafts();
+      writeDrafts([...drafts.filter(d => d.id !== draftId), { id: draftId, text: $('notes').value }], legacyKeys);
+    } catch { unsaved(); }
+  });
+
+  async function stamp() {
+    if (player) await Promise.resolve(player.pause());
+    const ta = $('notes');
+    const line = `~${fmt(await currentTime())}  `;
+    const pos = ta.selectionStart ?? ta.value.length;
+    const before = ta.value.slice(0, pos);
+    const prefix = before && !before.endsWith('\n') ? '\n' : '';
+    ta.value = before + prefix + line + ta.value.slice(pos);
+    const caret = (before + prefix + line).length;
+    ta.focus();
+    ta.setSelectionRange(caret, caret);
+    ta.dispatchEvent(new Event('input'));
+  }
+  $('stamp').addEventListener('click', stamp);
+  document.addEventListener('keydown', e => {
+    if (e.altKey && (e.key === 't' || e.code === 'KeyT')) { e.preventDefault(); stamp(); }
+  });
+
+  $('download').addEventListener('click', () => {
+    const blob = new Blob([$('notes').value], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'captions.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  const castParam = params.get('cast');
+  if (castParam) load(castParam, castParam);
+  else $('src').textContent = 'No cast loaded — open a file or use ?cast=path.cast';
+</script>
+</body>
+</html>

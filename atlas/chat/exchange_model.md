@@ -112,9 +112,12 @@ on their real markers. The live model stores only `preface = {size}` and derives
 its span with `preface_start/end`, immediately before block1. Those rows are
 already counted in `gap_before`; they are never counted twice in exchange size.
 
-Context builders prepend the raw preface through `question_tags.compose_question`.
-The initial request, tool continuation, ancestor context and branch topic request
-use the same composition. Anonymous tags affect only outline visibility. Existing
+Context builders omit local prefaces through `question_tags.compose_question`.
+Whole-line local tags elsewhere are classified from original rows before trimming
+or removing speaker prefixes. The parser retains raw `content`/`text` for local
+rendering and adds `context_content`/`context_text` only when that projection differs.
+Initial, ancestor and branch-topic requests consume the projection; live continuations
+project raw block lines. Decoded tool payloads and fenced examples remain literal. Existing
 file-reference syntax in a preface belongs to the following question, including
 its retention/reference-loading policy. Regenerating the preceding answer leaves
 the following preface outside the deleted span.

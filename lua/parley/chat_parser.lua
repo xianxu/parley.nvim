@@ -360,7 +360,9 @@ local fence = require("parley.fence")
 	local reasoning_prefix = decoration_patterns.reasoning_prefix
 	local user_prefix = decoration_patterns.user_prefix
 	local branch_prefix = decoration_patterns.branch_prefix
-	local prefaces = require("parley.question_tags").associations(lines, config, header_end)
+	local tags = require("parley.question_tags")
+	local excluded_tags = tags.local_rows(lines, config)
+	local prefaces = tags.associations(lines, config, header_end)
 	local preface_rows = {}
 	for _, preface in pairs(prefaces) do preface_rows[preface.line_start] = true end
 	-- M2 Task 2.5 of #81: tool_use / tool_result prefixes for the
@@ -388,7 +390,11 @@ local fence = require("parley.fence")
 	local in_reasoning_block = false
 	local in_reasoning_explicit_end = false
 	-- Use table accumulation instead of string concat for content (avoids O(n²))
-	local content_parts = {}
+	local content_parts, content_rows = {}, {}
+	local function append_content(line, row)
+		content_parts[#content_parts + 1] = line
+		content_rows[#content_parts] = row
+	end
 	local footnote_content_start = require("parley.define").managed_footnote_content_start(lines)
 
 	local function final_footnote_boundary(end_line)
@@ -440,7 +446,11 @@ local fence = require("parley.fence")
 			end
 			current_exchange[current_component].line_end = trimmed_end
 			current_exchange[current_component].content = table.concat(content_parts, "\n"):gsub("^%s*(.-)%s*$", "%1")
-			content_parts = {}
+			local context = tags.project(content_parts, content_rows, excluded_tags):gsub("^%s*(.-)%s*$", "%1")
+			if context ~= current_exchange[current_component].content then
+				current_exchange[current_component].context_content = context
+			end
+			content_parts, content_rows = {}, {}
 		end
 	end
 
@@ -465,7 +475,7 @@ local fence = require("parley.fence")
 	local function cb_start_block(kind)
 		if not cb_state then return end
 		cb_state.current_kind = kind
-		cb_state.current_lines = {}
+		cb_state.current_lines, cb_state.source_rows = {}, {}
 		-- line_start is set lazily on the first cb_append_line so that
 		-- it reflects the line that actually contains content (not the
 		-- pre-content header line where cb_start_block was called).
@@ -489,6 +499,9 @@ local fence = require("parley.fence")
 			local trimmed = body:gsub("^%s*(.-)%s*$", "%1")
 			if trimmed ~= "" then
 				block = { type = "text", text = trimmed }
+				local context = tags.project(cb_state.current_lines, cb_state.source_rows, excluded_tags)
+					:gsub("^%s*(.-)%s*$", "%1")
+				if context ~= trimmed then block.context_text = context end
 			end
 		elseif kind == "tool_use" then
 			local parsed = serialize_ok and serialize.parse_call(body) or nil
@@ -532,7 +545,7 @@ local fence = require("parley.fence")
 			table.insert(cb_state.blocks, block)
 		end
 		cb_state.current_kind = nil
-		cb_state.current_lines = {}
+		cb_state.current_lines, cb_state.source_rows = {}, {}
 		cb_state.current_line_start = nil
 		cb_state.tool_fence_len = nil
 		cb_state.tool_body_complete = false
@@ -560,6 +573,7 @@ local fence = require("parley.fence")
 			cb_state.current_line_start = line_no
 		end
 		table.insert(cb_state.current_lines, line)
+		cb_state.source_rows[#cb_state.current_lines] = line_no
 
 		-- Track fence state inside tool blocks to detect body end.
 		-- Opening fence: any run of 3+ backticks optionally followed
@@ -643,7 +657,10 @@ local fence = require("parley.fence")
 		return highlight_structure.is_structural_kind(kinds[row + header_end])
 	end)
 	local in_tool_body, depth0_marker = {}, {}
-	for k in pairs(fence.body_rows(bodies)) do in_tool_body[k + header_end] = true end
+	for k in pairs(fence.body_rows(bodies)) do
+		in_tool_body[k + header_end] = true
+		excluded_tags[k + header_end] = nil
+	end
 	for k in pairs(marker_set) do depth0_marker[k + header_end] = true end
 
 	for i = header_end + 1, #lines do
@@ -733,7 +750,7 @@ local fence = require("parley.fence")
 				},
 				answer = nil
 			}
-			content_parts = { question_content }
+			content_parts, content_rows = { question_content }, { i }
 			table.insert(result.exchanges, current_exchange)
 			current_component = "question"
 
@@ -814,7 +831,7 @@ local fence = require("parley.fence")
 				line_end = nil,
 				content = ""
 			}
-			content_parts = {}
+			content_parts, content_rows = {}, {}
 			current_component = "answer"
 
 			-- Initialize content_blocks state for this answer. Start with
@@ -838,7 +855,7 @@ local fence = require("parley.fence")
 			-- Also feed the raw line into content_parts so answer.content
 			-- (backward-compat flat text) still reflects the full answer
 			-- region exactly as it appears in the buffer.
-			table.insert(content_parts, line)
+			append_content(line, i)
 
 		-- Check for tool_result (📎:) header — same pattern as tool_use.
 		elseif current_component == "answer" and decoration_kind == "tool_result" then
@@ -846,7 +863,7 @@ local fence = require("parley.fence")
 			cb_finalize_block(i - 1)
 			cb_start_block("tool_result")
 			cb_append_line(line, i)
-			table.insert(content_parts, line)
+			append_content(line, i)
 
 		-- Check for summary line. 📝: also terminates any in-progress
 		-- reasoning block (defensive against missing blank-line
@@ -859,7 +876,7 @@ local fence = require("parley.fence")
 				content = line:sub(#summary_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
 			}
 			-- Also feed into content_blocks so the model tracks it.
-			table.insert(content_parts, line)
+			append_content(line, i)
 			cb_append_line(line, i)
 
 		-- 🧠:[END] terminator — explicit end-of-reasoning marker.
@@ -871,7 +888,7 @@ local fence = require("parley.fence")
 		-- never opens a new block.
 		elseif current_component == "answer" and decoration_kind == "reasoning_end" then
 			in_reasoning_block = false
-			table.insert(content_parts, line)
+			append_content(line, i)
 			cb_append_line(line, i)
 
 		-- Check for reasoning line — opens a multi-line reasoning block
@@ -915,7 +932,7 @@ local fence = require("parley.fence")
 			in_reasoning_explicit_end = has_end_marker
 			-- Also feed into content_blocks so the model tracks it as
 			-- part of the text section (🧠: is just text content).
-			table.insert(content_parts, line)
+			append_content(line, i)
 			cb_append_line(line, i)
 
 		-- Multi-line reasoning continuation. Reaches here only after
@@ -929,7 +946,7 @@ local fence = require("parley.fence")
 		elseif in_reasoning_block and current_component == "answer" then
 			if line:match("^%s*$") and not in_reasoning_explicit_end then
 				in_reasoning_block = false
-				table.insert(content_parts, line)
+				append_content(line, i)
 				cb_append_line(line, i)
 			else
 				if current_exchange.reasoning then
@@ -939,7 +956,7 @@ local fence = require("parley.fence")
 						current_exchange.reasoning.content = current_exchange.reasoning.content .. "\n" .. line
 					end
 				end
-				table.insert(content_parts, line)
+				append_content(line, i)
 				cb_append_line(line, i)
 			end
 
@@ -963,7 +980,7 @@ local fence = require("parley.fence")
 			local content_line = #inline_branches > 0
 				and M.unpack_inline_branch_links(line, branch_prefix)
 				or line
-			table.insert(content_parts, content_line)
+			append_content(content_line, i)
 
 			-- Feed the line into the current content_block (M2 Task 2.5).
 			-- Only meaningful when we're inside an answer; cb_append_line

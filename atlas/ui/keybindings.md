@@ -33,6 +33,15 @@ buffers retain Return-to-submit. Private notes must start at column one to be
 withheld from the model. A custom prefix rejected by Neovim's comment option
 produces a warning and keeps manual note entry available.
 
+In chat Insert mode, the second `@` inserts a closing `@@` and leaves the cursor
+between the delimiters. Typing closing `@@` moves across them; a single `@` stays
+literal. Pairing uses the current line, preserves one-step insertion undo, and
+respects existing effective mappings for the configured key. The
+`chat_shortcut_pair_at` registry entry follows the default-mapping switch; the app
+opts it in explicitly. Set its `shortcut = {}` to disable pairing independently.
+The pure key decision lives in `lua/parley/at_pair.lua`; chat preparation owns
+the buffer-local Insert-mode mapping.
+
 Structural editing uses text objects rather than one-off delete commands:
 `ae`/`ie` select the entity at the cursor (a markdown section, a paragraph, or
 a whole `💬:` exchange) and `aE` extends it through the end of the question, so

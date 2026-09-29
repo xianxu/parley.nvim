@@ -133,9 +133,21 @@ bundled originals here:
 4. [VIM Basics](packaging/tutorials/vim-basics.md) — modes, Back/Forward navigation,
    undo/redo, smart search, selection, clipboard editing, and saving.
 
+In chat Insert mode, typing `@@` inserts `@@@@` with the cursor between the pairs.
+Type the label, then type `@@` to move past the existing closing pair. Existing
+Insert-mode `@` mappings take precedence. Disable pairing with
+`chat_shortcut_pair_at = { shortcut = {} }`. The app explicitly enables this shortcut.
+
 To label a question in the outline, put `@@label@@` immediately above its question
-line, with no blank line between them. `@@_@@` hides that question from the outline.
-Both forms remain in AI context as a preface to the following question.
+line, with no blank line between them. The outline shows `💬: label` (or your
+configured question prefix). `@@_@@` hides that question from the outline.
+Whole-line outline tags are local only: the entire tag line is excluded from
+model context, including history. File/URL references such as `@@./notes.md@@`
+still attach context; inline mentions and fenced examples remain literal.
+
+The app also suggests words from the current buffer after two typed characters.
+Use Tab/Down or Up to select, Enter to accept and Esc to dismiss. With no menu,
+these keys keep their normal behavior. Ctrl-n/p, Ctrl-y and Ctrl-e also work. See [word completion](packaging/starter-config/README.md#complete-words-while-typing).
 
 Ask Parley about a feature as you work. Its documentation tool reads the
 README, tutorials, and [atlas](atlas/index.md) from your installed version.

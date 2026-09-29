@@ -43,6 +43,28 @@ describe('branch topic input boundaries',function()
         parley.dispatcher.query,parley.tasker.stop_owner=old_query,old_stop
         vim.fn.delete(parent);vim.fn.delete(child)
     end)
+    it('projects local tags out of the newly streamed answer before requesting a topic',function()
+        parley._state.agent='TopicNormal';parley._state.system_prompt='fixture-agent-prompt'
+        Respond.respond({range=0});wait(function()return #calls==1 end)
+        local answer=table.concat({'CURRENT ANSWER','@@private topic label@@','@@_@@',
+            'keep inline @@literal@@','```text','@@fenced literal@@','```'},'\n')
+        local call=calls[1]
+        parley.tasker.get_query(call.id).response=answer
+        call.output(call.id,answer)
+        wait(function()
+            return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n'):find(answer,1,true)~=nil
+        end)
+        call.complete(call.id);wait(function()return #calls==2 end)
+        local messages=calls[2].payload.messages
+        local outgoing_answer
+        for _,message in ipairs(messages)do
+            if message.role=='assistant'then outgoing_answer=message.content end
+        end
+        assert.equals(table.concat({'CURRENT ANSWER','keep inline @@literal@@',
+            '```text','@@fenced literal@@','```'},'\n'),outgoing_answer)
+        -- Context projection must not erase the transcript the operator sees.
+        assert.truthy(table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n'):find(answer,1,true))
+    end)
     for _,case in ipairs({{name='TopicNormal',leading={'NORMAL POLICY'}},
         {name='TopicSynthetic',leading={'SYNTHETIC POLICY','SYNTHETIC ACK'}},
         {name='TopicEmpty',leading={}}})do

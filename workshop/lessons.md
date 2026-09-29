@@ -283,3 +283,24 @@ oracle, and the mutation that would make the test fail.
 - `git add -A <dir>` sweeps in the operator's untracked files (a parley chat was
   committed and had to be amended out). Stage explicit paths.
 
+
+## 2026-09-29 (#300 — completion keyboard smoke)
+
+- Feed remappable keys when testing plugin mappings; `nvim_feedkeys` with `n` bypasses the mappings and tests Neovim defaults instead.
+- Parameterize caller-level tests across promised configuration variants, and test both directions of selection with distinct candidates; helper-only coverage cannot detect a caller passing the wrong configuration.
+
+## 2026-09-29 (#301 — local outline context)
+
+- Classify line-scoped syntax before trimming or removing speaker prefixes. Preserve a source-derived context projection when local rendering must retain the original text.
+- A context filter must preserve provider validity when all text disappears, and must recognize code fences on the speaker line without treating prefix-inline tags as whole-line tags. Test each changed request-producing caller, including topic requests.
+- When syntax determines both structural association and outgoing projection, share one row classification. Fence regressions must cross delimiter character, width, trailing content, speaker-line openers and turn-boundary termination; testing balanced examples alone misses reattachment loss.
+
+## 2026-09-29 (#302 — pairing with typeahead)
+
+- Insert expression mappings may inspect the line before preceding typeahead is inserted. Test contiguous mapped keys and ordinary text between them; use a command callback when the decision must observe completed insertion. Pairing cursor motions need `<C-g>U` to preserve a single undo step.
+
+- Delimiter typing tests must include directly adjacent pairs, not only prose-separated pairs. Keep acceptance-path integration smoke checks in the repository so reviewers and future changes can rerun them; sweep generated help alongside README when changing a user-visible contract.
+
+- Check whitespace across the reviewed commit range, including generated review sidecars; a clean working-tree diff can hide committed trailing whitespace.
+
+- Async file-selection callbacks need a generation check after reading; test A→B selections with both completion orders. Browser draft storage needs a documented retention bound and a visible unsaved state when persistence fails.

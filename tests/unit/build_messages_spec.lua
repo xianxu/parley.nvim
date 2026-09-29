@@ -2276,7 +2276,7 @@ describe("question-owned prefaces", function()
         local ex = exchange('```yaml {"type":"request"}\n' .. vim.json.encode(payload) .. '\n```')
         ex.preface = { content = "@@_@@", line_start = 9, line_end = 9 }
         local messages = initial(parsed_chat({ ex }))
-        assert.equals("@@_@@\n" .. ex.question.content, messages[2].content)
+        assert.equals(ex.question.content, messages[2].content)
         assert.are.same(payload, ex.question.raw_payload)
     end)
 
@@ -2292,8 +2292,8 @@ describe("question-owned prefaces", function()
             local live = require("parley.chat_respond").build_messages_from_model(buf, model, 2,
                 { system_prompt = "Test", provider = "openai", model = "gpt-4o" })
             vim.api.nvim_buf_delete(buf, { force = true })
-            assert.equals(tag .. "\nSecond", parsed_messages[#parsed_messages].content)
-            assert.equals(tag .. "\nSecond", live[#live].content)
+            assert.equals("Second", parsed_messages[#parsed_messages].content)
+            assert.equals("Second", live[#live].content)
             assert.is_nil(vim.inspect(parsed_messages[3]):find(tag, 1, true))
             assert.is_nil(vim.inspect(live[3]):find(tag, 1, true))
         end)
@@ -2317,7 +2317,7 @@ describe("question-owned prefaces", function()
         vim.api.nvim_buf_delete(buf, { force = true })
         assert.is_nil(vim.inspect(live):find("@@next topic@@", 1, true))
         local parsed_messages = initial(pc)
-        assert.equals("@@next topic@@\nSecond", parsed_messages[#parsed_messages].content)
+        assert.equals("Second", parsed_messages[#parsed_messages].content)
         table.remove(parsed_messages)
         assert.is_nil(vim.inspect(parsed_messages):find("@@next topic@@", 1, true))
         assert.is_truthy(vim.inspect(live):find("preface_tool", 1, true))
@@ -2343,6 +2343,146 @@ describe("question-owned prefaces", function()
         end)
     end
 
+    for _, delimiter in ipairs({ "```", "~~~", "````" }) do
+        it("projects original rows without changing local text or fenced examples: " .. delimiter, function()
+            local lines = { "# topic: Tags", "---", "@@preface@@", "💬: @@inline@@",
+                "@@question local@@", "  @@indented@@", "@@trailing@@ text",
+                delimiter, "@@fenced@@", delimiter == "````" and "```" or "fence content",
+                "@@still fenced@@", delimiter, "🤖:", "before", "@@answer local@@", "after",
+                "", "@@last@@", "💬: Second" }
+            local pc = parley.parse_chat(lines, 2)
+            local before = vim.deepcopy(pc)
+            local buf = vim.api.nvim_create_buf(false, true)
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+            local live = require("parley.chat_respond").build_messages_from_model(buf,
+                require("parley.exchange_model").from_parsed_chat(pc), 2,
+                { system_prompt = "Test", provider = "openai", model = "gpt-4o" })
+            assert.same(lines, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+            vim.api.nvim_buf_delete(buf, { force = true })
+            local ancestors = require("parley.chat_respond").build_ancestor_messages({
+                { exchanges = pc.exchanges, branch_after = 2 } })
+            for _, messages in ipairs({ initial(pc), live, ancestors }) do
+                local text = vim.inspect(messages)
+                for _, tag in ipairs({ "@@preface@@", "@@question local@@", "@@answer local@@", "@@last@@" }) do
+                    assert.is_nil(text:find(tag, 1, true), tag .. " leaked")
+                end
+                for _, literal in ipairs({ "@@inline@@", "@@indented@@", "@@trailing@@ text", "@@fenced@@", "@@still fenced@@" }) do
+                    assert.truthy(text:find(literal, 1, true), literal .. " was removed")
+                end
+                assert.truthy(text:find("before", 1, true))
+                assert.truthy(text:find("after", 1, true))
+            end
+            assert.same(before, pc)
+            assert.truthy(pc.exchanges[1].question.content:find("@@question local@@", 1, true))
+            assert.truthy(pc.exchanges[1].answer.content:find("@@answer local@@", 1, true))
+        end)
+    end
+
+    it("keeps serialized tool payloads literal while projecting surrounding text", function()
+        local serialize = require("parley.tools.serialize")
+        local payload = "@@payload@@\n```\n@@nested@@\n```"
+        local lines = { "# topic: Tools", "---", "💬: Run", "🤖:", "before", "@@before local@@" }
+        vim.list_extend(lines, vim.split(serialize.render_call({ name = "read_file", id = "tags",
+            input = { path = "@@input@@" } }), "\n", { plain = true }))
+        vim.list_extend(lines, vim.split(serialize.render_result({ name = "read_file", id = "tags",
+            content = payload }), "\n", { plain = true }))
+        vim.list_extend(lines, { "@@after local@@", "after", "💬: Next" })
+        local pc = parley.parse_chat(lines, 2)
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        local live = require("parley.chat_respond").build_messages_from_model(buf,
+            require("parley.exchange_model").from_parsed_chat(pc), 2,
+            { system_prompt = "Test", provider = "openai", model = "gpt-4o" })
+        vim.api.nvim_buf_delete(buf, { force = true })
+        for _, messages in ipairs({ initial(pc), live }) do
+            local found_input, found_result = false, false
+            for _, message in ipairs(messages) do
+                for _, block in ipairs(type(message.content) == "table" and message.content or {}) do
+                    if block.type == "tool_use" then
+                        assert.equals("@@input@@", block.input.path)
+                        found_input = true
+                    elseif block.type == "tool_result" then
+                        assert.equals(payload, block.content)
+                        found_result = true
+                    end
+                end
+            end
+            assert.is_true(found_input and found_result)
+            local text = vim.inspect(messages)
+            assert.is_nil(text:find("@@before local@@", 1, true))
+            assert.is_nil(text:find("@@after local@@", 1, true))
+            assert.truthy(text:find("after", 1, true))
+        end
+    end)
+
+    it("preserves a summary's prefix-inline tag as literal context", function()
+        local pc = parley.parse_chat({ "# topic: Summary", "---", "💬: First", "🤖:",
+            "answer", "📝: @@inline summary@@", "💬: Next" }, 2)
+        local messages = require("parley.chat_respond").build_ancestor_messages({
+            { exchanges = pc.exchanges, branch_after = 1 } })
+        assert.equals("@@inline summary@@", messages[2].content)
+    end)
+
+    it("drops tag-only questions, answers and text sections around tools", function()
+        local serialize = require("parley.tools.serialize")
+        local lines = { "# topic: Empty", "---", "💬:", "@@question only@@", "🤖:", "@@answer only@@",
+            "💬: Run", "🤖:", "@@before tool@@" }
+        vim.list_extend(lines, vim.split(serialize.render_call({ name = "read_file", id = "empty_tags",
+            input = { path = "a" } }), "\n", { plain = true }))
+        vim.list_extend(lines, vim.split(serialize.render_result({ name = "read_file", id = "empty_tags",
+            content = "result" }), "\n", { plain = true }))
+        vim.list_extend(lines, { "@@after tool@@", "", "💬: Next" })
+        local pc = parley.parse_chat(lines, 2)
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        local live = require("parley.chat_respond").build_messages_from_model(buf,
+            require("parley.exchange_model").from_parsed_chat(pc), 3,
+            { system_prompt = "Test", provider = "openai", model = "gpt-4o" })
+        vim.api.nvim_buf_delete(buf, { force = true })
+        for _, messages in ipairs({ initial(pc), live }) do
+            local roles, tool_order = {}, {}
+            for _, message in ipairs(messages) do
+                if message.role ~= "system" then roles[#roles + 1] = message.role end
+                if type(message.content) == "string" then
+                    assert.truthy(message.content:match("%S"), 'empty string message')
+                else
+                    for _, block in ipairs(message.content) do
+                        if block.type == "text" then assert.truthy(block.text:match("%S"), 'empty text block') end
+                        if block.type == "tool_use" or block.type == "tool_result" then
+                            tool_order[#tool_order + 1] = block.type
+                        end
+                    end
+                end
+            end
+            assert.same({ "user", "assistant", "user", "user" }, roles)
+            assert.same({ "tool_use", "tool_result" }, tool_order)
+        end
+    end)
+
+    for _, prefix in ipairs({ "💬:", "Q+:" }) do
+        for _, delimiter in ipairs({ "```", "~~~", "````" }) do
+        it("preserves a fence opened on the speaker line: " .. prefix .. delimiter, function()
+            local old = parley.config.chat_user_prefix
+            parley.config.chat_user_prefix = prefix
+            local buf = vim.api.nvim_create_buf(false, true)
+            local ok, err = pcall(function()
+                local lines = { "# topic: Fence", "---", prefix .. " " .. delimiter, "@@literal@@", delimiter, "@@local@@" }
+                local pc = parley.parse_chat(lines, 2)
+                vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+                local live = require("parley.chat_respond").build_messages_from_model(buf,
+                    require("parley.exchange_model").from_parsed_chat(pc), 1,
+                    { system_prompt = "Test", provider = "openai", model = "gpt-4o" })
+                for _, messages in ipairs({ initial(pc), live }) do
+                    assert.equals(delimiter .. "\n@@literal@@\n" .. delimiter, messages[#messages].content)
+                end
+            end)
+            parley.config.chat_user_prefix = old
+            vim.api.nvim_buf_delete(buf, { force = true })
+            assert.is_true(ok, tostring(err))
+        end)
+        end
+    end
+
     it("assigns a preface cursor to its question after an unanswered exchange", function()
         local lines = { "# topic: Prefaces", "---", "", "💬: First", "@@topic@@", "💬: Second" }
         local pc = parley.parse_chat(lines, 2)
@@ -2364,7 +2504,7 @@ describe("question-owned prefaces", function()
         parley.config.chat_user_prefix = old_prefix
         vim.api.nvim_buf_delete(buf, { force = true })
         assert.is_true(ok, tostring(messages))
-        assert.equals("@@topic@@\nAsk", messages[#messages].content)
+        assert.equals("Ask", messages[#messages].content)
     end)
 end)
 

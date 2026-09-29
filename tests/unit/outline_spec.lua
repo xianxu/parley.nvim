@@ -297,7 +297,7 @@ describe("Outline branch destinations (#250)", function()
         vim.api.nvim_win_set_cursor(0, { 8, 0 })
         outline.question_picker(parley.config)
         local selected = options.items[options.initial_index]
-        assert.equals("  label", selected.display)
+        assert.equals("  💬: label", selected.display)
         assert.equals(9, selected.value.lnum)
         settle(vim.api.nvim_get_current_buf())
         options.on_select(selected)

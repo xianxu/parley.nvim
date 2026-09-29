@@ -44,48 +44,164 @@ local function labels()
     return out
 end
 
--- Typing drives blink through vim.on_key and scheduled callbacks, so each case
--- feeds keys, then waits for the event loop to settle before observing.
-local cases = { { keys = ':mkpv', want = 'MarkdownPreview' }, { keys = ':thm', want = 'ParleyTheme' } }
+-- Exercise actual keys with event-loop turns between actions.
+local cmp = require('blink.cmp')
 local results, step = {}, 0
+local first_candidate
+local function has(label) return vim.tbl_contains(labels(), label) end
+local cases = {
+    { keys = ':mkpv', check = function()
+        assert(cmp.is_menu_visible() and labels()[1] == 'MarkdownPreview')
+    end },
+    { keys = '<C-u><Esc>', check = function() end },
+    { keys = ':thm', check = function()
+        assert(cmp.is_menu_visible() and labels()[1] == 'ParleyTheme')
+    end },
+    { keys = '<C-u><Esc>', check = function()
+        -- A visible second buffer must not contribute its vocabulary.
+        vim.cmd('vnew')
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'marzipan' })
+        vim.cmd('wincmd p')
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'marshmallow marmalade', '' })
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    end },
+    { keys = 'im', check = function()
+        assert(not cmp.is_menu_visible(), 'one character opened a menu')
+    end },
+    { keys = 'a', check = function()
+        assert(cmp.is_menu_visible() and has('marshmallow') and has('marmalade'), 'current-buffer words missing')
+        first_candidate = labels()[1]
+        assert(not has('marzipan'), 'another buffer contributed words')
+        assert(list.selected_item_idx == nil, 'item was preselected')
+        assert(vim.api.nvim_get_current_line() == 'ma', 'typing was replaced')
+        for _, map in ipairs(vim.api.nvim_get_keymap('c')) do
+            assert(map.lhs ~= '<Left>' and map.lhs ~= '<Right>', 'cmdline arrows claimed')
+        end
+    end },
+    { keys = '<Tab>', check = function()
+        assert(list.selected_item_idx == 1, 'Tab did not select first candidate')
+        assert(vim.api.nvim_get_current_line() == 'ma', 'selection inserted text')
+    end },
+    { keys = '<Down>', check = function()
+        assert(list.selected_item_idx == 2, 'Down did not advance to second candidate')
+        assert(list.get_selected_item().label ~= first_candidate, 'candidates must differ')
+    end },
+    { keys = '<Up>', check = function()
+        assert(list.selected_item_idx == 1, 'Up did not move to first candidate')
+        assert(list.get_selected_item().label == first_candidate)
+        assert(vim.api.nvim_get_current_line() == 'ma', 'selection inserted text')
+    end },
+    { keys = '<CR>', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate, 'Enter did not accept selected item')
+    end },
+    { keys = '<CR>ma', check = function()
+        assert(cmp.is_menu_visible(), 'menu did not reopen')
+    end },
+    { keys = '<Esc>', check = function()
+        assert(not cmp.is_menu_visible(), 'Esc did not dismiss')
+        assert(vim.fn.mode() == 'i', 'Esc dismissal left Insert mode')
+        assert(vim.api.nvim_get_current_line() == 'ma', 'dismiss changed the text')
+    end },
+    { keys = '<C-u>ma', check = function() assert(cmp.is_menu_visible()) end },
+    { keys = '<CR>', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate, 'Enter did not accept unselected first item')
+    end },
+    { keys = '<CR>', check = function()
+        assert(vim.api.nvim_get_current_line() == '', 'Enter without menu did not insert newline')
+    end },
+    { keys = '<Tab>', check = function()
+        assert(vim.api.nvim_get_current_line():match('^%s+$'), 'Tab without menu did not insert indentation')
+    end },
+    { keys = '<Up>', check = function()
+        assert(vim.api.nvim_win_get_cursor(0)[1] == 3, 'Up without menu did not move up')
+    end },
+    { keys = '<Down>', check = function()
+        assert(vim.api.nvim_win_get_cursor(0)[1] == 4, 'Down without menu did not move down')
+    end },
+    { keys = '<Esc>', check = function()
+        assert(vim.fn.mode() == 'n', 'Esc without menu did not leave Insert mode')
+        -- Exercise the app policy and production chat mapping together with Blink.
+        local parley = require('parley')
+        local roots = { data = vim.fn.stdpath('data') .. '/pairing', state = vim.fn.stdpath('state') }
+        local options = require('parley.starter_config').options(roots)
+        options.providers, options.api_keys = {}, {}
+        parley.setup(options)
+        vim.fn.mkdir(parley.config.chat_dir, 'p')
+        local path = parley.config.chat_dir .. '/2026-09-29-completion.md'
+        vim.fn.writefile({ '# topic: pairing', '- file: completion.md', '---', '',
+            'marshmallow marmalade', '' }, path)
+        vim.cmd('edit ' .. vim.fn.fnameescape(path))
+        local buf = vim.api.nvim_get_current_buf()
+        parley.prep_chat(buf, path)
+        assert(parley._prepared_bufs[buf], 'chat was not prepared')
+        assert(parley.config.default_keymaps == false, 'test must use the app shortcut policy')
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+    end },
+    { keys = 'i@@one@@@@two', check = function()
+        assert(vim.api.nvim_get_current_line() == '@@one@@@@two@@', 'adjacent pairing with Blink failed')
+    end },
+    { keys = '@@<CR>ma', check = function()
+        assert(vim.api.nvim_buf_get_lines(0, 5, 6, false)[1] == '@@one@@@@two@@', 'closers duplicated')
+        assert(cmp.is_menu_visible() and has('marshmallow') and has('marmalade'),
+            'chat buffer completion candidates missing')
+    end },
+    { keys = '<Tab>', check = function()
+        assert(list.selected_item_idx == 1, 'chat Tab selection failed')
+        first_candidate = list.get_selected_item().label
+    end },
+    { keys = '<Down>', check = function()
+        assert(list.selected_item_idx == 2, 'chat Down selection failed')
+    end },
+    { keys = '<Up>', check = function()
+        assert(list.get_selected_item().label == first_candidate, 'chat Up selection failed')
+    end },
+    { keys = '<CR>', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate, 'chat Enter acceptance failed')
+    end },
+    { keys = '<CR>ma', check = function() assert(cmp.is_menu_visible()) end },
+    { keys = '<Esc>', check = function()
+        assert(not cmp.is_menu_visible() and vim.fn.mode() == 'i', 'chat Esc dismissal failed')
+        assert(vim.api.nvim_get_current_line() == 'ma', 'chat dismissal changed text')
+    end },
+    { keys = '<C-u>ma', check = function() assert(cmp.is_menu_visible()) end },
+    { keys = '<C-n>', check = function()
+        first_candidate = list.get_selected_item().label
+    end },
+    { keys = '<C-n><C-p>', check = function()
+        assert(list.get_selected_item().label == first_candidate, 'Ctrl-n/p navigation changed')
+    end },
+    { keys = '<C-y>', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate, 'chat completion acceptance failed')
+    end },
+    { keys = '<CR>ma', check = function() assert(cmp.is_menu_visible()) end },
+    { keys = '<C-e>', check = function()
+        assert(not cmp.is_menu_visible(), 'Ctrl-e dismissal changed')
+        first_candidate = 'ma'
+    end },
+    { keys = ' @@after', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate .. ' @@after@@',
+            'pairing after completion acceptance failed')
+    end },
+    { keys = '@@!<Esc>', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate .. ' @@after@@!',
+            'closer skipping after completion acceptance failed')
+    end },
+}
 local function next_case()
     step = step + 1
     local case = cases[step]
     if not case then
-        -- Insert mode in a chat-like buffer: no sources, no menu, no blink keys.
-        vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'MarkdownPreview marshmallow markdown' })
-        vim.api.nvim_feedkeys('Gomar', 'nt', false)
-        vim.defer_fn(function()
-            local ok_insert, insert_err = pcall(function()
-                assert(vim.api.nvim_get_mode().mode == 'i')
-                assert(#list.items == 0, 'insert mode produced completion items')
-                assert(not require('blink.cmp').is_menu_visible(), 'insert mode opened a menu')
-                -- blink installs insert keys buffer-locally on InsertEnter; with -u NONE
-                -- nothing else maps this buffer, so any entry is a claimed key.
-                local claimed = vim.api.nvim_buf_get_keymap(0, 'i')
-                assert(#claimed == 0, 'blink claimed insert key ' .. (claimed[1] and claimed[1].lhs or ''))
-                for _, map in ipairs(vim.api.nvim_get_keymap('c')) do
-                    assert(map.lhs ~= '<Left>' and map.lhs ~= '<Right>', 'cmdline arrows claimed')
-                end
-            end)
-            if not ok_insert then return fail(insert_err) end
-            for _, line in ipairs(results) do print(line) end
-            print('PASS completion insert-mode quiet')
-            vim.cmd('qa!')
-        end, 800)
+        for _, line in ipairs(results) do print(line) end
+        print('PASS command-line, current-buffer completion, and app chat pairing keyboard behavior')
+        vim.cmd('qa!')
         return
     end
-    vim.api.nvim_feedkeys(case.keys, 'nt', false)
+    vim.api.nvim_feedkeys(vim.keycode(case.keys), 'mt', false)
     vim.defer_fn(function()
-        local found = labels()
-        local visible = require('blink.cmp').is_menu_visible()
-        if not (visible and found[1] == case.want) then
-            return fail(case.keys .. ': want ' .. case.want .. ' first in a visible menu, got '
-                .. vim.inspect(found) .. ' visible=' .. tostring(visible))
-        end
-        results[#results + 1] = 'PASS completion ' .. case.keys .. ' -> ' .. case.want
-        vim.api.nvim_feedkeys(vim.keycode('<C-u><Esc>'), 'nt', false)
-        vim.defer_fn(next_case, 200)
-    end, 800)
+        local passed, why = pcall(case.check)
+        if not passed then return fail('step ' .. step .. ': ' .. tostring(why)) end
+        results[#results + 1] = 'PASS completion step ' .. step .. ' ' .. case.keys
+        next_case()
+    end, 300)
 end
 vim.defer_fn(next_case, 100)

@@ -150,14 +150,32 @@ local ok, err = xpcall(function()
             lazy = false,
             keys = { { "<C-g>:", function() require("telescope.builtin").command_history() end,
                 desc = "Search command history" } } },
-        -- Fuzzy command-line completion only. The Lua matcher downloads no
-        -- binary; insert mode gets no sources and claims no keys (#262).
+        -- Fuzzy command-line and current-buffer word completion.
+        -- Keep Enter available for Parley submission and ordinary newlines.
         { "saghen/blink.cmp", commit = "78336bc89ee5365633bcf754d93df01678b5c08f", -- v1.10.2
             lazy = false,
             opts = {
                 fuzzy = { implementation = "lua" },
-                sources = { default = {} },
-                keymap = { preset = "none" },
+                sources = {
+                    default = { "buffer" },
+                    providers = { buffer = {
+                        min_keyword_length = 2,
+                        opts = { get_bufnrs = function() return { vim.api.nvim_get_current_buf() } end },
+                    } },
+                },
+                completion = { list = { selection = { preselect = false, auto_insert = false } } },
+                keymap = {
+                    preset = "none",
+                    ["<Tab>"] = { "select_next", "fallback" },
+                    ["<Down>"] = { "select_next", "fallback" },
+                    ["<Up>"] = { "select_prev", "fallback" },
+                    ["<CR>"] = { "select_and_accept", "fallback" },
+                    ["<Esc>"] = { "hide", "fallback" },
+                    ["<C-n>"] = { "select_next", "fallback" },
+                    ["<C-p>"] = { "select_prev", "fallback" },
+                    ["<C-y>"] = { "accept", "fallback" },
+                    ["<C-e>"] = { "hide", "fallback" },
+                },
                 cmdline = {
                     -- The preset would bind the arrows to menu selection; keep cursor movement.
                     keymap = { preset = "cmdline", ["<Left>"] = {}, ["<Right>"] = {} },
