@@ -8,6 +8,7 @@ updated: 2026-09-29
 estimate_hours:
 card_mirror: 'cb25334fd9074f69b3eebeab466cbd1b199c059d' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-29T10:35:00-07:00
+flow: {kind: quick, provenance: inferred, spec: "8ca1e017", done: "d6e804a8"}
 ---
 
 # Conversation label icons and app buffer completion
