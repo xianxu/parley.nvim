@@ -1,10 +1,12 @@
 ---
 id: 000301
-status: working
+status: codecomplete
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours:
 github_issue:
+started: 2026-09-29T10:58:55-07:00
+actual_hours: 3.02
 tracker:
     version: 1
     handoff:
@@ -17,7 +19,11 @@ tracker:
         source_blob: fe9c54197037a0f285c0b6e34494e458feae0463
         destination: workshop/issues/000301-local-outline-tags.md
         main_commit: fd920d9709f1000023955c8c6bbe33e515d4d2ff
-started: 2026-09-29T10:58:55-07:00
+    completion:
+        token: close-7c1d407f071a
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 9eedae23d8283b988eb47eef92478f48effd7608
+        evidence_commit: d4071283f591560eebd41813596f50f89339840a
 ---
 
 # Keep outline tags out of model context
