@@ -8,7 +8,7 @@ updated: 2026-09-29
 estimate_hours:
 card_mirror: 'ef577b2bd953d7e6033e7c275eca1ba5f9a43021' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-29T11:59:53-07:00
-flow: {kind: quick, provenance: inferred, spec: "31dc5753", done: "6d1a5da3"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Use familiar keys for app completion
@@ -33,6 +33,8 @@ Use Blink insert mappings: Tab/Down select next, Up selects previous, Return sel
 ## Log
 
 ### 2026-09-29
+- 2026-09-29: closed — Real pinned Blink passed 35 keyboard checks in ordinary and prepared app chat buffers: Tab/Down/Up selection, Enter selected/unselected acceptance, Escape dismissal, native no-menu fallbacks, legacy Ctrl keys and pairing. Regression failed at Tab before change. infra/starter, Lua lint and diff checks pass.; review verdict: SHIP
+- 2026-09-29: flow upgraded quick → full — 192 added lines in code files (limit 100)
 
 User specified the mapping directly. Use existing packaged Blink commands with fallback; keep current-buffer source and selection policy.
 
