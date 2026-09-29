@@ -8,6 +8,7 @@ updated: 2026-09-28
 estimate_hours:
 card_mirror: 'b13b64f82bdedab5f284be4ddf188894795fa205' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-28T18:58:22-07:00
+flow: {kind: quick, provenance: inferred, spec: "59570e2f", done: "f591b61c"}
 ---
 
 # Repo-local app demo and development loop
