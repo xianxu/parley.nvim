@@ -135,7 +135,8 @@ bundled originals here:
 
 In chat Insert mode, typing `@@` inserts `@@@@` with the cursor between the pairs.
 Type the label, then type `@@` to move past the existing closing pair. Existing
-Insert-mode `@` mappings take precedence; `default_keymaps = false` disables pairing.
+Insert-mode `@` mappings take precedence. Disable pairing with
+`chat_shortcut_pair_at = { shortcut = {} }`. The app explicitly enables this shortcut.
 
 To label a question in the outline, put `@@label@@` immediately above its question
 line, with no blank line between them. The outline shows `💬: label` (or your

@@ -40,7 +40,8 @@ function M.options(roots)
             local keys, modes = registry.resolve_keys(entry, defaults)
             local selected = {}
             for _, keybinding in ipairs(keys or {}) do
-                if entry.scope:match('_finder$') or object_only(modes)
+                -- Pairing preserves ordinary @ typing and existing mappings.
+                if entry.id == 'pair_at' or entry.scope:match('_finder$') or object_only(modes)
                     or keybinding:lower():match('^<c%-g>')
                     or keybinding:lower():match('^<m%-') then
                     selected[#selected + 1] = keybinding

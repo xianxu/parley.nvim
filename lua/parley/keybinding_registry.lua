@@ -105,6 +105,7 @@ end
 --   desc         - vim keymap description
 --   help_desc    - displayed in help (defaults to desc)
 --   buffer_local - true if registered per-buffer, false if global
+--   preserve_existing - skip effective user/plugin mappings (buffer-local entries)
 --   help_only    - true if registration is handled elsewhere (finders, review)
 
 M.entries = {
@@ -548,6 +549,16 @@ M.entries = {
 		desc = "Parley create and insert new chat",
 		help_desc = "Create and open sub-chat (insert branch reference)",
 		buffer_local = true,
+	},
+	{
+		id = "pair_at",
+		config_key = "chat_shortcut_pair_at",
+		default_key = "@",
+		default_modes = { "i" },
+		scope = "chat",
+		desc = "Parley pair double-at markers",
+		buffer_local = true,
+		preserve_existing = true,
 	},
 	{
 		id = "private_note",
@@ -1188,7 +1199,6 @@ M.feature_gated = {
 --- any parley mapping that is neither registry-derived nor named here is a leak.
 --- @type table<string, { where: string, why: string }>
 M.native_overrides = {
-	["@"] = { where = "init.lua prep_chat", why = "Insert-mode double-at pairing; single @ stays literal and existing mappings win" },
 	["u"] = {
 		where = "init.lua prep_chat (guarded_history)",
 		why = "undo runs natively unless this chat owns a pending response, in "
@@ -1402,18 +1412,14 @@ function M.register_buffer(scopes, buf, config, callbacks, set_keymap)
 				local keys, modes = M.resolve_keys(entry, config)
 				if keys and modes then
 					for _, key in ipairs(keys) do
-						if type(cb) == "table" then
-							-- Mode-specific callbacks: { n = fn, i = fn, v = fn }
-							for _, mode in ipairs(modes) do
-								local mode_cb = cb[mode]
-								if mode_cb then
-									set_keymap({ buf }, mode, key, mode_cb, entry.desc)
-								end
-							end
-						else
-							-- Single callback for all modes
-							for _, mode in ipairs(modes) do
-								set_keymap({ buf }, mode, key, cb, entry.desc)
+						for _, mode in ipairs(modes) do
+							local mode_cb = cb
+							if type(cb) == "table" then mode_cb = cb[mode] end
+							local existing = entry.preserve_existing and vim.api.nvim_buf_call(buf, function()
+								return next(vim.fn.maparg(key, mode, false, true)) ~= nil
+							end)
+							if mode_cb and not existing then
+								set_keymap({ buf }, mode, key, mode_cb, entry.desc)
 							end
 						end
 					end

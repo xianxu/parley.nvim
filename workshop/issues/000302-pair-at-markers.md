@@ -54,3 +54,9 @@ ARCH-DRY: reuse native_map and its registry exemption. ARCH-PURE: isolate line/b
 ## Revisions
 
 - 2026-09-29: Core concepts now explicitly records the inherited #301 helpers because architecture checks include the stacked branch diff. Runtime behavior remains line-local; production typeahead evidence selected a command callback rather than an expression callback.
+
+- 2026-09-29: App coexistence inspection found starter disables default mappings. Parent clarified app delivery is required: replace native exemption with an explicit registry shortcut; starter opts it in while preserving master-switch semantics for unspecified defaults. Preserve effective mappings for each configured key.
+
+- Final design supersedes the initial native-map exemption: ARCH-DRY uses the configurable registry entry `pair_at`, with `chat_shortcut_pair_at` and per-entry mapping preservation. Starter explicitly opts in; unspecified shortcuts still obey `default_keymaps=false`.
+- App revision GREEN: ui/keybindings passed 357 tests (15 pairing integration cases). Real installed Blink with actual starter options passed pairing/skip, Ctrl-n candidate selection, Ctrl-y acceptance, and subsequent pairing. Temporary smoke: `/tmp/parley-302-blink-smoke.lua`; output: `/tmp/parley-302-blink-smoke.log`. Focused luacheck: zero warnings/errors.
+- `make test-spec SPEC=infra/starter` passed 185 tests, zero failures/errors.

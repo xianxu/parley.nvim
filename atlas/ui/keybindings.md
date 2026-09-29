@@ -36,7 +36,9 @@ produces a warning and keeps manual note entry available.
 In chat Insert mode, the second `@` inserts a closing `@@` and leaves the cursor
 between the delimiters. Typing closing `@@` moves across them; a single `@` stays
 literal. Pairing uses the current line, preserves one-step insertion undo, and
-respects existing effective Insert-mode `@` mappings and `default_keymaps = false`.
+respects existing effective mappings for the configured key. The
+`chat_shortcut_pair_at` registry entry follows the default-mapping switch; the app
+opts it in explicitly. Set its `shortcut = {}` to disable pairing independently.
 The pure key decision lives in `lua/parley/at_pair.lua`; chat preparation owns
 the buffer-local Insert-mode mapping.
 
@@ -257,11 +259,11 @@ made every `refresh_state` caller raise while the mode was on, so opening any
 chat file errored.
 
 ## Native overrides (off-registry by design)
-`@` (Insert mode), `u`, `<C-r>`, `*`, `#`, `g*`, `g#` are mapped buffer-locally in chat buffers but
+`u`, `<C-r>`, `*`, `#`, `g*`, `g#` are mapped buffer-locally in chat buffers but
 have **no registry entry**. Each wraps the native key and falls through to it
 unless a parley-specific condition holds — `u`/`<C-r>` only intervene when the
 chat owns a pending response; `*`/`#`/`g*`/`g#` only when the cursor sits inside
-a `[...]` anchor (#141); Insert-mode `@` only pairs or skips double-at delimiters. They claim no keyspace, so there is nothing to rebind.
+a `[...]` anchor (#141). They claim no keyspace, so there is nothing to rebind.
 
 That exemption is enforced rather than trusted: `keybinding_registry.native_overrides`
 records each key's location and rationale, `init.lua`'s `native_map` refuses to
