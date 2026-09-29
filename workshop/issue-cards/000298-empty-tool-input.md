@@ -1,6 +1,6 @@
 ---
 id: 000298
-status: open
+status: working
 created: 2026-09-28
 updated: 2026-09-28
 estimate_hours:
@@ -17,6 +17,7 @@ tracker:
         source_blob: 7dcece9df8a96575d50ba8c305aa0dabc376749a
         destination: workshop/issues/000298-empty-tool-input.md
         main_commit: 4a3d286687041de8bd590c68fc73d121ac1c5486
+started: 2026-09-28T21:04:00-07:00
 ---
 
 # Preserve empty tool input objects
