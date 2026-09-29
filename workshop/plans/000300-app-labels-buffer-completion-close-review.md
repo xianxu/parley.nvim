@@ -42,7 +42,7 @@ The implementation is small, shares label formatting correctly, and passes the f
 5. **Test coverage notes**
 
    Passed independently:
-   
+
    - `make test-spec SPEC=ui/outline`
    - `make test-spec SPEC=infra/starter`
    - Real completion smoke against verified Blink commit `78336bc89ee5365633bcf754d93df01678b5c08f`
