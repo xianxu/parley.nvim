@@ -293,3 +293,4 @@ oracle, and the mutation that would make the test fail.
 
 - Classify line-scoped syntax before trimming or removing speaker prefixes. Preserve a source-derived context projection when local rendering must retain the original text.
 - A context filter must preserve provider validity when all text disappears, and must recognize code fences on the speaker line without treating prefix-inline tags as whole-line tags. Test each changed request-producing caller, including topic requests.
+- When syntax determines both structural association and outgoing projection, share one row classification. Fence regressions must cross delimiter character, width, trailing content, speaker-line openers and turn-boundary termination; testing balanced examples alone misses reattachment loss.

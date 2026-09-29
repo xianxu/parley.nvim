@@ -27,6 +27,31 @@ rounds:
           round: 1
       recipe: milestone-review
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-29T11:27:42-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Empty-content regression passes and fails when the projected text-block omission guard is removed in memory.
+          round: 2
+        - id: BR-2
+          disposition: not-addressed
+          note: Balanced speaker-line fences are fixed, but a speaker-line fence terminated by the next question still loses its final literal tag through question_tags.lua:56 preface association and line 71 composition.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: Both caller-level request tests pass; removing automatic-answer, prune-question, or prune-answer projection independently makes its regression fail.
+          round: 2
+      findings:
+        - id: BR-4
+          severity: Critical
+          title: Mixed delimiter runs incorrectly close fences and invert tag projection
+          detail: 'question_tags.lua:26 accepts ```~~~ as a backtick closer, deleting a subsequent fenced literal and retaining a local tag after the real closer. This is the 2nd finding in this family: establish one fence rule across projection and association, and test delimiter character, width, trailing content, speaker-line openers, and turn-boundary termination. ARCH-DRY, ARCH-PURPOSE.'
+          family: projection-preserves-fenced-literals
+          round: 2
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#301 (boundary-review)
@@ -45,8 +70,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Important] `changed-consumer-regression-coverage` Exercise tag projection through both changed topic-request callers
   lua/parley/chat_respond.lua:1673 and lua/parley/init.lua:4450 change automatic-topic and ChatPrune topic inputs without caller-level regression coverage. Capture both outgoing requests and assert local-tag exclusion and literal preservation; removing either caller's projection must fail its test.
 
+## Round 2 — 2026-09-29T11:27:42-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Empty-content regression passes and fails when the projected text-block omission guard is removed in memory.
+- BR-2 — not-addressed — Balanced speaker-line fences are fixed, but a speaker-line fence terminated by the next question still loses its final literal tag through question_tags.lua:56 preface association and line 71 composition.
+- BR-3 — addressed — Both caller-level request tests pass; removing automatic-answer, prune-question, or prune-answer projection independently makes its regression fail.
+
+### Raised
+
+- **BR-4** [Critical] `projection-preserves-fenced-literals` Mixed delimiter runs incorrectly close fences and invert tag projection
+  question_tags.lua:26 accepts ```~~~ as a backtick closer, deleting a subsequent fenced literal and retaining a local tag after the real closer. This is the 2nd finding in this family: establish one fence rule across projection and association, and test delimiter character, width, trailing content, speaker-line openers, and turn-boundary termination. ARCH-DRY, ARCH-PURPOSE.
+
 ## Open findings
 
-- **BR-1** [Critical] `projection-preserves-message-validity` Drop empty text blocks and messages after local-tag projection
 - **BR-2** [Critical] `projection-preserves-fenced-literals` Recognize fences opened after the question speaker prefix
-- **BR-3** [Important] `changed-consumer-regression-coverage` Exercise tag projection through both changed topic-request callers
+- **BR-4** [Critical] `projection-preserves-fenced-literals` Mixed delimiter runs incorrectly close fences and invert tag projection

@@ -63,6 +63,38 @@ end)
 
 -- Classify source rows, never already-trimmed message content.
 describe("local tag context projection", function()
+    for _, prefix in ipairs({ "💬:", "Q+:" }) do
+        for _, char in ipairs({ "`", "~" }) do
+            it("shares speaker-fence ownership through the next turn for " .. prefix .. char, function()
+                local config = { chat_user_prefix = prefix }
+                local lines = { prefix .. " " .. char:rep(3), "@@literal@@", prefix .. " Next",
+                    "@@./notes.md@@", prefix .. " With reference", "@@local@@" }
+                assert.same({ [6] = true }, tags.local_rows(lines, config))
+                assert.same({ [5] = { line_start = 4, line_end = 4,
+                    content = "@@./notes.md@@", label = "./notes.md" } }, tags.associations(lines, config))
+            end)
+        end
+    end
+    for _, case in ipairs({
+        { open = "```text", invalid = "```~~~", close = "```" },
+        { open = "~~~text", invalid = "~~~```", close = "~~~" },
+        { open = "````text", invalid = "```", close = "`````" },
+        { open = "~~~~text", invalid = "~~~", close = "~~~~~" },
+        { open = "```text", invalid = "~~~", close = "```" },
+        { open = "~~~text", invalid = "```", close = "~~~" },
+        { open = "```text", invalid = "```info", close = "  ```  " },
+        { open = "~~~text", invalid = "~~~info", close = "  ~~~  " },
+    }) do
+        it("requires a bare same-character closer with sufficient width after " .. case.invalid, function()
+            local lines = { "💬: example", case.open, case.invalid, "@@literal@@",
+                case.close, "@@local@@", "💬: Next" }
+            assert.same({ [6] = true }, tags.local_rows(lines, cfg))
+            assert.equals(table.concat({ lines[1], lines[2], lines[3], lines[4], lines[5], lines[7] }, "\n"),
+                tags.context_text(table.concat(lines, "\n"), cfg))
+            assert.same({ [7] = { line_start = 6, line_end = 6,
+                content = "@@local@@", label = "local" } }, tags.associations(lines, cfg))
+        end)
+    end
     it("keeps inline, indented, incomplete and reference forms", function()
         local lines = { "@@local@@", "@@_@@", "text @@inline@@", " @@indented@@",
             "@@tag@@ trailing", "@@@@", "@@unfinished", "@@./notes.md@@", "@@https://example.test@@",
