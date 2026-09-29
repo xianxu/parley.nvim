@@ -124,7 +124,7 @@ Files: create `tests/packaging/spell_compatibility.lua` and `scripts/check-spell
 - [x] Run the existing completion_compatibility.lua under the same isolated runner profile, preserving its no-native-library assertion. Record spell timing and bounded-work observations.
 - [x] Document plugin Blink setup, defaults, independent underline/menu switches, fallback and single-owner behavior, mode controls and limits. Explain #304's short-word behavior versus legacy min_word. Add revision notes to #259/#288 only through their issue-detail workflow when reconciliation is needed; do not change their cards or mark them done.
 - [x] Run mapped suites sequentially again after the final edits, `make lint`, `git diff --check`. Stage explicit files; commit tested code/docs with an issue reference and Co-Authored-By trailer.
-- [ ] Tick completed issue/plan checkboxes; run `sdlc issue sync --issue 304`. Run `sdlc close --issue 304 --verified '<actual command results and timing evidence>'`; let the binary run the mandatory boundary review, fix findings and record lessons before retrying. Then publish through `sdlc pr` and `sdlc merge` under the existing authorization/workflow contract.
+- [x] Tick completed issue/plan checkboxes; run `sdlc issue sync --issue 304`. Run `sdlc close --issue 304 --verified '<actual command results and timing evidence>'`; let the binary run the mandatory boundary review, fix findings and record lessons before retrying. Then publish through `sdlc pr` and `sdlc merge` under the existing authorization/workflow contract.
 
 ## Approval checkpoint
 
@@ -153,3 +153,7 @@ This plan is outside the quick-flow shell. Obtain approval for the concrete desi
 
 - Same-buffer window departure, entry, and departure/return during delayed resolution are part of the lifecycle. WinLeave synchronously invalidates through the reducer and releases menu/maps; WinEnter schedules a fresh observation. This covers window/tab transitions even when buffer and cursor remain identical.
 - Controller regressions assert cleanup and re-observation; real pinned Blink replays delayed resolution while staying in the second window and returning to the origin.
+
+### 2026-09-29 — Close accepted
+
+- Boundary re-review returned SHIP with no remaining findings; BR-1 was independently mutation-tested. Implementation and close checklist complete. Publication proceeds through the isolated durable checkout documented in the issue log, preserving the original main checkout.
