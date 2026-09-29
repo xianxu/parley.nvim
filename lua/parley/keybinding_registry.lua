@@ -1183,10 +1183,14 @@ M.opt_in = {
 --- `config.lua` and the atlas already blessed this category in prose; it is
 --- listed here so the leak guard's allowance list is genuinely closed, rather
 --- than reporting a documented, opt-in map as an escape (#214 BR-39).
---- @type table<string, { gate: string, where: string }>
+--- @type table<string, { gate: string, where: string, scope?: string }>
 M.feature_gated = {
+    ["<Tab>"] = { scope = "chat", gate = "owned Blink spelling menu", where = "spell_blink.lua lease" },
+    ["<Down>"] = { scope = "chat", gate = "owned Blink spelling menu", where = "spell_blink.lua lease" },
+    ["<Up>"] = { scope = "chat", gate = "owned Blink spelling menu", where = "spell_blink.lua lease" },
+    ["<Esc>"] = { scope = "chat", gate = "owned Blink spelling menu", where = "spell_blink.lua lease" },
 	["<CR>"] = {
-		gate = "chat_spell.typeahead (opt-in, ships false) / interview mode",
+		gate = "chat_spell.typeahead / interview mode / owned Blink spelling menu",
 		where = "spell.lua attach + interview.lua setup_keymap",
 	},
 }

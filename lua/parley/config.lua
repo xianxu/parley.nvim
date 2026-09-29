@@ -308,21 +308,16 @@ local config = {
 	chat_confirm_delete = true,
 	-- conceal model parameters in chat
 	chat_conceal_model_params = true,
-	-- spellcheck + as-you-type spell-suggestion typeahead in chat buffers.
-	-- `enable` turns on visible spell underlines (vim `spell`); `typeahead` pops a
-	-- completion menu of `spellsuggest()` results when a misspelled word ≥ `min_word`
-	-- chars is typed (built-in `spellsuggest`/`spellbadword`, no plugin). The two are
-	-- independent — `spellsuggest()` works even with `spell` off.
+	-- Spell underlines and completion are independent. Blink is used only after
+	-- the host has configured it; legacy native typeahead remains explicit opt-in.
 	chat_spell = {
-		enable = true, -- visible spell underlines on chat buffers
-		-- #214: shipped OFF. It maps insert-mode <CR> in every chat buffer, and a
-		-- popup that appears while you type is the kind of default that has to be
-		-- asked for. `enable` (the squiggles) stays on; set typeahead = true to
-		-- get the suggestion menu back.
-		typeahead = false, -- as-you-type spell-suggestion popup + <CR> handling
+		enable = true,
+		blink = true,
+		debounce_ms = 180,
+		typeahead = false,
 		spelllang = "en_us",
-		min_word = 4, -- min misspelled-word length before suggesting
-		max_suggest = 9, -- max suggestions shown in the menu
+		min_word = 4, -- legacy typing threshold; Blink corrects short existing typos
+		max_suggest = 9,
 	},
 	-- #214 master switch. `false` makes parley claim NO keys by DEFAULT: every
 	-- registry-derived binding (including picker-internal ones), plus the

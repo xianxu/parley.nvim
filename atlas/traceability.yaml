@@ -3,6 +3,23 @@ version: 1
 # Maps a feature entry to the code and tests that verify it.
 # Key format intentionally omits the leading "atlas/" and trailing ".md".
 atlas:
+  chat/spell_typeahead:
+    code:
+      - lua/parley/spell.lua
+      - lua/parley/spell_state.lua
+      - lua/parley/spell_blink.lua
+      - lua/parley/spell_source.lua
+      - scripts/check-spell-compatibility.sh
+      - tests/packaging/spell_compatibility.lua
+      - tests/helpers/fake_blink.lua
+    tests:
+      - tests/unit/spell_spec.lua
+      - tests/unit/spell_state_spec.lua
+      - tests/integration/spell_chat_spec.lua
+      - tests/integration/spell_source_spec.lua
+      - tests/integration/spell_blink_spec.lua
+      - tests/integration/neighborhood_completion_spec.lua
+
   ui/themes:
     code:
       - tests/packaging/theme_compatibility.lua

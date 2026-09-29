@@ -186,3 +186,90 @@ describe("typeahead gate (#214 M2)", function()
 		assert.is_true(shipped.chat_spell.enable)
 	end)
 end)
+
+describe('spell backend reattachment', function()
+    it('removes legacy autocmds and restores the prior Return mapping on disable', function()
+        local buf = make_buf()
+        local original = function() return 'original' end
+        vim.keymap.set('i', '<CR>', original, { buffer = buf, expr = true })
+        spell.attach(buf, { typeahead = true })
+        assert.is_true(has_cr_map(buf))
+        spell.attach(buf, { typeahead = false, blink = false })
+        assert.equals(0, typeahead_autocmds(buf))
+        assert.is_false(has_cr_map(buf))
+        assert.equals(original, vim.fn.maparg('<CR>', 'i', false, true).callback)
+    end)
+    it('does not overwrite a user replacement of the legacy Return mapping', function()
+        local buf = make_buf()
+        spell.attach(buf, { typeahead = true })
+        vim.keymap.set('i', '<CR>', 'user', { buffer = buf })
+        spell.attach(buf, {})
+        assert.equals('user', vim.fn.maparg('<CR>', 'i', false, true).rhs)
+    end)
+    it('does not interpret spelllang as an Ex command', function()
+        local buf = make_buf()
+        vim.g.parley_spell_injected = nil
+        pcall(spell.attach, buf, { spelllang = 'en_us | let g:parley_spell_injected=1' })
+        assert.is_nil(vim.g.parley_spell_injected)
+    end)
+end)
+
+describe('spell backend ownership', function()
+    local original_blink, original_neighborhood, fake, ready_callback, cmp_refreshes
+    before_each(function()
+        original_blink = package.loaded['parley.spell_blink']
+        original_neighborhood = package.loaded['parley.neighborhood']
+        cmp_refreshes = 0
+        fake = { active = false, attaches = 0, detaches = 0 }
+        fake.attach = function(_, opts)
+            fake.attaches = fake.attaches + 1
+            ready_callback = opts.on_ready
+            if fake.active then opts.on_ready() end
+            return fake.active
+        end
+        fake.detach = function() fake.detaches = fake.detaches + 1 end
+        package.loaded['parley.spell_blink'] = fake
+        package.loaded['parley.neighborhood'] = {
+            attach_cmp_completion = function() cmp_refreshes = cmp_refreshes + 1 end,
+        }
+    end)
+    after_each(function()
+        package.loaded['parley.spell_blink'] = original_blink
+        package.loaded['parley.neighborhood'] = original_neighborhood
+    end)
+    it('chooses ready Blink over legacy and disables previously enabled underlines', function()
+        local buf = make_buf()
+        spell.attach(buf, { enable = true, typeahead = true })
+        fake.active = true
+        spell.attach(buf, { enable = false, blink = true, typeahead = true })
+        assert.equals(1, fake.attaches)
+        assert.equals(0, typeahead_autocmds(buf))
+        assert.is_false(has_cr_map(buf))
+        assert.is_false(vim.wo.spell)
+        assert.equals(1, cmp_refreshes)
+    end)
+    it('retires fallback legacy resources when delayed Blink setup becomes ready', function()
+        local buf = make_buf()
+        spell.attach(buf, { blink = true, typeahead = true })
+        assert.is_true(has_cr_map(buf))
+        assert.equals(1, fake.attaches)
+        ready_callback()
+        assert.equals(0, typeahead_autocmds(buf))
+        assert.is_false(has_cr_map(buf))
+        assert.equals(1, cmp_refreshes)
+    end)
+    it('restores an expression string map and releases resources on wipeout', function()
+        local buf = make_buf()
+        vim.keymap.set('i', '<CR>', "'old'", { buffer = buf, expr = true, remap = true, silent = true })
+        local old = vim.fn.maparg('<CR>', 'i', false, true)
+        spell.attach(buf, { typeahead = true })
+        spell.attach(buf, {})
+        local restored = vim.fn.maparg('<CR>', 'i', false, true)
+        for _, key in ipairs({'rhs','expr','noremap','silent','replace_keycodes'}) do
+            assert.equals(old[key], restored[key], key)
+        end
+        spell.attach(buf, { typeahead = true })
+        vim.api.nvim_buf_delete(buf, { force = true })
+        assert.is_false(pcall(vim.api.nvim_get_autocmds, { group = 'ParleySpell_' .. buf }))
+    end)
+end)

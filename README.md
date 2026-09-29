@@ -149,6 +149,39 @@ The app also suggests words from the current buffer after two typed characters.
 Use Tab/Down or Up to select, Enter to accept and Esc to dismiss. With no menu,
 these keys keep their normal behavior. Ctrl-n/p, Ctrl-y and Ctrl-e also work. See [word completion](packaging/starter-config/README.md#complete-words-while-typing).
 
+## Spelling suggestions
+
+Spelling corrections appear after a short pause over a misspelling in
+Normal or Insert mode. They replace the whole word, even from its middle, and
+include short words such as `teh`. Tab/Down and Up select, Enter accepts the
+selected or first item, and Esc dismisses without leaving the current mode.
+No text changes until acceptance; with no spelling menu, these keys keep their
+prior behavior. Esc suppresses suggestions on that word until you leave or
+change it; `:lua require('parley.spell_blink').request()` requests them again.
+
+The app includes this spelling integration. Plugin users need Blink **v1.10.2**
+(commit `78336bc89ee5365633bcf754d93df01678b5c08f`) installed and loaded through
+their plugin manager. For a fresh setup, initialize Blink before Parley:
+
+```lua
+require("blink.cmp").setup({
+  fuzzy = { implementation = "lua" },
+  sources = { default = { "buffer" } },
+})
+require("parley").setup({
+  chat_spell = { blink = true, enable = true, debounce_ms = 180 },
+})
+```
+
+If Blink is already configured, keep its provider list; Parley adds spelling to
+it. `chat_spell.blink` defaults to `true` and activates once Blink is ready.
+`enable` independently controls underlines. Missing or delayed Blink setup leaves
+chats usable; the legacy Insert popup remains opt-in with `typeahead = true`
+and `min_word = 4`. Blink spelling has no minimum word length, defaults to nine
+suggestions and caps the count at twenty. See [spelling configuration and
+limits](atlas/chat/spell_typeahead.md) for fallback, Unicode handling and
+completion ownership.
+
 Ask Parley about a feature as you work. Its documentation tool reads the
 README, tutorials, and [atlas](atlas/index.md) from your installed version.
 
