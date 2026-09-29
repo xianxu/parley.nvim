@@ -1,12 +1,13 @@
 ---
 id: 000304
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours:
-card_mirror: '91fe7bac0955adf6af3973cba6b973540bf83ad2' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'ae8434fb5f6beefc3a1b045a030bc3da18061722' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-29T14:30:37-07:00
 ---
 
 # Unify automatic spell suggestions in Blink
@@ -49,3 +50,79 @@ Implementation questions to resolve during design: verify the pinned Blink versi
 ### 2026-09-29
 
 User requested a ticket only, not implementation. Explicit priorities: use Blink for spell typeahead in main Parley, ensure it works in parley_app, and automatically pop the Blink spelling menu over a misspelled word in Normal or Insert mode. Current spell underlines are enabled; legacy spell typeahead is disabled and owns a separate popup/Enter mapping when enabled. The app already has Blink buffer completion and the requested selection/acceptance/dismissal keys.
+
+
+### 2026-09-29 — Implementation authorized; restart checkpoint
+
+User subsequently said “ok, go work on it” and “continue?”; implementation is authorized. Claimed #304 and ran `sdlc start-plan --issue 304` in `/private/tmp/parley-304-worktree`, branch `000304-blink-spell-suggestions`, based on origin/main `63390569`. No production code or tests have been changed; no durable implementation plan has been written and `sdlc change-code` has NOT run. Next: write `workshop/plans/000304-blink-spell-suggestions-plan.md` with the writing-plans skill, checkpoint it, pass change-code, then implement/test. Do not reclaim an already-working issue. Latest SDLC state was refreshed successfully with escalation after sandbox blocked FETCH_HEAD.
+
+**Baseline:** `make test-spec SPEC=ui/keybindings` in this worktree finished exit 2. Runtime tests passed; sole failure was `tests/arch/single_source_sweeps_spec.lua:356`: no Core-concepts row selected. This is missing planning metadata, not a runtime regression. A durable plan must list actual module/export names in its Core concepts tables (Status column). Log: `/tmp/parley-304-baseline.log`. No test process remains. Never run concurrent make-test invocations in one checkout: orphan census can kill peers.
+
+**Real Blink feasibility:** installed app dependency at `/Users/xianxu/workspace/parley.nvim/demo/workspace/data/parley/lazy/blink.cmp`, pinned commit `78336bc89ee5365633bcf754d93df01678b5c08f` (1.10.2). Lua fuzzy implementation needs no native download. Public `cmp.show({providers={id}})` opens the actual menu in Normal mode. Default acceptance fails E785 because its dot-repeat implementation calls native complete(), which requires Insert mode. Do NOT globally disable dot_repeat in the user's Blink config. A custom provider `execute(ctx,item,callback,default_implementation)` solves this: in Normal establish an undo boundary, apply the explicit full-word text edit directly, leave cursor on last replacement character; in Insert call default_implementation; call callback exactly once on either path, including stale rejection. Probe demonstrated replacement of “before teh after” with “before the after”, Normal/Insert mode preservation and single undo restoring the typo. Probe source is embedded below for reproducibility; temporary original `/tmp/blink-spell-probe-execute.lua` is not durable.
+
+**API findings and critical acceptance race:** non-LSP items use UTF-8 byte textEdit offsets by default; no offsetEncoding property needed (`lib/text_edits.lua:189`). Set filterText to the misspelled query so fuzzy matching does not discard valid corrections. Blink changes textEdit.end BEFORE calling custom execute by the cursor movement since the item was generated (`text_edits.lua:160–166`). Keep the original range, cursor, buffer identity, word, changedtick and generation in item data; reject stale acceptance or reconstruct intended range. Menu/list close occurs BEFORE asynchronous resolve/execute; acceptance evidence cannot live only in visible-menu state. Public User BlinkCmpShow/Hide events include event.data.context; Hide retains previous context even when cmp.get_context() is nil. BlinkCmpMenuOpen/Close carry no items/context; use get_items to identify source ownership. add_source_provider asserts duplicate IDs; add_filetype_source appends without clearing existing config. Register once, preserve user source configuration.
+
+**Readiness:** no public ready API and no BlinkCmpReady event. Merely requiring Blink or inspecting fuzzy.implementation_type does not prove setup (it defaults to lua on require). Candidate narrow internal compatibility probe: inspect package.loaded['blink.cmp.completion.trigger'] and its buffer_events field without requiring internals; this field is assigned in trigger.activate during setup. Check from scheduled callbacks after setup's synchronous tail; retry existing BufEnter/InsertEnter/CursorMoved events. Isolate/document this version-dependent seam and cover delayed setup. Never invoke setup implicitly in plugin users' config.
+
+**Integration map:**
+- `lua/parley/spell.lua`: existing pure word_at_cursor returns only a word ending before insertion and rejects mid-word edits; preserve legacy semantics and add a separate full-word target abstraction. Existing attach only enables legacy native popup when typeahead=true; it does not clean up prior maps/autocmds on disabling. Fix backend reattachment lifecycle. spelllang must work with underlines off.
+- `lua/parley/init.lua` prep_chat around 2688 gates attach on enable/typeahead. Update for new Blink option. spell.attach runs before final registry maps, so capture effective original maps when a menu opens, not during early attach. Interview CR callback and prompt-buffer behavior must survive.
+- `lua/parley/config.lua` chat_spell currently enable=true, typeahead=false, min_word=4, max_suggest=9. Leaning: new blink=true default when dependency is ready, keep typeahead=false legacy opt-in, independently configurable popup/underlines. Short existing typo “teh” must trigger. Defaults, debounce and typing threshold remain design decisions, not accepted implementation.
+- `lua/parley/neighborhood.lua` attach_cmp_completion owns nvim-cmp path source, retries scheduled BufEnter/InsertEnter. Avoid competing native/nvim-cmp UI while Blink owns chat completion; neighborhood-path migration itself remains #288 scope. Both-enabled configurations require an explicit ownership choice and tests.
+- App starter already eagerly configures real Blink, Lua matcher, buffer source current-buffer only, no preselect/auto-insert; Tab/Down next, Up previous, Enter select-and-accept, Esc hide/fallback. Main plugin must consume same spelling controller, no app-only implementation.
+- `lua/parley/keybinding_registry.lua` feature_gated currently lists only CR. Add transient spelling menu keys with gate metadata. Normal app Up/Down globally map gj/gk. Lease buffer-local maps only while owned menu is visible; restore original buffer mapping (including callback/string/expr properties), or remove local map to expose global map. Never overwrite a user replacement made while menu was active.
+- Tests: existing `tests/unit/spell_spec.lua`, `tests/integration/spell_chat_spec.lua`, keybinding agreement/unit specs; actual dependency harness `tests/packaging/completion_compatibility.lua`. Add shared plugin + app real Blink scenarios, not just fake assertions. Packaging harness uses fake dependency installer, real pinned Blink. Launch with `nvim --headless -u NONE -i NONE -c 'luafile ...'` rather than -l. Update spec traceability YAML and atlas/index links.
+
+**Design still needed (ARCH-ORDER/PURE/DRY):** explicit pure state transition owner (idle/pending/open/dismissed, events for target/mode changes, timer completion, dismissal, menu close, detach). One cancellable debounce timer per buffer; reject old generations/results, bounded suggestion count, no full-buffer scanning per keystroke. Restore leased maps and cancel timers on BufLeave/Wipeout, unsupported modes, reattach and disable. Esc suppresses same unchanged target until moving/changing/manual request; no silent autocorrect. Preserve buffer completion in same Blink menu; avoid suppressing user's providers. Unicode letters/apostrophes, byte offsets after multibyte prefixes, punctuation/no-word positions need deliberate target extraction and tests. Test full-word replacement mid-word, undo, short typo, typing and motion triggers in both modes, delayed Blink setup/absence, stale accept, dismissal/retrigger, custom maps, buffer switches, user-remapped keys, correct words and no-menu native behavior. Establish operating budget (e.g. debounce 150–200ms) as a design choice, not a measured claim.
+
+**Other session state:** #300–303 were already merged (PR #215), archived, and their branches removed. Ariadne #272 captures stacked-development friction; no further peer work is needed for #304. User's separately staged demo changes (REHEARSAL, cut.py, viewer.html) were committed on main at `8f0e7a48` on explicit request, no push performed. Do not mix that work into #304. Root main was clean after commit; recheck on resume. User now requested saving work before restarting; stop after checkpoint.
+
+#### Reproducible feasibility probe (not production code)
+
+Run the following Lua with the installed pinned Blink on runtimepath, once normally and once with PROBE_INSERT=1. It prints SHOWN / ACCEPTED / SETTLED / UNDONE. This deliberately uses a fixed range and does not solve stale-target validation; production must do so.
+
+```lua
+vim.opt.rtp:prepend('/Users/xianxu/workspace/parley.nvim/demo/workspace/data/parley/lazy/blink.cmp')
+local cmp = require('blink.cmp')
+local nofilter = vim.env.PROBE_NOFILTER == '1'
+package.preload.probe_source = function()
+  return { new = function() return {execute = function(_, ctx, item, callback, default_implementation)
+    if vim.api.nvim_get_mode().mode == 'n' then
+      vim.o.undolevels = vim.o.undolevels
+      vim.lsp.util.apply_text_edits({item.textEdit}, ctx.bufnr, 'utf-8')
+      vim.api.nvim_win_set_cursor(0, {1, item.textEdit.range.start.character + #item.textEdit.newText - 1})
+    else default_implementation() end
+    callback()
+  end, get_completions = function(_, ctx, cb)
+    local items = {}
+    for _, label in ipairs({'the', 'ten', 'tea'}) do
+      items[#items+1] = {label = label, filterText = not nofilter and 'teh' or nil, kind = 1, textEdit = {newText = label, range = {start = {line = 0, character = 7}, ['end'] = {line = 0, character = 10}}}}
+    end
+    cb({items = items, is_incomplete_forward = false, is_incomplete_backward = false})
+  end} end }
+end
+cmp.setup({fuzzy = {implementation = 'lua'}, sources = {default = {}}, keymap = {preset = 'none'}, completion = {list = {selection = {preselect = true, auto_insert = false}}}})
+cmp.add_source_provider('probe', {name = 'Spelling', module = 'probe_source'})
+vim.api.nvim_buf_set_lines(0, 0, -1, false, {'before teh after'})
+vim.api.nvim_win_set_cursor(0, {1, tonumber(vim.env.PROBE_COL or '8')})
+vim.o.undolevels = vim.o.undolevels
+local function out(label) print(label .. ' ' .. vim.inspect({mode = vim.api.nvim_get_mode().mode, visible = cmp.is_menu_visible(), text = vim.api.nvim_get_current_line(), cursor = vim.api.nvim_win_get_cursor(0), items = vim.tbl_map(function(v) return v.label end, require('blink.cmp.completion.list').items)})) end
+if vim.env.PROBE_INSERT == '1' then vim.cmd('startinsert') end
+vim.defer_fn(function()
+ cmp.show({providers = {'probe'}})
+ vim.defer_fn(function()
+  out('SHOWN')
+  cmp.accept({index = 1, callback = function()
+   out('ACCEPTED')
+   vim.defer_fn(function()
+    out('SETTLED')
+    if vim.api.nvim_get_mode().mode == 'i' then vim.cmd('stopinsert') end
+    vim.cmd('undo')
+    out('UNDONE')
+    vim.cmd('qa!')
+   end, 100)
+  end})
+ end, 150)
+end, 100)
+vim.defer_fn(function() out('TIMEOUT'); vim.cmd('qa!') end, 2000)
+```
