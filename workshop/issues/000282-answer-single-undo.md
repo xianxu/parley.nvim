@@ -30,7 +30,10 @@ Cover answer replacement, errors, stop/cancel, reload and concurrent chats.
 
 ## Done when
 
-- A completed streamed answer can be undone in one action.
+- A completed streamed answer can be undone in one action, including one with tool
+  rounds or saves during streaming.
+- Regenerating an answer undoes in two steps: first to the question with no answer,
+  then to the previous answer (revised 2026-09-28, see Revisions).
 - Separate answers and unrelated user edits retain independent undo history.
 - Cancellation, errors, partial responses and reload do not corrupt undo state.
 - Regression tests exercise chunked streaming and the answer lifecycle paths.
