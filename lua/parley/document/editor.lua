@@ -19,6 +19,11 @@ local function native()
         undo_join=function(buf)
             vim.api.nvim_buf_call(buf,function() vim.cmd('undojoin') end)
         end,
+        -- A save bumps changedtick with no text and no buffer-update callback.
+        watch_write=function(buf,callback)
+            return vim.api.nvim_create_autocmd('BufWritePost',{buffer=buf,callback=callback})
+        end,
+        unwatch_write=function(id) pcall(vim.api.nvim_del_autocmd,id) end,
     }
 end
 local function endpoint(sr,sc,rows,col,byte)
@@ -141,6 +146,8 @@ function Editor:attach()
             self.total=self.driver.offset(self.buf,self.rows)
         elseif kind=='detach' then
             self.dead=true; self.attached=false
+            if self.write_watch and self.driver.unwatch_write then self.driver.unwatch_write(self.write_watch) end
+            self.write_watch=nil
             if owners[self.buf]==self then owners[self.buf]=nil end
         end
         self.in_callback=true
@@ -153,6 +160,19 @@ function Editor:attach()
         if not delivered then error(err) end
     end
     self.lifecycle=lifecycle
+    -- Saving mid-answer must not split the answer's undo block (#282): a
+    -- write changes changedtick but not the text or the undo history. Adopt
+    -- the new tick while the native undo sequence is still the receipt's; any
+    -- text change (a format-on-save included) already cleared it in observe.
+    if self.driver.watch_write then
+        self.write_watch=self.driver.watch_write(self.buf,function()
+            local receipt=self.undo_receipt
+            if self.dead or not receipt or not self.driver.undo_state then return end
+            local native_state=self.driver.undo_state(self.buf)
+            if native_state.sequence==receipt.sequence then receipt.tick=native_state.tick
+            else self.undo_receipt=nil end
+        end)
+    end
     local ok=self.driver.attach(self.buf,false,{
         on_bytes=function(_,_,tick,...)
             if self.dead then return true end
@@ -248,15 +268,19 @@ local function apply(self,plan,validate,user)
             local seen=self.pending and self.pending.seen
             self.pending=nil
             if operation.unexpected or not seen then status='interrupted'; break end
-            if operation.revoked then status='stale'; break end
-            if not user and self.driver.undo_break then self.driver.undo_break(self.buf) end
-            operation.undo_open=user
-            if operation.unexpected or operation.revoked then status='interrupted'; break end
+            operation.landed=i
+            -- Our own write landed, so the answer's undo block continues from
+            -- here even when authority is suspended right after it -- writing a
+            -- whole tool block does that until repair confirms it (#282).
             if not user and self.driver.undo_state then
                 local undo=self.driver.undo_state(self.buf)
                 self.undo_receipt={epoch=plan.epoch,generation=plan.generation,grant=plan.grant,
                     sequence=undo.sequence,tick=undo.tick}
             end
+            if operation.revoked then status='stale'; break end
+            if not user and self.driver.undo_break then self.driver.undo_break(self.buf) end
+            operation.undo_open=user
+            if operation.unexpected or operation.revoked then status='interrupted'; break end
         end
     end)
     -- Close even a partial or mutate-then-error write so the next caller cannot
@@ -266,7 +290,10 @@ local function apply(self,plan,validate,user)
         if not closed and ok then ok,err=false,close_error end
     end
     if ok and status=='applied' and (operation.unexpected or operation.revoked) then status='interrupted' end
-    if not ok or status~='applied' then self.undo_receipt=nil end
+    -- A plan whose every patch landed keeps its receipt even if authority was
+    -- suspended after the last one (#282). A partial or refused plan does not:
+    -- the writer's view of the text diverged, so its next write starts fresh.
+    if not ok or status~='applied' and (operation.landed or 0)<#plan.patches then self.undo_receipt=nil end
     self.pending,self.operation=nil,nil
     return {status=ok and status or 'error',receipts=operation.receipts,error=not ok and tostring(err) or nil}
 end

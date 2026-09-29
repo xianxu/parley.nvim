@@ -48,4 +48,34 @@ function M.install(parley)
     return calls, restore
 end
 
+--- An Anthropic SSE body in which the model calls `read_file` on `path` and
+--- stops for tool use. `text`, when given, is prose streamed before the call.
+--- Set it as the call's `raw_response` before completing the call.
+---@param id string # tool_use id
+---@param path string
+---@param text? string
+function M.tool_use_sse(id, path, text)
+    local events = { { type = 'message_start', message = { id = 'msg_test', model = 'claude-sonnet-5' } } }
+    local index = 0
+    if text then
+        vim.list_extend(events, {
+            { type = 'content_block_start', index = 0, content_block = { type = 'text', text = '' } },
+            { type = 'content_block_delta', index = 0, delta = { type = 'text_delta', text = text } },
+            { type = 'content_block_stop', index = 0 } })
+        index = 1
+    end
+    vim.list_extend(events, {
+        { type = 'content_block_start', index = index, content_block = { type = 'tool_use', id = id, name = 'read_file', input = {} } },
+        { type = 'content_block_delta', index = index, delta = { type = 'input_json_delta', partial_json = '{"path":"' .. path .. '"}' } },
+        { type = 'content_block_stop', index = index },
+        { type = 'message_delta', delta = { stop_reason = 'tool_use' } },
+        { type = 'message_stop' },
+    })
+    local lines = {}
+    for _, ev in ipairs(events) do
+        lines[#lines + 1] = 'event: ' .. ev.type; lines[#lines + 1] = 'data: ' .. vim.json.encode(ev); lines[#lines + 1] = ''
+    end
+    return table.concat(lines, '\n')
+end
+
 return M

@@ -124,6 +124,16 @@ observed native event with the intended patch. Unexpected nested edits stop the
 remaining patches; completed patches remain explicit receipts. Undo joins require
 an exact preceding receipt from the same writer and unchanged native undo state.
 
+One answer is one undo entry (#282): every generated write `undojoin`s the answer's
+block while the receipt holds. The receipt is recorded as soon as the writer's own
+patch lands — before the post-write authority check, since writing a whole tool
+block suspends the grant until repair confirms it — and survives refusals and
+suspensions. A save (`BufWritePost`) bumps changedtick without text, so the editor
+adopts the new tick while the native undo sequence is unchanged. Any other native
+text event (a user edit, undo, redo, format-on-save) clears the receipt, so those
+stay separate entries. `answer_undo_spec` covers saves, tool rounds, cancel,
+provider failure, reload, separate answers and mid-stream user edits.
+
 ## Live consumers
 
 Highlighters query at most 256 rows and 64 KiB per viewport page. Tall windows
