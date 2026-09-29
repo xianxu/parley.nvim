@@ -150,6 +150,11 @@ bin/
 # HOME/XDG elsewhere, so this only catches manual runs.
 .local/
 
+# Disposable checkout demo; keep configuration in demo/ tracked.
+/demo/workspace/
+/demo/workspace.launcher-lock/
+/demo/recordings/
+
 # Maintainer-only links are restored by bootstrap/weave, never shipped.
 /.claude/settings.ariadne.json
 /.codex/config.toml

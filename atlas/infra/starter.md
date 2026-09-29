@@ -38,6 +38,20 @@ source tutorials; the starter expands and canonicalizes that override. State and
 credentials remain in the demo. `--nuke` removes the owned demo profile and exits,
 leaving source tutorials untouched.
 
+`--demo` is the explicit repo-mode recording variant: the same ownership/PID
+and sibling-lock guards protect a fixed Git-ignored `demo/workspace/`. Its
+nearest `.parley` marker chooses a nested project root. `demo/init.lua` passes
+Screenkey's pinned spec into the shared starter via `loadfile` and enables it
+on VimEnter. The packaged starter accepts an optional spec list; ordinary app
+startup supplies none. Default demo startup selects a timestamped empty chat.
+`--demo --reset` clears workspace workshop/config/state/cache and the profile's
+chats/notes/exports/theme persistence, retaining plugins and HOME/auth;
+`--demo --nuke` removes the owned workspace. Tracked demo configuration and
+recordings outside the workspace survive. See `demo/README.md` for usage.
+Launcher integration tests cover nested root and chat recognition, retained
+versus reset data, symlink boundaries and competing operations; bootstrap
+tests prove the demo additions do not enter packaged defaults.
+
 The starter installs pinned Lualine with an automatic theme, prominent mode,
 chat name and cursor position. Existing `parley.lualine` integration supplies
 the model/activity section. `tests/packaging/statusline_compatibility.lua`

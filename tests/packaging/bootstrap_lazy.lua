@@ -14,6 +14,18 @@ return {
         assert(spec[1].commit == '4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a')
         local by_name = {}
         for _, plugin in ipairs(spec) do by_name[plugin[1] or plugin.name] = plugin end
+        local screenkey = by_name['NStefan002/screenkey.nvim']
+        if vim.env.BOOTSTRAP_DEMO then
+            assert(screenkey and screenkey.commit == '16390931d847b1d5d77098daccac4e55654ac9e2')
+            assert(screenkey.lazy == false and screenkey.opts.show_leader == false)
+            assert(screenkey.opts.keys['<CR>'] == 'Enter' and screenkey.opts.keys['<ESC>'] == 'Esc')
+            vim.api.nvim_create_user_command('Screenkey', function()
+                assert(vim.v.vim_did_enter == 1, 'Screenkey must wait for the initial file')
+                vim.fn.writefile({'shown'}, vim.env.BOOTSTRAP_RESULT .. '.screenkey')
+            end, {})
+        else
+            assert(screenkey == nil, 'Screenkey leaked into packaged defaults')
+        end
         assert(by_name['nvim-lua/plenary.nvim'].commit == '74b06c6c75e4eeb3108ec01852001636d85a932b')
         local telescope = by_name['nvim-telescope/telescope.nvim']
         assert(telescope.commit == 'a0bbec21143c7bc5f8bb02e0005fa0b982edc026')

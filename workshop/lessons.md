@@ -251,3 +251,11 @@ oracle, and the mutation that would make the test fail.
   resulting text still carries the entire private marker across that matrix.
 - #295 BR-2/BR-3: sweep README entry points with atlas docs, parameterize stated
   default/custom boundary cases, and prove prompt submission through Return.
+
+## 2026-09-28 (#297 — local recording demo)
+
+- Reset contracts must enumerate persistence outside XDG_STATE_HOME: the app
+  theme is under stdpath(data)/parley/persisted. Verify cleared and retained
+  paths with stateful fixtures, including auth and installed dependencies.
+- Seeded chats must pass production recognition (filename and headers), not
+  merely open as Markdown. Test the launched buffer through `not_chat`.
