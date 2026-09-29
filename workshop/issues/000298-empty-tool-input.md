@@ -8,6 +8,7 @@ updated: 2026-09-28
 estimate_hours:
 card_mirror: '523eab2eb98860887ee54b4991e8ec183480b3be' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-28T21:04:00-07:00
+flow: {kind: quick, provenance: inferred, spec: "efd8f4c0", done: "3ab22725"}
 ---
 
 # Preserve empty tool input objects
