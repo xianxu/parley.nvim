@@ -80,3 +80,14 @@ and duplicates an older app profile, slowing the edit/relaunch loop.
 - Scope is one atomic change targeting the quick-flow shell (<=100 code lines
   added, no milestones). Tests exercise the process boundary with the existing
   stateful fake editor and real Neovim; no new service or registry is added.
+
+## Revisions
+
+### 2026-09-28 — reset scope clarified after spec review
+
+- Reset clears workspace workshop/, config/, state/, cache/, plus profile
+  data/parley/{chats,notes,exports,persisted}. This includes theme persistence
+  outside XDG_STATE_HOME. Retain data/parley/lazy, managed proxy files and
+  demo HOME/auth for fast retakes; full nuke clears all of them.
+- Review found an ambiguous reset boundary (ARCH-PURPOSE); enumerate these
+  paths in tests and documentation. No new service lifecycle behavior.
