@@ -34,6 +34,7 @@ ARCH-DRY: reuse native_map and its registry exemption. ARCH-PURE: isolate line/b
 
 - Real typing creates paired markers, skips closers, preserves existing pairs and single-at text, and undoes in one step.
 - Existing global/buffer mappings and disabled defaults remain effective; non-chat buffers are unchanged.
+- The packaged app explicitly enables pairing through its registry shortcut while keeping its restricted shortcut policy. Actual starter options with Blink preserve pairing, closer skipping and buffer completion acceptance.
 - Keybinding and architecture tests pass; README and atlas describe the shortcut.
 
 ## Plan
@@ -60,3 +61,5 @@ ARCH-DRY: reuse native_map and its registry exemption. ARCH-PURE: isolate line/b
 - Final design supersedes the initial native-map exemption: ARCH-DRY uses the configurable registry entry `pair_at`, with `chat_shortcut_pair_at` and per-entry mapping preservation. Starter explicitly opts in; unspecified shortcuts still obey `default_keymaps=false`.
 - App revision GREEN: ui/keybindings passed 357 tests (15 pairing integration cases). Real installed Blink with actual starter options passed pairing/skip, Ctrl-n candidate selection, Ctrl-y acceptance, and subsequent pairing. Temporary smoke: `/tmp/parley-302-blink-smoke.lua`; output: `/tmp/parley-302-blink-smoke.log`. Focused luacheck: zero warnings/errors.
 - `make test-spec SPEC=infra/starter` passed 185 tests, zero failures/errors.
+
+- 2026-09-29: Restated Done when for the app-policy revision: explicit starter opt-in and real-Blink coexistence are acceptance requirements. #301 completed review with SHIP and its evidence commit is integrated.
