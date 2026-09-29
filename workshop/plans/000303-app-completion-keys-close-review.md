@@ -171,3 +171,81 @@ findings:
 7. **Plan revision recommendations**
 
    Append a timestamped `## Revisions` entry accounting for the viewer’s additional scope, selection-order invariant, draft retention policy and verification. Alternatively, move that addition to a separately specified and reviewed boundary. The completion plan itself matches the implementation.
+
+---
+
+## Re-review — 2026-09-29T12:30:56-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 303 — Use familiar keys for app completion |
+| repo | parley.nvim |
+| issue file | workshop/issues/000303-app-completion-keys.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 7cb00fc1f74976bd3aaf087141542e19fc4f59ec..a16021b7cc2909bacd16ec2c100e3178db9b706c |
+| command | sdlc close --issue 303 |
+| reviewer | codex |
+| timestamp | 2026-09-29T12:30:56-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+The pinned changes satisfy issue #303’s documented contract. All four open findings are addressed, with meaningful regression evidence for the behavior fixes. No new blocking findings emerged. Confidence is limited by the real-Blink rerun failing to load its local dependency.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      demo/viewer.html:96-105 guards successful and failed reads by selection generation. Both completion-order regressions pass and fail when the success guard is removed in memory.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      demo/viewer.html:112-158 bounds persisted drafts to 20, migrates legacy keys after successful persistence, and visibly reports storage failures. Retention and warning mutations independently make the corresponding regressions fail.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      atlas/infra/starter.md now documents viewer loading, timestamp insertion, downloads, selection ownership, bounded storage, legacy cleanup, and the production-script verification command; these match demo/viewer.html.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      git diff --check across the complete pinned range exits successfully, including demo/REHEARSAL.md.
+```
+
+1. **Strengths**
+   - Completion policy uses Blink’s existing commands and native fallback behavior, avoiding another mapping implementation.
+   - Viewer tests execute the production script with controlled asynchronous reads and stateful storage.
+   - Storage failures preserve editable, downloadable text; migration removes legacy data only after persistence succeeds.
+   - Tag projection preserves original text while sharing exclusion logic across model-context consumers.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - All eight viewer tests passed.
+   - In-memory mutations confirmed failures when selection ownership, retention enforcement, or visible storage warnings were removed.
+   - `make test-spec SPEC=infra/starter` passed. Its process census was skipped because `ps` was unavailable.
+   - Full-range whitespace validation passed.
+   - Inspected the 35-step real-Blink keyboard regression, but its rerun failed with `module 'blink.cmp' not found`; this review does not claim a successful keyboard rerun.
+   - Inspected related Lua regression coverage; did not rerun the full repository suite.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** Blink commands and shared tag-classification helpers centralize behavior.
+   - **ARCH-PURE — pass:** Pairing decisions remain pure, with editor effects in the mapping callback.
+   - **ARCH-PURPOSE — pass:** Completion mappings and the explicitly added viewer corrections fulfill the revised contract.
+   - **ARCH-MOCK — pass for reviewed corrections:** Stateful storage and controlled file promises exercise production handlers. Browser-player integration remains outside that evidence.
+   - **ARCH-CONSTRAINTS — pass:** Draft count is bounded; storage exhaustion produces a visible recovery path.
+   - **ARCH-SECURE — pass:** Stored drafts are validated; unreadable or malformed storage is preserved rather than silently overwritten.
+   - **ARCH-ORDER — pass:** Selection generations enforce latest-selection ownership, including stale failures; tests control both completion orders.
+   - **ARCH-FUNERAL — pass:** Draft eviction and legacy-key cleanup define persistent-data removal; replaced players are disposed.
+
+7. **Plan revision recommendations:** None. The existing revision records the viewer scope and its required corrections.

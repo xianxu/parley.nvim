@@ -50,6 +50,28 @@ rounds:
           round: 2
       recipe: milestone-review
       blocked: true
+    - "n": 3
+      timestamp: "2026-09-29T12:30:56-07:00"
+      agent: codex
+      dispose:
+        - id: BR-2
+          disposition: addressed
+          note: demo/viewer.html:96-105 guards successful and failed reads by selection generation. Both completion-order regressions pass and fail when the success guard is removed in memory.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: demo/viewer.html:112-158 bounds persisted drafts to 20, migrates legacy keys after successful persistence, and visibly reports storage failures. Retention and warning mutations independently make the corresponding regressions fail.
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: atlas/infra/starter.md now documents viewer loading, timestamp insertion, downloads, selection ownership, bounded storage, legacy cleanup, and the production-script verification command; these match demo/viewer.html.
+          round: 3
+        - id: BR-5
+          disposition: addressed
+          note: git diff --check across the complete pinned range exits successfully, including demo/REHEARSAL.md.
+          round: 3
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#303 (boundary-review)
@@ -81,9 +103,15 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-5** [Minor] `diff-hygiene` Pinned-range whitespace validation still fails in the rehearsal script
   demo/REHEARSAL.md:10,12,14,18,22,24,26 contains trailing whitespace. This is the 2nd finding in family diff-hygiene. Earlier rounds fixed instances: apply the rule that every added line across the entire pinned range passes git diff --check, and sweep all seven occurrences rather than fixing one line.
 
+## Round 3 — 2026-09-29T12:30:56-07:00 (codex) — passed
+
+### Disposed
+
+- BR-2 — addressed — demo/viewer.html:96-105 guards successful and failed reads by selection generation. Both completion-order regressions pass and fail when the success guard is removed in memory.
+- BR-3 — addressed — demo/viewer.html:112-158 bounds persisted drafts to 20, migrates legacy keys after successful persistence, and visibly reports storage failures. Retention and warning mutations independently make the corresponding regressions fail.
+- BR-4 — addressed — atlas/infra/starter.md now documents viewer loading, timestamp insertion, downloads, selection ownership, bounded storage, legacy cleanup, and the production-script verification command; these match demo/viewer.html.
+- BR-5 — addressed — git diff --check across the complete pinned range exits successfully, including demo/REHEARSAL.md.
+
 ## Open findings
 
-- **BR-2** [Critical] `latest-selection-owns-async-result` An older file read can replace the newly selected recording
-- **BR-3** [Important] `durable-drafts-have-bounded-retention` Browser drafts accumulate without cleanup and failed saves remain invisible
-- **BR-4** [Important] `new-workflows-reach-atlas` Atlas update appears missing for the recording viewer and caption-drafting workflow
-- **BR-5** [Minor] `diff-hygiene` Pinned-range whitespace validation still fails in the rehearsal script
+(none — every finding has been disposed)

@@ -34,6 +34,7 @@ Use Blink insert mappings: Tab/Down select next, Up selects previous, Return sel
 ## Log
 
 ### 2026-09-29
+- 2026-09-29: closed — User confirmed app behavior; 35 real-Blink keyboard checks and 185 starter tests pass. Publication viewer corrections pass 8 production-script Node tests (all red before fixes), covering both file-read orders, failed storage, 20-draft retention and legacy migration. Atlas/docs updated; full-range whitespace clean; main conflicts were issue-template records only.; review verdict: SHIP
 - 2026-09-29: closed — Real pinned Blink passed 35 keyboard checks in ordinary and prepared app chat buffers: Tab/Down/Up selection, Enter selected/unselected acceptance, Escape dismissal, native no-menu fallbacks, legacy Ctrl keys and pairing. Regression failed at Tab before change. infra/starter, Lua lint and diff checks pass.; review verdict: SHIP
 - 2026-09-29: flow upgraded quick → full — 192 added lines in code files (limit 100)
 
