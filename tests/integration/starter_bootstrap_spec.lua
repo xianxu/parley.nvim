@@ -2,8 +2,9 @@ local uv = vim.uv or vim.loop
 local entry = vim.fn.getcwd() .. '/packaging/starter-config/init.lua'
 local fixture = vim.fn.getcwd() .. '/tests/packaging/bootstrap_lazy.lua'
 local root, env, repo
-local function run(app, extra)
-    local args = { 'nvim', '--headless', '-u', entry, '+qa!' }
+local function run(app, extra, profile)
+    local args = { 'nvim', '--headless', '-u', profile or entry,
+        profile and '+autocmd VimEnter * qa!' or '+qa!' }
     local e = vim.tbl_extend('force', env, { NVIM_APPNAME = app or 'parley' }, extra or {})
     return vim.system(args, { env = e, text = true }):wait(15000)
 end
@@ -46,6 +47,15 @@ describe('starter bootstrap', function()
         vim.fn.writefile(vim.fn.readfile('lua/parley/theme.lua'), env.PARLEY_RUNTIME .. '/lua/parley/theme.lua')
     end)
     after_each(function() vim.fn.delete(root, 'rf') end)
+
+    it('loads demo-only plugins through the shared starter and enables Screenkey after startup', function()
+        vim.fn.mkdir(env.PARLEY_RUNTIME .. '/packaging/starter-config', 'p')
+        vim.fn.writefile(vim.fn.readfile(entry), env.PARLEY_RUNTIME .. '/packaging/starter-config/init.lua')
+        local result = run(nil, { BOOTSTRAP_DEMO = '1' }, vim.fn.getcwd() .. '/demo/init.lua')
+        assert.equals(0, result.code, result.stderr)
+        assert.equals('', result.stderr)
+        assert.same({ 'shown' }, vim.fn.readfile(root .. '/result.screenkey'))
+    end)
 
     local function preference(contents)
         local persisted = root .. '/data/parley/parley/persisted'

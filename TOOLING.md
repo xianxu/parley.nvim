@@ -198,6 +198,15 @@ The first run downloads editor plugins. Normal Parley configuration is untouched
 
 Verify the launcher boundary with `python3 tests/packaging/test_local_app.py`.
 
+`./parley_app --demo` runs the checkout with the separate configuration in
+`demo/init.lua`, Screenkey and an empty chat. The Git-ignored `demo/workspace/`
+has its own `.parley` marker and isolated profile. `--demo --reset` clears
+recording content and editor state while retaining dependencies/login;
+`--demo --nuke` clears the entire workspace. Both delete without a backup and
+require the editor to be closed. [demo/README.md](demo/README.md) describes
+configuration, exact reset paths and recording commands. Neither mode needs
+Homebrew; relaunch after changing local code.
+
 Demo launch/reset operations serialize through a sibling `.launcher-lock`
 directory. A competing operation fails with its lock path. After a crashed
 launcher, close launchers and remove that empty lock directory before retrying.

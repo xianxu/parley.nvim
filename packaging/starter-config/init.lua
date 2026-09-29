@@ -1,5 +1,6 @@
 -- Copy this file to ~/.config/parley/init.lua and launch NVIM_APPNAME=parley nvim.
 -- Edit this profile freely; ordinary Neovim configuration remains independent.
+local extra_plugins = ... or {} -- Optional specs supplied by the checkout demo.
 if vim.env.NVIM_APPNAME ~= "parley" then
     error("Parley starter requires NVIM_APPNAME=parley before startup")
 end
@@ -190,6 +191,7 @@ local ok, err = xpcall(function()
         parley,
     }
     for _, plugin in ipairs(additional_plugins) do theme_plugins[#theme_plugins + 1] = plugin end
+    vim.list_extend(theme_plugins, extra_plugins)
     require("lazy").setup(theme_plugins, {
         root = data .. "/lazy",
         lockfile = vim.fn.stdpath("config") .. "/lazy-lock.json",

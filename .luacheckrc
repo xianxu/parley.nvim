@@ -11,6 +11,10 @@ files["packaging/**/*.lua"] = {
     globals = { "vim" },
 }
 
+files["demo/init.lua"] = {
+    globals = { "vim" },
+}
+
 files["tests/**/*.lua"] = {
     globals = {
         "vim",

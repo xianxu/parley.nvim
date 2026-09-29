@@ -71,6 +71,12 @@ Use `./parley_app --tutorials` to edit `packaging/tutorials/` directly through
 the app. `./parley_app --nuke` removes the demo profile and exits; the next launch
 starts fresh. Source tutorials and the normal installed app profile are retained.
 
+For a recording setup, use `./parley_app --demo`. Its separate configuration
+lives in [`demo/init.lua`](demo/init.lua); a disposable nested workspace opens
+an empty chat with Screenkey enabled. `--demo --reset` clears chats and editor
+state while retaining plugins and login; `--demo --nuke` removes the entire
+workspace. See [demo instructions](demo/README.md) for reset scope and asciinema.
+
 Select text and press **Option+i** to start a linked follow-up chat. The draft
 quotes your selection and leaves the cursor on an empty line beneath it.
 

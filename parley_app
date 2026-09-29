@@ -1,14 +1,32 @@
 #!/bin/sh
-# Run this checkout's app profile without entering repo mode.
+# Run this checkout's app profile, or its recording demo.
 set -eu
 repo=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 unset PARLEY_CHAT_DIR
+recording=0
+init="$repo/packaging/starter-config/init.lua"
+if [ "${1:-}" = "--demo" ]; then
+    recording=1
+    shift
+    [ ! -L "$repo/demo" ] || { echo 'parley_app: demo must not be a symlink' >&2; exit 1; }
+    [ -z "${PARLEY_DEMO_DIR:-}" ] || { echo 'parley_app: --demo uses demo/workspace; unset PARLEY_DEMO_DIR' >&2; exit 1; }
+    init="$repo/demo/init.lua"
+fi
 if [ "${1:-}" = "--tutorials" ]; then
+    [ "$recording" -eq 0 ] || { echo 'parley_app: --demo cannot use --tutorials' >&2; exit 1; }
     export PARLEY_CHAT_DIR="$repo/packaging/tutorials"
     shift
 fi
 demo=${PARLEY_DEMO_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/parley-app-demo}
+[ "$recording" -eq 0 ] || demo="$repo/demo/workspace"
 nuke=0
+reset=0
+if [ "${1:-}" = "--reset" ]; then
+    [ "$recording" -eq 1 ] || { echo 'parley_app: --reset requires --demo' >&2; exit 1; }
+    reset=1
+    shift
+    [ "$#" -eq 0 ] || { echo 'parley_app: --reset takes no arguments' >&2; exit 1; }
+fi
 if [ "${1:-}" = "--nuke" ]; then
     nuke=1
     shift
@@ -36,9 +54,11 @@ if [ -L "$demo" ]; then
     echo 'parley_app: demo directory must not be a symlink' >&2; exit 1
 fi
 if [ "$nuke" -eq 1 ] && [ ! -e "$demo" ]; then exit 0; fi
-case "$demo/" in
-    "$repo/"*) echo 'parley_app: demo directory must be outside the checkout' >&2; exit 1 ;;
-esac
+if [ "$recording" -eq 0 ]; then
+    case "$demo/" in
+        "$repo/"*) echo 'parley_app: demo directory must be outside the checkout' >&2; exit 1 ;;
+    esac
+fi
 case "$repo/" in
     "$demo/"*) echo 'parley_app: demo directory must not contain the checkout' >&2; exit 1 ;;
 esac
@@ -64,15 +84,37 @@ if [ "$nuke" -eq 1 ]; then
     printf 'Removed Parley demo profile: %s\n' "$demo" >&2
     exit 0
 fi
+if [ "$recording" -eq 1 ]; then
+    chat_name="$(date +%Y-%m-%d).00-00-00.000_demo.md"
+    # Refuse redirected descendants before staging or partial reset traverses them.
+    for path in home config data data/parley data/parley/parley state cache workshop workshop/parley .parley "workshop/parley/$chat_name"; do
+        [ ! -L "$demo/$path" ] || { echo "parley_app: symlink in demo workspace: $path" >&2; exit 1; }
+    done
+    if [ "$reset" -eq 1 ]; then
+        rm -rf -- "$demo/workshop" "$demo/config" "$demo/state" "$demo/cache" \
+            "$demo/data/parley/chats" "$demo/data/parley/notes" \
+            "$demo/data/parley/exports" "$demo/data/parley/parley/persisted"
+        printf 'Reset demo chats and editor state; retained plugins and login: %s\n' "$demo" >&2
+        exit 0
+    fi
+    touch "$demo/.parley"
+    mkdir -p "$demo/workshop/parley"
+    chat="$demo/workshop/parley/$chat_name"
+    if [ ! -e "$chat" ]; then
+        printf -- '---\ntopic: Demo\nfile: %s\ntags:\n---\n\n💬:\n' "$chat_name" > "$chat"
+    fi
+    [ "$#" -gt 0 ] || set -- "$chat"
+fi
 printf '%s\n' "$$" > "$demo/.nvim-pid"
 mkdir -p "$demo/home"
 printf 'Parley demo profile: %s\n' "$demo" >&2
 cd "$demo"
 export HOME="$demo/home" NVIM_APPNAME=parley PARLEY_RUNTIME="$repo"
 export PARLEY_REPO_MODE=0
+[ "$recording" -eq 0 ] || unset PARLEY_REPO_MODE
 export XDG_CONFIG_HOME="$demo/config" XDG_DATA_HOME="$demo/data"
 export XDG_STATE_HOME="$demo/state" XDG_CACHE_HOME="$demo/cache"
 # The published PID stays live across exec; contenders now see a running app.
 rmdir "$lock"
 trap - 0 HUP INT TERM
-exec nvim -u "$repo/packaging/starter-config/init.lua" "$@"
+exec nvim -u "$init" "$@"
