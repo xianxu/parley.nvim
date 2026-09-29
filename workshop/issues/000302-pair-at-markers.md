@@ -8,6 +8,7 @@ updated: 2026-09-29
 estimate_hours:
 card_mirror: 'e4526c79552e2b7e6c10403e6035e62873ff7c06' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-29T11:08:55-07:00
+flow: {kind: quick, provenance: inferred, spec: "dbd4d9ad", done: "7f0c9902"}
 ---
 
 # Auto-pair double-at markers while typing
