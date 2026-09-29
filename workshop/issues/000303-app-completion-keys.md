@@ -8,6 +8,7 @@ updated: 2026-09-29
 estimate_hours:
 card_mirror: 'ef577b2bd953d7e6033e7c275eca1ba5f9a43021' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-29T11:59:53-07:00
+flow: {kind: quick, provenance: inferred, spec: "31dc5753", done: "6d1a5da3"}
 ---
 
 # Use familiar keys for app completion
