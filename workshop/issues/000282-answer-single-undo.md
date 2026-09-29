@@ -8,6 +8,7 @@ updated: 2026-09-28
 estimate_hours:
 card_mirror: '1c875e5c12e01b2737c552c75ed277b1849e591e' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-28T21:14:10-07:00
+flow: {kind: quick, provenance: inferred, spec: "1ae80399", done: "e9dd13de"}
 ---
 
 # Make each answer one undo history entry
