@@ -1,6 +1,6 @@
 ---
 id: 000302
-status: codecomplete
+status: done
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours:
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 7fac8549c491d58ada19296cded302c3e039ac82
         evidence_commit: ed1520b1e72853547ed5db18aa9cf0422426a94b
+        landed_commit: aedd9d660936e1c9fc83f6d734063ce66f1c39d3
 ---
 
 # Auto-pair double-at markers while typing
