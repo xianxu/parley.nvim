@@ -201,3 +201,80 @@ findings:
     detail: |
       question_tags.lua:26 accepts ```~~~ as a backtick closer, deleting a subsequent fenced literal and retaining a local tag after the real closer. This is the 2nd finding in this family: establish one fence rule across projection and association, and test delimiter character, width, trailing content, speaker-line openers, and turn-boundary termination. ARCH-DRY, ARCH-PURPOSE.
 ```
+
+---
+
+## Re-review — 2026-09-29T11:42:21-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 301 — Keep outline tags out of model context |
+| repo | parley.nvim |
+| issue file | workshop/issues/000301-local-outline-tags.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4539950f811407dc477b5064b043631cea2b760c..9eedae23d8283b988eb47eef92478f48effd7608 |
+| command | sdlc close --issue 301 |
+| reviewer | codex |
+| timestamp | 2026-09-29T11:42:21-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned implementation satisfies #301’s Spec and Plan. Both open fence findings are addressed, with regression tests that fail against the pre-fix module. No blocking correctness or documentation gaps found.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Shared fence classification preserves speaker-line literals through balanced fences and turn-boundary termination. The ancestor regression passes at HEAD and fails with the pre-fix module.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Association and projection share character, width and whitespace-only closer rules. All 23 tag tests pass; restoring the pre-fix module causes 12 matrix cases to fail.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Empty projected messages and tool-adjacent text remain covered by the passing message-builder regression.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Both changed topic callers retain request-capture regressions; their integration suites pass.
+```
+
+1. **Strengths**
+   - [question_tags.lua:18](/Users/xianxu/workspace/parley.nvim/lua/parley/question_tags.lua:18) shares fence classification between association and projection.
+   - Parser projections preserve original text and source-row classification.
+   - Tests check actual outgoing content, tool payload preservation, and default/custom prefixes.
+   - README and atlas document local-only tags and literal/reference exceptions.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None requiring action.
+
+5. **Test coverage**
+   - Passed `chat/format` and `ui/outline` mapped suites.
+   - Passed 98 message-builder tests, 10 ancestor tests, and 18 topic integration tests.
+   - In-memory pre-fix substitution caused 12 tag tests and the ancestor reproduction to fail.
+   - Changed production Lua files passed luacheck.
+   - Harness process census was unavailable because sandboxed `ps` was unavailable; test execution succeeded.
+
+6. **Architecture**
+   - **ARCH-DRY — Pass:** association and projection share the corrected scanner.
+   - **ARCH-PURE — Pass:** classification and projection operate on supplied text; buffer IO remains in callers.
+   - **ARCH-PURPOSE — Pass:** parsed, live, ancestor and topic consumers are covered.
+   - **ARCH-MOCK — Pass:** no new external dependency; topic tests capture requests through the existing seam.
+   - **ARCH-CONSTRAINTS — Pass:** bounded scans of supplied rows; no new background work or fan-out.
+   - **ARCH-SECURE — Pass:** original-row classification avoids promoting normalized lookalikes into local tags.
+   - **ARCH-ORDER — Pass:** fence transitions are explicit within each scan; no new state survives between events.
+   - **ARCH-FUNERAL — Pass:** projections are transient; no new runtime persistence or handles.
+
+7. **Plan revisions:** None needed. Existing revisions describe the implemented shared fence rule and regression matrix.

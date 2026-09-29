@@ -8,7 +8,7 @@ updated: 2026-09-29
 estimate_hours:
 card_mirror: '2fbd2ede6c844c2971a01e3e5cc609fa9f2fa761' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-29T10:58:55-07:00
-flow: {kind: quick, provenance: inferred, spec: "8288b012", done: "0b4dc0bb"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Keep outline tags out of model context
@@ -36,6 +36,8 @@ Exclude entire strict whole-line local `@@label@@` and `@@_@@` rows from outgoin
 ## Log
 
 ### 2026-09-29
+- 2026-09-29: closed — Shared fence scanner passes 23 tag tests, 10 ancestor tests, 247 chat/format tests and ui/outline; 12 delimiter/speaker regressions and exact ancestor reproduction failed before fixes. Prior empty-message, parsed/live, tool-payload and topic-caller regressions pass. Lua lint and diff checks clean.; review verdict: SHIP
+- 2026-09-29: flow upgraded quick → full — 139 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 User approved whole-line-only local tags. Follow-up @@ auto-pair typing will be a separate bounded change after this context change. Branch is stacked on #300 to retain the app customization already delivered. Read-only exploration confirmed normalized text cannot preserve original-line semantics, so raw parsed content stays authoritative and context projections are derived.
 

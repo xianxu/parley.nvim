@@ -52,6 +52,28 @@ rounds:
           round: 2
       recipe: milestone-review
       blocked: true
+    - "n": 3
+      timestamp: "2026-09-29T11:42:21-07:00"
+      agent: codex
+      dispose:
+        - id: BR-2
+          disposition: addressed
+          note: Shared fence classification preserves speaker-line literals through balanced fences and turn-boundary termination. The ancestor regression passes at HEAD and fails with the pre-fix module.
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: Association and projection share character, width and whitespace-only closer rules. All 23 tag tests pass; restoring the pre-fix module causes 12 matrix cases to fail.
+          round: 3
+        - id: BR-1
+          disposition: addressed
+          note: Empty projected messages and tool-adjacent text remain covered by the passing message-builder regression.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: Both changed topic callers retain request-capture regressions; their integration suites pass.
+          round: 3
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#301 (boundary-review)
@@ -83,7 +105,15 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Critical] `projection-preserves-fenced-literals` Mixed delimiter runs incorrectly close fences and invert tag projection
   question_tags.lua:26 accepts ```~~~ as a backtick closer, deleting a subsequent fenced literal and retaining a local tag after the real closer. This is the 2nd finding in this family: establish one fence rule across projection and association, and test delimiter character, width, trailing content, speaker-line openers, and turn-boundary termination. ARCH-DRY, ARCH-PURPOSE.
 
+## Round 3 — 2026-09-29T11:42:21-07:00 (codex) — passed
+
+### Disposed
+
+- BR-2 — addressed — Shared fence classification preserves speaker-line literals through balanced fences and turn-boundary termination. The ancestor regression passes at HEAD and fails with the pre-fix module.
+- BR-4 — addressed — Association and projection share character, width and whitespace-only closer rules. All 23 tag tests pass; restoring the pre-fix module causes 12 matrix cases to fail.
+- BR-1 — addressed — Empty projected messages and tool-adjacent text remain covered by the passing message-builder regression.
+- BR-3 — addressed — Both changed topic callers retain request-capture regressions; their integration suites pass.
+
 ## Open findings
 
-- **BR-2** [Critical] `projection-preserves-fenced-literals` Recognize fences opened after the question speaker prefix
-- **BR-4** [Critical] `projection-preserves-fenced-literals` Mixed delimiter runs incorrectly close fences and invert tag projection
+(none — every finding has been disposed)
