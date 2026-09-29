@@ -1,6 +1,6 @@
 ---
 id: 000301
-status: codecomplete
+status: done
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours:
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 9eedae23d8283b988eb47eef92478f48effd7608
         evidence_commit: d4071283f591560eebd41813596f50f89339840a
+        landed_commit: aedd9d660936e1c9fc83f6d734063ce66f1c39d3
 ---
 
 # Keep outline tags out of model context
