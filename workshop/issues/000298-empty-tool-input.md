@@ -47,6 +47,7 @@ empty object, not an array (ARCH-SECURE). No new abstraction is needed.
 ## Log
 
 ### 2026-09-28
+- 2026-09-28: closed — Reproduced [] instead of {} for absent/empty Anthropic argument deltas, then passed 639 tool-use tests across 33 specs including production continuation and replay JSON checks; lint passed 669 files and git diff --check passed. Atlas documents decoder ownership. Live model request not run.; review verdict: SHIP
 
 - Neovim confirms `vim.json.encode({})` is `[]`, while decoded `{}` and
   `vim.empty_dict()` survive `vim.deepcopy` as `{}`. Replay already coerces
