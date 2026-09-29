@@ -126,3 +126,10 @@ vim.defer_fn(function()
 end, 100)
 vim.defer_fn(function() out('TIMEOUT'); vim.cmd('qa!') end, 2000)
 ```
+
+
+### 2026-09-29 — Continuation resumed; durable plan reviewed
+
+Read workshop/continuation/20260929T150434-parley-blink-spell.md and recovered sdlc state in the existing issue worktree; did not reclaim or repeat feasibility work. Durable plan: [Blink spell suggestions](../plans/000304-blink-spell-suggestions-plan.md). Defaults proposed: Blink enabled when ready, 180 ms debounce, bounded suggestions, no Blink minimum word length, legacy opt-in retained as fallback. Shared reducer/controller/source own both distributions. ARCH-ORDER review corrected synchronous acceptance invalidation before deferred observations, native Blink source admission through reducer tickets, and Normal TextChanged handling. A second fresh-context plan review approved with no remaining blocking findings. Pinned public select_next/select_prev supports auto_insert=false; global Blink options remain untouched.
+
+The plan is ready for operator approval under AGENTS.md §2. Existing implementation authorization is recorded above, but this new non-trivial durable design has not yet been presented/approved. No production edits, change-code gate, estimate or runtime tests in this resumed turn. After design approval, run sdlc change-code --issue 304, satisfy its plan-quality/estimate requirements, then execute the plan with red/green tests. Unrelated root-main commit and untracked continuation remain untouched.
