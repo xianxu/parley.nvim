@@ -87,3 +87,117 @@ findings:
     detail: |
       lua/parley/chat_respond.lua:1673 and lua/parley/init.lua:4450 change automatic-topic and ChatPrune topic inputs without caller-level regression coverage. Capture both outgoing requests and assert local-tag exclusion and literal preservation; removing either caller's projection must fail its test.
 ```
+
+---
+
+## Re-review — 2026-09-29T11:27:42-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 301 — Keep outline tags out of model context |
+| repo | parley.nvim |
+| issue file | workshop/issues/000301-local-outline-tags.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4539950f811407dc477b5064b043631cea2b760c..c93e658571da4777470aad762320f3242c76a9fa |
+| command | sdlc close --issue 301 |
+| reviewer | codex |
+| timestamp | 2026-09-29T11:27:42-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The projection preserves raw transcript text, and the empty-content and topic-caller fixes have meaningful regression coverage. However, two fence-classification cases still remove literal content or leak local tags. BR-2 remains partially unresolved.
+
+1. **Strengths**
+
+   - Parsed context projections preserve the original text for rendering.
+   - Empty projected messages and tool-adjacent text blocks are omitted without changing tool order.
+   - Both topic callers have outgoing-payload tests. Independently removing each projection makes its regression fail.
+   - README and atlas updates cover the new behavior and stacked #300 surface.
+
+2. **Critical findings**
+
+   **BR-2 — not fully addressed:** [question_tags.lua:56](/Users/xianxu/workspace/parley.nvim/lua/parley/question_tags.lua:56) still uses a different fence scanner for preface association. For these consecutive rows:
+
+   ~~~~text
+   💬: ```
+   @@literal@@
+   💬: Next
+   ~~~~
+
+   `local_rows` correctly preserves the literal, but `associations` moves it into the next question’s preface, and `compose_question` removes it. I reproduced ancestor messages containing only `"```"` and `"Next"`. The repository explicitly supports a turn marker ending an unmatched fence. Use the same fence classification for association and projection. **ARCH-DRY, ARCH-PURPOSE.**
+
+   **New — mixed delimiters incorrectly close fences:** [question_tags.lua:26](/Users/xianxu/workspace/parley.nvim/lua/parley/question_tags.lua:26) accepts any mixture of backticks and tildes as a closer. Given:
+
+   ~~~~text
+   ```text
+   ```~~~
+   @@literal@@
+   ```
+   @@local@@
+   ~~~~
+
+   projection removes `@@literal@@` and retains `@@local@@`. Both outcomes violate the contract. A closer must contain only the opening delimiter character, with sufficient width.
+
+   **This is the 2nd finding in family `projection-preserves-fenced-literals`.** State and implement the shared rule across projection and association; enumerate delimiter character, width, trailing content, speaker-line openers, and turn-boundary termination. **ARCH-DRY, ARCH-PURPOSE.**
+
+3. **Important findings**
+
+   None beyond the blocking findings above.
+
+4. **Minor findings**
+
+   No substantive findings.
+
+5. **Test coverage notes**
+
+   - 285 tests passed across `chat/format` and the separately exercised tag, ancestor, and topic specs.
+   - In-memory mutations caused the BR-1 regression, all six BR-2 speaker-fence cases, and each of the three BR-3 caller projections to fail independently.
+   - Changed production Lua files pass luacheck.
+   - The two remaining cases were reproduced through production parsing and ancestor-message construction. They need regression tests.
+   - Checkout changes were left untouched.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — flag:** association and projection disagree about fence state.
+   - **ARCH-PURE — pass:** projection logic is deterministic; buffer access remains at callers.
+   - **ARCH-PURPOSE — flag:** fenced-literal preservation and local-tag exclusion remain incomplete.
+   - **ARCH-MOCK — pass:** no new external dependency; caller tests capture requests through existing seams.
+   - **ARCH-CONSTRAINTS — pass:** projection uses bounded-by-input linear scans; no new fan-out.
+   - **ARCH-SECURE — flag:** malformed delimiter classification silently changes user-provided context.
+   - **ARCH-ORDER — pass:** new scanner state exists only within a synchronous invocation.
+   - **ARCH-FUNERAL — pass:** new context fields are transient; no new runtime persistence family.
+
+7. **Plan revision recommendations**
+
+   Append a `## Revisions` entry recording the shared fence-classification rule and its regression matrix. Correct the current BR-2 completion claim until turn-boundary association is covered.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Empty-content regression passes and fails when the projected text-block omission guard is removed in memory.
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      Balanced speaker-line fences are fixed, but a speaker-line fence terminated by the next question still loses its final literal tag through question_tags.lua:56 preface association and line 71 composition.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Both caller-level request tests pass; removing automatic-answer, prune-question, or prune-answer projection independently makes its regression fail.
+findings:
+  - id: new
+    severity: Critical
+    family: projection-preserves-fenced-literals
+    title: |
+      Mixed delimiter runs incorrectly close fences and invert tag projection
+    detail: |
+      question_tags.lua:26 accepts ```~~~ as a backtick closer, deleting a subsequent fenced literal and retaining a local tag after the real closer. This is the 2nd finding in this family: establish one fence rule across projection and association, and test delimiter character, width, trailing content, speaker-line openers, and turn-boundary termination. ARCH-DRY, ARCH-PURPOSE.
+```

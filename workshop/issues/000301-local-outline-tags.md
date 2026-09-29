@@ -50,3 +50,9 @@ Context regressions failed before implementation, then passed. Verified chat/for
 - BR-3: capture actual automatic-topic and ChatPrune dispatcher payloads, retaining raw local chat content. Removing the automatic-answer, prune-question or prune-answer projection independently makes these tests fail.
 
 Verification: updated chat/format and chat/memory regressions pass, as do both topic caller specs. BR-1/BR-2 regressions failed before fixes; all three BR-3 mutation probes failed as intended and production files were restored. Changed Lua lint and diff checks pass.
+
+### 2026-09-29 — shared fence rule after second review
+
+Round 2 accepted the empty-content and topic-caller corrections, but BR-2 remained incomplete at turn-boundary preface association and BR-4 found mixed delimiter runs closing fences. ARCH-DRY: association and projection must consume the same row classification. Fence closers must use only the opening character, sufficient width and whitespace-only trailing content; speaker-line openers and turn-boundary termination must agree in both consumers. Extend the regression matrix across these dimensions before re-review.
+
+Verification: the shared scanner passed 23 tag tests, 10 ancestor tests, chat/format (247 tests), ui/outline, Lua lint and diff checks. Before the fix, 12 tag matrix cases and the exact ancestor turn-boundary reproduction failed. Both association and projection now use the same memo, including reference prefaces.

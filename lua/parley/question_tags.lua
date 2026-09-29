@@ -11,25 +11,40 @@ function M.is_local_tag(line)
     return M.parse_tag(line) ~= nil and #require("parley.chat_parser").extract_file_refs(line) == 0
 end
 
-function M.local_rows(lines, config)
-    local excluded, state, fence_char = {}, {}, nil
+-- One fence rule for ownership and context projection (ARCH-DRY). A turn
+-- partition ends an unmatched fence; a question may open another after its
+-- speaker prefix. Closers are bare runs of the opener's character, at least
+-- as wide. Snapshot before the opener so the question can still own a preface.
+local function fenced_rows(lines, config)
+    local memo, fence_char, fence_width = {}, nil, nil
     local patterns = structure.patterns(config)
     for row, line in ipairs(lines) do
-        if structure.is_partition(line, patterns) then state.in_code = false end
+        if structure.is_partition(line, patterns) then fence_char, fence_width = nil, nil end
+        memo[row] = fence_char ~= nil
         local fence_line = line
         if line:sub(1, #patterns.user_prefix) == patterns.user_prefix then
             fence_line = line:sub(#patterns.user_prefix + 1)
         end
-        local width = structure.is_fence_delim(fence_line, true)
-        if width then
-            local char = fence_line:match("^%s*([`~])")
-            if not state.in_code or (char == fence_char and fence_line:match("^%s*[`~]+%s*$")) then
-                structure.advance(state, "c" .. width, width)
-                fence_char = state.in_code and char or nil
+        local run, tail = fence_line:match("^%s*(`+)(.*)$")
+        if not run then run, tail = fence_line:match("^%s*(~+)(.*)$") end
+        if run and #run >= 3 then
+            local char = run:sub(1, 1)
+            if fence_char then
+                if char == fence_char and #run >= fence_width and tail:match("^%s*$") then
+                    fence_char, fence_width = nil, nil
+                end
+            elseif char ~= "`" or not tail:find("`", 1, true) then
+                fence_char, fence_width = char, #run
             end
-        elseif not state.in_code and M.is_local_tag(line) then
-            excluded[row] = true
         end
+    end
+    return memo
+end
+
+function M.local_rows(lines, config)
+    local excluded, memo = {}, fenced_rows(lines, config)
+    for row, line in ipairs(lines) do
+        if not memo[row] and M.is_local_tag(line) then excluded[row] = true end
     end
     return excluded
 end
@@ -53,7 +68,7 @@ end
 
 function M.associations(lines, config, header_end)
     local patterns = structure.patterns(config)
-    local memo = structure.code_block_memo(lines, patterns, true)
+    local memo = fenced_rows(lines, config)
     local result = {}
     local prefix = patterns.user_prefix
     for row = (header_end or 0) + 2, #lines do
