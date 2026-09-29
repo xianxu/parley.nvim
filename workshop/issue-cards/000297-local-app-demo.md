@@ -1,6 +1,6 @@
 ---
 id: 000297
-status: codecomplete
+status: done
 created: 2026-09-28
 updated: 2026-09-28
 estimate_hours:
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 6f1cdd6dbf63f21d4bed91ac6b81fbe4561e3d38
         evidence_commit: 2876cb70c3b5676ef1cc8a55df065e91c6d79b2a
+        landed_commit: 24472420780cca03845925ffcbb39446bbe0e752
 ---
 
 # Repo-local app demo and development loop
