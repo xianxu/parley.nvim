@@ -171,3 +171,12 @@ TDD evidence: pure state RED missing module → green; source RED absent/denied/
 ARCH-ORDER: synchronous invalidation, reducer-issued source tickets and menu-independent acceptance evidence guard deferred work. ARCH-DRY: one provider/controller serves both distributions; is_misspelled is shared by automatic-show and provider admission. ARCH-FUNERAL: debounce timers, map leases and compatibility wrappers are collected on detach/wipeout. The key guard now distinguishes chat-scoped transient Tab from unrelated picker defaults. README and atlas document setup, controls, fallback, byte/line bounds and pinned compatibility seams.
 
 Estimate-quality INFO was advisory: the v3.1 figure is idle-excluded ship wall-clock including subagent execution; integration primitives include fake and real keyboard verification, while the API-discovery line is solely residual compatibility investigation. No hand-entered actuals. All implementation stays on #304's worktree; root-main demo changes and the untracked continuation are untouched. Next: mandatory close review, then publish through SDLC.
+
+
+### 2026-09-29 — BR-1 fixed, ready for re-review
+
+Boundary review REWORK identified acceptance-context-invalidation: same-buffer/same-position window excursions bypassed buffer/cursor events. Reproduced twice: controller tests failed with the old menu still visible on WinLeave; real pinned Blink applied a delayed correction after leaving and returning. Added WinLeave synchronous reducer invalidation and WinEnter deferred observation. Departure, staying in another window, and return-before-resolution are covered; the controller checks menu/map release and fresh target ownership, and the real provider checks stale edit rejection in both distributions.
+
+Verification: mapped spelling suite passes 77 tests; real plugin/app spelling and existing 35-step completion/pairing harness pass; touched-file lint and git diff --check pass. New logs /tmp/parley-304-window-{red,green,real-red,real-green}.log. Lesson and plan revision record the event-family fix (ARCH-ORDER). No other review findings.
+
+Publication safety: the legacy ordinary-worktree merge implementation pulls/pushes the main checkout, which would risk publishing unrelated local demo commit 8f0e7a48. Use sdlc pr here, then the supported durable primary-workspace landing path from an independent clean clone of the remote. Leave the original primary checkout and continuation/worktree intact.
