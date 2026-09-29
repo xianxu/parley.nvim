@@ -1,10 +1,12 @@
 ---
 id: 000304
-status: working
+status: codecomplete
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours: 3.4
 github_issue:
+started: 2026-09-29T14:30:37-07:00
+actual_hours: 1.06
 tracker:
     version: 1
     handoff:
@@ -17,7 +19,11 @@ tracker:
         source_blob: 237f103d42b7846369998247928e2e7949e5d26c
         destination: workshop/issues/000304-blink-spell-suggestions.md
         main_commit: 63390569836794b56c5e97442dceb9e3db4fd454
-started: 2026-09-29T14:30:37-07:00
+    completion:
+        token: close-22e633fb78b0
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: ef336da699c25819524c82b34fda17da45eb74dd
+        evidence_commit: cfe01c8a51bc2ee7de763323081cbc9e6ed56224
 ---
 
 # Unify automatic spell suggestions in Blink
