@@ -1,0 +1,37 @@
+---
+id: 000301
+status: open
+deps: []
+github_issue:
+created: 2026-09-29
+updated: 2026-09-29
+estimate_hours:
+card_mirror: '20e2195534d59e7ff90cea22924d1503fb88e1c6' # card fields mirrored from issue-cards; edit via sdlc
+---
+
+# Keep outline tags out of model context
+
+## Problem
+
+Whole-line outline labels are local organization but currently leak into model context.
+
+## Spec
+
+Exclude entire strict whole-line local `@@label@@` and `@@_@@` rows from outgoing chat context, including standalone tags, prior answers and inherited history. Preserve file/URL references, inline/indented/trailing-text lookalikes, fenced examples, tool payloads and local stored/parsed text. Classify original rows before trimming or removing speaker prefixes. ARCH-DRY/ARCH-PURE: question_tags owns the predicate/projection, using existing reference and fence grammar; parser records optional context projections while retaining raw text, and live reads project original rows. Apply the same projection to topic inputs. No new persistence or asynchronous lifecycle.
+
+## Done when
+
+- Attached and standalone whole-line labels (including anonymous labels) are absent from parsed/live/ancestor context; local raw text, spans and outline associations remain.
+- File/URL references still load; inline, indented, trailing-text, custom-prefix and fenced examples remain literal, and tool inputs/results are unchanged.
+- Regression tests cover original-line classification and all changed context consumers; focused tests and lint pass.
+
+
+## Plan
+
+- [ ] Add failing context regressions, implement shared source-row projection, update docs, verify and close.
+
+## Log
+
+### 2026-09-29
+
+User approved whole-line-only local tags. Follow-up @@ auto-pair typing will be a separate bounded change after this context change. Branch is stacked on #300 to retain the app customization already delivered. Read-only exploration confirmed normalized text cannot preserve original-line semantics, so raw parsed content stays authoritative and context projections are derived.
