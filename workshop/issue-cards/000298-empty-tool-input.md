@@ -1,6 +1,6 @@
 ---
 id: 000298
-status: codecomplete
+status: done
 created: 2026-09-28
 updated: 2026-09-28
 estimate_hours:
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: ff69bfc8a250685654ef3a04db3a3c15e545ece3
         evidence_commit: d9696248baa490f24532b1ce9e5e49233ded49e4
+        landed_commit: 571c885911ff857743b42e1a498ed491f9687be9
 ---
 
 # Preserve empty tool input objects
