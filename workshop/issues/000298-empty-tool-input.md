@@ -60,3 +60,6 @@ empty object, not an array (ARCH-SECURE). No new abstraction is needed.
 - Verification is deterministic stream-to-production-round coverage, not a
   live model request. The demo launcher loads this checkout through
   `PARLEY_RUNTIME`; restarting it loads the correction without resetting data.
+- Operator confirmed the live demo retry worked after the fix and authorized
+  merging. The earlier help call had returned its file list successfully;
+  the rejection was in the subsequent model request.
