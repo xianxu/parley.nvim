@@ -32,6 +32,7 @@
   <label class="btn">Open .cast<input type="file" id="file" accept=".cast,.json,.txt"></label>
   <label><input type="checkbox" id="pauseOnMarkers"> pause at captions</label>
   <span class="hint" id="src"></span>
+  <span id="load-status" role="status"></span>
   <span class="hint">Player: space pause · ←/→ seek · . step frame (paused) · [ ] prev/next caption</span>
 </header>
 <main>
@@ -45,7 +46,8 @@
       <button id="download">Download notes</button>
     </div>
     <textarea id="notes" spellcheck="true" placeholder="~0:05  Parley installs its plugins on first launch.&#10;~0:42  Branch off to ask about radiators."></textarea>
-    <span class="hint">Notes are kept in this browser. Insert time pauses the player and adds a ~m:ss.s line.</span>
+    <span class="hint">This browser keeps the 20 most recently saved page-URL drafts; older drafts are removed. Opening local files shares this page’s draft. Download notes to keep them permanently. Insert time pauses the player and adds a ~m:ss.s line.</span>
+    <span id="draft-status" role="status"></span>
   </aside>
 </main>
 
@@ -53,7 +55,11 @@
 <script>
   const params = new URLSearchParams(location.search);
   const $ = id => document.getElementById(id);
-  const NOTES_KEY = 'cast-viewer-notes:' + (params.get('cast') || 'default');
+  const DRAFT_KEY = 'cast-viewer-drafts:v1';
+  const LEGACY_PREFIX = 'cast-viewer-notes:';
+  const draftId = params.get('cast') || 'default';
+  const MAX_DRAFTS = 20;
+  let selectionGeneration = 0;
   let player = null;
   let source = null; // string URL or { data }
 
@@ -86,15 +92,70 @@
 
   $('file').addEventListener('change', async e => {
     const f = e.target.files[0];
-    if (f) load({ data: await f.text() }, f.name);
+    if (!f) return;
+    const generation = ++selectionGeneration;
+    $('load-status').textContent = 'Loading ' + f.name + '…';
+    try {
+      const data = await f.text();
+      if (generation !== selectionGeneration) return;
+      load({ data }, f.name);
+      $('load-status').textContent = '';
+    } catch {
+      if (generation === selectionGeneration) {
+        $('load-status').textContent = 'Could not open ' + f.name + '. Choose a file to retry.';
+      }
+    }
   });
 
   $('pauseOnMarkers').addEventListener('change', () => { if (source) load(source, $('src').textContent); });
 
-  // Notes: per-viewer draft, stored best-effort.
-  try { $('notes').value = localStorage.getItem(NOTES_KEY) || ''; } catch {}
+  // One bounded entry, oldest first. Read failures never overwrite unseen drafts.
+  function readDrafts() {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    const drafts = raw === null ? [] : JSON.parse(raw);
+    if (!Array.isArray(drafts) || drafts.some(d => !d || typeof d.id !== 'string' || typeof d.text !== 'string')) {
+      throw new Error('Invalid stored drafts');
+    }
+    const legacyKeys = [];
+    const legacy = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(LEGACY_PREFIX)) {
+        legacyKeys.push(key);
+        legacy.push({ id: key.slice(LEGACY_PREFIX.length), text: localStorage.getItem(key) || '' });
+      }
+    }
+    // Legacy entries have no timestamps; use browser enumeration order, then modern saved order.
+    const combined = new Map();
+    for (const draft of [...legacy, ...drafts]) {
+      combined.delete(draft.id);
+      combined.set(draft.id, draft);
+    }
+    return { drafts: [...combined.values()], legacyKeys };
+  }
+
+  function writeDrafts(drafts, legacyKeys) {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts.slice(-MAX_DRAFTS)));
+    // Preserve legacy data if persistence failed. Cleanup can be retried on the next edit/load.
+    for (const key of legacyKeys) localStorage.removeItem(key);
+    $('draft-status').textContent = 'Saved in this browser.';
+  }
+
+  function unsaved() {
+    $('draft-status').textContent = 'Unsaved: browser storage is unavailable or full. Keep this page open and download notes.';
+  }
+
+  try {
+    const { drafts, legacyKeys } = readDrafts();
+    $('notes').value = drafts.find(d => d.id === draftId)?.text || '';
+    if (legacyKeys.length || drafts.length > MAX_DRAFTS) writeDrafts(drafts, legacyKeys);
+    else $('draft-status').textContent = 'Browser draft ready.';
+  } catch { unsaved(); }
   $('notes').addEventListener('input', () => {
-    try { localStorage.setItem(NOTES_KEY, $('notes').value); } catch {}
+    try {
+      const { drafts, legacyKeys } = readDrafts();
+      writeDrafts([...drafts.filter(d => d.id !== draftId), { id: draftId, text: $('notes').value }], legacyKeys);
+    } catch { unsaved(); }
   });
 
   async function stamp() {

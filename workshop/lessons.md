@@ -302,3 +302,5 @@ oracle, and the mutation that would make the test fail.
 - Delimiter typing tests must include directly adjacent pairs, not only prose-separated pairs. Keep acceptance-path integration smoke checks in the repository so reviewers and future changes can rerun them; sweep generated help alongside README when changing a user-visible contract.
 
 - Check whitespace across the reviewed commit range, including generated review sidecars; a clean working-tree diff can hide committed trailing whitespace.
+
+- Async file-selection callbacks need a generation check after reading; test A→B selections with both completion orders. Browser draft storage needs a documented retention bound and a visible unsaved state when persistence fails.

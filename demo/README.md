@@ -92,3 +92,11 @@ python3 -m http.server -d demo 8000   # then http://localhost:8000/viewer.html?c
 Alt+T pauses and inserts a `~m:ss.s` line into the notes; **Download notes**
 saves them as `captions.txt`. Casts with caption markers show the label under
 the player; tick "pause at captions" to stop at each one.
+
+Notes are saved in this browser for up to 20 recently saved cast URLs; saving a
+newer draft evicts the oldest when that limit is reached. Files opened on the
+same page share its draft. A visible warning identifies storage failures; notes
+remain editable and downloadable. Download notes you want to keep permanently.
+The viewer loads its pinned player from a CDN, so opening it requires network
+access. Verify its selection-order and draft-storage behavior with
+`node tests/packaging/test_cast_viewer.js`.

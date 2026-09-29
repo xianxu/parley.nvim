@@ -25,6 +25,7 @@ Use Blink insert mappings: Tab/Down select next, Up selects previous, Return sel
 
 - Real Blink tests cover Tab/Down/Up selection, Return acceptance selected/unselected, Esc dismissal preserving text/Insert mode and no-menu native fallbacks.
 - Existing Ctrl shortcuts, app pairing and command-line completion still work; current user docs match.
+- The included demo viewer keeps the latest file selection, bounds retained drafts to 20, reports failed saves visibly, and has deterministic regressions plus atlas documentation.
 
 ## Plan
 
@@ -39,3 +40,11 @@ Use Blink insert mappings: Tab/Down select next, Up selects previous, Return sel
 User specified the mapping directly. Use existing packaged Blink commands with fallback; keep current-buffer source and selection policy.
 
 Verification: existing policy failed the revised real-Blink regression at Tab selection (step 7). With the five mappings, all 35 keyboard steps pass, including prepared app chat, selected/unselected acceptance, Escape dismissal, native fallbacks, legacy Ctrl shortcuts and pairing. infra/starter passes; Lua lint and diff checks clean. Logs: /tmp/parley-303-red.log, /tmp/parley-303-final-blink.log, /tmp/parley-303-starter.log.
+
+## Revisions
+
+### 2026-09-29 — publication review includes demo viewer
+
+The user committed the demo rehearsal/viewer before requesting close and push. The publish gate requires the resulting HEAD to be reviewed. The app mappings passed again; the viewer needs latest-selection ownership for asynchronous file reads, bounded browser-draft retention with visible failed saves, deterministic production-script regressions and an atlas entry. Include those corrections in this publication boundary. ARCH-ORDER: superseded reads cannot replace the selected recording. ARCH-FUNERAL/CONSTRAINTS: retain at most 20 recording drafts and surface storage failures without losing the live editable text.
+
+Verification: all 8 viewer production-script tests failed before corrections and pass afterward; both file-read orders, current/stale errors, draft retention/eviction, read/quota errors, malformed storage, legacy migration and complete-text download are covered. The starter suite passes on rerun (/tmp/parley-303-publish-starter.log). Demo guide and atlas now describe the viewer lifecycle; full-range whitespace was swept.

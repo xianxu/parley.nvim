@@ -52,6 +52,18 @@ Launcher integration tests cover nested root and chat recognition, retained
 versus reset data, symlink boundaries and competing operations; bootstrap
 tests prove the demo additions do not enter packaged defaults.
 
+`demo/viewer.html` is a standalone recording-review helper, outside the app
+runtime. It loads the pinned asciinema player from a CDN, opens a local cast or
+`?cast=...` URL, displays caption markers, inserts paused time stamps with Alt+T,
+and downloads caption notes. File reads use selection generations so a slower
+old selection cannot replace the newest one. Browser storage keeps at most 20
+most recently saved URL-scoped drafts; local file openings share the current
+page's draft. Storage errors are visible and leave notes editable/downloadable.
+Legacy per-cast keys migrate to the bounded store and are removed only after a
+successful write. `node tests/packaging/test_cast_viewer.js` verifies the production
+script with controlled file reads and stateful storage. Usage and recording
+rehearsal live in `demo/README.md` and `demo/REHEARSAL.md`.
+
 The starter installs pinned Lualine with an automatic theme, prominent mode,
 chat name and cursor position. Existing `parley.lualine` integration supplies
 the model/activity section. `tests/packaging/statusline_compatibility.lua`
