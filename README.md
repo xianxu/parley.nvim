@@ -133,6 +133,10 @@ bundled originals here:
 4. [VIM Basics](packaging/tutorials/vim-basics.md) — modes, Back/Forward navigation,
    undo/redo, smart search, selection, clipboard editing, and saving.
 
+In chat Insert mode, typing `@@` inserts `@@@@` with the cursor between the pairs.
+Type the label, then type `@@` to move past the existing closing pair. Existing
+Insert-mode `@` mappings take precedence; `default_keymaps = false` disables pairing.
+
 To label a question in the outline, put `@@label@@` immediately above its question
 line, with no blank line between them. The outline shows `💬: label` (or your
 configured question prefix). `@@_@@` hides that question from the outline.

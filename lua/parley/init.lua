@@ -2745,7 +2745,7 @@ M.prep_chat = function(buf, file_name)
 	-- entry. `native_map` enforces that exemption instead of trusting it: the
 	-- key must carry a rationale in `keybinding_registry.native_overrides`, and
 	-- the whole set honours the `default_keymaps` master switch (#214).
-	local function native_map(key, fn, desc)
+	local function native_map(key, fn, desc, mode)
 		if not kb_registry.native_overrides[key] then
 			-- A developer mistake, not a user one, and prep_chat has already set
 			-- _prepared_bufs — raising here would leave the buffer permanently
@@ -2759,7 +2759,19 @@ M.prep_chat = function(buf, file_name)
 		if M.config.default_keymaps == false then
 			return
 		end
-		vim.keymap.set("n", key, fn, { buffer = buf, silent = true, desc = desc })
+		vim.keymap.set(mode or "n", key, fn, { buffer = buf, silent = true, desc = desc })
+	end
+
+	-- Preserve the effective user/plugin mapping, including global mappings.
+	local at_mapping = vim.api.nvim_buf_call(buf, function()
+		return vim.fn.maparg("@", "i", false, true)
+	end)
+	if vim.tbl_isempty(at_mapping) then
+		-- A command callback sees prior typeahead already inserted; expr maps can run early.
+		native_map("@", function()
+			local keys = require("parley.at_pair").keys(vim.api.nvim_get_current_line(), vim.fn.col(".") - 1)
+			vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "in", false)
+		end, "Parley: pair double-at markers", "i")
 	end
 
 	-- #141: in chat buffers, `*`/`#` (and `g*`/`g#`) over a `[...]` anchor search

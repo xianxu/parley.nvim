@@ -1188,6 +1188,7 @@ M.feature_gated = {
 --- any parley mapping that is neither registry-derived nor named here is a leak.
 --- @type table<string, { where: string, why: string }>
 M.native_overrides = {
+	["@"] = { where = "init.lua prep_chat", why = "Insert-mode double-at pairing; single @ stays literal and existing mappings win" },
 	["u"] = {
 		where = "init.lua prep_chat (guarded_history)",
 		why = "undo runs natively unless this chat owns a pending response, in "

@@ -23,6 +23,13 @@ In chat Insert mode, the second @ creates @@|@@, with the cursor between delimit
 
 ARCH-DRY: reuse native_map and its registry exemption. ARCH-PURE: isolate line/byte-column decisions in a stateless helper; the mapping reads the editor and returns keys. ARCH-CONSTRAINTS: scan only the current line on @, never the chat. ARCH-MOCK/SECURE/STATE/FUNERAL: no external service, secrets, inter-event state, or durable runtime artifacts. ARCH-PURPOSE: verify actual remappable typing and one-step undo.
 
+### Core concepts
+
+| Symbol | Status | Owner / purpose |
+| --- | --- | --- |
+| `keys` | new | `lua/parley/at_pair.lua`: pure line-local pairing decision |
+| `is_local_tag`, `local_rows`, `project`, `context_text`, `content`, `outline_label` | inherited | `lua/parley/question_tags.lua`: stacked #301 outline/context helpers |
+
 ## Done when
 
 - Real typing creates paired markers, skips closers, preserves existing pairs and single-at text, and undoes in one step.
@@ -31,10 +38,19 @@ ARCH-DRY: reuse native_map and its registry exemption. ARCH-PURE: isolate line/b
 
 ## Plan
 
-- [ ] Add failing production-key tests for pairing, cursor, skip, reuse, multiple pairs, mapping ownership, scope and undo.
-- [ ] Add pure pairing helper and minimal native insert mapping.
-- [ ] Document, run keybinding and single-source checks, and commit for integration before close.
+- [x] Add failing production-key tests for pairing, cursor, skip, reuse, multiple pairs, mapping ownership, scope and undo.
+- [x] Add pure pairing helper and minimal native insert mapping.
+- [x] Document, run keybinding and single-source checks, and commit for integration before close.
 
 ## Log
 
 ### 2026-09-29
+
+- Baseline keybinding behavior passed; two architecture checks initially attributed inherited #301 exports to this stacked branch. Added an explicitly inherited Core concepts row.
+- RED: production typing tests failed with missing closers before implementation. Typeahead tracing then showed expression callbacks observing stale text, including ordinary text between at signs; a command callback queues nonremapped keys only after prior insertion. Cursor motions use <C-g>U to retain one undo step.
+
+- GREEN: `make test-spec SPEC=ui/keybindings` passed 354 tests, zero failures/errors, including single-source architecture sweeps and 12 production typing tests (undo/redo, dot-repeat, rapid prose, email, scope, mappings). Focused luacheck passed. In-memory mutation runs through production mappings detected removal of pair, skip, reuse and fallback branches. `git diff --check` passed. Integration and close are owned by the parent session after #301 closes.
+
+## Revisions
+
+- 2026-09-29: Core concepts now explicitly records the inherited #301 helpers because architecture checks include the stacked branch diff. Runtime behavior remains line-local; production typeahead evidence selected a command callback rather than an expression callback.
