@@ -111,4 +111,13 @@ tool rounds included.
 - Minors: atlas sentence narrowed to the fully-landed rule; save watcher created only after
   a successful attach; two-answers case uses a two-question chat (no user edit between).
 - answer_undo_spec 10/10, 0/12 flaky; document_edit_spec 23/23.
+- Side fix (operator request, 2026-09-28): an untracked `workshop/parley/vim-basics.md`
+  was test residue. `packaging_boot_spec` and `starter_auth_spec` launched the starter
+  without `cwd`, so from the repository it ran in repo mode and seeded the missing
+  bundled tutorial into this repo's workshop/parley (the other three names already exist
+  there as recorded demo chats). Both now launch from their temp home; packaging_boot
+  asserts the repo's chat dir is unchanged (mutation: without cwd it fails). Full
+  integration sweep: no writes into the checkout except the git-ignored demo/workspace
+  the demo launcher owns by design. starter_config's welcome-initializer case failed
+  once under load (passes alone) — #294 family.
 

@@ -16,10 +16,16 @@ describe('installed app boot acceptance', function()
             'local ok,err=pcall(dofile,' .. string.format('%q', repository .. '/tests/packaging/vm_acceptance.lua') .. '); if not ok then print(err); vim.cmd("cquit 1") end',
             'vim.cmd("qa!")',
         }, script)
+        -- Launch from the isolated home, as a user would. From the repository's
+        -- cwd the app ran in repo mode and seeded bundled tutorials into this
+        -- repo's workshop/parley (#282).
+        local chats = repository .. '/workshop/parley'
+        local before = vim.fn.readdir(chats)
         local result = vim.system({'sh', repository .. '/packaging/parley', '--headless', '-n', '-i', 'NONE'},
-            {text = true, clear_env = true, env = {HOME = home, PATH = vim.env.PATH,
+            {cwd = home, text = true, clear_env = true, env = {HOME = home, PATH = vim.env.PATH,
                 PARLEY_NVIM = vim.v.progpath, PARLEY_STARTER = script, PARLEY_RUNTIME = repository}}):wait(30000)
         vim.fn.delete(home, 'rf')
         assert.equals(0, result.code, result.stderr)
+        assert.same(before, vim.fn.readdir(chats), 'the app launch wrote into the repository')
     end)
 end)
