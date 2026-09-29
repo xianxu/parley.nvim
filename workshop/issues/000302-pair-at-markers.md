@@ -8,7 +8,7 @@ updated: 2026-09-29
 estimate_hours:
 card_mirror: 'e4526c79552e2b7e6c10403e6035e62873ff7c06' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-29T11:08:55-07:00
-flow: {kind: quick, provenance: inferred, spec: "dbd4d9ad", done: "7f0c9902"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Auto-pair double-at markers while typing
@@ -46,6 +46,8 @@ ARCH-DRY: reuse native_map and its registry exemption. ARCH-PURE: isolate line/b
 ## Log
 
 ### 2026-09-29
+- 2026-09-29: closed — 360 ui/keybindings tests pass; committed completion_compatibility.lua passes all 21 real-Blink steps with actual starter options, paired chat typing and completion acceptance. Adjacent-pair pure/mapped regressions and packaging step 16 failed before fix. Prior 185 starter tests passed. Generated help corrected and swept; Lua lint and diff checks clean.; review verdict: SHIP
+- 2026-09-29: flow upgraded quick → full — 187 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Baseline keybinding behavior passed; two architecture checks initially attributed inherited #301 exports to this stacked branch. Added an explicitly inherited Core concepts row.
 - RED: production typing tests failed with missing closers before implementation. Typeahead tracing then showed expression callbacks observing stale text, including ordinary text between at signs; a command callback queues nonremapped keys only after prior insertion. Cursor motions use <C-g>U to retain one undo step.

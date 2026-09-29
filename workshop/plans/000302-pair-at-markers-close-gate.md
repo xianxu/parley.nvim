@@ -27,6 +27,24 @@ rounds:
           round: 1
       recipe: milestone-review
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-29T11:53:39-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: lua/parley/at_pair.lua:10-11 recognizes odd trailing runs. Pure and mapped regressions cover adjacent pairs, skipping, undo and redo. The pre-fix helper fails the new pure assertion and committed Blink test at step 16.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: tests/packaging/completion_compatibility.lua:110-155 prepares a real chat with starter options and exercises pairing, skipping, completion acceptance and subsequent pairing. All 21 steps passed with the pinned Blink commit; substituting the pre-fix helper fails step 16.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: The pinned diff replaces both obsolete statements at lua/parley/keybinding_registry.lua:1325-1327 with whole-line local-tag exclusion and literal/reference exceptions. These agree with question_tags.local_rows/context_text, context-projection tests, README and atlas; the current documentation sweep found no remaining superseded claim.
+          round: 2
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#302 (boundary-review)
@@ -45,8 +63,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Important] `user-help-contract-consistency` Generated help still claims local tags enter AI context
   lua/parley/keybinding_registry.lua:1325-1326 describes outline-only hiding and attached tags prefixing AI context, contradicting this range's projection behavior and updated README. Correct both statements and sweep current user-facing descriptions for the superseded contract. ARCH-PURPOSE.
 
+## Round 2 — 2026-09-29T11:53:39-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — lua/parley/at_pair.lua:10-11 recognizes odd trailing runs. Pure and mapped regressions cover adjacent pairs, skipping, undo and redo. The pre-fix helper fails the new pure assertion and committed Blink test at step 16.
+- BR-2 — addressed — tests/packaging/completion_compatibility.lua:110-155 prepares a real chat with starter options and exercises pairing, skipping, completion acceptance and subsequent pairing. All 21 steps passed with the pinned Blink commit; substituting the pre-fix helper fails step 16.
+- BR-3 — addressed — The pinned diff replaces both obsolete statements at lua/parley/keybinding_registry.lua:1325-1327 with whole-line local-tag exclusion and literal/reference exceptions. These agree with question_tags.local_rows/context_text, context-projection tests, README and atlas; the current documentation sweep found no remaining superseded claim.
+
 ## Open findings
 
-- **BR-1** [Critical] `pairing-delimiter-boundaries` Adjacent marker pairs fail to generate the second closing pair
-- **BR-2** [Important] `acceptance-path-regression-coverage` Promised Blink and pairing coexistence lacks a committed regression
-- **BR-3** [Important] `user-help-contract-consistency` Generated help still claims local tags enter AI context
+(none — every finding has been disposed)

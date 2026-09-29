@@ -87,3 +87,76 @@ findings:
     detail: |
       lua/parley/keybinding_registry.lua:1325-1326 describes outline-only hiding and attached tags prefixing AI context, contradicting this range's projection behavior and updated README. Correct both statements and sweep current user-facing descriptions for the superseded contract. ARCH-PURPOSE.
 ```
+
+---
+
+## Re-review — 2026-09-29T11:53:39-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 302 — Auto-pair double-at markers while typing |
+| repo | parley.nvim |
+| issue file | workshop/issues/000302-pair-at-markers.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4539950f811407dc477b5064b043631cea2b760c..7fac8549c491d58ada19296cded302c3e039ac82 |
+| command | sdlc close --issue 302 |
+| reviewer | codex |
+| timestamp | 2026-09-29T11:53:39-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies the revised issue contract. All three prior findings are addressed, with regression evidence for adjacent pairing and starter/Blink coexistence. No new blocking findings were identified. Repository files remain unchanged.
+
+1. **Strengths**
+   - Pairing decisions remain pure and line-local; editor access stays in the mapping callback.
+   - Production typing tests cover adjacent pairs, skipping, undo/redo, mapping ownership, disabled defaults, and buffer scope.
+   - The committed Blink regression exercises actual starter options and prepared chat mappings.
+   - README, atlas, and generated help consistently describe local-only tags.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** No new findings. `git diff --check` still reports trailing whitespace in the archived #300 review.
+
+5. **Test coverage**
+   - `ui/keybindings`: **360 passed**.
+   - `chat/exchange_model`: **265 passed**.
+   - Pinned Blink compatibility test: **21 steps passed**.
+   - Loading the pre-fix helper makes the adjacent-pair assertion fail and the committed Blink test exit unsuccessfully at step 16.
+   - Orphan verification was unavailable because the harness could not use `ps`.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** registry ownership and shared tag projection.
+   - **ARCH-PURE — pass:** pairing helper requires no IO or mocks; listed entities exist.
+   - **ARCH-PURPOSE — pass:** revised acceptance paths and prior corrections are delivered.
+   - **ARCH-MOCK — pass:** no new external service seam; Blink compatibility uses the real pinned dependency.
+   - **ARCH-CONSTRAINTS — pass:** pairing scans only the current line.
+   - **ARCH-SECURE — pass:** no command interpolation or credential exposure introduced.
+   - **ARCH-ORDER — pass:** pairing derives decisions from current editor contents without retained inter-event state.
+   - **ARCH-FUNERAL — pass:** pairing creates no durable artifacts or background tasks.
+
+7. **Plan revisions:** None required; existing revisions record the final registry design and review corrections.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      lua/parley/at_pair.lua:10-11 recognizes odd trailing runs. Pure and mapped regressions cover adjacent pairs, skipping, undo and redo. The pre-fix helper fails the new pure assertion and committed Blink test at step 16.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      tests/packaging/completion_compatibility.lua:110-155 prepares a real chat with starter options and exercises pairing, skipping, completion acceptance and subsequent pairing. All 21 steps passed with the pinned Blink commit; substituting the pre-fix helper fails step 16.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The pinned diff replaces both obsolete statements at lua/parley/keybinding_registry.lua:1325-1327 with whole-line local-tag exclusion and literal/reference exceptions. These agree with question_tags.local_rows/context_text, context-projection tests, README and atlas; the current documentation sweep found no remaining superseded claim.
+```
