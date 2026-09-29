@@ -148,3 +148,8 @@ This plan is outside the quick-flow shell. Obtain approval for the concrete desi
 - Real Blink exposed empty/late filetype registration; explicit spell requests append the source while preserving the enabled provider list, and FileType re-registers the current type.
 - Force-showing mixed providers for a correctly spelled word can reopen buffer completion after acceptance and steal the next Return. The controller now shares Source.is_misspelled with the source and only requests automatic correction for a flagged word.
 - Legacy detach is now explicit in Core concepts. Transient key metadata carries chat scope so the shipped-key guard distinguishes chat leases from picker Tab bindings.
+
+### 2026-09-29 — BR-1 acceptance context invalidation
+
+- Same-buffer window departure, entry, and departure/return during delayed resolution are part of the lifecycle. WinLeave synchronously invalidates through the reducer and releases menu/maps; WinEnter schedules a fresh observation. This covers window/tab transitions even when buffer and cursor remain identical.
+- Controller regressions assert cleanup and re-observation; real pinned Blink replays delayed resolution while staying in the second window and returning to the origin.

@@ -155,6 +155,31 @@ local run = coroutine.create(function()
     assert(text() == 'before teh after', 'late acceptance changed moved target')
     source.resolve = nil
 
+    for _, return_to_origin in ipairs({ false, true }) do
+        step = 'Same-buffer window excursion during resolve; return=' .. tostring(return_to_origin)
+        chat('before teh after', 8)
+        local origin = vim.api.nvim_get_current_win()
+        vim.cmd('split')
+        local other = vim.api.nvim_get_current_win()
+        vim.api.nvim_set_current_win(origin)
+        wait_for(spelling, 'window fixture did not open spelling')
+        local release_resolve
+        source.resolve = function(_, item, callback) release_resolve = function() callback(item) end end
+        keys('<CR>')
+        wait_for(function() return release_resolve ~= nil end, 'window acceptance did not resolve')
+        vim.api.nvim_set_current_win(other)
+        assert(not spelling(), 'window departure left owned menu')
+        if return_to_origin then vim.api.nvim_set_current_win(origin) end
+        release_resolve()
+        pause(100)
+        assert(text() == 'before teh after', 'window excursion accepted stale spelling')
+        source.resolve = nil
+        controller.detach(buf)
+        cmp.hide()
+        vim.api.nvim_set_current_win(origin)
+        vim.api.nvim_win_close(other, true)
+    end
+
     step = 'Current-buffer completion still present'
     chat('marshmallow marmalade', 0)
     keys('A<CR>ma')

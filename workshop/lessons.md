@@ -304,3 +304,7 @@ oracle, and the mutation that would make the test fail.
 - Check whitespace across the reviewed commit range, including generated review sidecars; a clean working-tree diff can hide committed trailing whitespace.
 
 - Async file-selection callbacks need a generation check after reading; test A→B selections with both completion orders. Browser draft storage needs a documented retention bound and a visible unsaved state when persistence fails.
+
+## 2026-09-29 (#304 — spelling acceptance context)
+
+- Buffer and cursor events do not observe every window transition: two windows can display the same buffer at the same cursor. Invalidate asynchronous editing authority on WinLeave as well; test an excursion and return before resolution, alongside staying in the other window.

@@ -250,6 +250,15 @@ function M.attach(buf, opts, dependency)
         dispatch(c, { kind = 'invalidate' })
     end })
     vim.api.nvim_create_autocmd('BufWipeout', { group = c.group, buffer = buf, callback = function() M.detach(buf) end })
+    -- BufLeave does not fire when two windows display the same buffer. A
+    -- departure is still an acceptance boundary, even if the user returns
+    -- before the deferred observation or provider resolve completes.
+    vim.api.nvim_create_autocmd({ 'WinLeave', 'WinEnter' }, { group = c.group, callback = function(event)
+        if vim.api.nvim_get_current_buf() == buf then
+            dispatch(c, { kind = 'invalidate' })
+            if event.event == 'WinEnter' then vim.schedule(function() observe(c) end) end
+        end
+    end })
     vim.api.nvim_create_autocmd('ModeChanged', { group = c.group, callback = function()
         if vim.api.nvim_get_current_buf() == buf then
             dispatch(c, { kind = 'invalidate' })
