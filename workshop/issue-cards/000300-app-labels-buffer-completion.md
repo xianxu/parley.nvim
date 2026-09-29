@@ -1,6 +1,6 @@
 ---
 id: 000300
-status: codecomplete
+status: done
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours:
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: d826c3a4b7004221c31ad2c01f46de2a09d0e7e7
         evidence_commit: fa255b8239b6863595a917353852cad8f78daae9
+        landed_commit: aedd9d660936e1c9fc83f6d734063ce66f1c39d3
 ---
 
 # Conversation label icons and app buffer completion
