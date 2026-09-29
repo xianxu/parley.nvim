@@ -1,10 +1,12 @@
 ---
 id: 000298
-status: working
+status: codecomplete
 created: 2026-09-28
 updated: 2026-09-28
 estimate_hours:
 github_issue:
+started: 2026-09-28T21:04:00-07:00
+actual_hours: 0.05
 tracker:
     version: 1
     handoff:
@@ -17,7 +19,11 @@ tracker:
         source_blob: 7dcece9df8a96575d50ba8c305aa0dabc376749a
         destination: workshop/issues/000298-empty-tool-input.md
         main_commit: 4a3d286687041de8bd590c68fc73d121ac1c5486
-started: 2026-09-28T21:04:00-07:00
+    completion:
+        token: close-20ccda8e1870
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: ff69bfc8a250685654ef3a04db3a3c15e545ece3
+        evidence_commit: d9696248baa490f24532b1ce9e5e49233ded49e4
 ---
 
 # Preserve empty tool input objects
