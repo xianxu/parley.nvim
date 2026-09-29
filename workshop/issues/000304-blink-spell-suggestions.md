@@ -8,7 +8,7 @@ updated: 2026-09-29
 estimate_hours: 3.4
 card_mirror: '92f58e3fdda90c74f91524aa2c40bd848c99e2aa' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-29T14:30:37-07:00
-flow: {kind: quick, provenance: inferred, spec: "203ef255", done: "c1b34118"}
+flow: {kind: full, provenance: operator}
 ---
 
 # Unify automatic spell suggestions in Blink
