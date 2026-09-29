@@ -14,9 +14,14 @@
   header .hint { color: var(--muted); font-size: 12px; }
   main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px; }
   @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
-  #caption { min-height: 2.8em; margin-top: 10px; padding: 8px 12px; background: var(--panel);
-             border-left: 3px solid var(--accent); font-size: 17px; }
-  #caption:empty { visibility: hidden; }
+  /* The player fits the window so nothing falls below the fold. placeCaption() pins the
+     caption to the terminal's bottom-left, beside Screenkey and above the status line. */
+  .stage { position: relative; height: calc(100vh - 84px); min-height: 320px; }
+  #player { height: 100%; }
+  #caption { position: absolute; z-index: 10; padding: 0.35em 0.7em; border-radius: 10px;
+             pointer-events: none; background: rgba(0, 0, 0, 0.85); color: #fff;
+             font: 600 22px/1.25 system-ui, sans-serif; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5); }
+  #caption:empty { display: none; }
   aside { display: flex; flex-direction: column; gap: 8px; }
   textarea { flex: 1; min-height: 360px; width: 100%; background: var(--panel); color: var(--fg);
              border: 1px solid #333a46; padding: 8px; font: 13px/1.5 ui-monospace, monospace; resize: vertical; }
@@ -29,14 +34,14 @@
 <body>
 <header>
   <span class="time" id="time">0:00.0</span>
-  <label class="btn">Open .cast<input type="file" id="file" accept=".cast,.json,.txt"></label>
+  <button id="open">Open .cast</button><input type="file" id="file" accept=".cast,.json,.txt">
   <label><input type="checkbox" id="pauseOnMarkers"> pause at captions</label>
   <span class="hint" id="src"></span>
   <span id="load-status" role="status"></span>
   <span class="hint">Player: space pause · ←/→ seek · . step frame (paused) · [ ] prev/next caption</span>
 </header>
 <main>
-  <section>
+  <section class="stage">
     <div id="player"></div>
     <div id="caption"></div>
   </section>
@@ -62,24 +67,34 @@
   let selectionGeneration = 0;
   let player = null;
   let source = null; // string URL or { data }
+  let captions = null; // [{start, end, text}] from a cut cast's header
 
   const fmt = t => {
     const m = Math.floor(t / 60), s = t - m * 60;
     return `${m}:${s.toFixed(1).padStart(4, '0')}`;
   };
 
+  function readCaptions(data) {
+    try {
+      const header = JSON.parse(data.slice(0, data.indexOf('\n')));
+      return Array.isArray(header.captions) ? header.captions : null;
+    } catch { return null; }
+  }
+
   function load(src, label) {
     source = src;
+    captions = src.data ? readCaptions(src.data) : null;
     $('src').textContent = label;
     $('caption').textContent = '';
     if (player) player.dispose();
     $('player').innerHTML = '';
     player = AsciinemaPlayer.create(src, $('player'), {
-      fit: 'width',
+      fit: 'both',
       pauseOnMarkers: $('pauseOnMarkers').checked,
     });
-    player.addEventListener('marker', ({ label }) => { $('caption').textContent = label || ''; });
-    player.addEventListener('seeked', () => { $('caption').textContent = ''; });
+    // Header captions carry their own end time; bare markers show until the next one.
+    player.addEventListener('marker', ({ label }) => { if (!captions) $('caption').textContent = label || ''; });
+    player.addEventListener('seeked', () => { if (!captions) $('caption').textContent = ''; });
   }
 
   async function currentTime() {
@@ -88,10 +103,50 @@
     return typeof t === 'number' ? t : 0;
   }
 
-  setInterval(async () => { $('time').textContent = fmt(await currentTime()); }, 100);
+  // Caption box in terminal fractions: left edge, max width, bottom edge (Screenkey's bottom).
+  const CAPTION_BOX = { left: 0.02, width: 0.5, bottom: 0.935 };
 
-  $('file').addEventListener('change', async e => {
-    const f = e.target.files[0];
+  function placeCaption() {
+    const term = $('player').querySelector('.ap-term');
+    if (!term) return;
+    const t = term.getBoundingClientRect(), stage = $('player').parentElement.getBoundingClientRect();
+    const c = $('caption').style;
+    c.left = `${t.left - stage.left + t.width * CAPTION_BOX.left}px`;
+    c.maxWidth = `${t.width * CAPTION_BOX.width}px`;
+    c.bottom = `${stage.bottom - (t.top + t.height * CAPTION_BOX.bottom)}px`;
+    c.fontSize = `${Math.max(16, t.width * 0.032)}px`;
+  }
+
+  setInterval(async () => {
+    placeCaption();
+    const t = await currentTime();
+    $('time').textContent = fmt(t);
+    if (captions) {
+      const c = captions.find(c => c.start <= t && t < c.end);
+      $('caption').textContent = c ? c.text : '';
+    }
+  }, 100);
+
+  // Chromium's picker remembers the last folder per id, so after one visit to
+  // the recordings folder it opens there. Other browsers use the plain input.
+  $('open').addEventListener('click', async () => {
+    if (!window.showOpenFilePicker) return $('file').click();
+    let handle;
+    try {
+      [handle] = await showOpenFilePicker({
+        id: 'cast-viewer',
+        types: [{ description: 'asciinema cast', accept: { 'text/plain': ['.cast', '.json', '.txt'] } }],
+      });
+    } catch (e) {
+      if (e.name !== 'AbortError') $('file').click();
+      return;
+    }
+    openFile(await handle.getFile());
+  });
+
+  $('file').addEventListener('change', e => { openFile(e.target.files[0]); e.target.value = ''; });
+
+  async function openFile(f) {
     if (!f) return;
     const generation = ++selectionGeneration;
     $('load-status').textContent = 'Loading ' + f.name + '…';
@@ -105,7 +160,7 @@
         $('load-status').textContent = 'Could not open ' + f.name + '. Choose a file to retry.';
       }
     }
-  });
+  }
 
   $('pauseOnMarkers').addEventListener('change', () => { if (source) load(source, $('src').textContent); });
 
@@ -186,7 +241,11 @@
   });
 
   const castParam = params.get('cast');
-  if (castParam) load(castParam, castParam);
+  // Fetch the text ourselves so a cut cast's header captions are available.
+  if (castParam) fetch(castParam)
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then(data => load({ data }, castParam))
+    .catch(() => { $('load-status').textContent = 'Could not load ' + castParam; });
   else $('src').textContent = 'No cast loaded — open a file or use ?cast=path.cast';
 </script>
 </body>

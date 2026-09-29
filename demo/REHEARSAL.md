@@ -1,9 +1,10 @@
 
-x 1. capture code start (installing some lazyvim plugins)
+1. capture code start (installing some lazyvim plugins)
 
-x . tell me more about space data center
+2. tell me more about space data center
 
-   this triggers asking to connect account.
+   this triggers asking to connect account. 
+   then select a model
 
 3. inside the answer of space data center, find something to ask branched question.
 
