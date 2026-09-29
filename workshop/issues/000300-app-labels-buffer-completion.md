@@ -34,6 +34,7 @@ Reuse the configured question prefix for attached tag labels in flat and tree ou
 ## Log
 
 ### 2026-09-29
+- 2026-09-29: closed — 228 outline and 185 starter checks pass; 14-step pinned Blink keyboard smoke and changed Lua lint pass. BR-1 covered default/custom flat+tree prefixes and Ctrl-n/p; all three targeted mutation probes fail as expected.; review verdict: SHIP
 
 Scoped from the two explicit app requests. No new dependency, persistent state or background owner; existing Blink manages completion lifecycle.
 
