@@ -197,3 +197,79 @@ findings:
 6. **Architecture:** ARCH-DRY **pass**—shared projections and existing Blink commands. ARCH-PURE **pass**—pairing decisions remain stateless. ARCH-PURPOSE **flag**—branch traceability fails. ARCH-MOCK **pass**—real Blink and stateful storage tests. ARCH-CONSTRAINTS **pass**—line-local pairing and current-buffer completion. ARCH-SECURE **pass**—storage validation and visible failures. ARCH-ORDER **pass**—superseded reads are rejected in both tested completion orders. ARCH-FUNERAL **pass**—draft eviction, legacy cleanup, and player disposal are present.
 
 7. **Plan revision:** Append a #303 `## Revisions` entry recording the stacked export inventory and successful architecture-check rerun.
+
+---
+
+## Re-review — 2026-09-29T12:40:23-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 300 — Conversation label icons and app buffer completion |
+| repo | parley.nvim |
+| issue file | workshop/issues/000300-app-labels-buffer-completion.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 7cb00fc1f74976bd3aaf087141542e19fc4f59ec..d826c3a4b7004221c31ad2c01f46de2a09d0e7e7 |
+| command | sdlc close --issue 300 |
+| reviewer | codex |
+| timestamp | 2026-09-29T12:40:23-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies the documented stacked scope. BR-3 is addressed: the inherited inventory matches the exported helpers, includes a revision entry, and both previously failing architecture guards pass on branch `000303-app-completion-keys`. No blocking findings remain.
+
+```findings
+dispose:
+  - id: BR-3
+    disposition: addressed
+    note: |
+      workshop/issues/000303-app-completion-keys.md:24-29 inventories all seven inherited exports with ownership and paths; lines 60-64 record the revision. Definitions match, and make test-spec SPEC=ui/keybindings passes both traceability guards.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Retained: outline tests exercise default/custom prefixes through both builders, and the real pinned-Blink keyboard test exercises forward/backward selection successfully.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Retained: git diff --check across the complete pinned range passes, including generated review artifacts.
+```
+
+1. **Strengths**
+   - Flat and tree outlines share prefix formatting, with caller-level parity tests.
+   - Context projection preserves original transcript text and serialized tool payloads.
+   - Completion tests exercise actual starter options and pinned Blink in prepared chat buffers.
+   - Viewer tests control both file-read completion orders and exercise stateful storage failures.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - `ui/keybindings`: passed, including both BR-3 guards.
+   - `ui/outline`: 243 passed.
+   - `chat/format`: 247 passed.
+   - `infra/starter`: 185 passed.
+   - Real Blink: all 35 keyboard steps passed; checkout matches the configured pin.
+   - Viewer: 8 passed.
+   - Pinned-range whitespace check: passed.
+   - Harness limitation: process-orphan checks were skipped because `ps` was unavailable.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** shared label/projection helpers; existing Blink commands reused.
+   - **ARCH-PURE — pass:** pairing decisions and row projections remain separate from editor effects.
+   - **ARCH-PURPOSE — pass:** promised behavior is covered; #303 explicitly supersedes #300’s original Enter policy.
+   - **ARCH-MOCK — pass:** production viewer script uses controlled reads and stateful storage doubles; Blink receives real integration coverage.
+   - **ARCH-CONSTRAINTS — pass:** pairing scans one line; completion uses only the current buffer.
+   - **ARCH-SECURE — pass:** malformed storage and persistence failures remain visible without overwriting unread drafts.
+   - **ARCH-ORDER — pass:** selection generations reject stale file completions; both orders are tested.
+   - **ARCH-FUNERAL — pass:** draft writes enforce the 20-entry bound; replaced players are disposed.
+
+7. **Plan revision recommendations:** None.

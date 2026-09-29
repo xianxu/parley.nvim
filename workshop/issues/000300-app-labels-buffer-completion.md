@@ -8,7 +8,7 @@ updated: 2026-09-29
 estimate_hours:
 card_mirror: 'cb25334fd9074f69b3eebeab466cbd1b199c059d' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-29T10:35:00-07:00
-flow: {kind: quick, provenance: inferred, spec: "8ca1e017", done: "d6e804a8"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Conversation label icons and app buffer completion
@@ -34,6 +34,8 @@ Reuse the configured question prefix for attached tag labels in flat and tree ou
 ## Log
 
 ### 2026-09-29
+- 2026-09-29: closed — Full stack ui/keybindings now passes including both previously failing architecture inventory sweeps; inherited exports are documented in #303. Prior ancestor re-review passed outline, starter, chat/format, all 35 real-Blink checks, eight viewer tests and full-range whitespace. Only documentation changed since that review; user confirmed app behavior.; review verdict: SHIP
+- 2026-09-29: flow upgraded quick → full — 385 added lines in code files (limit 100); an earlier round of this close already ran the full review
 - 2026-09-29: closed — 228 outline and 185 starter checks pass; 14-step pinned Blink keyboard smoke and changed Lua lint pass. BR-1 covered default/custom flat+tree prefixes and Ctrl-n/p; all three targeted mutation probes fail as expected.; review verdict: SHIP
 
 Scoped from the two explicit app requests. No new dependency, persistent state or background owner; existing Blink manages completion lifecycle.

@@ -53,6 +53,24 @@ rounds:
           round: 3
       recipe: milestone-review
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-29T12:40:23-07:00"
+      agent: codex
+      dispose:
+        - id: BR-3
+          disposition: addressed
+          note: workshop/issues/000303-app-completion-keys.md:24-29 inventories all seven inherited exports with ownership and paths; lines 60-64 record the revision. Definitions match, and make test-spec SPEC=ui/keybindings passes both traceability guards.
+          round: 4
+        - id: BR-1
+          disposition: addressed
+          note: 'Retained: outline tests exercise default/custom prefixes through both builders, and the real pinned-Blink keyboard test exercises forward/backward selection successfully.'
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: 'Retained: git diff --check across the complete pinned range passes, including generated review artifacts.'
+          round: 4
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#300 (boundary-review)
@@ -90,6 +108,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Important] `core-concepts-traceability` Restore the stacked branch's Core concepts inventory
   tests/arch/single_source_sweeps_spec.lua:208 and :356 fail under make test-spec SPEC=ui/keybindings. On branch 000303-app-completion-keys, the checker selects workshop/issues/000303-app-completion-keys.md, which contains no Core concepts table. It reports content, context_text, is_local_tag, keys, local_rows, outline_label and project as undocumented exports. Add the complete inventory with ownership, paths and inherited status, append a Revisions entry, and rerun the suite. ARCH-PURPOSE: the existing traceability guard must pass for the actual stacked branch.
 
+## Round 4 — 2026-09-29T12:40:23-07:00 (codex) — passed
+
+### Disposed
+
+- BR-3 — addressed — workshop/issues/000303-app-completion-keys.md:24-29 inventories all seven inherited exports with ownership and paths; lines 60-64 record the revision. Definitions match, and make test-spec SPEC=ui/keybindings passes both traceability guards.
+- BR-1 — addressed — Retained: outline tests exercise default/custom prefixes through both builders, and the real pinned-Blink keyboard test exercises forward/backward selection successfully.
+- BR-2 — addressed — Retained: git diff --check across the complete pinned range passes, including generated review artifacts.
+
 ## Open findings
 
-- **BR-3** [Important] `core-concepts-traceability` Restore the stacked branch's Core concepts inventory
+(none — every finding has been disposed)
