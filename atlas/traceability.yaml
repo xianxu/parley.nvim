@@ -421,6 +421,7 @@ atlas:
       - tests/unit/document_write_turn_spec.lua
       - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/unit/document_sequence_spec.lua
+      - tests/integration/answer_undo_spec.lua
       - tests/integration/repair_work_budget_spec.lua
       - tests/unit/document_lexical_spec.lua
       - tests/unit/document_grammar_spec.lua

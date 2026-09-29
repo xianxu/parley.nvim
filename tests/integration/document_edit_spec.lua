@@ -252,6 +252,8 @@ describe('document editor', function()
         assert.equals('α',first_line())
         vim.fn.delete(path)
     end)
+    -- Pinned by observe clearing the receipt on the undo (and can_join_undo's
+    -- sequence check), not by the save watcher.
     it('does not join across an undo followed by a save',function()
         vim.api.nvim_set_current_buf(buf)
         local path=file_backed()

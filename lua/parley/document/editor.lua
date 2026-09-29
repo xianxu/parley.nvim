@@ -189,8 +189,9 @@ function Editor:attach()
             local receipt=self.undo_receipt
             if self.dead or not receipt or not self.driver.undo_state then return end
             local native_state=self.driver.undo_state(self.buf)
-            if native_state.sequence==receipt.sequence then receipt.tick=native_state.tick
-            else self.undo_receipt=nil end
+            -- A moved sequence needs no handling here: undo/redo already cleared
+            -- the receipt in observe, and can_join_undo re-checks the sequence.
+            if native_state.sequence==receipt.sequence then receipt.tick=native_state.tick end
         end)
     end
     self.attached=true

@@ -259,3 +259,21 @@ oracle, and the mutation that would make the test fail.
   paths with stateful fixtures, including auth and installed dependencies.
 - Seeded chats must pass production recognition (filename and headers), not
   merely open as Markdown. Test the launched buffer through `not_chat`.
+
+## 2026-09-28 (#282 — one answer, one undo entry)
+
+- Verify which native callback actually fires before building on it: the first fix
+  adopted a new tick on the `on_changedtick` lifecycle event, and `:write` never
+  delivers one. Instrument the path (who clears the state, with which values) before
+  writing the fix; the second finding (a "stale" apply that had in fact landed) was
+  the opposite of the first guess too.
+- Text written outside the owning writer (the regeneration's raw `delete_answer`)
+  sits outside that writer's undo grouping. When a flow spans a pre-writer edit and
+  the writer, hand the undo state across explicitly (seed + adopt), and fall back
+  to separate entries when anything intervenes.
+- A regression test for rule X must fail when only X's code is removed; if another
+  mechanism already guarantees the outcome, the branch is dead — delete it rather
+  than keep an untestable guard (#282 close review).
+- `git add -A <dir>` sweeps in the operator's untracked files (a parley chat was
+  committed and had to be amended out). Stage explicit paths.
+
