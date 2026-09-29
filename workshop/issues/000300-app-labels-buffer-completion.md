@@ -1,28 +1,37 @@
 ---
 id: 000300
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours:
-card_mirror: 'eafa7c9dc480d402faede05c9ff3d0c5b0af0d18' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'cb25334fd9074f69b3eebeab466cbd1b199c059d' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-29T10:35:00-07:00
 ---
 
 # Conversation label icons and app buffer completion
 
 ## Problem
 
+App usage exposed missing conversation prefixes on tagged outline entries and disabled buffer-word typeahead.
+
 ## Spec
+
+Reuse the configured question prefix for attached tag labels in flat and tree outlines; retain indentation, anchors, anonymous hiding and standalone annotations. Enable the existing app Blink buffer source for the current buffer only at two characters. Use Ctrl-n/p to select, Ctrl-y to accept and Ctrl-e to dismiss, with no preselection or Enter binding. Preserve command-line completion. ARCH-DRY: share label formatting and use Blink’s existing provider. This is a bounded app change; broader spelling/path work remains in #259/#288.
 
 ## Done when
 
--
+- Tagged questions show the configured conversation prefix in both outline paths, including custom prefixes.
+- App typing offers words from the current buffer after two characters; selection/accept/dismiss work and Enter is unchanged.
+- Focused outline tests and real pinned-Blink typing checks pass; app documentation describes the keys.
 
 ## Plan
 
-- [ ]
+- [ ] Update label projections and app options with regression coverage, run focused suites and real Blink smoke, document behavior.
 
 ## Log
 
 ### 2026-09-29
+
+Scoped from the two explicit app requests. No new dependency, persistent state or background owner; existing Blink manages completion lifecycle.
