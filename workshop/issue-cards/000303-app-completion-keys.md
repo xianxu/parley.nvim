@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000303-app-completion-keys.md
         source_blob: fcd96a33e6d1e2988cb4e044d623780607312e91
         destination: workshop/issues/000303-app-completion-keys.md
+        main_commit: 7cb00fc1f74976bd3aaf087141542e19fc4f59ec
 ---
 
 # Use familiar keys for app completion
