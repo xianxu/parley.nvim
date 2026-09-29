@@ -29,10 +29,12 @@ Reuse the configured question prefix for attached tag labels in flat and tree ou
 
 ## Plan
 
-- [ ] Update label projections and app options with regression coverage, run focused suites and real Blink smoke, document behavior.
+- [x] Update label projections and app options with regression coverage, run focused suites and real Blink smoke, document behavior.
 
 ## Log
 
 ### 2026-09-29
 
 Scoped from the two explicit app requests. No new dependency, persistent state or background owner; existing Blink manages completion lifecycle.
+
+Verified: make test-spec SPEC=ui/outline and SPEC=infra/starter passed; real pinned Blink keyboard smoke passed (two-character trigger, current buffer only, selection/accept/dismiss/newline, command-line matching); changed Lua files passed luacheck. Regressions failed before implementation. The smoke must feed remappable keys to test the actual configured bindings.

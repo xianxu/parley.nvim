@@ -44,48 +44,76 @@ local function labels()
     return out
 end
 
--- Typing drives blink through vim.on_key and scheduled callbacks, so each case
--- feeds keys, then waits for the event loop to settle before observing.
-local cases = { { keys = ':mkpv', want = 'MarkdownPreview' }, { keys = ':thm', want = 'ParleyTheme' } }
+-- Exercise actual keys with event-loop turns between actions.
+local cmp = require('blink.cmp')
 local results, step = {}, 0
+local function has(label) return vim.tbl_contains(labels(), label) end
+local cases = {
+    { keys = ':mkpv', check = function()
+        assert(cmp.is_menu_visible() and labels()[1] == 'MarkdownPreview')
+    end },
+    { keys = '<C-u><Esc>', check = function() end },
+    { keys = ':thm', check = function()
+        assert(cmp.is_menu_visible() and labels()[1] == 'ParleyTheme')
+    end },
+    { keys = '<C-u><Esc>', check = function()
+        -- A visible second buffer must not contribute its vocabulary.
+        vim.cmd('vnew')
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'marzipan' })
+        vim.cmd('wincmd p')
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'marshmallow', '' })
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    end },
+    { keys = 'im', check = function()
+        assert(not cmp.is_menu_visible(), 'one character opened a menu')
+    end },
+    { keys = 'a', check = function()
+        assert(cmp.is_menu_visible() and has('marshmallow'), 'current-buffer word missing')
+        assert(not has('marzipan'), 'another buffer contributed words')
+        assert(list.selected_item_idx == nil, 'item was preselected')
+        assert(vim.api.nvim_get_current_line() == 'ma', 'typing was replaced')
+        for _, map in ipairs(vim.api.nvim_buf_get_keymap(0, 'i')) do
+            assert(map.lhs ~= '<CR>', 'blink claimed Enter')
+        end
+        for _, map in ipairs(vim.api.nvim_get_keymap('c')) do
+            assert(map.lhs ~= '<Left>' and map.lhs ~= '<Right>', 'cmdline arrows claimed')
+        end
+    end },
+    { keys = '<C-n>', check = function()
+        assert(list.selected_item_idx ~= nil, 'Ctrl-n did not select')
+        assert(vim.api.nvim_get_current_line() == 'ma', 'selection inserted text')
+    end },
+    { keys = '<C-y>', check = function()
+        assert(vim.api.nvim_get_current_line() == 'marshmallow', 'Ctrl-y did not accept')
+    end },
+    { keys = '<CR>ma', check = function()
+        assert(cmp.is_menu_visible(), 'menu did not reopen')
+    end },
+    { keys = '<C-e>', check = function()
+        assert(not cmp.is_menu_visible(), 'Ctrl-e did not dismiss')
+        assert(vim.api.nvim_get_current_line() == 'ma', 'dismiss changed the text')
+    end },
+    { keys = '<C-u>ma', check = function() assert(cmp.is_menu_visible()) end },
+    { keys = '<CR>', check = function()
+        local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+        assert(lines[3] == 'ma' and lines[4] == '', 'Enter accepted a suggestion instead of newline')
+    end },
+}
 local function next_case()
     step = step + 1
     local case = cases[step]
     if not case then
-        -- Insert mode in a chat-like buffer: no sources, no menu, no blink keys.
-        vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'MarkdownPreview marshmallow markdown' })
-        vim.api.nvim_feedkeys('Gomar', 'nt', false)
-        vim.defer_fn(function()
-            local ok_insert, insert_err = pcall(function()
-                assert(vim.api.nvim_get_mode().mode == 'i')
-                assert(#list.items == 0, 'insert mode produced completion items')
-                assert(not require('blink.cmp').is_menu_visible(), 'insert mode opened a menu')
-                -- blink installs insert keys buffer-locally on InsertEnter; with -u NONE
-                -- nothing else maps this buffer, so any entry is a claimed key.
-                local claimed = vim.api.nvim_buf_get_keymap(0, 'i')
-                assert(#claimed == 0, 'blink claimed insert key ' .. (claimed[1] and claimed[1].lhs or ''))
-                for _, map in ipairs(vim.api.nvim_get_keymap('c')) do
-                    assert(map.lhs ~= '<Left>' and map.lhs ~= '<Right>', 'cmdline arrows claimed')
-                end
-            end)
-            if not ok_insert then return fail(insert_err) end
-            for _, line in ipairs(results) do print(line) end
-            print('PASS completion insert-mode quiet')
-            vim.cmd('qa!')
-        end, 800)
+        for _, line in ipairs(results) do print(line) end
+        print('PASS command-line and current-buffer completion keyboard behavior')
+        vim.cmd('qa!')
         return
     end
-    vim.api.nvim_feedkeys(case.keys, 'nt', false)
+    vim.api.nvim_feedkeys(vim.keycode(case.keys), 'mt', false)
     vim.defer_fn(function()
-        local found = labels()
-        local visible = require('blink.cmp').is_menu_visible()
-        if not (visible and found[1] == case.want) then
-            return fail(case.keys .. ': want ' .. case.want .. ' first in a visible menu, got '
-                .. vim.inspect(found) .. ' visible=' .. tostring(visible))
-        end
-        results[#results + 1] = 'PASS completion ' .. case.keys .. ' -> ' .. case.want
-        vim.api.nvim_feedkeys(vim.keycode('<C-u><Esc>'), 'nt', false)
-        vim.defer_fn(next_case, 200)
-    end, 800)
+        local passed, why = pcall(case.check)
+        if not passed then return fail('step ' .. step .. ': ' .. tostring(why)) end
+        results[#results + 1] = 'PASS completion step ' .. step .. ' ' .. case.keys
+        next_case()
+    end, 300)
 end
 vim.defer_fn(next_case, 100)

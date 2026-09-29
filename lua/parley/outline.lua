@@ -245,7 +245,7 @@ function M._build_picker_items(bufnr, config, opts)
           local content=label(bufnr,preface.start_row)
           local attached=question_tags.parse_tag(content) or content:sub(3)
           if attached=="_" then item=nil
-          else item.display="  "..attached;item.value.tag_lnum=preface.start_row+1 end
+          else item.display="  "..question_tags.outline_label(attached,config);item.value.tag_lnum=preface.start_row+1 end
         end
       end
     elseif token.preface_tag then

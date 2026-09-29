@@ -16,7 +16,8 @@
   `tests/unit/outline_parity_spec.lua` is the differential oracle. An
   standalone annotation displays as `  → text` (both delimiters stripped).
   A whole-line `@@label@@` immediately above a question becomes that question's
-  outline label and search text, retaining its question-row destination.
+  outline label and search text, prefixed with the configured question marker
+  (`💬:` by default) and retaining its question-row destination.
   A blank line breaks adjacency. `@@_@@` always hides its own annotation row;
   immediately above a question it hides that question from the outline too.
   These attached tags are the exchange's preface: their raw text still prefixes

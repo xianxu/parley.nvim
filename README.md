@@ -134,8 +134,13 @@ bundled originals here:
    undo/redo, smart search, selection, clipboard editing, and saving.
 
 To label a question in the outline, put `@@label@@` immediately above its question
-line, with no blank line between them. `@@_@@` hides that question from the outline.
+line, with no blank line between them. The outline shows `💬: label` (or your
+configured question prefix). `@@_@@` hides that question from the outline.
 Both forms remain in AI context as a preface to the following question.
+
+The app also suggests words from the current buffer after two typed characters.
+Use Ctrl-n/p to select, Ctrl-y to accept and Ctrl-e to dismiss; Enter keeps its
+usual behavior. See [word completion](packaging/starter-config/README.md#complete-words-while-typing).
 
 Ask Parley about a feature as you work. Its documentation tool reads the
 README, tutorials, and [atlas](atlas/index.md) from your installed version.

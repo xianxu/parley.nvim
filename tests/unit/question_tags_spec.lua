@@ -36,9 +36,15 @@ describe("question preface outline projection", function()
         local items = { item("annotation", 1, "      → polar"), item("question", 2, "      💬: hidden question text") }
         local before = vim.deepcopy(items)
         local result = tags.apply_outline(items, lines, cfg)
-        assert.same({ { type = "question", display = "      polar", value = { file = "/chat.md", lnum = 2, tag_lnum = 1 } } }, result)
+        assert.same({ { type = "question", display = "      💬: polar", value = { file = "/chat.md", lnum = 2, tag_lnum = 1 } } }, result)
         assert.same(before, items)
         assert.equals(1, tags.initial_index(result, "/chat.md", 1))
+    end)
+    it("uses the configured question prefix for labels", function()
+        local custom = { chat_user_prefix = "Q:", chat_assistant_prefix = "A:" }
+        local result = tags.apply_outline({ item("question", 2, "    Q: wording") },
+            { "@@label@@", "Q: wording" }, custom)
+        assert.equals("    Q: label", result[1].display)
     end)
     it("hides anonymous tags and their adjacent questions only", function()
         local lines = { "@@_@@", "💬: hidden", "@@_@@", "", "💬: visible", "@@last@@" }

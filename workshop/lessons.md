@@ -283,3 +283,7 @@ oracle, and the mutation that would make the test fail.
 - `git add -A <dir>` sweeps in the operator's untracked files (a parley chat was
   committed and had to be amended out). Stage explicit paths.
 
+
+## 2026-09-29 (#300 — completion keyboard smoke)
+
+- Feed remappable keys when testing plugin mappings; `nvim_feedkeys` with `n` bypasses the mappings and tests Neovim defaults instead.

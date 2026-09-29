@@ -43,6 +43,10 @@ local function copy_item(item)
     return out
 end
 
+function M.outline_label(label, config)
+    return config.chat_user_prefix .. " " .. label
+end
+
 function M.apply_outline(items, lines, config, header_end)
     local attached = M.associations(lines, config, header_end)
     local used_tags = {}
@@ -58,7 +62,7 @@ function M.apply_outline(items, lines, config, header_end)
         if not hidden_tag and not (preface and preface.label == "_") then
             local copy = copy_item(item)
             if preface then
-                copy.display = (item.display:match("^%s*") or "") .. preface.label
+                copy.display = (item.display:match("^%s*") or "") .. M.outline_label(preface.label, config)
                 copy.value.tag_lnum = preface.line_start
             end
             result[#result + 1] = copy
