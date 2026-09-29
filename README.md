@@ -146,8 +146,8 @@ model context, including history. File/URL references such as `@@./notes.md@@`
 still attach context; inline mentions and fenced examples remain literal.
 
 The app also suggests words from the current buffer after two typed characters.
-Use Ctrl-n/p to select, Ctrl-y to accept and Ctrl-e to dismiss; Enter keeps its
-usual behavior. See [word completion](packaging/starter-config/README.md#complete-words-while-typing).
+Use Tab/Down or Up to select, Enter to accept and Esc to dismiss. With no menu,
+these keys keep their normal behavior. Ctrl-n/p, Ctrl-y and Ctrl-e also work. See [word completion](packaging/starter-config/README.md#complete-words-while-typing).
 
 Ask Parley about a feature as you work. Its documentation tool reads the
 README, tutorials, and [atlas](atlas/index.md) from your installed version.

@@ -74,42 +74,52 @@ local cases = {
         assert(not has('marzipan'), 'another buffer contributed words')
         assert(list.selected_item_idx == nil, 'item was preselected')
         assert(vim.api.nvim_get_current_line() == 'ma', 'typing was replaced')
-        for _, map in ipairs(vim.api.nvim_buf_get_keymap(0, 'i')) do
-            assert(map.lhs ~= '<CR>', 'blink claimed Enter')
-        end
         for _, map in ipairs(vim.api.nvim_get_keymap('c')) do
             assert(map.lhs ~= '<Left>' and map.lhs ~= '<Right>', 'cmdline arrows claimed')
         end
     end },
-    { keys = '<C-n>', check = function()
-        assert(list.selected_item_idx == 1, 'Ctrl-n did not select first candidate')
+    { keys = '<Tab>', check = function()
+        assert(list.selected_item_idx == 1, 'Tab did not select first candidate')
         assert(vim.api.nvim_get_current_line() == 'ma', 'selection inserted text')
     end },
-    { keys = '<C-n>', check = function()
-        assert(list.selected_item_idx == 2, 'Ctrl-n did not advance to second candidate')
+    { keys = '<Down>', check = function()
+        assert(list.selected_item_idx == 2, 'Down did not advance to second candidate')
         assert(list.get_selected_item().label ~= first_candidate, 'candidates must differ')
     end },
-    { keys = '<C-p>', check = function()
-        assert(list.selected_item_idx == 1, 'Ctrl-p did not move to first candidate')
+    { keys = '<Up>', check = function()
+        assert(list.selected_item_idx == 1, 'Up did not move to first candidate')
         assert(list.get_selected_item().label == first_candidate)
         assert(vim.api.nvim_get_current_line() == 'ma', 'selection inserted text')
     end },
-    { keys = '<C-y>', check = function()
-        assert(vim.api.nvim_get_current_line() == first_candidate, 'Ctrl-y did not accept')
+    { keys = '<CR>', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate, 'Enter did not accept selected item')
     end },
     { keys = '<CR>ma', check = function()
         assert(cmp.is_menu_visible(), 'menu did not reopen')
     end },
-    { keys = '<C-e>', check = function()
-        assert(not cmp.is_menu_visible(), 'Ctrl-e did not dismiss')
+    { keys = '<Esc>', check = function()
+        assert(not cmp.is_menu_visible(), 'Esc did not dismiss')
+        assert(vim.fn.mode() == 'i', 'Esc dismissal left Insert mode')
         assert(vim.api.nvim_get_current_line() == 'ma', 'dismiss changed the text')
     end },
     { keys = '<C-u>ma', check = function() assert(cmp.is_menu_visible()) end },
     { keys = '<CR>', check = function()
-        local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-        assert(lines[3] == 'ma' and lines[4] == '', 'Enter accepted a suggestion instead of newline')
+        assert(vim.api.nvim_get_current_line() == first_candidate, 'Enter did not accept unselected first item')
+    end },
+    { keys = '<CR>', check = function()
+        assert(vim.api.nvim_get_current_line() == '', 'Enter without menu did not insert newline')
+    end },
+    { keys = '<Tab>', check = function()
+        assert(vim.api.nvim_get_current_line():match('^%s+$'), 'Tab without menu did not insert indentation')
+    end },
+    { keys = '<Up>', check = function()
+        assert(vim.api.nvim_win_get_cursor(0)[1] == 3, 'Up without menu did not move up')
+    end },
+    { keys = '<Down>', check = function()
+        assert(vim.api.nvim_win_get_cursor(0)[1] == 4, 'Down without menu did not move down')
     end },
     { keys = '<Esc>', check = function()
+        assert(vim.fn.mode() == 'n', 'Esc without menu did not leave Insert mode')
         -- Exercise the app policy and production chat mapping together with Blink.
         local parley = require('parley')
         local roots = { data = vim.fn.stdpath('data') .. '/pairing', state = vim.fn.stdpath('state') }
@@ -135,12 +145,38 @@ local cases = {
         assert(cmp.is_menu_visible() and has('marshmallow') and has('marmalade'),
             'chat buffer completion candidates missing')
     end },
-    { keys = '<C-n>', check = function()
-        assert(list.get_selected_item(), 'chat completion selection failed')
+    { keys = '<Tab>', check = function()
+        assert(list.selected_item_idx == 1, 'chat Tab selection failed')
         first_candidate = list.get_selected_item().label
+    end },
+    { keys = '<Down>', check = function()
+        assert(list.selected_item_idx == 2, 'chat Down selection failed')
+    end },
+    { keys = '<Up>', check = function()
+        assert(list.get_selected_item().label == first_candidate, 'chat Up selection failed')
+    end },
+    { keys = '<CR>', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate, 'chat Enter acceptance failed')
+    end },
+    { keys = '<CR>ma', check = function() assert(cmp.is_menu_visible()) end },
+    { keys = '<Esc>', check = function()
+        assert(not cmp.is_menu_visible() and vim.fn.mode() == 'i', 'chat Esc dismissal failed')
+        assert(vim.api.nvim_get_current_line() == 'ma', 'chat dismissal changed text')
+    end },
+    { keys = '<C-u>ma', check = function() assert(cmp.is_menu_visible()) end },
+    { keys = '<C-n>', check = function()
+        first_candidate = list.get_selected_item().label
+    end },
+    { keys = '<C-n><C-p>', check = function()
+        assert(list.get_selected_item().label == first_candidate, 'Ctrl-n/p navigation changed')
     end },
     { keys = '<C-y>', check = function()
         assert(vim.api.nvim_get_current_line() == first_candidate, 'chat completion acceptance failed')
+    end },
+    { keys = '<CR>ma', check = function() assert(cmp.is_menu_visible()) end },
+    { keys = '<C-e>', check = function()
+        assert(not cmp.is_menu_visible(), 'Ctrl-e dismissal changed')
+        first_candidate = 'ma'
     end },
     { keys = ' @@after', check = function()
         assert(vim.api.nvim_get_current_line() == first_candidate .. ' @@after@@',

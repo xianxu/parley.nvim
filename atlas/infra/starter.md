@@ -59,8 +59,10 @@ exercises the production options with real Lualine and every packaged theme.
 
 It also pins blink.cmp (#287) for fuzzy `:` completion and current-buffer word suggestions
 after two characters (#300), using its Lua matcher (no native download).
-Insert mode uses Ctrl-n/p to select, Ctrl-y to accept and Ctrl-e to dismiss;
-no preselection, automatic insertion or Enter binding. Telescope's
+Insert mode uses Tab/Down and Up to select, Enter to accept (first item if none
+is selected), and Esc to dismiss while staying in Insert mode. Closed-menu keys
+fall back to native behavior; Ctrl-n/p, Ctrl-y and Ctrl-e remain alternatives.
+There is no preselection or automatic insertion. Telescope's
 `command_history` is bound to `<C-g>:`, since blink offers no history source.
 `tests/packaging/completion_compatibility.lua` runs the production options
 through the real pinned blink.

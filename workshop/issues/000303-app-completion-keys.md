@@ -28,10 +28,12 @@ Use Blink insert mappings: Tab/Down select next, Up selects previous, Return sel
 
 ## Plan
 
-- [ ] Update keyboard regression, configure mappings, refresh docs and verify.
+- [x] Update keyboard regression, configure mappings, refresh docs and verify.
 
 ## Log
 
 ### 2026-09-29
 
 User specified the mapping directly. Use existing packaged Blink commands with fallback; keep current-buffer source and selection policy.
+
+Verification: existing policy failed the revised real-Blink regression at Tab selection (step 7). With the five mappings, all 35 keyboard steps pass, including prepared app chat, selected/unselected acceptance, Escape dismissal, native fallbacks, legacy Ctrl shortcuts and pairing. infra/starter passes; Lua lint and diff checks clean. Logs: /tmp/parley-303-red.log, /tmp/parley-303-final-blink.log, /tmp/parley-303-starter.log.

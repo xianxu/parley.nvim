@@ -166,6 +166,11 @@ local ok, err = xpcall(function()
                 completion = { list = { selection = { preselect = false, auto_insert = false } } },
                 keymap = {
                     preset = "none",
+                    ["<Tab>"] = { "select_next", "fallback" },
+                    ["<Down>"] = { "select_next", "fallback" },
+                    ["<Up>"] = { "select_prev", "fallback" },
+                    ["<CR>"] = { "select_and_accept", "fallback" },
+                    ["<Esc>"] = { "hide", "fallback" },
                     ["<C-n>"] = { "select_next", "fallback" },
                     ["<C-p>"] = { "select_prev", "fallback" },
                     ["<C-y>"] = { "accept", "fallback" },

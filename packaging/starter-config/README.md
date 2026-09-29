@@ -162,8 +162,12 @@ install it.
 ## Complete words while typing
 
 After two characters, the app suggests words from the current buffer (including
-conversation text). Use `Ctrl-n` / `Ctrl-p` to select a suggestion, `Ctrl-y` to
-accept it, and `Ctrl-e` to dismiss the menu. Nothing is selected automatically;
-Enter retains its usual newline or chat submission behavior. Other open buffers
+conversation text). Use `Tab` / `Down` to select the next suggestion and `Up`
+to select the previous one. `Enter` accepts the selection (or the first suggestion
+if none is selected); `Esc` dismisses the menu and stays in Insert mode. With no
+menu, these keys keep their normal behavior, including Enter for a newline and
+Esc to leave Insert mode. `Ctrl-n` / `Ctrl-p`, `Ctrl-y` and `Ctrl-e` remain
+alternative selection, acceptance and dismissal keys. Selection does not insert
+text until accepted. Other open buffers
 do not contribute words. To disable this, set Blink’s `sources.default = {}` in
 your app `init.lua`.
