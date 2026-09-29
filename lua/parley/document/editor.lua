@@ -215,32 +215,13 @@ end
 -- observed edit/lifecycle transition clears this private receipt first.
 function Editor:can_join_undo(plan)
     local receipt=self.undo_receipt
-    -- A seeded receipt (below) has no grant yet: it joins its generation's
-    -- first write, which then leaves an ordinary receipt.
     if self.dead or not receipt or not self.driver.undo_state or type(plan)~='table'
         or plan.epoch~=self.epoch or plan.epoch~=receipt.epoch
         or plan.generation==nil or plan.grant==nil
-        or plan.generation~=receipt.generation
-        or receipt.grant~=nil and plan.grant~=receipt.grant then return false end
+        or plan.generation~=receipt.generation or plan.grant~=receipt.grant then return false end
     local native_state=self.driver.undo_state(self.buf)
     return native_state.sequence>0 and native_state.sequence==receipt.sequence and native_state.tick==receipt.tick
 end
--- Regenerating deletes the old answer before the new generation exists
--- (#282). Seed a receipt at that native state, owned by the regeneration's
--- token; the generation adopts it, and its first write joins the deletion, so
--- one undo restores the old answer. Any edit in between clears the seed.
-function Editor:seed_undo(owner)
-    if self.dead or owner==nil or not self.driver.undo_state then return end
-    local undo=self.driver.undo_state(self.buf)
-    self.undo_receipt={epoch=self.epoch,owner=owner,sequence=undo.sequence,tick=undo.tick}
-end
-function Editor:adopt_undo_seed(owner,generation)
-    local receipt=self.undo_receipt
-    if receipt and receipt.owner==owner and receipt.generation==nil and receipt.grant==nil then
-        receipt.generation=generation
-    end
-end
-
 local function apply(self,plan,validate,user)
     if self.in_callback or self.operation then return {status='busy',receipts={}} end
     if self.dead or not self.attached or plan.epoch~=self.epoch then return {status='stale',receipts={}} end

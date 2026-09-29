@@ -264,33 +264,6 @@ describe('document editor', function()
         assert.is_false(editor:can_join_undo(plan))
         vim.fn.delete(path)
     end)
-    -- #282: regenerating deletes the old answer before the generation exists.
-    -- A seeded receipt lets that generation's first write join the deletion.
-    it('joins a seeded deletion only for the generation that adopts the seed',function()
-        vim.api.nvim_set_current_buf(buf)
-        local before=first_line()
-        vim.cmd('let &l:undolevels = &l:undolevels') -- the deletion is its own user block
-        vim.api.nvim_buf_set_text(buf,0,1,0,1,{'old'})
-        local token={}
-        editor:seed_undo(token)
-        assert.is_false(editor:can_join_undo({epoch=7,generation='a',grant='g'}),'unadopted seed joined')
-        editor:adopt_undo_seed({},'a')
-        assert.is_false(editor:can_join_undo({epoch=7,generation='a',grant='g'}),'another owner adopted the seed')
-        editor:adopt_undo_seed(token,'a')
-        assert.is_false(editor:can_join_undo({epoch=7,generation='b',grant='g'}),'another generation joined')
-        assert.is_true(editor:can_join_undo({epoch=7,generation='a',grant='g'}))
-        append_owned(editor,buf,'a','g','new')
-        vim.cmd('undo') -- one step: the seeded edit and the joined write together
-        assert.equals(before,first_line())
-    end)
-    it('drops a seed when anything edits before the first write',function()
-        vim.api.nvim_set_current_buf(buf)
-        local token={}
-        editor:seed_undo(token)
-        vim.api.nvim_buf_set_text(buf,0,1,0,1,{'H'})
-        editor:adopt_undo_seed(token,'a')
-        assert.is_false(editor:can_join_undo({epoch=7,generation='a',grant='g'}))
-    end)
     it('groups edits in the target buffer without changing the current buffer history',function()
         local other=vim.api.nvim_create_buf(false,true)
         vim.api.nvim_buf_set_lines(other,0,-1,false,{'other'})

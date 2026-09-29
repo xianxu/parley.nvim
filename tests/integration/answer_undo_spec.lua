@@ -140,7 +140,10 @@ describe('one answer is one undo entry (#282)', function()
         assert.same(two, lines(buf))
     end)
 
-    it('restores the previous answer when a regenerated answer is undone', function()
+    -- Regenerating clears the old answer, then writes the new one: two undo
+    -- steps, so the first u shows the cleared state rather than an answer that
+    -- looks unchanged (operator, 2026-09-28).
+    it('undoes a regenerated answer in two steps: cleared, then the old answer', function()
         local answered = { '# topic: Undo', '- file: undo.md', '---', '', '💬: question', '',
             '🤖:[FixtureAnthropic]', 'old answer', '' }
         buf = open(answered, 5)
@@ -149,6 +152,10 @@ describe('one answer is one undo entry (#282)', function()
         finish(session, call)
         assert.is_true(has(buf, 'new answer'))
         assert.is_false(has(buf, 'old answer'))
+        undo()
+        assert.is_false(has(buf, 'new answer'), 'the new answer survived its undo')
+        assert.is_false(has(buf, 'old answer'), 'one undo went past the cleared state')
+        assert.is_true(has(buf, '💬: question'))
         undo()
         assert.same(answered, lines(buf))
     end)

@@ -132,10 +132,9 @@ every patch landed even if authority is suspended afterwards; a partial or
 refused plan still clears it. A save (`BufWritePost`) bumps changedtick without text, so the editor
 adopts the new tick while the native undo sequence is unchanged. Any other native
 text event (a user edit, undo, redo, format-on-save) clears the receipt, so those
-stay separate entries. Regenerating deletes the old answer before the new
-generation exists; the editor seeds a receipt at that point (`seed_undo`) that
-the generation adopts through its previous-answer owner token, so one undo
-restores the old answer. `answer_undo_spec` covers regeneration, concurrent chats,
+stay separate entries. Regenerating is two steps by design: clearing the old
+answer is its own entry, then the new answer is one, so the first undo shows
+the question unanswered and the second restores the old answer. `answer_undo_spec` covers regeneration, concurrent chats,
 mid-stream reload, saves, tool rounds, cancel,
 provider failure, reload, separate answers and mid-stream user edits.
 

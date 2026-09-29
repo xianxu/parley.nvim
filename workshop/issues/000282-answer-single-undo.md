@@ -42,8 +42,6 @@ Cover answer replacement, errors, stop/cancel, reload and concurrent chats.
 | `can_join_undo` (receipt kept for fully-landed plans; recorded before the post-write authority check) | `lua/parley/document/editor.lua` | modified |
 | `native` (driver gains watch_write / unwatch_write: BufWritePost adopts the save's tick) | `lua/parley/document/editor.lua` | modified |
 | `tool_use_sse` (shared fixture SSE builder, moved from writer_folds_spec) | `tests/helpers/respond_fixture.lua` | new |
-| `seed_undo` / `adopt_undo_seed` (regeneration: the new answer's first write joins the old answer's deletion) | `lua/parley/document/editor.lua` | new |
-| `set_previous_answer` (adopts the regeneration's undo seed by owner token) | `lua/parley/document/init.lua` | modified |
 
 ## Plan
 
@@ -120,4 +118,15 @@ tool rounds included.
   integration sweep: no writes into the checkout except the git-ignored demo/workspace
   the demo launcher owns by design. starter_config's welcome-initializer case failed
   once under load (passes alone) — #294 family.
+
+## Revisions
+
+### 2026-09-28 — regeneration undo is two steps (operator)
+- Reason: with the seed, one `u` on a regenerated answer swapped in the old answer, which
+  looks unchanged on screen ("I can't undo to remove an answer"); the operator found that
+  confusing.
+- Delta: the regeneration seed (`seed_undo`/`adopt_undo_seed`) is removed. Clearing the
+  old answer stays its own undo step (the raw `delete_answer` edit), the new answer is
+  one step: first `u` leaves the question unanswered, second restores the old answer.
+  answer_undo_spec pins the two steps; the rest of the grouping is unchanged.
 
