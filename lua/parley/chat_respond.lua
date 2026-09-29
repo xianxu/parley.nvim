@@ -797,7 +797,7 @@ M.build_messages = function(opts)
                 copy.text = define.strip_definition_footnote_footer(copy.context_text or copy.text)
                 copy.context_text = nil
             end
-            out[#out + 1] = copy
+            if copy.type ~= "text" or copy.text:match("%S") then out[#out + 1] = copy end
         end
         return out
     end
@@ -861,12 +861,11 @@ M.build_messages = function(opts)
                 idx, exchange_idx, total_exchanges, max_exchanges, #exchange.question.file_references > 0)
             logger.debug("Exchange #" .. idx .. (should_preserve and " preserved in full" or " summarized"))
 
-                -- Process the question
+            local question_content = question_tags.compose_question(exchange.preface and exchange.preface.content,
+                define.strip_definition_footnote_footer(question_tags.content(exchange.question)))
+            if question_content:match("%S") then
                 if should_preserve then
                     -- Get the question content and process any file loading directives
-                    local question_content = require("parley.question_tags").compose_question(
-                        exchange.preface and exchange.preface.content,
-                        define.strip_definition_footnote_footer(question_tags.content(exchange.question)))
                     local file_content_parts = {}
 
                     -- Raw request input feature: detect a `yaml {"type":"request"}`
@@ -950,6 +949,7 @@ M.build_messages = function(opts)
                         content = assets.omitted_text(omit_user_text, exchange.question.attachments),
                     })
                 end
+            end
 
             -- Process the answer if it exists and is within our range.
             -- M2 Task 2.6 of #81: if the answer carries tool_use / tool_result
@@ -1010,9 +1010,11 @@ M.build_messages = function(opts)
     -- content_blocks carry a table in .content (Anthropic's content-
     -- block shape); those have already been trimmed at the block
     -- level by chat_parser cb_finalize_block so we leave them alone.
-    for _, message in ipairs(messages) do
+    for index = #messages, 1, -1 do
+        local message = messages[index]
         if type(message.content) == "string" then
             message.content = message.content:gsub("^%s*(.-)%s*$", "%1")
+            if message.content == "" then table.remove(messages, index) end
         end
     end
 

@@ -25,6 +25,7 @@ Exclude entire strict whole-line local `@@label@@` and `@@_@@` rows from outgoin
 
 - Attached and standalone whole-line labels (including anonymous labels) are absent from parsed/live/ancestor context; local raw text, spans and outline associations remain.
 - File/URL references still load; inline, indented, trailing-text, custom-prefix and fenced examples remain literal, and tool inputs/results are unchanged.
+- Empty projected questions, answers and tool-adjacent text are omitted; speaker-line fences work with default/custom prefixes. Captured automatic-topic and ChatPrune requests exclude local labels and preserve literals.
 - Regression tests cover original-line classification and all changed context consumers; focused tests and lint pass.
 
 
@@ -39,3 +40,13 @@ Exclude entire strict whole-line local `@@label@@` and `@@_@@` rows from outgoin
 User approved whole-line-only local tags. Follow-up @@ auto-pair typing will be a separate bounded change after this context change. Branch is stacked on #300 to retain the app customization already delivered. Read-only exploration confirmed normalized text cannot preserve original-line semantics, so raw parsed content stays authoritative and context projections are derived.
 
 Context regressions failed before implementation, then passed. Verified chat/format, ui/outline, chat/memory and chat/exchange_model mapped suites plus changed-file Lua lint. Tests cover original-line lookalikes, anonymous/standalone tags, backtick/tilde/nested fenced literals, reference loading, tool input/result byte identity, ancestor context and unchanged local parsed/buffer text.
+
+## Revisions
+
+### 2026-09-29 — review boundary corrections
+
+- BR-1: drop empty projected text blocks/messages, including older questions that otherwise would gain a memory placeholder; preserve tool ordering.
+- BR-2: recognize fences in the speaker-line content while classifying tags against original physical rows; cover default/custom prefixes with backtick, tilde and long fences.
+- BR-3: capture actual automatic-topic and ChatPrune dispatcher payloads, retaining raw local chat content. Removing the automatic-answer, prune-question or prune-answer projection independently makes these tests fail.
+
+Verification: updated chat/format and chat/memory regressions pass, as do both topic caller specs. BR-1/BR-2 regressions failed before fixes; all three BR-3 mutation probes failed as intended and production files were restored. Changed Lua lint and diff checks pass.

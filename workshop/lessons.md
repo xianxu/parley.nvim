@@ -292,3 +292,4 @@ oracle, and the mutation that would make the test fail.
 ## 2026-09-29 (#301 — local outline context)
 
 - Classify line-scoped syntax before trimming or removing speaker prefixes. Preserve a source-derived context projection when local rendering must retain the original text.
+- A context filter must preserve provider validity when all text disappears, and must recognize code fences on the speaker line without treating prefix-inline tags as whole-line tags. Test each changed request-producing caller, including topic requests.

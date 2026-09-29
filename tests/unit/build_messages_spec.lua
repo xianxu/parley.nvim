@@ -2423,6 +2423,66 @@ describe("question-owned prefaces", function()
         assert.equals("@@inline summary@@", messages[2].content)
     end)
 
+    it("drops tag-only questions, answers and text sections around tools", function()
+        local serialize = require("parley.tools.serialize")
+        local lines = { "# topic: Empty", "---", "💬:", "@@question only@@", "🤖:", "@@answer only@@",
+            "💬: Run", "🤖:", "@@before tool@@" }
+        vim.list_extend(lines, vim.split(serialize.render_call({ name = "read_file", id = "empty_tags",
+            input = { path = "a" } }), "\n", { plain = true }))
+        vim.list_extend(lines, vim.split(serialize.render_result({ name = "read_file", id = "empty_tags",
+            content = "result" }), "\n", { plain = true }))
+        vim.list_extend(lines, { "@@after tool@@", "", "💬: Next" })
+        local pc = parley.parse_chat(lines, 2)
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        local live = require("parley.chat_respond").build_messages_from_model(buf,
+            require("parley.exchange_model").from_parsed_chat(pc), 3,
+            { system_prompt = "Test", provider = "openai", model = "gpt-4o" })
+        vim.api.nvim_buf_delete(buf, { force = true })
+        for _, messages in ipairs({ initial(pc), live }) do
+            local roles, tool_order = {}, {}
+            for _, message in ipairs(messages) do
+                if message.role ~= "system" then roles[#roles + 1] = message.role end
+                if type(message.content) == "string" then
+                    assert.truthy(message.content:match("%S"), 'empty string message')
+                else
+                    for _, block in ipairs(message.content) do
+                        if block.type == "text" then assert.truthy(block.text:match("%S"), 'empty text block') end
+                        if block.type == "tool_use" or block.type == "tool_result" then
+                            tool_order[#tool_order + 1] = block.type
+                        end
+                    end
+                end
+            end
+            assert.same({ "user", "assistant", "user", "user" }, roles)
+            assert.same({ "tool_use", "tool_result" }, tool_order)
+        end
+    end)
+
+    for _, prefix in ipairs({ "💬:", "Q+:" }) do
+        for _, delimiter in ipairs({ "```", "~~~", "````" }) do
+        it("preserves a fence opened on the speaker line: " .. prefix .. delimiter, function()
+            local old = parley.config.chat_user_prefix
+            parley.config.chat_user_prefix = prefix
+            local buf = vim.api.nvim_create_buf(false, true)
+            local ok, err = pcall(function()
+                local lines = { "# topic: Fence", "---", prefix .. " " .. delimiter, "@@literal@@", delimiter, "@@local@@" }
+                local pc = parley.parse_chat(lines, 2)
+                vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+                local live = require("parley.chat_respond").build_messages_from_model(buf,
+                    require("parley.exchange_model").from_parsed_chat(pc), 1,
+                    { system_prompt = "Test", provider = "openai", model = "gpt-4o" })
+                for _, messages in ipairs({ initial(pc), live }) do
+                    assert.equals(delimiter .. "\n@@literal@@\n" .. delimiter, messages[#messages].content)
+                end
+            end)
+            parley.config.chat_user_prefix = old
+            vim.api.nvim_buf_delete(buf, { force = true })
+            assert.is_true(ok, tostring(err))
+        end)
+        end
+    end
+
     it("assigns a preface cursor to its question after an unanswered exchange", function()
         local lines = { "# topic: Prefaces", "---", "", "💬: First", "@@topic@@", "💬: Second" }
         local pc = parley.parse_chat(lines, 2)

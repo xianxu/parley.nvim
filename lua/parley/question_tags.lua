@@ -16,10 +16,14 @@ function M.local_rows(lines, config)
     local patterns = structure.patterns(config)
     for row, line in ipairs(lines) do
         if structure.is_partition(line, patterns) then state.in_code = false end
-        local width = structure.is_fence_delim(line, true)
+        local fence_line = line
+        if line:sub(1, #patterns.user_prefix) == patterns.user_prefix then
+            fence_line = line:sub(#patterns.user_prefix + 1)
+        end
+        local width = structure.is_fence_delim(fence_line, true)
         if width then
-            local char = line:match("^%s*([`~])")
-            if not state.in_code or (char == fence_char and line:match("^%s*[`~]+%s*$")) then
+            local char = fence_line:match("^%s*([`~])")
+            if not state.in_code or (char == fence_char and fence_line:match("^%s*[`~]+%s*$")) then
                 structure.advance(state, "c" .. width, width)
                 fence_char = state.in_code and char or nil
             end
