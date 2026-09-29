@@ -24,7 +24,7 @@ Reuse the configured question prefix for attached tag labels in flat and tree ou
 ## Done when
 
 - Tagged questions show the configured conversation prefix in both outline paths, including custom prefixes.
-- App typing offers words from the current buffer after two characters; selection/accept/dismiss work and Enter is unchanged.
+- App typing offers words from the current buffer after two characters; Ctrl-n and Ctrl-p move forward/backward among candidates, Ctrl-y accepts, Ctrl-e dismisses, and Enter is unchanged.
 - Focused outline tests and real pinned-Blink typing checks pass; app documentation describes the keys.
 
 ## Plan
