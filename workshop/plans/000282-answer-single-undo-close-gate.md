@@ -77,6 +77,26 @@ rounds:
           round: 2
       recipe: small-diff-review
       blocked: false
+    - "n": 3
+      timestamp: "2026-09-28T23:28:02-07:00"
+      agent: claude
+      recipe: small-diff-review
+      blocked: false
+      protocol_error: no valid findings block
+    - "n": 4
+      timestamp: "2026-09-28T23:44:02-07:00"
+      agent: claude
+      dispose:
+        - id: BR-6
+          disposition: addressed
+          note: The unreachable else branch was removed from the BufWritePost watcher (editor.lua:195-197). The test comment at document_edit_spec now says observe clearing the receipt and the sequence check in can_join_undo cover it, not the watcher. No watcher branch is left that the test would need to exercise.
+          round: 4
+        - id: BR-7
+          disposition: addressed
+          note: atlas/traceability.yaml now lists answer_undo_spec under chat/document (line 424) as well as chat/lifecycle (line 280).
+          round: 4
+      recipe: small-diff-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#282 (boundary-review)
@@ -115,7 +135,17 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-7** [Minor] `traceability-maps-to-wrong-atlas` answer_undo_spec is mapped under chat/lifecycle although its contract lives in atlas/chat/document.md
   make test-spec SPEC=chat/document does not run the spec that pins the undo-grouping section it documents. Map it under chat/document, or under both.
 
+## Round 3 — 2026-09-28T23:28:02-07:00 (claude) — passed
+
+**Protocol error:** no valid findings block — this round contributed no findings.
+
+## Round 4 — 2026-09-28T23:44:02-07:00 (claude) — passed
+
+### Disposed
+
+- BR-6 — addressed — The unreachable else branch was removed from the BufWritePost watcher (editor.lua:195-197). The test comment at document_edit_spec now says observe clearing the receipt and the sequence check in can_join_undo cover it, not the watcher. No watcher branch is left that the test would need to exercise.
+- BR-7 — addressed — atlas/traceability.yaml now lists answer_undo_spec under chat/document (line 424) as well as chat/lifecycle (line 280).
+
 ## Open findings
 
-- **BR-6** [Minor] `test-confounded-by-setup` undo-then-save test cannot fail without the BufWritePost sequence-mismatch branch
-- **BR-7** [Minor] `traceability-maps-to-wrong-atlas` answer_undo_spec is mapped under chat/lifecycle although its contract lives in atlas/chat/document.md
+(none — every finding has been disposed)

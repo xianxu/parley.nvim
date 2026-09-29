@@ -189,3 +189,87 @@ findings:
     detail: |
       make test-spec SPEC=chat/document does not run the spec that pins the undo-grouping section it documents. Map it under chat/document, or under both.
 ```
+
+---
+
+## Re-review — 2026-09-28T23:28:01-07:00 (unknown)
+
+| field | value |
+|-------|-------|
+| issue | 282 — Make each answer one undo history entry |
+| repo | parley.nvim |
+| issue file | workshop/issues/000282-answer-single-undo.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a3c8f38df329673c1830b36489428a1913b6edc6..5ad0ab93d21f3e01c1bbe9f5cfb21bfd4614b333 |
+| command | sdlc close --issue 282 |
+| reviewer | claude |
+| timestamp | 2026-09-28T23:28:01-07:00 |
+| verdict | unknown |
+
+## Review
+
+I'll wait for the background test run to notify.
+
+---
+
+## Re-review — 2026-09-28T23:44:02-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 282 — Make each answer one undo history entry |
+| repo | parley.nvim |
+| issue file | workshop/issues/000282-answer-single-undo.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a3c8f38df329673c1830b36489428a1913b6edc6..5ad0ab93d21f3e01c1bbe9f5cfb21bfd4614b333 |
+| command | sdlc close --issue 282 |
+| reviewer | claude |
+| timestamp | 2026-09-28T23:44:02-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This close gate can pass. Both open findings are fixed, and I found nothing new. The editor change is small and correct. The receipt is now recorded as soon as the writer's own patch lands (`lua/parley/document/editor.lua:274-281`). It is kept only when every patch in the plan landed (`editor.lua:297`). Because `or` binds looser than `and`, the condition reads `not ok or (status~='applied' and landed<#patches)`, which is what's intended. The `BufWritePost` watcher adopts the new tick only when the native undo sequence hasn't moved. It is created only after a successful attach and removed on detach through `lifecycle('detach')`, which `Editor:detach` also calls. The regeneration "seed" is fully gone: nothing in `lua`, `tests` or `atlas` still mentions `seed_undo`, `adopt_undo_seed` or `undo_seed`. The atlas, the `chat_respond.lua` comment, the spec and the revised Done-when all describe the same two-step regeneration undo.
+
+1. **Strengths**
+   - Recording the receipt before the post-write authority check (`editor.lua:274-285`) is the smallest fix that covers the tool-block case. It leaves `document_edit_spec`'s partial-plan contract alone.
+   - The save watcher uses the native undo sequence to decide, so saving never widens what counts as a join. Every text event still clears the receipt in `observe` (`editor.lua:72`) and in `lifecycle` (`editor.lua:137`).
+   - `answer_undo_spec` drives real answers through `chat_respond` with the stateful fixture transport and counts `u` presses. Each Done-when clause gets its own case: saves, tool rounds, separate answers, regeneration in two steps, concurrent chats, reload before and during an answer, cancel, and provider failure.
+   - Moving `tool_use_sse` into `tests/helpers/respond_fixture.lua` removes the copy in `writer_folds_spec` (ARCH-DRY).
+   - Side fix: two specs no longer write into the repo. `packaging_boot_spec` now checks that the repo's `workshop/parley` is unchanged after launch, and that check fails without the `cwd` fix.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor:** none raised. In the issue file, the `## Log` "closed" line still says one `u` restores the old answer after regeneration. The `## Revisions` entry correctly overrides that, and log lines are append-only, so it isn't a finding.
+
+5. **Test coverage**
+   - The direct editor cases in `document_edit_spec` cover: joining after a fully-landed plan whose authority was revoked afterwards, joining across a save, and no join after an undo followed by a save.
+   - The last of those is now honestly described as covered by `observe`, not by the watcher.
+   - The regeneration case checks both undo steps: first the cleared state, then the old answer.
+
+6. **Architecture**
+   - **ARCH-DRY: pass.** The SSE builder is shared, and the tick-adoption logic exists in one place.
+   - **ARCH-PURE: pass.** The IO sits behind the driver seam (`watch_write`/`unwatch_write` in `native()`), and the join decision stays in `can_join_undo`.
+   - **ARCH-PURPOSE: pass.** Every Done-when clause, including the revised regeneration behaviour, is delivered and tested.
+
+7. **Plan revisions:** none needed. The `## Revisions` entry already records the removed seed and the two-step regeneration undo.
+
+```findings
+dispose:
+  - id: BR-6
+    disposition: addressed
+    note: |
+      The unreachable else branch was removed from the BufWritePost watcher (editor.lua:195-197). The test comment at document_edit_spec now says observe clearing the receipt and the sequence check in can_join_undo cover it, not the watcher. No watcher branch is left that the test would need to exercise.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      atlas/traceability.yaml now lists answer_undo_spec under chat/document (line 424) as well as chat/lifecycle (line 280).
+```

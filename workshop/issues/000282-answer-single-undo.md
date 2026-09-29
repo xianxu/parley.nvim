@@ -81,6 +81,7 @@ tool rounds included.
 ### 2026-09-26
 
 ### 2026-09-28
+- 2026-09-28: closed — answer_undo_spec 10/10: one u removes a chunked answer saved between chunks, a two-round tool answer, a cancelled or failed partial answer, an answer after reload; regenerating is two steps by operator request (u -> question unanswered, u -> old answer); separate answers, mid-stream user edits and concurrent chats stay separate. document_edit_spec 21/21 direct receipt rules. App-launch specs no longer write into the repo (packaging_boot asserts it). Full suite green bar load-only specs that pass alone (#294). Prior round verdict "unknown" was a reviewer dispatch failure (ariadne#271); review verdict: SHIP
 - 2026-09-28: closed — answer_undo_spec 10/10 (0/12 flaky): one u restores the pre-answer text for a chunked answer saved between chunks, a two-round tool answer, cancel, provider failure, reload-then-answer, and a regenerated answer (old answer restored); two answers and a mid-stream user edit stay separate; concurrent chats undo independently; mid-stream reload leaves history undoable. document_edit_spec 23/23 incl. direct receipt/seed rules; each rule mutation-checked. Full unit green; integration green bar starter_config_spec (load-only, passes alone; #294 family); review verdict: SHIP
 - Repro (scratch probe, fixture transport, disk-loaded chat): plain chunked stream = 1 undo
   (grouping works); with `:write` between chunks = 5 undos (one per chunk); two-round tool
