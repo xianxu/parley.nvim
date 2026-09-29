@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000299-navigation-floating-overlays.md
         source_blob: 322e3ec68d3b450086fef2107896248da89eebe5
         destination: workshop/issues/000299-navigation-floating-overlays.md
+        main_commit: 1e1b01b5e3c4c16097716ae268212f0fdc795d97
 ---
 
 # Ignore floating overlays during chat navigation
