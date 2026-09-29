@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000300-app-labels-buffer-completion.md
         source_blob: b7e9f76b83bc5d3450d82ea85313e6841eb0827b
         destination: workshop/issues/000300-app-labels-buffer-completion.md
+        main_commit: 4539950f811407dc477b5064b043631cea2b760c
 ---
 
 # Conversation label icons and app buffer completion
