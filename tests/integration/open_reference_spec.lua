@@ -376,6 +376,42 @@ describe("reference opening: the fall-through to gf", function()
 end)
 
 describe("open_buf prefers the other split", function()
+    for _,layout in ipairs({"single", "split", "target in float"}) do
+        it("keeps parent-link navigation out of overlays: " .. layout, function()
+            local target = write_chat("2026-03-24.17-00-00.010_parent.md")
+            local origin = write_chat("2026-03-24.17-00-00.011_child.md",
+                { "🌿: " .. vim.fn.fnamemodify(target, ":t") .. ": Parent" })
+            vim.cmd("silent! %bwipeout!")
+            vim.cmd("only")
+            vim.cmd("edit " .. vim.fn.fnameescape(origin))
+            local origin_win = vim.api.nvim_get_current_win()
+            local expected_win = origin_win
+            if layout == "split" then
+                vim.cmd("vsplit")
+                expected_win = vim.api.nvim_get_current_win()
+                vim.api.nvim_set_current_win(origin_win)
+            end
+            local overlay_buf = vim.api.nvim_create_buf(false, true)
+            if layout == "target in float" then
+                overlay_buf = vim.fn.bufadd(target)
+                vim.fn.bufload(overlay_buf)
+            end
+            local overlay = vim.api.nvim_open_win(overlay_buf, false, {
+                relative = "editor", row = 1, col = 1, width = 30, height = 3, focusable = false,
+            })
+            vim.api.nvim_win_set_cursor(origin_win, { vim.api.nvim_buf_line_count(0), 0 })
+            assert.is_not_nil(vim.fn.maparg("<M-o>", "n", false, true).callback)
+            vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<M-o>", true, false, true), "xt", false)
+            local landed_win = vim.api.nvim_get_current_win()
+            local landed_path = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(expected_win))
+            local overlay_after = vim.api.nvim_win_get_buf(overlay)
+            vim.api.nvim_win_close(overlay, true)
+            vim.cmd("only")
+            assert.equals(expected_win, landed_win)
+            assert.equals(vim.fn.resolve(target), vim.fn.resolve(landed_path))
+            assert.equals(overlay_buf, overlay_after)
+        end)
+    end
     -- BR-6 moved this logic into `focus_other_split`; the review noted the
     -- CALL SITE was left unpinned — reverting open_buf to open in the current
     -- window would have kept the suite green. The netrw arm exercises the

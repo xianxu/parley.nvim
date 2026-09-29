@@ -3,6 +3,12 @@
 Compact rules distilled from Parley.nvim's review and integration history.
 Incident detail belongs in the issue or plan that owns it.
 
+## 2026-09-28 (#299 — navigation with overlays)
+
+- Neovim window lists include floating overlays. Split counting and existing-buffer
+  destination lookup must share the same editing-window predicate. Test an overlay
+  both with its scratch buffer and with the destination buffer already displayed.
+
 ## 2026-09-27 (#291 — writer and reader under one config)
 
 - #291 close review BR-1: `require("parley.config")` is the defaults module, not the
