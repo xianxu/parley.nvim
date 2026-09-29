@@ -66,3 +66,4 @@ all affected consumers rather than disabling Screenkey (ARCH-PURPOSE).
   `make lint` passed 669 files without warnings/errors; `git diff --check` passed.
   The isolated demo-shape probe now opens root in the main window and preserves
   the overlay's scratch buffer. Existing split and ChatFinder tests remain green.
+- Operator confirmed the demo navigation is fixed and authorized closing and landing.
