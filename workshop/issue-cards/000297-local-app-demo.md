@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000297-local-app-demo.md
         source_blob: 0c3b73377d4cb6bd2fcc0e5992999bf63075503a
         destination: workshop/issues/000297-local-app-demo.md
+        main_commit: e50c216405de3086e6d9dae16e92f11a0d8cd670
 ---
 
 # Repo-local app demo and development loop
