@@ -21,6 +21,13 @@ App completion lacks the familiar selection and acceptance keys the user expects
 
 Use Blink insert mappings: Tab/Down select next, Up selects previous, Return selects and accepts the current item (first item if unselected), Esc dismisses the visible menu while staying in Insert mode. All keys fall back to native behavior with no menu; existing Ctrl shortcuts and command-line policy remain. ARCH-DRY: use Blink built-ins in starter policy, no new mapping implementation/state or dependencies. ARCH-PURPOSE: exercise real pinned Blink and actual prepared app chat, including no-menu fallbacks.
 
+### Core concepts
+
+| Symbol | Status | Owner / purpose |
+| --- | --- | --- |
+| `keys` | inherited | `lua/parley/at_pair.lua`: #302 pure line-local pairing decision |
+| `is_local_tag`, `local_rows`, `project`, `context_text`, `content`, `outline_label` | inherited | `lua/parley/question_tags.lua`: #300/#301 outline formatting and context projection |
+
 ## Done when
 
 - Real Blink tests cover Tab/Down/Up selection, Return acceptance selected/unselected, Esc dismissal preserving text/Insert mode and no-menu native fallbacks.
@@ -49,3 +56,9 @@ Verification: existing policy failed the revised real-Blink regression at Tab se
 The user committed the demo rehearsal/viewer before requesting close and push. The publish gate requires the resulting HEAD to be reviewed. The app mappings passed again; the viewer needs latest-selection ownership for asynchronous file reads, bounded browser-draft retention with visible failed saves, deterministic production-script regressions and an atlas entry. Include those corrections in this publication boundary. ARCH-ORDER: superseded reads cannot replace the selected recording. ARCH-FUNERAL/CONSTRAINTS: retain at most 20 recording drafts and surface storage failures without losing the live editable text.
 
 Verification: all 8 viewer production-script tests failed before corrections and pass afterward; both file-read orders, current/stale errors, draft retention/eviction, read/quota errors, malformed storage, legacy migration and complete-text download are covered. The starter suite passes on rerun (/tmp/parley-303-publish-starter.log). Demo guide and atlas now describe the viewer lifecycle; full-range whitespace was swept.
+
+### 2026-09-29 — inherited symbol traceability
+
+The #300 full-stack re-close ran ui/keybindings on branch #303 and exposed the checker selecting this issue for all added exports. Record the inherited helpers here without claiming #303 introduced them; no new Lua API was added by the completion-key change.
+
+Verification: ui/keybindings passes with the inherited Core concepts inventory on the actual #303 branch, including both architecture sweeps. Log: /tmp/parley-303-stack-keybindings.log.

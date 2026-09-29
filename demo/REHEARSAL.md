@@ -1,7 +1,7 @@
 
 x 1. capture code start (installing some lazyvim plugins)
 
-2. tell me more about space data center
+x . tell me more about space data center
 
    this triggers asking to connect account.
 

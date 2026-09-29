@@ -137,3 +137,63 @@ findings:
     detail: |
       git diff --check identifies one instance in this window: workshop/plans/000300-app-labels-buffer-completion-close-review.md:45. Remove the spaces from that blank line when regenerating the artifact.
 ```
+
+---
+
+## Re-review — 2026-09-29T12:35:53-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 300 — Conversation label icons and app buffer completion |
+| repo | parley.nvim |
+| issue file | workshop/issues/000300-app-labels-buffer-completion.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 7cb00fc1f74976bd3aaf087141542e19fc4f59ec..d20c778ebeb8d6b218db64a643b4323f99b1be10 |
+| command | sdlc close --issue 300 |
+| reviewer | codex |
+| timestamp | 2026-09-29T12:35:53-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The runtime changes passed focused verification, and BR-2 is corrected. One Important issue remains: the keybinding suite fails two architecture checks because the current stacked branch’s issue lacks the required Core concepts inventory. #303 explicitly documents the revised Enter behavior.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The pinned review artifact's blank line is clean; git diff --check across the complete pinned range reports no whitespace errors.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Default/custom prefixes exercise both outline builders; the real pinned-Blink smoke exercises Ctrl-n/p navigation and passes.
+findings:
+  - id: new
+    severity: Important
+    family: core-concepts-traceability
+    title: |
+      Restore the stacked branch's Core concepts inventory
+    detail: |
+      tests/arch/single_source_sweeps_spec.lua:208 and :356 fail under make test-spec SPEC=ui/keybindings. On branch 000303-app-completion-keys, the checker selects workshop/issues/000303-app-completion-keys.md, which contains no Core concepts table. It reports content, context_text, is_local_tag, keys, local_rows, outline_label and project as undocumented exports. Add the complete inventory with ownership, paths and inherited status, append a Revisions entry, and rerun the suite. ARCH-PURPOSE: the existing traceability guard must pass for the actual stacked branch.
+```
+
+1. **Strengths:** Shared outline formatting covers both builders and custom prefixes. Context projection preserves raw transcript text and tool payloads. Real Blink tests exercise production starter options. Viewer tests control asynchronous completion order and use stateful storage.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** The Core concepts inventory failure above. This is a branch-sensitive documentation/checker mismatch, not a demonstrated runtime defect.
+
+4. **Minor findings:** None remaining.
+
+5. **Test coverage:** Passed `ui/outline`, `infra/starter`, `chat/format`, all 35 pinned-Blink keyboard steps, eight viewer tests, and range-wide whitespace checks. `ui/keybindings` failed only the two architecture checks identified above. Process-orphan inspection was unavailable because `ps` was blocked.
+
+6. **Architecture:** ARCH-DRY **pass**—shared projections and existing Blink commands. ARCH-PURE **pass**—pairing decisions remain stateless. ARCH-PURPOSE **flag**—branch traceability fails. ARCH-MOCK **pass**—real Blink and stateful storage tests. ARCH-CONSTRAINTS **pass**—line-local pairing and current-buffer completion. ARCH-SECURE **pass**—storage validation and visible failures. ARCH-ORDER **pass**—superseded reads are rejected in both tested completion orders. ARCH-FUNERAL **pass**—draft eviction, legacy cleanup, and player disposal are present.
+
+7. **Plan revision:** Append a #303 `## Revisions` entry recording the stacked export inventory and successful architecture-check rerun.
