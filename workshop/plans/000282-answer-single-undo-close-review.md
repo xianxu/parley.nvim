@@ -97,3 +97,95 @@ findings:
     title: |
       two-answers test inserts a user edit between answers, so it does not isolate answer-to-answer separation
 ```
+
+---
+
+## Re-review — 2026-09-28T21:50:26-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 282 — Make each answer one undo history entry |
+| repo | parley.nvim |
+| issue file | workshop/issues/000282-answer-single-undo.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a3c8f38df329673c1830b36489428a1913b6edc6..cefca4ba14d23e69c0ce0f6582078c12cce80003 |
+| command | sdlc close --issue 282 |
+| reviewer | claude |
+| timestamp | 2026-09-28T21:50:26-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All five findings from round 1 are fixed in `cefca4ba`, and I checked each fix against the code, not the commit message. Regeneration now joins the old answer's deletion through a seeded receipt. The direct editor tests cover the receipt rules that were only pinned end-to-end. The atlas sentence matches the code's rule: the receipt survives only when every patch landed. The save watcher is created only after a successful attach, and detach removes it. The two-answers test now uses a two-question chat, so there is no user edit between the answers.
+
+I ran `answer_undo_spec` three times in a row: 10/10 passed each time. `make test-spec SPEC=chat/document`, which includes `document_edit_spec`, finished with 0 failures and 0 errors. Nothing blocks shipping. Two Minor notes remain.
+
+**Strengths**
+- `editor.lua:290-302` records the receipt as soon as the writer's own patch lands, and `:315` keeps it only when `landed == #plan.patches`. The existing partial-operation contract (`document_edit_spec.lua:189`) still holds.
+- `can_join_undo` (`editor.lua:215-225`) still requires the native undo sequence and changedtick to match. The seed widens only the grant check, and only for the generation that adopted it. Owner tokens are fresh tables, so one regeneration cannot adopt another's seed.
+- The save watcher adopts the new tick only when the undo sequence is unchanged; otherwise it clears the receipt. Detach goes through `lifecycle('detach')`, which unwatches, so it doesn't leak.
+- The seed has direct negative tests: not adopted, adopted by the wrong owner, wrong generation, and an edit before the first write.
+
+**Critical:** none.
+
+**Important:** none.
+
+**Minor**
+- `document_edit_spec.lua` ("does not join across an undo followed by a save"): the `undo` already clears the receipt in `observe`, so this test can't fail if the watcher's `else self.undo_receipt=nil` branch is removed. This is the 2nd finding in family `test-confounded-by-setup` (BR-5 was the 1st). The rule covering both: a regression test for rule X must fail when only X's code is removed. The setup must not trigger a different mechanism that produces the same outcome. For this case, force a sequence mismatch on the save path only, e.g. a fake driver whose `undo_state` sequence advances.
+- `atlas/traceability.yaml:280` maps `answer_undo_spec` under `chat/lifecycle`, but the contract it pins is written in `atlas/chat/document.md`. As a result, `make test-spec SPEC=chat/document` doesn't run it; I confirmed it's missing from that run's log.
+
+**Test coverage notes**
+- The mid-stream reload test only checks that at most 10 undos get back to the original text. That fits the "does not corrupt" clause, but it doesn't pin how many steps it takes.
+- Every Done-when clause is covered in both of its modes: complete, cancelled and errored answers; separate answers and user edits; reload between answers and mid-stream; chunked streams and tool rounds.
+
+**Architecture**
+- **ARCH-DRY: pass.** `tool_use_sse` was moved into the shared fixture, and `writer_folds_spec` now uses it instead of its own copy.
+- **ARCH-PURE: pass.** The receipt logic stays in the editor and reaches native undo only through the injected driver (`watch_write`, `unwatch_write`, `undo_state`). The unit tests run against that seam.
+- **ARCH-PURPOSE: pass.** Regeneration, the tool-round case that motivated the issue, is delivered rather than deferred.
+
+**Plan revisions:** none needed; the Core concepts table matches the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      answer_undo_spec adds regenerate, two concurrent chats and mid-stream reload cases; the seed fix is exercised by the regenerate case; 10/10 across 3 runs.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      document_edit_spec adds revoked-after-last-patch joins, save keeps join, undo-then-save no join, plus seed cases; partial plan is the existing case at line 189.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      atlas/chat/document.md now says the receipt survives only a plan whose every patch landed; matches editor.lua (landed < number of patches clears it).
+  - id: BR-4
+    disposition: addressed
+    note: |
+      watch_write is created after the `if not ok` return, and the detach lifecycle unwatches it.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      The two-answers case now opens a two-question chat and only moves the cursor between answers.
+findings:
+  - id: new
+    severity: Minor
+    family: test-confounded-by-setup
+    title: |
+      undo-then-save test cannot fail without the BufWritePost sequence-mismatch branch
+    detail: |
+      Second finding in this family. The undo already clears the receipt in observe, so the test passes even if the else branch in the save watcher is removed. Rule: a regression test for rule X must fail when only X's code is removed. Drive a sequence mismatch on the save path alone, e.g. a fake driver whose undo_state sequence advances.
+  - id: new
+    severity: Minor
+    family: traceability-maps-to-wrong-atlas
+    title: |
+      answer_undo_spec is mapped under chat/lifecycle although its contract lives in atlas/chat/document.md
+    detail: |
+      make test-spec SPEC=chat/document does not run the spec that pins the undo-grouping section it documents. Map it under chat/document, or under both.
+```
