@@ -1,10 +1,12 @@
 ---
 id: 000302
-status: working
+status: codecomplete
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours:
 github_issue:
+started: 2026-09-29T11:08:55-07:00
+actual_hours: 0.35
 tracker:
     version: 1
     handoff:
@@ -17,7 +19,11 @@ tracker:
         source_blob: 9c5be55c17a863d88667521e92743b401fee372f
         destination: workshop/issues/000302-pair-at-markers.md
         main_commit: 12da91e9646ba3320a6b31854572a3e536a3b24c
-started: 2026-09-29T11:08:55-07:00
+    completion:
+        token: close-3adb7ce7ac11
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 7fac8549c491d58ada19296cded302c3e039ac82
+        evidence_commit: ed1520b1e72853547ed5db18aa9cf0422426a94b
 ---
 
 # Auto-pair double-at markers while typing
