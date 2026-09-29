@@ -1,12 +1,14 @@
 ---
 id: 000301
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours:
-card_mirror: '20e2195534d59e7ff90cea22924d1503fb88e1c6' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2fbd2ede6c844c2971a01e3e5cc609fa9f2fa761' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-29T10:58:55-07:00
+flow: {kind: quick, provenance: inferred, spec: "8288b012", done: "0b4dc0bb"}
 ---
 
 # Keep outline tags out of model context
