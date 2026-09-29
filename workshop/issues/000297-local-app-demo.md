@@ -67,6 +67,7 @@ and duplicates an older app profile, slowing the edit/relaunch loop.
 ## Log
 
 ### 2026-09-28
+- 2026-09-28: closed — 11 launcher tests pass; make test-spec SPEC=infra/starter passes; cold real --demo startup after --nuke proves local runtime, nested root, recognized empty chat and active Screenkey; reset retention and safety covered; changed Lua lint, shell syntax, starter scan and git diff --check pass.; review verdict: SHIP
 
 - User approved repo-local demo design and requested a ticket and clearly
   separate demo configuration. Related video work: #207; supersedes the
