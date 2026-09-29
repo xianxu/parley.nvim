@@ -150,7 +150,9 @@ function M.decode_tool_calls_from_stream(raw_response)
     for _,idx in ipairs(order) do
         local state = in_flight[idx]
         if state.stopped and not state.invalid then
-            local input = {}
+            -- No argument deltas still means an object. A plain empty Lua
+            -- table becomes [] when the tool round sends this call back.
+            local input = vim.empty_dict()
             local full_json = table.concat(state.parts)
             if full_json ~= "" then
                 local ok,parsed = pcall(vim.json.decode,full_json)

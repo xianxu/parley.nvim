@@ -157,12 +157,10 @@ describe("anthropic.decode_tool_calls_from_stream (synthetic fixtures)", functio
         local calls = providers.decode_anthropic_tool_calls_from_stream(raw)
         assert.equals(1, #calls)
         assert.is_table(calls[1].input)
+        assert.equals("{}", vim.json.encode(calls[1].input))
     end)
 
-    it("handles a tool_use with NO input deltas at all (malformed stream)", function()
-        -- Defensive: if the model opens a tool_use block and stops it
-        -- without streaming any input JSON, we still want a ToolCall
-        -- with id/name/empty-input rather than dropping it entirely.
+    it("preserves an empty input object when a tool_use has no input deltas", function()
         local raw = sse({
             { type = "content_block_start", index = 0,
               content_block = { type = "tool_use", id = "toolu_E", name = "read_file", input = {} } },
@@ -174,6 +172,7 @@ describe("anthropic.decode_tool_calls_from_stream (synthetic fixtures)", functio
         assert.equals("toolu_E", calls[1].id)
         assert.equals("read_file", calls[1].name)
         assert.same({}, calls[1].input)
+        assert.equals("{}", vim.json.encode(calls[1].input))
     end)
 
     it("IGNORES server_tool_use blocks (web_search is resolved server-side)", function()

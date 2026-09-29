@@ -128,6 +128,11 @@ still surfaces what assembled. The response adapter admits tool rounds only
 from a successful provider completion; failure does not launch tools from a
 partial stream. Malformed `arguments` yield an empty input rather than raising.
 
+Anthropic calls without argument deltas default to an explicit empty JSON
+object in the decoder. This preserves `{}` through tool execution, transcript
+serialization, and the frozen continuation; a plain Lua table would become
+`[]` and cause the next request to fail provider validation.
+
 Wire shapes are pinned by real captures in `tests/fixtures/openai_*.sse`, plus a
 live conformance spec (`cliproxy_tool_conformance_spec.lua`, gated behind
 `PARLEY_LIVE_CONFORMANCE=1`) that asks a real proxy for a real tool call so

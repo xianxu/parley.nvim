@@ -63,6 +63,44 @@ local function setup(options)
 end
 local calls={{id='a',name='read_file',input={path='a'}},{id='b',name='read_file',input={path='b'}}}
 describe('production concurrent tool round composition',function()
+    for _,arguments in ipairs({false, '', '{}', '{"topic":"chat","options":{},"items":[]}'})do
+        it('preserves JSON input types through a help round: '..tostring(arguments),function()
+            local events={
+                {type='content_block_start',index=0,
+                    content_block={type='tool_use',id='help',name='parley_help',input=vim.empty_dict()}},
+            }
+            if arguments then
+                events[#events+1]={type='content_block_delta',index=0,
+                    delta={type='input_json_delta',partial_json=arguments}}
+            end
+            events[#events+1]={type='content_block_stop',index=0}
+            local stream={}
+            for _,event in ipairs(events)do stream[#stream+1]='data: '..vim.json.encode(event)end
+            local decoded=require('parley.tools.wire_anthropic').decode_tool_calls_from_stream(table.concat(stream,'\n'))
+            local f=setup();f.round(decoded)
+            local op=f.producer.started[1]
+            op.events.outcome('known',{content='Help topics'});op.events.resolved();f.drain()
+            assert.equals(2,#f.requests)
+            local messages=f.requests[2].ctx.input.payload.messages
+            local continuation=messages[#messages-1].content[2].input
+            local transcript=table.concat(f.editor.lines,'\n')
+            local rendered=require('parley.tools.serialize').parse_call(transcript:match('(🔧:.*)'))
+            assert.is_not_nil(rendered)
+            local replay=require('parley.chat_respond')._emit_content_blocks_as_messages({
+                {type='tool_use',id=rendered.id,name=rendered.name,input=rendered.input},
+                {type='tool_result',id=rendered.id,content='Help topics'},
+            })
+            for _,input in ipairs({continuation,replay[1].content[1].input})do
+                if arguments and arguments:find('topic',1,true)then
+                    assert.equals('chat',input.topic)
+                    assert.equals('{}',vim.json.encode(input.options))
+                    assert.equals('[]',vim.json.encode(input.items))
+                else
+                    assert.equals('{}',vim.json.encode(input))
+                end
+            end
+        end)
+    end
     it('keeps upstream incompleteness visible in transcript and both provider continuations at tiny caps',function()
         local f=setup({max_result_bytes=8});f.round({calls[1]})
         local op=f.producer.started[1]

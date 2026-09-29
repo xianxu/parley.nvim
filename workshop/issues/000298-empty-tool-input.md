@@ -41,9 +41,8 @@ empty object, not an array (ARCH-SECURE). No new abstraction is needed.
 
 ## Plan
 
-- [ ] Reproduce the wrong JSON type in decoder and production round tests.
-- [ ] Correct the decoder default and run provider tool-use tests and lint.
-- [ ] Record boundary review and close.
+- [x] Reproduce the wrong JSON type in decoder and production round tests.
+- [x] Correct the decoder default and run provider tool-use tests and lint.
 
 ## Log
 
@@ -52,3 +51,11 @@ empty object, not an array (ARCH-SECURE). No new abstraction is needed.
 - Neovim confirms `vim.json.encode({})` is `[]`, while decoded `{}` and
   `vim.empty_dict()` survive `vim.deepcopy` as `{}`. Replay already coerces
   empty input; the frozen continuation correctly copies what the decoder emits.
+- Red: decoder test and continuation cases with absent/empty deltas failed
+  with `[]` instead of `{}`; explicit `{}` and nested inputs passed.
+- Green: `make test-spec SPEC=providers/tool_use` passed all 639 tests in 33
+  spec files (live provider conformance remains opt-in). `make lint` passed
+  669 files with zero warnings/errors; `git diff --check` passed.
+- Verification is deterministic stream-to-production-round coverage, not a
+  live model request. The demo launcher loads this checkout through
+  `PARLEY_RUNTIME`; restarting it loads the correction without resetting data.
