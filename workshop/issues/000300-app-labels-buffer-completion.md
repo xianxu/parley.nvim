@@ -38,3 +38,14 @@ Reuse the configured question prefix for attached tag labels in flat and tree ou
 Scoped from the two explicit app requests. No new dependency, persistent state or background owner; existing Blink manages completion lifecycle.
 
 Verified: make test-spec SPEC=ui/outline and SPEC=infra/starter passed; real pinned Blink keyboard smoke passed (two-character trigger, current buffer only, selection/accept/dismiss/newline, command-line matching); changed Lua files passed luacheck. Regressions failed before implementation. The smoke must feed remappable keys to test the actual configured bindings.
+
+## Revisions
+
+### 2026-09-29 — complete acceptance coverage (BR-1)
+
+Reason: boundary review found that custom prefixes and Ctrl-p were only partially exercised.
+Delta: parameterize the actual flat/tree builder fixture for default and custom prefixes; drive Ctrl-n twice and Ctrl-p back through distinguishable real-Blink candidates.
+
+### Verification
+
+Both updated suites pass (228 outline checks; real Blink 14-step typing smoke). Three independent mutations fail as intended: force the default prefix in the flat caller; force it in the tree caller; replace Ctrl-p’s select_prev with select_next. Each production file was restored byte-for-byte after its probe. Changed test files pass luacheck. This addresses BR-1’s entire acceptance-matrix-coverage family.

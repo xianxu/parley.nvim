@@ -49,14 +49,15 @@ local function write_tree()
     return tmp .. "/" .. ROOT
 end
 
-local function flat_items(lines)
+local function flat_items(lines, config)
+    config = config or cfg
     local buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     local document=require('parley.document')
-    document.drain(document.attach(buf,{schedule=false}),1000)
+    document.drain(document.attach(buf,{schedule=false, patterns=require("parley.highlight_structure").patterns(config)}),1000)
     local items, cursor = {}, nil
     repeat
-        local page, result = outline._build_picker_items(buf, cfg, { is_chat = true, cursor=cursor })
+        local page, result = outline._build_picker_items(buf, config, { is_chat = true, cursor=cursor })
         vim.list_extend(items,page); cursor=result and result.cursor
     until not cursor
     vim.api.nvim_buf_delete(buf, { force = true })
@@ -216,24 +217,28 @@ end)
 
 describe("outline question prefaces (#240)", function()
     after_each(function() vim.fn.delete(tmp .. "/" .. ROOT) end)
-    it("keeps flat and tree labels, anonymous hiding and strict adjacency aligned", function()
-        local lines = { "---", "topic: Root", "file: " .. ROOT, "---",
-            "@@polar@@", "💬: hidden wording", "🤖: answer", "text",
-            "@@_@@", "💬: hidden question", "🤖: answer", "text",
-            "@@standalone@@", "", "💬: visible", "@@last@@" }
-        vim.fn.writefile(lines, tmp .. "/" .. ROOT)
-        local tree = outline._build_tree_outline_items(tmp .. "/" .. ROOT, cfg, {})
-        table.remove(tree, 1)
-        local flat = flat_items(lines)
-        assert.same(normalized(flat), normalized(tree))
-        assert.equals(4, #tree)
-        assert.equals("  💬: polar", tree[1].display)
-        assert.equals(6, tree[1].value.lnum)
-        assert.equals(5, tree[1].value.tag_lnum)
-        assert.equals("  → standalone", tree[2].display)
-        assert.equals("  💬: visible", tree[3].display)
-        assert.equals("  → last", tree[4].display)
-    end)
+    for _, prefix in ipairs({ "💬:", "Q:" }) do
+        it("keeps flat and tree labels aligned with prefix " .. prefix, function()
+            local config = vim.tbl_extend("force", cfg, { chat_user_prefix = prefix })
+            local lines = { "---", "topic: Root", "file: " .. ROOT, "---",
+                "@@polar@@", prefix .. " hidden wording", "🤖: answer", "text",
+                "@@_@@", prefix .. " hidden question", "🤖: answer", "text",
+                "@@standalone@@", "", prefix .. " visible", "@@last@@" }
+            vim.fn.writefile(lines, tmp .. "/" .. ROOT)
+            local tree = outline._build_tree_outline_items(tmp .. "/" .. ROOT, config, {})
+            table.remove(tree, 1)
+            local flat = flat_items(lines, config)
+            assert.same(normalized(flat), normalized(tree))
+            assert.equals(4, #tree)
+            assert.equals("  " .. prefix .. " polar", tree[1].display)
+            assert.equals("  " .. prefix .. " polar", flat[1].display)
+            assert.equals(6, tree[1].value.lnum)
+            assert.equals(5, tree[1].value.tag_lnum)
+            assert.equals("  → standalone", tree[2].display)
+            assert.equals("  " .. prefix .. " visible", tree[3].display)
+            assert.equals("  → last", tree[4].display)
+        end)
+    end
     it("drops a tagged trailing empty prompt and keeps inline branches beside labelled questions", function()
         local lines = { "---", "topic: Root", "file: " .. ROOT, "---",
             "@@label@@", "💬: see [🌿: Child](" .. CHILD .. ")",

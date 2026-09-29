@@ -47,6 +47,7 @@ end
 -- Exercise actual keys with event-loop turns between actions.
 local cmp = require('blink.cmp')
 local results, step = {}, 0
+local first_candidate
 local function has(label) return vim.tbl_contains(labels(), label) end
 local cases = {
     { keys = ':mkpv', check = function()
@@ -61,14 +62,15 @@ local cases = {
         vim.cmd('vnew')
         vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'marzipan' })
         vim.cmd('wincmd p')
-        vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'marshmallow', '' })
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'marshmallow marmalade', '' })
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
     end },
     { keys = 'im', check = function()
         assert(not cmp.is_menu_visible(), 'one character opened a menu')
     end },
     { keys = 'a', check = function()
-        assert(cmp.is_menu_visible() and has('marshmallow'), 'current-buffer word missing')
+        assert(cmp.is_menu_visible() and has('marshmallow') and has('marmalade'), 'current-buffer words missing')
+        first_candidate = labels()[1]
         assert(not has('marzipan'), 'another buffer contributed words')
         assert(list.selected_item_idx == nil, 'item was preselected')
         assert(vim.api.nvim_get_current_line() == 'ma', 'typing was replaced')
@@ -80,11 +82,20 @@ local cases = {
         end
     end },
     { keys = '<C-n>', check = function()
-        assert(list.selected_item_idx ~= nil, 'Ctrl-n did not select')
+        assert(list.selected_item_idx == 1, 'Ctrl-n did not select first candidate')
+        assert(vim.api.nvim_get_current_line() == 'ma', 'selection inserted text')
+    end },
+    { keys = '<C-n>', check = function()
+        assert(list.selected_item_idx == 2, 'Ctrl-n did not advance to second candidate')
+        assert(list.get_selected_item().label ~= first_candidate, 'candidates must differ')
+    end },
+    { keys = '<C-p>', check = function()
+        assert(list.selected_item_idx == 1, 'Ctrl-p did not move to first candidate')
+        assert(list.get_selected_item().label == first_candidate)
         assert(vim.api.nvim_get_current_line() == 'ma', 'selection inserted text')
     end },
     { keys = '<C-y>', check = function()
-        assert(vim.api.nvim_get_current_line() == 'marshmallow', 'Ctrl-y did not accept')
+        assert(vim.api.nvim_get_current_line() == first_candidate, 'Ctrl-y did not accept')
     end },
     { keys = '<CR>ma', check = function()
         assert(cmp.is_menu_visible(), 'menu did not reopen')

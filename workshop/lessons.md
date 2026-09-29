@@ -287,3 +287,4 @@ oracle, and the mutation that would make the test fail.
 ## 2026-09-29 (#300 — completion keyboard smoke)
 
 - Feed remappable keys when testing plugin mappings; `nvim_feedkeys` with `n` bypasses the mappings and tests Neovim defaults instead.
+- Parameterize caller-level tests across promised configuration variants, and test both directions of selection with distinct candidates; helper-only coverage cannot detect a caller passing the wrong configuration.
