@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000296-app-screenkey.md
         source_blob: f4a04675643ca1a6f7aef0c3f208a11256d443fc
         destination: workshop/issues/000296-app-screenkey.md
+        main_commit: 47faad3428db20cdcb41676918a81d9f9be6d842
 ---
 
 # Package Screenkey for app recordings
