@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000304-blink-spell-suggestions.md
         source_blob: 237f103d42b7846369998247928e2e7949e5d26c
         destination: workshop/issues/000304-blink-spell-suggestions.md
+        main_commit: 63390569836794b56c5e97442dceb9e3db4fd454
 ---
 
 # Unify automatic spell suggestions in Blink
