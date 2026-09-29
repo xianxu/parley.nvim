@@ -1,5 +1,5 @@
 
-1. capture code start (installing some lazyvim plugins)
+x 1. capture code start (installing some lazyvim plugins)
 
 2. tell me more about space data center
 
