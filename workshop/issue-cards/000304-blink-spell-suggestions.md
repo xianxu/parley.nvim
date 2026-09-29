@@ -1,6 +1,6 @@
 ---
 id: 000304
-status: codecomplete
+status: done
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours: 3.4
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: ef336da699c25819524c82b34fda17da45eb74dd
         evidence_commit: cfe01c8a51bc2ee7de763323081cbc9e6ed56224
+        landed_commit: c502111abb34e589c5dd1c576b3bd977e9510e76
 ---
 
 # Unify automatic spell suggestions in Blink
