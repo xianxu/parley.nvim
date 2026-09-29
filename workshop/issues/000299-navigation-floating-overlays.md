@@ -8,6 +8,7 @@ updated: 2026-09-28
 estimate_hours:
 card_mirror: '746d5429b867baa70efa0440ab67bc1142c9a4ad' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-28T22:21:06-07:00
+flow: {kind: quick, provenance: inferred, spec: "9c52c5bd", done: "3652fdef"}
 ---
 
 # Ignore floating overlays during chat navigation
