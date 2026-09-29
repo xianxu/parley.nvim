@@ -1,12 +1,13 @@
 ---
 id: 000297
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-28
 updated: 2026-09-28
 estimate_hours:
-card_mirror: 'e502fd4a394d948642e0fd421052868e50859a63' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'b13b64f82bdedab5f284be4ddf188894795fa205' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-28T18:58:22-07:00
 ---
 
 # Repo-local app demo and development loop
