@@ -27,7 +27,9 @@ describe('starter shared login upgrade', function()
         return vim.system({vim.v.progpath, '--headless', '-n', '-i', 'NONE', '-u', 'NONE',
             '-c', 'lua vim.opt.runtimepath:prepend(' .. string.format('%q', runtime) .. ')',
             '-c', 'lua local ok,e=pcall(function() ' .. probe .. ' end); if not ok then io.stderr:write(tostring(e)); vim.cmd("cquit 1") end',
-            '-c', 'qa!'}, {text = true, clear_env = true, env = {
+            -- From the scratch home: the repository's cwd would put the starter
+            -- in repo mode and seed tutorials into its workshop/parley (#282).
+            '-c', 'qa!'}, {cwd = scratch, text = true, clear_env = true, env = {
                 PATH = vim.env.PATH, HOME = scratch, NVIM_APPNAME = 'parley',
                 TEST_CUSTOM_AUTH = custom,
                 XDG_CONFIG_HOME = scratch .. '/config', XDG_DATA_HOME = scratch .. '/data',

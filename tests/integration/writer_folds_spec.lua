@@ -22,30 +22,7 @@ local parser=require('parley.chat_parser')
 local D=require('parley.document')
 local Await=require('tests.helpers.await')
 
--- `text`, when given, is prose the model streams before its tool call.
-local function sse(id,path,text)
-    local events={{type='message_start',message={id='msg_test',model='claude-sonnet-5'}}}
-    local index=0
-    if text then
-        vim.list_extend(events,{
-            {type='content_block_start',index=0,content_block={type='text',text=''}},
-            {type='content_block_delta',index=0,delta={type='text_delta',text=text}},
-            {type='content_block_stop',index=0}})
-        index=1
-    end
-    vim.list_extend(events,{
-        {type='content_block_start',index=index,content_block={type='tool_use',id=id,name='read_file',input={}}},
-        {type='content_block_delta',index=index,delta={type='input_json_delta',partial_json='{"path":"'..path..'"}'}},
-        {type='content_block_stop',index=index},
-        {type='message_delta',delta={stop_reason='tool_use'}},
-        {type='message_stop'},
-    })
-    local lines={}
-    for _,ev in ipairs(events) do
-        lines[#lines+1]='event: '..ev.type;lines[#lines+1]='data: '..vim.json.encode(ev);lines[#lines+1]=''
-    end
-    return table.concat(lines,'\n')
-end
+local sse=Fixture.tool_use_sse
 local function row_of(buf,prefix)
     for index,line in ipairs(vim.api.nvim_buf_get_lines(buf,0,-1,false)) do
         if line:sub(1,#prefix)==prefix then return index end

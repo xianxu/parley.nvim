@@ -1537,6 +1537,9 @@ local function start_scoped_response(frame)
         local delete_last = exchange.answer.line_end - 1
         if footer then delete_last = math.min(delete_last, footer - 1) end
         require('parley.buffer_edit').delete_answer(buf, exchange.question.line_end, delete_last, config)
+        -- Clearing the old answer is its own undo step, before the new answer's
+        -- one (#282, operator 2026-09-28): u leaves the question unanswered, a
+        -- second u restores the old answer.
         local current_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         local current_header = require('parley.chat_parser').find_header_end(current_lines)
         if current_header then

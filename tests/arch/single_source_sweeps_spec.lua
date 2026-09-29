@@ -50,7 +50,8 @@ end
 --- (#220: `LoopbackHTTPServer`, defined as a class since #202, was reported
 --- missing). `def` and `class` are the Python halves of the same question.
 local function definition_pattern(name)
-    return ("(function [A-Za-z0-9_.]*%s\\b|[A-Za-z0-9_.]*[.]%s *=[^=]|local function %s\\b|local %s *=[^=]"
+    -- `:` so Lua methods (`function Editor:can_join_undo`) count as definitions (#282).
+    return ("(function [A-Za-z0-9_.:]*%s\\b|[A-Za-z0-9_.]*[.]%s *=[^=]|local function %s\\b|local %s *=[^=]"
         .. "|def %s\\b|class %s\\b|\"%s\")")
         :format(name, name, name, name, name, name, name)
 end
@@ -370,6 +371,8 @@ describe("arch: single-source sweeps stay swept", function()
             "file-local value")
         assert.is_true(defines("anthropic_tools_route", 'strategy = "anthropic_tools_route",'),
             "a quoted string — a table cell may name a VALUE, not a symbol")
+        assert.is_true(defines("can_join_undo", "function Editor:can_join_undo(plan)"),
+            "a Lua method")
     end)
 
     it("the definition matcher rejects a mere mention (planted false positive)", function()

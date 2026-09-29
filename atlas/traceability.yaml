@@ -277,6 +277,7 @@ atlas:
       - tests/integration/chat_respond_spec.lua
       - tests/integration/tool_folds_spec.lua
       - tests/integration/writer_folds_spec.lua
+      - tests/integration/answer_undo_spec.lua
       - tests/integration/not_chat_spec.lua
       - tests/integration/timer_race_spec.lua
       - tests/integration/read_repair_spec.lua
@@ -420,6 +421,7 @@ atlas:
       - tests/unit/document_write_turn_spec.lua
       - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/unit/document_sequence_spec.lua
+      - tests/integration/answer_undo_spec.lua
       - tests/integration/repair_work_budget_spec.lua
       - tests/unit/document_lexical_spec.lua
       - tests/unit/document_grammar_spec.lua
