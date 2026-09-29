@@ -78,3 +78,17 @@ The older personal `~/parley-demo/` and `~/parley-demo-setup/` are not modified.
 
 Verify the launcher with `python3 tests/packaging/test_local_app.py` and the
 shared starter with `make test-spec SPEC=infra/starter`.
+
+## Review a recording
+
+`viewer.html` plays a `.cast` with a precise time readout and a notes pane for
+drafting captions. Either open it directly and use **Open .cast**, or serve the
+directory to load a cast by URL:
+
+```sh
+python3 -m http.server -d demo 8000   # then http://localhost:8000/viewer.html?cast=take1.cast
+```
+
+Alt+T pauses and inserts a `~m:ss.s` line into the notes; **Download notes**
+saves them as `captions.txt`. Casts with caption markers show the label under
+the player; tick "pause at captions" to stop at each one.

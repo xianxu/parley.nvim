@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cast Viewer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/asciinema-player@3.17.0/dist/bundle/asciinema-player.css">
+<style>
+  :root { --bg: #16181d; --fg: #d8dbe2; --muted: #8a90a0; --panel: #1f232b; --accent: #7aa2f7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
+  header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 16px; background: var(--panel); }
+  header .time { font: 600 20px ui-monospace, monospace; color: var(--accent); min-width: 110px; }
+  header .hint { color: var(--muted); font-size: 12px; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  #caption { min-height: 2.8em; margin-top: 10px; padding: 8px 12px; background: var(--panel);
+             border-left: 3px solid var(--accent); font-size: 17px; }
+  #caption:empty { visibility: hidden; }
+  aside { display: flex; flex-direction: column; gap: 8px; }
+  textarea { flex: 1; min-height: 360px; width: 100%; background: var(--panel); color: var(--fg);
+             border: 1px solid #333a46; padding: 8px; font: 13px/1.5 ui-monospace, monospace; resize: vertical; }
+  button, label.btn { background: #2a303b; color: var(--fg); border: 1px solid #3a4250; padding: 5px 10px;
+                      border-radius: 4px; cursor: pointer; font: inherit; }
+  input[type=file] { display: none; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+</style>
+</head>
+<body>
+<header>
+  <span class="time" id="time">0:00.0</span>
+  <label class="btn">Open .cast<input type="file" id="file" accept=".cast,.json,.txt"></label>
+  <label><input type="checkbox" id="pauseOnMarkers"> pause at captions</label>
+  <span class="hint" id="src"></span>
+  <span class="hint">Player: space pause · ←/→ seek · . step frame (paused) · [ ] prev/next caption</span>
+</header>
+<main>
+  <section>
+    <div id="player"></div>
+    <div id="caption"></div>
+  </section>
+  <aside>
+    <div class="row">
+      <button id="stamp" title="Alt+T">Insert time (Alt+T)</button>
+      <button id="download">Download notes</button>
+    </div>
+    <textarea id="notes" spellcheck="true" placeholder="~0:05  Parley installs its plugins on first launch.&#10;~0:42  Branch off to ask about radiators."></textarea>
+    <span class="hint">Notes are kept in this browser. Insert time pauses the player and adds a ~m:ss.s line.</span>
+  </aside>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/asciinema-player@3.17.0/dist/bundle/asciinema-player.min.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  const $ = id => document.getElementById(id);
+  const NOTES_KEY = 'cast-viewer-notes:' + (params.get('cast') || 'default');
+  let player = null;
+  let source = null; // string URL or { data }
+
+  const fmt = t => {
+    const m = Math.floor(t / 60), s = t - m * 60;
+    return `${m}:${s.toFixed(1).padStart(4, '0')}`;
+  };
+
+  function load(src, label) {
+    source = src;
+    $('src').textContent = label;
+    $('caption').textContent = '';
+    if (player) player.dispose();
+    $('player').innerHTML = '';
+    player = AsciinemaPlayer.create(src, $('player'), {
+      fit: 'width',
+      pauseOnMarkers: $('pauseOnMarkers').checked,
+    });
+    player.addEventListener('marker', ({ label }) => { $('caption').textContent = label || ''; });
+    player.addEventListener('seeked', () => { $('caption').textContent = ''; });
+  }
+
+  async function currentTime() {
+    if (!player) return 0;
+    const t = await Promise.resolve(player.getCurrentTime());
+    return typeof t === 'number' ? t : 0;
+  }
+
+  setInterval(async () => { $('time').textContent = fmt(await currentTime()); }, 100);
+
+  $('file').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (f) load({ data: await f.text() }, f.name);
+  });
+
+  $('pauseOnMarkers').addEventListener('change', () => { if (source) load(source, $('src').textContent); });
+
+  // Notes: per-viewer draft, stored best-effort.
+  try { $('notes').value = localStorage.getItem(NOTES_KEY) || ''; } catch {}
+  $('notes').addEventListener('input', () => {
+    try { localStorage.setItem(NOTES_KEY, $('notes').value); } catch {}
+  });
+
+  async function stamp() {
+    if (player) await Promise.resolve(player.pause());
+    const ta = $('notes');
+    const line = `~${fmt(await currentTime())}  `;
+    const pos = ta.selectionStart ?? ta.value.length;
+    const before = ta.value.slice(0, pos);
+    const prefix = before && !before.endsWith('\n') ? '\n' : '';
+    ta.value = before + prefix + line + ta.value.slice(pos);
+    const caret = (before + prefix + line).length;
+    ta.focus();
+    ta.setSelectionRange(caret, caret);
+    ta.dispatchEvent(new Event('input'));
+  }
+  $('stamp').addEventListener('click', stamp);
+  document.addEventListener('keydown', e => {
+    if (e.altKey && (e.key === 't' || e.code === 'KeyT')) { e.preventDefault(); stamp(); }
+  });
+
+  $('download').addEventListener('click', () => {
+    const blob = new Blob([$('notes').value], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'captions.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  const castParam = params.get('cast');
+  if (castParam) load(castParam, castParam);
+  else $('src').textContent = 'No cast loaded — open a file or use ?cast=path.cast';
+</script>
+</body>
+</html>
