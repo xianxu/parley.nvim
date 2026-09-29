@@ -42,9 +42,9 @@ Implementation questions to resolve during design: verify the pinned Blink versi
 
 ## Plan
 
-- [ ] Reconcile overlapping spelling scope with #259/#288 and design shared Blink sources, Normal-mode presentation, triggers and dismissal lifecycle.
-- [ ] Implement the shared plugin integration and app wiring with regression coverage.
-- [ ] Verify real keyboard behavior in both distributions and document the resulting interface.
+- [x] Reconcile overlapping spelling scope with #259/#288 and design shared Blink sources, Normal-mode presentation, triggers and dismissal lifecycle.
+- [x] Implement the shared plugin integration and app wiring with regression coverage.
+- [x] Verify real keyboard behavior in both distributions and document the resulting interface.
 
 ## Log
 
@@ -160,3 +160,14 @@ total: 3.4
 ```
 
 Design subtotal 1.095 × 1.15 = 1.25925; implementation 1.43 × 1.5 = 2.145; total 3.40425, rounded 3.4 focused ship-hours. This is an estimate, not a replacement for measured close actuals.
+
+
+### 2026-09-29 — Shared Blink implementation and verification
+
+Implemented pure spell_state targets/admission/acceptance, shared spell_blink controller and spell_source provider, backend teardown, independent defaults, scoped key leases and Parley cmp ownership. Plugin and app use the same path. Native spelling uses buffer spelllang even without underlines. Late filetype setup now registers on FileType; automatic mixed-provider requests only run for actual misspellings, preventing a correctly spelled accepted word from reopening a menu and stealing Return. Source evidence survives hide-before-resolve and rejects stale/duplicate acceptance.
+
+TDD evidence: pure state RED missing module → green; source RED absent/denied/correct-word cases → 11 green; legacy reattach RED stale mapping/options → 25 green; controller/default and cmp ownership RED → green. Final mapped spell suite passed, as did ui/keybindings and infra/starter. Real pinned Blink script passed both plugin/app scenarios and the pre-existing 35-step completion/pairing harness. English native suggestion sample n=30 per profile: plugin median25.58ms/p9528.30ms; app median25.96ms/p9527.91ms. Results are measured samples, not universal latency guarantees. make lint passes after removing an unused generated-test loop variable; git diff --check clean. Logs /tmp/parley-304-{spell-final,keybindings-final,starter,real,lint-final}.log are supplementary; this paragraph is durable evidence.
+
+ARCH-ORDER: synchronous invalidation, reducer-issued source tickets and menu-independent acceptance evidence guard deferred work. ARCH-DRY: one provider/controller serves both distributions; is_misspelled is shared by automatic-show and provider admission. ARCH-FUNERAL: debounce timers, map leases and compatibility wrappers are collected on detach/wipeout. The key guard now distinguishes chat-scoped transient Tab from unrelated picker defaults. README and atlas document setup, controls, fallback, byte/line bounds and pinned compatibility seams.
+
+Estimate-quality INFO was advisory: the v3.1 figure is idle-excluded ship wall-clock including subagent execution; integration primitives include fake and real keyboard verification, while the API-discovery line is solely residual compatibility investigation. No hand-entered actuals. All implementation stays on #304's worktree; root-main demo changes and the untracked continuation are untouched. Next: mandatory close review, then publish through SDLC.
