@@ -1,0 +1,52 @@
+---
+gate: boundary-review
+issue: 302
+id_prefix: BR
+rounds:
+    - "n": 1
+      timestamp: "2026-09-29T11:47:19-07:00"
+      agent: codex
+      findings:
+        - id: BR-1
+          severity: Critical
+          title: Adjacent marker pairs fail to generate the second closing pair
+          detail: lua/parley/at_pair.lua:10 rejects an opener following an existing closer. Production typing i@@one@@@@two<Esc> produces @@one@@@@two instead of @@one@@@@two@@. Recognize the unpaired trailing at sign and add pure and mapped-typing regressions covering adjacent pairs, skipping, and undo. ARCH-PURPOSE.
+          family: pairing-delimiter-boundaries
+          round: 1
+        - id: BR-2
+          severity: Important
+          title: Promised Blink and pairing coexistence lacks a committed regression
+          detail: tests/packaging/completion_compatibility.lua:15 initializes Blink without preparing Parley chat mappings, while tests/integration/at_pair_spec.lua:86 tests starter pairing without Blink. Commit the combined production-options typing and completion test currently represented only by a temporary smoke script. ARCH-PURPOSE.
+          family: acceptance-path-regression-coverage
+          round: 1
+        - id: BR-3
+          severity: Important
+          title: Generated help still claims local tags enter AI context
+          detail: lua/parley/keybinding_registry.lua:1325-1326 describes outline-only hiding and attached tags prefixing AI context, contradicting this range's projection behavior and updated README. Correct both statements and sweep current user-facing descriptions for the superseded contract. ARCH-PURPOSE.
+          family: user-help-contract-consistency
+          round: 1
+      recipe: milestone-review
+      blocked: true
+---
+
+# Gate ledger — parley.nvim#302 (boundary-review)
+
+Findings this gate raised, the stable ids the binary assigned them, and how
+later rounds disposed of them. Generated — edit the gate, not this file.
+
+## Round 1 — 2026-09-29T11:47:19-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-1** [Critical] `pairing-delimiter-boundaries` Adjacent marker pairs fail to generate the second closing pair
+  lua/parley/at_pair.lua:10 rejects an opener following an existing closer. Production typing i@@one@@@@two<Esc> produces @@one@@@@two instead of @@one@@@@two@@. Recognize the unpaired trailing at sign and add pure and mapped-typing regressions covering adjacent pairs, skipping, and undo. ARCH-PURPOSE.
+- **BR-2** [Important] `acceptance-path-regression-coverage` Promised Blink and pairing coexistence lacks a committed regression
+  tests/packaging/completion_compatibility.lua:15 initializes Blink without preparing Parley chat mappings, while tests/integration/at_pair_spec.lua:86 tests starter pairing without Blink. Commit the combined production-options typing and completion test currently represented only by a temporary smoke script. ARCH-PURPOSE.
+- **BR-3** [Important] `user-help-contract-consistency` Generated help still claims local tags enter AI context
+  lua/parley/keybinding_registry.lua:1325-1326 describes outline-only hiding and attached tags prefixing AI context, contradicting this range's projection behavior and updated README. Correct both statements and sweep current user-facing descriptions for the superseded contract. ARCH-PURPOSE.
+
+## Open findings
+
+- **BR-1** [Critical] `pairing-delimiter-boundaries` Adjacent marker pairs fail to generate the second closing pair
+- **BR-2** [Important] `acceptance-path-regression-coverage` Promised Blink and pairing coexistence lacks a committed regression
+- **BR-3** [Important] `user-help-contract-consistency` Generated help still claims local tags enter AI context

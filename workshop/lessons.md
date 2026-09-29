@@ -298,3 +298,5 @@ oracle, and the mutation that would make the test fail.
 ## 2026-09-29 (#302 — pairing with typeahead)
 
 - Insert expression mappings may inspect the line before preceding typeahead is inserted. Test contiguous mapped keys and ordinary text between them; use a command callback when the decision must observe completed insertion. Pairing cursor motions need `<C-g>U` to preserve a single undo step.
+
+- Delimiter typing tests must include directly adjacent pairs, not only prose-separated pairs. Keep acceptance-path integration smoke checks in the repository so reviewers and future changes can rerun them; sweep generated help alongside README when changing a user-visible contract.

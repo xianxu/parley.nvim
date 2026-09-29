@@ -32,10 +32,10 @@ ARCH-DRY: reuse native_map and its registry exemption. ARCH-PURE: isolate line/b
 
 ## Done when
 
-- Real typing creates paired markers, skips closers, preserves existing pairs and single-at text, and undoes in one step.
+- Real typing creates paired markers, including directly adjacent pairs, skips closers, preserves existing pairs and single-at text, and undoes/redoes in one step.
 - Existing global/buffer mappings and disabled defaults remain effective; non-chat buffers are unchanged.
-- The packaged app explicitly enables pairing through its registry shortcut while keeping its restricted shortcut policy. Actual starter options with Blink preserve pairing, closer skipping and buffer completion acceptance.
-- Keybinding and architecture tests pass; README and atlas describe the shortcut.
+- The packaged app explicitly enables pairing through its registry shortcut while keeping its restricted shortcut policy. The committed packaging regression uses actual starter options with Blink and preserves pairing, closer skipping, buffer completion acceptance and subsequent pairing.
+- Keybinding and architecture tests pass; README, atlas and generated help describe pairing and local-only tags consistently.
 
 ## Plan
 
@@ -63,3 +63,7 @@ ARCH-DRY: reuse native_map and its registry exemption. ARCH-PURE: isolate line/b
 - `make test-spec SPEC=infra/starter` passed 185 tests, zero failures/errors.
 
 - 2026-09-29: Restated Done when for the app-policy revision: explicit starter opt-in and real-Blink coexistence are acceptance requirements. #301 completed review with SHIP and its evidence commit is integrated.
+
+- 2026-09-29 — review corrections: BR-1 expands the delimiter-boundary matrix to directly adjacent pairs, closer skipping and undo. BR-2 moves the real starter/Blink coexistence smoke into the committed packaging test. BR-3 corrects generated help's superseded context claims; a sweep of README, atlas, docs and current Lua help found no other user-facing claim that local tags prefix model context.
+
+- Review correction verification: 360 ui/keybindings tests pass. The committed `tests/packaging/completion_compatibility.lua` passes all 21 steps with the installed Blink runtime, actual starter policy and prepared chat. Pure/mapped adjacent-pair regressions and packaging step 16 failed before the trailing-run fix. Focused lint and diff checks are clean. BR-3 help text now agrees with local-only whole-line tags; current documentation sweep found no remaining old AI-context claim.

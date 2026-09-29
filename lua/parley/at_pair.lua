@@ -7,7 +7,8 @@ function M.keys(line, byte_column)
     if delimiters % 2 == 1 and after:sub(1, 1) == "@" then
         return "<C-g>U<Right>"
     end
-    if delimiters % 2 == 0 and before:sub(-1) == "@" and before:sub(-2) ~= "@@" then
+    local trailing = before:match("@+$") or ""
+    if delimiters % 2 == 0 and #trailing % 2 == 1 then
         if after:sub(1, 2) == "@@" then return "@" end
         return "@@@<C-g>U<Left><C-g>U<Left>"
     end

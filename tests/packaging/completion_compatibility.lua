@@ -109,13 +109,54 @@ local cases = {
         local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
         assert(lines[3] == 'ma' and lines[4] == '', 'Enter accepted a suggestion instead of newline')
     end },
+    { keys = '<Esc>', check = function()
+        -- Exercise the app policy and production chat mapping together with Blink.
+        local parley = require('parley')
+        local roots = { data = vim.fn.stdpath('data') .. '/pairing', state = vim.fn.stdpath('state') }
+        local options = require('parley.starter_config').options(roots)
+        options.providers, options.api_keys = {}, {}
+        parley.setup(options)
+        vim.fn.mkdir(parley.config.chat_dir, 'p')
+        local path = parley.config.chat_dir .. '/2026-09-29-completion.md'
+        vim.fn.writefile({ '# topic: pairing', '- file: completion.md', '---', '',
+            'marshmallow marmalade', '' }, path)
+        vim.cmd('edit ' .. vim.fn.fnameescape(path))
+        local buf = vim.api.nvim_get_current_buf()
+        parley.prep_chat(buf, path)
+        assert(parley._prepared_bufs[buf], 'chat was not prepared')
+        assert(parley.config.default_keymaps == false, 'test must use the app shortcut policy')
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+    end },
+    { keys = 'i@@one@@@@two', check = function()
+        assert(vim.api.nvim_get_current_line() == '@@one@@@@two@@', 'adjacent pairing with Blink failed')
+    end },
+    { keys = '@@<CR>ma', check = function()
+        assert(vim.api.nvim_buf_get_lines(0, 5, 6, false)[1] == '@@one@@@@two@@', 'closers duplicated')
+        assert(cmp.is_menu_visible() and has('marshmallow') and has('marmalade'),
+            'chat buffer completion candidates missing')
+    end },
+    { keys = '<C-n>', check = function()
+        assert(list.get_selected_item(), 'chat completion selection failed')
+        first_candidate = list.get_selected_item().label
+    end },
+    { keys = '<C-y>', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate, 'chat completion acceptance failed')
+    end },
+    { keys = ' @@after', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate .. ' @@after@@',
+            'pairing after completion acceptance failed')
+    end },
+    { keys = '@@!<Esc>', check = function()
+        assert(vim.api.nvim_get_current_line() == first_candidate .. ' @@after@@!',
+            'closer skipping after completion acceptance failed')
+    end },
 }
 local function next_case()
     step = step + 1
     local case = cases[step]
     if not case then
         for _, line in ipairs(results) do print(line) end
-        print('PASS command-line and current-buffer completion keyboard behavior')
+        print('PASS command-line, current-buffer completion, and app chat pairing keyboard behavior')
         vim.cmd('qa!')
         return
     end
