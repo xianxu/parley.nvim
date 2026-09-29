@@ -1,6 +1,6 @@
 ---
 id: 000303
-status: open
+status: working
 created: 2026-09-29
 updated: 2026-09-29
 estimate_hours:
@@ -17,6 +17,7 @@ tracker:
         source_blob: fcd96a33e6d1e2988cb4e044d623780607312e91
         destination: workshop/issues/000303-app-completion-keys.md
         main_commit: 7cb00fc1f74976bd3aaf087141542e19fc4f59ec
+started: 2026-09-29T11:59:53-07:00
 ---
 
 # Use familiar keys for app completion
