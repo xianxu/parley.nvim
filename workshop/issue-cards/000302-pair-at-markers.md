@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000302-pair-at-markers.md
         source_blob: 9c5be55c17a863d88667521e92743b401fee372f
         destination: workshop/issues/000302-pair-at-markers.md
+        main_commit: 12da91e9646ba3320a6b31854572a3e536a3b24c
 ---
 
 # Auto-pair double-at markers while typing
