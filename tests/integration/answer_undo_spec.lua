@@ -33,21 +33,34 @@ local function has(buf, text)
 end
 
 describe('one answer is one undo entry (#282)', function()
-    local calls, restore, buf
+    local calls, restore, buf, opened
+
+    -- A chat loaded from disk with `text`, cursor on `row`; becomes current.
+    local function open(text, row)
+        seq = seq + 1
+        local path = tmp_dir .. '/2026-03-01-undo-' .. seq .. '.md'
+        vim.fn.writefile(text, path)
+        vim.cmd('silent edit! ' .. vim.fn.fnameescape(path))
+        local b = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { row or 5, 0 })
+        F.setup(b)
+        opened[#opened + 1] = b
+        return b
+    end
 
     before_each(function()
         calls, restore = Fixture.install(parley)
-        seq = seq + 1
-        local path = tmp_dir .. '/2026-03-01-undo-' .. seq .. '.md'
-        vim.fn.writefile(ORIGINAL, path)
-        vim.cmd('silent edit! ' .. vim.fn.fnameescape(path))
-        buf = vim.api.nvim_get_current_buf()
-        vim.api.nvim_win_set_cursor(0, { 5, 0 })
-        F.setup(buf)
+        opened = {}
+        buf = open(ORIGINAL)
     end)
     after_each(function()
-        Respond.cancel_responses(buf); restore()
-        if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
+        for _, b in ipairs(opened) do
+            if vim.api.nvim_buf_is_valid(b) then Respond.cancel_responses(b) end
+        end
+        restore()
+        for _, b in ipairs(opened) do
+            if vim.api.nvim_buf_is_valid(b) then vim.api.nvim_buf_delete(b, { force = true }) end
+        end
     end)
 
     local function submit()
@@ -65,17 +78,17 @@ describe('one answer is one undo entry (#282)', function()
             if between then between() end
         end
     end
-    local function settle(session)
+    local function settle(session, b)
         wait_for(function() return Respond.response_snapshot(session).status == 'terminal' end)
-        wait_for(function() return F.flush(buf) == 'idle' end)
+        wait_for(function() return F.flush(b or buf) == 'idle' end)
     end
-    local function finish(session, call)
+    local function finish(session, call, b)
         call.running = false; call.complete(call.id)
-        settle(session)
+        settle(session, b)
     end
     -- The auto-save prep_md installs: a write bumps changedtick, no text.
     local function save() vim.api.nvim_buf_call(buf, function() vim.cmd('silent! write') end) end
-    local function undo() vim.api.nvim_buf_call(buf, function() vim.cmd('silent undo') end) end
+    local function undo(b) vim.api.nvim_buf_call(b or buf, function() vim.cmd('silent undo') end) end
 
     it('undoes a chunked answer in one step even when it is saved between chunks', function()
         local session, call = submit()
@@ -106,21 +119,76 @@ describe('one answer is one undo entry (#282)', function()
     end)
 
     it('keeps two answers as two undo entries', function()
+        -- Two questions from the start: no user edit sits between the answers.
+        local two = { '# topic: Undo', '- file: undo.md', '---', '', '💬: first question', '',
+            '💬: second question', '' }
+        buf = open(two, 5)
         local session, call = submit()
         stream(call, { 'first answer' })
         finish(session, call)
-        -- Ask a second question in the prompt the answer left.
         local rows = lines(buf)
-        local prompt = #rows
-        while prompt > 0 and not vim.startswith(rows[prompt], '💬:') do prompt = prompt - 1 end
-        vim.api.nvim_buf_set_lines(buf, prompt - 1, prompt, false, { '💬: second question' })
-        vim.api.nvim_win_set_cursor(0, { prompt, 0 })
+        local second = 0
+        for i, l in ipairs(rows) do if l == '💬: second question' then second = i end end
+        vim.api.nvim_win_set_cursor(0, { second, 0 })
         session, call = submit()
         stream(call, { 'second answer' })
         finish(session, call)
         undo()
         assert.is_false(has(buf, 'second answer'), 'the second answer survived its undo')
         assert.is_true(has(buf, 'first answer'), 'one undo removed both answers')
+        undo()
+        assert.same(two, lines(buf))
+    end)
+
+    it('restores the previous answer when a regenerated answer is undone', function()
+        local answered = { '# topic: Undo', '- file: undo.md', '---', '', '💬: question', '',
+            '🤖:[FixtureAnthropic]', 'old answer', '' }
+        buf = open(answered, 5)
+        local session, call = submit()
+        stream(call, { 'new', ' answer' }, save)
+        finish(session, call)
+        assert.is_true(has(buf, 'new answer'))
+        assert.is_false(has(buf, 'old answer'))
+        undo()
+        assert.same(answered, lines(buf))
+    end)
+
+    it('keeps two chats streaming at once as one entry each', function()
+        local first_buf = buf
+        local session_a, call_a = submit()
+        local other = open({ '# topic: Other', '- file: other.md', '---', '', '💬: other question', '' })
+        local session_b, call_b = submit()
+        for i, chunk in ipairs({ 'alpha', ' beta', ' gamma' }) do
+            stream(call_a, { chunk }, save)
+            stream(call_b, { ('%d'):format(i) })
+            vim.api.nvim_buf_call(other, function() vim.cmd('silent! write') end)
+        end
+        finish(session_a, call_a, first_buf)
+        finish(session_b, call_b, other)
+        assert.is_true(has(first_buf, 'alpha beta gamma') and has(other, '123'))
+        undo(first_buf)
+        assert.same(ORIGINAL, lines(first_buf))
+        assert.is_true(has(other, '123'), 'undo in one chat touched the other')
+        undo(other)
+        assert.same({ '# topic: Other', '- file: other.md', '---', '', '💬: other question', '' }, lines(other))
+    end)
+
+    -- A reload replaces the buffer's text from disk: it ends the answer's undo
+    -- block (the editor re-attaches), but must not corrupt what undo can reach.
+    it('leaves an undoable history when the chat reloads mid-stream', function()
+        local session, call = submit()
+        stream(call, { 'before', ' reload' })
+        save()
+        vim.api.nvim_buf_call(buf, function() vim.cmd('silent edit!') end)
+        stream(call, { ' after' })
+        call.running = false; call.complete(call.id)
+        wait_for(function() return Respond.response_snapshot(session).status == 'terminal' end)
+        for _ = 1, 10 do
+            if vim.deep_equal(ORIGINAL, lines(buf)) then break end
+            local ok, err = pcall(undo)
+            assert.is_true(ok, tostring(err))
+        end
+        assert.same(ORIGINAL, lines(buf))
     end)
 
     it('keeps a user edit made mid-stream as its own entry', function()

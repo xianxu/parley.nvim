@@ -160,19 +160,6 @@ function Editor:attach()
         if not delivered then error(err) end
     end
     self.lifecycle=lifecycle
-    -- Saving mid-answer must not split the answer's undo block (#282): a
-    -- write changes changedtick but not the text or the undo history. Adopt
-    -- the new tick while the native undo sequence is still the receipt's; any
-    -- text change (a format-on-save included) already cleared it in observe.
-    if self.driver.watch_write then
-        self.write_watch=self.driver.watch_write(self.buf,function()
-            local receipt=self.undo_receipt
-            if self.dead or not receipt or not self.driver.undo_state then return end
-            local native_state=self.driver.undo_state(self.buf)
-            if native_state.sequence==receipt.sequence then receipt.tick=native_state.tick
-            else self.undo_receipt=nil end
-        end)
-    end
     local ok=self.driver.attach(self.buf,false,{
         on_bytes=function(_,_,tick,...)
             if self.dead then return true end
@@ -192,6 +179,20 @@ function Editor:attach()
         on_changedtick=function(_,_,tick) return lifecycle('tick',tick) end,
     })
     if not ok then owners[self.buf]=nil; return false end
+    -- After a successful attach, so a failed one leaves nothing behind.
+    -- Saving mid-answer must not split the answer's undo block (#282): a
+    -- write changes changedtick but not the text or the undo history. Adopt
+    -- the new tick while the native undo sequence is still the receipt's; any
+    -- text change (a format-on-save included) already cleared it in observe.
+    if self.driver.watch_write then
+        self.write_watch=self.driver.watch_write(self.buf,function()
+            local receipt=self.undo_receipt
+            if self.dead or not receipt or not self.driver.undo_state then return end
+            local native_state=self.driver.undo_state(self.buf)
+            if native_state.sequence==receipt.sequence then receipt.tick=native_state.tick
+            else self.undo_receipt=nil end
+        end)
+    end
     self.attached=true
     return true
 end
@@ -213,12 +214,30 @@ end
 -- observed edit/lifecycle transition clears this private receipt first.
 function Editor:can_join_undo(plan)
     local receipt=self.undo_receipt
+    -- A seeded receipt (below) has no grant yet: it joins its generation's
+    -- first write, which then leaves an ordinary receipt.
     if self.dead or not receipt or not self.driver.undo_state or type(plan)~='table'
         or plan.epoch~=self.epoch or plan.epoch~=receipt.epoch
         or plan.generation==nil or plan.grant==nil
-        or plan.generation~=receipt.generation or plan.grant~=receipt.grant then return false end
+        or plan.generation~=receipt.generation
+        or receipt.grant~=nil and plan.grant~=receipt.grant then return false end
     local native_state=self.driver.undo_state(self.buf)
     return native_state.sequence>0 and native_state.sequence==receipt.sequence and native_state.tick==receipt.tick
+end
+-- Regenerating deletes the old answer before the new generation exists
+-- (#282). Seed a receipt at that native state, owned by the regeneration's
+-- token; the generation adopts it, and its first write joins the deletion, so
+-- one undo restores the old answer. Any edit in between clears the seed.
+function Editor:seed_undo(owner)
+    if self.dead or owner==nil or not self.driver.undo_state then return end
+    local undo=self.driver.undo_state(self.buf)
+    self.undo_receipt={epoch=self.epoch,owner=owner,sequence=undo.sequence,tick=undo.tick}
+end
+function Editor:adopt_undo_seed(owner,generation)
+    local receipt=self.undo_receipt
+    if receipt and receipt.owner==owner and receipt.generation==nil and receipt.grant==nil then
+        receipt.generation=generation
+    end
 end
 
 local function apply(self,plan,validate,user)

@@ -362,6 +362,8 @@ function M.set_previous_answer(doc,spec)
     local prior=s.previous[spec.entity]
     if prior and prior.generation==nil and prior.owner~=nil and prior.owner~=spec.owner then return false end
     s.previous[spec.entity]={generation=spec.generation,value=spec.value,owner=spec.owner or prior and prior.owner}
+    -- The regeneration's owner token also adopts its undo seed (#282).
+    if spec.owner~=nil then s.editor:adopt_undo_seed(spec.owner,spec.generation) end
     return true
 end
 function M.set_pending_previous_answer(doc,spec)
@@ -369,6 +371,11 @@ function M.set_pending_previous_answer(doc,spec)
     if s.dead or type(spec)~='table' or spec.entity==nil or spec.value==nil then return false end
     s.previous[spec.entity]={generation=nil,value=spec.value,owner=spec.owner}
     return true
+end
+--- Seed the answer's undo block at the current native state (#282): the
+--- generation that adopts `owner`'s pending slot joins its first write to it.
+function M.seed_undo(doc,owner)
+    local s=state(doc); if not s.dead then s.editor:seed_undo(owner) end
 end
 function M.clear_pending_previous_answer(doc,entity,owner)
     local s=state(doc); local slot=s.previous[entity]

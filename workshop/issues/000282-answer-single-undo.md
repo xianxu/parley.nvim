@@ -35,6 +35,16 @@ Cover answer replacement, errors, stop/cancel, reload and concurrent chats.
 - Cancellation, errors, partial responses and reload do not corrupt undo state.
 - Regression tests exercise chunked streaming and the answer lifecycle paths.
 
+## Core concepts
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `can_join_undo` (receipt kept for fully-landed plans; recorded before the post-write authority check) | `lua/parley/document/editor.lua` | modified |
+| `native` (driver gains watch_write / unwatch_write: BufWritePost adopts the save's tick) | `lua/parley/document/editor.lua` | modified |
+| `tool_use_sse` (shared fixture SSE builder, moved from writer_folds_spec) | `tests/helpers/respond_fixture.lua` | new |
+| `seed_undo` / `adopt_undo_seed` (regeneration: the new answer's first write joins the old answer's deletion) | `lua/parley/document/editor.lua` | new |
+| `set_previous_answer` (adopts the regeneration's undo seed by owner token) | `lua/parley/document/init.lua` | modified |
+
 ## Plan
 
 Design: the editor already groups one answer's writes into one undo block — each
@@ -51,14 +61,6 @@ Two refusals that change nothing clear that receipt and split the answer:
    before recording the receipt. Fix: record the receipt as soon as the writer's own
    patch lands; keep it when every patch of the plan landed. A partial or refused plan
    still clears it (the existing `document_edit_spec` contract).
-
-Core concepts:
-
-| Name | Lives in | Status |
-|------|----------|--------|
-| `can_join_undo` (receipt kept for fully-landed plans; recorded before the post-write authority check) | `lua/parley/document/editor.lua` | modified |
-| `native` (driver gains watch_write / unwatch_write: BufWritePost adopts the save's tick) | `lua/parley/document/editor.lua` | modified |
-| `tool_use_sse` (shared fixture SSE builder, moved from writer_folds_spec) | `tests/helpers/respond_fixture.lua` | new |
 
 `can_join_undo` still requires native sequence + tick to match, and every text event
 (edit, undo, redo) still clears the receipt in `observe`, so a real intervening change
@@ -95,4 +97,17 @@ tool rounds included.
 - Full suite: unit/integration green except tool_resources_spec, perf_document_spec and
   document_fold_batches_spec, which fail only under parallel load and pass alone (#294;
   tool_resources_spec is a new member of that set).
+- Close review round 1 (FIX-THEN-SHIP): BR-1 regenerate / concurrent chats / mid-stream
+  reload had no test; BR-2 receipt rules pinned only end-to-end. Added the three
+  integration cases and direct editor cases (fully-landed-then-revoked joins, save keeps
+  join, undo-then-save does not, seed joins only its adopting generation, edit drops seed).
+- Regenerate was 2 undo steps: `buffer_edit.delete_answer` removes the old answer with a
+  raw set_lines before the generation exists. Fix: `D.seed_undo(doc, pending_owner)` right
+  after the deletion; `set_previous_answer` adopts the seed by owner token in
+  `prepare_input` (before any write), so the first generated write joins the deletion.
+  Mutation: no seed → regenerate case red. Mid-stream reload: the response stops ("chat was
+  reloaded"), history stays undoable to the original.
+- Minors: atlas sentence narrowed to the fully-landed rule; save watcher created only after
+  a successful attach; two-answers case uses a two-question chat (no user edit between).
+- answer_undo_spec 10/10, 0/12 flaky; document_edit_spec 23/23.
 

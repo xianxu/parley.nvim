@@ -215,6 +215,80 @@ describe('document editor', function()
         assert.equals('α',first_line())
         vim.fn.delete(path)
     end)
+    -- #282: writing a whole tool block suspends authority right after its only
+    -- patch lands. The answer's undo block must continue from that write; a
+    -- partial plan (above) still does not.
+    it('keeps joining after a plan whose every patch landed before authority was revoked',function()
+        vim.api.nvim_set_current_buf(buf)
+        local line=first_line()
+        local plan={epoch=7,generation='a',operation='block',grant='g',entity='answer',patches={
+            {start={row=0,col=#line,byte=#line},finish={row=0,col=#line,byte=#line},expected_old='',text='A'},
+        }}
+        local result=editor:apply(plan,function(_,_,phase) return phase~='after' end)
+        assert.equals('stale',result.status)
+        assert.equals(1,#result.receipts)
+        assert.is_true(editor:can_join_undo(plan))
+        append_owned(editor,buf,'a','g','B')
+        vim.cmd('undo')
+        assert.equals('α',first_line())
+    end)
+    -- #282: a save bumps changedtick with no text; the answer's undo block
+    -- survives it. An undo before the save still ends the block.
+    local function file_backed()
+        local path=vim.fn.tempname()
+        vim.fn.writefile({'α','tail'},path)
+        vim.bo[buf].buftype=''
+        vim.api.nvim_buf_set_name(buf,path)
+        return path
+    end
+    it('keeps joining across a save',function()
+        vim.api.nvim_set_current_buf(buf)
+        local path=file_backed()
+        local plan=append_owned(editor,buf,'a','g','A')
+        vim.cmd('silent write!')
+        assert.is_true(editor:can_join_undo(plan))
+        append_owned(editor,buf,'a','g','B')
+        vim.cmd('undo')
+        assert.equals('α',first_line())
+        vim.fn.delete(path)
+    end)
+    it('does not join across an undo followed by a save',function()
+        vim.api.nvim_set_current_buf(buf)
+        local path=file_backed()
+        local plan=append_owned(editor,buf,'a','g','A')
+        append_owned(editor,buf,'a','g','B')
+        vim.cmd('undo')
+        vim.cmd('silent write!')
+        assert.is_false(editor:can_join_undo(plan))
+        vim.fn.delete(path)
+    end)
+    -- #282: regenerating deletes the old answer before the generation exists.
+    -- A seeded receipt lets that generation's first write join the deletion.
+    it('joins a seeded deletion only for the generation that adopts the seed',function()
+        vim.api.nvim_set_current_buf(buf)
+        local before=first_line()
+        vim.cmd('let &l:undolevels = &l:undolevels') -- the deletion is its own user block
+        vim.api.nvim_buf_set_text(buf,0,1,0,1,{'old'})
+        local token={}
+        editor:seed_undo(token)
+        assert.is_false(editor:can_join_undo({epoch=7,generation='a',grant='g'}),'unadopted seed joined')
+        editor:adopt_undo_seed({},'a')
+        assert.is_false(editor:can_join_undo({epoch=7,generation='a',grant='g'}),'another owner adopted the seed')
+        editor:adopt_undo_seed(token,'a')
+        assert.is_false(editor:can_join_undo({epoch=7,generation='b',grant='g'}),'another generation joined')
+        assert.is_true(editor:can_join_undo({epoch=7,generation='a',grant='g'}))
+        append_owned(editor,buf,'a','g','new')
+        vim.cmd('undo') -- one step: the seeded edit and the joined write together
+        assert.equals(before,first_line())
+    end)
+    it('drops a seed when anything edits before the first write',function()
+        vim.api.nvim_set_current_buf(buf)
+        local token={}
+        editor:seed_undo(token)
+        vim.api.nvim_buf_set_text(buf,0,1,0,1,{'H'})
+        editor:adopt_undo_seed(token,'a')
+        assert.is_false(editor:can_join_undo({epoch=7,generation='a',grant='g'}))
+    end)
     it('groups edits in the target buffer without changing the current buffer history',function()
         local other=vim.api.nvim_create_buf(false,true)
         vim.api.nvim_buf_set_lines(other,0,-1,false,{'other'})
