@@ -209,7 +209,7 @@ end)
 describe("Outline branch destinations (#250)", function()
     local parley = require("parley")
     local picker = require("parley.float_picker")
-    local tmp, original_open, original_notify, options, notices
+    local tmp, original_open, original_notify, options, notices, overlay
 
     before_each(function()
         tmp = vim.fn.tempname()
@@ -224,6 +224,10 @@ describe("Outline branch destinations (#250)", function()
 
     after_each(function()
         picker.open, vim.notify = original_open, original_notify
+        if overlay and vim.api.nvim_win_is_valid(overlay) then
+            vim.api.nvim_win_close(overlay, true)
+        end
+        overlay = nil
         for _, buf in ipairs(vim.api.nvim_list_bufs()) do
             if vim.api.nvim_buf_get_name(buf):find(tmp, 1, true) then
                 vim.api.nvim_buf_delete(buf, { force = true })
@@ -348,6 +352,39 @@ describe("Outline branch destinations (#250)", function()
         options.on_select(root_item)
         assert.same({1,0},vim.api.nvim_win_get_cursor(0))
     end)
+
+    for _, preferred in ipairs({ false, true }) do
+        it("opens the root in an ordinary window when a " .. (preferred and "preferred" or "destination") .. " float shows it (#299)", function()
+            local parent = chat("parent", "🌿: child.md: Child")
+            local child = chat("child")
+            vim.fn.writefile({ "---", "topic: child", "file: " .. filename("child"), "---",
+                "🌿: " .. filename("parent") .. ": Parent", "", "💬: child question" }, child)
+            vim.cmd("edit " .. vim.fn.fnameescape(child))
+            local main_win = vim.api.nvim_get_current_win()
+            local child_buf = vim.api.nvim_get_current_buf()
+            local parent_buf = vim.fn.bufadd(parent)
+            vim.fn.bufload(parent_buf)
+            overlay = vim.api.nvim_open_win(preferred and child_buf or parent_buf, false, {
+                relative = "editor", row = 1, col = 1, width = 30, height = 4, focusable = false,
+            })
+            outline.question_picker(parley.config)
+            local root_item = options.items[1]
+            assert.is_true(root_item.value.file_start)
+            assert.equals(parent, root_item.value.file)
+            -- A captured window can change its buffer while the picker is open.
+            -- Both captured and discovered destination windows must exclude floats.
+            vim.api.nvim_win_set_buf(overlay, parent_buf)
+            vim.api.nvim_win_set_cursor(overlay, { 5, 0 })
+
+            options.on_select(root_item)
+
+            assert.equals(main_win, vim.api.nvim_get_current_win())
+            assert.equals(parent_buf, vim.api.nvim_win_get_buf(main_win))
+            assert.same({ 1, 0 }, vim.api.nvim_win_get_cursor(main_win))
+            assert.equals(parent_buf, vim.api.nvim_win_get_buf(overlay))
+            assert.same({ 5, 0 }, vim.api.nvim_win_get_cursor(overlay))
+        end)
+    end
 
     it("reports a missing child without opening an empty file", function()
         local parent = chat("parent", "🌿: missing.md: Missing")

@@ -7,6 +7,13 @@ local logger = require("parley.logger")
 local _H = {}
 local LAST_CONTENT_LINE_CHUNK_SIZE = 256
 
+-- Navigation belongs in editing windows, never overlays such as Screenkey.
+_H.is_editing_window = function(win)
+    if not vim.api.nvim_win_is_valid(win) then return false end
+    local config = vim.api.nvim_win_get_config(win)
+    return config.relative == "" and not config.external
+end
+
 -- Pop a non-blocking as-you-type completion menu (no auto-insert, no auto-select),
 -- restoring the user's `completeopt` afterward. The shared idiom behind parley's
 -- typeahead completers (spell suggestions, vision YAML). `start` is the 1-indexed

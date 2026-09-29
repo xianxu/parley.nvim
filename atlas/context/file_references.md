@@ -44,7 +44,9 @@ independent of shell cwd. For `@@` links, relative or bare names are resolved
 against the buffer directory and chat roots; timestamp-first chat lookup tolerates
 renamed slugs. A missing chat timestamp can be a forward reference that creates
 the chat. Directory references open netrw in chat buffers, preferring the other
-window in a two-split layout.
+window in a two-split layout. Floating overlays (including the demo's Screenkey)
+are excluded from split counting and existing-buffer destinations by the shared
+`helper.is_editing_window` predicate.
 
 When invoked from Insert mode, a chat-reference destination restores editing;
 the smart-gf fallback lands in Normal mode for reading source. Pressing `gf`

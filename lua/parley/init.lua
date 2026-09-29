@@ -3137,7 +3137,7 @@ M.setup_buf_handler = function()
 	highlighter.setup_buf_handler()
 end
 
--- Move to the other window when the tab has exactly two. Returns whether it
+-- Move to the other editing window when the tab has exactly two. Returns whether it
 -- moved. The two-split preference had THREE copies (#225): this one, and two
 -- hand-inlined inside OpenFileUnderCursor. Netrw is why a separate call site
 -- exists — a directory reference does not go through `open_buf` — but that is
@@ -3145,7 +3145,7 @@ end
 ---@param what string|nil # what is being opened, for the debug line
 ---@return boolean # whether it moved
 local function focus_other_split(what)
-	local tab_wins = vim.api.nvim_tabpage_list_wins(0)
+	local tab_wins = vim.tbl_filter(M.helpers.is_editing_window, vim.api.nvim_tabpage_list_wins(0))
 	if #tab_wins ~= 2 then
 		return false
 	end
@@ -3172,7 +3172,7 @@ M.open_buf = function(file_name, from_chat_finder)
 	for _, b in ipairs(vim.api.nvim_list_bufs()) do
 		if vim.api.nvim_buf_get_name(b) == file_name then
 			for _, w in ipairs(vim.api.nvim_list_wins()) do
-				if vim.api.nvim_win_get_buf(w) == b then
+				if M.helpers.is_editing_window(w) and vim.api.nvim_win_get_buf(w) == b then
 					vim.api.nvim_set_current_win(w)
 					return b
 				end

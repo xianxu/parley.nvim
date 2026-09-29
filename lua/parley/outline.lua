@@ -6,6 +6,7 @@ local M = {}
 local highlight_structure = require("parley.highlight_structure")
 local question_tags = require("parley.question_tags")
 local markdown_heading = require("parley.markdown_heading")
+local is_editing_window = require("parley.helper").is_editing_window
 
 local Document = require("parley.document")
 local Reader = require("parley.line_reader")
@@ -98,14 +99,14 @@ local function focus_buffer_line(target_buf, target_name, preferred_windows, lnu
     return true
   end
   for _, win in ipairs(preferred_windows or {}) do
-    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == target_buf then
+    if is_editing_window(win) and vim.api.nvim_win_get_buf(win) == target_buf then
       vim.api.nvim_set_current_win(win)
       return place_cursor(win)
     end
   end
 
   for _, win in ipairs(vim.api.nvim_list_wins()) do
-    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == target_buf then
+    if is_editing_window(win) and vim.api.nvim_win_get_buf(win) == target_buf then
       vim.api.nvim_set_current_win(win)
       return place_cursor(win)
     end

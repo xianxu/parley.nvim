@@ -43,6 +43,8 @@
 - Standard `float_picker` (results + prompt), fuzzy filter with highlights
 - Single click selects; double-click/`<CR>` confirms with highlight flash
 - Cross-file nav uses `edit` (same window), not split
+- Destination lookup excludes floating overlays, including when a root buffer
+  is already displayed in one; `helper.is_editing_window` also governs link navigation.
 
 ## Implementation and checks
 

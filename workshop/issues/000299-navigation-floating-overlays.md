@@ -43,9 +43,9 @@ all affected consumers rather than disabling Screenkey (ARCH-PURPOSE).
 
 ## Plan
 
-- [ ] Add failing regression coverage for link and outline destinations.
-- [ ] Share the ordinary-window predicate and apply it to both navigation paths.
-- [ ] Verify tests, lint, and update atlas.
+- [x] Add failing regression coverage for link and outline destinations.
+- [x] Share the ordinary-window predicate and apply it to both navigation paths.
+- [x] Verify tests, lint, and update atlas.
 
 ## Log
 
@@ -57,3 +57,11 @@ all affected consumers rather than disabling Screenkey (ARCH-PURPOSE).
 - Separate discovery: cold child-question outline selection can reject a row
   before its document index is repaired. This is outside the clarified root-file
   failure and is not part of this window-target fix.
+- Red: three actual Option+O mapping cases chose the wrong window (single
+  editing window, two real splits, and destination already in float); two
+  outline root-selection cases focused a discovered/captured float.
+- Green: `make test-spec SPEC=context/file_references` passed 101 tests in
+  7 specs; `make test-spec SPEC=ui/outline` passed 226 tests in 6 specs.
+  `make lint` passed 669 files without warnings/errors; `git diff --check` passed.
+  The isolated demo-shape probe now opens root in the main window and preserves
+  the overlay's scratch buffer. Existing split and ChatFinder tests remain green.
