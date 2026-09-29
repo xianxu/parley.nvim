@@ -2689,7 +2689,7 @@ M.prep_chat = function(buf, file_name)
 	-- The spell <CR> map shadows interview's global <CR> map buffer-locally, so we
 	-- inject interview.cr_keys as the no-popup base to keep timestamp insertion (#134).
 	local cs = M.config.chat_spell
-	if cs and (cs.enable or cs.typeahead) then
+	if cs then
 		require("parley.spell").attach(buf, vim.tbl_extend("force", cs, {
 			prompt_buf_type = M.config.chat_prompt_buf_type,
 			base_cr = require("parley.interview").cr_keys,

@@ -752,10 +752,12 @@ describe("arch: native key overrides are declared (#214)", function()
         local reg = require("parley.keybinding_registry")
         local shipped = dofile("lua/parley/config.lua")
         local leaked = {}
-        for key in pairs(reg.feature_gated) do
+        for key, meta in pairs(reg.feature_gated) do
             for _, e in ipairs(reg.entries) do
                 for _, k in ipairs(reg.resolve_keys(e, shipped) or {}) do
-                    if k == key then leaked[#leaked + 1] = key .. " via " .. e.id end
+                    if k == key and (not meta.scope or meta.scope == e.scope) then
+                        leaked[#leaked + 1] = key .. " via " .. e.id
+                    end
                 end
             end
         end

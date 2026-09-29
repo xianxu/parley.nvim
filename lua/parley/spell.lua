@@ -13,6 +13,32 @@
 local helper = require("parley.helper")
 
 local M = {}
+local legacy = {}
+
+local function detach_legacy(buf)
+    local owned = legacy[buf]
+    if not owned then return end
+    legacy[buf] = nil
+    pcall(vim.api.nvim_del_augroup_by_id, owned.group)
+    if owned.mapping and vim.api.nvim_buf_is_valid(buf) then
+        vim.api.nvim_buf_call(buf, function()
+            local current = vim.fn.maparg("<CR>", "i", false, true)
+            if vim.deep_equal(current, owned.mapping) then
+                if owned.previous then
+                    vim.fn.mapset("i", false, owned.previous)
+                else
+                    vim.keymap.del("i", "<CR>", { buffer = buf })
+                end
+            end
+        end)
+    end
+end
+
+function M.detach(buf)
+    detach_legacy(buf)
+    local blink = package.loaded["parley.spell_blink"]
+    if blink then blink.detach(buf) end
+end
 
 --------------------------------------------------------------------------------
 -- Pure core
@@ -127,6 +153,8 @@ end
 --                     set, skip the <CR> map so we don't shadow the prompt.
 --   base_cr         → function returning the no-popup <CR> keys (injected by the
 --                     caller so this module stays decoupled from interview mode).
+-- Blink takes ownership when requested and ready; explicit legacy typeahead
+-- remains a fallback until then. Reattachment tears down the previous backend.
 -- Both `enable` and `typeahead` are OPT-IN (nil ⇒ off). #214 flipped `typeahead`
 -- from opt-out: it installs an insert-mode <CR> map and a TextChangedI autocmd on
 -- every chat buffer, so a user who has not asked for a spelling popup should not
@@ -138,14 +166,21 @@ end
 ---@param opts table|nil
 function M.attach(buf, opts)
 	opts = opts or {}
+	M.detach(buf)
 	local lang = opts.spelllang or "en_us"
-
+	vim.api.nvim_set_option_value("spelllang", lang, { buf = buf })
 	vim.api.nvim_buf_call(buf, function()
-		vim.cmd("setlocal spelllang=" .. lang)
-		if opts.enable then
-			vim.cmd("setlocal spell")
-		end
+		vim.api.nvim_set_option_value("spell", opts.enable == true, { scope = "local" })
 	end)
+
+	if opts.blink then
+		local blink_opts = vim.tbl_extend("force", {}, opts, { on_ready = function()
+			detach_legacy(buf)
+			require("parley.neighborhood").attach_cmp_completion(buf)
+			if opts.on_ready then opts.on_ready() end
+		end })
+		if require("parley.spell_blink").attach(buf, blink_opts) then return end
+	end
 
 	-- nil ⇒ off (#214). Only an explicit truthy `typeahead` wires the popup.
 	if not opts.typeahead then
@@ -153,6 +188,11 @@ function M.attach(buf, opts)
 	end
 
 	local group = vim.api.nvim_create_augroup("ParleySpell_" .. buf, { clear = true })
+	local owned = { group = group }
+	legacy[buf] = owned
+	vim.api.nvim_create_autocmd("BufWipeout", {
+		group = group, buffer = buf, callback = function() M.detach(buf) end,
+	})
 	vim.api.nvim_create_autocmd({ "TextChangedI", "TextChangedP" }, {
 		group = group,
 		buffer = buf,
@@ -169,12 +209,19 @@ function M.attach(buf, opts)
 	-- for prompt buffers where <CR> already triggers respond.
 	local base_cr = opts.base_cr
 	if not opts.prompt_buf_type then
+		vim.api.nvim_buf_call(buf, function()
+			local previous = vim.fn.maparg("<CR>", "i", false, true)
+			if previous.buffer == 1 then owned.previous = previous end
+		end)
 		vim.keymap.set("i", "<CR>", function()
 			local visible = vim.fn.pumvisible() == 1
 			local has_selection = vim.fn.complete_info({ "selected" }).selected ~= -1
 			local base = base_cr and base_cr() or "<CR>"
 			return M.cr_keys(visible, has_selection, base)
 		end, { buffer = buf, expr = true, silent = true, desc = "parley: accept spell suggestion / newline" })
+		vim.api.nvim_buf_call(buf, function()
+			owned.mapping = vim.fn.maparg("<CR>", "i", false, true)
+		end)
 	end
 end
 
