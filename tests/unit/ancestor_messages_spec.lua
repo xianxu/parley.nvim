@@ -140,15 +140,14 @@ end)
 
 
 describe("ancestor preface ownership", function()
-    it("prefixes anonymous and labelled questions including an empty question", function()
+    it("omits local prefaces and skips an otherwise empty question", function()
         local first = exchange("Ask", "Answer")
         first.preface = { content = "@@topic@@" }
         local second = exchange("")
         second.preface = { content = "@@_@@" }
         assert.are.same({
-            { role = "user", content = "@@topic@@\nAsk" },
+            { role = "user", content = "Ask" },
             { role = "assistant", content = "Answer" },
-            { role = "user", content = "@@_@@" },
         }, build({ { exchanges = { first, second }, branch_after = 2 } }))
     end)
 end)

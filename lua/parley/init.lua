@@ -4447,10 +4447,10 @@ M.cmd.ChatPrune = function()
 		local ex = parsed_chat.exchanges[idx]
 		if ex.question then
 			table.insert(topic_msgs, { role = "user", content = require("parley.question_tags").compose_question(
-				ex.preface and ex.preface.content, ex.question.content) })
+				ex.preface and ex.preface.content, require("parley.question_tags").content(ex.question)) })
 		end
 		if ex.answer then
-			table.insert(topic_msgs, { role = "assistant", content = ex.answer.content })
+			table.insert(topic_msgs, { role = "assistant", content = require("parley.question_tags").content(ex.answer) })
 		end
 	end
 

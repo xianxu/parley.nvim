@@ -136,7 +136,9 @@ bundled originals here:
 To label a question in the outline, put `@@label@@` immediately above its question
 line, with no blank line between them. The outline shows `💬: label` (or your
 configured question prefix). `@@_@@` hides that question from the outline.
-Both forms remain in AI context as a preface to the following question.
+Whole-line outline tags are local only: the entire tag line is excluded from
+model context, including history. File/URL references such as `@@./notes.md@@`
+still attach context; inline mentions and fenced examples remain literal.
 
 The app also suggests words from the current buffer after two typed characters.
 Use Ctrl-n/p to select, Ctrl-y to accept and Ctrl-e to dismiss; Enter keeps its

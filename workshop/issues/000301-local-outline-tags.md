@@ -30,10 +30,12 @@ Exclude entire strict whole-line local `@@label@@` and `@@_@@` rows from outgoin
 
 ## Plan
 
-- [ ] Add failing context regressions, implement shared source-row projection, update docs, verify and close.
+- [x] Add failing context regressions, implement shared source-row projection, update docs, verify and close.
 
 ## Log
 
 ### 2026-09-29
 
 User approved whole-line-only local tags. Follow-up @@ auto-pair typing will be a separate bounded change after this context change. Branch is stacked on #300 to retain the app customization already delivered. Read-only exploration confirmed normalized text cannot preserve original-line semantics, so raw parsed content stays authoritative and context projections are derived.
+
+Context regressions failed before implementation, then passed. Verified chat/format, ui/outline, chat/memory and chat/exchange_model mapped suites plus changed-file Lua lint. Tests cover original-line lookalikes, anonymous/standalone tags, backtick/tilde/nested fenced literals, reference loading, tool input/result byte identity, ancestor context and unchanged local parsed/buffer text.

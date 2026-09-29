@@ -1,3 +1,4 @@
+local question_tags = require("parley.question_tags")
 -- parley/chat_respond.lua — LLM response pipeline extracted from init.lua
 -- Owns: remote reference cache, _build_messages, _resolve_remote_references,
 --       chat_respond, chat_respond_all, cmd.Stop/ChatRespond; refusals speak through
@@ -182,7 +183,7 @@ M.build_ancestor_messages = function(ancestor_chain)
             end
             if exchange.question then
                 local content = require("parley.question_tags").compose_question(
-                    exchange.preface and exchange.preface.content, exchange.question.content)
+                    exchange.preface and exchange.preface.content, question_tags.content(exchange.question))
                     :gsub("^%s*(.-)%s*$", "%1")
                 if content ~= "" then
                     table.insert(msgs, { role = "user", content = content })
@@ -190,7 +191,7 @@ M.build_ancestor_messages = function(ancestor_chain)
             end
             if exchange.answer then
                 -- Use summary when available (mirrors memory-aware answer handling)
-                local raw = exchange.summary and exchange.summary.content or exchange.answer.content
+                local raw = exchange.summary and question_tags.content(exchange.summary) or question_tags.content(exchange.answer)
                 local content = (raw or ""):gsub("^%s*(.-)%s*$", "%1")
                 if content ~= "" then
                     table.insert(msgs, { role = "assistant", content = content })
@@ -523,7 +524,7 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info, opts)
             if blk.size <= 0 then goto continue end
 
             if blk.kind == "question" then
-                local text = read_block_text(k, b)
+                local text = question_tags.context_text(read_block_text(k, b), _parley and _parley.config)
                 -- Prefix matching is literal: configured prefixes may contain Lua pattern characters.
                 local user_prefix = (_parley and _parley.config.chat_user_prefix) or "💬:"
                 if text:sub(1, #user_prefix) == user_prefix then
@@ -565,7 +566,7 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info, opts)
                 goto continue  -- not part of messages
 
             elseif blk.kind == "text" or blk.kind == "stream_placeholder" then
-                local text = define.strip_definition_footnote_footer(read_block_text(k, b))
+                local text = define.strip_definition_footnote_footer(question_tags.context_text(read_block_text(k, b), _parley and _parley.config))
                 if text:match("%S") then
                     table.insert(answer_blocks, { type = "text", text = text })
                 end
@@ -793,7 +794,8 @@ M.build_messages = function(opts)
         for _, block in ipairs(blocks or {}) do
             local copy = vim.deepcopy(block)
             if copy.type == "text" and type(copy.text) == "string" then
-                copy.text = define.strip_definition_footnote_footer(copy.text)
+                copy.text = define.strip_definition_footnote_footer(copy.context_text or copy.text)
+                copy.context_text = nil
             end
             out[#out + 1] = copy
         end
@@ -864,7 +866,7 @@ M.build_messages = function(opts)
                     -- Get the question content and process any file loading directives
                     local question_content = require("parley.question_tags").compose_question(
                         exchange.preface and exchange.preface.content,
-                        define.strip_definition_footnote_footer(exchange.question.content))
+                        define.strip_definition_footnote_footer(question_tags.content(exchange.question)))
                     local file_content_parts = {}
 
                     -- Raw request input feature: detect a `yaml {"type":"request"}`
@@ -983,12 +985,12 @@ M.build_messages = function(opts)
                             table.insert(messages, m)
                         end
                     else
-                        table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(exchange.answer.content) })
+                        table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.answer)) })
                     end
                 else
                     -- Use the summary if available
                     if exchange.summary then
-                        table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(exchange.summary.content) })
+                        table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.summary)) })
                     else
                         -- If no summary is available, use the full content (fallback)
                         if answer_has_tool_blocks then
@@ -996,7 +998,7 @@ M.build_messages = function(opts)
                                 table.insert(messages, m)
                             end
                         else
-                            table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(exchange.answer.content) })
+                            table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.answer)) })
                         end
                     end
                 end
@@ -1668,7 +1670,7 @@ local function start_scoped_response(frame)
         if not header or not parents then return end
         local Topic = require('parley.response_topic')
         local conversation = M._conversation_after_lead(messages or {}, message_lead)
-        conversation[#conversation + 1] = {role = 'assistant', content = latest and latest.response or ''}
+        conversation[#conversation + 1] = {role = 'assistant', content = question_tags.context_text(latest and latest.response or '', config)}
         local input = Topic.input(conversation, info.provider, info.model, config.chat_topic_gen_prompt, _parley.dispatcher)
         input.buf = buf
         topic_finished = false

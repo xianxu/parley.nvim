@@ -20,9 +20,9 @@
   (`💬:` by default) and retaining its question-row destination.
   A blank line breaks adjacency. `@@_@@` always hides its own annotation row;
   immediately above a question it hides that question from the outline too.
-  These attached tags are the exchange's preface: their raw text still prefixes
-  the following user message in AI context, including `@@_@@`. Fenced lookalikes
-  do not attach. The shared rule lives in `question_tags.lua`.
+  These attached tags are the exchange's preface locally. Whole-line local tags
+  (attached or standalone, including `@@_@@`) are excluded from model context.
+  File/URL references retain their reference behavior; fenced lookalikes do not attach. The shared rule lives in `question_tags.lua`.
 - Headings indented by level: `#` → 2sp, `##` → 4sp, `###` → 6sp
 - Lines inside code blocks (``` / ~~~) are excluded — but a `💬:`/`🤖:` turn
   marker at column zero ENDS an open fence (#218), so an unmatched fence in one

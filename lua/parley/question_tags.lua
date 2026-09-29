@@ -6,6 +6,47 @@ function M.parse_tag(line)
     return type(line) == "string" and line:match("^@@(.+)@@$") or nil
 end
 
+-- Classify physical rows before speaker removal or whitespace normalization.
+function M.is_local_tag(line)
+    return M.parse_tag(line) ~= nil and #require("parley.chat_parser").extract_file_refs(line) == 0
+end
+
+function M.local_rows(lines, config)
+    local excluded, state, fence_char = {}, {}, nil
+    local patterns = structure.patterns(config)
+    for row, line in ipairs(lines) do
+        if structure.is_partition(line, patterns) then state.in_code = false end
+        local width = structure.is_fence_delim(line, true)
+        if width then
+            local char = line:match("^%s*([`~])")
+            if not state.in_code or (char == fence_char and line:match("^%s*[`~]+%s*$")) then
+                structure.advance(state, "c" .. width, width)
+                fence_char = state.in_code and char or nil
+            end
+        elseif not state.in_code and M.is_local_tag(line) then
+            excluded[row] = true
+        end
+    end
+    return excluded
+end
+
+function M.project(parts, source_rows, excluded)
+    local out = {}
+    for index, part in ipairs(parts) do
+        if not excluded[source_rows and source_rows[index] or index] then out[#out + 1] = part end
+    end
+    return table.concat(out, "\n")
+end
+
+function M.context_text(text, config)
+    local lines = vim.split(text or "", "\n", { plain = true })
+    return M.project(lines, nil, M.local_rows(lines, config))
+end
+
+function M.content(component)
+    return component.context_content or component.content
+end
+
 function M.associations(lines, config, header_end)
     local patterns = structure.patterns(config)
     local memo = structure.code_block_memo(lines, patterns, true)
@@ -23,7 +64,7 @@ function M.associations(lines, config, header_end)
 end
 
 function M.compose_question(preface_content, question_content)
-    if preface_content and preface_content ~= "" then
+    if preface_content and preface_content ~= "" and not M.is_local_tag(preface_content) then
         return preface_content .. "\n" .. (question_content or "")
     end
     return question_content or ""

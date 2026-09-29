@@ -20,9 +20,9 @@ describe("question preface association", function()
         assert.same({ [7] = { line_start = 6, line_end = 6, content = "@@custom@@", label = "custom" } },
             tags.associations(lines, custom))
     end)
-    it("composes raw prefaces including anonymous and file-shaped tags", function()
+    it("omits local prefaces but keeps reference prefaces", function()
         assert.equals("question", tags.compose_question(nil, "question"))
-        assert.equals("@@_@@\nquestion", tags.compose_question("@@_@@", "question"))
+        assert.equals("question", tags.compose_question("@@_@@", "question"))
         assert.equals("@@./notes.md@@\nquestion", tags.compose_question("@@./notes.md@@", "question"))
     end)
 end)
@@ -58,5 +58,23 @@ describe("question preface outline projection", function()
         items[2].value.tag_lnum = 7
         assert.equals(2, tags.initial_index(items, "/chat.md", 7))
         assert.equals(2, tags.initial_index(items, "/chat.md", 8))
+    end)
+end)
+
+-- Classify source rows, never already-trimmed message content.
+describe("local tag context projection", function()
+    it("keeps inline, indented, incomplete and reference forms", function()
+        local lines = { "@@local@@", "@@_@@", "text @@inline@@", " @@indented@@",
+            "@@tag@@ trailing", "@@@@", "@@unfinished", "@@./notes.md@@", "@@https://example.test@@",
+            "@@/absolute@@", "@@~/home@@", "@@../parent@@", "@@http://example.test@@" }
+        assert.equals(table.concat(lines, "\n", 3), tags.context_text(table.concat(lines, "\n"), cfg))
+    end)
+    it("keeps fenced text across mixed and shorter fence runs", function()
+        local text = "````lua\n```\n@@one@@\n~~~\n@@two@@\n````\n@@local@@"
+        assert.equals(text:sub(1, -11), tags.context_text(text, cfg))
+    end)
+    it("uses configured turn boundaries after an unmatched fence", function()
+        local text = "```\n@@literal@@\nQ+: question\n@@local@@"
+        assert.equals("```\n@@literal@@\nQ+: question", tags.context_text(text, { chat_user_prefix = "Q+:" }))
     end)
 end)
