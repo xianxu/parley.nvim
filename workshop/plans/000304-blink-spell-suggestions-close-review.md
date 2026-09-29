@@ -80,3 +80,70 @@ findings:
     detail: |
       lua/parley/spell_blink.lua:241-258 omits window entry/leave invalidation. With pinned real Blink, switching between two windows showing the same buffer and returning during resolution still applied the old correction. ARCH-ORDER: invalidate synchronously on window departure, observe on entry, and add regression tests covering delayed acceptance and resource cleanup across these transitions.
 ```
+
+---
+
+## Re-review — 2026-09-29T16:28:17-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 304 — Unify automatic spell suggestions in Blink |
+| repo | parley.nvim |
+| issue file | workshop/issues/000304-blink-spell-suggestions.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 63390569836794b56c5e97442dceb9e3db4fd454..ef336da699c25819524c82b34fda17da45eb74dd |
+| command | sdlc close --issue 304 |
+| reviewer | codex |
+| timestamp | 2026-09-29T16:28:17-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range delivers the shared Blink spelling integration and documents its setup and limits. BR-1 is addressed: window transitions invalidate acceptance synchronously, and its regression fails when that fix is removed in memory. No new blocking findings. Repository files remain unchanged.
+
+1. **Strengths**
+   - Pure targeting, dismissal, and acceptance logic lives in `lua/parley/spell_state.lua`.
+   - Whole-word edits preserve surrounding text and undo behavior in both modes.
+   - Mapping leases restore previous mappings while preserving intervening user remaps.
+   - README and atlas cover the new configuration, controls, and compatibility boundary.
+
+2. **Critical findings:** None remaining.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+   - Required pinned stat/name-status inspections completed.
+   - `make test-spec SPEC=chat/spell_typeahead`: **77 tests passed**.
+   - Pinned Blink compatibility: **plugin, app, and existing completion/pairing checks passed**.
+   - Mutation removing the window-event handler failed at `tests/packaging/spell_compatibility.lua:175`: stale correction accepted after returning to the original window.
+   - English spelling p95 measured approximately **28 ms**.
+   - Pinned diff whitespace check passed.
+   - Harness process census was unavailable because `ps` was unavailable.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** shared plugin/app implementation and dictionary admission.
+   - **ARCH-PURE — pass:** data-only reducer tests; declared integration entities match their locations.
+   - **ARCH-PURPOSE — pass:** automatic Normal/Insert corrections delivered in both distributions.
+   - **ARCH-MOCK — pass:** stateful fake plus real pinned dependency checks.
+   - **ARCH-CONSTRAINTS — pass:** bounded inputs, suggestion counts, and cancellable debounce.
+   - **ARCH-SECURE — pass:** option/edit APIs avoid command interpolation; compatibility tests isolate storage.
+   - **ARCH-ORDER — pass:** window transitions now revoke tickets through the reducer; delayed-resolution regression verified.
+   - **ARCH-FUNERAL — pass:** timers, mappings, adapters, and controller resources have teardown paths.
+
+7. **Plan revision recommendations:** None; the BR-1 revision records the corrected lifecycle and regression scenarios.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      lua/parley/spell_blink.lua:256 invalidates synchronously on window transitions and schedules entry observation. Controller regressions verify cleanup and re-observation; real Blink regressions cover delayed resolution across departure and return. Both profiles pass, and removing this handler in memory makes the return-to-origin regression fail at tests/packaging/spell_compatibility.lua:175.
+```

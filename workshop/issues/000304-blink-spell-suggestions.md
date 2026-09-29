@@ -49,6 +49,7 @@ Implementation questions to resolve during design: verify the pinned Blink versi
 ## Log
 
 ### 2026-09-29
+- 2026-09-29: closed — BR-1 reproduced then fixed: 77 mapped spell tests and pinned Blink plugin/app window-excursion resolve regressions pass; existing 35-step completion/pairing harness passes; prior ui/keybindings and infra/starter pass; full lint clean before fix and touched-file lint clean after; git diff --check clean; docs and lesson updated; review verdict: SHIP
 
 User requested a ticket only, not implementation. Explicit priorities: use Blink for spell typeahead in main Parley, ensure it works in parley_app, and automatically pop the Blink spelling menu over a misspelled word in Normal or Insert mode. Current spell underlines are enabled; legacy spell typeahead is disabled and owns a separate popup/Enter mapping when enabled. The app already has Blink buffer completion and the requested selection/acceptance/dismissal keys.
 
