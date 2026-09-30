@@ -327,6 +327,28 @@ it offers the current chat's captured generations in a picker.
 `:ParleyStopDocument` cancels all generations in the current chat. Save a separate
 copy or use version control when you need durable recovery beyond editor history.
 
+### Editing while an answer is generated
+
+You can write the next question while one or more answers stream elsewhere in
+the chat. Their requests run at the same time, but answers are written one at a
+time: a later answer waits, showing which answer it is waiting for, then appears
+in full once the earlier one finishes or pauses — so an undo step never mixes two
+answers. An answer's header appears with its first output. Submitting a question
+that is already generating leaves its current response running. Deleting an
+exchange invalidates its writers; reloading the file invalidates all active
+writes. Undo does not restart a cancelled request.
+
+Changing earlier input leaves an in-flight request on its original input. The
+answer shows an **input changed** note for this editor session
+(`lua/parley/response_status.lua`). A tool continuation pauses rather than
+silently combining edited input with previous results: `:ParleyChatResumeResponse`
+selects a paused response and, after confirmation, continues it with the
+**original input and confirmed tool results**; otherwise stop it and generate a
+new answer. Edited output cannot regain its old write permission through resume.
+The note clears when a fresh response starts or the file is reloaded.
+
+These controls apply to concurrent work in one Neovim instance.
+
 ### A stopped response always ends (#261)
 
 **The invariant:** every generation that enters `stopping` reaches `terminal`

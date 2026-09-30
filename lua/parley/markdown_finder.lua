@@ -310,13 +310,10 @@ M.open = function()
 		or { active = false, members = {} }
 	local mode = super_state.active and "super_repo" or "ordinary"
 	local member_roots = super_state.members or {}
-	local repo_root = config.repo_root
-	if mode == "ordinary" and (not repo_root or repo_root == "") then
-		repo_root = _parley.helpers.find_git_root(vim.fn.getcwd())
-		if repo_root == "" then
-			_parley.logger.warning("Markdown finder: not in a git repository")
-			return
-		end
+	local repo_root = _parley.project_root()
+	if mode == "ordinary" and repo_root == "" then
+		_parley.logger.warning("Markdown finder: not in a git repository")
+		return
 	end
 	local roots = valid_roots(mode, member_roots, repo_root)
 	local snapshot = finder_scan.snapshot({

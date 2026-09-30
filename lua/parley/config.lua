@@ -259,7 +259,7 @@ local config = {
 	note_roots = {},
 	-- additional note roots searched by note-aware features; new notes still use notes_dir
 	note_dirs = {},
-	-- note dir within repo when repo mode is active (relative to git root)
+	-- note dir within repo when repo mode is active (relative to the repo root)
 	repo_note_dir = "workshop/notes",
 	-- export directories for different formats
 	export_html_dir = data_root .. "/exports/html",
@@ -526,11 +526,11 @@ local config = {
 		months = 3,
 		presets = { 3, 6, 12 },
 	},
-	-- repo-local parley detection (marker file in git root enables repo mode)
+	-- repo-local parley detection (nearest ancestor holding this marker enables repo mode; repo_root = false opts out)
 	repo_marker = ".parley",
-	-- chat dir within repo when repo mode is active (relative to git root)
+	-- chat dir within repo when repo mode is active (relative to the repo root)
 	repo_chat_dir = "workshop/parley",
-	-- issue management (repo-local, relative to git root)
+	-- issue management (repo-local, relative to the repo root)
 	issues_dir = "workshop/issues",
 	-- root for src: URL scheme (parent of sibling repos). nil = auto-detect via git rev-parse.
 	src_root = nil,
@@ -540,9 +540,9 @@ local config = {
 	-- binary is on $PATH, "sdlc" works as-is; otherwise set an absolute path
 	-- (e.g. "~/workspace/ariadne/bin/sdlc"). Read-only, so it's lock-free + fast.
 	sdlc_cmd = "sdlc",
-	-- issue history (repo-local, relative to git root)
+	-- issue history (repo-local, relative to the repo root)
 	history_dir = "workshop/history/issues",
-	-- vision tracker (repo-local, relative to git root)
+	-- vision tracker (repo-local, relative to the repo root)
 	vision_dir = "workshop/vision",
 	-- global shortcuts for vision tracker
 	global_shortcut_vision_validate = { modes = { "n" }, shortcut = "<C-j>v" },

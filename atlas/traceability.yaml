@@ -654,6 +654,7 @@ atlas:
       - tests/unit/provider_params_spec.lua
       - tests/unit/pure_functions_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
+      - tests/integration/zero_config_spec.lua
 
   infra/logging:
     code:
@@ -750,6 +751,7 @@ atlas:
       - tests/arch/buffer_mutation_spec.lua
       - tests/unit/helper_io_spec.lua
       - tests/unit/repo_mode_spec.lua
+      - tests/integration/zero_config_spec.lua
       - tests/unit/super_repo_spec.lua
       - tests/unit/finder_facets_spec.lua
       - tests/unit/chat_finder_logic_spec.lua

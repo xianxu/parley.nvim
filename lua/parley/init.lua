@@ -95,6 +95,14 @@ M.toggle_super_repo = function()
 end
 M.is_super_repo_active = function() return super_repo.is_active() end
 
+-- Root that repo-relative paths (issues, vision) resolve against: the repo-mode
+-- root setup selected (nearest marker, #307), else cwd's Git root ("" if none).
+M.project_root = function()
+	local root = M.config.repo_root
+	if type(root) == "string" and root ~= "" then return root end
+	return M.helpers.find_git_root(vim.fn.getcwd())
+end
+
 -- Discovery registry (#116): the repo's noun-vocabulary (what file types exist
 -- and how to find their instances). Pure given mode context; current() reads it
 -- from live config (repo_root + super_repo_members) via the injected M ref.
@@ -585,8 +593,10 @@ M.setup = function(opts)
 	-- crash leftover of the atomic writer (#261).
 	M.helpers.remove_stale_temps(state_dir)
 
-	-- Process API keys from api_keys table and load them into vault
-	local api_keys = opts.api_keys or M.config.api_keys or {}
+	-- Process API keys from api_keys table and load them into vault. User keys
+	-- layer over the defaults so keyless providers (ollama, cliproxyapi) keep
+	-- their local tokens; `false` drops a default.
+	local api_keys = vim.tbl_extend("force", M.config.api_keys or {}, opts.api_keys or {})
 	for provider_name, api_key in pairs(api_keys) do
 		if api_key then
 			M.logger.debug("Loading " .. provider_name .. " API key into vault")
@@ -594,10 +604,11 @@ M.setup = function(opts)
 		end
 	end
 
-	-- Process providers and inject secrets from vault if needed
+	-- Process providers and inject secrets from vault if needed. An empty table
+	-- disables its provider (dispatcher.setup), so it must stay empty.
 	local providers = opts.providers or M.config.providers or {}
 	for provider_name, provider in pairs(providers) do
-		if provider and type(provider) == "table" and not provider.secret and api_keys[provider_name] then
+		if type(provider) == "table" and next(provider) ~= nil and not provider.secret and api_keys[provider_name] then
 			M.logger.debug("Setting " .. provider_name .. " provider secret from api_keys")
 			provider.secret = api_keys[provider_name]
 		end
@@ -751,15 +762,17 @@ M.setup = function(opts)
 	)
 
 	-- Detect parley-enabled repo via marker file and set up repo-local directories
-	-- An explicit chat_dir stays authoritative unless a project root is also selected.
+	-- The nearest marker above cwd selects the repo; an explicit chat_dir becomes
+	-- its "global" root. `repo_root = false` or PARLEY_REPO_MODE=0 opts out.
 	local function apply_repo_local()
-		if opts.chat_dir and not opts.repo_root then return end
+		if opts.repo_root == false then return end
+		if opts.repo_root == nil and vim.env.PARLEY_REPO_MODE == "0" then return end
 
 		local marker = M.config.repo_marker
 		if not marker then return end
 
-		local git_root = opts.repo_root or M.helpers.find_git_root(vim.fn.getcwd())
-		if git_root == "" then return end
+		local git_root = opts.repo_root or repo_mode.detect_root(vim.fn.getcwd(), marker)
+		if not git_root then return end
 
 		local marker_path = git_root .. "/" .. marker
 		if vim.fn.filereadable(marker_path) ~= 1 then return end
@@ -1054,7 +1067,7 @@ M.setup = function(opts)
 		callback = function(ev)
 			local vision_dir = M.config.vision_dir
 			if not vision_dir or vision_dir == "" then return end
-			local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+			local git_root = M.project_root()
 			if git_root == "" then git_root = vim.fn.getcwd() end
 			local abs_vision = vim.fn.resolve(git_root .. "/" .. vision_dir)
 			local file_dir = vim.fn.resolve(vim.fn.fnamemodify(ev.file, ":p:h"))
@@ -1080,7 +1093,7 @@ M.setup = function(opts)
 		callback = function(ev)
 			local issues_dir = M.config.issues_dir
 			if not issues_dir or issues_dir == "" then return end
-			local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+			local git_root = M.project_root()
 			if git_root == "" then git_root = vim.fn.getcwd() end
 			local abs_issues = vim.fn.resolve(git_root .. "/" .. issues_dir)
 			local file_dir = vim.fn.resolve(vim.fn.fnamemodify(ev.file, ":p:h"))
@@ -1666,7 +1679,7 @@ local function detect_buffer_context(buf)
 	if file_name:match("%.yaml$") or file_name:match("%.yml$") then
 		local vision_dir = M.config.vision_dir
 		if vision_dir and vision_dir ~= "" then
-			local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+			local git_root = M.project_root()
 			if git_root ~= "" then
 				local abs_vision = vim.fn.resolve(git_root .. "/" .. vision_dir)
 				local resolved = vim.fn.resolve(vim.fn.fnamemodify(file_name, ":p"))
@@ -1677,13 +1690,9 @@ local function detect_buffer_context(buf)
 			end
 		end
 	end
-	-- Check if in a repo (has .parley marker)
-	local git_root = M.helpers.find_git_root(vim.fn.getcwd())
-	if git_root ~= "" then
-		local marker = git_root .. "/" .. (M.config.repo_marker or ".parley")
-		if vim.fn.filereadable(marker) == 1 then
-			return "repo"
-		end
+	-- Repo mode is setup's decision (#307); opt-outs leave repo_root unset.
+	if type(M.config.repo_root) == "string" and M.config.repo_root ~= "" then
+		return "repo"
 	end
 	return "other"
 end
