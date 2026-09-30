@@ -5,10 +5,10 @@ deps: []
 github_issue:
 created: 2026-09-30
 updated: 2026-09-30
-estimate_hours:
-card_mirror: 'b67b74723fbd6d1d0da0ce788b87a3cc15d6501d' # card fields mirrored from issue-cards; edit via sdlc
+estimate_hours: 3.74
+card_mirror: 'a282e27b4c801742d6a2dcbf203285b592141ac5' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-30T10:27:48-07:00
-flow: {kind: quick, provenance: inferred, spec: "a27bc433", done: "d145bc7f"}
+flow: {kind: full, provenance: operator}
 ---
 
 # Bundle tested editor dependencies for offline app startup
@@ -37,6 +37,25 @@ Preserve user configuration and chats. Existing copied starter files retain the 
 
 - [ ] Implement the shared dependency manifest, bundle assembly and production startup integration with regression coverage.
 - [ ] Verify real dependency parity and offline app behavior, update packaging documentation, then close through SDLC review.
+
+## Estimate
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only; calibration flagged stale by SDLC. Primitives cover issue design, pure manifest, artifact integration, starter integration, consumer refactor, upstream conformance, docs and boundary review. Python stdlib covers archives, hashing and locking (library discount for the pure manifest/provisioning design); use thorough-spec design discount ×0.2, familiar stack ×1.0, v3.1 implementation scale ×0.4 and +15% design buffer. Base implementation picks are 0.2/0.8/1.5/1.5/0.5/0.45/0.2/0.5 hours respectively.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.2 impl=0.08
+item: greenfield-go-module design=0.125 impl=0.32
+item: api-integration design=0.4 impl=0.6
+item: lua-neovim design=0.4 impl=0.6
+item: cross-cutting-refactor design=0.12 impl=0.2
+item: real-api-discovery design=0 impl=0.18
+item: atlas-docs design=0.02 impl=0.08
+item: milestone-review design=0.02 impl=0.2
+design-buffer: 0.15
+total: 3.74
+```
 
 ## Log
 
