@@ -34,8 +34,13 @@ brew install xianxu/parley/parley
 parley
 ```
 
-The first launch installs editor dependencies and opens the Welcome tutorial.
-Follow it to connect an account, choose a model, and send your first question.
+Homebrew installs the pinned editor dependencies with the app. The bundled
+starter opens the Welcome tutorial without downloading editor plugins; follow
+it to connect an account, choose a model, and send your first question. Editor
+startup and local Markdown preview work offline; provider login and AI requests
+still need a connection. Existing edited profiles must adopt the new
+`init.lua.new` starter to use bundled dependencies.
+
 Your Parley editor settings and chats are separate from your existing Neovim
 profile; provider logins are shared with other CLIProxyAPI clients.
 
@@ -65,16 +70,19 @@ new prefix to resume ordinary text. Prompt buffers keep Return-to-submit.
 
 To try the app from a checkout, run `./parley_app`. It loads the local starter
 outside repo mode, using a separate demo home and profile. Subsequent launches
-reuse that demo's chats, login and plugins. Its location is printed at startup;
-set `PARLEY_DEMO_DIR` to another directory to test a new profile.
+reuse that demo's chats and login. Python 3 provisions a bundle from the same
+checksummed dependency manifest as Homebrew, then verifies it before each launch.
+Initial provisioning needs a connection; a verified existing bundle can launch
+offline. Its location is printed at startup; set `PARLEY_DEMO_DIR` to another directory to test a new profile.
 Use `./parley_app --tutorials` to edit `packaging/tutorials/` directly through
 the app. `./parley_app --nuke` removes the demo profile and exits; the next launch
 starts fresh. Source tutorials and the normal installed app profile are retained.
 
 For a recording setup, use `./parley_app --demo`. Its separate configuration
 lives in [`demo/init.lua`](demo/init.lua); a disposable nested workspace opens
-an empty chat with Screenkey enabled. `--demo --reset` clears chats and editor
-state while retaining plugins and login; `--demo --nuke` removes the entire
+an empty chat with Screenkey enabled. The recording profile adds Screenkey from
+the same manifest; it is not a shipped app dependency. `--demo --reset` clears
+chats and editor state while retaining plugins and login; `--demo --nuke` removes the entire
 workspace. See [demo instructions](demo/README.md) for reset scope and asciinema.
 
 Select text and press **Option+i** to start a linked follow-up chat. The draft

@@ -189,12 +189,15 @@ Verify with `luacheck --version`. If `make test` still complains, ensure
 Run `./parley_app` from the checkout to use the real packaged starter with the
 current local code. The helper launches outside repo mode and reuses a dedicated
 demo profile; `PARLEY_DEMO_DIR=/path/outside/repo ./parley_app` selects another.
-The first run downloads editor plugins. Normal Parley configuration is untouched.
+Python 3 prepares a checksummed editor bundle beneath that profile, verifies its
+complete payload before every launch, and retains a shared reader lease until
+Neovim exits. Initial provisioning needs network access; reuse of a verified
+bundle does not. Normal Parley configuration is untouched.
 
 - `./parley_app --tutorials`: use this checkout's `packaging/tutorials/` as the
   chat folder, so edits change the release's source documents directly.
 - `./parley_app --nuke`: delete only the owned demo profile and exit. Launch
-  again for first-run setup; this includes downloading editor plugins again.
+  again for first-run setup; this includes provisioning the editor bundle again.
 
 Verify the launcher boundary with `python3 tests/packaging/test_local_app.py`.
 
@@ -205,8 +208,93 @@ recording content and editor state while retaining dependencies/login;
 `--demo --nuke` clears the entire workspace. Both delete without a backup and
 require the editor to be closed. [demo/README.md](demo/README.md) describes
 configuration, exact reset paths and recording commands. Neither mode needs
-Homebrew; relaunch after changing local code.
+Homebrew; both require Python 3. The recording profile adds the manifest's
+Screenkey member to the same app dependency set. Relaunch after changing local
+code. A mismatched or corrupt managed bundle refuses launch with a repair
+command; old Lazy caches and unrelated plugin checkouts are not deleted.
 
 Demo launch/reset operations serialize through a sibling `.launcher-lock`
 directory. A competing operation fails with its lock path. After a crashed
 launcher, close launchers and remove that empty lock directory before retrying.
+
+## Editor dependency bundles
+
+`lua/parley/editor_dependencies.lua` owns plugin repositories, full commits,
+archive URLs/checksums and platform Preview binary checksums. Its `app` membership
+is shipped by Homebrew; `recording` also includes Screenkey. Theme metadata,
+starter specs, local provisioning and formula resources derive from this source.
+CLI executable dependencies remain in the separate `parley.deps` registry.
+
+The Python standard-library assembler requires Python 3 and Neovim. Run from the
+checkout root; global options precede the subcommand:
+
+```sh
+bundle_root="${XDG_CACHE_HOME:-$HOME/.cache}/parley-editor-bundles"
+bundle=$(python3 scripts/editor-dependencies.py --runtime "$PWD" --profile app prepare --root "$bundle_root")
+python3 scripts/editor-dependencies.py --runtime "$PWD" --profile app verify --bundle "$bundle"
+python3 scripts/editor-dependencies.py --runtime "$PWD" --profile app run --root "$bundle_root" -- \
+  env NVIM_APPNAME=parley PARLEY_RUNTIME="$PWD" nvim -u "$PWD/packaging/starter-config/init.lua"
+```
+
+`prepare` prints the complete bundle path. `verify` prints its machine-readable
+receipt after comparing the complete payload, including unexpected files.
+`run` verifies/prepares, then execs the editor while retaining a shared lock;
+use it for writable development bundles so repair cannot remove an active tree.
+`--profile recording` includes recording dependencies. Platform detection is
+automatic; `--platform macos-arm64`, `macos` or `linux` selects an explicit
+artifact for build/projection checks. Linux ARM has no supported Preview binary.
+Selecting another platform does not prove its executable runs on that platform.
+
+To provision from local archives, add `--archives /path/to/archives` before
+`prepare` or `run`. The directory must be complete: missing files fail instead
+of falling back to the network. Plugin archive names can be
+`<name>-<commit>.tar.gz` or the URL basename; Preview uses its URL basename.
+All bytes are still checked against the manifest. Downloaded archives are bounded
+to 100 MiB and 120 seconds each; no upstream install script is executed.
+
+For a damaged managed bundle, close its editors and explicitly repair its owned
+root, then prepare again:
+
+```sh
+python3 scripts/editor-dependencies.py --runtime "$PWD" --profile app repair --root "$bundle_root"
+python3 scripts/editor-dependencies.py --runtime "$PWD" --profile app prepare --root "$bundle_root"
+```
+
+Repair removes only recognized bundle/staging children under the marked root;
+it refuses unowned roots and takes the same exclusive lease as publication.
+For `./parley_app`, use the printed demo profile's `editor-dependencies` directory
+as `bundle_root`; for `--demo`, it is `demo/workspace/editor-dependencies`.
+The normal local root is separate from the example root above. Old Lazy caches,
+chats, credentials and personal plugin directories are not repair targets.
+Homebrew bundles are immutable package payloads: repair those with Homebrew
+reinstall/upgrade, not this development-root command.
+
+To update a pin, change the authoritative manifest after obtaining the immutable
+source archive and computing its SHA-256. Preview changes also require the
+extracted binary's SHA-256 for every supported artifact. Retain licenses and
+review the dependency closure. Do not copy commits into theme/starter/formula
+consumers. Export the selected record set with:
+
+```sh
+nvim --headless -u NONE -i NONE -l "$PWD/scripts/export-editor-dependencies.lua" app macos-arm64
+```
+
+Verification commands:
+
+```sh
+python3 -m unittest discover -s tests/packaging -p 'test_editor_dependencies.py'
+python3 tests/packaging/test_local_app.py
+make test-spec SPEC=infra/packaging
+make test-spec SPEC=infra/starter
+scripts/check-editor-bundle.sh
+```
+
+Run mapped suites sequentially. The last command is a macOS release gate: it
+assembles a fresh real bundle, checks external-network denial, permits loopback
+Preview, and exercises cold/warm production startup. It fails if enforcement is
+unavailable. `PARLEY_EDITOR_ARCHIVES=/path/to/archives` supplies a complete local
+archive set to that runner. Compare its before/after verification reports to
+check package immutability; passing unit tests alone is not offline evidence.
+`scripts/release-parley.sh` runs the gate from the extracted immutable tagged tree
+before any tap write, including publication retries. Running the gate or these
+tests does not create a tag, release or tap publication.

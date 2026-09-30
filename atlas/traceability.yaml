@@ -38,6 +38,15 @@ atlas:
 
   infra/packaging:
     code:
+      - lua/parley/editor_dependencies.lua
+      - lua/parley/editor_bundle.lua
+      - scripts/editor-dependencies.py
+      - scripts/export-editor-dependencies.lua
+      - scripts/check-editor-bundle.sh
+      - tests/packaging/test_editor_dependencies.py
+      - tests/packaging/editor_bundle.lua
+      - packaging/README.md
+      - TOOLING.md
       - packaging/formula.lua
       - packaging/render-formula.lua
       - packaging/parley
@@ -52,6 +61,8 @@ atlas:
       - tests/packaging/vm_stop.lua
       - tests/packaging/vm_uninstall.py
     tests:
+      - tests/unit/editor_dependencies_spec.lua
+      - tests/integration/editor_bundle_spec.lua
       - tests/arch/single_source_sweeps_spec.lua
       - tests/unit/packaging_formula_spec.lua
       - tests/integration/packaging_launcher_spec.lua
@@ -64,6 +75,11 @@ atlas:
 
   infra/starter:
     code:
+      - lua/parley/editor_dependencies.lua
+      - lua/parley/editor_bundle.lua
+      - scripts/editor-dependencies.py
+      - scripts/export-editor-dependencies.lua
+      - packaging/starter-config/README.md
       - parley_app
       - tests/packaging/test_local_app.py
       - tests/packaging/statusline_compatibility.lua
@@ -89,6 +105,8 @@ atlas:
       - lua/parley/init.lua
       - scripts/check-starter.py
     tests:
+      - tests/unit/editor_dependencies_spec.lua
+      - tests/integration/editor_bundle_spec.lua
       - tests/unit/prepare_dir_spec.lua
       - tests/unit/help_content_spec.lua
       - tests/integration/parley_help_spec.lua
