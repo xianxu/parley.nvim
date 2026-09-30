@@ -221,6 +221,26 @@ describe("neighborhood completion", function()
         assert.equals("README.md", items[1].word)
     end)
 
+    it("suspends only its own cmp adapter when Blink takes ownership", function()
+        local captured, enabled = nil, true
+        package.loaded.cmp = {
+            config = { sources = function(sources) return sources end },
+            setup = { buffer = function(config) captured = config; if config.enabled ~= nil then enabled = config.enabled end end },
+            get_config = function() return { enabled = enabled } end,
+            register_source = function() end,
+        }
+        local buf, path = make_chat()
+        parley.prep_chat(buf, path)
+        assert.is_true(vim.wait(500, function() return captured ~= nil end))
+        local blink = require('parley.spell_blink')
+        blink.attach(buf, { blink = true }, require('tests.helpers.fake_blink').new())
+        neighborhood.attach_cmp_completion(buf)
+        assert.is_false(enabled)
+        blink.detach(buf)
+        neighborhood.attach_cmp_completion(buf)
+        assert.is_true(enabled)
+    end)
+
     it("re-asserts the parley buffer config on BufEnter", function()
         local captured
         local register_count = 0

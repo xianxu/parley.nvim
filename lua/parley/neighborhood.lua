@@ -235,6 +235,7 @@ function M.completefunc(findstart, base)
 end
 
 local cmp_registered = false
+local cmp_owners = {}
 local function cmp_path_sources(cmp)
     local sources = {
         {
@@ -263,6 +264,27 @@ function M.attach_cmp_completion(buf)
     if not ok or type(cmp) ~= "table" or type(cmp.setup) ~= "table" or type(cmp.setup.buffer) ~= "function" then
         return nil
     end
+    local owner = cmp_owners[buf]
+    if require("parley.spell_blink").owns(buf) then
+        if owner and not owner.suspended then
+            owner.enabled = cmp.get_config and cmp.get_config().enabled
+            cmp.setup.buffer({ enabled = false })
+            owner.suspended = true
+        end
+        return nil
+    end
+    local enabled
+    if owner and owner.suspended then
+        enabled = owner.enabled
+        if enabled == nil then enabled = true end
+        owner.suspended = false
+    end
+    if not owner then
+        owner = {}
+        cmp_owners[buf] = owner
+        vim.api.nvim_create_autocmd("BufWipeout", { buffer = buf, once = true,
+            callback = function() cmp_owners[buf] = nil end })
+    end
     if not cmp_registered and type(cmp.register_source) == "function" then
         cmp.register_source("parley_path", {
             complete = function(_, params, callback)
@@ -279,6 +301,7 @@ function M.attach_cmp_completion(buf)
     end
 
     cmp.setup.buffer({
+        enabled = enabled,
         completion = {
             keyword_pattern = [[\~\?\(\k\|[\/\.\-]\)\+]],
             keyword_length = 1,

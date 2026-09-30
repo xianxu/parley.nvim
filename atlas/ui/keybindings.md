@@ -203,7 +203,8 @@ door: no later configuration could bind anything back, and several actions
 Not covered: **hardcoded** keys inside transient parley windows (`q`/`<Esc>` to
 dismiss a picker, motion within it), so a window you opened stays closable; and
 maps that exist solely because a feature was switched on (interview-mode `<CR>`,
-`chat_spell.typeahead`'s `<CR>`) — those are the feature, not a default.
+`chat_spell.typeahead`'s `<CR>`, and the open Blink spelling menu's controls) —
+those belong to the enabled feature.
 
 **Reversibility, per sample site.** The switch is *sampled* in three places, and
 each one is where its decision becomes durable state:
@@ -231,10 +232,33 @@ user's namespace, and `<leader>fo` mapped oil.nvim, which parley never requires.
 ## Feature-gated maps
 A third category, distinct from both defaults and opt-ins:
 `keybinding_registry.feature_gated` names keys that exist **only** because a
-feature was switched on — `chat_spell.typeahead`'s insert-mode `<CR>`, and
-interview mode's. They are not keyspace claims: turning the feature off removes
-them. They are listed so the leak guard's allowance list is genuinely closed
+feature was switched on — `chat_spell.typeahead`'s insert-mode `<CR>`,
+interview mode's Return, and the open Blink spelling menu's controls. Turning
+the feature off removes its mappings. They are listed so the leak guard's allowance list is genuinely closed
 rather than reporting a documented opt-in as an escape.
+
+With `chat_spell.blink` enabled and Blink ready, a spelling menu temporarily
+borrows buffer-local controls in both Normal and Insert mode:
+
+| Key | While the spelling menu is open |
+|---|---|
+| Tab / Down | Select next item |
+| Up | Select previous item |
+| Enter | Accept selected item, or first item if none is selected |
+| Esc | Dismiss and remain in the current mode |
+
+These mappings exist only while Parley owns the visible context. Selection does
+not insert preview text. Closing the menu restores the prior effective mappings,
+including prompt and interview Return behavior; an intervening user remap is
+left intact. Without a spelling menu the keys are unchanged. These feature
+controls remain available under `default_keymaps = false`; disable them with
+`chat_spell.blink = false` instead.
+
+Esc keeps the unchanged word dismissed through within-word cursor movement and
+Normal/Insert transitions. Leaving or changing the word clears dismissal;
+`:lua require('parley.spell_blink').request()` explicitly requests suggestions
+again. See [spelling](../chat/spell_typeahead.md) for defaults, the pinned Blink
+setup, whole-word replacement and the separate legacy popup controls.
 
 Interview's `<CR>` is **global**, and its teardown **restores what it shadowed**.
 
