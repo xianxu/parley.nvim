@@ -39,12 +39,20 @@ Use a local HTTP archive server and real fixture Git repositories as the statefu
 
 ## Chunk 1: Manifest and consumers
 
+### Publication and verification contract (PQ-1/PQ-2)
+
+`run_with_bundle(root, manifest, command)` owns the development bundle lifecycle. A stable sibling lockfile uses OS advisory `flock`: an exclusive lease covers verification/assembly/publication/cleanup, then downgrades to a shared lease held by the parent for the entire Neovim subprocess lifetime. Competing writers wait at most 120 seconds then fail clearly; the kernel releases locks after process death. Readers enter only through this wrapper. Homebrew-installed kegs are immutable and do not use this development-writer path.
+
+`prepare_bundle` runs under that exclusive lease. It creates staging only beneath an app-owned root with an ownership marker, validates downloaded archives before extraction, builds a full payload receipt, then publishes a manifest-addressed directory by atomic rename without overwriting an existing directory. Verified matching bundles are reused. A corrupt existing bundle fails with a repair command; repair takes the same exclusive lease and refuses unknown ownership. After publication, obsolete owned bundle/staging directories are collected under the exclusive lease, so no active reader can lose files. Stable lockfile inode is never unlinked. Interrupted staging is never selected by readers and only the next exclusive owner may remove it. Tests control interruption at staging, verification and rename boundaries and order writer/reader acquisition with subprocess barriers.
+
+Named pure test targets: `validate_manifest` (ambiguous identity, schema validation); `validate_member` (archive path/type escape, containment/type allowlist); `parse_receipt` (untrusted/ambiguous metadata, exact schema and manifest binding); `compare_payloads` (missing/extra/modified files, complete deterministic path+mode+hash inventory); `publication_action` (existing/staged/current manifest states, explicit decision table). Stateful integration tests exercise `prepare_bundle`/`run_with_bundle` across filesystem state and lock lifetimes. Consumer tests verify set equality between projected local specs/resources and the manifest. These named strategies replace the earlier prose case inventories; end-to-end acceptance remains a separate production-path check.
+
 ### Task 1: Establish authoritative dependency records
 
 Files: new `lua/parley/editor_dependencies.lua`, `tests/unit/editor_dependencies_spec.lua`; modify `lua/parley/theme.lua`, `packaging/starter-config/init.lua`, `demo/init.lua`, `tests/packaging/bootstrap_lazy.lua`, theme tests.
 
 - [ ] Inventory the starter/theme dependency closure and current locally installed versions. Record source/binary checksums from actual immutable archives; preserve current tested pins unless an incompatibility is demonstrated.
-- [ ] Red: unit tests reject duplicate names, non-full commit pins, unsafe paths/URLs, absent hashes and unsupported artifact platforms. Test defensive copies and stable sorted projection. Test every theme's plugin reference resolves.
+- [ ] Red: test `validate_manifest` and consumer set equality using the named strategies above; test defensive copies and stable projection.
 - [ ] Green: expose deterministic manifest APIs (`plugins()`, `plugin(id)`, `artifact(platform)`, manifest identity serialization); no download or `vim.system` in this module. Move pins from theme/starter into it.
 - [ ] Update starter/bootstrap fixtures to derive the authoritative set, while retaining explicit behavioral expectations for required features. Test additions cannot silently bypass manifest coverage.
 - [ ] Derive recording Screenkey from the manifest in `demo/init.lua`; verify `./parley_app --demo` selects its verified recording member without an independent commit pin or Lazy installation.
@@ -54,7 +62,7 @@ Files: new `lua/parley/editor_dependencies.lua`, `tests/unit/editor_dependencies
 
 Files: new `scripts/editor-dependencies.py`, `lua/parley/editor_bundle.lua`, `tests/packaging/test_editor_dependencies.py`, `tests/integration/editor_bundle_spec.lua`; modify `parley_app`.
 
-- [ ] Red: serve fixture archives locally and assert rejection of wrong digest, truncated content, traversal/escaping links, incomplete manifest, wrong cached Git HEAD, tracked modifications and binary digest mismatch. Test failed staging cannot replace a good bundle and a retry succeeds.
+- [ ] Red: implement the named archive/receipt/payload/publication strategies against the local artifact server and run controlled process-ordering tests through the production lifecycle wrapper.
 - [ ] Green: consume the manifest exported by Neovim with `--headless -u NONE`, assemble a local bundle using exact source archives and platform artifact, and emit a deterministic receipt after full validation. Provision missing development dependencies explicitly, then verify before launch. Existing mismatches fail with a command that repairs only app-owned dependencies; never reset arbitrary user checkouts.
 - [ ] Use argument arrays for subprocesses. Keep downloaded source metadata/licensing. Validate all paths before writes, keep staging outside the final bundle, clean only directories created by this operation.
 - [ ] Verify reused plugin caches and archive bundles using their respective provenance, without requiring `.git` inside Homebrew resources. Export a machine-readable parity report for conformance tests.
@@ -66,7 +74,7 @@ Files: new `scripts/editor-dependencies.py`, `lua/parley/editor_bundle.lua`, `te
 
 Files: `packaging/formula.lua`, `packaging/render-formula.lua`, `scripts/release-parley.sh`, `tests/unit/packaging_formula_spec.lua`, `tests/integration/packaging_release_spec.lua`.
 
-- [ ] Red: rendered formula contains exactly manifest resources with URLs/hashes, includes Lazy and all theme dependencies, selects Preview by host architecture and passes an explicit bundle directory to the launcher. Release fixture must derive its dependency metadata from the tagged archive, never the caller checkout.
+- [ ] Red: test formula resource projection with the consumer set-equality strategy and platform selection; test tagged-tree isolation through the release fixture.
 - [ ] Green: stage plugin resources into `libexec` bundle paths; stage the Preview executable at the location its plugin expects. Use checksum-verified resources instead of running upstream download hooks. Generate receipt/metadata from the same manifest and preserve executable modes.
 - [ ] Keep existing CLI tool dependencies in `parley.deps`; editor plugins have a separate lifecycle and should not duplicate that registry. Do not add a second list of plugin URLs/pins to Ruby.
 - [ ] Verify formula syntax and architecture-specific projections with fixtures. A bottle includes the prepared bundle when built; creating/publishing new release tags or bottles is outside this implementation's authorized publication.
@@ -112,3 +120,4 @@ The operator approved the packaging direction and shared-pin contract. This is f
 
 - 2026-09-30: Dependency audit identified Lazy's implicit package/rock discovery as an additional network path. Explicitly disable it for bundles; include recording-only Screenkey in manifest membership without adding it to the shipped app.
 - 2026-09-30: Fresh-eyes review required full payload verification of reused writable bundles, explicit migration of the demo Screenkey consumer, and mandatory tagged-tree conformance in the release publication path. Added all three so parity cannot be bypassed through a warm cache or future release.
+- 2026-09-30: SDLC PQ-1/PQ-2 required explicit reader/writer ownership and function-level adversarial strategies. Added OS lock leases through editor lifetime, immutable publication/recovery rules, and named pure validation/decision functions; replaced repeated case inventories with those strategies.
