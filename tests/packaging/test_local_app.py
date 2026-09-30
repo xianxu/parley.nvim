@@ -1,5 +1,6 @@
 """Exercise the local app launcher without starting an interactive editor."""
 import json
+import fcntl
 from datetime import date
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ import unittest
 from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[2]
+FAKE_BUNDLE = "bundle-" + "a" * 64
 
 
 class LocalAppTest(unittest.TestCase):
@@ -24,25 +26,45 @@ class LocalAppTest(unittest.TestCase):
         binaries = Path(fixture.name)
         wrapper = binaries / 'python3'
         wrapper.write_text('#!' + sys.executable + '\n' + '''
-import json, os, pathlib, sys
-runner = os.environ.get('PARLEY_RUNTIME', '') + '/scripts/editor-dependencies.py'
-if len(sys.argv) < 2 or sys.argv[1] != runner:
+import json, os, pathlib, subprocess, sys, time
+if len(sys.argv) < 2 or not sys.argv[1].endswith('/scripts/editor-dependencies.py'):
     os.execv(REAL_PYTHON, [REAL_PYTHON] + sys.argv[1:])
 args = sys.argv[2:]
+if args[:2] == ['repair', '--root']:
+    command = [REAL_PYTHON, REAL_RUNNER, '--lock-timeout', '.1'] + args
+    if os.environ.get('RACE_REPAIR_ROOT'):
+        result = subprocess.run(command)
+        if result.returncode:
+            sys.exit(result.returncode)
+        barrier = pathlib.Path(os.environ['RACE_REPAIR_ROOT'])
+        (barrier / 'repaired').touch()
+        while not (barrier / 'resume').exists(): time.sleep(.01)
+        sys.exit(0)
+    os.execv(REAL_PYTHON, command)
 assert args[0] == '--runtime' and args[1] == os.environ['PARLEY_RUNTIME']
 assert args[2] == '--profile' and args[3] in ('app', 'recording')
 assert args[4:6] == ['run', '--root'] and args[7] == '--'
 assert args[3] == os.environ['PARLEY_EDITOR_PROFILE']
 root = pathlib.Path(args[6])
 root.mkdir(parents=True, exist_ok=True)
-(root / 'request.json').write_text(json.dumps({'runtime': args[1], 'profile': args[3],
+(root / '.parley-editor-owned').write_text('parley-editor-bundles-v1\\n')
+(root / '.lock').touch()
+(root.parent / 'bundle-request.json').write_text(json.dumps({'runtime': args[1], 'profile': args[3],
     'root': str(root), 'command': args[8:], 'pid': os.getpid()}))
-if (root / 'reject').exists():
+if (root.parent / 'bundle-reject').exists():
     print('fixture bundle verification failed', file=sys.stderr)
     sys.exit(23)
-os.environ['PARLEY_EDITOR_BUNDLE'] = str(root)
+bundle = root / FAKE_BUNDLE
+if not bundle.exists():
+    bundle.mkdir()
+    (bundle / 'artifact').write_text('pinned dependency')
+    count = root.parent / 'bundle-downloads'
+    count.write_text(str(int(count.read_text()) + 1 if count.exists() else 1))
+os.environ['PARLEY_EDITOR_BUNDLE'] = str(bundle)
 os.execvp(args[8], args[8:])
-'''.replace('REAL_PYTHON', repr(sys.executable)))
+'''.replace('REAL_PYTHON', repr(sys.executable))
+            .replace('REAL_RUNNER', repr(str(REPO / 'scripts/editor-dependencies.py')))
+            .replace('FAKE_BUNDLE', repr(FAKE_BUNDLE)))
         wrapper.chmod(0o755)
         environment = patch.dict(os.environ, PATH=str(binaries) + os.pathsep + os.environ['PATH'])
         environment.start()
@@ -74,19 +96,19 @@ os.execvp(args[8], args[8:])
                 self.assertEqual(0, result.returncode, result.stderr)
                 observed = json.loads(result.stdout)
                 bundle = profile / 'editor-dependencies'
-                self.assertEqual(str(bundle), observed['bundle'])
-                request = json.loads((bundle / 'request.json').read_text())
+                self.assertEqual(str(bundle / FAKE_BUNDLE), observed['bundle'])
+                request = json.loads((profile / 'bundle-request.json').read_text())
                 self.assertEqual('recording' if recording else 'app', request['profile'])
                 self.assertEqual(str(checkout), request['runtime'])
                 self.assertEqual('file with spaces.md', request['command'][-1])
                 self.assertEqual(observed['pid'], request['pid'])
                 self.assertEqual(str(observed['pid']), (profile / '.nvim-pid').read_text().strip())
-                (bundle / 'reject').touch()
+                (profile / 'bundle-reject').touch()
                 failed = subprocess.run(command, env=env, text=True, capture_output=True, timeout=10)
                 self.assertEqual(23, failed.returncode, failed.stderr)
                 self.assertEqual('', failed.stdout, 'Neovim ran despite failed bundle verification')
                 self.assertIn('bundle verification failed', failed.stderr)
-                (bundle / 'reject').unlink()
+                (profile / 'bundle-reject').unlink()
                 repaired = subprocess.run(command, env=env, text=True, capture_output=True, timeout=10)
                 self.assertEqual(0, repaired.returncode, repaired.stderr)
 
@@ -110,10 +132,11 @@ os.execvp(args[8], args[8:])
                 else:
                     env['PARLEY_DEMO_DIR'] = str(profile)
                 command = [str(checkout / 'parley_app')] + (['--demo'] if recording else [])
-                result = subprocess.run(command, env=env, text=True, capture_output=True, timeout=10)
-                self.assertNotEqual(0, result.returncode)
-                self.assertIn('editor-dependencies', result.stderr)
-                self.assertEqual(['precious'], sorted(p.name for p in outside.iterdir()))
+                for args in ([], ['--nuke']):
+                    result = subprocess.run(command + args, env=env, text=True, capture_output=True, timeout=10)
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn('editor-dependencies', result.stderr)
+                    self.assertEqual(['precious'], sorted(p.name for p in outside.iterdir()))
 
     def test_recording_demo_selects_nested_root_and_recognizes_seed_chat(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -196,7 +219,7 @@ vim.cmd('qa!')
             chat.write_text('trial one')
             cleared = ('state/old', 'config/old', 'cache/old', 'data/parley/parley/persisted/theme',
                        'data/parley/chats/old.md', 'data/parley/notes/old.md', 'data/parley/exports/old.md')
-            retained = ('editor-dependencies/keep', 'data/parley/lazy/keep',
+            retained = ('editor-dependencies/' + FAKE_BUNDLE + '/keep', 'data/parley/lazy/keep',
                         'data/parley/parley/cliproxy/config.yaml', 'home/.cli-proxy-api/login')
             for path in cleared + retained:
                 leaf = workspace / path
@@ -226,7 +249,10 @@ vim.cmd('qa!')
             self.assertEqual(0, run().returncode)
             self.assertIn('💬:', chat.read_text())
             self.assertEqual(0, run('--nuke').returncode)
-            self.assertFalse(workspace.exists())
+            self.assertTrue(workspace.exists())
+            self.assertIn('💬:', chat.read_text())
+            self.assertFalse((workspace / 'editor-dependencies' / FAKE_BUNDLE).exists())
+            self.assertEqual('cached', (workspace / 'home/.cli-proxy-api/login').read_text())
             self.assertEqual('-- tracked config', (checkout / 'demo/init.lua').read_text())
 
     def test_recording_demo_rejects_symlink_ancestry_and_unowned_workspace(self):
@@ -328,54 +354,49 @@ vim.cmd('qa!')
                 result = subprocess.run(command + ["--nuke"], env=env, text=True,
                                         capture_output=True, timeout=5)
                 self.assertEqual(0, result.returncode, result.stderr)
-                self.assertFalse(demo.exists())
+                self.assertTrue(demo.exists())
 
-    def test_reset_lock_survives_profile_deletion_and_is_not_stolen(self):
+    def test_launcher_lock_survives_dependency_repair_and_is_not_stolen(self):
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch).resolve()
             demo = root / "demo"
             demo.mkdir()
             (demo / ".parley-app-demo").write_text("parley_app v1\n")
-            bin_dir = root / "bin"
-            bin_dir.mkdir()
-            remove = bin_dir / "rm"
-            remove.write_text("#!/usr/bin/env python3\n"
-                              "import os, pathlib, shutil, sys, time\n"
-                              "shutil.rmtree(sys.argv[-1])\n"
-                              "root = pathlib.Path(os.environ['RACE_ROOT'])\n"
-                              "(root / 'deleted').touch()\n"
-                              "while not (root / 'resume').exists(): time.sleep(.01)\n")
-            remove.chmod(0o755)
-            env = dict(os.environ, PARLEY_DEMO_DIR=str(demo), RACE_ROOT=str(root),
-                       PATH=str(bin_dir) + os.pathsep + os.environ["PATH"])
+            (demo / "chat.md").write_text("keep")
+            dependencies = demo / 'editor-dependencies'
+            dependencies.mkdir()
+            (dependencies / '.parley-editor-owned').write_text('parley-editor-bundles-v1\n')
+            (dependencies / FAKE_BUNDLE).mkdir()
+            env = dict(os.environ, PARLEY_DEMO_DIR=str(demo), RACE_REPAIR_ROOT=str(root))
             command = [str(REPO / "parley_app")]
             reset = subprocess.Popen(command + ["--nuke"], env=env, text=True,
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 deadline = time.monotonic() + 5
-                while not (root / "deleted").exists() and time.monotonic() < deadline:
+                while not (root / "repaired").exists() and time.monotonic() < deadline:
                     time.sleep(.01)
-                self.assertTrue((root / "deleted").exists())
+                self.assertTrue((root / "repaired").exists())
+                self.assertFalse((dependencies / FAKE_BUNDLE).exists())
                 for args in ([], ["--nuke"]):
                     result = subprocess.run(command + args, env=env, text=True,
                                             capture_output=True, timeout=5)
                     self.assertNotEqual(0, result.returncode)
                     self.assertIn("locked", result.stderr)
-                    self.assertFalse(demo.exists())
+                    self.assertEqual('keep', (demo / 'chat.md').read_text())
             finally:
                 (root / "resume").touch()
                 reset.communicate(timeout=5)
             self.assertEqual(0, reset.returncode)
             lock = root / "demo.launcher-lock"
             self.assertFalse(lock.exists())
-            lock.mkdir()  # Simulate an abandoned lock: fail closed, never steal it.
+            lock.mkdir()  # An abandoned lock is never stolen.
             for args in ([], ["--nuke"]):
                 result = subprocess.run(command + args, env=env, text=True,
                                         capture_output=True, timeout=5)
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("locked", result.stderr)
                 self.assertTrue(lock.exists())
-                self.assertFalse(demo.exists())
+                self.assertEqual('keep', (demo / 'chat.md').read_text())
 
     def test_production_starter_stays_non_repo_for_marked_demo_ancestry(self):
         real_nvim = shutil.which("nvim")
@@ -416,35 +437,89 @@ vim.cmd('qa!')
                                             text=True, capture_output=True, timeout=20)
                     self.assertEqual(0, result.returncode, result.stderr)
 
-    def test_nuke_deletes_only_owned_demo_and_next_launch_is_fresh(self):
-        with tempfile.TemporaryDirectory() as scratch:
-            root = Path(scratch).resolve()
-            demo = root / "demo"
-            bin_dir = root / "bin"
-            bin_dir.mkdir()
-            fake = bin_dir / "nvim"
-            fake.write_text("#!/bin/sh\nprintf launched\n")
-            fake.chmod(0o755)
-            env = dict(os.environ, PARLEY_DEMO_DIR=str(demo),
-                       PATH=str(bin_dir) + os.pathsep + os.environ["PATH"])
-            command = [str(REPO / "parley_app")]
-            normal = root / "normal-profile"
-            normal.mkdir()
-            (normal / "keep").write_text("keep")
-            subprocess.run(command + ["--tutorials"], env=env, check=True, capture_output=True)
-            for folder in ("home", "config", "data", "state", "cache"):
-                (demo / folder).mkdir(exist_ok=True)
-                (demo / folder / "cached").write_text("old")
-            (demo / "external-link").symlink_to(normal, target_is_directory=True)
-            for _ in range(2):
-                result = subprocess.run(command + ["--nuke"], env=env, text=True, capture_output=True)
-                self.assertEqual(0, result.returncode, result.stderr)
-                self.assertNotIn("launched", result.stdout)
-                self.assertFalse(demo.exists())
-                self.assertEqual("keep", (normal / "keep").read_text())
-            subprocess.run(command, env=env, check=True, capture_output=True)
-            self.assertTrue((demo / "home").is_dir())
-            self.assertFalse((demo / "data/cached").exists())
+    def test_nuke_preserves_user_data_and_next_launch_refetches_dependencies(self):
+        for recording in (False, True):
+            with self.subTest(recording=recording), tempfile.TemporaryDirectory() as scratch:
+                root = Path(scratch).resolve()
+                checkout = root / 'checkout'
+                checkout.mkdir()
+                shutil.copy2(REPO / 'parley_app', checkout / 'parley_app')
+                demo = checkout / 'demo/workspace' if recording else root / 'profile'
+                bin_dir = root / 'bin'
+                bin_dir.mkdir()
+                editor = bin_dir / 'nvim'
+                editor.write_text('#!/bin/sh\nprintf launched\n')
+                editor.chmod(0o755)
+                env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ['PATH'])
+                if recording:
+                    env.pop('PARLEY_DEMO_DIR', None)
+                else:
+                    env['PARLEY_DEMO_DIR'] = str(demo)
+                command = [str(checkout / 'parley_app')] + (['--demo'] if recording else [])
+                subprocess.run(command, env=env, check=True, capture_output=True)
+                preserved = ('workshop/parley/chat.md', 'data/parley/chats/other.md',
+                             'config/parley/init.lua', 'state/editor-state', 'cache/user-cache',
+                             'home/.cli-proxy-api/login', 'data/parley/parley/cliproxy/config.yaml')
+                for item in preserved:
+                    path = demo / item
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text('user content: ' + item)
+                dependencies = demo / 'editor-dependencies'
+                inode = (dependencies / '.lock').stat().st_ino
+                self.assertEqual('1', (demo / 'bundle-downloads').read_text())
+                for _ in range(2):
+                    result = subprocess.run(command + ['--nuke'], env=env, text=True, capture_output=True, timeout=5)
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    self.assertNotIn('launched', result.stdout)
+                    self.assertFalse((dependencies / FAKE_BUNDLE).exists())
+                    self.assertEqual(inode, (dependencies / '.lock').stat().st_ino)
+                    self.assertEqual('parley_app v1\n', (demo / '.parley-app-demo').read_text())
+                    for item in preserved:
+                        self.assertEqual('user content: ' + item, (demo / item).read_text())
+                subprocess.run(command, env=env, check=True, capture_output=True)
+                self.assertEqual('2', (demo / 'bundle-downloads').read_text())
+                self.assertTrue((dependencies / FAKE_BUNDLE / 'artifact').is_file())
+                for item in preserved:
+                    self.assertEqual('user content: ' + item, (demo / item).read_text())
+
+    def test_nuke_refuses_unowned_dependencies_and_live_lease_but_absence_is_noop(self):
+        for recording in (False, True):
+            with self.subTest(recording=recording), tempfile.TemporaryDirectory() as scratch:
+                root = Path(scratch).resolve()
+                checkout = root / 'checkout'
+                checkout.mkdir()
+                shutil.copy2(REPO / 'parley_app', checkout / 'parley_app')
+                demo = checkout / 'demo/workspace' if recording else root / 'profile'
+                demo.mkdir(parents=True)
+                (demo / '.parley-app-demo').write_text('parley_app v1\n')
+                (demo / 'chat.md').write_text('keep')
+                env = dict(os.environ)
+                if recording:
+                    env.pop('PARLEY_DEMO_DIR', None)
+                else:
+                    env['PARLEY_DEMO_DIR'] = str(demo)
+                command = [str(checkout / 'parley_app')] + (['--demo'] if recording else []) + ['--nuke']
+                absent = subprocess.run(command, env=env, text=True, capture_output=True, timeout=5)
+                self.assertEqual(0, absent.returncode, absent.stderr)
+                self.assertEqual('keep', (demo / 'chat.md').read_text())
+                dependencies = demo / 'editor-dependencies'
+                dependencies.mkdir()
+                (dependencies / 'precious').write_text('keep')
+                unknown = subprocess.run(command, env=env, text=True, capture_output=True, timeout=5)
+                self.assertNotEqual(0, unknown.returncode)
+                self.assertIn('owned', unknown.stderr)
+                self.assertEqual('keep', (dependencies / 'precious').read_text())
+                (dependencies / 'precious').unlink()
+                (dependencies / '.parley-editor-owned').write_text('parley-editor-bundles-v1\n')
+                (dependencies / FAKE_BUNDLE).mkdir()
+                with (dependencies / '.lock').open('w') as lease:
+                    fcntl.flock(lease, fcntl.LOCK_SH)
+                    blocked = subprocess.run(command, env=env, text=True, capture_output=True, timeout=5)
+                self.assertNotEqual(0, blocked.returncode)
+                self.assertIn('lease busy', blocked.stderr)
+                self.assertIn('Clearing cached editor dependencies', blocked.stderr)
+                self.assertTrue((dependencies / FAKE_BUNDLE).exists())
+                self.assertEqual('keep', (demo / 'chat.md').read_text())
 
     def test_nuke_refuses_unowned_or_live_demo(self):
         with tempfile.TemporaryDirectory() as scratch:
