@@ -3,6 +3,19 @@
 Compact rules distilled from Parley.nvim's review and integration history.
 Incident detail belongs in the issue or plan that owns it.
 
+## 2026-09-30 (#307 — setup defaults that read cwd)
+
+- Before widening a detection that reads cwd or env, run the full suite and
+  `git status --untracked-files=all`. Specs run from this checkout, which carries
+  `.parley`; removing the `chat_dir` guard made 79 chats land in `workshop/parley`.
+  The opt-out belongs in the harness (`tests/minimal_init.vim`), not in each spec.
+- Merging user values over defaults can re-enable things an empty table disabled.
+  After changing a merge, test one opted-out entry (`openai = {}`).
+- #307 close review BR-1 (two rounds): when you change how a mode is decided, grep
+  every reader that re-derives it (`find_git_root(vim.fn.getcwd())`, marker checks)
+  and make them read the decision (`config.repo_root`, `project_root()`). A reader
+  that recomputes the mode from cwd ignores the opt-outs.
+
 ## 2026-09-28 (#299 — navigation with overlays)
 
 - Neovim window lists include floating overlays. Split counting and existing-buffer

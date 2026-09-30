@@ -30,6 +30,11 @@ let g:parley_test_mode = v:true
 " (#227), which works either way. A spec that needs a different value for
 " `g:parley_test_mode` sets it itself (file_tracker_spec, sidecars.lua).
 let $PARLEY_TEST_MODE = '1'
+" #307: this checkout carries a `.parley` marker and specs run from it. Setup
+" detects repo mode from cwd even with an explicit chat_dir, so without this a
+" spec's chats would land in this repo's workshop/parley. Specs that exercise
+" detection pass repo_root or run a child with a cleared environment.
+let $PARLEY_REPO_MODE = '0'
 " #237: cliproxy's release lookups go to github.com by default. Point them at a
 " dead local port so a spec that forgets cliproxy._set_releases_url fails fast
 " instead of reaching the network; plenary's child nvims inherit this.

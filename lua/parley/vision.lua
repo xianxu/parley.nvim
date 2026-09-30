@@ -1549,7 +1549,7 @@ M.get_vision_dir = function()
         return vision_dir
     end
 
-    local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
+    local git_root = _parley.project_root()
     if git_root == "" then
         git_root = vim.fn.getcwd()
     end
@@ -1625,7 +1625,7 @@ M.cmd_export_csv = function(params)
     local csv = M.export_csv(items)
     local output = params and params.args and params.args ~= "" and params.args or nil
     if not output then
-        local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
+        local git_root = _parley.project_root()
         if git_root == "" then git_root = vim.fn.getcwd() end
         output = git_root .. "/roadmap.csv"
     end
@@ -1659,7 +1659,7 @@ M.cmd_export_dot = function(params)
     end
 
     if not output then
-        local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
+        local git_root = _parley.project_root()
         if git_root == "" then git_root = vim.fn.getcwd() end
         output = git_root .. "/roadmap.dot"
     end

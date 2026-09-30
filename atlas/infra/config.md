@@ -29,6 +29,41 @@ Installing the plugin leaves your editor profile under your control.
 Spelling suggestions additionally need Blink **v1.10.2**, installed and set up
 before Parley; see [Spell Typeahead](../chat/spell_typeahead.md#plugin-setup-and-completion-ownership).
 
+### Minimal config
+
+`setup({})` is a complete configuration: it boots with no keys and no warnings,
+stores chats and notes under `stdpath("data")/parley`, and enters
+[repo mode](repo_mode.md) when started under a directory holding `.parley`.
+A headless spec pins this (`tests/integration/zero_config_spec.lua`). Typical
+personal overrides are storage and export paths only:
+
+```lua
+require('parley').setup({
+    chat_dir = vim.fn.expand('~/Documents/parley'),   -- global chats
+    notes_dir = vim.fn.expand('~/Documents/notes'),
+    export_html_dir = vim.fn.expand('~/blog/static'),
+    export_markdown_dir = vim.fn.expand('~/blog/posts'),
+})
+```
+
+Setting `chat_dir` does not turn off repo detection; in a marked project it
+becomes the `"global"` root beside the project's chats. Pass `repo_root = false`
+to opt out. Models reached through the managed proxy need no API key. Keys are
+for agents that call a provider directly (`provider = "openai"`, `"anthropic"`,
+`"googleai"`). `api_keys` merges over the defaults, which read `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY` and `GOOGLEAI_API_KEY` from the environment; set an entry to
+`false` to drop a default. A key may also be a command, resolved on first use:
+
+```lua
+local function keychain(service)
+    return { 'security', 'find-generic-password', '-a', 'me:neovim', '-s', service, '-w' }
+end
+require('parley').setup({ api_keys = { anthropic = keychain('ANTHROPIC_API_KEY') } })
+```
+
+A provider without a key reports `vault secret <name> not found` when an agent
+first uses it, not at startup.
+
 ## Merge order
 
 1. Plugin defaults in `lua/parley/config.lua`.
@@ -39,7 +74,7 @@ Hooks merge by key; agents and system prompts merge by their `name`. Each suppli
 named entry replaces that entry, rather than recursively merging its fields.
 Other options replace the corresponding option wholesale, including nested
 configuration tables. Provider definitions and credentials have dedicated setup
-handling. `defaults.lua` contains runtime constants/templates, not a second full
+handling; `api_keys` merges per provider over the defaults. `defaults.lua` contains runtime constants/templates, not a second full
 configuration layer.
 
 ## Storage and state

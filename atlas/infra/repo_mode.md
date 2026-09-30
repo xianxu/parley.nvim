@@ -5,17 +5,21 @@ The standalone app detects the nearest ancestor directory containing `.parley`,
 including ordinary folders without Git, and enters repo mode. This makes parley a brainstorming and design tool scoped to that repository.
 
 ## Detection
-The app uses `repo_mode.detect_root(cwd, marker)` and passes the detected root
-into setup. Its global chat-directory policy does not override that selection.
-For ordinary plugin setup without an explicit repo root, an explicit `chat_dir`
-keeps that storage choice and suppresses automatic repo detection. Otherwise,
-after config merging:
-1. Check `config.repo_marker` is set (default: `".parley"`)
-2. Find the git root from `vim.fn.getcwd()` (works from any subdirectory)
-3. If `<git_root>/<repo_marker>` is readable, activate repo mode
+Setup walks up from `vim.fn.getcwd()` with `repo_mode.detect_root(cwd, marker)`
+and enters repo mode at the nearest directory holding `config.repo_marker`
+(default `".parley"`), Git or not. The standalone app and plugin setup share this
+rule, and no user config is needed for it. Only setup decides repo mode:
+the "repo" buffer context reads `config.repo_root`, and readers of repo-relative
+paths (issues, history, vision, exports, the Markdown finder) go through
+`parley.project_root()`, which returns the selected repo root or else cwd's Git
+root, so issues still work in an unmarked Git repository. An explicit `chat_dir` does not
+suppress detection; it becomes the `"global"` root beside the project's chats
+(#307). `repo_root = "<path>"` selects a root; `repo_root = false` opts out, as
+does `PARLEY_REPO_MODE=0` when `repo_root` is unset (the demo launcher and the
+test harness set it, since this checkout carries a marker).
 
 ## Behavior when active
-- `config.repo_root` is set to the selected project root (the Git root for implicit plugin detection)
+- `config.repo_root` is set to the selected project root (the nearest marked directory)
 - Repo-local directories are auto-created: `workshop/parley/`, `workshop/notes/`, `workshop/issues/`, `workshop/vision/`, `workshop/history/issues/`
 - `workshop/parley/` (configurable via `repo_chat_dir`) becomes the primary chat directory, labeled `"repo"`
 - `workshop/notes/` (configurable via `repo_note_dir`) becomes the primary note directory

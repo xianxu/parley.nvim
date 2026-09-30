@@ -505,7 +505,7 @@ local function resolve_against_git_root(dir)
     if dir:sub(1, 1) == "/" then
         return dir -- already absolute
     end
-    local git_root = _parley.helpers.find_git_root(vim.fn.getcwd())
+    local git_root = _parley.project_root()
     if git_root == "" then
         git_root = vim.fn.getcwd() -- fallback if not in a git repo
     end
@@ -526,18 +526,19 @@ end
 
 -- Resolve the git repo root issues are created in — the same root get_issues_dir
 -- resolves against — so the caller can label the destination (#142). Relative
--- issues_dir → cwd's git root; absolute → the git root above the configured path.
+-- issues_dir → project_root (repo-mode root, else cwd's git root); absolute → the
+-- git root above the configured path.
 M.get_issues_repo_root = function()
     local issues_dir = _parley.config.issues_dir
     if not issues_dir or issues_dir == "" then
         return nil
     end
-    local base = (issues_dir:sub(1, 1) == "/") and issues_dir or vim.fn.getcwd()
-    local root = _parley.helpers.find_git_root(base)
-    if root == "" then
-        root = base
+    if issues_dir:sub(1, 1) ~= "/" then
+        local root = _parley.project_root()
+        return root ~= "" and root or vim.fn.getcwd()
     end
-    return root
+    local root = _parley.helpers.find_git_root(issues_dir)
+    return root ~= "" and root or issues_dir
 end
 
 -- Scan a directory for max issue ID (4-digit prefix pattern)

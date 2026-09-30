@@ -354,9 +354,7 @@ describe("markdown finder entry point", function()
 					return vim.deepcopy(runtime_state)
 				end,
 			},
-			helpers = {
-				find_git_root = function() return ordinary_root end,
-			},
+			project_root = function() return ordinary_root end,
 			logger = { warning = function(message) warnings[#warnings + 1] = message end },
 			_finder_dependencies = {
 				git_markdown_source = { list = list_markdown },

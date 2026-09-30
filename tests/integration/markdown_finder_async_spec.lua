@@ -61,7 +61,7 @@ local function parley_for(root, warnings, dependencies)
 		_markdown_finder = {},
 		config = { repo_root = root, markdown_finder_max_depth = 4 },
 		super_repo = { get_state = function() return { active = false, members = {} } end },
-		helpers = { find_git_root = function() return root end },
+		project_root = function() return root end,
 		logger = { warning = function(message) warnings[#warnings + 1] = message end },
 		_finder_dependencies = dependencies,
 		float_picker = float_picker,
