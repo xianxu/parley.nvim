@@ -43,9 +43,12 @@ curl --fail --location --silent --show-error --output "$scratch/release.tar.gz" 
 sha256=$(shasum -a 256 "$scratch/release.tar.gz" | awk '{print $1}')
 mkdir "$scratch/tree"
 tar -xzf "$scratch/release.tar.gz" -C "$scratch/tree" --strip-components=1
-for file in packaging/formula.lua packaging/render-formula.lua packaging/parley packaging/launcher.lua packaging/starter-config/init.lua lua/parley/deps.lua; do
+for file in packaging/formula.lua packaging/render-formula.lua packaging/parley packaging/launcher.lua packaging/starter-config/init.lua lua/parley/deps.lua lua/parley/editor_dependencies.lua scripts/editor-dependencies.py scripts/export-editor-dependencies.lua scripts/check-editor-bundle.sh; do
     [ -f "$scratch/tree/$file" ] || fail "tagged archive lacks $file; publish a release containing packaging"
 done
+# Always validate the extracted release's dependency set, including retries.
+# Caller-checkout generators, manifests and installed caches are not release evidence.
+(cd "$scratch/tree" && sh scripts/check-editor-bundle.sh) || fail 'tagged editor bundle conformance failed'
 PARLEY_RELEASE_TAG="$tag" PARLEY_RELEASE_SHA256="$sha256" \
     PARLEY_RELEASE_OUTPUT="$scratch/parley.rb" nvim -n --headless --noplugin -u NONE -i NONE \
     -l "$scratch/tree/packaging/render-formula.lua"
