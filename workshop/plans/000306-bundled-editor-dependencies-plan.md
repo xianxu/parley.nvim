@@ -32,7 +32,7 @@ Use a local HTTP archive server and real fixture Git repositories as the statefu
 
 - Network occurs only during explicit provisioning/build. Download calls have bounded timeout and size limits (initial proposal: 120 seconds and 100 MiB per artifact; validate against measured real sizes). No retries or downloads during bundled startup; missing/incompatible dependencies give a repair error (ARCH-CONSTRAINTS).
 - Verify archive hashes before extracting; reject traversal, absolute paths and escaping links. Extract into an owned temporary directory and publish only a complete verified bundle. Never execute a downloaded install script to determine a binary version (ARCH-SECURE).
-- Bundle receipt records manifest identity and artifact payload identities. Runtime validates structure/manifest identity; exhaustive payload hashing is done at assembly and release verification. Local Git caches verify exact HEAD and tracked dirt, with binary hashing where relevant; document the trust boundary rather than treating a receipt alone as proof.
+- Bundle receipt records manifest identity and artifact payload identities. Installed-keg startup trusts the package-manager-owned payload and validates structure/manifest identity; assembly and release verification hash the complete payload. Writable local archive bundles require complete payload verification before every local launch, including corruption after successful assembly. Local Git caches verify exact HEAD and tracked dirt, with binary hashing where relevant; document these distinct trust boundaries rather than treating a receipt alone as proof. Verification includes unexpected executable/Lua/plugin files, not only missing or changed listed files.
 - Installed bundles live as long as their Homebrew keg and are removed by normal uninstall/cleanup. One active development bundle plus owned temporary staging; interrupted staging is removed on failure/retry. Do not accumulate a new bundle on each launch (ARCH-RETENTION).
 - Measure cold and warm startup locally and record results; optimize only verified bottlenecks. Startup verification must not trigger network or write into the keg. Architecture-specific binary tests cover both formula projections; execute the current host binary and report the other architecture as unexecuted unless a matching runner exists.
 - Reuse `theme`, existing formula renderer and launcher config-preservation semantics (ARCH-DRY). Keep identity/projection pure and IO in the boundary (ARCH-PURE). Include all shipped plugins, Preview, local launch parity and old-profile migration in the delivery (ARCH-PURPOSE).
@@ -41,12 +41,13 @@ Use a local HTTP archive server and real fixture Git repositories as the statefu
 
 ### Task 1: Establish authoritative dependency records
 
-Files: new `lua/parley/editor_dependencies.lua`, `tests/unit/editor_dependencies_spec.lua`; modify `lua/parley/theme.lua`, `packaging/starter-config/init.lua`, `tests/packaging/bootstrap_lazy.lua`, theme tests.
+Files: new `lua/parley/editor_dependencies.lua`, `tests/unit/editor_dependencies_spec.lua`; modify `lua/parley/theme.lua`, `packaging/starter-config/init.lua`, `demo/init.lua`, `tests/packaging/bootstrap_lazy.lua`, theme tests.
 
 - [ ] Inventory the starter/theme dependency closure and current locally installed versions. Record source/binary checksums from actual immutable archives; preserve current tested pins unless an incompatibility is demonstrated.
 - [ ] Red: unit tests reject duplicate names, non-full commit pins, unsafe paths/URLs, absent hashes and unsupported artifact platforms. Test defensive copies and stable sorted projection. Test every theme's plugin reference resolves.
 - [ ] Green: expose deterministic manifest APIs (`plugins()`, `plugin(id)`, `artifact(platform)`, manifest identity serialization); no download or `vim.system` in this module. Move pins from theme/starter into it.
 - [ ] Update starter/bootstrap fixtures to derive the authoritative set, while retaining explicit behavioral expectations for required features. Test additions cannot silently bypass manifest coverage.
+- [ ] Derive recording Screenkey from the manifest in `demo/init.lua`; verify `./parley_app --demo` selects its verified recording member without an independent commit pin or Lazy installation.
 - [ ] Run `make test-spec SPEC=infra/starter` plus focused theme/manifest tests, then commit the coherent manifest change.
 
 ### Task 2: Verified artifact assembly and local parity
@@ -69,6 +70,7 @@ Files: `packaging/formula.lua`, `packaging/render-formula.lua`, `scripts/release
 - [ ] Green: stage plugin resources into `libexec` bundle paths; stage the Preview executable at the location its plugin expects. Use checksum-verified resources instead of running upstream download hooks. Generate receipt/metadata from the same manifest and preserve executable modes.
 - [ ] Keep existing CLI tool dependencies in `parley.deps`; editor plugins have a separate lifecycle and should not duplicate that registry. Do not add a second list of plugin URLs/pins to Ruby.
 - [ ] Verify formula syntax and architecture-specific projections with fixtures. A bottle includes the prepared bundle when built; creating/publishing new release tags or bottles is outside this implementation's authorized publication.
+- [ ] Wire real bundle assembly and the conformance runner into `scripts/release-parley.sh` using the extracted tagged tree, before staging the generated formula or committing/pushing the tap. Require successful verification even on publication retries. Add a regression where failed conformance leaves the tap and its remote unchanged; a conflicting caller-checkout manifest must not alter tagged-tree inputs.
 - [ ] Run `make test-spec SPEC=infra/packaging` (confirm traceability spec name first), then commit.
 
 ### Task 4: Make starter load the bundle without installing
@@ -109,3 +111,4 @@ The operator approved the packaging direction and shared-pin contract. This is f
 ## Revisions
 
 - 2026-09-30: Dependency audit identified Lazy's implicit package/rock discovery as an additional network path. Explicitly disable it for bundles; include recording-only Screenkey in manifest membership without adding it to the shipped app.
+- 2026-09-30: Fresh-eyes review required full payload verification of reused writable bundles, explicit migration of the demo Screenkey consumer, and mandatory tagged-tree conformance in the release publication path. Added all three so parity cannot be bypassed through a warm cache or future release.
