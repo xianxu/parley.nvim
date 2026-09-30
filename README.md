@@ -36,7 +36,9 @@ profile; provider logins are shared with other CLIProxyAPI clients.
 See the [app guide](packaging/README.md) for updates and removal, or
 [configuration and recovery](packaging/starter-config/README.md) for profile
 paths and settings. Existing Neovim users can use the
-[plugin setup guide](atlas/infra/config.md#install-as-a-neovim-plugin).
+[plugin setup guide](atlas/infra/config.md#install-as-a-neovim-plugin):
+`require('parley').setup({})` works as is; see
+[minimal config](atlas/infra/config.md#minimal-config) for typical overrides.
 
 ## Learn by chatting
 
