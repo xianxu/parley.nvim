@@ -112,7 +112,7 @@ Files: `README.md`, `TOOLING.md`, `packaging/README.md`, `packaging/starter-conf
 - [x] Document the manifest ownership, pin update/verification commands, bundled mode versus development provisioning, old-profile `.new` adoption and offline scope. Replace first-launch download claims only where bundled startup applies.
 - [x] Add new tests to traceability; run mapped starter/packaging/theme checks, local launcher tests, real offline runner, lint and `git diff --check`.
 - [x] Update this plan and issue Log with exact results and limitations.
-- [ ] Run `sdlc close --issue 306 --verified '<evidence>'`; fix mandatory review findings before PR/merge. Do not publish a Homebrew release implicitly.
+- [x] Run `sdlc close --issue 306 --verified '<evidence>'`; fix mandatory review findings before PR/merge. Do not publish a Homebrew release implicitly.
 
 ## Alternatives considered
 

@@ -80,6 +80,8 @@ Boundary round 2 independently confirmed BR-1/BR-2 fixed via mutation tests, the
 
 The operator's local startup report exposed silent first-time provisioning. CLI progress now reports manifest/loading, named downloads, cache verification and contention on stderr without changing stdout. Python tests pass 19 assembler + 6 download cases, including CLI progress and held-lock behavior. Inspected default profile had an interrupted staging tree and no running launcher; completed its app-owned bundle using already-verified archives, then ran actual `./parley_app --headless` successfully in 0.52s without downloads or AI calls. Publication/build fetches dependencies; installed startup uses the shipped bundle, while checkout startup has its own manifest-equivalent cache.
 
+Boundary round 3 returned SHIP, disposed BR-1/BR-2/BR-3 and published codecomplete bound to evidence commit `210c1785130b`. Reviewer independently passed 25 Python tests, 13 launcher tests and the mapped starter suite, including the six-case BR-3 mutation check. Reviewer again saw the guest VM containment test fail and reproduced a containment failure on both pinned base and head; its exact cause remains unresolved and the relevant code is unchanged. This limitation is carried into the PR rather than claiming universal suite reproducibility. No Homebrew release or bottle published.
+
 ## Revisions
 
 - 2026-09-30: Local launch now always selects the archive bundle, never an old Lazy Git cache. Full manifest/file/mode verification covers wrong source or binary payloads, missing files and unexpected files; the proposed separate HEAD/tracked-dirt check is superseded because legacy Git caches are not loaded or modified (ARCH-DRY).
