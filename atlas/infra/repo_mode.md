@@ -10,8 +10,9 @@ and enters repo mode at the nearest directory holding `config.repo_marker`
 (default `".parley"`), Git or not. The standalone app and plugin setup share this
 rule, and no user config is needed for it. An explicit `chat_dir` does not
 suppress detection; it becomes the `"global"` root beside the project's chats
-(#307). `repo_root = "<path>"` selects a root; `repo_root = false` opts out (the
-demo launcher's `PARLEY_REPO_MODE=0` uses it).
+(#307). `repo_root = "<path>"` selects a root; `repo_root = false` opts out, as
+does `PARLEY_REPO_MODE=0` when `repo_root` is unset (the demo launcher and the
+test harness set it, since this checkout carries a marker).
 
 ## Behavior when active
 - `config.repo_root` is set to the selected project root (the nearest marked directory)
