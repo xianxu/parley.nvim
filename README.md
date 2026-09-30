@@ -66,7 +66,8 @@ development processes. Roughly:
 
 1. Clone this repo.
 2. Run `weave compile`, which pulls the necessary base layers and compiles binaries that
-   support the AI native development processes.
+   support the AI native development processes. `weave refresh` will update local clone 
+   of ariadne dependencies, and current repo, then run `weave comple`.
 3. Start your favorite AI coding tool: `claude`, `codex`, etc.
    I use [pair and couch](https://github.com/xianxu/pair), which provides a much
    stronger local development environment while leveraging other coding agents.
