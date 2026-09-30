@@ -145,10 +145,6 @@ def compare_payloads(expected, actual):
         raise ValueError('bundle payload mismatch: missing=%s extra=%s changed=%s' % (missing[:5], extra[:5], changed[:5]))
 
 
-def publication_action(exists, valid):
-    return 'reuse' if exists and valid else 'repair' if exists else 'assemble'
-
-
 def digest(path):
     checksum = hashlib.sha256()
     with path.open('rb') as stream:

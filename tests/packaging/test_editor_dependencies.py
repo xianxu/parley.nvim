@@ -126,11 +126,6 @@ class Artifacts(unittest.TestCase):
                 bundle.validate_member(member)
         bundle.validate_member(tarfile.TarInfo('source/lua/init.lua'))
 
-    def test_publication_decision_table(self):
-        self.assertEqual('assemble', bundle.publication_action(False, False))
-        self.assertEqual('reuse', bundle.publication_action(True, True))
-        self.assertEqual('repair', bundle.publication_action(True, False))
-
     def test_http_assembly_reuse_and_full_payload_verification(self):
         path = self.prepare()
         self.assertEqual(2, len(self.requests))
