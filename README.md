@@ -75,15 +75,17 @@ checksummed dependency manifest as Homebrew, then verifies it before each launch
 Initial provisioning needs a connection; a verified existing bundle can launch
 offline. Its location is printed at startup; set `PARLEY_DEMO_DIR` to another directory to test a new profile.
 Use `./parley_app --tutorials` to edit `packaging/tutorials/` directly through
-the app. `./parley_app --nuke` removes the demo profile and exits; the next launch
-starts fresh. Source tutorials and the normal installed app profile are retained.
+the app. `./parley_app --nuke` clears its downloaded editor dependencies and exits;
+the next launch downloads the pinned set again with terminal progress. Chats,
+settings and login are retained. Local code edits are loaded directly from the
+checkout on every launch; they do not require clearing dependencies.
 
 For a recording setup, use `./parley_app --demo`. Its separate configuration
 lives in [`demo/init.lua`](demo/init.lua); a disposable nested workspace opens
 an empty chat with Screenkey enabled. The recording profile adds Screenkey from
 the same manifest; it is not a shipped app dependency. `--demo --reset` clears
-chats and editor state while retaining plugins and login; `--demo --nuke` removes the entire
-workspace. See [demo instructions](demo/README.md) for reset scope and asciinema.
+chats and editor state while retaining plugins and login; `--demo --nuke` clears
+only downloaded dependencies. See [demo instructions](demo/README.md) for reset scope and asciinema.
 
 Select text and press **Option+i** to start a linked follow-up chat. The draft
 quotes your selection and leaves the cursor on an empty line beneath it.

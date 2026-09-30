@@ -196,8 +196,10 @@ bundle does not. Normal Parley configuration is untouched.
 
 - `./parley_app --tutorials`: use this checkout's `packaging/tutorials/` as the
   chat folder, so edits change the release's source documents directly.
-- `./parley_app --nuke`: delete only the owned demo profile and exit. Launch
-  again for first-run setup; this includes provisioning the editor bundle again.
+- `./parley_app --nuke`: clear only the owned downloaded editor dependency
+  payloads and exit. Chats, settings and login survive; the next launch downloads
+  the pinned set again with progress. The dependency ownership marker and stable
+  lock remain so cleanup and competing readers keep using the same lock.
 
 Verify the launcher boundary with `python3 tests/packaging/test_local_app.py`.
 
@@ -205,7 +207,8 @@ Verify the launcher boundary with `python3 tests/packaging/test_local_app.py`.
 `demo/init.lua`, Screenkey and an empty chat. The Git-ignored `demo/workspace/`
 has its own `.parley` marker and isolated profile. `--demo --reset` clears
 recording content and editor state while retaining dependencies/login;
-`--demo --nuke` clears the entire workspace. Both delete without a backup and
+`--demo --nuke` clears only downloaded dependencies, preserving recording content,
+settings and login. Both delete their selected content without a backup and
 require the editor to be closed. [demo/README.md](demo/README.md) describes
 configuration, exact reset paths and recording commands. Neither mode needs
 Homebrew; both require Python 3. The recording profile adds the manifest's

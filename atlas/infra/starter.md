@@ -36,8 +36,10 @@ Unlike the installed application, its HOME isolation separates credential files.
 The launcher explicitly sets `PARLEY_REPO_MODE=0` so markers in any demo ancestor
 cannot enable repo mode. `--tutorials` sets `PARLEY_CHAT_DIR` to the checkout's
 source tutorials; the starter expands and canonicalizes that override. State and
-credentials remain in the demo. `--nuke` removes the owned demo profile and exits,
-leaving source tutorials untouched. Python 3 provisions the manifest's checksummed
+credentials remain in the demo. `--nuke` clears its downloaded dependency payloads
+under the bundle's exclusive repair lease and exits, retaining chats, settings,
+login and source tutorials. The next launch provisions the pinned set again.
+Python 3 provisions the manifest's checksummed
 bundle under the demo profile's `editor-dependencies` root, verifies the complete
 payload before every launch, and passes a shared reader lease into Neovim.
 The initial preparation can download archives; a verified reused bundle does not.
@@ -53,8 +55,10 @@ membership so Screenkey is assembled and verified with the app dependencies.
 Default demo startup selects a timestamped empty chat.
 `--demo --reset` clears workspace workshop/config/state/cache and the profile's
 chats/notes/exports/theme persistence, retaining plugins and HOME/auth;
-`--demo --nuke` removes the owned workspace. Tracked demo configuration and
-recordings outside the workspace survive. See `demo/README.md` for usage.
+`--demo --nuke` clears downloaded dependencies through the same repair lease as
+ordinary app mode, preserving the workspace's profile and recording content.
+Tracked demo configuration and recordings outside the workspace survive.
+See `demo/README.md` for usage.
 Launcher integration tests cover nested root and chat recognition, retained
 versus reset data, symlink boundaries and competing operations; bootstrap
 tests prove the demo additions do not enter packaged defaults.

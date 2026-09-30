@@ -83,6 +83,8 @@ The operator's local startup report exposed silent first-time provisioning. CLI 
 
 Boundary round 3 returned SHIP, disposed BR-1/BR-2/BR-3 and published codecomplete bound to evidence commit `210c1785130b`. Reviewer independently passed 25 Python tests, 13 launcher tests and the mapped starter suite, including the six-case BR-3 mutation check. Reviewer again saw the guest VM containment test fail and reproduced a containment failure on both pinned base and head; its exact cause remains unresolved and the relevant code is unchanged. This limitation is carried into the PR rather than claiming universal suite reproducibility. No Homebrew release or bottle published.
 
+Dependency-only reset refinement: launcher regressions pass 14/14 on Python 3.9.6, including real repair leases, repeated cleanup, foreign/symlink refusal, app and recording profile preservation, and next-launch provisioning. A real temporary profile was nuked twice; hashes for chats/config/login/state and the stable lock inode were unchanged. Reprovisioned from verified archives and launched actual checkout Neovim successfully (PARLEY_REPROVISIONED_OK). Shell syntax and diff checks pass. README, TOOLING, recording instructions and atlas now describe the narrower reset; --demo remains a reusable recording workspace, and --demo --reset retains its existing scope.
+
 ## Revisions
 
 - 2026-09-30: Operator approved dependency-only `./parley_app --nuke`: preserve chats/settings/login, clear the owned dependency payloads under their existing lease, and download again on the next launch. Reopening the existing PR for this focused launcher-contract refinement; local code continues to load directly from the checkout.

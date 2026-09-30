@@ -48,16 +48,18 @@ standalone/personal plugin caches in `data/parley/lazy/`, managed proxy files an
 the demo HOME, including login files. Bundle corruption requires an explicit
 [managed-root repair](../TOOLING.md#editor-dependency-bundles). The tracked `demo/init.lua` is retained.
 
-For a complete first-run reproduction:
+To download the pinned recording dependencies again:
 
 ```sh
 ./parley_app --demo --nuke
 ./parley_app --demo
 ```
 
-Full nuke removes the entire owned workspace, including plugins and demo login
-files. Both reset commands **delete content without a backup** and exit without
-opening the editor. Keep anything you need outside `workspace/`.
+Nuke clears only downloaded editor dependencies, including Screenkey. Chats,
+settings and demo login files survive; the next launch downloads the pinned set
+with terminal progress. This is a dependency reset, not a fresh-profile onboarding
+test. Both reset commands **delete their selected content without a backup** and
+exit without opening the editor.
 The launcher refuses an unowned workspace, redirected workspace paths and an
 active editor. An abandoned `workspace.launcher-lock` is handled like the
 regular launcher's lock: close launchers before removing that empty directory.
@@ -76,7 +78,7 @@ filename for each take. Provider requests use the usual localhost proxy on
 port 8317: an already-running proxy can be shared with regular Neovim or the
 installed app and uses its existing accounts. The launcher does not stop or
 upgrade that external process. If the demo starts its own proxy, its login
-files live under the isolated demo HOME; full nuke deletes those files.
+files live under the isolated demo HOME and survive dependency nuke.
 
 The existing `./parley_app`, `--tutorials` and external `PARLEY_DEMO_DIR` profile
 remain available for testing the ordinary app experience. `--demo` uses the
