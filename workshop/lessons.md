@@ -3,6 +3,15 @@
 Compact rules distilled from Parley.nvim's review and integration history.
 Incident detail belongs in the issue or plan that owns it.
 
+## 2026-09-30 (#307 — setup defaults that read cwd)
+
+- Before widening a detection that reads cwd or env, run the full suite and
+  `git status --untracked-files=all`. Specs run from this checkout, which carries
+  `.parley`; removing the `chat_dir` guard made 79 chats land in `workshop/parley`.
+  The opt-out belongs in the harness (`tests/minimal_init.vim`), not in each spec.
+- Merging user values over defaults can re-enable things an empty table disabled.
+  After changing a merge, test one opted-out entry (`openai = {}`).
+
 ## 2026-09-28 (#299 — navigation with overlays)
 
 - Neovim window lists include floating overlays. Split counting and existing-buffer
