@@ -89,6 +89,8 @@ Dependency-only reset refinement: launcher regressions pass 14/14 on Python 3.9.
 
 Operator confirmed local smoke test passed and authorized merge. Integrated current main; resolved the README-only conflict by retaining its shorter landing-page layout, bundled-startup description and links to local launcher/recording instructions.
 
+Post-integration verification completed: unrestricted mapped starter suite passed 199 tests and reported no surviving test processes. Round 5 review returned SHIP with no new findings, independently passing 25 dependency, 14 launcher and 199 starter tests. Reviewer noted the packaging architecture guard uses an older merge-base and attributes main's existing project_root symbol to this issue; packaging behavior tests passed. GitHub merge-check passed.
+
 ## Revisions
 
 - 2026-09-30: Operator approved dependency-only `./parley_app --nuke`: preserve chats/settings/login, clear the owned dependency payloads under their existing lease, and download again on the next launch. Reopening the existing PR for this focused launcher-contract refinement; local code continues to load directly from the checkout.
