@@ -39,6 +39,18 @@ def archive(path, files):
     return sha(path.read_bytes())
 
 
+class Digest(unittest.TestCase):
+    def test_hashes_empty_and_multichunk_files_without_python311_helper(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'payload'
+            with mock.patch.dict(hashlib.__dict__):
+                hashlib.__dict__.pop('file_digest', None)
+                for payload in (b'', b'abc', bytes(range(256)) * 8192 + b'tail'):
+                    with self.subTest(size=len(payload)):
+                        path.write_bytes(payload)
+                        self.assertEqual(sha(payload), bundle.digest(path))
+
+
 class Artifacts(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
