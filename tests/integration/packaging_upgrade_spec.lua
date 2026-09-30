@@ -64,6 +64,44 @@ describe('disposable guest package upgrade', function()
         assert.equals(vim.fn.sha256(starter .. '\n-- acceptance fixture B\n'), report.candidate_b_sha256)
         assert.equals(0, vim.fn.filereadable(scratch .. '/public/libexec/packaging/starter-config/init.lua'))
     end)
+    it('omits only the installed top-level bundle from reconstructed release archives', function()
+        write(scratch .. '/public/libexec/editor-bundle/plugins/fixture/LICENSE', { 'installed bundle license' })
+        write(scratch .. '/public/libexec/lua/editor-bundle/keep', { 'unrelated nested directory' })
+        -- Observe the real fixture archives while the package store consumes
+        -- them, before the upgrade workflow cleans its owned temporary tree.
+        vim.fn.delete(scratch .. '/bin/brew')
+        write(scratch .. '/bin/brew', vim.split([=[
+#!/usr/bin/env python3
+import json, os, subprocess, sys, tarfile
+from pathlib import Path
+result = subprocess.run([sys.executable, os.environ['UPGRADE_BREW_FIXTURE'], *sys.argv[1:]])
+if result.returncode == 0 and sys.argv[1] in ('install', 'upgrade'):
+    store = Path(os.environ['FAKE_UPGRADE_BREW'])
+    state = json.loads((store / 'state.json').read_text())
+    archive = store.parent / 'report/upgrade-fixture' / state['versions'][-1]
+    capture = store / 'archive-members.json'
+    members = json.loads(capture.read_text()) if capture.exists() else []
+    with tarfile.open(archive) as content:
+        members.append(content.getnames())
+    capture.write_text(json.dumps(members))
+sys.exit(result.returncode)
+]=], '\n'))
+        assert(uv.fs_chmod(scratch .. '/bin/brew', 448))
+        local result = run({ UPGRADE_BREW_FIXTURE = root .. '/tests/fixtures/fake_packaging_upgrade_brew' })
+        assert.equals(0, result.code, result.stderr)
+        local archives = vim.json.decode(table.concat(vim.fn.readfile(scratch .. '/brew/archive-members.json'), '\n'))
+        assert.equals(2, #archives)
+        for _, members in ipairs(archives) do
+            assert.is_true(vim.tbl_contains(members, 'lua/editor-bundle/keep'))
+            for _, member in ipairs(members) do
+                assert.is_falsy(member:match('^editor%-bundle'), 'installed bundle leaked into release archive: ' .. member)
+            end
+        end
+        assert.same({ 'installed bundle license' },
+            vim.fn.readfile(scratch .. '/public/libexec/editor-bundle/plugins/fixture/LICENSE'))
+        assert.same({ 'unrelated nested directory' },
+            vim.fn.readfile(scratch .. '/public/libexec/lua/editor-bundle/keep'))
+    end)
     it('restores public parley and removes only its fixture on upgrade failure', function()
         local result = run({ FAKE_UPGRADE_FAIL = 'upgrade' })
         assert.is_not.equals(0, result.code)

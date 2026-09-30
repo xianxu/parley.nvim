@@ -60,7 +60,12 @@ try:
     tap_created = True
     formula_path = tap_path / 'Formula/parley-upgrade-fixture.rb'
     source = owned / 'runtime'
-    shutil.copytree(runtime, source, symlinks=True, ignore=shutil.ignore_patterns('.git'))
+    def source_only(directory, names):
+        # Reconstruct release inputs, not the installed resources the generated
+        # formula will stage anew. Preserve unrelated nested names unchanged.
+        return {name for name in names if name == '.git'
+                or (name == 'editor-bundle' and Path(directory) == runtime)}
+    shutil.copytree(runtime, source, symlinks=True, ignore=source_only)
     starter = source / 'packaging/starter-config/init.lua'
     # Homebrew moves this file from libexec into share during formula install.
     # Reconstruct the release source from that same installed prefix, not another version.
