@@ -308,3 +308,9 @@ oracle, and the mutation that would make the test fail.
 ## 2026-09-29 (#304 — spelling acceptance context)
 
 - Buffer and cursor events do not observe every window transition: two windows can display the same buffer at the same cursor. Invalidate asynchronous editing authority on WinLeave as well; test an excursion and return before resolution, alongside staying in the other window.
+
+## 2026-09-30 (#306 — bundled editor dependencies)
+
+- A receipt alone does not verify a writable cache. Compare the complete payload inventory before reuse, including unexpected files and executable modes. Keep package-manager-owned payloads and writable development caches explicit in the trust model.
+- A reader lease must survive its launcher: pass the lock descriptor into the consuming process and test parent death. Recheck after an exclusive-to-shared conversion because a waiting writer can win the conversion gap.
+- Exercise offline acceptance through the actual launchers with enforced network denial and read-only installed payloads. Use long temporary paths: Neovim 0.11's encoded bytecode-cache names can exceed filesystem filename limits.

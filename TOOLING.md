@@ -291,7 +291,9 @@ scripts/check-editor-bundle.sh
 
 Run mapped suites sequentially. The last command is a macOS release gate: it
 assembles a fresh real bundle, checks external-network denial, permits loopback
-Preview, and exercises cold/warm production startup. It fails if enforcement is
+Preview, and exercises installed cold/warm startup plus the local app and recording
+launchers. The recording check uses a temporary checkout and verifies Screenkey;
+it does not write into your checkout's demo workspace. The gate fails if enforcement is
 unavailable. `PARLEY_EDITOR_ARCHIVES=/path/to/archives` supplies a complete local
 archive set to that runner. Compare its before/after verification reports to
 check package immutability; passing unit tests alone is not offline evidence.

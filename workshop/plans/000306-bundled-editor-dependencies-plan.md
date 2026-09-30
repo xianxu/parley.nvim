@@ -8,7 +8,12 @@
 
 **Stack:** Lua/Neovim, lazy.nvim, Python standard library for artifact tooling, generated Homebrew Ruby resources, existing shell release runner.
 
-## Concepts and integration points
+## Core concepts
+
+| Symbol | Path | Status |
+|---|---|---|
+| `validate_manifest`, `plugins`, `plugin`, `artifact`, `export` | `lua/parley/editor_dependencies.lua` | new |
+| `platform`, `select` | `lua/parley/editor_bundle.lua` | new |
 
 | Pure entity | Path | Status |
 |---|---|---|
@@ -122,3 +127,5 @@ The operator approved the packaging direction and shared-pin contract. This is f
 - 2026-09-30: Fresh-eyes review required full payload verification of reused writable bundles, explicit migration of the demo Screenkey consumer, and mandatory tagged-tree conformance in the release publication path. Added all three so parity cannot be bypassed through a warm cache or future release.
 - 2026-09-30: SDLC PQ-1/PQ-2 required explicit reader/writer ownership and function-level adversarial strategies. Added OS lock leases through editor lifetime, immutable publication/recovery rules, and named pure validation/decision functions; replaced repeated case inventories with those strategies.
 - 2026-09-30: PQ-1 follow-up identified a parent-death lease gap. Pass the shared lock descriptor across exec into Neovim itself; test consumer survival and competing writer refusal, including parent termination when a subprocess wrapper is exercised.
+- 2026-09-30: Implementation uses the same verified archive bundles for every local app launch, so legacy Lazy Git caches are never selected. Full payload verification supersedes the proposed separate Git HEAD/tracked-dirt verification path; legacy user checkouts remain untouched. Added explicit exported symbols to the Core concepts inventory to satisfy the architecture guard.
+- 2026-09-30: Removed the unused proposed publication decision helper instead of retaining a test-only production abstraction. Stateful tests cover publication decisions through the real prepare/reuse/corruption/recovery lifecycle. Verification also runs on the host's Python 3.9.6 so developer startup does not accidentally require Python 3.11's hashing helper.
