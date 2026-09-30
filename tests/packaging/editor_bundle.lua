@@ -14,7 +14,8 @@ local step = 'startup'
 local run = coroutine.create(function()
     local deps = require('parley.editor_dependencies')
     local plugins = require('lazy.core.config').plugins
-    for _, plugin in ipairs(deps.plugins('app')) do
+    local profile = vim.env.PARLEY_EDITOR_PROFILE or 'app'
+    for _, plugin in ipairs(deps.plugins(profile)) do
         if plugin.name ~= 'lazy.nvim' then
             local loaded = assert(plugins[plugin.name], 'missing Lazy spec ' .. plugin.name)
             assert(loaded.dir == vim.env.PARLEY_EDITOR_BUNDLE .. '/plugins/' .. plugin.name)
@@ -22,6 +23,17 @@ local run = coroutine.create(function()
     end
     local options = require('lazy.core.config').options
     assert(not options.install.missing and not options.pkg.enabled and not options.rocks.enabled and not options.local_spec)
+    if profile == 'recording' then
+        assert(vim.fn.exists(':Screenkey') == 2, 'recording Screenkey command missing')
+        local screenkey = assert(package.loaded.screenkey, 'recording Screenkey was not loaded')
+        assert(screenkey.is_active(), 'recording Screenkey was not activated after VimEnter')
+        local workspace = vim.env.PARLEY_RUNTIME .. '/demo/workspace'
+        assert(vim.fn.getcwd() == workspace, 'recording escaped its temporary workspace')
+        assert(require('parley').config.chat_dir == workspace .. '/workshop/parley',
+            'recording chat path escaped its temporary workspace')
+    else
+        assert(not plugins['screenkey.nvim'], 'recording-only dependency leaked into app profile')
+    end
     assert(vim.fn.exists(':Telescope') == 2, 'Telescope missing')
     assert(#vim.o.statusline > 0, 'statusline missing')
     step = 'themes'
@@ -69,7 +81,7 @@ local run = coroutine.create(function()
     wait_for(function() return result ~= nil end, 'Preview request did not complete')
     assert(result.code == 0 and result.stdout:find('<html', 1, true), 'Preview HTTP request failed: ' .. (result.stderr or ''))
     vim.fn['mkdp#rpc#stop_server']()
-    print('PASS bundled production startup, themes, buffer completion, spelling, Preview HTTP')
+    print('PASS bundled ' .. profile .. ' startup, themes, buffer completion, spelling, Preview HTTP')
     vim.cmd('qa!')
 end)
 local function advance()

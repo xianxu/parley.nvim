@@ -35,8 +35,8 @@ Preserve user configuration and chats. Existing copied starter files retain the 
 
 ## Plan
 
-- [ ] Implement the shared dependency manifest, bundle assembly and production startup integration with regression coverage.
-- [ ] Verify real dependency parity and offline app behavior, update packaging documentation, then close through SDLC review.
+- [x] Implement the shared dependency manifest, bundle assembly and production startup integration with regression coverage.
+- [x] Verify real dependency parity and offline app behavior, update packaging documentation, then close through SDLC review.
 
 ## Estimate
 
@@ -70,6 +70,8 @@ Real offline startup exposed Neovim 0.11's full-path bytecode-cache filename lim
 Mapped suites now pass: infra/starter 195, ui/themes 122, infra/packaging 86; local launcher 13 and assembler 15 pass. The assembler suite and a real ARM bundle verification also pass under macOS Python 3.9.6. Full lint: zero warnings/errors in 686 files; changed smoke Lua and shell syntax checked separately. Upgrade regression inspects both synthetic release archives and proves the installed top-level bundle is excluded while the original payload and nested names remain intact.
 
 Actual installed cold/warm and local-app launchers passed enforced external-network denial with full payload inventories unchanged. Whole smoke elapsed times (including themes/completion/Preview HTTP, not startup-only latency): 1.48s cold, 0.94s warm, 1.72s local. Native Apple Silicon executed Preview v0.0.10; Intel macOS/Linux archives, binary formats/checksums and formula selections were verified but their binaries were not executed here. ARM app inputs total 23,048,113 compressed bytes (11 source archives plus Preview). No actual Homebrew bottle installation or release publication is claimed.
+
+Final enforced offline runner also passed the actual recording launcher with Screenkey active and the workspace confined to its temporary checkout. Full inventories were unchanged across all four runs; latest whole-smoke elapsed times were 1.61s cold, 0.98s warm, 1.88s local, 2.06s recording. Cached archives were supplied before network denial. Homebrew staging API compatibility was inspected against installed Brew source; both resource-stage directory behavior and named Preview installation match the actual tar layouts. Ready for the mandatory close review.
 
 ## Revisions
 

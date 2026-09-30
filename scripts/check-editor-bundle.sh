@@ -62,3 +62,28 @@ env PARLEY_DEMO_DIR="$scratch/local" /usr/bin/time -p \
 "$@" verify --bundle "$local_bundle" > "$scratch/local-after.json"
 cmp "$scratch/local-before.json" "$scratch/local-after.json"
 echo 'PASS local launcher dependency parity and offline startup'
+# Exercise --demo itself without writing demo/workspace in the source checkout.
+# Runtime folders can point at the source, but the demo and launcher are local
+# files so profile ownership, seeding and recording additions take the real path.
+recording="$scratch/recording-checkout"
+mkdir -p "$recording/demo"
+cp "$repo/parley_app" "$recording/parley_app"
+cp "$repo/demo/init.lua" "$recording/demo/init.lua"
+for directory in lua construct packaging scripts tests; do
+    ln -s "$repo/$directory" "$recording/$directory"
+done
+workspace="$recording/demo/workspace"
+mkdir -p "$workspace"
+printf 'parley_app v1\n' > "$workspace/.parley-app-demo"
+recording_bundle=$("$@" --profile recording prepare --root "$workspace/editor-dependencies")
+"$@" --profile recording verify --bundle "$recording_bundle" > "$scratch/recording-before.json"
+python3 - "$recording_bundle" >> "$scratch/offline.sb" <<'PY'
+import json, sys
+print('(deny file-write* (subpath ' + json.dumps(sys.argv[1]) + '))')
+PY
+env PARLEY_DEMO_DIR= /usr/bin/time -p \
+    sandbox-exec -f "$scratch/offline.sb" "$recording/parley_app" --demo \
+    --headless -i NONE -c "luafile $repo/tests/packaging/editor_bundle.lua"
+"$@" --profile recording verify --bundle "$recording_bundle" > "$scratch/recording-after.json"
+cmp "$scratch/recording-before.json" "$scratch/recording-after.json"
+echo 'PASS recording launcher, bundled Screenkey, and offline startup'
