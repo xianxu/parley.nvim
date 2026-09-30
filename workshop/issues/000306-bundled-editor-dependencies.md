@@ -62,3 +62,7 @@ total: 3.74
 ### 2026-09-30
 
 Created and claimed from the operator's approved packaging direction. `sdlc start-plan` prepared the issue branch from published main, preserving local unpublished demo work. Current downloads include lazy.nvim bootstrap, the starter/theme plugin set and Markdown Preview's platform executable. Plan: `workshop/plans/000306-bundled-editor-dependencies-plan.md`.
+
+Implementation gate passed after PQ-1/PQ-2 were resolved; estimate-quality INFO noted optimistic integration/harness allocation. The integration primitive includes archive verification, locks, recovery and their tests; the Lua integration primitive includes the production offline runner. Native descriptor inheritance was proved with Neovim 0.11.7 and a terminated launcher. Manifest/theme tests pass (6+7), assembler tests pass (15), launcher tests pass (13), formula/release tests pass (3+9), and starter bootstrap passes (16) after a red bundled-startup regression.
+
+Real offline startup exposed Neovim 0.11's full-path bytecode-cache filename limit under long bundle paths. Bundled startup now disables that optional loader cache; standalone behavior is retained. Production starter cold/warm checks now pass themes, real buffer/Blink spelling and a loopback Preview HTTP request under external-network denial. The Preview probe must yield the editor event loop while HTTP is served because the server requests buffer state over RPC. Actual installed/local launcher conformance is being verified next; no release published.

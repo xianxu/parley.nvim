@@ -45,8 +45,29 @@ describe('starter bootstrap', function()
             PARLEY_RUNTIME = root .. '/runtime', }
         vim.fn.mkdir(env.PARLEY_RUNTIME .. '/lua/parley', 'p')
         vim.fn.writefile(vim.fn.readfile('lua/parley/theme.lua'), env.PARLEY_RUNTIME .. '/lua/parley/theme.lua')
+        for _, name in ipairs({ 'editor_dependencies', 'editor_bundle' }) do
+            vim.fn.writefile(vim.fn.readfile('lua/parley/' .. name .. '.lua'), env.PARLEY_RUNTIME .. '/lua/parley/' .. name .. '.lua')
+        end
     end)
     after_each(function() vim.fn.delete(root, 'rf') end)
+
+    it('loads an installed bundle without cloning or running builders', function()
+        local bundle = root .. '/bundle'
+        local manifest = require('parley.editor_dependencies').export('app', require('parley.editor_bundle').platform())
+        for _, item in ipairs(manifest.plugins) do vim.fn.mkdir(bundle .. '/plugins/' .. item.name, 'p') end
+        vim.fn.mkdir(bundle .. '/plugins/lazy.nvim/lua/lazy', 'p')
+        vim.fn.writefile(vim.fn.readfile(fixture), bundle .. '/plugins/lazy.nvim/lua/lazy/init.lua')
+        local binary = bundle .. '/' .. manifest.artifact.output
+        vim.fn.mkdir(vim.fn.fnamemodify(binary, ':h'), 'p')
+        vim.fn.writefile({ '#!/bin/sh', 'echo 0.0.10' }, binary)
+        vim.fn.setfperm(binary, 'rwxr-xr-x')
+        vim.fn.writefile({ vim.json.encode({ schema_version = 1, manifest = manifest, files = {} }) }, bundle .. '/receipt.json')
+        local result = run(nil, { PARLEY_EDITOR_BUNDLE = bundle, BOOTSTRAP_BUNDLE = '1' })
+        assert.equals('', result.stderr)
+        assert.equals(0, result.code)
+        assert.equals(0, vim.fn.filereadable(root .. '/calls'), 'bundled startup cloned Lazy')
+        assert.equals(1, vim.fn.filereadable(root .. '/result'))
+    end)
 
     it('loads demo-only plugins through the shared starter and enables Screenkey after startup', function()
         vim.fn.mkdir(env.PARLEY_RUNTIME .. '/packaging/starter-config', 'p')

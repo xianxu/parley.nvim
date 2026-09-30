@@ -70,7 +70,6 @@ local ok, err = xpcall(function()
     fd:write(tostring(uv.os_getpid()), "\n")
     fd:close()
     local lazy = data .. "/lazy/lazy.nvim"
-    local pin = "85c7ff3711b730b4030d03144f6db6375044ae82" -- Lazy v11.17.5
     local function git(args)
         local timeout = math.min(120000, remaining())
         if timeout == 0 then error("Parley bootstrap startup deadline exceeded") end
@@ -105,6 +104,10 @@ local ok, err = xpcall(function()
         end
         vim.opt.runtimepath:prepend(runtime)
     end
+    local dependencies = require("parley.editor_dependencies")
+    local pin = dependencies.plugin("lazy.nvim").commit
+    local bundle = require("parley.editor_bundle").select()
+    if bundle then lazy = bundle.lazy end
     local theme = require("parley.theme")
     if not uv.fs_stat(lazy) then
         local staging = lock .. "/staging"
@@ -133,7 +136,7 @@ local ok, err = xpcall(function()
         plugin.priority = i == 1 and 1000 or 999
     end
     local additional_plugins = {
-        { "nvim-lualine/lualine.nvim", commit = "221ce6b2d999187044529f49da6554a92f740a96",
+        { "nvim-lualine/lualine.nvim", commit = dependencies.plugin("lualine.nvim").commit,
             lazy = false,
             opts = {
                 options = { theme = "auto", icons_enabled = false, globalstatus = true,
@@ -144,15 +147,15 @@ local ok, err = xpcall(function()
                 inactive_sections = { lualine_a = {}, lualine_b = {}, lualine_c = {},
                     lualine_x = {}, lualine_y = {}, lualine_z = {} },
             } },
-        { "nvim-lua/plenary.nvim", commit = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
+        { "nvim-lua/plenary.nvim", commit = dependencies.plugin("plenary.nvim").commit },
         -- `keys` would make Lazy defer loading; keep :Telescope available at startup.
-        { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026",
+        { "nvim-telescope/telescope.nvim", commit = dependencies.plugin("telescope.nvim").commit,
             lazy = false,
             keys = { { "<C-g>:", function() require("telescope.builtin").command_history() end,
                 desc = "Search command history" } } },
         -- Fuzzy command-line and current-buffer word completion.
         -- Keep Enter available for Parley submission and ordinary newlines.
-        { "saghen/blink.cmp", commit = "78336bc89ee5365633bcf754d93df01678b5c08f", -- v1.10.2
+        { "saghen/blink.cmp", commit = dependencies.plugin("blink.cmp").commit, -- v1.10.2
             lazy = false,
             opts = {
                 fuzzy = { implementation = "lua" },
@@ -183,7 +186,7 @@ local ok, err = xpcall(function()
                 },
             } },
         { "iamcco/markdown-preview.nvim",
-            commit = "a923f5fc5ba36a3b17e289dc35dc17f66d0548ee",
+            commit = dependencies.plugin("markdown-preview.nvim").commit,
             cmd = { "MarkdownPreview", "MarkdownPreviewToggle", "MarkdownPreviewStop" },
             ft = { "markdown" },
             init = function()
@@ -210,7 +213,15 @@ local ok, err = xpcall(function()
     }
     for _, plugin in ipairs(additional_plugins) do theme_plugins[#theme_plugins + 1] = plugin end
     vim.list_extend(theme_plugins, extra_plugins)
+    if bundle then theme_plugins = bundle:specs(theme_plugins) end
     require("lazy").setup(theme_plugins, {
+        -- Neovim 0.11 encodes full source paths into cache filenames. Long
+        -- manifest-addressed local paths can exceed the filesystem name limit.
+        performance = { cache = { enabled = not bundle } },
+        install = { missing = not bundle },
+        pkg = { enabled = not bundle },
+        rocks = { enabled = not bundle },
+        local_spec = not bundle,
         root = data .. "/lazy",
         lockfile = vim.fn.stdpath("config") .. "/lazy-lock.json",
         checker = { enabled = false },
