@@ -23,7 +23,7 @@ describe('disposable guest package upgrade', function()
         vim.fn.mkdir(scratch .. '/bin', 'p')
         assert(uv.fs_symlink(root .. '/tests/fixtures/fake_packaging_upgrade_brew', scratch .. '/bin/brew'))
         for _, path in ipairs({ 'packaging/formula.lua', 'packaging/render-formula.lua', 'packaging/parley', 'packaging/launcher.lua',
-            'lua/parley/deps.lua', 'lua/parley/fs.lua' }) do
+            'lua/parley/deps.lua', 'lua/parley/editor_dependencies.lua', 'lua/parley/fs.lua' }) do
             write(scratch .. '/public/libexec/' .. path, vim.fn.readfile(root .. '/' .. path))
         end
         assert(uv.fs_chmod(scratch .. '/public/libexec/packaging/parley', 493))
