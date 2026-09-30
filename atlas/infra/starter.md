@@ -160,7 +160,16 @@ For startup problems:
    `~/.local/share/parley/initializer.lock` and
    `~/.local/state/parley/welcome-initializer`. With XDG overrides use the reported
    path, not these defaults. Do not remove the entire profile to clear a lock.
-3. A standalone source profile's incomplete Lazy checkout is reported with its
+3. A standalone source profile validates `theme.lua`, `editor_dependencies.lua`,
+   and `editor_bundle.lua` before publishing fresh runtime staging or reusing its
+   cached Parley checkout. An incompatible runtime names its missing files before
+   Lazy loads; owned fresh staging is cleaned and cached files remain untouched.
+   Set `PARLEY_RUNTIME` to the checkout matching the copied starter, or preserve
+   cached edits and use terminal Git to fetch tags and check out the matching
+   release. A matching published starter/runtime pair also works when newer
+   starter changes have not been released; `:Lazy update` cannot repair this
+   pre-Lazy failure. See the [standalone recovery steps](../../packaging/starter-config/README.md).
+   A standalone source profile's incomplete Lazy checkout is reported with its
    exact directory. Preserve local changes before repairing that checkout;
    bundled app repair does not delete it. An incomplete welcome chat is also
    reported by path: back up and repair that file, or move it aside and restart

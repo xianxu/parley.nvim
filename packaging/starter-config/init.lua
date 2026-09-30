@@ -80,6 +80,18 @@ local ok, err = xpcall(function()
         end
         return result.stdout or ""
     end
+    -- Check this starter's bootstrap module closure before publishing a release
+    -- or loading from a user-owned cache. Lazy cannot repair an earlier failure.
+    local function check_runtime(path, description, recovery)
+        local missing = {}
+        for _, name in ipairs({ "theme", "editor_dependencies", "editor_bundle" }) do
+            local file = "lua/parley/" .. name .. ".lua"
+            if vim.fn.filereadable(path .. "/" .. file) ~= 1 then missing[#missing + 1] = file end
+        end
+        assert(#missing == 0, "Parley bootstrap " .. description .. " is incompatible with this starter: "
+            .. path .. "; missing required module(s): " .. table.concat(missing, ", ")
+            .. ". " .. recovery .. ". Lazy is not loaded")
+    end
     local runtime = vim.env.PARLEY_RUNTIME
     if not runtime or runtime == "" then
         runtime = data .. "/lazy/parley.nvim"
@@ -94,13 +106,14 @@ local ok, err = xpcall(function()
             end
             assert(release, "Parley bootstrap found no stable release")
             git({ "-C", staging, "checkout", "--detach", release })
-            assert(uv.fs_stat(staging .. "/lua/parley/theme.lua"),
-                "Parley bootstrap release " .. release .. " lacks theme support; retry after v2.6.0 is published")
+            check_runtime(staging, "release " .. release,
+                "Use init.lua from a matching published release, or set PARLEY_RUNTIME to a checkout matching this init.lua")
             vim.fn.mkdir(data .. "/lazy", "p", 448)
             assert(uv.fs_rename(staging, runtime))
-        elseif not uv.fs_stat(runtime .. "/lua/parley/theme.lua") then
-            error("Parley bootstrap cached Parley release lacks theme support: " .. runtime
-                .. "; preserve any local changes, update that checkout to v2.6.0 or later, then retry")
+        else
+            check_runtime(runtime, "cached Parley release",
+                "Set PARLEY_RUNTIME to a checkout matching this init.lua, or use Git from a terminal to inspect and "
+                .. "preserve local changes, fetch tags, and check out the release matching this init.lua")
         end
         vim.opt.runtimepath:prepend(runtime)
     end

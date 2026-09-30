@@ -21,9 +21,28 @@ NVIM_APPNAME=parley nvim
 
 Without the Homebrew launcher, the first launch downloads the latest stable Parley
 release into the profile’s Lazy directory, then loads its pinned theme registry.
-Later launches reuse that checkout; `:Lazy update parley.nvim` manages updates.
-If an older cached checkout lacks theme support, startup reports its path: preserve
-any local changes and update it to v2.6.0 or later before retrying.
+Later launches reuse that checkout. Once startup succeeds, `:Lazy update parley.nvim`
+can update it. Before publishing a fresh checkout or reusing a cached one, the
+starter checks for its required `theme`, `editor_dependencies`, and `editor_bundle`
+modules. An incompatible release fails before Lazy loads, names the missing files,
+and leaves an existing checkout untouched. Failed fresh staging is removed.
+
+If startup reports an incompatible runtime, use a matching starter/runtime pair.
+You can launch immediately against the checkout this starter came from:
+
+```sh
+PARLEY_RUNTIME=/absolute/path/to/matching/parley.nvim NVIM_APPNAME=parley nvim
+```
+
+Alternatively, use Git **from a terminal** in the cached runtime directory named
+by the error. Inspect `git status`, preserve local edits and untracked files, then
+run `git fetch origin --tags` and `git switch --detach <matching-release-tag>` with
+the actual release tag that supplied your `init.lua`. A detached release checkout
+does not use `git pull` for this operation. Keep your customized `init.lua` backed
+up when selecting a matching older starter. If this starter's changes are not yet
+released, use its matching source checkout or a published starter/runtime pair;
+retrying the same older release cannot supply the missing modules. `:Lazy update`
+is unavailable until initialization succeeds.
 
 A standalone profile without a supplied bundle downloads its pinned editor
 plugins. The Homebrew app uses its installed bundle. Both open `chats/welcome.md`
