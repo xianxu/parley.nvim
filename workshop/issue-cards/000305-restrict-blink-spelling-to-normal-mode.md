@@ -7,6 +7,6 @@ estimate_hours:
 github_issue:
 ---
 
-# Restrict Blink spelling to Normal mode
+# Separate Insert buffer completion and Normal mixed suggestions
 
 ## Problem
