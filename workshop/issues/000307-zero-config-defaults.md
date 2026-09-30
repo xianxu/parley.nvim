@@ -1,12 +1,14 @@
 ---
 id: 000307
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-30
 updated: 2026-09-30
 estimate_hours:
-card_mirror: 'fb9b5aca269763e7a9cc5fbf0a55c6d0097fd6e2' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '20b6544a82e33a1d74a38c7b9fad2ca05e049608' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-30T11:29:00-07:00
+flow: {kind: quick, provenance: inferred, spec: "a3e5d739", done: "15a7c84a"}
 ---
 
 # Clean up local parley config; zero-config plugin defaults
