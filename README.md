@@ -28,8 +28,13 @@ brew install xianxu/parley/parley
 parley
 ```
 
-The first launch installs editor dependencies and opens the Welcome tutorial.
-Follow it to connect an account, choose a model, and send your first question.
+Homebrew installs the pinned editor dependencies with the app. The bundled
+starter opens the Welcome tutorial without downloading editor plugins; follow
+it to connect an account, choose a model, and send your first question. Editor
+startup and local Markdown preview work offline; provider login and AI requests
+still need a connection. Existing edited profiles must adopt the new
+`init.lua.new` starter to use bundled dependencies.
+
 Your Parley editor settings and chats are separate from your existing Neovim
 profile; provider logins are shared with other CLIProxyAPI clients.
 
@@ -59,6 +64,11 @@ ships its own help and points the model at it. Try asking Parley about a feature
 README, tutorials, and [atlas](atlas/index.md) from your installed version.
 
 ## Contribute to Parley
+
+For local verification, run `./parley_app` from your checkout. It caches the pinned
+dependencies on first launch; `--nuke` clears those dependencies while retaining
+chats, settings and login. See [local launcher instructions](TOOLING.md) and the
+[recording workspace guide](demo/README.md) for `--demo`.
 
 Parley is built entirely by AI agents, so contributing works a little differently.
 It uses `ariadne` as its base development layer, and everything is managed inside

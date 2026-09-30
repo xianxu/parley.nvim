@@ -70,7 +70,6 @@ local ok, err = xpcall(function()
     fd:write(tostring(uv.os_getpid()), "\n")
     fd:close()
     local lazy = data .. "/lazy/lazy.nvim"
-    local pin = "85c7ff3711b730b4030d03144f6db6375044ae82" -- Lazy v11.17.5
     local function git(args)
         local timeout = math.min(120000, remaining())
         if timeout == 0 then error("Parley bootstrap startup deadline exceeded") end
@@ -80,6 +79,18 @@ local ok, err = xpcall(function()
             error("Parley bootstrap git failed: " .. (result.stderr or "timeout"))
         end
         return result.stdout or ""
+    end
+    -- Check this starter's bootstrap module closure before publishing a release
+    -- or loading from a user-owned cache. Lazy cannot repair an earlier failure.
+    local function check_runtime(path, description, recovery)
+        local missing = {}
+        for _, name in ipairs({ "theme", "editor_dependencies", "editor_bundle" }) do
+            local file = "lua/parley/" .. name .. ".lua"
+            if vim.fn.filereadable(path .. "/" .. file) ~= 1 then missing[#missing + 1] = file end
+        end
+        assert(#missing == 0, "Parley bootstrap " .. description .. " is incompatible with this starter: "
+            .. path .. "; missing required module(s): " .. table.concat(missing, ", ")
+            .. ". " .. recovery .. ". Lazy is not loaded")
     end
     local runtime = vim.env.PARLEY_RUNTIME
     if not runtime or runtime == "" then
@@ -95,16 +106,21 @@ local ok, err = xpcall(function()
             end
             assert(release, "Parley bootstrap found no stable release")
             git({ "-C", staging, "checkout", "--detach", release })
-            assert(uv.fs_stat(staging .. "/lua/parley/theme.lua"),
-                "Parley bootstrap release " .. release .. " lacks theme support; retry after v2.6.0 is published")
+            check_runtime(staging, "release " .. release,
+                "Use init.lua from a matching published release, or set PARLEY_RUNTIME to a checkout matching this init.lua")
             vim.fn.mkdir(data .. "/lazy", "p", 448)
             assert(uv.fs_rename(staging, runtime))
-        elseif not uv.fs_stat(runtime .. "/lua/parley/theme.lua") then
-            error("Parley bootstrap cached Parley release lacks theme support: " .. runtime
-                .. "; preserve any local changes, update that checkout to v2.6.0 or later, then retry")
+        else
+            check_runtime(runtime, "cached Parley release",
+                "Set PARLEY_RUNTIME to a checkout matching this init.lua, or use Git from a terminal to inspect and "
+                .. "preserve local changes, fetch tags, and check out the release matching this init.lua")
         end
         vim.opt.runtimepath:prepend(runtime)
     end
+    local dependencies = require("parley.editor_dependencies")
+    local pin = dependencies.plugin("lazy.nvim").commit
+    local bundle = require("parley.editor_bundle").select()
+    if bundle then lazy = bundle.lazy end
     local theme = require("parley.theme")
     if not uv.fs_stat(lazy) then
         local staging = lock .. "/staging"
@@ -133,7 +149,7 @@ local ok, err = xpcall(function()
         plugin.priority = i == 1 and 1000 or 999
     end
     local additional_plugins = {
-        { "nvim-lualine/lualine.nvim", commit = "221ce6b2d999187044529f49da6554a92f740a96",
+        { "nvim-lualine/lualine.nvim", commit = dependencies.plugin("lualine.nvim").commit,
             lazy = false,
             opts = {
                 options = { theme = "auto", icons_enabled = false, globalstatus = true,
@@ -144,15 +160,15 @@ local ok, err = xpcall(function()
                 inactive_sections = { lualine_a = {}, lualine_b = {}, lualine_c = {},
                     lualine_x = {}, lualine_y = {}, lualine_z = {} },
             } },
-        { "nvim-lua/plenary.nvim", commit = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
+        { "nvim-lua/plenary.nvim", commit = dependencies.plugin("plenary.nvim").commit },
         -- `keys` would make Lazy defer loading; keep :Telescope available at startup.
-        { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026",
+        { "nvim-telescope/telescope.nvim", commit = dependencies.plugin("telescope.nvim").commit,
             lazy = false,
             keys = { { "<C-g>:", function() require("telescope.builtin").command_history() end,
                 desc = "Search command history" } } },
         -- Fuzzy command-line and current-buffer word completion.
         -- Keep Enter available for Parley submission and ordinary newlines.
-        { "saghen/blink.cmp", commit = "78336bc89ee5365633bcf754d93df01678b5c08f", -- v1.10.2
+        { "saghen/blink.cmp", commit = dependencies.plugin("blink.cmp").commit, -- v1.10.2
             lazy = false,
             opts = {
                 fuzzy = { implementation = "lua" },
@@ -183,7 +199,7 @@ local ok, err = xpcall(function()
                 },
             } },
         { "iamcco/markdown-preview.nvim",
-            commit = "a923f5fc5ba36a3b17e289dc35dc17f66d0548ee",
+            commit = dependencies.plugin("markdown-preview.nvim").commit,
             cmd = { "MarkdownPreview", "MarkdownPreviewToggle", "MarkdownPreviewStop" },
             ft = { "markdown" },
             init = function()
@@ -210,7 +226,15 @@ local ok, err = xpcall(function()
     }
     for _, plugin in ipairs(additional_plugins) do theme_plugins[#theme_plugins + 1] = plugin end
     vim.list_extend(theme_plugins, extra_plugins)
+    if bundle then theme_plugins = bundle:specs(theme_plugins) end
     require("lazy").setup(theme_plugins, {
+        -- Neovim 0.11 encodes full source paths into cache filenames. Long
+        -- manifest-addressed local paths can exceed the filesystem name limit.
+        performance = { cache = { enabled = not bundle } },
+        install = { missing = not bundle },
+        pkg = { enabled = not bundle },
+        rocks = { enabled = not bundle },
+        local_spec = not bundle,
         root = data .. "/lazy",
         lockfile = vim.fn.stdpath("config") .. "/lazy-lock.json",
         checker = { enabled = false },

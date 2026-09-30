@@ -5,8 +5,13 @@ shift text as you type. Searches (`/` and `?`) ignore case unless you type an
 uppercase letter: `/parley` matches any casing, while `/Parley` matches that case.
 
 This profile gives Parley its own configuration, chats and account login. Your
-ordinary Neovim configuration stays separate. It requires Neovim 0.11 or newer,
-Git, curl, and an internet connection. macOS supplies the image clipboard tools.
+ordinary Neovim configuration stays separate. The Homebrew app supplies its
+Neovim and editor dependencies. Its bundled starter does not download plugins
+at launch. Provider login and AI requests still require a connection.
+macOS supplies the image clipboard tools.
+
+For a standalone source profile, install Neovim 0.11 or newer, Git and curl.
+Initial source/dependency provisioning requires an internet connection.
 
 Copy this release's `init.lua` to `~/.config/parley/init.lua`, then run:
 
@@ -16,11 +21,31 @@ NVIM_APPNAME=parley nvim
 
 Without the Homebrew launcher, the first launch downloads the latest stable Parley
 release into the profile’s Lazy directory, then loads its pinned theme registry.
-Later launches reuse that checkout; `:Lazy update parley.nvim` manages updates.
-If an older cached checkout lacks theme support, startup reports its path: preserve
-any local changes and update it to v2.6.0 or later before retrying.
+Later launches reuse that checkout. Once startup succeeds, `:Lazy update parley.nvim`
+can update it. Before publishing a fresh checkout or reusing a cached one, the
+starter checks for its required `theme`, `editor_dependencies`, and `editor_bundle`
+modules. An incompatible release fails before Lazy loads, names the missing files,
+and leaves an existing checkout untouched. Failed fresh staging is removed.
 
-The first launch downloads the pinned editor plugins and opens `chats/welcome.md`
+If startup reports an incompatible runtime, use a matching starter/runtime pair.
+You can launch immediately against the checkout this starter came from:
+
+```sh
+PARLEY_RUNTIME=/absolute/path/to/matching/parley.nvim NVIM_APPNAME=parley nvim
+```
+
+Alternatively, use Git **from a terminal** in the cached runtime directory named
+by the error. Inspect `git status`, preserve local edits and untracked files, then
+run `git fetch origin --tags` and `git switch --detach <matching-release-tag>` with
+the actual release tag that supplied your `init.lua`. A detached release checkout
+does not use `git pull` for this operation. Keep your customized `init.lua` backed
+up when selecting a matching older starter. If this starter's changes are not yet
+released, use its matching source checkout or a published starter/runtime pair;
+retrying the same older release cannot supply the missing modules. `:Lazy update`
+is unavailable until initialization succeeds.
+
+A standalone profile without a supplied bundle downloads its pinned editor
+plugins. The Homebrew app uses its installed bundle. Both open `chats/welcome.md`
 with setup instructions and an example question. Later launches reuse it. The
 app uses its own chat folder, separate from ordinary Neovim. Existing chats in
 the old `chats/welcome/` folder move into `chats/` with their attachments.
@@ -74,7 +99,8 @@ same Parley runtime as an ordinary plugin installation.
 Neovim's standard XDG variables apply. With their default values, this profile owns:
 
 - `~/.config/parley`: editable configuration and plugin lockfile.
-- `~/.local/share/parley`: plugins, chats, exports and proxy binary.
+- `~/.local/share/parley`: chats, exports, proxy binary, and any standalone or personal plugins.
+  Homebrew-owned editor dependencies live in the application keg.
 - `~/.local/state/parley`: session state and logs.
 - `~/.cache/parley`: caches and query scratch.
 
@@ -88,7 +114,12 @@ on the same computer without additional environment variables. If that
 port belongs to another service, stop that service or choose another port in
 your configuration. Parley will not remove a foreign listener.
 
-A failed download cleans its own staging so restarting can retry. If an initializer
+A failed standalone bootstrap download cleans its own staging so restarting can
+retry. Bundled startup never repairs dependencies by downloading: reinstall or
+upgrade the Homebrew app if its bundle is missing or damaged. For a development
+bundle, use the [explicit repair command](../../TOOLING.md#editor-dependency-bundles).
+Neither path silently deletes old Lazy caches or personal plugin directories.
+If an initializer
 was abruptly killed, the error names its lock directory: close all Parley
 instances, remove only that named initializer directory, then retry. An invalid
 welcome file is reported by path for explicit repair. Older releases' `client-key`
@@ -113,12 +144,23 @@ Maintainers verify the artifact with `python3 scripts/check-starter.py` and
 From the repository root, run:
 
 ```sh
-NVIM_APPNAME=parley PARLEY_RUNTIME="$PWD" nvim -u "$PWD/packaging/starter-config/init.lua"
+./parley_app
 ```
 
-This loads the working checkout with the release profile and its pinned plugin
-dependencies, without Homebrew or copying a configuration file. It uses your
-existing Parley chats and login. The first launch may download missing plugins.
+This uses a separate local profile and Python 3 to provision and verify the
+manifest's `app` bundle before opening Neovim. Provisioning fetches checksummed
+archives once; relaunch verifies the complete existing payload.
+`./parley_app --demo` uses the `recording` membership, adding Screenkey. Neither
+entry silently reuses an unchecked Lazy cache. See
+[local launch and bundle tooling](../../TOOLING.md#local-app-experience) for
+profile selection and explicit preparation/repair.
+
+To use an existing Parley profile directly, first prepare a bundle with the
+[dependency CLI](../../TOOLING.md#editor-dependency-bundles), then launch through
+its `run` command. This retains the verified bundle's reader lease for the editor
+lifetime. A direct standalone `NVIM_APPNAME=parley nvim` without that bundle uses
+the source-profile bootstrap and is outside the packaged offline guarantee.
+
 The profile bootstrap lives in `packaging/starter-config/init.lua`; its options
 come from `lua/parley/starter_config.lua`, layered over the plugin defaults in
 `lua/parley/config.lua`.
@@ -135,9 +177,11 @@ plugins. In a Markdown chat, run `:MarkdownPreview` to open a live browser previ
 Use `:MarkdownPreviewToggle` to toggle it and `:MarkdownPreviewStop` to stop it.
 Preview starts only when requested and listens on localhost.
 
-First installation downloads the upstream prebuilt preview server; Node and Yarn
-are not required. A failed install can be retried with
-`:Lazy build markdown-preview.nvim`. The preview renders Markdown, so Parley's
+The app ships the checksummed upstream prebuilt preview server; Node and Yarn
+are not required, and bundled startup runs no Preview install hook. App upgrades
+replace the server along with its plugin. Standalone profiles without a bundle
+retain the explicit `:Lazy build markdown-preview.nvim` recovery path.
+The preview renders Markdown, so Parley's
 chat markers remain visible as text. This is an app dependency; installing the
 parley.nvim plugin alone does not install MarkdownPreview.
 
@@ -153,9 +197,10 @@ Press `Ctrl-g :` in normal mode to search every command you have run before.
 Type part of one, then press Enter to run it again.
 
 The app includes `saghen/blink.cmp` for this, pinned with the other editor
-plugins and configured with its built-in Lua matcher, so installation downloads
-no native binary. When a release pins a newer version, copy the change from
-`init.lua.new` into your `init.lua`, then run `:Lazy update blink.cmp`.
+plugins and configured with its built-in Lua matcher, so no native matcher
+binary is needed. Homebrew upgrades carry its pinned version in the bundle.
+Adopt bundle-loading changes from `init.lua.new` when upgrading an older edited
+starter; do not run `:Lazy update blink.cmp` against the packaged dependency.
 This is an app dependency; installing the parley.nvim plugin alone does not
 install it.
 

@@ -79,9 +79,15 @@ if [ -f "$demo/.nvim-pid" ]; then
         echo 'parley_app: demo is running; close it before retrying' >&2; exit 1
     fi
 fi
+[ ! -L "$demo/editor-dependencies" ] || {
+    echo 'parley_app: editor-dependencies must not be a symlink' >&2; exit 1
+}
 if [ "$nuke" -eq 1 ]; then
-    rm -rf -- "$demo"
-    printf 'Removed Parley demo profile: %s\n' "$demo" >&2
+    if [ -e "$demo/editor-dependencies" ]; then
+        printf 'Clearing cached editor dependencies...\n' >&2
+        python3 "$repo/scripts/editor-dependencies.py" repair --root "$demo/editor-dependencies"
+    fi
+    printf 'Cleared Parley editor dependencies; preserved chats and settings: %s\n' "$demo" >&2
     exit 0
 fi
 if [ "$recording" -eq 1 ]; then
@@ -114,7 +120,11 @@ export PARLEY_REPO_MODE=0
 [ "$recording" -eq 0 ] || unset PARLEY_REPO_MODE
 export XDG_CONFIG_HOME="$demo/config" XDG_DATA_HOME="$demo/data"
 export XDG_STATE_HOME="$demo/state" XDG_CACHE_HOME="$demo/cache"
+export PARLEY_EDITOR_PROFILE=app
+[ "$recording" -eq 0 ] || export PARLEY_EDITOR_PROFILE=recording
 # The published PID stays live across exec; contenders now see a running app.
 rmdir "$lock"
 trap - 0 HUP INT TERM
-exec nvim -u "$init" "$@"
+exec python3 "$repo/scripts/editor-dependencies.py" --runtime "$repo" \
+    --profile "$PARLEY_EDITOR_PROFILE" run --root "$demo/editor-dependencies" -- \
+    nvim -u "$init" "$@"

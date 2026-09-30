@@ -1,0 +1,153 @@
+---
+gate: boundary-review
+issue: 306
+id_prefix: BR
+rounds:
+    - "n": 1
+      timestamp: "2026-09-30T11:46:59-07:00"
+      agent: codex
+      findings:
+        - id: BR-1
+          severity: Critical
+          title: Writable receipts can certify modified plugin source
+          detail: scripts/editor-dependencies.py:203-214 compares source files against editable receipt hashes without binding that inventory to trusted archive identities. Modifying plugin source and regenerating its receipt passes verify_bundle and prepare_bundle. Bind expected payload identity to trusted manifest data or checksum-verified archives, with changed-receipt regressions (ARCH-SECURE, ARCH-PURPOSE).
+          family: payload-identity-trust
+          round: 1
+        - id: BR-2
+          severity: Important
+          title: Streaming downloads can exceed the declared deadline inside read
+          detail: scripts/editor-dependencies.py:277-286 checks elapsed time only after read(1 MiB); the socket timeout measures inactivity. A drip-response reproduction exceeded a 0.1-second budget for 0.535 seconds before rejection. Enforce the remaining deadline during IO and add a slow-response regression (ARCH-CONSTRAINTS).
+          family: wall-clock-deadline-enforcement
+          round: 1
+      recipe: milestone-review
+      blocked: true
+    - "n": 2
+      timestamp: "2026-09-30T12:03:41-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Source inventories are bound to trusted manifest hashes in scripts/editor-dependencies.py:185-195. All five changed-receipt regressions pass; restoring the previous check_layout makes every variant fail.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: scripts/editor-dependencies.py:277-351 bounds blocking IO with worker deadlines and kill/reap cleanup. Slow-header/body regressions pass; restoring the previous fetch_archive makes them exceed the budget at approximately 0.8 seconds.
+          round: 2
+      findings:
+        - id: BR-3
+          severity: Important
+          title: Standalone migration accepts runtimes missing newly required modules
+          detail: packaging/starter-config/init.lua:97-109 checks only theme.lua before requiring editor_dependencies and editor_bundle. An isolated cached pre-change runtime reproduces module-not-found before Lazy loads, making the documented :Lazy update recovery unavailable. Validate required capabilities for both fresh and cached runtimes, reject incompatible staging before publication, provide external recovery instructions, and add regressions preserving existing checkout contents (ARCH-PURPOSE, ARCH-SECURE).
+          family: starter-runtime-compatibility
+          round: 2
+      recipe: milestone-review
+      blocked: true
+    - "n": 3
+      timestamp: "2026-09-30T12:57:06-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Source inventories remain bound to manifest hashes independently of writable receipts. Tamper-and-regenerate regression tests passed.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: Download workers enforce total deadlines and are reaped before partial-file removal. Slow-header, slow-body, and independent worker-deadline tests passed.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: packaging/starter-config/init.lua:85 checks all three required modules before fresh publication or cached selection. Tests at tests/integration/starter_bootstrap_spec.lua:120 verify rejection, cleanup, external recovery, and checkout preservation. Removing the guard in a temporary pinned copy produced exactly six failures; the other 14 tests passed.
+          round: 3
+      recipe: milestone-review
+      blocked: false
+    - "n": 4
+      timestamp: "2026-09-30T13:11:34-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Seal and verification enforce manifest-pinned source inventories; removing that binding makes modified, added, removed and executable-mode forged-receipt regressions fail.
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: Deadline-owned workers bound blocking downloads and are reaped before cleanup; restoring the old downloader makes real slow-header and slow-body regressions fail.
+          round: 4
+        - id: BR-3
+          disposition: addressed
+          note: Fresh and cached standalone runtime selection checks required modules before Lazy loads; six inspected regressions assert rejection, staging cleanup, cached checkout preservation and external recovery guidance.
+          round: 4
+      recipe: milestone-review
+      blocked: false
+    - "n": 5
+      timestamp: "2026-09-30T13:28:45-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Independent source inventory hashes protect seal, verify, and reuse. Tampering regressions pass; removing the identity check in memory produces four failures.
+          round: 5
+        - id: BR-2
+          disposition: addressed
+          note: Blocking downloads run in deadline-owned workers with kill/reap cleanup and a worker alarm. Real dripping-header/body, worker-deadline, and partial-file regressions pass.
+          round: 5
+        - id: BR-3
+          disposition: addressed
+          note: Starter compatibility checks enumerate all three required modules before fresh publication or cached loading. Six fresh/cached regressions pass and verify preservation and actionable recovery.
+          round: 5
+      recipe: milestone-review
+      blocked: false
+---
+
+# Gate ledger — parley.nvim#306 (boundary-review)
+
+Findings this gate raised, the stable ids the binary assigned them, and how
+later rounds disposed of them. Generated — edit the gate, not this file.
+
+## Round 1 — 2026-09-30T11:46:59-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-1** [Critical] `payload-identity-trust` Writable receipts can certify modified plugin source
+  scripts/editor-dependencies.py:203-214 compares source files against editable receipt hashes without binding that inventory to trusted archive identities. Modifying plugin source and regenerating its receipt passes verify_bundle and prepare_bundle. Bind expected payload identity to trusted manifest data or checksum-verified archives, with changed-receipt regressions (ARCH-SECURE, ARCH-PURPOSE).
+- **BR-2** [Important] `wall-clock-deadline-enforcement` Streaming downloads can exceed the declared deadline inside read
+  scripts/editor-dependencies.py:277-286 checks elapsed time only after read(1 MiB); the socket timeout measures inactivity. A drip-response reproduction exceeded a 0.1-second budget for 0.535 seconds before rejection. Enforce the remaining deadline during IO and add a slow-response regression (ARCH-CONSTRAINTS).
+
+## Round 2 — 2026-09-30T12:03:41-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Source inventories are bound to trusted manifest hashes in scripts/editor-dependencies.py:185-195. All five changed-receipt regressions pass; restoring the previous check_layout makes every variant fail.
+- BR-2 — addressed — scripts/editor-dependencies.py:277-351 bounds blocking IO with worker deadlines and kill/reap cleanup. Slow-header/body regressions pass; restoring the previous fetch_archive makes them exceed the budget at approximately 0.8 seconds.
+
+### Raised
+
+- **BR-3** [Important] `starter-runtime-compatibility` Standalone migration accepts runtimes missing newly required modules
+  packaging/starter-config/init.lua:97-109 checks only theme.lua before requiring editor_dependencies and editor_bundle. An isolated cached pre-change runtime reproduces module-not-found before Lazy loads, making the documented :Lazy update recovery unavailable. Validate required capabilities for both fresh and cached runtimes, reject incompatible staging before publication, provide external recovery instructions, and add regressions preserving existing checkout contents (ARCH-PURPOSE, ARCH-SECURE).
+
+## Round 3 — 2026-09-30T12:57:06-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Source inventories remain bound to manifest hashes independently of writable receipts. Tamper-and-regenerate regression tests passed.
+- BR-2 — addressed — Download workers enforce total deadlines and are reaped before partial-file removal. Slow-header, slow-body, and independent worker-deadline tests passed.
+- BR-3 — addressed — packaging/starter-config/init.lua:85 checks all three required modules before fresh publication or cached selection. Tests at tests/integration/starter_bootstrap_spec.lua:120 verify rejection, cleanup, external recovery, and checkout preservation. Removing the guard in a temporary pinned copy produced exactly six failures; the other 14 tests passed.
+
+## Round 4 — 2026-09-30T13:11:34-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Seal and verification enforce manifest-pinned source inventories; removing that binding makes modified, added, removed and executable-mode forged-receipt regressions fail.
+- BR-2 — addressed — Deadline-owned workers bound blocking downloads and are reaped before cleanup; restoring the old downloader makes real slow-header and slow-body regressions fail.
+- BR-3 — addressed — Fresh and cached standalone runtime selection checks required modules before Lazy loads; six inspected regressions assert rejection, staging cleanup, cached checkout preservation and external recovery guidance.
+
+## Round 5 — 2026-09-30T13:28:45-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Independent source inventory hashes protect seal, verify, and reuse. Tampering regressions pass; removing the identity check in memory produces four failures.
+- BR-2 — addressed — Blocking downloads run in deadline-owned workers with kill/reap cleanup and a worker alarm. Real dripping-header/body, worker-deadline, and partial-file regressions pass.
+- BR-3 — addressed — Starter compatibility checks enumerate all three required modules before fresh publication or cached loading. Six fresh/cached regressions pass and verify preservation and actionable recovery.
+
+## Open findings
+
+(none — every finding has been disposed)

@@ -14,6 +14,17 @@ return {
         assert(spec[1].commit == '4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a')
         local by_name = {}
         for _, plugin in ipairs(spec) do by_name[plugin[1] or plugin.name] = plugin end
+        if vim.env.BOOTSTRAP_BUNDLE then
+            assert(opts.install and opts.install.missing == false, 'bundled startup permits installation')
+            assert(opts.pkg.enabled == false and opts.rocks.enabled == false and opts.local_spec == false)
+            for _, item in ipairs(require('parley.editor_dependencies').plugins('app')) do
+                if item.name ~= 'lazy.nvim' then
+                    local plugin = assert(by_name[item.repo])
+                    assert(plugin.dir == vim.env.PARLEY_EDITOR_BUNDLE .. '/plugins/' .. item.name)
+                    assert(plugin.build == false and plugin.pin == true)
+                end
+            end
+        end
         local screenkey = by_name['NStefan002/screenkey.nvim']
         if vim.env.BOOTSTRAP_DEMO then
             assert(screenkey and screenkey.commit == '16390931d847b1d5d77098daccac4e55654ac9e2')
@@ -92,6 +103,9 @@ return {
         assert(vim.deep_equal(preview.cmd, {'MarkdownPreview', 'MarkdownPreviewToggle', 'MarkdownPreviewStop'}))
         preview.init()
         assert(vim.g.mkdp_auto_start == 0 and vim.g.mkdp_open_to_the_world == 0)
+        if vim.env.BOOTSTRAP_BUNDLE then
+            assert(preview.build == false)
+        else
         assert(type(preview.build) == 'function')
         -- Stateful installer fixture: materialize the server, then verify
         -- failure is surfaced rather than accepting a missing download.
@@ -116,8 +130,9 @@ return {
         vim.fn.writefile({'#!/bin/sh', 'echo 0.0.9'}, dir .. '/app/bin/' .. binary)
         local verified, verify_error = pcall(preview.build, {dir = dir})
         assert(not verified and tostring(verify_error):find('verification failed', 1, true))
+        end
         for _, plugin in ipairs(spec) do
-            if plugin.dir then runtime = plugin.dir end
+            if plugin.name == 'parley.nvim' and plugin.dir then runtime = plugin.dir end
         end
         local installed = vim.fn.stdpath('data') .. '/fixture-installed'
         local install_win

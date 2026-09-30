@@ -7,7 +7,11 @@ brew install xianxu/parley/parley
 parley
 ```
 
-The first launch downloads the editor plugins and opens a welcome chat. In
+Homebrew installs the pinned editor plugins and Markdown Preview server with
+the application. The bundled starter opens a welcome chat without dependency
+downloads. Themes, completion and local Preview do not need external networking;
+Homebrew installation, provider login, AI requests and personal plugin additions
+are outside that offline scope. In
 Parley, press Escape and type `:ParleyProxy connect`, then press Return. Choose your
 provider and finish its account login in the browser. Follow the welcome chat
 for choosing a model, sending a question, and pasting an image.
@@ -27,14 +31,10 @@ The picker also includes all OneDark styles (dark, darker, cool, deep, warm,
 warmer, light) and all Nightfox variants (nightfox, dayfox, dawnfox, duskfox,
 nordfox, terafox, carbonfox).
 
-When upgrading an existing profile, adopt the theme dependency changes from
-`init.lua.new` to install the new choices. For release verification against
-installed pinned plugins, run `PARLEY_THEME_ROOT=/path/to/lazy nvim --headless
--u NONE -l tests/packaging/theme_compatibility.lua` from the source checkout.
-When a release changes the pinned blink.cmp, also run
-`PARLEY_RUNTIME="$PWD" PARLEY_BLINK_RUNTIME=/path/to/lazy/blink.cmp NVIM_APPNAME=parley
-nvim --headless -u NONE -i NONE -c 'luafile tests/packaging/completion_compatibility.lua'`
-with isolated XDG directories; it checks fuzzy `:` completion against the real plugin.
+Editor dependency versions come from `lua/parley/editor_dependencies.lua` in the
+released runtime. Homebrew upgrades replace that bundle with the app; do not use
+`:Lazy update` or `:Lazy build` to change the packaged dependencies. Local plugin
+users still manage their own dependencies.
 
 ## Updates and removal
 
@@ -45,8 +45,13 @@ brew upgrade parley
 
 Your settings stay intact. When the packaged starter changes, launching Parley
 places the complete new version beside your settings as `init.lua.new`. Compare
-it with `init.lua` and copy any changes you want. Repeated launches keep one
-candidate and do not repeat the notice for unchanged bytes.
+it with `init.lua` and adopt its bundle-loading setup while retaining personal
+settings. This adoption is required for an older edited starter to gain offline
+startup; simply upgrading the package does not rewrite your configuration.
+Repeated launches keep one candidate and do not repeat the notice for unchanged
+bytes. Old per-profile Lazy checkouts and unrelated plugins are left in place;
+no migration silently deletes them. The new starter loads shipped dependencies
+from the current Homebrew keg.
 
 Before uninstalling, run `:ParleyProxy stop` inside Parley and close the app.
 Then run `brew uninstall parley`. Homebrew removes the application; your chats
@@ -58,8 +63,10 @@ they are not part of app-profile removal.
 
 ## Maintainer release
 
-The source release contains the launcher, formula renderer, starter and dependency
-registry. After its SDLC review, create and push a new immutable `vMAJOR.MINOR.PATCH`
+The source release contains the launcher, formula renderer, starter, CLI tool
+registry and checksummed editor manifest. Release publication is a separate
+maintainer action from implementing or testing packaging changes. After its
+SDLC review and release authorization, create and push a new immutable `vMAJOR.MINOR.PATCH`
 tag and GitHub release. Never move a published tag. From this source checkout:
 
 ```sh
@@ -74,10 +81,23 @@ scripts/release-parley.sh vMAJOR.MINOR.PATCH /path/to/homebrew-parley --publish
 
 The script checks both repository identities and matching local/remote tag
 commits, downloads the tagged archive, hashes it, and uses that archive's own
-renderer and dependency registry. An identical retry creates no extra commit;
-publication can retry an interrupted push. The tap must otherwise be clean.
+renderer and dependency manifest. Before writing the tap, it runs the extracted
+tag's `scripts/check-editor-bundle.sh`: assemble and verify a fresh bundle, then
+launch the production starter under a macOS external-network deny policy while
+allowing loopback Preview. This gate also runs on publication retries and fails
+if network enforcement is unavailable. A failed check leaves the tap unchanged.
+An identical successful retry creates no extra commit; publication can retry an
+interrupted push. The tap must otherwise be clean.
 The application never invokes Homebrew itself. CLIProxyAPI remains managed by
 Parley; the formula installs Neovim and the default macOS tool projection.
+Python 3.13 is a build-only dependency used to seal the checksummed editor
+bundle; installed app startup does not invoke Python or download hooks.
+
+Run the conformance gate directly from a checkout with
+`scripts/check-editor-bundle.sh`. `PARLEY_EDITOR_ARCHIVES=/path/to/archives` uses
+a complete local archive set instead of fetching artifacts. See
+[dependency tooling](../TOOLING.md#editor-dependency-bundles) for provisioning,
+verification and pin updates. Running the gate does not publish a release.
 
 ## Clean-machine acceptance
 

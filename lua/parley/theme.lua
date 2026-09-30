@@ -3,9 +3,9 @@
 -- module's registry is deliberately deterministic so every consumer derives
 -- the same picker rows and validation set.
 local M = {}
+local dependencies = require('parley.editor_dependencies')
 
-local nightfox_plugin = { "EdenEast/nightfox.nvim", name = "nightfox",
-    commit = "4dacd3f0185a2227bdf3b6c0975a8f0bf87cac9a" }
+local nightfox_plugin = dependencies.plugin('nightfox')
 
 local DEFAULT = {
     id = "startup",
@@ -24,7 +24,7 @@ local CHOICES = {
         colorscheme = "catppuccin-mocha",
         mode = "dark",
         style = "colorful",
-        plugin = { "catppuccin/nvim", name = "catppuccin", commit = "edefef779ab08ce1a4a404713e3012b0d202bd35" },
+        plugin = dependencies.plugin('catppuccin'),
     },
     {
         id = "tokyonight-storm",
@@ -32,7 +32,7 @@ local CHOICES = {
         colorscheme = "tokyonight-storm",
         mode = "dark",
         style = "subdued",
-        plugin = { "folke/tokyonight.nvim", name = "tokyonight", commit = "cdc07ac78467a233fd62c493de29a17e0cf2b2b6" },
+        plugin = dependencies.plugin('tokyonight'),
     },
     {
         id = "catppuccin-latte",
@@ -40,7 +40,7 @@ local CHOICES = {
         colorscheme = "catppuccin-latte",
         mode = "light",
         style = "colorful",
-        plugin = { "catppuccin/nvim", name = "catppuccin", commit = "edefef779ab08ce1a4a404713e3012b0d202bd35" },
+        plugin = dependencies.plugin('catppuccin'),
     },
     {
         id = "solarized-light",
@@ -48,12 +48,11 @@ local CHOICES = {
         colorscheme = "solarized",
         mode = "light",
         style = "subdued",
-        plugin = { "altercation/vim-colors-solarized", name = "solarized", commit = "528a59f26d12278698bb946f8fb82a63711eec21" },
+        plugin = dependencies.plugin('solarized'),
     },
 }
 
-local onedark_plugin = { "navarasu/onedark.nvim", name = "onedark",
-    commit = "df4792accde9db0043121f32628bcf8e645d9aea" }
+local onedark_plugin = dependencies.plugin('onedark')
 for _, variant in ipairs({ "dark", "darker", "cool", "deep", "warm", "warmer", "light" }) do
     CHOICES[#CHOICES + 1] = {
         id = "onedark-" .. variant,
