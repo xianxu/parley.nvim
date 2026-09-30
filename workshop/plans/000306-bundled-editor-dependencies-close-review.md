@@ -246,3 +246,76 @@ dispose:
    - **ARCH-FUNERAL — Pass:** owned staging and obsolete bundles have cleanup paths; installed payload lifetime follows the keg.
 
 7. **Plan revision recommendations:** None. Existing revisions explain the archive-only cache design, removal of the unused decision helper, and BR-3’s compatibility checks.
+
+---
+
+## Re-review — 2026-09-30T13:11:34-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 306 — Bundle tested editor dependencies for offline app startup |
+| repo | parley.nvim |
+| issue file | workshop/issues/000306-bundled-editor-dependencies.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c57c616af1a940877b9e7160973c2da7d632490f..5517c3bac4e0389da4262d74e24e0bf2aa1e8707 |
+| command | sdlc close --issue 306 |
+| reviewer | codex |
+| timestamp | 2026-09-30T13:11:34-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies the issue’s revised contract. Dependency identities derive from one manifest, writable bundles receive independent payload verification, and dependency reset preserves user data. No new blocking findings emerged. All three prior corrections remain addressed.
+
+1. **Strengths**
+   - Manifest projections cover app, recording, theme and Homebrew consumers.
+   - Bundle publication and repair share ownership checks and reader/writer leases.
+   - `parley_app` reuses the repair operation for dependency-only `--nuke`; tests cover preservation, repeated cleanup, reprovisioning and contention.
+   - README and atlas document offline scope, standalone recovery and starter migration.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Passed: 19 artifact tests, 6 download tests, 14 launcher tests and all 86 mapped packaging tests.
+   - Mutation checks confirmed that removing BR-1’s source binding breaks forged-receipt regressions, and restoring BR-2’s old downloader breaks slow-header/body deadline tests.
+   - Inspected BR-3’s six fresh/cached missing-module regressions and reachable guards; did not rerun that suite.
+   - Pinned-range whitespace check passed.
+   - Live offline conformance and actual Homebrew installation were not rerun. The harness could not check orphan processes because `ps` was unavailable.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** consumers derive pins from the shared manifest.
+   - **ARCH-PURE — pass:** deterministic projections remain separate from filesystem/process orchestration.
+   - **ARCH-PURPOSE — pass:** shipped and recording dependencies, local verification and migration are covered.
+   - **ARCH-MOCK — pass:** stateful archive, HTTP and release fixtures exercise production boundaries.
+   - **ARCH-CONSTRAINTS — pass:** download deadlines and size bounds are enforced; bundled startup disables dependency installation.
+   - **ARCH-SECURE — pass:** archive validation and independent source identities protect payload selection.
+   - **ARCH-ORDER — pass:** lease-scoped publication, downgrade revalidation and inherited reader ownership cover relevant ordering.
+   - **ARCH-FUNERAL — pass:** staging and obsolete bundles have cleanup paths; installed bundles follow keg lifetime.
+
+7. **Plan revision recommendations:** None. Existing revisions explain the implemented deviations and dependency-reset refinement.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Seal and verification enforce manifest-pinned source inventories; removing that binding makes modified, added, removed and executable-mode forged-receipt regressions fail.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Deadline-owned workers bound blocking downloads and are reaped before cleanup; restoring the old downloader makes real slow-header and slow-body regressions fail.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Fresh and cached standalone runtime selection checks required modules before Lazy loads; six inspected regressions assert rejection, staging cleanup, cached checkout preservation and external recovery guidance.
+```

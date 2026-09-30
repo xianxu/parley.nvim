@@ -61,6 +61,7 @@ total: 3.74
 ## Log
 
 ### 2026-09-30
+- 2026-09-30: closed — Dependency-only nuke: 14 launcher regressions pass on Python3.9; actual temporary profile reset twice preserves chats/config/login/state hashes and stable lock inode, then real archive reprovision and checkout Neovim launch pass. Shell syntax and diff checks pass. Docs and atlas updated. Prior full bundled-runtime verification and baseline VM test limitation remain recorded; no release published.; review verdict: SHIP
 - 2026-09-30: closed — BR1/BR2 confirmed by second review; BR3 fresh/cached migration20 pass with six red-before cases preserving cached HEAD/dirt. Python3.9 assembler19+downloads6 pass; progress preserves stdout and reports waits. Actual user ./parley_app warm headless startup0.52s. Prior network-denied installed/local/recording conformance passed. Reviewer VM failure not reproduced: focused17 plus two baseline/two branch17 each pass; no unrelated runtime changes. Packaging86 and lint clean; no release publication.; review verdict: SHIP
 
 Created and claimed from the operator's approved packaging direction. `sdlc start-plan` prepared the issue branch from published main, preserving local unpublished demo work. Current downloads include lazy.nvim bootstrap, the starter/theme plugin set and Markdown Preview's platform executable. Plan: `workshop/plans/000306-bundled-editor-dependencies-plan.md`.
