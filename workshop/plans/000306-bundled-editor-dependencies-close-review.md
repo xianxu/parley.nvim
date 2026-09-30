@@ -89,3 +89,83 @@ findings:
     detail: |
       scripts/editor-dependencies.py:277-286 checks elapsed time only after read(1 MiB); the socket timeout measures inactivity. A drip-response reproduction exceeded a 0.1-second budget for 0.535 seconds before rejection. Enforce the remaining deadline during IO and add a slow-response regression (ARCH-CONSTRAINTS).
 ```
+
+---
+
+## Re-review — 2026-09-30T12:03:41-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 306 — Bundle tested editor dependencies for offline app startup |
+| repo | parley.nvim |
+| issue file | workshop/issues/000306-bundled-editor-dependencies.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c57c616af1a940877b9e7160973c2da7d632490f..5133c829d37af1993cc84fdae4167fa968c53baa |
+| command | sdlc close --issue 306 |
+| reviewer | codex |
+| timestamp | 2026-09-30T12:03:41-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Both prior findings are addressed, with regressions that fail when the fixes are removed. One standalone migration gap remains: the new starter accepts older cached runtimes, then fails before loading the tool users are told to use for updates. Packaging validation also had a failure noted below.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Source inventories are bound to trusted manifest hashes in scripts/editor-dependencies.py:185-195. All five changed-receipt regressions pass; restoring the previous check_layout makes every variant fail.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      scripts/editor-dependencies.py:277-351 bounds blocking IO with worker deadlines and kill/reap cleanup. Slow-header/body regressions pass; restoring the previous fetch_archive makes them exceed the budget at approximately 0.8 seconds.
+findings:
+  - id: new
+    severity: Important
+    family: starter-runtime-compatibility
+    title: |
+      Standalone migration accepts runtimes missing newly required modules
+    detail: |
+      packaging/starter-config/init.lua:97-109 checks only theme.lua before requiring editor_dependencies and editor_bundle. An isolated cached pre-change runtime reproduces module-not-found before Lazy loads, making the documented :Lazy update recovery unavailable. Validate required capabilities for both fresh and cached runtimes, reject incompatible staging before publication, provide external recovery instructions, and add regressions preserving existing checkout contents (ARCH-PURPOSE, ARCH-SECURE).
+```
+
+1. **Strengths**
+   - Sealing, verification and reuse enforce the same independently pinned source identity.
+   - Download regressions exercise real trickling HTTP responses and verify worker cleanup.
+   - Formula resources derive from the manifest; bundled startup disables installation/build paths.
+   - Release checks use the tagged tree before tap mutation, including retries.
+
+2. **Critical findings:** None.
+
+3. **Important findings**
+   - **Standalone compatibility:** [init.lua:97](/Users/xianxu/workspace/parley.nvim/packaging/starter-config/init.lua:97). Both fresh and cached runtime checks need the new module requirements. [Starter guidance:24](/Users/xianxu/workspace/parley.nvim/packaging/starter-config/README.md:24) still recommends an update command unavailable after this failure. Existing fixtures always include the new modules, masking the migration case.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+   - Artifact/download tests: **23 passed**.
+   - Local launcher tests: **13 passed**.
+   - Mutation checks independently confirmed both prior regressions.
+   - `git diff --check` passed.
+   - `make test-spec SPEC=infra/packaging` **failed** at `packaging_vm_spec.lua:167`: “guest chat file escaped isolated profile.” Attribution to this change remains unestablished. Process census was unavailable because `ps` was blocked.
+   - Actual Homebrew installation and full offline conformance were not rerun in this review.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** dependency pins and checksums have one manifest.
+   - **ARCH-PURE — pass:** manifest/projection logic remains separate from artifact IO.
+   - **ARCH-PURPOSE — flag:** standalone migration is incomplete.
+   - **ARCH-MOCK — pass:** filesystem, HTTP and subprocess tests exercise stateful boundaries.
+   - **ARCH-CONSTRAINTS — pass:** download deadlines and size limits have behavioral coverage.
+   - **ARCH-SECURE — flag:** cross-version runtime capability validation is incomplete; payload trust repair passes.
+   - **ARCH-ORDER — pass:** publication leases, conversion rechecks and parent-death tests cover relevant ordering.
+   - **ARCH-FUNERAL — pass:** staging, obsolete bundles and download workers have cleanup paths.
+
+7. **Plan revision recommendation**
+   - Append a `## Revisions` entry covering fresh/cached runtime capability checks, external upgrade guidance, and migration regressions that preserve existing user checkouts.

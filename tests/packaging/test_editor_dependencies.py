@@ -295,6 +295,41 @@ class Artifacts(unittest.TestCase):
                 bundle.run_with_bundle(self.cache, self.manifest, ['unused'])
             execute.assert_not_called()
 
+    def test_cli_reports_cold_warm_and_cached_phases_without_polluting_stdout(self):
+        cold = subprocess.run(self.cli('prepare', '--root', self.cache), capture_output=True, text=True, check=True)
+        path = Path(cold.stdout.strip())
+        self.assertTrue(path.is_dir())
+        self.assertEqual(str(path) + '\n', cold.stdout)
+        self.assertIn('Reading editor dependency manifest', cold.stderr)
+        self.assertIn('Downloading markdown-preview.nvim', cold.stderr)
+        self.assertIn(self.manifest['plugins'][0]['commit'][:12], cold.stderr)
+        self.assertIn('Downloading Preview 1 (test)', cold.stderr)
+        self.assertIn('Verifying assembled editor bundle', cold.stderr)
+        warm = subprocess.run(self.cli('run', '--root', self.cache, '--', sys.executable, '-c', "print('consumer-ready')"),
+                              capture_output=True, text=True, check=True)
+        self.assertEqual('consumer-ready\n', warm.stdout)
+        self.assertIn('Verifying cached editor bundle', warm.stderr)
+        self.assertIn('ready; starting', warm.stderr)
+        self.assertNotIn('Downloading', warm.stderr)
+        cached = subprocess.run(self.cli('--archives', self.archives, 'prepare', '--root', self.root / 'offline-cache'),
+                                capture_output=True, text=True, check=True)
+        self.assertTrue(Path(cached.stdout.strip()).is_dir())
+        self.assertIn('Verifying cached archive markdown-preview.nvim', cached.stderr)
+        self.assertIn('Verifying cached archive Preview 1 (test)', cached.stderr)
+
+    def test_cli_reports_a_contended_lease_once_and_times_out_without_stdout(self):
+        self.prepare()
+        with (self.cache / '.lock').open('r') as lock:
+            fcntl.flock(lock, fcntl.LOCK_SH)
+            started = time.monotonic()
+            result = subprocess.run(self.cli('--lock-timeout', '.1', 'prepare', '--root', self.cache),
+                                    capture_output=True, text=True, timeout=3)
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual('', result.stdout)
+        self.assertEqual(1, result.stderr.count('Waiting for editor bundle lease'))
+        self.assertIn('close active editors', result.stderr)
+
     def test_real_exec_shared_lease_blocks_writer_until_consumer_exits(self):
         ready, stop = self.root / 'ready', self.root / 'stop'
         consumer = 'import os,time,pathlib; pathlib.Path(os.environ["READY"]).write_text(os.environ["PARLEY_EDITOR_BUNDLE"]);\nwhile not pathlib.Path(os.environ["STOP"]).exists(): time.sleep(.02)'

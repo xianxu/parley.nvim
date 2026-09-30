@@ -240,6 +240,10 @@ python3 scripts/editor-dependencies.py --runtime "$PWD" --profile app run --root
 receipt after comparing the complete payload, including unexpected files.
 `run` verifies/prepares, then execs the editor while retaining a shared lock;
 use it for writable development bundles so repair cannot remove an active tree.
+First preparation downloads each pinned archive; it is separate from any installed
+Homebrew bundle. Preparation and launch report their phase to stderr (manifest,
+download/cache verification, lock wait, ready), while path/JSON stdout stays
+machine-readable. Later launches verify and reuse the completed local bundle.
 `--profile recording` includes recording dependencies. Platform detection is
 automatic; `--platform macos-arm64`, `macos` or `linux` selects an explicit
 artifact for build/projection checks. Linux ARM has no supported Preview binary.

@@ -28,6 +28,12 @@ MAX_MEMBERS = 50000
 TIMEOUT = 120
 OWNER = 'parley-editor-bundles-v1\n'
 MARKER = '.parley-editor-owned'
+_show_progress = False
+
+
+def report(message):
+    if _show_progress:
+        print('editor dependencies: ' + message, file=sys.stderr, flush=True)
 
 
 def canonical(value):
@@ -246,11 +252,15 @@ def exclusive_lease(root, create=True, timeout=TIMEOUT):
     fd = os.open(root / '.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
         deadline = time.monotonic() + timeout
+        reported_wait = False
         while True:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except BlockingIOError:
+                if not reported_wait:
+                    report('Waiting for editor bundle lease; another local editor may still be running...')
+                    reported_wait = True
                 if time.monotonic() >= deadline:
                     raise ValueError('editor bundle lease busy; close active editors and retry')
                 time.sleep(min(.05, max(0, deadline - time.monotonic())))
@@ -317,6 +327,9 @@ def _download_worker(record_json, output_fd, archives, timeout, max_bytes):
 
 
 def fetch_archive(record, destination, archives=None):
+    label = (record['name'] + ' (' + record['commit'][:12] + ')') if 'commit' in record else (
+        'Preview ' + record.get('version', '?') + ' (' + record.get('platform', '?') + ')')
+    report(('Verifying cached archive ' if archives else 'Downloading ') + label + '...')
     # A socket timeout measures inactivity, not request duration. Isolate every
     # blocking step in a worker so trickling bodies/headers and DNS cannot keep
     # the caller past its total deadline. Cache reads use the same boundary.
@@ -398,6 +411,7 @@ def prepare_locked(root, manifest, archives=None):
     identity = hashlib.sha256(canonical(manifest).encode()).hexdigest()
     final = root / ('bundle-' + identity)
     if final.exists() or final.is_symlink():
+        report('Verifying cached editor bundle...')
         try:
             verify_bundle(final, manifest)
         except (ValueError, OSError) as error:
@@ -418,6 +432,7 @@ def prepare_locked(root, manifest, archives=None):
         archive = staging / 'binary.tar.gz'
         fetch_archive(artifact, archive, archives)
         extract_archive(archive, payload / artifact['output'], artifact['member'])
+        report('Verifying assembled editor bundle...')
         seal_bundle(payload, manifest)
         verify_bundle(payload, manifest)
         if final.exists():
@@ -462,10 +477,12 @@ def run_with_bundle(root, manifest, command, archives=None, timeout=TIMEOUT):
         os.set_inheritable(fd, True)
         os.environ['PARLEY_EDITOR_BUNDLE'] = str(path)
         os.environ['PARLEY_EDITOR_LEASE_FD'] = str(fd)
+        report('Editor dependencies ready; starting ' + Path(command[0]).name + '.')
         os.execvp(command[0], command)
 
 
 def read_manifest(args):
+    report('Reading editor dependency manifest...')
     if args.manifest:
         value = load_json(Path(args.manifest).read_text())
     else:
@@ -479,6 +496,7 @@ def read_manifest(args):
 
 
 def main():
+    global _show_progress
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime')
     parser.add_argument('--manifest')
@@ -498,6 +516,7 @@ def main():
     identity.add_argument('--archive', required=True)
     identity.add_argument('--sha256', required=True)
     args = parser.parse_args()
+    _show_progress = args.action in ('prepare', 'run')
     try:
         if not 0 <= args.lock_timeout <= TIMEOUT:
             raise ValueError('lock timeout must be between 0 and 120 seconds')
@@ -513,7 +532,9 @@ def main():
         elif args.action == 'seal':
             print(seal_bundle(Path(args.bundle).resolve(), manifest))
         elif args.action == 'prepare':
-            print(prepare_bundle(args.root, manifest, args.archives, args.lock_timeout))
+            path = prepare_bundle(args.root, manifest, args.archives, args.lock_timeout)
+            report('Editor dependencies ready.')
+            print(path)
         else:
             command = args.command[1:] if args.command[:1] == ['--'] else args.command
             run_with_bundle(args.root, manifest, command, args.archives, args.lock_timeout)
