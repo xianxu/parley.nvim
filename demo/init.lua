@@ -6,11 +6,10 @@ local keys = {
     ["<RIGHT>"] = "Right", ["<UP>"] = "Up", ["<DOWN>"] = "Down", ["SUPER"] = "Cmd",
 }
 for n = 1, 12 do keys["<F" .. n .. ">"] = "F" .. n end
-local plugins = {
-    { "NStefan002/screenkey.nvim",
-        commit = "16390931d847b1d5d77098daccac4e55654ac9e2", -- v2.4.2
-        lazy = false, opts = { keys = keys, show_leader = false } },
-}
+local screenkey = dofile(runtime .. '/lua/parley/editor_dependencies.lua').plugin('screenkey.nvim')
+screenkey.lazy = false
+screenkey.opts = { keys = keys, show_leader = false }
+local plugins = { screenkey }
 assert(loadfile(runtime .. "/packaging/starter-config/init.lua"))(plugins)
 -- Show keys once Neovim has opened its initial file.
 vim.api.nvim_create_autocmd("VimEnter", { once = true, callback = function() vim.cmd("Screenkey") end })

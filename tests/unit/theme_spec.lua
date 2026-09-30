@@ -1,6 +1,23 @@
 local theme = require("parley.theme")
 
 describe("Parley theme registry", function()
+    it("derives dependency specs from the editor manifest without changing theme order", function()
+        local manifest = require('parley.editor_dependencies')
+        local original = manifest.plugin
+        manifest.plugin = function(name)
+            local spec = original(name)
+            spec.commit = 'manifest-' .. name
+            return spec
+        end
+        local ok, loaded = pcall(dofile, 'lua/parley/theme.lua')
+        manifest.plugin = original
+        assert.is_true(ok, loaded)
+        local plugins = loaded.packaged_plugins()
+        assert.same({ 'nightfox', 'catppuccin', 'tokyonight', 'solarized', 'onedark' },
+            vim.tbl_map(function(plugin) return plugin.name end, plugins))
+        for _, plugin in ipairs(plugins) do assert.equals('manifest-' .. plugin.name, plugin.commit) end
+    end)
+
     it("derives all picker choices from one registry", function()
         local items = theme.items()
         assert.equals(19, #items)
