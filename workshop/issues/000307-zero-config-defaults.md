@@ -69,10 +69,12 @@ Out of scope: new provider integrations; changing default storage locations
 - `repo_root` detection needs no user config, including when `chat_dir` is set (test
   covers it).
 - Keyless providers need no placeholder key (test covers it).
-- README has a minimal-config section that matches the tested setup.
-- Operator's `~/.config/nvim/lua/plugins/parley.lua` holds only personal paths + key
-  sources (no internal `require("parley.*")` calls, no commented dead blocks), and
-  parley behaves the same in the operator's daily use.
+- The plugin setup guide the README links to (`atlas/infra/config.md`) has a
+  minimal-config section that matches the tested setup.
+- A trimmed operator config (only personal paths; no api_keys, no internal
+  `require("parley.*")` calls, no commented dead blocks) resolves to the same
+  config as today's, checked by a probe in a repo dir and a plain dir. Installing it
+  to `~/.config/nvim` follows the merge.
 
 ## Plan
 
