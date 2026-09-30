@@ -61,6 +61,7 @@ total: 3.74
 ## Log
 
 ### 2026-09-30
+- 2026-09-30: closed — Operator smoke test passed and merge authorized. Integrated origin/main with only README conflict resolution, preserving concise landing page and linking launcher docs. Combined starter run reports zero assertion failures; sandbox ps restriction prevented final orphan check, unrestricted rerun underway. Prior review passed 14 launcher,25 dependency,86 packaging tests and actual reset/reprovision smoke.; review verdict: SHIP
 - 2026-09-30: closed — Dependency-only nuke: 14 launcher regressions pass on Python3.9; actual temporary profile reset twice preserves chats/config/login/state hashes and stable lock inode, then real archive reprovision and checkout Neovim launch pass. Shell syntax and diff checks pass. Docs and atlas updated. Prior full bundled-runtime verification and baseline VM test limitation remain recorded; no release published.; review verdict: SHIP
 - 2026-09-30: closed — BR1/BR2 confirmed by second review; BR3 fresh/cached migration20 pass with six red-before cases preserving cached HEAD/dirt. Python3.9 assembler19+downloads6 pass; progress preserves stdout and reports waits. Actual user ./parley_app warm headless startup0.52s. Prior network-denied installed/local/recording conformance passed. Reviewer VM failure not reproduced: focused17 plus two baseline/two branch17 each pass; no unrelated runtime changes. Packaging86 and lint clean; no release publication.; review verdict: SHIP
 

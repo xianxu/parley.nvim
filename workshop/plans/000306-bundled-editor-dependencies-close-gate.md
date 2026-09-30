@@ -78,6 +78,24 @@ rounds:
           round: 4
       recipe: milestone-review
       blocked: false
+    - "n": 5
+      timestamp: "2026-09-30T13:28:45-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Independent source inventory hashes protect seal, verify, and reuse. Tampering regressions pass; removing the identity check in memory produces four failures.
+          round: 5
+        - id: BR-2
+          disposition: addressed
+          note: Blocking downloads run in deadline-owned workers with kill/reap cleanup and a worker alarm. Real dripping-header/body, worker-deadline, and partial-file regressions pass.
+          round: 5
+        - id: BR-3
+          disposition: addressed
+          note: Starter compatibility checks enumerate all three required modules before fresh publication or cached loading. Six fresh/cached regressions pass and verify preservation and actionable recovery.
+          round: 5
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#306 (boundary-review)
@@ -121,6 +139,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-1 — addressed — Seal and verification enforce manifest-pinned source inventories; removing that binding makes modified, added, removed and executable-mode forged-receipt regressions fail.
 - BR-2 — addressed — Deadline-owned workers bound blocking downloads and are reaped before cleanup; restoring the old downloader makes real slow-header and slow-body regressions fail.
 - BR-3 — addressed — Fresh and cached standalone runtime selection checks required modules before Lazy loads; six inspected regressions assert rejection, staging cleanup, cached checkout preservation and external recovery guidance.
+
+## Round 5 — 2026-09-30T13:28:45-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Independent source inventory hashes protect seal, verify, and reuse. Tampering regressions pass; removing the identity check in memory produces four failures.
+- BR-2 — addressed — Blocking downloads run in deadline-owned workers with kill/reap cleanup and a worker alarm. Real dripping-header/body, worker-deadline, and partial-file regressions pass.
+- BR-3 — addressed — Starter compatibility checks enumerate all three required modules before fresh publication or cached loading. Six fresh/cached regressions pass and verify preservation and actionable recovery.
 
 ## Open findings
 

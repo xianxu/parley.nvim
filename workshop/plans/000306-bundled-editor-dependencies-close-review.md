@@ -319,3 +319,76 @@ dispose:
     note: |
       Fresh and cached standalone runtime selection checks required modules before Lazy loads; six inspected regressions assert rejection, staging cleanup, cached checkout preservation and external recovery guidance.
 ```
+
+---
+
+## Re-review — 2026-09-30T13:28:45-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 306 — Bundle tested editor dependencies for offline app startup |
+| repo | parley.nvim |
+| issue file | workshop/issues/000306-bundled-editor-dependencies.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 8a650a36bdf9f0974c00e4b611ff909d9b48dcad..0f1671540c9a0b35c54788b11fd2b432c41aeb2b |
+| command | sdlc close --issue 306 |
+| reviewer | codex |
+| timestamp | 2026-09-30T13:28:45-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+The pinned range delivers the shared dependency manifest, verified local bundles, packaged startup, and migration contract. No new blocking defects found. Prior fixes remain addressed. Validation is qualified by an unrelated packaging guard failure and real offline/Homebrew checks not rerun during this review.
+
+1. **Strengths**
+   - Source identity is independently pinned; rewritten receipts cannot certify modified plugins (`scripts/editor-dependencies.py:194`).
+   - Downloads have process-owned deadlines, worker reaping, and partial-file cleanup.
+   - Starter compatibility checks protect both fresh staging and existing checkouts (`packaging/starter-config/init.lua:85`).
+   - Release tests verify tagged-tree conformance precedes tap mutation; README and atlas document the new surface.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Passed: 25 bundle/download tests, 14 launcher tests, 199 starter tests.
+   - Packaging behavior tests passed. Its architecture guard failed because it compares against an older merge-base and attributes `project_root` to this issue; that symbol already exists at the pinned base.
+   - Removing the source-identity check in memory made four tampering regression cases fail.
+   - `git diff --check` passed; checkout remains clean.
+   - Real offline conformance and Homebrew installation were not rerun. Process census was unavailable because `ps` is restricted.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** dependency identities derive from one manifest across consumers.
+   - **ARCH-PURE — pass:** deterministic registry/projections remain separate from assembly and startup IO.
+   - **ARCH-PURPOSE — pass:** local, installed, recording, and release paths are covered.
+   - **ARCH-MOCK — pass:** filesystem, HTTP, and process fixtures exercise persisted behavior; live conformance is wired into releases.
+   - **ARCH-CONSTRAINTS — pass:** downloads, extraction, and lock waits have explicit bounds.
+   - **ARCH-SECURE — pass:** independent hashes, archive validation, and owned-root checks enforce the documented boundaries.
+   - **ARCH-ORDER — pass:** exclusive publication, inherited reader leases, downgrade revalidation, and recovery have sequence coverage.
+   - **ARCH-FUNERAL — pass:** staging and obsolete bundles have cleanup paths; installed bundles follow keg ownership.
+
+7. **Plan revisions:** None required; existing revisions reconcile implementation choices.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Independent source inventory hashes protect seal, verify, and reuse. Tampering regressions pass; removing the identity check in memory produces four failures.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Blocking downloads run in deadline-owned workers with kill/reap cleanup and a worker alarm. Real dripping-header/body, worker-deadline, and partial-file regressions pass.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Starter compatibility checks enumerate all three required modules before fresh publication or cached loading. Six fresh/cached regressions pass and verify preservation and actionable recovery.
+```
