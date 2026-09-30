@@ -42,6 +42,24 @@ rounds:
           round: 2
       recipe: milestone-review
       blocked: true
+    - "n": 3
+      timestamp: "2026-09-30T12:57:06-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Source inventories remain bound to manifest hashes independently of writable receipts. Tamper-and-regenerate regression tests passed.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: Download workers enforce total deadlines and are reaped before partial-file removal. Slow-header, slow-body, and independent worker-deadline tests passed.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: packaging/starter-config/init.lua:85 checks all three required modules before fresh publication or cached selection. Tests at tests/integration/starter_bootstrap_spec.lua:120 verify rejection, cleanup, external recovery, and checkout preservation. Removing the guard in a temporary pinned copy produced exactly six failures; the other 14 tests passed.
+          round: 3
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#306 (boundary-review)
@@ -70,6 +88,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Important] `starter-runtime-compatibility` Standalone migration accepts runtimes missing newly required modules
   packaging/starter-config/init.lua:97-109 checks only theme.lua before requiring editor_dependencies and editor_bundle. An isolated cached pre-change runtime reproduces module-not-found before Lazy loads, making the documented :Lazy update recovery unavailable. Validate required capabilities for both fresh and cached runtimes, reject incompatible staging before publication, provide external recovery instructions, and add regressions preserving existing checkout contents (ARCH-PURPOSE, ARCH-SECURE).
 
+## Round 3 — 2026-09-30T12:57:06-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Source inventories remain bound to manifest hashes independently of writable receipts. Tamper-and-regenerate regression tests passed.
+- BR-2 — addressed — Download workers enforce total deadlines and are reaped before partial-file removal. Slow-header, slow-body, and independent worker-deadline tests passed.
+- BR-3 — addressed — packaging/starter-config/init.lua:85 checks all three required modules before fresh publication or cached selection. Tests at tests/integration/starter_bootstrap_spec.lua:120 verify rejection, cleanup, external recovery, and checkout preservation. Removing the guard in a temporary pinned copy produced exactly six failures; the other 14 tests passed.
+
 ## Open findings
 
-- **BR-3** [Important] `starter-runtime-compatibility` Standalone migration accepts runtimes missing newly required modules
+(none — every finding has been disposed)

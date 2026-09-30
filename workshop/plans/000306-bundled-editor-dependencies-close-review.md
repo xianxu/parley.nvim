@@ -169,3 +169,80 @@ findings:
 
 7. **Plan revision recommendation**
    - Append a `## Revisions` entry covering fresh/cached runtime capability checks, external upgrade guidance, and migration regressions that preserve existing user checkouts.
+
+---
+
+## Re-review — 2026-09-30T12:57:05-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 306 — Bundle tested editor dependencies for offline app startup |
+| repo | parley.nvim |
+| issue file | workshop/issues/000306-bundled-editor-dependencies.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c57c616af1a940877b9e7160973c2da7d632490f..00fa14f988ba2912224e0069212ac98cbb5d488f |
+| command | sdlc close --issue 306 |
+| reviewer | codex |
+| timestamp | 2026-09-30T12:57:05-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+The pinned implementation satisfies the issue’s bundle, verification, migration, and documentation contracts. BR-3 is addressed with regression tests that fail when its guard is removed. No new blocking findings. Confidence is limited by a packaging VM containment-test failure described below.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Source inventories remain bound to manifest hashes independently of writable receipts. Tamper-and-regenerate regression tests passed.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Download workers enforce total deadlines and are reaped before partial-file removal. Slow-header, slow-body, and independent worker-deadline tests passed.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      packaging/starter-config/init.lua:85 checks all three required modules before fresh publication or cached selection. Tests at tests/integration/starter_bootstrap_spec.lua:120 verify rejection, cleanup, external recovery, and checkout preservation. Removing the guard in a temporary pinned copy produced exactly six failures; the other 14 tests passed.
+```
+
+1. **Strengths**
+
+   - Manifest-derived pins reach starter, theme, recording, formula, and release consumers.
+   - Bundle verification checks independent source identity, binary identity, and complete payload inventories.
+   - Publication and cleanup share a lease retained by the consuming editor; tests cover parent death and lock-conversion interference.
+   - BR-3 recovery documentation names terminal Git and matching-runtime recovery before Lazy is available.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None introduced by this range.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - Passed: 25 Python bundle/download tests; 13 local-launcher tests; mapped starter suite, including 20 bootstrap tests.
+   - BR-3 mutation: six expected failures, 14 passes.
+   - Packaging suite: 85 passed, one failed at `tests/integration/packaging_vm_spec.lua:167`, reporting guest chat **file** containment.
+   - Separate pinned base and head copies both returned 16 passes and one failure in that same VM test, at its earlier chat **root** containment assertion. These comparisons do not explain the original failure; the relevant VM probe and starter code are unchanged.
+   - `git diff --check` passed; repository remained clean.
+   - Real offline conformance and an actual Homebrew installation were not rerun during this review.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — Pass:** dependency identities derive from the shared manifest.
+   - **ARCH-PURE — Pass:** manifest/projection logic stays separate from provisioning IO.
+   - **ARCH-PURPOSE — Pass:** app and recording consumers, release validation, and migration are covered.
+   - **ARCH-MOCK — Pass:** filesystem-backed fixtures, real local HTTP responses, and process tests exercise production boundaries.
+   - **ARCH-CONSTRAINTS — Pass:** archive limits, total deadlines, and bounded lease contention are enforced.
+   - **ARCH-SECURE — Pass:** checksums, inventory binding, archive validation, and ownership checks defend the declared boundaries.
+   - **ARCH-ORDER — Pass:** publication is serialized; inherited leases and post-conversion verification protect reader lifetime.
+   - **ARCH-FUNERAL — Pass:** owned staging and obsolete bundles have cleanup paths; installed payload lifetime follows the keg.
+
+7. **Plan revision recommendations:** None. Existing revisions explain the archive-only cache design, removal of the unused decision helper, and BR-3’s compatibility checks.
