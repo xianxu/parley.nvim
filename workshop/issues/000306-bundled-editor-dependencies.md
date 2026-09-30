@@ -8,6 +8,7 @@ updated: 2026-09-30
 estimate_hours:
 card_mirror: 'b67b74723fbd6d1d0da0ce788b87a3cc15d6501d' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-30T10:27:48-07:00
+flow: {kind: quick, provenance: inferred, spec: "a27bc433", done: "d145bc7f"}
 ---
 
 # Bundle tested editor dependencies for offline app startup
