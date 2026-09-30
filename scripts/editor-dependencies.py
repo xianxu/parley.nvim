@@ -69,7 +69,7 @@ def validate_manifest(manifest):
         raise ValueError('manifest plugins must be a nonempty array')
     names, repos = set(), set()
     for plugin in manifest['plugins']:
-        if not isinstance(plugin, dict) or set(plugin) != {'name', 'repo', 'commit', 'url', 'sha256', 'scope'}:
+        if not isinstance(plugin, dict) or set(plugin) != {'name', 'repo', 'commit', 'url', 'sha256', 'source_sha256', 'scope'}:
             raise ValueError('invalid plugin fields')
         name = plugin['name']
         if not isinstance(name, str) or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._-]*', name):
@@ -78,7 +78,7 @@ def validate_manifest(manifest):
             raise ValueError('invalid plugin repository')
         if name in names or plugin['repo'] in repos:
             raise ValueError('duplicate plugin identity')
-        if not hex_string(plugin['commit'], 40) or not hex_string(plugin['sha256'], 64):
+        if not hex_string(plugin['commit'], 40) or not hex_string(plugin['sha256'], 64) or not hex_string(plugin['source_sha256'], 64):
             raise ValueError('invalid plugin commit/checksum')
         if plugin['scope'] not in ('app', 'recording'):
             raise ValueError('invalid plugin scope')
@@ -153,7 +153,7 @@ def digest(path):
     return checksum.hexdigest()
 
 
-def payload_inventory(root):
+def payload_inventory(root, include_receipt=False):
     if root.is_symlink() or not root.is_dir():
         raise ValueError('bundle must be a directory, not a symlink')
     result = {}
@@ -168,7 +168,7 @@ def payload_inventory(root):
         for name in files:
             path = Path(current) / name
             relative = path.relative_to(root).as_posix()
-            if relative != 'receipt.json':
+            if include_receipt or relative != 'receipt.json':
                 result[relative] = {'sha256': digest(path), 'executable': bool(path.stat().st_mode & 0o111)}
     return dict(sorted(result.items()))
 
@@ -181,6 +181,14 @@ def check_layout(root, manifest, files):
         prefix = 'plugins/' + plugin['name'] + '/'
         if not (plugins / plugin['name']).is_dir() or not any(name.startswith(prefix) for name in files):
             raise ValueError('empty/missing plugin: ' + plugin['name'])
+        # Receipts are writable evidence, not an independent source of trust.
+        # Bind every source file to the archive-derived inventory in the manifest.
+        source = {name[len(prefix):]: entry for name, entry in files.items()
+                  if name.startswith(prefix) and name != manifest['artifact']['output']}
+        if hashlib.sha256(canonical(source).encode()).hexdigest() != plugin['source_sha256']:
+            raise ValueError('plugin source identity mismatch: ' + plugin['name'])
+    if any(not name.startswith('plugins/') for name in files):
+        raise ValueError('payload outside declared plugin roots')
     artifact = manifest['artifact']
     binary = files.get(artifact['output'])
     if binary != {'sha256': artifact['binary_sha256'], 'executable': True}:
@@ -266,27 +274,81 @@ def collect_owned(root, keep=None, staging_only=False):
         shutil.rmtree(path)
 
 
+def _download_worker(record_json, output_fd, archives, timeout, max_bytes):
+    """Blocking IO stays in a disposable process, including DNS and headers."""
+    import signal
+
+    record = load_json(record_json)
+    timeout, max_bytes = float(timeout), int(max_bytes)
+    def expired(_number, _frame):
+        raise TimeoutError('archive worker total time deadline exceeded')
+    # Backup for parent death: an orphaned worker must not drip indefinitely.
+    # The parent's process deadline still includes worker startup and DNS.
+    signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, timeout)
+    try:
+        with os.fdopen(int(output_fd), 'wb') as output:
+            source = None
+            if archives:
+                candidates = [Path(archives) / (record['name'] + '-' + record['commit'] + '.tar.gz')] if 'commit' in record else []
+                candidates.append(Path(archives) / Path(urllib.parse.urlsplit(record['url']).path).name)
+                source = next((candidate for candidate in candidates if candidate.is_file()), None)
+                if source is None:
+                    raise ValueError('archive cache missing: ' + record['url'])
+            opener = source.open('rb') if source else urllib.request.urlopen(record['url'], timeout=timeout)
+            checksum, total = hashlib.sha256(), 0
+            with opener as stream:
+                while True:
+                    chunk = stream.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise ValueError('archive size limit exceeded')
+                    output.write(chunk)
+                    checksum.update(chunk)
+            if checksum.hexdigest() != record['sha256']:
+                raise ValueError('archive checksum mismatch: ' + record['url'])
+    except (OSError, ValueError) as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+
+
 def fetch_archive(record, destination, archives=None):
-    source = None
-    if archives:
-        candidates = [Path(archives) / (record['name'] + '-' + record['commit'] + '.tar.gz')] if 'commit' in record else []
-        candidates.append(Path(archives) / Path(urllib.parse.urlsplit(record['url']).path).name)
-        source = next((candidate for candidate in candidates if candidate.is_file()), None)
-        if source is None:
-            raise ValueError('archive cache missing: ' + record['url'])
-    total, started = 0, time.monotonic()
-    opener = source.open('rb') if source else urllib.request.urlopen(record['url'], timeout=TIMEOUT)
-    with opener as stream, destination.open('xb') as output:
-        while True:
-            chunk = stream.read(1024 * 1024)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > MAX_ARCHIVE_BYTES or time.monotonic() - started > TIMEOUT:
-                raise ValueError('archive size/time limit exceeded')
-            output.write(chunk)
-    if digest(destination) != record['sha256']:
-        raise ValueError('archive checksum mismatch: ' + record['url'])
+    # A socket timeout measures inactivity, not request duration. Isolate every
+    # blocking step in a worker so trickling bodies/headers and DNS cannot keep
+    # the caller past its total deadline. Cache reads use the same boundary.
+    deadline = time.monotonic() + TIMEOUT
+    worker = None
+    succeeded = False
+    communicated = False
+    # Exclusively create the destination before spawning. Only this owned file
+    # may be removed on failure; preexisting caller files remain untouched.
+    with destination.open('xb') as output:
+        try:
+            worker = subprocess.Popen([
+                sys.executable, '-c',
+                "import runpy,sys; runpy.run_path(sys.argv[1])['_download_worker'](*sys.argv[2:])",
+                str(Path(__file__).resolve()), canonical(record), str(output.fileno()),
+                str(archives) if archives else '', str(TIMEOUT), str(MAX_ARCHIVE_BYTES),
+            ], pass_fds=(output.fileno(),), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            try:
+                _, error = worker.communicate(timeout=max(0, deadline - time.monotonic()))
+                communicated = True
+            except subprocess.TimeoutExpired as error:
+                raise ValueError('archive total time deadline exceeded') from error
+            if worker.returncode:
+                raise ValueError(error.decode('utf-8', errors='replace').strip() or 'archive worker failed')
+            succeeded = True
+        finally:
+            if worker is not None and not communicated:
+                if worker.poll() is None:
+                    worker.kill()
+                worker.communicate()  # Reap before deleting any partially written bytes.
+            if not succeeded:
+                destination.unlink()
 
 
 def extract_archive(archive, destination, member_name=None):
@@ -373,6 +435,16 @@ def prepare_bundle(root, manifest, archives=None, timeout=TIMEOUT):
         return prepare_locked(owned, manifest, archives)
 
 
+def source_identity(archive, checksum):
+    archive = Path(archive)
+    if not hex_string(checksum, 64) or digest(archive) != checksum:
+        raise ValueError('source archive checksum mismatch')
+    with tempfile.TemporaryDirectory(prefix='parley-source-identity-') as temporary:
+        source = Path(temporary) / 'source'
+        extract_archive(archive, source)
+        return hashlib.sha256(canonical(payload_inventory(source, include_receipt=True)).encode()).hexdigest()
+
+
 def repair_bundle(root, timeout=TIMEOUT):
     with exclusive_lease(root, create=False, timeout=timeout) as (owned, _):
         collect_owned(owned)
@@ -422,12 +494,18 @@ def main():
     for name in ('verify', 'seal'):
         command = commands.add_parser(name)
         command.add_argument('--bundle', required=True)
+    identity = commands.add_parser('source-identity')
+    identity.add_argument('--archive', required=True)
+    identity.add_argument('--sha256', required=True)
     args = parser.parse_args()
     try:
         if not 0 <= args.lock_timeout <= TIMEOUT:
             raise ValueError('lock timeout must be between 0 and 120 seconds')
         if args.action == 'repair':
             repair_bundle(args.root, args.lock_timeout)
+            return
+        if args.action == 'source-identity':
+            print(source_identity(args.archive, args.sha256))
             return
         manifest = read_manifest(args)
         if args.action == 'verify':

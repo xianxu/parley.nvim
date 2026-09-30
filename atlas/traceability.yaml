@@ -44,6 +44,7 @@ atlas:
       - scripts/export-editor-dependencies.lua
       - scripts/check-editor-bundle.sh
       - tests/packaging/test_editor_dependencies.py
+      - tests/packaging/test_editor_downloads.py
       - tests/packaging/editor_bundle.lua
       - packaging/README.md
       - TOOLING.md

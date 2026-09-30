@@ -90,7 +90,11 @@ class Artifacts(unittest.TestCase):
         artifact = self.archives / 'preview.tar.gz'
         checksum = archive(artifact, [('preview', binary, 0o755)])
         self.manifest = {'schema_version': 1, 'plugins': [dict(name='markdown-preview.nvim', repo='fixture/preview',
-            commit=commit, scope='app', url=base + '/' + source.name, sha256=sha(source.read_bytes()))],
+            commit=commit, scope='app', url=base + '/' + source.name, sha256=sha(source.read_bytes()),
+            source_sha256=sha(bundle.canonical({
+                'LICENSE': {'sha256': sha(b'fixture license\n'), 'executable': False},
+                'init.lua': {'sha256': sha(b'return {}\n'), 'executable': False},
+            }).encode()))],
             'artifact': dict(platform='test', version='1', url=base + '/preview.tar.gz', sha256=checksum,
                              binary_sha256=sha(binary), member='preview', output='plugins/markdown-preview.nvim/app/bin/preview')}
         self.manifest_path = self.root / 'manifest.json'
@@ -105,12 +109,13 @@ class Artifacts(unittest.TestCase):
 
     def test_manifest_rejects_ambiguous_and_escaping_identity(self):
         bundle.validate_manifest(self.manifest)
-        for change in ('duplicate', 'name', 'commit', 'checksum', 'output', 'schema'):
+        for change in ('duplicate', 'name', 'commit', 'checksum', 'source_checksum', 'output', 'schema'):
             invalid = copy.deepcopy(self.manifest)
             if change == 'duplicate': invalid['plugins'].append(copy.deepcopy(invalid['plugins'][0]))
             if change == 'name': invalid['plugins'][0]['name'] = '../escape'
             if change == 'commit': invalid['plugins'][0]['commit'] = 'main'
             if change == 'checksum': invalid['plugins'][0]['sha256'] = 'a'
+            if change == 'source_checksum': invalid['plugins'][0]['source_sha256'] = 'a'
             if change == 'output': invalid['artifact']['output'] = '../escape'
             if change == 'schema': invalid['schema_version'] = True
             with self.subTest(change=change), self.assertRaises(ValueError):
@@ -160,6 +165,38 @@ class Artifacts(unittest.TestCase):
         unknown.mkdir()
         with self.assertRaisesRegex(ValueError, 'owned'):
             bundle.repair_bundle(unknown)
+
+    def test_changed_receipt_cannot_certify_tampered_source(self):
+        for mutation in ('changed', 'added', 'removed', 'mode', 'outside'):
+            with self.subTest(mutation=mutation):
+                root = self.root / mutation
+                path = bundle.prepare_bundle(root, self.manifest, archives=self.archives)
+                source = path / 'plugins/markdown-preview.nvim/init.lua'
+                if mutation == 'changed': source.write_text('return "modified"')
+                if mutation == 'added': (source.parent / 'injected.lua').write_text('return {}')
+                if mutation == 'removed': source.unlink()
+                if mutation == 'mode': source.chmod(0o755)
+                if mutation == 'outside': (path / 'injected.lua').write_text('return {}')
+                receipt = json.loads((path / 'receipt.json').read_text())
+                receipt['files'] = bundle.payload_inventory(path)
+                (path / 'receipt.json').write_text(bundle.canonical(receipt))
+                with self.assertRaisesRegex(ValueError, 'source|outside'):
+                    bundle.verify_bundle(path, self.manifest)
+                with self.assertRaisesRegex(ValueError, 'repair'):
+                    bundle.prepare_bundle(root, self.manifest, archives=self.archives)
+                with self.assertRaisesRegex(ValueError, 'source|outside'):
+                    bundle.seal_bundle(path, self.manifest)
+
+    def test_source_identity_requires_verified_archive_and_matches_manifest(self):
+        plugin = self.manifest['plugins'][0]
+        archive_path = self.archives / (plugin['name'] + '-' + plugin['commit'] + '.tar.gz')
+        command = [sys.executable, str(SCRIPT), 'source-identity', '--archive', str(archive_path),
+                   '--sha256', plugin['sha256']]
+        self.assertEqual(plugin['source_sha256'], subprocess.check_output(command, text=True).strip())
+        archive_path.write_bytes(archive_path.read_bytes() + b'changed')
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn('checksum', result.stderr)
 
     def test_checksum_failure_and_interrupted_publication_leave_no_selected_stage(self):
         bad = copy.deepcopy(self.manifest)

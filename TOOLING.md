@@ -270,7 +270,17 @@ Homebrew bundles are immutable package payloads: repair those with Homebrew
 reinstall/upgrade, not this development-root command.
 
 To update a pin, change the authoritative manifest after obtaining the immutable
-source archive and computing its SHA-256. Preview changes also require the
+source archive and computing its SHA-256. Compute the manifest's `source_sha256`
+from that verified archive with:
+
+```sh
+python3 scripts/editor-dependencies.py source-identity --archive /path/to/source.tar.gz --sha256 ARCHIVE_SHA256
+```
+
+This hashes the canonical relative-path/content-hash/executable-mode inventory;
+the injected Preview executable has its own independent hash. Sealing and reuse
+check source identities against the manifest, even if a receipt was regenerated.
+Preview changes also require the
 extracted binary's SHA-256 for every supported artifact. Retain licenses and
 review the dependency closure. Do not copy commits into theme/starter/formula
 consumers. Export the selected record set with:
@@ -283,6 +293,7 @@ Verification commands:
 
 ```sh
 python3 -m unittest discover -s tests/packaging -p 'test_editor_dependencies.py'
+python3 -m unittest discover -s tests/packaging -p 'test_editor_downloads.py'
 python3 tests/packaging/test_local_app.py
 make test-spec SPEC=infra/packaging
 make test-spec SPEC=infra/starter

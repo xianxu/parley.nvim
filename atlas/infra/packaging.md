@@ -60,6 +60,14 @@ changed and unexpected payload files invalidate reuse. Publication uses an owned
 staging tree and atomic rename. Repair is explicit and limited to marked managed
 roots; old user plugin caches are never reset implicitly.
 
+Each manifest plugin also pins the archive-derived source inventory hash, so
+regenerating a writable receipt cannot certify different source files or modes.
+The separately pinned Preview binary is excluded from its plugin's source hash.
+The `source-identity` tool computes this value from a checksum-verified archive.
+Downloads run in bounded disposable workers: the parent enforces the whole
+operation deadline, including slow headers and trickling bodies, and reaps a
+timed-out worker before removing its partial archive.
+
 An exclusive OS lock covers verification/publication/cleanup, then becomes a
 shared lease inherited by the editor process. Competing writers wait at most
 120 seconds. One selected bundle survives under the owned root; obsolete owned

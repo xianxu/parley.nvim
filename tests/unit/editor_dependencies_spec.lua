@@ -69,6 +69,8 @@ describe('editor dependency manifest', function()
             function(m) m.plugins[1].repo = 'owner/../../outside' end,
             function(m) m.plugins[1].commit = 'main' end,
             function(m) m.plugins[1].sha256 = string.rep('z', 64) end,
+            function(m) m.plugins[1].source_sha256 = nil end,
+            function(m) m.plugins[1].source_sha256 = 'invalid' end,
             function(m) m.plugins[1].scope = 'unknown' end,
             function(m) m.plugins[1].url = 'http://untrusted.invalid/archive' end,
             function(m) m.plugins = {} end,
