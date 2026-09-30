@@ -6,7 +6,7 @@ updated: 2026-09-30
 estimate_hours: 3.74
 github_issue:
 started: 2026-09-30T10:27:48-07:00
-actual_hours: 6.05
+actual_hours: 6.32
 tracker:
     version: 1
     handoff:
@@ -20,10 +20,10 @@ tracker:
         destination: workshop/issues/000306-bundled-editor-dependencies.md
         main_commit: c57c616af1a940877b9e7160973c2da7d632490f
     completion:
-        token: close-26b4575ae280
+        token: close-2a3b699555b1
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 5517c3bac4e0389da4262d74e24e0bf2aa1e8707
-        evidence_commit: 89bfdcb4aa8a94175706ebca2dc6fc83227a4d0e
+        reviewed_head: 0f1671540c9a0b35c54788b11fd2b432c41aeb2b
+        evidence_commit: 7c9dd54c135e561c1a1f376d5b27ba535b545d9d
 ---
 
 # Bundle tested editor dependencies for offline app startup
