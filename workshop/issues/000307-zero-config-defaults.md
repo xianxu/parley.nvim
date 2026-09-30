@@ -145,3 +145,17 @@ Implementation:
   `branch_child_spec.lua` (runs 39–51s alone on both main and branch against a ~50s
   plenary deadline; times out under parallel load. Existing, not introduced here).
 
+## Revisions
+
+### 2026-09-30 — close review round 1 (FIX-THEN-SHIP)
+- Done when "README has a minimal-config section" → the section is in
+  `atlas/infra/config.md#minimal-config`. README became a landing page in e02820c7
+  and links plugin setup to that file's install anchor.
+- Done when "operator's config holds only personal paths" → parity verified by probe
+  before close; installing the trimmed file happens after merge, because lazy loads
+  parley from the main checkout. The last Plan item stays open until then.
+- BR-1: setup's nearest-marker root now reaches every repo-relative reader through
+  `parley.project_root()` (repo root, else cwd Git root); the "repo" buffer
+  context uses `repo_mode.detect_root`. zero_config_spec pins issues/vision/
+  buffer-context in a marker-only project and fails with the old issues.lua.
+

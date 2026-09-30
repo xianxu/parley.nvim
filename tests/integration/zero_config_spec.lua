@@ -101,6 +101,16 @@ describe('zero-config setup', function()
             local roots = p.config.chat_roots
             assert(roots[1].label == 'repo' and roots[2].label == 'global' and roots[2].dir == global,
                 vim.inspect(roots))
+            -- Every repo-relative reader resolves against the same marked root,
+            -- which here has no Git at all (#307 close review BR-1).
+            assert(p.project_root() == root, p.project_root())
+            local issues = require('parley.issues').get_issues_dir()
+            assert(issues == root .. '/' .. p.config.issues_dir, issues)
+            assert(require('parley.issues').get_issues_repo_root() == root)
+            local vision = require('parley.vision').get_vision_dir()
+            assert(vision == root .. '/' .. p.config.vision_dir, vision)
+            vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/nested/notes.txt'))
+            assert(p._detect_buffer_context(0) == 'repo', p._detect_buffer_context(0))
         ]], scratch .. '/work/project/nested')
     end)
 

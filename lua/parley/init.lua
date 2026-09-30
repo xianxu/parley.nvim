@@ -95,6 +95,14 @@ M.toggle_super_repo = function()
 end
 M.is_super_repo_active = function() return super_repo.is_active() end
 
+-- Root that repo-relative paths (issues, vision) resolve against: the repo-mode
+-- root setup selected (nearest marker, #307), else cwd's Git root ("" if none).
+M.project_root = function()
+	local root = M.config.repo_root
+	if type(root) == "string" and root ~= "" then return root end
+	return M.helpers.find_git_root(vim.fn.getcwd())
+end
+
 -- Discovery registry (#116): the repo's noun-vocabulary (what file types exist
 -- and how to find their instances). Pure given mode context; current() reads it
 -- from live config (repo_root + super_repo_members) via the injected M ref.
@@ -763,7 +771,7 @@ M.setup = function(opts)
 		local marker = M.config.repo_marker
 		if not marker then return end
 
-		local git_root = opts.repo_root or require("parley.repo_mode").detect_root(vim.fn.getcwd(), marker)
+		local git_root = opts.repo_root or repo_mode.detect_root(vim.fn.getcwd(), marker)
 		if not git_root then return end
 
 		local marker_path = git_root .. "/" .. marker
@@ -1059,7 +1067,7 @@ M.setup = function(opts)
 		callback = function(ev)
 			local vision_dir = M.config.vision_dir
 			if not vision_dir or vision_dir == "" then return end
-			local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+			local git_root = M.project_root()
 			if git_root == "" then git_root = vim.fn.getcwd() end
 			local abs_vision = vim.fn.resolve(git_root .. "/" .. vision_dir)
 			local file_dir = vim.fn.resolve(vim.fn.fnamemodify(ev.file, ":p:h"))
@@ -1085,7 +1093,7 @@ M.setup = function(opts)
 		callback = function(ev)
 			local issues_dir = M.config.issues_dir
 			if not issues_dir or issues_dir == "" then return end
-			local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+			local git_root = M.project_root()
 			if git_root == "" then git_root = vim.fn.getcwd() end
 			local abs_issues = vim.fn.resolve(git_root .. "/" .. issues_dir)
 			local file_dir = vim.fn.resolve(vim.fn.fnamemodify(ev.file, ":p:h"))
@@ -1671,7 +1679,7 @@ local function detect_buffer_context(buf)
 	if file_name:match("%.yaml$") or file_name:match("%.yml$") then
 		local vision_dir = M.config.vision_dir
 		if vision_dir and vision_dir ~= "" then
-			local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+			local git_root = M.project_root()
 			if git_root ~= "" then
 				local abs_vision = vim.fn.resolve(git_root .. "/" .. vision_dir)
 				local resolved = vim.fn.resolve(vim.fn.fnamemodify(file_name, ":p"))
@@ -1682,13 +1690,9 @@ local function detect_buffer_context(buf)
 			end
 		end
 	end
-	-- Check if in a repo (has .parley marker)
-	local git_root = M.helpers.find_git_root(vim.fn.getcwd())
-	if git_root ~= "" then
-		local marker = git_root .. "/" .. (M.config.repo_marker or ".parley")
-		if vim.fn.filereadable(marker) == 1 then
-			return "repo"
-		end
+	-- In a marked project: the same nearest-marker rule setup uses (#307)
+	if repo_mode.detect_root(vim.fn.getcwd(), M.config.repo_marker or ".parley") then
+		return "repo"
 	end
 	return "other"
 end

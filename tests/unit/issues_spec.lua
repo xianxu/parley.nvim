@@ -171,7 +171,7 @@ describe("next_issue_id archive root", function()
         vim.fn.writefile({}, archive_dir .. "/000009-archived.md")
         issues.setup({
             config = { history_dir = require("parley.config").history_dir },
-            helpers = { find_git_root = function() return base_dir end },
+            project_root = function() return base_dir end,
         })
     end)
 
