@@ -26,6 +26,8 @@ is not required when using the managed account path. The plugin requires a
 working Neovim installation and `curl`; individual features may need additional
 [external tools](dependencies.md). Run `:checkhealth parley` for local advice.
 Installing the plugin leaves your editor profile under your control.
+Spelling suggestions additionally need Blink **v1.10.2**, installed and set up
+before Parley; see [Spell Typeahead](../chat/spell_typeahead.md#plugin-setup-and-completion-ownership).
 
 ## Merge order
 
