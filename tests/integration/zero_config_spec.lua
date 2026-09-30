@@ -122,6 +122,8 @@ describe('zero-config setup', function()
             p.setup(opts)
             assert(type(p.config.repo_root) ~= 'string', tostring(p.config.repo_root))
             assert(p.config.chat_dir == global, p.config.chat_dir)
+            vim.cmd('edit ' .. vim.fn.fnameescape(vim.env.HOME .. '/work/notes.txt'))
+            assert(p._detect_buffer_context(0) == 'other', p._detect_buffer_context(0))
         ]]
 
     it('stays out of repo mode with repo_root = false', function()

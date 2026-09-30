@@ -11,6 +11,10 @@ Incident detail belongs in the issue or plan that owns it.
   The opt-out belongs in the harness (`tests/minimal_init.vim`), not in each spec.
 - Merging user values over defaults can re-enable things an empty table disabled.
   After changing a merge, test one opted-out entry (`openai = {}`).
+- #307 close review BR-1 (two rounds): when you change how a mode is decided, grep
+  every reader that re-derives it (`find_git_root(vim.fn.getcwd())`, marker checks)
+  and make them read the decision (`config.repo_root`, `project_root()`). A reader
+  that recomputes the mode from cwd ignores the opt-outs.
 
 ## 2026-09-28 (#299 — navigation with overlays)
 

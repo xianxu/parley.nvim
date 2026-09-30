@@ -8,10 +8,11 @@ including ordinary folders without Git, and enters repo mode. This makes parley 
 Setup walks up from `vim.fn.getcwd()` with `repo_mode.detect_root(cwd, marker)`
 and enters repo mode at the nearest directory holding `config.repo_marker`
 (default `".parley"`), Git or not. The standalone app and plugin setup share this
-rule, and no user config is needed for it. Readers of repo-relative paths
-(issues, history, vision, exports, the "repo" buffer context) go through
-`parley.project_root()`: the selected repo root, else cwd's Git root, so issues
-still work in an unmarked Git repository. An explicit `chat_dir` does not
+rule, and no user config is needed for it. Only setup decides repo mode:
+the "repo" buffer context reads `config.repo_root`, and readers of repo-relative
+paths (issues, history, vision, exports, the Markdown finder) go through
+`parley.project_root()`, which returns the selected repo root or else cwd's Git
+root, so issues still work in an unmarked Git repository. An explicit `chat_dir` does not
 suppress detection; it becomes the `"global"` root beside the project's chats
 (#307). `repo_root = "<path>"` selects a root; `repo_root = false` opts out, as
 does `PARLEY_REPO_MODE=0` when `repo_root` is unset (the demo launcher and the

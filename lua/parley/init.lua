@@ -1690,8 +1690,8 @@ local function detect_buffer_context(buf)
 			end
 		end
 	end
-	-- In a marked project: the same nearest-marker rule setup uses (#307)
-	if repo_mode.detect_root(vim.fn.getcwd(), M.config.repo_marker or ".parley") then
+	-- Repo mode is setup's decision (#307); opt-outs leave repo_root unset.
+	if type(M.config.repo_root) == "string" and M.config.repo_root ~= "" then
 		return "repo"
 	end
 	return "other"
