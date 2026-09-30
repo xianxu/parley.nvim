@@ -9,13 +9,18 @@ From the checkout root:
 This runs the checkout's current code with the packaged app defaults and the
 additions in [init.lua](init.lua). No Homebrew installation or release is needed.
 Edit the app code or demo configuration, quit Neovim, and launch again. The
-first launch downloads pinned editor plugins; later launches reuse them.
-Prerequisites are Neovim, Git and the packaged starter's usual download tools.
+first launch provisions checksummed archives from the shared editor manifest;
+later launches verify the complete bundle before reusing it. Prerequisites are
+Neovim and Python 3, plus network access for initial provisioning. A verified
+existing bundle can launch offline.
 
 Screenkey is enabled for recordings, with text labels such as Enter, Esc and
 Tab. Use `:Screenkey` to toggle it. It is not part of the packaged app's default
-dependencies. Add demo plugin specs to the `plugins` table in `init.lua`; put
-other demo-only editor settings after the shared starter call. The starter
+dependencies. Its pin belongs to the manifest's `recording` membership. To add
+a managed recording dependency, update that membership and its checksums as well
+as the `plugins` table in `init.lua`; bundle mode does not install missing specs.
+Personal extras require explicit provisioning and are outside the offline
+guarantee. Put other demo-only editor settings after the shared starter call. The starter
 accepts the optional plugin list through Lua `loadfile`, so this file does not
 copy the app configuration or its bootstrap logic.
 
@@ -38,8 +43,10 @@ Close the demo editor first, then choose a reset:
 Reset deletes `workspace/workshop/`, `config/`, `state/`, `cache/`, and the
 profile's `data/parley/{chats,notes,exports,parley/persisted}`. This clears
 transcripts, notes, exports, command history and saved theme/model choices.
-It retains downloaded plugins in `data/parley/lazy/`, managed proxy files and
-the demo HOME, including login files. The tracked `demo/init.lua` is retained.
+It retains the verified bundle root in `editor-dependencies/`, existing
+standalone/personal plugin caches in `data/parley/lazy/`, managed proxy files and
+the demo HOME, including login files. Bundle corruption requires an explicit
+[managed-root repair](../TOOLING.md#editor-dependency-bundles). The tracked `demo/init.lua` is retained.
 
 For a complete first-run reproduction:
 

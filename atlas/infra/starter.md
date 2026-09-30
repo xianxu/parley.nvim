@@ -18,8 +18,9 @@ must not fork those implementations. App profile isolation keeps editor configur
 a plugin configured in ordinary Neovim. Proxy account credentials are shared in
 `~/.cli-proxy-api`; they are not isolated by `NVIM_APPNAME`.
 
-First-install bootstrap closes Lazy's installer view and restores the original
-editor window before starting Parley. Lazy's view closes asynchronously, so focus
+Bundled startup loads shipped editor dependencies directly and opens no installer
+view. Standalone source bootstrap closes Lazy's installer view and restores the
+original editor window before starting Parley. Lazy's view closes asynchronously, so focus
 restoration is explicit: the welcome chat must never inherit its 80% floating
 window. Bootstrap coverage exercises an actual Neovim float as well as cached
 startup, even when the test process itself runs headless.
@@ -36,14 +37,20 @@ The launcher explicitly sets `PARLEY_REPO_MODE=0` so markers in any demo ancesto
 cannot enable repo mode. `--tutorials` sets `PARLEY_CHAT_DIR` to the checkout's
 source tutorials; the starter expands and canonicalizes that override. State and
 credentials remain in the demo. `--nuke` removes the owned demo profile and exits,
-leaving source tutorials untouched.
+leaving source tutorials untouched. Python 3 provisions the manifest's checksummed
+bundle under the demo profile's `editor-dependencies` root, verifies the complete
+payload before every launch, and passes a shared reader lease into Neovim.
+The initial preparation can download archives; a verified reused bundle does not.
+See [bundle lifecycle and ownership](packaging.md#development-bundle-lifecycle).
 
 `--demo` is the explicit repo-mode recording variant: the same ownership/PID
 and sibling-lock guards protect a fixed Git-ignored `demo/workspace/`. Its
 nearest `.parley` marker chooses a nested project root. `demo/init.lua` passes
-Screenkey's pinned spec into the shared starter via `loadfile` and enables it
+Screenkey's manifest-derived spec into the shared starter via `loadfile` and enables it
 on VimEnter. The packaged starter accepts an optional spec list; ordinary app
-startup supplies none. Default demo startup selects a timestamped empty chat.
+startup supplies none. The recording launcher selects the manifest's `recording`
+membership so Screenkey is assembled and verified with the app dependencies.
+Default demo startup selects a timestamped empty chat.
 `--demo --reset` clears workspace workshop/config/state/cache and the profile's
 chats/notes/exports/theme persistence, retaining plugins and HOME/auth;
 `--demo --nuke` removes the owned workspace. Tracked demo configuration and
@@ -64,7 +71,7 @@ successful write. `node tests/packaging/test_cast_viewer.js` verifies the produc
 script with controlled file reads and stateful storage. Usage and recording
 rehearsal live in `demo/README.md` and `demo/REHEARSAL.md`.
 
-The starter installs pinned Lualine with an automatic theme, prominent mode,
+The starter loads manifest-pinned Lualine with an automatic theme, prominent mode,
 chat name and cursor position. Existing `parley.lualine` integration supplies
 the model/activity section. `tests/packaging/statusline_compatibility.lua`
 exercises the production options with real Lualine and every packaged theme.
@@ -84,7 +91,10 @@ through the real pinned blink.
 | `lua/parley/config.lua` | Current plugin defaults consumed by `setup(opts)` |
 | `lua/parley/starter_config.lua` | Release policy overrides, derived from supplied profile roots |
 | `lua/parley/starter.lua` | Applies release policy, initializes profile and welcome chat, starts onboarding |
-| `packaging/starter-config/init.lua` | App editor settings, pinned dependency bootstrap and starter entry |
+| `lua/parley/editor_dependencies.lua` | Authoritative plugin commits and source/Preview artifact hashes |
+| `scripts/editor-dependencies.py` | Verified development bundle assembly, publication and leases |
+| `lua/parley/editor_bundle.lua` | Bundle identity/structure checks and local spec projection |
+| `packaging/starter-config/init.lua` | App editor settings, bundle loading, standalone bootstrap and starter entry |
 | `packaging/parley`, `packaging/launcher.lua` | Homebrew runtime selection and isolated editable configuration |
 | User's Neovim configuration | Plugin overrides and personal workflow integrations |
 
@@ -119,7 +129,8 @@ replace the corresponding base directory; `/parley` is appended to each base.
 | Chats and tutorials | `~/.local/share/parley/chats/` | `XDG_DATA_HOME` |
 | Notes | `~/.local/share/parley/notes/` | `XDG_DATA_HOME` |
 | Exports | `~/.local/share/parley/exports/` | `XDG_DATA_HOME` |
-| Installed editor plugins | `~/.local/share/parley/lazy/` | `XDG_DATA_HOME` |
+| Shipped editor plugins | Homebrew keg's `libexec/editor-bundle/plugins/` | Package-managed |
+| Standalone/personal plugin storage | `~/.local/share/parley/lazy/` | `XDG_DATA_HOME` |
 | Saved Parley state | `~/.local/state/parley/persisted/state.json` | `XDG_STATE_HOME` |
 | Runtime log | `~/.local/state/parley/parley.log` | `XDG_STATE_HOME` |
 | Caches/query scratch | `~/.cache/parley/` | `XDG_CACHE_HOME` |
@@ -135,11 +146,12 @@ Provider accounts remain in shared `~/.cli-proxy-api`, outside these profile roo
 
 For startup problems:
 
-1. A failed download normally removes its own staging. Check internet access
-   and retry `parley`. The starter requires Neovim 0.11+, Git and curl; Homebrew
-   supplies the app runtime. When the editor opens, `:checkhealth parley` reports
-   feature dependencies. A preview-server build failure can be retried with
-   `:Lazy build markdown-preview.nvim`.
+1. A missing or incompatible Homebrew editor bundle requires package repair or
+   upgrade; startup does not download a replacement. A corrupt development
+   bundle requires the explicit [managed-root repair](../../TOOLING.md#editor-dependency-bundles).
+   Standalone source-profile download failures remove owned staging and can be
+   retried after restoring connectivity; that fallback requires Neovim 0.11+,
+   Git and curl. `:checkhealth parley` reports feature dependencies once open.
 2. An error saying an initializer is **still active** means another launch owns
    it; let that launch finish. If the error explicitly says **requires repair**,
    close all Parley instances, then remove only the initializer directory named
@@ -148,16 +160,18 @@ For startup problems:
    `~/.local/share/parley/initializer.lock` and
    `~/.local/state/parley/welcome-initializer`. With XDG overrides use the reported
    path, not these defaults. Do not remove the entire profile to clear a lock.
-3. An incomplete installed Lazy checkout is reported with its exact directory.
-   Close Parley, remove only that reported checkout and retry; the starter
-   downloads it again. An incomplete welcome chat is also reported by path:
-   back up and repair that file, or move it aside and restart to seed a fresh
-   copy. Existing tutorial edits are otherwise preserved.
+3. A standalone source profile's incomplete Lazy checkout is reported with its
+   exact directory. Preserve local changes before repairing that checkout;
+   bundled app repair does not delete it. An incomplete welcome chat is also
+   reported by path: back up and repair that file, or move it aside and restart
+   to seed a fresh copy. Existing tutorial edits are otherwise preserved.
 4. If loopback port 8317 belongs to another service, stop that service or change
    the configured proxy port. Parley does not remove a foreign listener.
 
 Upgrades preserve `init.lua`; compare any adjacent `init.lua.new` before adopting
-new starter settings. Before removing app profile data, save chats/assets you
+new starter settings. Adopting the new bundle-loading setup is required for an
+older edited starter to gain offline dependency loading. Existing Lazy caches
+and personal plugins remain untouched. Before removing app profile data, save chats/assets you
 want and run `:ParleyProxy stop`. `brew uninstall parley` alone removes the
 application, retaining profile data and shared account logins.
 
@@ -179,12 +193,21 @@ Existing files are not moved by this configuration change.
 From the checkout root:
 
 ```sh
-NVIM_APPNAME=parley PARLEY_RUNTIME="$PWD" nvim -u "$PWD/packaging/starter-config/init.lua"
+./parley_app
 ```
 
-This uses the working tree and the same starter entry as the release, including
-pinned dependencies. It uses existing Parley profile data and may download missing
-plugins. It does not exercise Homebrew formula installation or launcher upgrades.
+This uses the working tree and the same starter entry as the release in an
+isolated demo profile. Python 3 prepares missing manifest dependencies and
+verifies the complete bundle before opening the editor. For an existing profile,
+use the [dependency CLI's `run` entry](../../TOOLING.md#editor-dependency-bundles)
+with the desired Neovim command. Direct standalone startup without a supplied
+bundle retains its online bootstrap outside the packaged offline guarantee.
+These paths do not exercise Homebrew formula installation or launcher upgrades.
+
+Bundle mode disables Lazy's bytecode cache: Neovim 0.11 encodes complete source
+paths in cache filenames, and long manifest-addressed bundle paths can exceed the
+filesystem's filename limit. Source-profile bootstrap retains its existing cache
+behavior. Mutable Lazy state and lockfiles still use user XDG storage.
 
 `make test-spec SPEC=infra/starter` follows [traceability](../traceability.yaml).
 The policy unit spec defends defaults, key families, and finder-local controls; starter integration probes
@@ -197,11 +220,13 @@ necessary for release transport and installation behavior.
 ## Runtime and lifecycle details
 
 The single editable `packaging/starter-config/init.lua` is the app entry under
-`NVIM_APPNAME=parley`. It bootstraps pinned Lazy and editor dependencies, then
-loads a released Parley version. Packaging can supply `PARLEY_RUNTIME` to use its
-installed release. A profile initializer directory owns staged Git work and
-serializes first installation; dead or incomplete ownership requires explicit
-recovery instead of stealing a competing initializer's work.
+`NVIM_APPNAME=parley`. Packaging supplies `PARLEY_RUNTIME` and
+`PARLEY_EDITOR_BUNDLE` for the installed release and its dependencies. Bundled
+Lazy loads local specs without installation or build hooks. Without those
+supplied paths, the standalone source profile bootstraps a released Parley
+checkout and manifest-pinned dependencies. Its profile initializer directory owns
+staged Git work and serializes initialization; dead or incomplete ownership
+requires explicit recovery instead of stealing a competing initializer's work.
 
 `starter_config.options(roots)` is the pure profile policy projection. It uses
 loopback port 8317 and the `parley-local` client key, matching `define` defaults;
@@ -242,7 +267,8 @@ in the recovery section above. See the
 `scripts/check-starter.py` rejects personal configuration markers in the artifact
 and its policy source. Hermetic startup tests inspect effective Parley setup,
 not just returned options; local Git/process fixtures exercise bootstrap races
-and failures, followed by live upstream bootstrap conformance at release.
+and failures. Release conformance separately exercises the real assembled bundle
+with external networking blocked.
 `tests/integration/starter_auth_spec.lua` covers legacy auth migration, collision
 preservation, private permissions and refusal of redirected credential roots.
 
@@ -285,22 +311,26 @@ default, while plugin users can explicitly grant additional read roots.
 
 ## Markdown browser preview
 
-The app bootstrap includes `iamcco/markdown-preview.nvim` at commit
-`a923f5fc5ba36a3b17e289dc35dc17f66d0548ee`. Its Lazy build runs the upstream
-versioned prebuilt installer with a 120-second timeout, then executes the server
-via argv to verify its version (five-second timeout). The build derives the
-platform from Neovim’s host information; it must not call plugin autoload
-functions because Lazy function builders run before those files are loaded. No Node/Yarn dependency is
-added. Failed download or version verification fails the build and names the
-Lazy retry command. Keep Lazy's default `markdown-preview.nvim` directory name:
-the upstream binary uses it to locate its assets.
+The app loads `iamcco/markdown-preview.nvim` and its prebuilt server from the
+shared editor manifest. Homebrew resources and local provisioning verify source
+archive, binary archive and extracted binary hashes before startup. Bundled
+specs disable the plugin's install hook; no Node/Yarn dependency is added.
+Keep the `markdown-preview.nvim` directory name: the upstream binary uses it
+to locate its assets. App upgrades replace the plugin/server together.
+
+Standalone source bootstrap without a bundle retains the explicit Lazy build:
+it runs the versioned upstream installer, then checks the executable version.
+Failed download/version verification names `:Lazy build markdown-preview.nvim`
+for retry. This fallback does not establish bundled dependency parity.
 
 The Markdown filetype and `MarkdownPreview`, `MarkdownPreviewToggle`, and
 `MarkdownPreviewStop` commands load the plugin. Auto-start and network exposure
 are explicitly disabled; upstream owns preview process shutdown on Stop/editor
-exit. Bootstrap fixtures exercise plugin selection, installer success/failure
-and version verification. Live conformance checks start a pinned server in an
-isolated profile, fetch its local HTML and stop it without opening a browser.
+exit. Bootstrap fixtures cover bundled local specs and standalone install errors.
+The real bundle conformance runner opens the production starter with external
+networking denied, fetches Preview's loopback HTML and compares payload hashes
+before/after. That runtime assertion, rather than a download stub, is the offline
+verification boundary.
 
 ## Stable tutorial filenames
 
@@ -324,7 +354,8 @@ PARLEY_DEMO_DIR=/tmp/parley-vim-basics-check ./parley_app --headless -i NONE \
   -c "luafile $PWD/tests/packaging/vim_basics_compatibility.lua"
 ```
 
-Use a new disposable demo path; startup may install the packaged dependencies.
+Use a new disposable demo path; the launcher may provision its manifest bundle
+before opening the editor. Existing bundles are verified before reuse.
 The probe edits only the seeded copy and supplies an in-memory clipboard provider.
 It checks jump history (including Tab), undo/redo, smart-case search, selection,
 copy/cut/paste and explicit save with the packaged mappings loaded.

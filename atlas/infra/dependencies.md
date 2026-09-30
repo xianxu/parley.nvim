@@ -1,8 +1,8 @@
 # External dependencies
 
 Run `:checkhealth parley` to see which external tools are available and what a
-missing tool affects. The Homebrew app installs Neovim and ripgrep; CLIProxyAPI
-is managed separately by Parley (`:ParleyProxy update`). `curl` is required for
+missing tool affects. The Homebrew app installs Neovim, ripgrep and its pinned
+editor bundle. CLIProxyAPI is managed separately by Parley (`:ParleyProxy update`). `curl` is required for
 provider requests and is supplied by macOS. Clipboard/image conversion and
 export tools are feature-specific: a missing optional converter does not prevent
 ordinary text chat. Plugin installations own their dependency setup.
@@ -35,7 +35,7 @@ its existing configure-owned resolution cache. Exporter's pandoc error and
 CLIProxyAPI's missing-binary guidance also derive from the registry.
 
 `deps.packages({sysname='Darwin', manager='brew'}, 'default')` supplies
-ripgrep as the additional formula dependency. Neovim remains the host runtime;
+ripgrep as the additional CLI runtime dependency. Neovim remains the host runtime;
 CLIProxyAPI remains Parley-managed. Alternate converters and pandoc are optional;
 `'all'` projects the available advisory packages for explicit installation advice.
 `packaging/formula.lua` generates the formula from this projection, with parity
@@ -44,3 +44,12 @@ coverage in `tests/unit/packaging_formula_spec.lua`.
 The dependency specs cover host policy, executable/version changes and read-only
 health reporting. `tests/arch/dependency_registry_spec.lua` prevents builtin
 recipes or package-install command literals from creating a second advice source.
+
+Editor plugins have a separate lifecycle and manifest in
+`lua/parley/editor_dependencies.lua`; they are not CLI executable advice rows.
+Homebrew checksummed resources and the verified local bundle assembler derive
+from that manifest. Python 3.13 is a formula build-only dependency for bundle
+sealing; local development provisioning requires Python 3. Installed bundled
+startup does not invoke Python or install editor plugins. See
+[packaging ownership](packaging.md) and
+[dependency tooling](../../TOOLING.md#editor-dependency-bundles).
