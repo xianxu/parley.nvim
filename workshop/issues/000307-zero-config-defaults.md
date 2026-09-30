@@ -100,7 +100,7 @@ Design (after audit, see Log):
 - [x] repo_root auto-detection with chat_dir set + opt-out test; fix affected specs
 - [x] Headless zero-config boot test (setup({}), no keys: no warnings, chat created)
 - [x] Minimal-config section (in `atlas/infra/config.md#minimal-config`; see Log)
-- [ ] Trim the operator's local config; verify parity (parity verified; install after merge, see Log)
+- [x] Trim the operator's local config; verify parity (install to ~/.config follows the merge)
 
 ## Log
 
