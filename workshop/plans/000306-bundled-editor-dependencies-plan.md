@@ -124,6 +124,8 @@ The operator approved the packaging direction and shared-pin contract. This is f
 
 ## Revisions
 
+- 2026-09-30: Operator approved a narrower local launcher contract: `--nuke` clears downloaded editor dependencies and exits, preserving profile chats, settings and login. Reuse the existing owned-root repair operation and exclusive bundle lease (ARCH-DRY/ARCH-ORDER), retain launcher/PID/symlink guards, and make an absent cache a no-op. Regression coverage must prove retained profile data, subsequent reprovisioning, foreign-root refusal and contention protection. No dependency-version update command is needed; the checked-in manifest remains the update surface.
+
 - 2026-09-30: Dependency audit identified Lazy's implicit package/rock discovery as an additional network path. Explicitly disable it for bundles; include recording-only Screenkey in manifest membership without adding it to the shipped app.
 - 2026-09-30: Fresh-eyes review required full payload verification of reused writable bundles, explicit migration of the demo Screenkey consumer, and mandatory tagged-tree conformance in the release publication path. Added all three so parity cannot be bypassed through a warm cache or future release.
 - 2026-09-30: SDLC PQ-1/PQ-2 required explicit reader/writer ownership and function-level adversarial strategies. Added OS lock leases through editor lifetime, immutable publication/recovery rules, and named pure validation/decision functions; replaced repeated case inventories with those strategies.

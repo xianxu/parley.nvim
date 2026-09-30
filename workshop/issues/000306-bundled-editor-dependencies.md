@@ -6,9 +6,10 @@ github_issue:
 created: 2026-09-30
 updated: 2026-09-30
 estimate_hours: 3.74
-card_mirror: 'a282e27b4c801742d6a2dcbf203285b592141ac5' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2f9326d4178ac7eba16456aa942743727586c772' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-30T10:27:48-07:00
 flow: {kind: full, provenance: operator}
+actual_hours: 5.42
 ---
 
 # Bundle tested editor dependencies for offline app startup
@@ -83,5 +84,7 @@ The operator's local startup report exposed silent first-time provisioning. CLI 
 Boundary round 3 returned SHIP, disposed BR-1/BR-2/BR-3 and published codecomplete bound to evidence commit `210c1785130b`. Reviewer independently passed 25 Python tests, 13 launcher tests and the mapped starter suite, including the six-case BR-3 mutation check. Reviewer again saw the guest VM containment test fail and reproduced a containment failure on both pinned base and head; its exact cause remains unresolved and the relevant code is unchanged. This limitation is carried into the PR rather than claiming universal suite reproducibility. No Homebrew release or bottle published.
 
 ## Revisions
+
+- 2026-09-30: Operator approved dependency-only `./parley_app --nuke`: preserve chats/settings/login, clear the owned dependency payloads under their existing lease, and download again on the next launch. Reopening the existing PR for this focused launcher-contract refinement; local code continues to load directly from the checkout.
 
 - 2026-09-30: Local launch now always selects the archive bundle, never an old Lazy Git cache. Full manifest/file/mode verification covers wrong source or binary payloads, missing files and unexpected files; the proposed separate HEAD/tracked-dirt check is superseded because legacy Git caches are not loaded or modified (ARCH-DRY).
