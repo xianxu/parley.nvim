@@ -48,6 +48,7 @@ local function check()
     local chat_dir = vim.env.TMPDIR .. '/chats-' .. vim.env.PARLEY_PROBE_VARIANT
     parley.setup({
         chat_dir = chat_dir,
+        repo_root = false, -- the archive carries this repo's .parley marker
         state_dir = vim.env.TMPDIR .. '/parley-state',
         providers = {},
         api_keys = {},

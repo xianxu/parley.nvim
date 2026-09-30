@@ -94,11 +94,11 @@ Design (after audit, see Log):
   found" on first use, nothing at startup); add a test that pins it.
 
 - [x] Clean-profile audit (`NVIM_APPNAME=parley-clean`); log findings
-- [ ] api_keys merge + tests (keyless default survives a user table; `false` drops it)
-- [ ] repo_root auto-detection with chat_dir set + opt-out test; fix affected specs
-- [ ] Headless zero-config boot test (setup({}), no keys: no warnings, chat created)
-- [ ] README minimal-config section
-- [ ] Trim the operator's local config; verify parity
+- [x] api_keys merge + tests (keyless default survives a user table; `false` drops it)
+- [x] repo_root auto-detection with chat_dir set + opt-out test; fix affected specs
+- [x] Headless zero-config boot test (setup({}), no keys: no warnings, chat created)
+- [x] Minimal-config section (in `atlas/infra/config.md#minimal-config`; see Log)
+- [ ] Trim the operator's local config; verify parity (parity verified; install after merge, see Log)
 
 ## Log
 
@@ -117,4 +117,31 @@ Audit (clean XDG tree, `NVIM_APPNAME=parley-clean`, `setup({})`, no `*_API_KEY` 
   computing `repo_root` by hand.
 - Missing key at use time: `vault.run_with_secret` warns "vault secret X not found"
   and calls on_error; nothing at startup. Behavior is already right; needs a pin test.
+
+Implementation:
+- `api_keys` merges over the defaults. Found in the full suite: the merged
+  defaults re-enabled providers the starter disables with `openai = {}`, because
+  secret injection made the empty table non-empty (an empty table is the
+  dispatcher's disable signal). Injection now skips empty provider tables; spec pins it.
+- Detection opt-out: `repo_root = false`, or `PARLEY_REPO_MODE=0` when `repo_root` is
+  unset. The env check moved from the starter into setup (one knob, ARCH-DRY). The
+  test harness sets `PARLEY_REPO_MODE=0` in `tests/minimal_init.vim`: the first full
+  run without it wrote 79 chats into this repo's `workshop/parley` (removed).
+  super_repo_spec's startup cases clear it locally; fresh_clone_probe passes
+  `repo_root = false`.
+- Operator follow-up: with cliproxyapi built in, the operator's openai/anthropic/googleai
+  keychain keys are dead. No agent in their config calls a direct provider; default and
+  catalog agents all dispatch through cliproxyapi. Trimmed config is 4 paths.
+  Parity probe (resolved repo_root/chat_dir/chat_roots/notes/note_dirs/export dirs/agents/
+  secret presence), old code + old config vs new code + trimmed config: identical from
+  `~/workspace/parley.nvim` (repo mode) and from a plain dir.
+  Install waits for merge: lazy loads parley from the main checkout, which
+  needs the new detection.
+- The README was slimmed to a landing page in e02820c7 and links plugin setup to
+  `atlas/infra/config.md#install-as-a-neovim-plugin`, so the minimal-config section
+  lives there instead of in README.
+- Suite: all green except `tests/arch/buffer_mutation_spec.lua` and
+  `single_source_sweeps_spec.lua` (both fail on main too; unrelated), and
+  `branch_child_spec.lua` (runs 39–51s alone on both main and branch against a ~50s
+  plenary deadline; times out under parallel load. Existing, not introduced here).
 

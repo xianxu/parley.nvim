@@ -585,8 +585,10 @@ M.setup = function(opts)
 	-- crash leftover of the atomic writer (#261).
 	M.helpers.remove_stale_temps(state_dir)
 
-	-- Process API keys from api_keys table and load them into vault
-	local api_keys = opts.api_keys or M.config.api_keys or {}
+	-- Process API keys from api_keys table and load them into vault. User keys
+	-- layer over the defaults so keyless providers (ollama, cliproxyapi) keep
+	-- their local tokens; `false` drops a default.
+	local api_keys = vim.tbl_extend("force", M.config.api_keys or {}, opts.api_keys or {})
 	for provider_name, api_key in pairs(api_keys) do
 		if api_key then
 			M.logger.debug("Loading " .. provider_name .. " API key into vault")
@@ -594,10 +596,11 @@ M.setup = function(opts)
 		end
 	end
 
-	-- Process providers and inject secrets from vault if needed
+	-- Process providers and inject secrets from vault if needed. An empty table
+	-- disables its provider (dispatcher.setup), so it must stay empty.
 	local providers = opts.providers or M.config.providers or {}
 	for provider_name, provider in pairs(providers) do
-		if provider and type(provider) == "table" and not provider.secret and api_keys[provider_name] then
+		if type(provider) == "table" and next(provider) ~= nil and not provider.secret and api_keys[provider_name] then
 			M.logger.debug("Setting " .. provider_name .. " provider secret from api_keys")
 			provider.secret = api_keys[provider_name]
 		end
@@ -751,15 +754,17 @@ M.setup = function(opts)
 	)
 
 	-- Detect parley-enabled repo via marker file and set up repo-local directories
-	-- An explicit chat_dir stays authoritative unless a project root is also selected.
+	-- The nearest marker above cwd selects the repo; an explicit chat_dir becomes
+	-- its "global" root. `repo_root = false` or PARLEY_REPO_MODE=0 opts out.
 	local function apply_repo_local()
-		if opts.chat_dir and not opts.repo_root then return end
+		if opts.repo_root == false then return end
+		if opts.repo_root == nil and vim.env.PARLEY_REPO_MODE == "0" then return end
 
 		local marker = M.config.repo_marker
 		if not marker then return end
 
-		local git_root = opts.repo_root or M.helpers.find_git_root(vim.fn.getcwd())
-		if git_root == "" then return end
+		local git_root = opts.repo_root or require("parley.repo_mode").detect_root(vim.fn.getcwd(), marker)
+		if not git_root then return end
 
 		local marker_path = git_root .. "/" .. marker
 		if vim.fn.filereadable(marker_path) ~= 1 then return end

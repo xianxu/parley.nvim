@@ -697,12 +697,16 @@ describe("super_repo startup restoration", function()
 		if parley.is_super_repo_active() then parley.super_repo.set_active(false) end
 		parley._state = {}
 		vim.cmd("cd " .. vim.fn.fnameescape(cwd))
+		-- These cases exercise cwd detection, which the harness turns off (#307).
+		local repo_mode_env = vim.env.PARLEY_REPO_MODE
+		vim.env.PARLEY_REPO_MODE = nil
 		local ok, err = pcall(body, {
 			base = base,
 			current = current,
 			sibling = sibling,
 			state_dir = state_dir,
 		})
+		vim.env.PARLEY_REPO_MODE = repo_mode_env
 		if parley.is_super_repo_active() then parley.super_repo.set_active(false) end
 		vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
 		vim.fn.delete(base, "rf")

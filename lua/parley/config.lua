@@ -526,7 +526,7 @@ local config = {
 		months = 3,
 		presets = { 3, 6, 12 },
 	},
-	-- repo-local parley detection (marker file in git root enables repo mode)
+	-- repo-local parley detection (nearest ancestor holding this marker enables repo mode; repo_root = false opts out)
 	repo_marker = ".parley",
 	-- chat dir within repo when repo mode is active (relative to git root)
 	repo_chat_dir = "workshop/parley",
