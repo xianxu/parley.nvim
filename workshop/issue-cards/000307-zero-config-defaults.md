@@ -1,6 +1,6 @@
 ---
 id: 000307
-status: open
+status: working
 created: 2026-09-30
 updated: 2026-09-30
 estimate_hours:
@@ -17,6 +17,7 @@ tracker:
         source_blob: 854f7f6cb5405995e0db5277a16e3ae8cb0a43a9
         destination: workshop/issues/000307-zero-config-defaults.md
         main_commit: 6c0156cbdc3ac5fe9560ee57fcee1bb5a4719d95
+started: 2026-09-30T11:29:00-07:00
 ---
 
 # Clean up local parley config; zero-config plugin defaults
