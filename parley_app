@@ -84,6 +84,9 @@ if [ "$nuke" -eq 1 ]; then
     printf 'Removed Parley demo profile: %s\n' "$demo" >&2
     exit 0
 fi
+[ ! -L "$demo/editor-dependencies" ] || {
+    echo 'parley_app: editor-dependencies must not be a symlink' >&2; exit 1
+}
 if [ "$recording" -eq 1 ]; then
     chat_name="$(date +%Y-%m-%d).00-00-00.000_demo.md"
     # Refuse redirected descendants before staging or partial reset traverses them.
@@ -114,7 +117,11 @@ export PARLEY_REPO_MODE=0
 [ "$recording" -eq 0 ] || unset PARLEY_REPO_MODE
 export XDG_CONFIG_HOME="$demo/config" XDG_DATA_HOME="$demo/data"
 export XDG_STATE_HOME="$demo/state" XDG_CACHE_HOME="$demo/cache"
+export PARLEY_EDITOR_PROFILE=app
+[ "$recording" -eq 0 ] || export PARLEY_EDITOR_PROFILE=recording
 # The published PID stays live across exec; contenders now see a running app.
 rmdir "$lock"
 trap - 0 HUP INT TERM
-exec nvim -u "$init" "$@"
+exec python3 "$repo/scripts/editor-dependencies.py" --runtime "$repo" \
+    --profile "$PARLEY_EDITOR_PROFILE" run --root "$demo/editor-dependencies" -- \
+    nvim -u "$init" "$@"

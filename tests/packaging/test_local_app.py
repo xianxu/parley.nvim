@@ -6,14 +6,115 @@ from pathlib import Path
 import shutil
 import shlex
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[2]
 
 
 class LocalAppTest(unittest.TestCase):
+    def setUp(self):
+        # Replace only the artifact runner boundary. Every other Python call
+        # (including fake editors) uses the real interpreter unchanged.
+        fixture = tempfile.TemporaryDirectory()
+        self.addCleanup(fixture.cleanup)
+        binaries = Path(fixture.name)
+        wrapper = binaries / 'python3'
+        wrapper.write_text('#!' + sys.executable + '\n' + '''
+import json, os, pathlib, sys
+runner = os.environ.get('PARLEY_RUNTIME', '') + '/scripts/editor-dependencies.py'
+if len(sys.argv) < 2 or sys.argv[1] != runner:
+    os.execv(REAL_PYTHON, [REAL_PYTHON] + sys.argv[1:])
+args = sys.argv[2:]
+assert args[0] == '--runtime' and args[1] == os.environ['PARLEY_RUNTIME']
+assert args[2] == '--profile' and args[3] in ('app', 'recording')
+assert args[4:6] == ['run', '--root'] and args[7] == '--'
+assert args[3] == os.environ['PARLEY_EDITOR_PROFILE']
+root = pathlib.Path(args[6])
+root.mkdir(parents=True, exist_ok=True)
+(root / 'request.json').write_text(json.dumps({'runtime': args[1], 'profile': args[3],
+    'root': str(root), 'command': args[8:], 'pid': os.getpid()}))
+if (root / 'reject').exists():
+    print('fixture bundle verification failed', file=sys.stderr)
+    sys.exit(23)
+os.environ['PARLEY_EDITOR_BUNDLE'] = str(root)
+os.execvp(args[8], args[8:])
+'''.replace('REAL_PYTHON', repr(sys.executable)))
+        wrapper.chmod(0o755)
+        environment = patch.dict(os.environ, PATH=str(binaries) + os.pathsep + os.environ['PATH'])
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def test_routes_app_and_recording_through_bundle_verification_before_exec(self):
+        for recording in (False, True):
+            with self.subTest(recording=recording), tempfile.TemporaryDirectory() as scratch:
+                root = Path(scratch).resolve()
+                checkout = root / 'checkout'
+                checkout.mkdir()
+                shutil.copy2(REPO / 'parley_app', checkout / 'parley_app')
+                binaries = root / 'bin'
+                binaries.mkdir()
+                editor = binaries / 'nvim'
+                editor.write_text('#!/usr/bin/env python3\nimport json, os\n'
+                                  'print(json.dumps({"pid":os.getpid(), "bundle":'
+                                  'os.environ.get("PARLEY_EDITOR_BUNDLE")}))\n')
+                editor.chmod(0o755)
+                env = dict(os.environ, PATH=str(binaries) + os.pathsep + os.environ['PATH'])
+                profile = checkout / 'demo/workspace' if recording else root / 'profile'
+                if recording:
+                    env.pop('PARLEY_DEMO_DIR', None)
+                else:
+                    env['PARLEY_DEMO_DIR'] = str(profile)
+                command = [str(checkout / 'parley_app')] + (['--demo'] if recording else [])
+                result = subprocess.run(command + ['file with spaces.md'], env=env,
+                                        text=True, capture_output=True, timeout=10)
+                self.assertEqual(0, result.returncode, result.stderr)
+                observed = json.loads(result.stdout)
+                bundle = profile / 'editor-dependencies'
+                self.assertEqual(str(bundle), observed['bundle'])
+                request = json.loads((bundle / 'request.json').read_text())
+                self.assertEqual('recording' if recording else 'app', request['profile'])
+                self.assertEqual(str(checkout), request['runtime'])
+                self.assertEqual('file with spaces.md', request['command'][-1])
+                self.assertEqual(observed['pid'], request['pid'])
+                self.assertEqual(str(observed['pid']), (profile / '.nvim-pid').read_text().strip())
+                (bundle / 'reject').touch()
+                failed = subprocess.run(command, env=env, text=True, capture_output=True, timeout=10)
+                self.assertEqual(23, failed.returncode, failed.stderr)
+                self.assertEqual('', failed.stdout, 'Neovim ran despite failed bundle verification')
+                self.assertIn('bundle verification failed', failed.stderr)
+                (bundle / 'reject').unlink()
+                repaired = subprocess.run(command, env=env, text=True, capture_output=True, timeout=10)
+                self.assertEqual(0, repaired.returncode, repaired.stderr)
+
+    def test_refuses_redirected_dependency_root_without_touching_target(self):
+        for recording in (False, True):
+            with self.subTest(recording=recording), tempfile.TemporaryDirectory() as scratch:
+                root = Path(scratch).resolve()
+                checkout = root / 'checkout'
+                checkout.mkdir()
+                shutil.copy2(REPO / 'parley_app', checkout / 'parley_app')
+                profile = checkout / 'demo/workspace' if recording else root / 'profile'
+                profile.mkdir(parents=True)
+                (profile / '.parley-app-demo').write_text('parley_app v1\n')
+                outside = root / 'outside'
+                outside.mkdir()
+                (outside / 'precious').write_text('keep')
+                (profile / 'editor-dependencies').symlink_to(outside, target_is_directory=True)
+                env = dict(os.environ)
+                if recording:
+                    env.pop('PARLEY_DEMO_DIR', None)
+                else:
+                    env['PARLEY_DEMO_DIR'] = str(profile)
+                command = [str(checkout / 'parley_app')] + (['--demo'] if recording else [])
+                result = subprocess.run(command, env=env, text=True, capture_output=True, timeout=10)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn('editor-dependencies', result.stderr)
+                self.assertEqual(['precious'], sorted(p.name for p in outside.iterdir()))
+
     def test_recording_demo_selects_nested_root_and_recognizes_seed_chat(self):
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch).resolve()
@@ -95,7 +196,8 @@ vim.cmd('qa!')
             chat.write_text('trial one')
             cleared = ('state/old', 'config/old', 'cache/old', 'data/parley/parley/persisted/theme',
                        'data/parley/chats/old.md', 'data/parley/notes/old.md', 'data/parley/exports/old.md')
-            retained = ('data/parley/lazy/keep', 'data/parley/parley/cliproxy/config.yaml', 'home/.cli-proxy-api/login')
+            retained = ('editor-dependencies/keep', 'data/parley/lazy/keep',
+                        'data/parley/parley/cliproxy/config.yaml', 'home/.cli-proxy-api/login')
             for path in cleared + retained:
                 leaf = workspace / path
                 leaf.parent.mkdir(parents=True, exist_ok=True)
