@@ -105,6 +105,7 @@ Design (after audit, see Log):
 ## Log
 
 ### 2026-09-30
+- 2026-09-30: closed — make test: all green except 2 arch specs failing on main too and one parallel-load timeout (document_fold_batches 5/5 alone; branch_child 39-51s alone on main and branch vs ~50s deadline); tests/integration/zero_config_spec.lua 9 cases incl. BR-1 class (issues/history/vision/buffer-context resolve to marker-only root; fails with old issues.lua); make lint clean; parity probe old code+old operator config vs new code+trimmed config identical in repo and plain dir; minimal-config section in atlas/infra/config.md.; review verdict: FIX-THEN-SHIP
 
 Audit (clean XDG tree, `NVIM_APPNAME=parley-clean`, `setup({})`, no `*_API_KEY` env):
 - setup succeeds, no `vim.notify`, no WARNING/ERROR in parley.nvim.log;
