@@ -1,6 +1,6 @@
 ---
 id: 000307
-status: codecomplete
+status: done
 created: 2026-09-30
 updated: 2026-09-30
 estimate_hours:
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: dc1d958ba2f3f39abc73f9ea9adb29cab070b245
         evidence_commit: 8e83191300a48adf8ba5f98528d774488a8c314b
+        landed_commit: d5129c99f7a1dc74da9651058ad70a15fde50c57
 ---
 
 # Clean up local parley config; zero-config plugin defaults
