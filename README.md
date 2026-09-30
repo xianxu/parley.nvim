@@ -71,6 +71,11 @@ development processes. Roughly:
    I use [pair and couch](https://github.com/xianxu/pair), which provides a much
    stronger local development environment while leveraging other coding agents.
 
+Before sending pull request, you should file an issue first, focusing on the feature
+you want to create and getting alignment with maintainer first. All pull request without
+agreement won't be checked. After all, in the era of AI coding, it's easy to write 
+code; it's harder to agree what feature should be created.
+
 ## Report issues
 
 Use [GitHub issues](https://github.com/xianxu/parley.nvim/issues) for feature requests
