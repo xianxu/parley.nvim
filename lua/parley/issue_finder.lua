@@ -384,22 +384,10 @@ M.open = function(_options)
     end
 
     local function render_issue(issue)
-        local prefix = issue.archived and "[archived]" or string.format("[%s]", issue.status or "?")
-        local label = issue.title ~= "" and issue.title or issue.slug
-        local repo_prefix = issue.repo_name and ("{" .. issue.repo_name .. "} ") or ""
-        local display = string.format("%s%s %s %s", repo_prefix, prefix, issue.id, label)
-        if issue.github_issue then
-            display = display .. " (#" .. issue.github_issue .. ")"
-        end
-        if issue.created ~= "" then
-            display = display .. " [" .. issue.created .. "]"
-        end
-        return {
-            display = display,
-            search_text = string.format("%s%s %s %s %s", repo_prefix, issue.status or "", issue.id, issue.title, issue.slug),
-            value = issue.path,
-            issue = issue,
-        }
+        local row = issue_records.render(issue)
+        row.value = issue.path
+        row.issue = issue
+        return row
     end
 
     local function build_picker_data()

@@ -176,4 +176,41 @@ describe("Issue finder records", function()
         assert.equals("failure", results[1].kind)
         assert.equals(finder_scan.FAILURE_KIND.adapter_exception, results[1].failure_kind)
     end)
+
+    describe("render (#308)", function()
+        local base = {
+            id = "000296", slug = "app-screenkey", title = "Package Screenkey",
+            status = "open", created = "2026-09-28", github_issue = nil, repo_name = nil,
+        }
+
+        it("keeps the existing row format for untracked issues", function()
+            local row = records.render(base)
+            assert.equals("[open] 000296 Package Screenkey [2026-09-28]", row.display)
+            assert.equals("open 000296 Package Screenkey app-screenkey", row.search_text)
+            assert.same({}, row.highlights)
+            local with_repo = records.render(vim.tbl_extend("force", base, {
+                repo_name = "parley.nvim", github_issue = "12", archived = true, created = "",
+            }))
+            assert.equals("{parley.nvim} [archived] 000296 Package Screenkey (#12)", with_repo.display)
+            assert.equals("{parley.nvim} open 000296 Package Screenkey app-screenkey", with_repo.search_text)
+        end)
+
+        it("falls back to the slug when the title is empty", function()
+            assert.equals("[open] 000296 app-screenkey [2026-09-28]",
+                records.render(vim.tbl_extend("force", base, { title = "" })).display)
+        end)
+
+        it("spans stale tracker fields in the tracker highlight", function()
+            local row = records.render(vim.tbl_extend("force", base, {
+                status = "wontfix", github_issue = "7", tracked = true,
+                tracker_stale = { status = true, github_issue = true },
+            }))
+            local painted = {}
+            for _, span in ipairs(row.highlights) do
+                assert.equals("ParleyIssueTracker", span[3])
+                painted[#painted + 1] = row.display:sub(span[1] + 1, span[2])
+            end
+            assert.same({ "[wontfix]", "(#7)" }, painted)
+        end)
+    end)
 end)
