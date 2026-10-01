@@ -64,6 +64,7 @@ route through `sdlc issue set-status`.
 - Unit tests: card parser, overlay/stale-diff, ref resolution, highlight spans;
   integration test with a disposable git repo carrying an `issue-tracker` branch.
 - Untracked repos and missing refs behave exactly as before (tests).
+- A tracker move, whether this session's fetch or a ref another slot's sdlc fetched, repaints every open finder and issue buffer on that repo, including hidden buffers, under the real throttle (tests). A failed re-read keeps the last good cards.
 
 ## Plan
 
