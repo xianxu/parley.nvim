@@ -311,6 +311,44 @@ describe("float_picker", function()
             assert.truthy(lines[1]:find("…", 1, true), "truncated line should end with ellipsis")
         end)
 
+        it("paints item highlight spans and keeps them across updates (#308)", function()
+            local function spans()
+                local ns = vim.api.nvim_get_namespaces()["parley_picker_items"]
+                local buf = vim.api.nvim_win_get_buf(find_float_win())
+                local out = {}
+                for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+                    out[#out + 1] = {
+                        line = vim.api.nvim_buf_get_lines(buf, mark[2], mark[2] + 1, false)[1],
+                        start = mark[3],
+                        finish = mark[4].end_col,
+                        group = mark[4].hl_group,
+                    }
+                end
+                return out
+            end
+            local picker = float_picker.open({
+                title = "Test",
+                items = {
+                    { display = "[wontfix] 000296 x", value = "a", highlights = { { 0, 9, "ParleyIssueTracker" } } },
+                    { display = "[open] 000297 y", value = "b" },
+                    { display = "short", value = "c", highlights = { { 2, 400, "ParleyIssueTracker" } } },
+                },
+                on_select = function() end,
+            })
+            local marks = spans()
+            assert.equals(2, #marks)
+            table.sort(marks, function(l, r) return l.line < r.line end)
+            assert.equals(" [wontfix] 000296 x", marks[1].line)
+            assert.equals("[wontfix]", marks[1].line:sub(marks[1].start + 1, marks[1].finish))
+            assert.equals("ParleyIssueTracker", marks[1].group)
+            assert.equals(#" short", marks[2].finish) -- clipped to the line
+
+            picker.update({ { display = "[done] 000296 x", value = "a", highlights = { { 0, 6, "ParleyIssueTracker" } } } })
+            marks = spans()
+            assert.equals(1, #marks)
+            assert.equals("[done]", marks[1].line:sub(marks[1].start + 1, marks[1].finish))
+        end)
+
         it("seeds the prompt and filtered results from initial_query", function()
             float_picker.open({
                 title = "Test",
