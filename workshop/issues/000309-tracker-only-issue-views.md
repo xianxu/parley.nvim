@@ -8,7 +8,7 @@ updated: 2026-09-30
 estimate_hours:
 card_mirror: 'f4061c0190b460e9d7fa657df6de0c97c78726fc' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-30T22:11:00-07:00
-flow: {kind: quick, provenance: inferred, spec: "dd4ea307", done: "d4c100c7"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Show tracker-only cards in issue finder and viewer
@@ -68,6 +68,8 @@ Durable plan: [000309 plan](../plans/000309-tracker-only-issue-views-plan.md). S
 ## Log
 
 ### 2026-09-30
+- 2026-09-30: closed — Done-when unchanged on purpose: Revisions record close-review fixes within scope, no acceptance change. make test green except 2 arch specs failing on main too (buffer_mutation: only spell_source.lua:61) and load timeouts that pass alone (perf_ownership 3/3, document_*); round-1 fixes: card join scans the finder's own resolved roots (discovery_roots resolves both views once; regression spec with a super-repo history dir config does not name, fails on old code), status() reports bootstrap in flight, view distinguishes unreadable tracker from removed card; specs: issue_cards 24, issue_finder_records 13, issue_tracker 18, issue_card_view 6, issue_finder_tracker 12, issue_finder 31; make lint clean; live in this repo: #305 sole card-only row, view 'origin/issue-tracker @ 4a0d2e4 · fetched 22:38', nonmodifiable.; review verdict: SHIP
+- 2026-09-30: flow upgraded quick → full — 407 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Filed from operator request after checking #308's scope and implementation:
   remote-card reading and amber overlays exist, but standalone card rows and
