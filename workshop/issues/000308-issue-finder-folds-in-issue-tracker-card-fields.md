@@ -8,6 +8,7 @@ updated: 2026-09-30
 estimate_hours:
 card_mirror: 'c665520f81e5c7539038bb584a7305912b488ae1' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-30T17:08:06-07:00
+flow: {kind: quick, provenance: inferred, spec: "d106d99a", done: "eadc6421"}
 ---
 
 # Issue finder folds in issue-tracker card fields
