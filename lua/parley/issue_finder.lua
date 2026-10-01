@@ -8,6 +8,8 @@ local finder_loader = require("parley.finder_loader")
 local finder_producer = require("parley.finder_producer")
 local async_file_source = require("parley.async_file_source")
 local issue_records = require("parley.issue_finder_records")
+local issue_cards = require("parley.issue_cards")
+local issue_tracker = require("parley.issue_tracker")
 
 local M = {}
 local _parley
@@ -367,6 +369,27 @@ M.open = function(_options)
         return
     end
     local session = new_session(snapshot)
+    -- #308: tracker cards per repository root, overlaid before sorting.
+    local raw_records = nil
+    local cards_by_root = {}
+    local root_of_dir = {}
+    local function repo_root_of(path)
+        local dir = vim.fn.fnamemodify(path, ":h")
+        if root_of_dir[dir] == nil then
+            root_of_dir[dir] = issue_tracker.repo_root(dir) or false
+        end
+        return root_of_dir[dir]
+    end
+    local function overlay_cards(records)
+        local names = issue_tracker.field_names()
+        local out = {}
+        for i, record in ipairs(records or {}) do
+            local root = repo_root_of(record.path)
+            local cards = root and cards_by_root[root]
+            out[i] = cards and issue_cards.overlay(record, cards[record.id], names) or record
+        end
+        return out
+    end
     local repo_facets = finder_facets.eligible_labels(roots, super_repo, function(root)
         return root.repo_name
     end)
@@ -384,22 +407,10 @@ M.open = function(_options)
     end
 
     local function render_issue(issue)
-        local prefix = issue.archived and "[archived]" or string.format("[%s]", issue.status or "?")
-        local label = issue.title ~= "" and issue.title or issue.slug
-        local repo_prefix = issue.repo_name and ("{" .. issue.repo_name .. "} ") or ""
-        local display = string.format("%s%s %s %s", repo_prefix, prefix, issue.id, label)
-        if issue.github_issue then
-            display = display .. " (#" .. issue.github_issue .. ")"
-        end
-        if issue.created ~= "" then
-            display = display .. " [" .. issue.created .. "]"
-        end
-        return {
-            display = display,
-            search_text = string.format("%s%s %s %s %s", repo_prefix, issue.status or "", issue.id, issue.title, issue.slug),
-            value = issue.path,
-            issue = issue,
-        }
+        local row = issue_records.render(issue)
+        row.value = issue.path
+        row.issue = issue
+        return row
     end
 
     local function build_picker_data()
@@ -493,7 +504,8 @@ M.open = function(_options)
             ))
         end,
         materialize = function(outcome)
-            sorted = issue_records.materialize(outcome.records, {
+            raw_records = outcome.records
+            sorted = issue_records.materialize(overlay_cards(raw_records), {
                 archived = M.includes_history(view_mode),
             })
             items, repo_tag_bar_tags = build_picker_data()
@@ -618,6 +630,46 @@ M.open = function(_options)
         picker_ref.update = loading.picker.update
     end
     session:start()
+
+    -- #308: fold in tracker cards as they arrive — the local ref first, then any
+    -- tip move a background fetch (ours or another view's) finds — keeping the
+    -- operator's selected row.
+    issue_tracker.ensure_highlight()
+    local function picker_open()
+        local picker = loading and loading.picker
+        return picker ~= nil and not (picker.is_closed and picker.is_closed())
+    end
+    local function deliver(root, cards)
+        local picker = loading and loading.picker
+        if not cards or not picker_open() then
+            return
+        end
+        cards_by_root[root] = cards
+        if raw_records == nil then
+            return -- materialize overlays them when the scan settles
+        end
+        sorted = issue_records.materialize(overlay_cards(raw_records), {
+            archived = M.includes_history(view_mode),
+        })
+        items, repo_tag_bar_tags = build_picker_data()
+        local current = picker.selected and picker.selected()
+        picker.update(items, repo_tag_bar_tags, current and current.value or nil)
+    end
+    local seen_roots = {}
+    for _, root in ipairs(roots) do
+        local repo_root = issue_tracker.repo_root(root.path)
+        if repo_root and not seen_roots[repo_root] then
+            seen_roots[repo_root] = true
+            issue_tracker.subscribe(repo_root, {
+                notify = function(cards) deliver(repo_root, cards) end,
+                alive = picker_open,
+            })
+            issue_tracker.load(repo_root, function(cards)
+                deliver(repo_root, cards)
+                issue_tracker.refresh(repo_root)
+            end)
+        end
+    end
 
     _parley._issue_finder.initial_index = nil
     _parley._issue_finder.initial_value = nil

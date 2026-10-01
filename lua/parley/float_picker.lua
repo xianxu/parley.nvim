@@ -54,6 +54,9 @@ local TAG_BAR_BORDER_ROWS = 2
 
 -- Highlight namespace for fuzzy match characters in results.
 local MATCH_NS = vim.api.nvim_create_namespace("float_picker_match")
+-- Item-owned highlight spans: item.highlights = { {start, finish, group} },
+-- 0-based byte offsets into item.display, end-exclusive (#308).
+local ITEM_NS = vim.api.nvim_create_namespace("parley_picker_items")
 
 -- ---------------------------------------------------------------------------
 -- Fuzzy scoring
@@ -906,6 +909,8 @@ function M.open(opts)
         end
     end
 
+    local paint_item_highlights -- forward: needs visual_row_for_index (below)
+
     local function refresh_results()
         if closed or not vim.api.nvim_buf_is_valid(results_buf) then
             return
@@ -936,6 +941,7 @@ function M.open(opts)
         end
         vim.api.nvim_buf_set_lines(results_buf, 0, -1, false, lines)
         vim.bo[results_buf].modifiable = false
+        paint_item_highlights(lines)
     end
 
     local function results_row_count()
@@ -961,6 +967,24 @@ function M.open(opts)
 
     local function visual_row_for_index(idx)
         return M._visual_row_for_index(idx, #filtered, results_row_count(), anchor)
+    end
+
+    paint_item_highlights = function(lines)
+        vim.api.nvim_buf_clear_namespace(results_buf, ITEM_NS, 0, -1)
+        if status_line ~= nil then
+            return
+        end
+        for idx, item in ipairs(filtered) do
+            local visual_row = visual_row_for_index(idx)
+            local line = lines[visual_row]
+            for _, span in ipairs(line and item.highlights or {}) do
+                local start = span[1] + 1 -- the leading space before display
+                local finish = math.min(span[2] + 1, #line)
+                if start < finish then
+                    vim.api.nvim_buf_add_highlight(results_buf, ITEM_NS, span[3], visual_row - 1, start, finish)
+                end
+            end
+        end
     end
 
     local function index_for_visual_row(visual_row)

@@ -1,6 +1,7 @@
 local finder_scan = require("parley.finder_scan")
 local issue_vocabulary = require("parley.issue_vocabulary")
 local issues = require("parley.issues")
+local issue_cards = require("parley.issue_cards")
 
 local M = {}
 local INVALID = finder_scan.FAILURE_KIND.invalid_adapter_result
@@ -108,6 +109,50 @@ M.materialize = function(records, options)
         end
         return false
     end)
+end
+
+-- One finder row: display + search text + highlight spans. Built from segments
+-- so a field the tracker card corrected (`tracker_stale`, #308) can be painted.
+M.render = function(issue)
+    local stale = issue.tracker_stale or {}
+    local parts, highlights, width = {}, {}, 0
+    local function append(text, field)
+        if field and stale[field] then
+            highlights[#highlights + 1] = { width, width + #text, issue_cards.HIGHLIGHT }
+        end
+        parts[#parts + 1] = text
+        width = width + #text
+    end
+
+    local repo_prefix = issue.repo_name and ("{" .. issue.repo_name .. "} ") or ""
+    append(repo_prefix)
+    if issue.archived then
+        append("[archived]")
+    else
+        append(string.format("[%s]", issue.status or "?"), "status")
+    end
+    append(" " .. issue.id .. " ")
+    if issue.title ~= "" then
+        append(issue.title, "title")
+    else
+        append(issue.slug)
+    end
+    if issue.github_issue then
+        append(" ")
+        append("(#" .. issue.github_issue .. ")", "github_issue")
+    elseif stale.github_issue then
+        append(" ")
+        append("(#-)", "github_issue") -- the tracker dropped the link the file still has
+    end
+    if (issue.created or "") ~= "" then
+        append(" ")
+        append("[" .. issue.created .. "]", "created")
+    end
+    return {
+        display = table.concat(parts),
+        search_text = string.format("%s%s %s %s %s", repo_prefix, issue.status or "", issue.id, issue.title, issue.slug),
+        highlights = highlights,
+    }
 end
 
 return M
