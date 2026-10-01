@@ -220,5 +220,25 @@ describe("Issue finder records", function()
             assert.equals("[open] 000296 Package Screenkey (#-) [2026-09-28]", row.display)
             assert.equals("(#-)", row.display:sub(row.highlights[1][1] + 1, row.highlights[1][2]))
         end)
+
+        it("marks a card-only issue with a lock after the id and a fully amber row (#309)", function()
+            local row = records.render({
+                id = "000305", slug = "", title = "Separate completion", status = "open",
+                created = "2026-09-29", card_only = true, repo_name = "pair",
+                tracker_stale = { status = true },
+            })
+            assert.equals("{pair} [open] 000305🔒 Separate completion [2026-09-29]", row.display)
+            assert.falsy(row.display:find("card only", 1, true))
+            assert.same({ { 0, #row.display, "ParleyIssueTracker" } }, row.highlights)
+            assert.truthy(row.search_text:find("Separate completion", 1, true))
+        end)
+
+        it("keeps per-field amber and no lock for a stale details file (#309)", function()
+            local row = records.render(vim.tbl_extend("force", base, {
+                status = "wontfix", tracked = true, tracker_stale = { status = true },
+            }))
+            assert.falsy(row.display:find("🔒", 1, true))
+            assert.same({ { 0, #"[wontfix]", "ParleyIssueTracker" } }, row.highlights)
+        end)
     end)
 end)

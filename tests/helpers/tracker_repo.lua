@@ -21,7 +21,8 @@ end
 
 local function card_text(name, fields)
     local id = name:match("^(%d+)")
-    return table.concat({
+    local problem = fields.problem and { "## Problem", "", fields.problem, "" } or {}
+    return table.concat(vim.list_extend({
         "---",
         "id: " .. id,
         "status: " .. fields.status,
@@ -34,7 +35,7 @@ local function card_text(name, fields)
         "",
         "# " .. fields.title,
         "",
-    }, "\n")
+    }, problem), "\n")
 end
 
 -- Details file as `sdlc issue new` leaves it: a card_mirror snapshot.
@@ -69,8 +70,10 @@ function M.write_card(writer, name, fields)
     M.git(writer, { "push", "-q", "origin", "issue-tracker" })
 end
 
--- cards: { [filename] = {status, title, ...} }. Details on main mirror the
--- initial card values; `details` overrides them per filename.
+-- cards: { [filename] = {status, title, problem?, ...} }. Details on main mirror
+-- the initial card values; `details` overrides them per filename: `false` means
+-- no details file on main (#309), and an override's `dir` places the file there
+-- (e.g. workshop/history/issues) instead of workshop/issues.
 function M.create(cards, details)
     local base = vim.fn.resolve(vim.fn.tempname())
     local repos = { base = base, remote = base .. "/remote.git", writer = base .. "/writer", reader = base .. "/reader" }
@@ -80,8 +83,12 @@ function M.create(cards, details)
 
     write(repos.writer .. "/workshop/issue-tracker.json", '{"version":1}')
     for name, fields in pairs(cards) do
-        write(repos.writer .. "/workshop/issues/" .. name,
-            M.details_text(name, (details or {})[name] or fields))
+        local override = (details or {})[name]
+        if override ~= false then
+            local values = override or fields
+            write(repos.writer .. "/" .. (values.dir or "workshop/issues") .. "/" .. name,
+                M.details_text(name, values))
+        end
     end
     M.git(repos.writer, { "add", "." })
     M.git(repos.writer, { "commit", "-q", "-m", "main" })
@@ -100,6 +107,17 @@ function M.create(cards, details)
 
     M.git(base, { "clone", "-q", repos.remote, repos.reader })
     return repos
+end
+
+-- Commit a details file on another branch of the writer and push it: details
+-- that exist, just not in the reader's checkout (#309).
+function M.details_on_branch(repos, branch, name, fields)
+    M.git(repos.writer, { "worktree", "add", "-q", "-b", branch, repos.base .. "/" .. branch, "main" })
+    local tree = repos.base .. "/" .. branch
+    write(tree .. "/workshop/issues/" .. name, M.details_text(name, fields))
+    M.git(tree, { "add", "workshop/issues/" .. name })
+    M.git(tree, { "commit", "-q", "-m", "details: " .. name })
+    M.git(tree, { "push", "-q", "origin", branch })
 end
 
 function M.destroy(repos)

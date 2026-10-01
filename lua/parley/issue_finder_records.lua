@@ -39,12 +39,18 @@ local function valid_input(input)
     return true
 end
 
+-- A details filename → id, slug (nil for anything else). The card join (#309)
+-- uses this same parser, so it counts exactly the files the scan turns into rows.
+M.parse_name = function(name)
+    return name:match("^(%d+)%-(.+)%.md$")
+end
+
 M.adapt = function(input)
     if not valid_input(input) then
         return failure()
     end
 
-    local id, slug = input.name:match("^(%d+)%-(.+)%.md$")
+    local id, slug = M.parse_name(input.name)
     if not id then
         return { kind = "skip" }
     end
@@ -131,7 +137,9 @@ M.render = function(issue)
     else
         append(string.format("[%s]", issue.status or "?"), "status")
     end
-    append(" " .. issue.id .. " ")
+    -- 🔒: the issue lives only on the tracker branch, with no details here to
+    -- pick up (#309); a stale details file keeps per-field amber, no lock.
+    append(" " .. issue.id .. (issue.card_only and "🔒" or "") .. " ")
     if issue.title ~= "" then
         append(issue.title, "title")
     else
@@ -148,8 +156,12 @@ M.render = function(issue)
         append(" ")
         append("[" .. issue.created .. "]", "created")
     end
+    local display = table.concat(parts)
+    if issue.card_only then
+        highlights = { { 0, #display, issue_cards.HIGHLIGHT } } -- the whole row is the card
+    end
     return {
-        display = table.concat(parts),
+        display = display,
         search_text = string.format("%s%s %s %s %s", repo_prefix, issue.status or "", issue.id, issue.title, issue.slug),
         highlights = highlights,
     }

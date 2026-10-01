@@ -1,12 +1,15 @@
 ---
 id: 000309
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-30
-updated: 2026-09-30
+updated: 2026-10-01
 estimate_hours:
-card_mirror: '9eb24473db49de82ec8d916b855358e949f9995b' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2fe90e3070cf17a11a06b7ad13cf31e05ed5696f' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-30T22:11:00-07:00
+flow: {kind: full, provenance: inferred}
+actual_hours: 1.28
 ---
 
 # Show tracker-only cards in issue finder and viewer
@@ -41,7 +44,9 @@ relying on color alone.
 ## Done when
 
 - A card present only on origin/issue-tracker appears in the finder even when
-  its details exist only on another branch; normal search/filter/sort work.
+  its details exist only on another branch; normal search/filter/sort work. Its
+  row is amber end to end with 🔒 right after the id and no text label, unlike
+  a stale details file (per-field amber, no 🔒).
 - Opening it displays available card content in a read-only, nonmodifiable
   scratch buffer with an amber label and source ref; mutation actions refuse.
 - An asynchronous fetch discovers newly published cards and refreshes open
@@ -54,13 +59,89 @@ relying on color alone.
 
 ## Plan
 
-- [ ] Design and implement card-only discovery and viewing on top of #308.
+Durable plan: [000309 plan](../plans/000309-tracker-only-issue-views-plan.md). Single pass, one close.
+
+- [x] T1 pure card model: card body, card-only records, freshness, card view text
+- [x] T2 card-only finder row label
+- [x] T3 tracker first-fetch bootstrap + fetch status
+- [x] T4 read-only card view + buffer-command refusals
+- [x] T5 finder card-only rows, open, refusals
+- [x] T6 atlas + live check (#305 is card-only in this repo today)
 
 ## Log
 
+
+- 2026-10-01: closed — Smoke-test delta (operator feedback on :0): card-only finder rows drop the text label, are amber end to end, and carry 🔒 after the id; stale details rows keep per-field amber, no lock. Specs: issue_finder_records 14 (lock + full-row span; stale row has no lock), issue_finder_tracker 13, issue_finder 31; make lint clean; full make test green except the 2 arch specs failing on main too; live probe through the real float_picker renders '[open] 000305🔒 Separate Insert buffer…' without errors (spans clamp to the drawn line).; review verdict: SHIP
 ### 2026-09-30
+- 2026-09-30: closed — Done-when unchanged on purpose: Revisions record close-review fixes within scope. Post-close delta: issue_finder_records.parse_name shared by scan and card join (spec: skipped 000005-.md must not hide the card; fails on old pattern). Specs green: issue_finder_records 13, issue_finder_tracker 13, issue_finder 31; make lint clean; earlier evidence unchanged (full suite green except main-failing arch specs and alone-passing load timeouts; live #305 card-only row and view).; review verdict: SHIP
+- 2026-09-30: closed — Done-when unchanged on purpose: Revisions record close-review fixes within scope, no acceptance change. make test green except 2 arch specs failing on main too (buffer_mutation: only spell_source.lua:61) and load timeouts that pass alone (perf_ownership 3/3, document_*); round-1 fixes: card join scans the finder's own resolved roots (discovery_roots resolves both views once; regression spec with a super-repo history dir config does not name, fails on old code), status() reports bootstrap in flight, view distinguishes unreadable tracker from removed card; specs: issue_cards 24, issue_finder_records 13, issue_tracker 18, issue_card_view 6, issue_finder_tracker 12, issue_finder 31; make lint clean; live in this repo: #305 sole card-only row, view 'origin/issue-tracker @ 4a0d2e4 · fetched 22:38', nonmodifiable.; review verdict: SHIP
+- 2026-09-30: flow upgraded quick → full — 407 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Filed from operator request after checking #308's scope and implementation:
   remote-card reading and amber overlays exist, but standalone card rows and
   read-only views do not. This task records the extension; implementation has
   not started.
+
+- Design: durable plan `workshop/plans/000309-tracker-only-issue-views-plan.md`;
+  a fresh-context plan review found 5 blocking issues. The main one: the finder
+  spec's relative history_dir resolved to this repository through the real
+  parley's `project_root()`. Fixed, then approved on re-review.
+- change-code inferred the quick flow (design under the limit); the code diff
+  (~360 lines) leaves the shell, so close runs the full review.
+- Arch: the card view's render first called `nvim_buf_set_lines` directly and
+  tripped `tests/arch/buffer_mutation_spec.lua`. It now goes through a new
+  `buffer_edit.replace_all` instead of widening the allow list.
+- Live check in this repo (outside the harness, so fetch is on) found two bugs
+  the specs had missed, both now pinned by tests:
+  - the view stayed on "refreshing…": the finder's fetch was in flight, the
+    view's refresh settled at once, and an unchanged tip never notifies. A
+    refresh now joins the fetch in flight and gets a throttled follow-up. This
+    also fixed a pre-existing race in #308's "background fetch moves the
+    tracker" spec, which the longer `fetching` window exposed.
+  - every re-render raised W10 because the buffer was `readonly`.
+  Final live state: #305 is the only card-only row, and its view reads
+  `card only · read only — origin/issue-tracker @ 4a0d2e4 · fetched 22:38`
+  with the card's fields and Problem heading, nonmodifiable.
+- Suite: green except the two arch specs that also fail on main (only
+  `spell_source.lua:61` remains in buffer_mutation) and document-fold specs
+  that time out under parallel load but pass alone.
+
+## Revisions
+
+### 2026-09-30 — close review round 1 (FIX-THEN-SHIP)
+- BR-1 (Important, parallel-path-resolution): `local_ids` re-derived the issues
+  and history dirs from config instead of using the dirs the scan resolves. The
+  card join now scans `discovery_roots(0)`/`(1)` per repository root. The
+  regression spec puts history in a super-repo dir the config value does not
+  name; it failed with the old code.
+- Minor (freshness): `issue_tracker.status` returned nil during a first-fetch
+  bootstrap. It now reports `fetching` with `ref = nil` until a remote is known.
+- Minor (freshness): the view said "no longer on <ref>" when no tracker was
+  readable at all. `view_lines` now takes `readable` and says "No tracker
+  cards are readable in this checkout right now."
+- Minor (flag-constellation), declined: `freshness` already fixes the
+  precedence between the flags (failure after success wins; `fetching` is a
+  suffix), and reshaping #308's tracker state into a tagged outcome is a
+  refactor beyond this issue.
+
+### 2026-09-30 — close review round 2 (SHIP, one advisory in the same family)
+- Advisory (parallel-path-resolution, second in its family): `local_ids` parsed
+  filenames with its own pattern. The rule the review named covers every
+  fact the join uses, not only the dirs. `issue_finder_records.parse_name` is
+  now the one parser shared by the scan and the join; the regression spec (a
+  skipped `000005-.md` must not hide card #000005) fails with the old pattern.
+
+### 2026-10-01 — operator smoke test on :0
+- Feedback: drop the `card only · read only` text from finder rows (amber already
+  says it), paint the whole row amber, and add 🔒 right after the id so a
+  card-only issue (on the tracker branch only, not ready to pick up in this
+  worktree) differs from a stale details file (per-field amber, no lock).
+- Delta: `issue_finder_records.render` puts 🔒 after the id and one
+  full-row span on card-only rows. The 🔒 is the non-colour cue the Spec asked
+  for. The card view keeps its label line, since it explains the source and
+  freshness. Done when restated for the finder row.
+
+### 2026-10-01
+- Operator smoke test on :0 passed (card-only rows: full-row amber, 🔒 after the
+  id; stale details rows: per-field amber; card view opens read-only).
+

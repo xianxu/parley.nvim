@@ -29,7 +29,7 @@ M._on_git = nil -- test hook: observes each git argv before it runs
 local states = {}
 
 local function state(root)
-    states[root] = states[root] or { gen = 0, blobs = {}, waiters = {}, subscribers = {} }
+    states[root] = states[root] or { gen = 0, blobs = {}, waiters = {}, subscribers = {}, joiners = {} }
     return states[root]
 end
 
@@ -232,31 +232,99 @@ M.load = function(root, callback)
     end
 end
 
+-- The remote to fetch the tracker from when no read has found one yet (#309's
+-- first-fetch bootstrap): the same choice the reader makes, over every remote.
+local function resolve_remote(root, st, done)
+    if st.remote then
+        return done(st.remote)
+    end
+    git(root, { "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}" }, {}, function(has_upstream, upstream)
+        git(root, { "remote" }, {}, function(ok, out)
+            local remotes = ok and vim.split(vim.trim(out), "\n", { trimempty = true }) or {}
+            done(issue_cards.select_remote(has_upstream and upstream:match("^([^/\n]+)/") or nil, remotes))
+        end)
+    end)
+end
+
 -- Fetch the tracker branch (at most once per fetch_interval_s per root) and
--- re-read it; a moved tip reaches every subscriber. `on_settled` (optional) runs
--- once this refresh is finished or skipped.
+-- re-read it; a moved tip reaches every subscriber. A repository whose checkout
+-- never fetched the tracker resolves a remote first. The explicit refspec also
+-- serves single-branch clones. `on_settled` (optional) runs once this refresh
+-- is finished or skipped.
 M.refresh = function(root, on_settled)
     on_settled = on_settled or function() end
     local found = discovery()
     local st = tracked(root) and found and states[root]
     local now = uv.now() / 1000
-    if not M.fetch_enabled or not st or not st.remote or st.fetching
+    if st and st.fetching then
+        -- Wait for the fetch in flight: settling now would let a view report
+        -- "refreshing…" after it ends with an unchanged tip (no notify), and the
+        -- caller may be asking for a change made after that fetch began.
+        st.joiners[#st.joiners + 1] = on_settled
+        return
+    end
+    if not M.fetch_enabled or not st
         or (st.fetched_at and now - st.fetched_at < M.fetch_interval_s) then
         return vim.schedule(on_settled)
     end
+    -- Stamp before resolving: the bootstrap path is throttled too, and a
+    -- concurrent refresh joins via `fetching`.
     st.fetching, st.fetched_at = true, now
-    git(root, { "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", st.remote, found.tracker },
-        { timeout = M.fetch_timeout_ms }, function(ok, _, err)
-            st.fetching = false
-            if not ok then
-                logger.debug("issue tracker: fetch failed in " .. root .. ": " .. tostring(err))
-                return on_settled()
-            end
-            st.waiters[#st.waiters + 1] = function()
-                on_settled()
-            end
-            read(root, st, found) -- supersedes any read of the pre-fetch tip
-        end)
+    local function settle()
+        st.fetching = false
+        local joiners = st.joiners
+        st.joiners = {}
+        on_settled()
+        if #joiners > 0 then
+            -- They asked after this fetch began: give them a follow-up refresh
+            -- (still throttled, so usually it settles at once).
+            M.refresh(root, function()
+                for _, joiner in ipairs(joiners) do
+                    joiner()
+                end
+            end)
+        end
+    end
+    resolve_remote(root, st, function(remote)
+        if not remote then
+            return settle()
+        end
+        local refspec = "+refs/heads/" .. found.tracker .. ":refs/remotes/" .. remote .. "/" .. found.tracker
+        git(root, { "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", remote, refspec },
+            { timeout = M.fetch_timeout_ms }, function(ok, _, err)
+                if not ok then
+                    logger.debug("issue tracker: fetch failed in " .. root .. ": " .. tostring(err))
+                    st.fetch_failed_at, st.fetch_error = os.time(), tostring(err)
+                    return settle()
+                end
+                st.fetch_ok_at, st.fetch_failed_at, st.fetch_error = os.time(), nil, nil
+                st.remote = st.remote or remote -- provisional until the read confirms it
+                -- `fetching` stays set until the post-fetch read lands, so a
+                -- joiner sees the new tip.
+                st.waiters[#st.waiters + 1] = settle
+                read(root, st, found) -- supersedes any read of the pre-fetch tip
+            end)
+    end)
+end
+
+-- How current this root's cards are, for views that must say so (#309): the
+-- ref read (nil until a remote is known, e.g. during a first-fetch bootstrap),
+-- its tip, and the last fetch outcome (wall-clock seconds). nil when the root
+-- was never loaded or the vocabulary names no tracker.
+M.status = function(root)
+    local st = states[root]
+    local found = discovery()
+    if not st or not found then
+        return nil
+    end
+    return {
+        ref = st.remote and (st.remote .. "/" .. found.tracker) or nil,
+        tip = st.tip,
+        fetching = st.fetching == true,
+        fetch_ok_at = st.fetch_ok_at,
+        fetch_failed_at = st.fetch_failed_at,
+        fetch_error = st.fetch_error,
+    }
 end
 
 return M

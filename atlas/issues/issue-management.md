@@ -64,13 +64,35 @@ Parley reads those cards read-only and shows them in two places:
 - **Issue buffers:** a details file in the repository's issue home gets amber
   end-of-line virtual text, `← tracker: <value>`, beside each stale card-owned
   line and the H1. File bytes are never changed.
+- **Card-only issues (#309):** a card with no details file in this checkout
+  (the details may sit on another branch) still gets a finder row. Cards join
+  details by repository and id across the issues *and* history dirs, so an
+  archived issue is never card-only. A card-only row is amber end to end and
+  carries 🔒 right after its id (the issue lives only on the tracker branch,
+  so it cannot be picked up in this checkout). A details file whose fields went
+  stale keeps per-field amber and no lock. The row sorts by card status and
+  lands in the history view when its status is terminal. Selecting it opens a read-only
+  scratch buffer (`parley-card://<root>#<id>`, nomodifiable, wiped when hidden)
+  with the provenance label, the source ref and tip, a freshness line, the
+  card's top-level fields (not sdlc's `tracker:` envelope) and its body, the
+  Problem included. No details file is created and no Spec or Plan is
+  invented. The finder's delete and status-cycle keys, `:ParleyIssueStatus` and
+  `:ParleyIssueDecompose` refuse these with
+  `#<id> is a tracker card without local details (read only)`. Code:
+  `lua/parley/issue_card_view.lua`, plus `card_only_records`/`view_lines`/
+  `freshness` in `issue_cards.lua`.
 
 Cards come from `refs/remotes/<remote>/issue-tracker`. The remote is the
 current branch's upstream remote, else the only one carrying that ref, and every linked
 worktree shares it. Reads are async: `ls-tree`, then one `cat-file --batch` for
 blobs not yet cached by OID. A throttled background fetch of that branch (at
 most once per 60s per repository, 15s timeout, skipped under the test harness
-unless a spec opts in). Every open finder and issue buffer subscribes per
+unless a spec opts in) runs with an explicit refspec, so single-branch clones
+work. A checkout that never fetched the tracker resolves the remote the same way
+and fetches it first (#309). The fetch outcome is kept apart from the throttle
+stamp: `issue_tracker.status(root)` reports the ref, tip, last success and last
+failure, and the card view says `cached · last fetch failed …` rather than
+claiming freshness. Every open finder and issue buffer subscribes per
 repository. Any read that finds a new tip (that fetch, another view's read, or
 an issue buffer re-reading the local ref on BufEnter after sdlc in another slot
 fetched) repaints them all. A failed re-read keeps the last good cards. The card

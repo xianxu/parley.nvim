@@ -10,6 +10,9 @@ local async_file_source = require("parley.async_file_source")
 local issue_records = require("parley.issue_finder_records")
 local issue_cards = require("parley.issue_cards")
 local issue_tracker = require("parley.issue_tracker")
+local issue_vocabulary = require("parley.issue_vocabulary")
+
+local uv = vim.uv or vim.loop
 
 local M = {}
 local _parley
@@ -164,51 +167,57 @@ local function absolute_configured_dir(value, fallback)
     return fallback()
 end
 
-local function discovery_roots(view_mode)
-    local issue_roots = _parley.super_repo
-        and _parley.super_repo.expand_roots(_parley.config.issues_dir) or nil
-    local history_roots = _parley.super_repo
-        and _parley.super_repo.expand_roots(_parley.config.history_dir) or nil
-    local archived = M.includes_history(view_mode)
-    local selected = archived and history_roots or issue_roots
-    local roots = {}
-
-    if selected then
-        for _, root in ipairs(selected) do
-            if type(root.dir) == "string" and root.dir ~= "" then
-                roots[#roots + 1] = {
-                    path = vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"):gsub("/+$", ""),
-                    label = root.repo_name,
-                    repo_name = root.repo_name,
-                    archived = archived,
-                    optional = true,
-                }
+-- Both views' roots from one expansion of each configured dir: [0] the active
+-- issues, [1] the history. The scan takes one; the card join (#309) needs both,
+-- resolved exactly as scanned.
+local function discovery_roots()
+    local expanded = {
+        [0] = _parley.super_repo and _parley.super_repo.expand_roots(_parley.config.issues_dir) or nil,
+        [1] = _parley.super_repo and _parley.super_repo.expand_roots(_parley.config.history_dir) or nil,
+    }
+    local by_mode = {}
+    for view_mode = 0, 1 do
+        local archived = M.includes_history(view_mode)
+        local selected = expanded[view_mode]
+        local roots = {}
+        if selected then
+            for _, root in ipairs(selected) do
+                if type(root.dir) == "string" and root.dir ~= "" then
+                    roots[#roots + 1] = {
+                        path = vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"):gsub("/+$", ""),
+                        label = root.repo_name,
+                        repo_name = root.repo_name,
+                        archived = archived,
+                        optional = true,
+                    }
+                end
+            end
+        else
+            local path
+            if archived then
+                path = absolute_configured_dir(_parley.config.history_dir, issues_mod.get_history_dir)
+            else
+                path = absolute_configured_dir(_parley.config.issues_dir, issues_mod.get_issues_dir)
+            end
+            if path then
+                roots[1] = { path = path, archived = archived, optional = true }
             end
         end
-    else
-        local path
-        if archived then
-            path = absolute_configured_dir(_parley.config.history_dir, issues_mod.get_history_dir)
-        else
-            path = absolute_configured_dir(_parley.config.issues_dir, issues_mod.get_issues_dir)
-        end
-        if path then
-            roots[1] = { path = path, archived = archived, optional = true }
-        end
+        by_mode[view_mode] = roots
     end
-    return roots, issue_roots ~= nil
+    return by_mode, expanded[0] ~= nil
 end
 
 local function discovery_snapshot(view_mode)
-    local roots, super_repo = discovery_roots(view_mode)
+    local by_mode, super_repo = discovery_roots()
     return finder_scan.snapshot({
         kind = "issue",
-        roots = roots,
+        roots = by_mode[view_mode],
         recursion = false,
         max_depth = 1,
         pattern = "*.md",
         backend = { source = "libuv", read = "all", view = view_mode },
-    }), super_repo
+    }), super_repo, by_mode
 end
 
 local function split_lines(payload)
@@ -338,6 +347,44 @@ local function new_session(snapshot)
 end
 
 --------------------------------------------------------------------------------
+-- Card-only issues (#309)
+--------------------------------------------------------------------------------
+
+-- Ids with a details file in `dirs` (one repository's active and history dirs,
+-- exactly as the finder scans them): a card joins its details by id whichever
+-- dir the finder is showing. One listing per dir per delivery.
+local function local_ids(dirs)
+    local ids = {}
+    for _, dir in ipairs(dirs or {}) do
+        local scan = uv.fs_scandir(dir)
+        while scan do
+            local name = uv.fs_scandir_next(scan)
+            if not name then
+                break
+            end
+            local id = issue_records.parse_name(name)
+            if id then
+                ids[id] = true
+            end
+        end
+    end
+    return ids
+end
+
+local function is_terminal(status)
+    local vocabulary = issue_vocabulary.default()
+    return vocabulary ~= nil and vocabulary:is_terminal(status)
+end
+
+local function refuse_card_only(item)
+    if item and item.issue and item.issue.card_only then
+        _parley.logger.warning(issues_mod.card_only_warning(item.issue.id))
+        return true
+    end
+    return false
+end
+
+--------------------------------------------------------------------------------
 -- Main IssueFinder open function
 --------------------------------------------------------------------------------
 
@@ -360,7 +407,7 @@ M.open = function(_options)
     -- View mode: 0=issues (default), 1=history. Clamp with % 2 so any stale
     -- in-memory value (e.g. a `2` left by the pre-#158 tri-state) self-heals.
     local view_mode = (_parley._issue_finder.view_mode or 0) % 2
-    local snapshot, super_repo = discovery_snapshot(view_mode)
+    local snapshot, super_repo, roots_by_mode = discovery_snapshot(view_mode)
     local roots = snapshot:copy().roots
     if #roots == 0 then
         _parley.logger.warning(M.includes_history(view_mode)
@@ -372,6 +419,19 @@ M.open = function(_options)
     -- #308: tracker cards per repository root, overlaid before sorting.
     local raw_records = nil
     local cards_by_root = {}
+    local repo_name_of_root = {}
+    -- #309: each repository's active and history dirs, from the same
+    -- resolution the scan used, so the card join can never look elsewhere.
+    local details_dirs = {}
+    for mode = 0, 1 do
+        for _, scanned in ipairs(roots_by_mode[mode]) do
+            local repo_root = issue_tracker.repo_root(scanned.path)
+            if repo_root then
+                details_dirs[repo_root] = details_dirs[repo_root] or {}
+                table.insert(details_dirs[repo_root], scanned.path)
+            end
+        end
+    end
     local root_of_dir = {}
     local function repo_root_of(path)
         local dir = vim.fn.fnamemodify(path, ":h")
@@ -387,6 +447,14 @@ M.open = function(_options)
             local root = repo_root_of(record.path)
             local cards = root and cards_by_root[root]
             out[i] = cards and issue_cards.overlay(record, cards[record.id], names) or record
+        end
+        -- #309: cards with no details file in this checkout get their own rows.
+        for root, cards in pairs(cards_by_root) do
+            vim.list_extend(out, issue_cards.card_only_records(cards, local_ids(details_dirs[root]), {
+                root = root,
+                repo_name = repo_name_of_root[root],
+                is_terminal = is_terminal,
+            }))
         end
         return out
     end
@@ -408,7 +476,7 @@ M.open = function(_options)
 
     local function render_issue(issue)
         local row = issue_records.render(issue)
-        row.value = issue.path
+        row.value = issue.card_only and issue_cards.card_ref(issue.card_root, issue.id) or issue.path
         row.issue = issue
         return row
     end
@@ -538,6 +606,10 @@ M.open = function(_options)
                 if source_win and vim.api.nvim_win_is_valid(source_win) then
                     vim.api.nvim_set_current_win(source_win)
                 end
+                if item.issue and item.issue.card_only then
+                    require("parley.issue_card_view").open(item.issue.card_root, item.issue.id)
+                    return
+                end
                 _parley.open_buf(item.value, true)
             end,
             on_cancel = function()
@@ -549,7 +621,7 @@ M.open = function(_options)
             {
                 key = delete_shortcut,
                 fn = function(item, close_fn, context)
-                    if not item then
+                    if not item or refuse_card_only(item) then
                         return
                     end
                     local selected_index = 1
@@ -578,7 +650,7 @@ M.open = function(_options)
             {
                 key = cycle_status_shortcut,
                 fn = function(item, close_fn)
-                    if not item or not item.issue then
+                    if not item or not item.issue or refuse_card_only(item) then
                         return
                     end
                     -- Read the file, cycle status, write back
@@ -660,6 +732,7 @@ M.open = function(_options)
         local repo_root = issue_tracker.repo_root(root.path)
         if repo_root and not seen_roots[repo_root] then
             seen_roots[repo_root] = true
+            repo_name_of_root[repo_root] = root.repo_name
             issue_tracker.subscribe(repo_root, {
                 notify = function(cards) deliver(repo_root, cards) end,
                 alive = picker_open,
