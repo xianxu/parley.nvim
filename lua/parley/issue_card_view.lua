@@ -3,6 +3,7 @@
 -- fresh it is; it never creates a details file or invents Spec/Plan content.
 -- The buffer wipes when hidden, and its tracker subscription drops with it.
 
+local buffer_edit = require("parley.buffer_edit")
 local issue_cards = require("parley.issue_cards")
 local issue_tracker = require("parley.issue_tracker")
 
@@ -16,7 +17,7 @@ local function render(buf, root, id, cards)
     end
     local view = issue_cards.view_lines(cards and cards[id], id, issue_tracker.status(root) or {})
     vim.bo[buf].modifiable = true
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, view.lines)
+    buffer_edit.replace_all(buf, view.lines)
     vim.bo[buf].modifiable = false
     vim.bo[buf].modified = false
     vim.api.nvim_buf_clear_namespace(buf, M.NS, 0, -1)

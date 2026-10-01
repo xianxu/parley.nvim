@@ -401,6 +401,12 @@ function M.stream_replace_at_line(buf, line_0_indexed, lines)
     vim.api.nvim_buf_set_lines(buf, line_0_indexed, line_0_indexed + 1, false, lines)
 end
 
+--- Replace a whole buffer's lines: a scratch view rendered in one piece
+--- (#309's tracker card view), not a user document.
+function M.replace_all(buf, lines)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+end
+
 --- Append a blank line at the very end of the buffer.
 function M.append_blank_at_end(buf)
     vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "" })
