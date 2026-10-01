@@ -141,3 +141,7 @@ Durable plan: [000309 plan](../plans/000309-tracker-only-issue-views-plan.md). S
   for. The card view keeps its label line, since it explains the source and
   freshness. Done when restated for the finder row.
 
+### 2026-10-01
+- Operator smoke test on :0 passed (card-only rows: full-row amber, 🔒 after the
+  id; stale details rows: per-field amber; card view opens read-only).
+
