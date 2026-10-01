@@ -86,4 +86,9 @@ Durable plan: [000308 plan](../plans/000308-issue-finder-folds-in-issue-tracker-
 - Added `fetch_enabled`, off under `PARLEY_TEST_MODE`, so no spec reaches a real remote.
 - Manual check on this repo: 307 cards load; #296 shows `[wontfix]` with an amber span in the finder, and its buffer shows `← tracker: wontfix` beside `status: open`.
 - `make test`: the new specs pass. Pre-existing failures unrelated to this diff: `tests/arch/buffer_mutation_spec.lua` (spell_source.lua from #304, identical to main) and parallel-load flakes (#294) that vary per run and pass in isolation (document_semantic, branch_child, document_append_extent). `make lint` is clean.
+- Close round 1, FIX-THEN-SHIP, BR-1 Important: a moved tip reached only the view that triggered the fetch. Fixed the class: per-root `subscribe` notifies every live view on any tip change, and an issue buffer's BufEnter re-reads the local ref. Specs: subscriber fan-out, a pruned closed view, a hidden buffer under the real throttle, finder notified by another view's read. Minors also fixed: a failed re-read keeps the cache, a blank card title is ignored, a dropped GitHub link shows `(#-)`, and the Spec wording is corrected (Revisions).
+
+## Revisions
+
+- 2026-09-30 — Spec "Source": the remote is the **current branch's** upstream remote (else the single remote carrying the ref), not the default branch's. "Freshness": a moved tip is pushed to every open view through a per-root subscription, and issue buffers also re-read the local ref on BufEnter.
 

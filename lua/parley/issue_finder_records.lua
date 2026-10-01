@@ -140,6 +140,9 @@ M.render = function(issue)
     if issue.github_issue then
         append(" ")
         append("(#" .. issue.github_issue .. ")", "github_issue")
+    elseif stale.github_issue then
+        append(" ")
+        append("(#-)", "github_issue") -- the tracker dropped the link the file still has
     end
     if (issue.created or "") ~= "" then
         append(" ")

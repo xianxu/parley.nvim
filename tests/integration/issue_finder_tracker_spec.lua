@@ -116,6 +116,24 @@ describe("IssueFinder tracker overlay", function()
         assert.equals(selected_value, updates[#updates].next_selection)
     end)
 
+    it("repaints when another view's read finds a moved tip", function()
+        issue_tracker.fetch_interval_s = 3600
+        open_finder(repos.reader .. "/workshop/issues")
+        assert(vim.wait(10000, function()
+            local alpha = #updates > 0 and row(last_items(), "000001")
+            return alpha and alpha.issue.status == "wontfix"
+        end, 10))
+
+        assert(vim.wait(10000, function() return not issue_tracker._busy_for_tests(repos.reader) end, 10))
+        fixture.write_card(repos.writer, "000002-beta.md", { status = "working", title = "Beta" })
+        fixture.git(repos.reader, { "fetch", "-q", "origin", "issue-tracker" })
+        issue_tracker.load(repos.reader, function() end) -- e.g. an issue buffer's BufEnter
+        assert(vim.wait(10000, function()
+            local beta = row(last_items(), "000002")
+            return beta and beta.issue.status == "working"
+        end, 10), "the finder never heard of the move")
+    end)
+
     it("leaves an untracked repository's rows as they are", function()
         vim.fn.delete(repos.reader .. "/workshop/issue-tracker.json")
         open_finder(repos.reader .. "/workshop/issues")

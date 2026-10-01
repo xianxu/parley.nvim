@@ -140,6 +140,17 @@ describe("issue_cards.overlay", function()
         assert.is_true(out.tracker_stale.title)
     end)
 
+    it("keeps the details title when the card has no H1, and flags a dropped GitHub link", function()
+        local card = cards.parse_card(CARD_296)
+        card.title = ""
+        local linked = vim.tbl_extend("force", record, { github_issue = "12" })
+        local out = cards.overlay(linked, card, NAMES)
+        assert.are.equal("Package Screenkey for app recordings", out.title)
+        assert.is_nil(out.tracker_stale.title)
+        assert.is_nil(out.github_issue)
+        assert.is_true(out.tracker_stale.github_issue)
+    end)
+
     it("returns the record unchanged without a card", function()
         local out = cards.overlay(record, nil, NAMES)
         assert.are.equal("open", out.status)

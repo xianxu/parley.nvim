@@ -168,6 +168,9 @@ M.overlay = function(record, card, names)
     out.tracker_stale = {}
     for _, name in ipairs(RECORD_FIELDS) do
         local value = card_value(card, name)
+        if name == "title" and blank(value) then
+            value = nil -- a card always has a title; blank means no H1 was parsed
+        end
         if owned[name] and value ~= nil then
             if not same(value, record[name]) then
                 out.tracker_stale[name] = true

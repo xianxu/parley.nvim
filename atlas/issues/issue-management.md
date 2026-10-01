@@ -66,11 +66,14 @@ Parley reads those cards read-only and shows them in two places:
   line and the H1. File bytes are never changed.
 
 Cards come from `refs/remotes/<remote>/issue-tracker`. The remote is the
-upstream's remote, else the only one carrying that ref, and every linked
+current branch's upstream remote, else the only one carrying that ref, and every linked
 worktree shares it. Reads are async: `ls-tree`, then one `cat-file --batch` for
 blobs not yet cached by OID. A throttled background fetch of that branch (at
 most once per 60s per repository, 15s timeout, skipped under the test harness
-unless a spec opts in) repaints open views when the tip moves. The card
+unless a spec opts in). Every open finder and issue buffer subscribes per
+repository. Any read that finds a new tip (that fetch, another view's read, or
+an issue buffer re-reading the local ref on BufEnter after sdlc in another slot
+fetched) repaints them all. A failed re-read keeps the last good cards. The card
 directory, branch and field list come from the vocabulary's `discovery` and
 `card` blocks. Without the marker, the ref or the vocabulary, behaviour is
 unchanged. Code: pure `lua/parley/issue_cards.lua`; IO in

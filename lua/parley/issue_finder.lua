@@ -631,12 +631,17 @@ M.open = function(_options)
     end
     session:start()
 
-    -- #308: fold in tracker cards as they arrive (local ref first, then after a
-    -- throttled background fetch), keeping the operator's selected row.
+    -- #308: fold in tracker cards as they arrive — the local ref first, then any
+    -- tip move a background fetch (ours or another view's) finds — keeping the
+    -- operator's selected row.
     issue_tracker.ensure_highlight()
+    local function picker_open()
+        local picker = loading and loading.picker
+        return picker ~= nil and not (picker.is_closed and picker.is_closed())
+    end
     local function deliver(root, cards)
         local picker = loading and loading.picker
-        if not cards or not picker or (picker.is_closed and picker.is_closed()) then
+        if not cards or not picker_open() then
             return
         end
         cards_by_root[root] = cards
@@ -655,11 +660,13 @@ M.open = function(_options)
         local repo_root = issue_tracker.repo_root(root.path)
         if repo_root and not seen_roots[repo_root] then
             seen_roots[repo_root] = true
+            issue_tracker.subscribe(repo_root, {
+                notify = function(cards) deliver(repo_root, cards) end,
+                alive = picker_open,
+            })
             issue_tracker.load(repo_root, function(cards)
                 deliver(repo_root, cards)
-                issue_tracker.refresh(repo_root, function(moved)
-                    deliver(repo_root, moved)
-                end)
+                issue_tracker.refresh(repo_root)
             end)
         end
     end

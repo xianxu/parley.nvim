@@ -29,6 +29,7 @@ describe("issue tracker buffer annotations", function()
         issue_tracker.fetch_interval_s = 0
         repos = fixture.create({
             ["000001-alpha.md"] = { status = "wontfix", title = "Alpha" },
+            ["000002-beta.md"] = { status = "open", title = "Beta" },
         }, {
             ["000001-alpha.md"] = { status = "open", title = "Alpha" },
         })
@@ -56,7 +57,7 @@ describe("issue tracker buffer annotations", function()
         local buf = vim.api.nvim_get_current_buf()
         assert(vim.wait(10000, function() return #marks(buf) > 0 end, 10))
         assert(vim.wait(10000, function()
-            return not issue_tracker._fetching_for_tests(repos.reader)
+            return not issue_tracker._busy_for_tests(repos.reader)
         end, 10), "the initial background fetch never settled")
 
         fixture.write_card(repos.writer, "000001-alpha.md", { status = "done", title = "Alpha" })
@@ -65,6 +66,29 @@ describe("issue tracker buffer annotations", function()
             local m = marks(buf)
             return m[1] and m[1].text == "← tracker: done"
         end, 10), "the fetched card never repainted the buffer")
+    end)
+
+    it("repaints every open issue buffer when any view sees a move, under the real throttle", function()
+        issue_tracker.fetch_interval_s = 60
+        local home = repos.reader .. "/workshop/issues/"
+        vim.cmd.edit(vim.fn.fnameescape(home .. "000001-alpha.md"))
+        local alpha = vim.api.nvim_get_current_buf()
+        assert(vim.wait(10000, function() return #marks(alpha) > 0 end, 10))
+        vim.cmd.edit(vim.fn.fnameescape(home .. "000002-beta.md"))
+        local beta = vim.api.nvim_get_current_buf()
+        assert(vim.wait(10000, function()
+            return not issue_tracker._busy_for_tests(repos.reader)
+        end, 10))
+        assert.same({}, marks(beta))
+
+        -- A peer moves #2; sdlc in another slot fetches the shared ref.
+        fixture.write_card(repos.writer, "000002-beta.md", { status = "working", title = "Beta" })
+        fixture.git(repos.reader, { "fetch", "-q", "origin", "issue-tracker" })
+        vim.cmd.buffer(alpha)
+        assert(vim.wait(10000, function()
+            local m = marks(beta)
+            return m[1] and m[1].text == "← tracker: working"
+        end, 10), "the hidden buffer never heard of the move")
     end)
 
     it("leaves files outside a tracked issues home alone", function()

@@ -35,9 +35,9 @@
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `load`, `refresh`, `repo_root`, `field_names` (issue_tracker) | `lua/parley/issue_tracker.lua` | new | `git` via `vim.system` |
+| `load`, `refresh`, `subscribe`, `repo_root`, `field_names` (issue_tracker) | `lua/parley/issue_tracker.lua` | new | `git` via `vim.system` |
 | `ensure_highlight`, `fetch_enabled` (issue_tracker) | `lua/parley/issue_tracker.lua` | new | highlight group; fetch switch (off under the test harness) |
-| `reset_for_tests`, `_on_git`, `_blob_count_for_tests`, `_fetching_for_tests` | `lua/parley/issue_tracker.lua` | new | test seams over in-memory state |
+| `reset_for_tests`, `_on_git`, `_blob_count_for_tests`, `_busy_for_tests` | `lua/parley/issue_tracker.lua` | new | test seams over in-memory state |
 | `attach`, `setup`, `NS` (issue_tracker_buffer) | `lua/parley/issue_tracker_buffer.lua` | new | extmarks + autocmds |
 | finder overlay wiring | `lua/parley/issue_finder.lua` | modified | picker session |
 | issue-buffer autocmd hook | `lua/parley/init.lua` (issue `*.md` BufRead autocmd) | modified | Neovim autocmd |
@@ -156,3 +156,5 @@
 ## Revisions
 
 - 2026-09-30 — the single-source arch guard needs every added export as its own backticked name in a Core-concepts row, so the entity tables were split per name. Added `fetch_enabled`: specs never fetch from a real remote unless they opt in. Added the `_fetching_for_tests` seam. No design change.
+- 2026-09-30 — close review BR-1 (FIX-THEN-SHIP): a moved tip reached only the view that triggered the fetch. Every view of a root now `subscribe`s and is notified when any read finds a new tip, and an issue buffer's BufEnter re-reads the local ref before the throttled fetch. `refresh` loses its `on_moved` argument. A failed re-read keeps the last good cards. The overlay ignores a blank card title, and the finder marks a dropped GitHub link `(#-)`. Remote selection uses the current branch's upstream, not the default branch's. `_fetching_for_tests` became `_busy_for_tests`.
+

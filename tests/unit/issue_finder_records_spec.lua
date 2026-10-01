@@ -212,5 +212,13 @@ describe("Issue finder records", function()
             end
             assert.same({ "[wontfix]", "(#7)" }, painted)
         end)
+
+        it("marks a GitHub link the tracker dropped", function()
+            local row = records.render(vim.tbl_extend("force", base, {
+                tracked = true, tracker_stale = { github_issue = true },
+            }))
+            assert.equals("[open] 000296 Package Screenkey (#-) [2026-09-28]", row.display)
+            assert.equals("(#-)", row.display:sub(row.highlights[1][1] + 1, row.highlights[1][2]))
+        end)
     end)
 end)

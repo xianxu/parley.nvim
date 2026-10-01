@@ -55,8 +55,15 @@ M.attach = function(buf)
             paint(buf, card, names)
         end
     end
-    local function refresh()
-        issue_tracker.refresh(root, show)
+    -- Re-read the local ref (another slot's sdlc verb may have moved it), then
+    -- fetch if the throttle allows; a moved tip reaches `show` via subscribe.
+    local function sync()
+        issue_tracker.load(root, function(cards)
+            show(cards)
+            if cards then
+                issue_tracker.refresh(root)
+            end
+        end)
     end
 
     local group = vim.api.nvim_create_augroup("ParleyIssueTrackerBuffer" .. buf, { clear = true })
@@ -67,7 +74,7 @@ M.attach = function(buf)
             paint(buf, card, names)
         end,
     })
-    vim.api.nvim_create_autocmd("BufEnter", { group = group, buffer = buf, callback = refresh })
+    vim.api.nvim_create_autocmd("BufEnter", { group = group, buffer = buf, callback = sync })
     vim.api.nvim_create_autocmd("BufWipeout", {
         group = group,
         buffer = buf,
@@ -76,12 +83,16 @@ M.attach = function(buf)
         end,
     })
 
-    issue_tracker.load(root, function(cards)
-        show(cards)
-        if cards then
-            refresh()
-        end
-    end)
+    if not vim.b[buf].parley_issue_tracker_subscribed then
+        vim.b[buf].parley_issue_tracker_subscribed = true
+        issue_tracker.subscribe(root, {
+            notify = show,
+            alive = function()
+                return vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf)
+            end,
+        })
+    end
+    sync()
 end
 
 M.setup = function()

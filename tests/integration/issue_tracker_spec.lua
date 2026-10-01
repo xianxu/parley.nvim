@@ -55,29 +55,69 @@ describe("issue_tracker", function()
         assert.equals("Beta", cards["000002"].title)
     end)
 
-    it("reports a moved tracker after a background fetch, and stays quiet otherwise", function()
+    local function refresh(root)
+        local settled = false
+        tracker.refresh(root, function() settled = true end)
+        wait_for(function() return settled end)
+    end
+
+    local function subscriber(alive)
+        local seen = {}
+        tracker.subscribe(repos.reader, {
+            notify = function(cards) seen[#seen + 1] = cards end,
+            alive = alive or function() return true end,
+        })
+        return seen
+    end
+
+    it("notifies every live subscriber of a moved tip, and stays quiet otherwise", function()
         assert.equals("open", load(repos.reader)["000001"].fields.status)
+        local first, second = subscriber(), subscriber()
         fixture.write_card(repos.writer, "000001-alpha.md", { status = "done", title = "Alpha" })
 
-        local moved
-        tracker.refresh(repos.reader, function(cards) moved = cards end)
-        wait_for(function() return moved ~= nil end)
-        assert.equals("done", moved["000001"].fields.status)
+        refresh(repos.reader)
+        assert.equals(1, #first)
+        assert.equals(1, #second)
+        assert.equals("done", second[1]["000001"].fields.status)
 
-        local again, settled = nil, false
-        tracker.refresh(repos.reader, function(cards) again = cards end, function() settled = true end)
-        wait_for(function() return settled end)
-        assert.is_nil(again)
+        refresh(repos.reader)
+        assert.equals(1, #first)
+    end)
+
+    it("notifies subscribers when a plain load sees a ref another checkout fetched", function()
+        tracker.fetch_interval_s = 3600
+        load(repos.reader)
+        local seen = subscriber()
+        fixture.write_card(repos.writer, "000002-beta.md", { status = "done", title = "Beta" })
+        fixture.git(repos.reader, { "fetch", "-q", "origin", "issue-tracker" })
+        load(repos.reader)
+        assert.equals(1, #seen)
+        assert.equals("done", seen[1]["000002"].fields.status)
+    end)
+
+    it("drops subscribers whose view closed", function()
+        load(repos.reader)
+        local open = true
+        local seen = subscriber(function() return open end)
+        open = false
+        fixture.write_card(repos.writer, "000001-alpha.md", { status = "done", title = "Alpha" })
+        refresh(repos.reader)
+        assert.equals(0, #seen)
+    end)
+
+    it("keeps the last good cards when a re-read fails", function()
+        load(repos.reader)
+        local blob = vim.trim(fixture.git(repos.reader, { "rev-parse", "origin/issue-tracker:issue-tracker.json" }))
+        fixture.git(repos.reader, { "update-ref", "refs/remotes/origin/issue-tracker", blob })
+        local cards = load(repos.reader)
+        assert.equals("open", cards["000001"].fields.status)
     end)
 
     it("throttles fetches inside the interval", function()
         tracker.fetch_interval_s = 3600
         load(repos.reader)
-        local settled = 0
-        tracker.refresh(repos.reader, function() end, function() settled = settled + 1 end)
-        wait_for(function() return settled == 1 end)
-        tracker.refresh(repos.reader, function() end, function() settled = settled + 1 end)
-        wait_for(function() return settled == 2 end)
+        refresh(repos.reader)
+        refresh(repos.reader)
         assert.equals(1, count("fetch"))
     end)
 
@@ -108,9 +148,9 @@ describe("issue_tracker", function()
     it("reads only changed blobs after the tracker moves", function()
         load(repos.reader)
         fixture.write_card(repos.writer, "000002-beta.md", { status = "done", title = "Beta" })
-        local moved
-        tracker.refresh(repos.reader, function(cards) moved = cards end)
-        wait_for(function() return moved ~= nil end)
+        local seen = subscriber()
+        refresh(repos.reader)
+        local moved = seen[1]
         assert.equals("done", moved["000002"].fields.status)
         assert.equals("open", moved["000001"].fields.status)
         assert.equals(2, count("cat-file"))

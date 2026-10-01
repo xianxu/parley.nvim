@@ -29,7 +29,7 @@ M._on_git = nil -- test hook: observes each git argv before it runs
 local states = {}
 
 local function state(root)
-    states[root] = states[root] or { gen = 0, blobs = {}, waiters = {} }
+    states[root] = states[root] or { gen = 0, blobs = {}, waiters = {}, subscribers = {} }
     return states[root]
 end
 
@@ -41,8 +41,30 @@ M._blob_count_for_tests = function(root)
     return vim.tbl_count(state(root).blobs)
 end
 
-M._fetching_for_tests = function(root)
-    return states[root] ~= nil and states[root].fetching == true
+M._busy_for_tests = function(root)
+    local st = states[root]
+    return st ~= nil and (st.fetching == true or st.loading == true)
+end
+
+-- Keep only subscribers whose view is still open, so the set is bounded by the
+-- live views on a root rather than by how many were ever opened (ARCH-FUNERAL).
+local function live(subscribers)
+    local kept = {}
+    for _, subscriber in ipairs(subscribers) do
+        if subscriber.alive() then
+            kept[#kept + 1] = subscriber
+        end
+    end
+    return kept
+end
+
+-- Every open view of `root` registers here: `notify(cards)` runs whenever any
+-- read (a load, or a refresh someone else triggered) finds a new tracker tip.
+-- `alive()` returning false drops the subscriber.
+M.subscribe = function(root, subscriber)
+    local st = state(root)
+    st.subscribers = live(st.subscribers)
+    st.subscribers[#st.subscribers + 1] = subscriber
 end
 
 M.ensure_highlight = function()
@@ -119,8 +141,9 @@ local function read(root, st, found)
     end
 
     local function fail(step, err)
+        -- A transient git failure keeps the last good cards.
         logger.debug("issue tracker: " .. step .. " failed in " .. root .. ": " .. tostring(err))
-        finish(nil)
+        finish(st.cards)
     end
 
     local ref_pattern = "refs/remotes/*/" .. found.tracker
@@ -168,8 +191,15 @@ local function read(root, st, found)
                     if gen ~= st.gen then
                         return
                     end
+                    local moved = st.tip ~= tip
                     st.blobs, st.tip, st.remote = blobs, tip, remote
                     finish(cards)
+                    if moved then
+                        st.subscribers = live(st.subscribers)
+                        for _, subscriber in ipairs(st.subscribers) do
+                            subscriber.notify(cards)
+                        end
+                    end
                 end
                 if #missing == 0 then
                     return assemble({})
@@ -202,10 +232,10 @@ M.load = function(root, callback)
     end
 end
 
--- Fetch the tracker branch (at most once per fetch_interval_s per root), re-read
--- it, and call `on_moved(cards)` only when the tip changed. `on_settled` (optional)
--- runs once this refresh is finished or skipped.
-M.refresh = function(root, on_moved, on_settled)
+-- Fetch the tracker branch (at most once per fetch_interval_s per root) and
+-- re-read it; a moved tip reaches every subscriber. `on_settled` (optional) runs
+-- once this refresh is finished or skipped.
+M.refresh = function(root, on_settled)
     on_settled = on_settled or function() end
     local found = discovery()
     local st = tracked(root) and found and states[root]
@@ -222,11 +252,7 @@ M.refresh = function(root, on_moved, on_settled)
                 logger.debug("issue tracker: fetch failed in " .. root .. ": " .. tostring(err))
                 return on_settled()
             end
-            local before = st.tip
-            st.waiters[#st.waiters + 1] = function(cards)
-                if cards and st.tip ~= before then
-                    on_moved(cards)
-                end
+            st.waiters[#st.waiters + 1] = function()
                 on_settled()
             end
             read(root, st, found) -- supersedes any read of the pre-fetch tip
