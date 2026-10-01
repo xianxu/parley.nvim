@@ -1,6 +1,6 @@
 ---
 id: 000309
-status: open
+status: working
 created: 2026-09-30
 updated: 2026-09-30
 estimate_hours:
@@ -17,6 +17,7 @@ tracker:
         source_blob: 17f808835ed5644f19e66046ecbe89adf5952056
         destination: workshop/issues/000309-tracker-only-issue-views.md
         main_commit: c1b2173ea7fbb3e3d6a5b851d500be082b2bd09d
+started: 2026-09-30T22:11:00-07:00
 ---
 
 # Show tracker-only cards in issue finder and viewer
