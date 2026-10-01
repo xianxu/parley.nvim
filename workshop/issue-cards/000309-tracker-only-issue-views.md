@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000309-tracker-only-issue-views.md
         source_blob: 17f808835ed5644f19e66046ecbe89adf5952056
         destination: workshop/issues/000309-tracker-only-issue-views.md
+        main_commit: c1b2173ea7fbb3e3d6a5b851d500be082b2bd09d
 ---
 
 # Show tracker-only cards in issue finder and viewer
