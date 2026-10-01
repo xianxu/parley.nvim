@@ -167,51 +167,57 @@ local function absolute_configured_dir(value, fallback)
     return fallback()
 end
 
-local function discovery_roots(view_mode)
-    local issue_roots = _parley.super_repo
-        and _parley.super_repo.expand_roots(_parley.config.issues_dir) or nil
-    local history_roots = _parley.super_repo
-        and _parley.super_repo.expand_roots(_parley.config.history_dir) or nil
-    local archived = M.includes_history(view_mode)
-    local selected = archived and history_roots or issue_roots
-    local roots = {}
-
-    if selected then
-        for _, root in ipairs(selected) do
-            if type(root.dir) == "string" and root.dir ~= "" then
-                roots[#roots + 1] = {
-                    path = vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"):gsub("/+$", ""),
-                    label = root.repo_name,
-                    repo_name = root.repo_name,
-                    archived = archived,
-                    optional = true,
-                }
+-- Both views' roots from one expansion of each configured dir: [0] the active
+-- issues, [1] the history. The scan takes one; the card join (#309) needs both,
+-- resolved exactly as scanned.
+local function discovery_roots()
+    local expanded = {
+        [0] = _parley.super_repo and _parley.super_repo.expand_roots(_parley.config.issues_dir) or nil,
+        [1] = _parley.super_repo and _parley.super_repo.expand_roots(_parley.config.history_dir) or nil,
+    }
+    local by_mode = {}
+    for view_mode = 0, 1 do
+        local archived = M.includes_history(view_mode)
+        local selected = expanded[view_mode]
+        local roots = {}
+        if selected then
+            for _, root in ipairs(selected) do
+                if type(root.dir) == "string" and root.dir ~= "" then
+                    roots[#roots + 1] = {
+                        path = vim.fn.fnamemodify(vim.fn.expand(root.dir), ":p"):gsub("/+$", ""),
+                        label = root.repo_name,
+                        repo_name = root.repo_name,
+                        archived = archived,
+                        optional = true,
+                    }
+                end
+            end
+        else
+            local path
+            if archived then
+                path = absolute_configured_dir(_parley.config.history_dir, issues_mod.get_history_dir)
+            else
+                path = absolute_configured_dir(_parley.config.issues_dir, issues_mod.get_issues_dir)
+            end
+            if path then
+                roots[1] = { path = path, archived = archived, optional = true }
             end
         end
-    else
-        local path
-        if archived then
-            path = absolute_configured_dir(_parley.config.history_dir, issues_mod.get_history_dir)
-        else
-            path = absolute_configured_dir(_parley.config.issues_dir, issues_mod.get_issues_dir)
-        end
-        if path then
-            roots[1] = { path = path, archived = archived, optional = true }
-        end
+        by_mode[view_mode] = roots
     end
-    return roots, issue_roots ~= nil
+    return by_mode, expanded[0] ~= nil
 end
 
 local function discovery_snapshot(view_mode)
-    local roots, super_repo = discovery_roots(view_mode)
+    local by_mode, super_repo = discovery_roots()
     return finder_scan.snapshot({
         kind = "issue",
-        roots = roots,
+        roots = by_mode[view_mode],
         recursion = false,
         max_depth = 1,
         pattern = "*.md",
         backend = { source = "libuv", read = "all", view = view_mode },
-    }), super_repo
+    }), super_repo, by_mode
 end
 
 local function split_lines(payload)
@@ -401,7 +407,7 @@ M.open = function(_options)
     -- View mode: 0=issues (default), 1=history. Clamp with % 2 so any stale
     -- in-memory value (e.g. a `2` left by the pre-#158 tri-state) self-heals.
     local view_mode = (_parley._issue_finder.view_mode or 0) % 2
-    local snapshot, super_repo = discovery_snapshot(view_mode)
+    local snapshot, super_repo, roots_by_mode = discovery_snapshot(view_mode)
     local roots = snapshot:copy().roots
     if #roots == 0 then
         _parley.logger.warning(M.includes_history(view_mode)
@@ -414,11 +420,11 @@ M.open = function(_options)
     local raw_records = nil
     local cards_by_root = {}
     local repo_name_of_root = {}
-    -- #309: each repository's active and history dirs, resolved by the same
-    -- discovery_roots the scan uses, so the card join can never look elsewhere.
+    -- #309: each repository's active and history dirs, from the same
+    -- resolution the scan used, so the card join can never look elsewhere.
     local details_dirs = {}
-    for _, mode in ipairs({ 0, 1 }) do
-        for _, scanned in ipairs((discovery_roots(mode))) do
+    for mode = 0, 1 do
+        for _, scanned in ipairs(roots_by_mode[mode]) do
             local repo_root = issue_tracker.repo_root(scanned.path)
             if repo_root then
                 details_dirs[repo_root] = details_dirs[repo_root] or {}
