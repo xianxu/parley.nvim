@@ -293,8 +293,8 @@ in `cmd_issue_status`, `cmd_issue_decompose`); Test `tests/integration/issue_car
     `card only · read only` and `origin/issue-tracker @`; a line equals `## Problem`
     and one `Why it matters`; an extmark on row 0 has `hl_group == "ParleyIssueTracker"`.
   - opening again reuses the buffer (same bufnr).
-  - `require("parley.issues").cmd_issue_status()` and `cmd_issue_decompose()` (cursor on
-    a `- [ ] x` line is impossible in the card view, so put the cursor on any line)
+  - `require("parley.issues").cmd_issue_status()` and `cmd_issue_decompose()` (the
+    refusal runs before any cursor check, so the cursor position is irrelevant)
     each leave the lines unchanged and log the read-only warning (logger stub).
   - spec setup: `before_each` sets `issue_tracker.fetch_enabled = true`,
     `fetch_interval_s = 0` and `reset_for_tests()`; `after_each` restores 60 / false.
@@ -400,9 +400,10 @@ end
     issues view hides `000009` anyway because a `done` card is archived.
   - a card `000011` (`done`, no details anywhere) appears only in the history view.
   - search/filter/sort: `000005`'s search text contains its title and `card only`;
-    with `000001` (`wontfix` card) and `000002` (`open`, details) present, the open
-    card-only `000005` sorts by card status with `000002` ahead of `000001`; in a
-    super-repo fake with two repo facets, toggling the fixture's facet off hides `000005`.
+    with `000001` (`wontfix` card) and `000002` (`open`, details) present, the issues
+    view orders exactly `000002, 000005, 000001` (open by id, then wontfix); in a
+    super-repo fake with two repo facets, where the second repo is untracked (no
+    marker, so it yields no card rows), toggling the fixture's facet off hides `000005`.
   - untracked repo (existing case at `issue_finder_tracker_spec.lua:137`): no row has `card_only`.
   - `on_select` with the `000005` row opens the card view (current buffer name is the ref).
   - delete and cycle-status mappings on `000005` write nothing and warn (logger stub).
