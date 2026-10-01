@@ -6,7 +6,7 @@ updated: 2026-09-30
 estimate_hours:
 github_issue:
 started: 2026-09-30T22:11:00-07:00
-actual_hours: 0.78
+actual_hours: 0.85
 tracker:
     version: 1
     handoff:
@@ -20,10 +20,10 @@ tracker:
         destination: workshop/issues/000309-tracker-only-issue-views.md
         main_commit: c1b2173ea7fbb3e3d6a5b851d500be082b2bd09d
     completion:
-        token: close-8a5c70b5d1ab
+        token: close-21476e62d89a
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 18a6643866522d4bbe8c8464ced4f3c0343d3634
-        evidence_commit: 301f25490e73966e9aa32662ae03261750790c5a
+        reviewed_head: 051770cc4335f0baefbcb416111086a55448fd5a
+        evidence_commit: 99447e1e97c6981f14f5393c46a0a56a04b5fc30
 ---
 
 # Show tracker-only cards in issue finder and viewer
