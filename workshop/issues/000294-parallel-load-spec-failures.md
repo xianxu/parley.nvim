@@ -144,3 +144,18 @@ it prints, pass or fail.
   default, 16s `jit.off()`). The same setting on 0.11.7 is catastrophic every
   time (2.9M flushes, 166s): any tuning must be gated on the fixed LuaJIT.
   Scratch probes: `$TMPDIR/r294/{trace_probe,syn2,mmap_probe}.lua`.
+- **Suite on Neovim 0.12.5** (operator: "we can test new version"; PATH puts
+  `/opt/homebrew/opt/neovim/bin` first, 2 runs, quiet machine, load 4–5):
+  - `review_diag_display_spec:232` fails every run. On 0.12 a diagnostic sign
+    opens the sign column eagerly (`getwininfo().textoff` 0 → 2), but
+    `diag_display` wraps virtual lines inside its diagnostic handler, and
+    `vim.diagnostic.show` runs handlers in `pairs` order, so the wrap can happen
+    before the signs handler. Rows are wrapped 2 cells too wide. 0.11 hides it
+    headless; a real UI on either version would overflow the same way.
+  - `entity_delete_parity` 21s → 39s alone. jit.profile C-time stacks: ~2/3 is
+    `vim/treesitter/highlighter.lua`. 0.12's `ftplugin/markdown.lua` begins with
+    `vim.treesitter.start()`; 0.11's does not, so every chat buffer is now
+    treesitter-highlighted under parley's own highlighter (which only outranks
+    it at priority 200).
+  - `branch_child` 13–14s alone on both versions; 35–50s in the 0.12 suite runs
+    is contention, killed once at 50s.
