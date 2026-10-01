@@ -54,14 +54,17 @@ function Source:get_completions(ctx, callback)
 end
 
 local function normal_edit(evidence, replacement)
-	vim.api.nvim_buf_call(evidence.buf, function()
-		-- The same native undo boundary used by the document editor: preserve
-		-- history while closing any preceding change's undo block.
-		vim.cmd("let &l:undolevels = &l:undolevels")
-		vim.api.nvim_buf_set_text(evidence.buf, evidence.row, evidence.start_col,
-			evidence.row, evidence.end_col, { replacement })
-		vim.cmd("let &l:undolevels = &l:undolevels")
-	end)
+	-- A user correction is a document write: the editor owns the buffer callback
+	-- and the undo boundary (#254's buffer_mutation boundary).
+	local edits = require("parley.buffer_edit")
+	local capture, reason = edits.capture_user(evidence.buf, "spell-correction", {
+		{ first = { row = evidence.row, col = evidence.start_col }, last = { row = evidence.row, col = evidence.end_col } },
+	})
+	if not capture then error("spell correction unavailable: " .. tostring(reason), 0) end
+	local result = edits.apply_user(capture, { { region = 1, text = replacement } })
+	if result.status ~= "applied" then
+		error("spell correction not applied: " .. tostring(result.reason or result.error or result.status), 0)
+	end
 	local last = math.max(0, vim.fn.match(replacement, ".$"))
 	vim.api.nvim_win_set_cursor(evidence.win, { evidence.row + 1, evidence.start_col + last })
 end
