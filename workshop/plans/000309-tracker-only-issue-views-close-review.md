@@ -246,3 +246,84 @@ dispose:
     note: |
       local_ids now calls issue_records.parse_name (issue_finder.lua:365), the same parser adapt uses; spec "counts only the files the scan turns into rows" pins the empty-slug case, which the old .* pattern would have counted as local.
 ```
+
+---
+
+## Re-review — 2026-10-01T08:58:49-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 309 — Show tracker-only cards in issue finder and viewer |
+| repo | parley.nvim |
+| issue file | workshop/issues/000309-tracker-only-issue-views.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1b2173ea7fbb3e3d6a5b851d500be082b2bd09d..408843e3b4773a0d666f1caab9cf8e434f54eb49 |
+| command | sdlc close --issue 309 |
+| reviewer | claude |
+| timestamp | 2026-10-01T08:58:49-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+**VERDICT: SHIP**
+
+The three earlier rounds closed every finding, BR-1 through BR-5. The only code change since the last close is 408843e3. It came from the operator's smoke test and changes how card-only rows render: the `card only · read only` text is gone, the whole row is amber, and a 🔒 sits right after the id. The issue records this as a Revision and restates its Done-when to match. The code fits the picker's contract. `float_picker.lua:57-58` says highlight spans are 0-based, end-exclusive byte offsets. `render` sets `{0, #display}`, which counts the 4-byte 🔒 in bytes, and the painter clamps to `#line`. The lock still gives a cue that doesn't depend on colour, which the Spec requires (`Amber and a textual provenance label … without relying on color alone`). That requirement is now met by a glyph, and the Revision says so. Nothing blocks the ship. Two Minor items remain: the durable plan was not revised for this change, and you can no longer search for card-only rows.
+
+1. **Strengths**
+   - `issue_finder_records.lua:159-162`: one span covering the whole row for card-only issues. Stale details files keep their separate per-field spans, so the two cases look clearly different.
+   - The new unit test `issue_finder_records_spec.lua` "keeps per-field amber and no lock for a stale details file" checks the contrast from the other side too: no 🔒, and the span covers exactly `[wontfix]`. The card-only test adds `tracker_stale = { status = true }`, which shows the whole-row span takes precedence over per-field spans.
+   - The integration test checks both `000005🔒 Remote only` and the exact highlight list, so a byte-offset regression would fail it.
+   - The atlas entry `atlas/issues/issue-management.md` was updated in the same commit.
+   - At HEAD, `make test-spec SPEC=issues/issue-management` passes every mapped spec, 0 failures: issue_finder_records 14, issue_finder_tracker 13, issue_cards 24, issue_card_view 6, issue_tracker 18, issue_finder 31, float_picker 82, and the rest.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - `workshop/plans/000309-tracker-only-issue-views-plan.md:74-76, 230-236, 396-402` still says rows show `card only · read only` and that `search_text` includes `card only`. The plan has no `## Revisions` section for the smoke-test change.
+   - `issue_finder_records.lua:165`: `search_text` no longer has any card-only token. Before, typing `card only` filtered to these rows; now nothing does, and 🔒 isn't searchable either.
+
+5. **Test coverage notes:** The kind of bug this change could ship is a wrong byte span with a multibyte glyph, or losing per-field amber on stale details files. Unit and integration tests cover both. Nothing tests the search-affordance change, because it was removed on purpose.
+
+6. **Architecture**
+   - **ARCH-DRY: pass.** `render` still builds the row through one `append` path. The card-only override is a single assignment.
+   - **ARCH-PURE: pass.** `render` stays pure and has direct unit tests.
+   - **ARCH-PURPOSE: pass.** The Done-when as restated is delivered. The 🔒 still meets the Spec's "not colour alone" rule.
+   - **ARCH-MOCK: pass.** The delta adds no new external calls. The tracker fixtures from earlier rounds are unchanged.
+   - **ARCH-CONSTRAINTS: pass.** One string concat per row, no change on the hot path.
+   - **ARCH-SECURE: pass.** No untrusted input or secrets are added. The display contains card text, as it did before.
+   - **ARCH-ORDER: pass.** The delta holds no state between events because `render` is a pure function of one issue record.
+   - **ARCH-FUNERAL: pass.** The delta creates nothing durable, because it only changes how an in-memory display string is built.
+
+7. **Plan revision recommendations**
+   - Add a `## Revisions` entry to the durable plan, dated 2026-10-01, with the reason "operator smoke test". Delta: the T2 render produces `<id>🔒` with one full-row `ParleyIssueTracker` span and no text label, and `search_text` no longer includes `card only`. The card view's label line (`issue_cards.lua:305`) is unchanged.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Disposed in an earlier round; no regression in the latest delta.
+findings:
+  - id: new
+    severity: Minor
+    family: plan-revision-lag
+    title: |
+      Durable plan still specifies the card-only text label and search token removed by 408843e3
+    detail: |
+      Plan lines 74-76, 230-236 and 396-402 describe the card-only text label and the search token. The issue's Revisions records the change, but the plan has no Revisions entry.
+  - id: new
+    severity: Minor
+    family: search-affordance-regression
+    title: |
+      Card-only rows no longer carry a searchable provenance token in search_text
+    detail: |
+      issue_finder_records.lua:165 dropped the card-only search token and did not add the lock. Users can no longer narrow the finder to card-only issues by typing; adding a token such as 'card-only' back to search_text would restore it.
+```

@@ -69,6 +69,29 @@ rounds:
           round: 3
       recipe: milestone-review
       blocked: false
+    - "n": 4
+      timestamp: "2026-10-01T08:58:49-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Disposed in an earlier round; no regression in the latest delta.
+          round: 4
+      findings:
+        - id: BR-6
+          severity: Minor
+          title: Durable plan still specifies the card-only text label and search token removed by 408843e3
+          detail: Plan lines 74-76, 230-236 and 396-402 describe the card-only text label and the search token. The issue's Revisions records the change, but the plan has no Revisions entry.
+          family: plan-revision-lag
+          round: 4
+        - id: BR-7
+          severity: Minor
+          title: Card-only rows no longer carry a searchable provenance token in search_text
+          detail: issue_finder_records.lua:165 dropped the card-only search token and did not add the lock. Users can no longer narrow the finder to card-only issues by typing; adding a token such as 'card-only' back to search_text would restore it.
+          family: search-affordance-regression
+          round: 4
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#309 (boundary-review)
@@ -106,6 +129,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - BR-5 — addressed — local_ids now calls issue_records.parse_name (issue_finder.lua:365), the same parser adapt uses; spec "counts only the files the scan turns into rows" pins the empty-slug case, which the old .* pattern would have counted as local.
 
+## Round 4 — 2026-10-01T08:58:49-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — Disposed in an earlier round; no regression in the latest delta.
+
+### Raised
+
+- **BR-6** [Minor] `plan-revision-lag` Durable plan still specifies the card-only text label and search token removed by 408843e3
+  Plan lines 74-76, 230-236 and 396-402 describe the card-only text label and the search token. The issue's Revisions records the change, but the plan has no Revisions entry.
+- **BR-7** [Minor] `search-affordance-regression` Card-only rows no longer carry a searchable provenance token in search_text
+  issue_finder_records.lua:165 dropped the card-only search token and did not add the lock. Users can no longer narrow the finder to card-only issues by typing; adding a token such as 'card-only' back to search_text would restore it.
+
 ## Open findings
 
-(none — every finding has been disposed)
+- **BR-6** [Minor] `plan-revision-lag` Durable plan still specifies the card-only text label and search token removed by 408843e3
+- **BR-7** [Minor] `search-affordance-regression` Card-only rows no longer carry a searchable provenance token in search_text
