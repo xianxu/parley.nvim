@@ -126,3 +126,21 @@ it prints, pass or fail.
   `buffer_edit.capture_user`/`apply_user` (f102dd36; spell specs and
   buffer_mutation_spec green); deadlines stretch by `load_factor` (8c7dbdbb);
   Core-concepts table added so `single_source_sweeps_spec` has rows to check.
+- **Root cause of the JIT thrash (operator asked to find its source).** Every
+  flush is a `failed to allocate mcode memory` abort (468 of 468 in one
+  chat_typing size-1000 run); no flush comes from `maxtrace`. Not parley: a
+  synthetic workload in `nvim --clean` reproduces it (and 2/10 runs hit >10,000
+  flushes). LuaJIT on arm64 must place machine code within jump range of its
+  previous area; macOS ignores mmap address hints (FFI probe: 0–1 of 40 hints
+  honored). Neovim 0.11.7 statically bundles LuaJIT 2.1.1741730670 (March
+  2025), before upstream 68354f4447 (2025-11-05, "Allow mcode allocations
+  outside of the jump range to the support code"). Without that commit a failed
+  placement only flushes and retries: the chat_typing probe ran 25–46s with
+  2.8k–11.7k flushes, and once 173s with 2,895,657 flushes (#293's "random
+  15x"). Neovim 0.12.5 (Homebrew `neovim`, LuaJIT 2.1.1788856981) has the fix:
+  15–22s, 484–1,395 flushes, never catastrophic. It still flushes because each
+  exhausted area (64KB default) forces a new range.
+- `sizemcode=1024,maxmcode=8192` on 0.12.5: 9 flushes, 9.6–10.7s (vs 15–22s
+  default, 16s `jit.off()`). The same setting on 0.11.7 is catastrophic every
+  time (2.9M flushes, 166s): any tuning must be gated on the fixed LuaJIT.
+  Scratch probes: `$TMPDIR/r294/{trace_probe,syn2,mmap_probe}.lua`.
