@@ -117,9 +117,11 @@ scratch buffer. Mutation paths (finder delete and cycle-status, `:ParleyIssueSta
 - **refuse_card_only.** `cmd_issue_status` and `cmd_issue_decompose` return early
   with the same warning when `vim.b.parley_card_only` is set.
 - **Fixture.** `card_text` accepts an optional `problem`, written under
-  `## Problem`. `create(cards, details)` treats `details[name] == false` as "no
-  details file on main". `M.details_on_branch(repos, branch, name, fields)`
-  commits a details file on another branch of the writer and pushes it.
+  `## Problem`. `create(cards, details)` gets an explicit `details[name] == false`
+  branch, meaning "no details file on main" (today's `or fields` fallback would
+  swallow `false`). A details override may carry `dir = "workshop/history/issues"`
+  to place the file in the history dir. `M.details_on_branch(repos, branch, name,
+  fields)` commits a details file on another branch of the writer and pushes it.
 
 ## Tasks
 
@@ -239,7 +241,9 @@ end
 **Files:** Modify `lua/parley/issue_tracker.lua:235-260`, `tests/helpers/tracker_repo.lua`; Test `tests/integration/issue_tracker_spec.lua`
 
 - [ ] Fixture: `card_text` writes `"## Problem", "", fields.problem` when given;
-  `create` skips details whose override is `false`; add `details_on_branch`.
+  `create` skips details whose override is exactly `false` (explicit branch, not
+  `or`), writes an override with `dir` under that dir instead of `workshop/issues`;
+  add `details_on_branch`.
 - [ ] Failing tests (real git):
   - **bootstrap:** `update-ref -d refs/remotes/origin/issue-tracker` in the reader;
     `load` → nil; `refresh` → settles; `load` now returns both cards; a subscriber
@@ -267,8 +271,12 @@ end
   `resolve_remote`; if nil, clear `fetching` and settle. Otherwise fetch
   `{ "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", remote,
   "+refs/heads/" .. found.tracker .. ":refs/remotes/" .. remote .. "/" .. found.tracker }`.
-  On failure: `st.fetch_failed_at, st.fetch_error = os.time(), err`. On success:
-  `st.fetch_ok_at = os.time()`, then `read` as today.
+  `fetched_at` (throttle) and `fetching` are set **before** `resolve_remote`, so the
+  bootstrap path is throttled and concurrent refreshes coalesce. On failure:
+  `st.fetch_failed_at, st.fetch_error = os.time(), err`. On success:
+  `st.fetch_ok_at = os.time()`, clear `fetch_failed_at`/`fetch_error` (same-second
+  stamps would otherwise keep reporting the failure), set a provisional
+  `st.remote = remote` so `status()` names the ref while the read runs, then `read`.
   `M.status = function(root) local st = states[root]; if not st or not st.remote and not st.fetch_failed_at then return nil end; return { ref = st.remote and (st.remote .. "/" .. (discovery() or {}).tracker) or nil, tip = st.tip, fetching = st.fetching == true, fetch_ok_at = st.fetch_ok_at, fetch_failed_at = st.fetch_failed_at, fetch_error = st.fetch_error } end`.
   Update the existing throttle test's git-call counts if `remote` is now called.
 - [ ] PASS (`tests/integration/issue_tracker_spec.lua` whole file); commit
@@ -285,8 +293,11 @@ in `cmd_issue_status`, `cmd_issue_decompose`); Test `tests/integration/issue_car
     `card only · read only` and `origin/issue-tracker @`; a line equals `## Problem`
     and one `Why it matters`; an extmark on row 0 has `hl_group == "ParleyIssueTracker"`.
   - opening again reuses the buffer (same bufnr).
-  - `vim.cmd("ParleyIssueStatus")` (via `require("parley.issues").cmd_issue_status()`)
-    leaves the lines unchanged and logs the read-only warning (capture with a logger stub).
+  - `require("parley.issues").cmd_issue_status()` and `cmd_issue_decompose()` (cursor on
+    a `- [ ] x` line is impossible in the card view, so put the cursor on any line)
+    each leave the lines unchanged and log the read-only warning (logger stub).
+  - spec setup: `before_each` sets `issue_tracker.fetch_enabled = true`,
+    `fetch_interval_s = 0` and `reset_for_tests()`; `after_each` restores 60 / false.
   - a writer pushes a new status for `000005`; `refresh` → the view's `status:` line updates.
   - remote URL broken → refresh → content kept, line 1 contains `last fetch failed`.
 - [ ] Implement:
@@ -315,7 +326,11 @@ end
 M.open = function(root, id)
     issue_tracker.ensure_highlight()
     local name = issue_cards.card_ref(root, id)
-    local buf = vim.fn.bufnr(name)
+    local buf = -1
+    for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
+        -- exact match: bufnr() treats its argument as a file pattern
+        if vim.api.nvim_buf_get_name(candidate) == name then buf = candidate end
+    end
     local fresh = buf == -1
     if fresh then
         buf = vim.api.nvim_create_buf(true, true)
@@ -338,6 +353,7 @@ M.open = function(root, id)
     issue_tracker.load(root, function(loaded)
         show(loaded)
         issue_tracker.refresh(root, function() show(nil) end)
+        show(nil) -- refresh has set `fetching`: paint "refreshing…"
     end)
     return buf
 end
@@ -348,10 +364,16 @@ return M
   In `issues.lua`, add near `can_use_issue_actions`:
 
 ```lua
+-- The text only: each caller logs through its own _parley (the finder spec
+-- injects a fake whose logger must see it).
+M.card_only_warning = function(id)
+    return "#" .. id .. " is a tracker card without local details (read only)"
+end
+
 local function refuse_card_only()
     local card = vim.b.parley_card_only
     if not card then return false end
-    _parley.logger.warning("#" .. card.id .. " is a tracker card without local details (read only)")
+    _parley.logger.warning(M.card_only_warning(card.id))
     return true
 end
 ```
@@ -363,15 +385,25 @@ end
 
 **Files:** Modify `lua/parley/issue_finder.lua:372-392, 536-607, 642-672`; Test `tests/integration/issue_finder_tracker_spec.lua`
 
+- [ ] Test harness: `open_finder` passes **absolute** fixture dirs
+  (`issues_dir = reader .. "/workshop/issues"`, `history_dir = reader ..
+  "/workshop/history/issues"`); a relative `history_dir` would resolve through
+  the real parley's `project_root()` to this repository.
 - [ ] Failing tests (fixture: `000001` with details, `000005` card-only open card with
   details committed only on writer branch `000005-x`, `000009` card `done` whose
-  details live in `workshop/history/issues` on main):
+  details live in `workshop/history/issues` on main via the `dir` override):
   - issues view: exactly one row per id; `000005` row has `issue.card_only`, display
     contains `card only · read only`, value `parley-card://<reader>#000005`; no
     `000009` row; `000001` row is not card-only and its value is its path.
-  - history view (`view_mode = 1`): no card-only `000009` row (its details exist in history).
+  - history view (`view_mode = 1`): `000009` appears exactly once, as its local
+    details row (not `card_only`). This is the assertion that tests the join; the
+    issues view hides `000009` anyway because a `done` card is archived.
   - a card `000011` (`done`, no details anywhere) appears only in the history view.
-  - query filtering keeps working: `items` search text for `000005` contains its title.
+  - search/filter/sort: `000005`'s search text contains its title and `card only`;
+    with `000001` (`wontfix` card) and `000002` (`open`, details) present, the open
+    card-only `000005` sorts by card status with `000002` ahead of `000001`; in a
+    super-repo fake with two repo facets, toggling the fixture's facet off hides `000005`.
+  - untracked repo (existing case at `issue_finder_tracker_spec.lua:137`): no row has `card_only`.
   - `on_select` with the `000005` row opens the card view (current buffer name is the ref).
   - delete and cycle-status mappings on `000005` write nothing and warn (logger stub).
   - bootstrap: reader with the tracker ref deleted → the finder still shows `000005`
@@ -386,8 +418,15 @@ end
     issue_vocabulary.default(); return v and v:is_terminal(s) end })`.
     `repo_name_of_root` is filled in the subscribe loop from `root.repo_name`.
   - `render_issue`: `row.value = issue.card_only and issue_cards.card_ref(issue.card_root, issue.id) or issue.path`.
-  - `on_select`: `if item.issue and item.issue.card_only then require("parley.issue_card_view").open(item.issue.card_root, item.issue.id) return end`.
-  - delete + cycle-status mappings: `if item.issue and item.issue.card_only then _parley.logger.warning(...) return end` (same text as `refuse_card_only`; export it from `issues.lua` as `M.card_only_warning(id)` and use it in both places — ARCH-DRY).
+  - `local issue_vocabulary = require("parley.issue_vocabulary")` at the top of
+    `issue_finder.lua` (it is not required there today).
+  - `on_select`: the card-only branch goes **after** `nvim_set_current_win(source_win)`,
+    so the card buffer lands in the source window, not the picker's:
+    `if item.issue and item.issue.card_only then require("parley.issue_card_view").open(item.issue.card_root, item.issue.id) return end`.
+  - delete + cycle-status mappings: `if item.issue and item.issue.card_only then _parley.logger.warning(issues_mod.card_only_warning(item.issue.id)) return end`
+    (one text, each caller logs through its own `_parley`, ARCH-DRY).
+  - `local_ids`: comment that it builds dirs from config relative to the Git root,
+    which matches the super-repo `expand_roots` dirs for relative config (today's case).
 - [ ] PASS; full `make test`; commit `#309: issue finder shows tracker-only cards`.
 
 ### Task 6: atlas + verification
