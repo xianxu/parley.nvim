@@ -16,14 +16,10 @@
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `issue_cards.parse_card` | `lua/parley/issue_cards.lua` | new |
-| `issue_cards.parse_tree` | `lua/parley/issue_cards.lua` | new |
-| `issue_cards.parse_batch` | `lua/parley/issue_cards.lua` | new |
-| `issue_cards.select_remote` | `lua/parley/issue_cards.lua` | new |
-| `issue_cards.card_field_names` | `lua/parley/issue_cards.lua` | new |
-| `issue_cards.overlay` | `lua/parley/issue_cards.lua` | new |
-| `issue_cards.annotations` | `lua/parley/issue_cards.lua` | new |
-| `issue_finder_records.render` | `lua/parley/issue_finder_records.lua` | new (moved out of `issue_finder.open`) |
+| `parse_card`, `parse_tree`, `parse_batch` | `lua/parley/issue_cards.lua` | new |
+| `select_remote`, `card_field_names` | `lua/parley/issue_cards.lua` | new |
+| `overlay`, `annotations` | `lua/parley/issue_cards.lua` | new |
+| `render` (issue_finder_records) | `lua/parley/issue_finder_records.lua` | new (moved out of `issue_finder.open`) |
 | float_picker item `highlights` | `lua/parley/float_picker.lua` | modified (new optional item field) |
 
 - **Card** `{id, title, fields = {name = value}}` — one parsed `workshop/issue-cards/NNNNNN-*.md` blob. Top-level `key: value` frontmatter lines only (the nested `tracker:` envelope is internal and ignored); quotes and trailing `# comment` are stripped; title is the first H1.
@@ -39,8 +35,10 @@
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `issue_tracker` (load / refresh / repo_root) | `lua/parley/issue_tracker.lua` | new | `git` via `vim.system` |
-| `issue_tracker_buffer.attach` | `lua/parley/issue_tracker_buffer.lua` | new | extmarks + autocmds |
+| `load`, `refresh`, `repo_root`, `field_names` (issue_tracker) | `lua/parley/issue_tracker.lua` | new | `git` via `vim.system` |
+| `ensure_highlight`, `fetch_enabled` (issue_tracker) | `lua/parley/issue_tracker.lua` | new | highlight group; fetch switch (off under the test harness) |
+| `reset_for_tests`, `_on_git`, `_blob_count_for_tests`, `_fetching_for_tests` | `lua/parley/issue_tracker.lua` | new | test seams over in-memory state |
+| `attach`, `setup`, `NS` (issue_tracker_buffer) | `lua/parley/issue_tracker_buffer.lua` | new | extmarks + autocmds |
 | finder overlay wiring | `lua/parley/issue_finder.lua` | modified | picker session |
 | issue-buffer autocmd hook | `lua/parley/init.lua` (issue `*.md` BufRead autocmd) | modified | Neovim autocmd |
 
@@ -154,3 +152,7 @@
 - [ ] Run `make test` and `make lint`.
 - [ ] Manual check in this repo: `:ParleyIssueFinder` shows #296 as `[wontfix]` in amber, and opening `workshop/issues/000296-app-screenkey.md` shows amber `← tracker: wontfix`. Record this in the issue Log.
 - [ ] `sdlc close --issue 308 --verified '…'`.
+
+## Revisions
+
+- 2026-09-30 — the single-source arch guard needs every added export as its own backticked name in a Core-concepts row, so the entity tables were split per name. Added `fetch_enabled`: specs never fetch from a real remote unless they opt in. Added the `_fetching_for_tests` seam. No design change.

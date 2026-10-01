@@ -1079,9 +1079,16 @@ atlas:
       - lua/parley/finder_facets.lua
       - lua/parley/issue_finder.lua
       - lua/parley/issue_finder_records.lua
+      - lua/parley/issue_cards.lua
+      - lua/parley/issue_tracker.lua
+      - lua/parley/issue_tracker_buffer.lua
       - lua/parley/float_picker.lua
       - lua/parley/init.lua
     tests:
+      - tests/unit/issue_cards_spec.lua
+      - tests/integration/issue_tracker_spec.lua
+      - tests/integration/issue_finder_tracker_spec.lua
+      - tests/integration/issue_tracker_buffer_spec.lua
       - tests/unit/issue_vocabulary_spec.lua
       - tests/unit/issue_unavailable_spec.lua
       - tests/integration/issue_command_spec.lua

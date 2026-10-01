@@ -975,13 +975,13 @@ function M.open(opts)
             return
         end
         for idx, item in ipairs(filtered) do
-            local row = visual_row_for_index(idx)
-            local line = lines[row]
+            local visual_row = visual_row_for_index(idx)
+            local line = lines[visual_row]
             for _, span in ipairs(line and item.highlights or {}) do
                 local start = span[1] + 1 -- the leading space before display
                 local finish = math.min(span[2] + 1, #line)
                 if start < finish then
-                    vim.api.nvim_buf_add_highlight(results_buf, ITEM_NS, span[3], row - 1, start, finish)
+                    vim.api.nvim_buf_add_highlight(results_buf, ITEM_NS, span[3], visual_row - 1, start, finish)
                 end
             end
         end
