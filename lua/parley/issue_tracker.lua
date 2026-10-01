@@ -41,6 +41,10 @@ M._blob_count_for_tests = function(root)
     return vim.tbl_count(state(root).blobs)
 end
 
+M._fetching_for_tests = function(root)
+    return states[root] ~= nil and states[root].fetching == true
+end
+
 M.ensure_highlight = function()
     vim.api.nvim_set_hl(0, issue_cards.HIGHLIGHT, { fg = "#FFBF00", default = true })
 end

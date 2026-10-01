@@ -1087,6 +1087,9 @@ M.setup = function(opts)
 		end,
 	})
 
+	-- #308: amber tracker values beside stale card-owned fields in issue files
+	require("parley.issue_tracker_buffer").setup()
+
 	-- Set up typeahead completion for status: field in issue files
 	vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
 		pattern = "*.md",
