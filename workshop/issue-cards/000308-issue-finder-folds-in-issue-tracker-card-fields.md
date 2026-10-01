@@ -1,6 +1,6 @@
 ---
 id: 000308
-status: codecomplete
+status: done
 created: 2026-09-30
 updated: 2026-09-30
 estimate_hours:
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: c48559771d3be07f14b36e2f88ee121eea365d08
         evidence_commit: ca1c65d96a147d56544d2a770d09514088d5a393
+        landed_commit: b1d3a6bf0949ed75aa8fc2e3692f97d91a497286
 ---
 
 # Issue finder folds in issue-tracker card fields
