@@ -296,9 +296,10 @@ end
 local VIEW_FIELDS = { "status", "created", "updated", "github_issue", "estimate_hours" }
 
 -- The read-only card view: provenance label, the card's top-level fields (the
--- `tracker:` envelope is sdlc's), then the card body as is. `card` nil means the
--- card left the tracker. Nothing is fabricated.
-M.view_lines = function(card, id, status)
+-- `tracker:` envelope is sdlc's), then the card body as is. Without a card,
+-- `readable` tells a card that left the tracker (cards were read) from a
+-- tracker that could not be read at all. Nothing is fabricated.
+M.view_lines = function(card, id, status, readable)
     local ref = status.ref or "issue-tracker"
     local lines = {
         "card only · read only — " .. ref .. (status.tip and (" @ " .. status.tip:sub(1, 7)) or "")
@@ -308,7 +309,8 @@ M.view_lines = function(card, id, status)
         "",
     }
     if not card then
-        lines[#lines + 1] = "Card #" .. id .. " is no longer on " .. ref .. "."
+        lines[#lines + 1] = readable and ("Card #" .. id .. " is no longer on " .. ref .. ".")
+            or "No tracker cards are readable in this checkout right now."
         return { lines = lines, label_rows = { 0 } }
     end
     for _, key in ipairs(VIEW_FIELDS) do

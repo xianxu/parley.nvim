@@ -156,6 +156,18 @@ describe("issue_tracker", function()
         assert.equals("open", load(repos.reader)["000001"].fields.status)
     end)
 
+    it("reports a first-fetch bootstrap while it runs", function()
+        fixture.git(repos.reader, { "update-ref", "-d", "refs/remotes/origin/issue-tracker" })
+        load(repos.reader)
+        local settled = false
+        tracker.refresh(repos.reader, function() settled = true end)
+        local during = tracker.status(repos.reader)
+        assert.is_table(during)
+        assert.is_true(during.fetching)
+        wait_for(function() return settled end)
+        assert.equals("origin/issue-tracker", tracker.status(repos.reader).ref)
+    end)
+
     it("reports a successful fetch with its ref and tip", function()
         load(repos.reader)
         refresh(repos.reader)

@@ -334,6 +334,32 @@ describe("IssueFinder card-only issues", function()
         assert.truthy(find(items, "000003"))
     end)
 
+    it("joins against the dirs the finder scans, not a re-derivation of them", function()
+        -- The super-repo puts this repository's history somewhere the config
+        -- value does not name; 000009's details live only there.
+        local archive = repos.reader .. "/archive/issues"
+        vim.fn.mkdir(archive, "p")
+        vim.fn.rename(repos.reader .. "/workshop/history/issues/000009-archived.md", archive .. "/000009-archived.md")
+        local super_repo = {
+            expand_roots = function(dir)
+                if dir:find("history", 1, true) then
+                    return { { dir = archive, repo_name = "reader" } }
+                end
+                return { { dir = dir, repo_name = "reader" } }
+            end,
+        }
+        open_finder(1, super_repo)
+        local items = wait_items(function(list) return find(list, "000011") ~= nil end, "the finished card")
+        local rows = 0
+        for _, item in ipairs(items) do
+            if item.issue.id == "000009" then
+                rows = rows + 1
+                assert.is_nil(item.issue.card_only)
+            end
+        end
+        assert.equals(1, rows)
+    end)
+
     it("adds no card-only rows for an untracked repository", function()
         vim.fn.delete(repos.reader .. "/workshop/issue-tracker.json")
         open_finder(0)

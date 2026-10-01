@@ -344,22 +344,13 @@ end
 -- Card-only issues (#309)
 --------------------------------------------------------------------------------
 
-local function configured_dir(root, value)
-    if type(value) ~= "string" or value == "" then
-        return nil
-    end
-    return value:sub(1, 1) == "/" and value or (root .. "/" .. value)
-end
-
--- Ids with a details file in the repository at `root`, active or archived: a
--- card joins its details by id whichever dir the finder is showing. Dirs come
--- from config relative to the Git root, which matches super-repo expand_roots
--- for relative config (today's case). Two directory listings per delivery.
-local function local_ids(root)
+-- Ids with a details file in `dirs` (one repository's active and history dirs,
+-- exactly as the finder scans them): a card joins its details by id whichever
+-- dir the finder is showing. One listing per dir per delivery.
+local function local_ids(dirs)
     local ids = {}
-    for _, value in ipairs({ _parley.config.issues_dir, _parley.config.history_dir }) do
-        local dir = configured_dir(root, value)
-        local scan = dir and uv.fs_scandir(dir)
+    for _, dir in ipairs(dirs or {}) do
+        local scan = uv.fs_scandir(dir)
         while scan do
             local name = uv.fs_scandir_next(scan)
             if not name then
@@ -423,6 +414,18 @@ M.open = function(_options)
     local raw_records = nil
     local cards_by_root = {}
     local repo_name_of_root = {}
+    -- #309: each repository's active and history dirs, resolved by the same
+    -- discovery_roots the scan uses, so the card join can never look elsewhere.
+    local details_dirs = {}
+    for _, mode in ipairs({ 0, 1 }) do
+        for _, scanned in ipairs((discovery_roots(mode))) do
+            local repo_root = issue_tracker.repo_root(scanned.path)
+            if repo_root then
+                details_dirs[repo_root] = details_dirs[repo_root] or {}
+                table.insert(details_dirs[repo_root], scanned.path)
+            end
+        end
+    end
     local root_of_dir = {}
     local function repo_root_of(path)
         local dir = vim.fn.fnamemodify(path, ":h")
@@ -441,7 +444,7 @@ M.open = function(_options)
         end
         -- #309: cards with no details file in this checkout get their own rows.
         for root, cards in pairs(cards_by_root) do
-            vim.list_extend(out, issue_cards.card_only_records(cards, local_ids(root), {
+            vim.list_extend(out, issue_cards.card_only_records(cards, local_ids(details_dirs[root]), {
                 root = root,
                 repo_name = repo_name_of_root[root],
                 is_terminal = is_terminal,

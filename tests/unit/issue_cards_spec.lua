@@ -269,7 +269,12 @@ describe("issue_cards.view_lines", function()
     end)
 
     it("says when the card left the tracker", function()
-        local view = cards.view_lines(nil, "000005", status)
+        local view = cards.view_lines(nil, "000005", status, true)
         assert.are.equal("Card #000005 is no longer on origin/issue-tracker.", view.lines[#view.lines])
+    end)
+
+    it("says when no tracker could be read, rather than that the card left", function()
+        local view = cards.view_lines(nil, "000005", {}, false)
+        assert.are.equal("No tracker cards are readable in this checkout right now.", view.lines[#view.lines])
     end)
 end)

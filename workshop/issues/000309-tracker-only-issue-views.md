@@ -98,3 +98,21 @@ Durable plan: [000309 plan](../plans/000309-tracker-only-issue-views-plan.md). S
   `spell_source.lua:61` remains in buffer_mutation) and document-fold specs
   that time out under parallel load but pass alone.
 
+## Revisions
+
+### 2026-09-30 — close review round 1 (FIX-THEN-SHIP)
+- BR-1 (Important, parallel-path-resolution): `local_ids` re-derived the issues
+  and history dirs from config instead of using the dirs the scan resolves. The
+  card join now scans `discovery_roots(0)`/`(1)` per repository root. The
+  regression spec puts history in a super-repo dir the config value does not
+  name; it failed with the old code.
+- Minor (freshness): `issue_tracker.status` returned nil during a first-fetch
+  bootstrap. It now reports `fetching` with `ref = nil` until a remote is known.
+- Minor (freshness): the view said "no longer on <ref>" when no tracker was
+  readable at all. `view_lines` now takes `readable` and says "No tracker
+  cards are readable in this checkout right now."
+- Minor (flag-constellation), declined: `freshness` already fixes the
+  precedence between the flags (failure after success wins; `fetching` is a
+  suffix), and reshaping #308's tracker state into a tagged outcome is a
+  refactor beyond this issue.
+

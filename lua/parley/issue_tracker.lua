@@ -308,12 +308,13 @@ M.refresh = function(root, on_settled)
 end
 
 -- How current this root's cards are, for views that must say so (#309): the
--- ref read, its tip, and the last fetch outcome (wall-clock seconds). nil when
--- the root was never loaded or has no tracker to name.
+-- ref read (nil until a remote is known, e.g. during a first-fetch bootstrap),
+-- its tip, and the last fetch outcome (wall-clock seconds). nil when the root
+-- was never loaded or the vocabulary names no tracker.
 M.status = function(root)
     local st = states[root]
     local found = discovery()
-    if not st or not found or (not st.remote and not st.fetch_failed_at) then
+    if not st or not found then
         return nil
     end
     return {

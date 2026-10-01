@@ -15,7 +15,7 @@ local function render(buf, root, id, cards)
     if not vim.api.nvim_buf_is_valid(buf) then
         return
     end
-    local view = issue_cards.view_lines(cards and cards[id], id, issue_tracker.status(root) or {})
+    local view = issue_cards.view_lines(cards and cards[id], id, issue_tracker.status(root) or {}, cards ~= nil)
     -- Lift both guards for the render only: writing a `readonly` buffer warns (W10).
     vim.bo[buf].readonly, vim.bo[buf].modifiable = false, true
     buffer_edit.replace_all(buf, view.lines)

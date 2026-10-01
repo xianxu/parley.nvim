@@ -13,6 +13,10 @@ Incident detail belongs in the issue or plan that owns it.
 - Put assertions outside scheduled callbacks. An assert inside one runs after
   the flag the test waits on is set, and its error never reaches busted, so the
   test passes vacuously.
+- #309 close review BR-1, and #307's BR-1 the same day: a second derivation
+  of a path the system already resolves drifts from it. When a feature needs
+  "the dirs the finder scans", take them from the function that resolves
+  them (`discovery_roots`), never from config again.
 - Run a feature live outside the harness before close. The harness disables
   fetching; the concurrency bug and the W10 warning only showed with it on.
 
