@@ -330,3 +330,9 @@ oracle, and the mutation that would make the test fail.
 - Adding bootstrap imports changes the minimum runtime closure. Validate all newly required modules before publishing a fetched release and before selecting an older cache; recovery instructions must work before the missing loader starts.
 - A reader lease must survive its launcher: pass the lock descriptor into the consuming process and test parent death. Recheck after an exclusive-to-shared conversion because a waiting writer can win the conversion gap.
 - Exercise offline acceptance through the actual launchers with enforced network denial and read-only installed payloads. Use long temporary paths: Neovim 0.11's encoded bytecode-cache names can exceed filesystem filename limits.
+
+## 2026-09-30 (#308 — tracker cards in issue views)
+
+- When shared external state changes, notify every open view of it, not just the caller that triggered the read. Throttled or coalesced refreshes otherwise drop the news for everyone else. Design a per-resource subscription whose liveness derives from the view itself, and test a hidden view under the real throttle.
+- Key a subscription by view identity and replace it on re-attach; never guard it with a sticky flag. Flags such as `b:` vars outlive unload and reload, so the subscription and its liveness drift apart.
+- Async specs that change external state must first wait for the component to go idle (reads as well as fetches). A request that joins an in-flight read started before the change will legitimately return the old state.
