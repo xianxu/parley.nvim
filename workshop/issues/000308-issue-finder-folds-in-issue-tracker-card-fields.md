@@ -69,15 +69,21 @@ route through `sdlc issue set-status`.
 
 Durable plan: [000308 plan](../plans/000308-issue-finder-folds-in-issue-tracker-card-fields-plan.md). Single pass, one close.
 
-- [ ] T1 pure issue_cards
-- [ ] T2 float_picker item highlight spans
-- [ ] T3 segment-built finder rows
-- [ ] T4 issue_tracker async reader + throttled fetch
-- [ ] T5 finder overlay wiring
-- [ ] T6 issue-buffer amber annotations
-- [ ] T7 atlas + verification
+- [x] T1 pure issue_cards
+- [x] T2 float_picker item highlight spans
+- [x] T3 segment-built finder rows
+- [x] T4 issue_tracker async reader + throttled fetch
+- [x] T5 finder overlay wiring
+- [x] T6 issue-buffer amber annotations
+- [x] T7 atlas + verification
 
 ## Log
 
 ### 2026-09-30
 - Operator: amber for tracker values; scope = finder + issue buffer; freshness = local ref + throttled background fetch.
+- Implemented T1–T7: pure `issue_cards`, `float_picker` item highlight spans, segment-built finder rows, async `issue_tracker` (ls-tree + one cat-file batch, OID cache pruned per tip, throttled fetch), finder overlay with selection-preserving repaint, buffer virt_text, atlas. ARCH-MOCK: real git in throwaway repos (`tests/helpers/tracker_repo.lua`). ARCH-FUNERAL: in-memory state only, blob cache pruned to the current tree.
+- Discovery: the single-source arch guard needs every export as its own backticked name in a Core-concepts row, so the plan tables were split (plan Revisions).
+- Added `fetch_enabled`, off under `PARLEY_TEST_MODE`, so no spec reaches a real remote.
+- Manual check on this repo: 307 cards load; #296 shows `[wontfix]` with an amber span in the finder, and its buffer shows `← tracker: wontfix` beside `status: open`.
+- `make test`: the new specs pass. Pre-existing failures unrelated to this diff: `tests/arch/buffer_mutation_spec.lua` (spell_source.lua from #304, identical to main) and parallel-load flakes (#294) that vary per run and pass in isolation (document_semantic, branch_child, document_append_extent). `make lint` is clean.
+
