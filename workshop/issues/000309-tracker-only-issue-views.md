@@ -1,12 +1,13 @@
 ---
 id: 000309
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-30
 updated: 2026-09-30
 estimate_hours:
-card_mirror: '9eb24473db49de82ec8d916b855358e949f9995b' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'f4061c0190b460e9d7fa657df6de0c97c78726fc' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-30T22:11:00-07:00
 ---
 
 # Show tracker-only cards in issue finder and viewer
@@ -54,7 +55,14 @@ relying on color alone.
 
 ## Plan
 
-- [ ] Design and implement card-only discovery and viewing on top of #308.
+Durable plan: [000309 plan](../plans/000309-tracker-only-issue-views-plan.md). Single pass, one close.
+
+- [ ] T1 pure card model: card body, card-only records, freshness, card view text
+- [ ] T2 card-only finder row label
+- [ ] T3 tracker first-fetch bootstrap + fetch status
+- [ ] T4 read-only card view + buffer-command refusals
+- [ ] T5 finder card-only rows, open, refusals
+- [ ] T6 atlas + live check (#305 is card-only in this repo today)
 
 ## Log
 
