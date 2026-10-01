@@ -180,3 +180,69 @@ findings:
     detail: |
       2nd in family. Rule: the card join derives every fact (dirs AND filename-to-id) from the scan's own resolution. issue_finder.lua local_ids uses ^(%d+)%-.*%.md$ while issue_finder_records.lua:47 uses ^(%d+)%-(.+)%.md$, so a name like 000123-.md is "local" to the join but has no scan row and vanishes. Expose the records parser and call it from local_ids. One remaining instance.
 ```
+
+---
+
+## Re-review — 2026-09-30T23:03:14-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 309 — Show tracker-only cards in issue finder and viewer |
+| repo | parley.nvim |
+| issue file | workshop/issues/000309-tracker-only-issue-views.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1b2173ea7fbb3e3d6a5b851d500be082b2bd09d..051770cc4335f0baefbcb416111086a55448fd5a |
+| command | sdlc close --issue 309 |
+| reviewer | claude |
+| timestamp | 2026-09-30T23:03:14-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+BR-5 is fixed. `issue_finder_records.parse_name` (`lua/parley/issue_finder_records.lua:44`) is now the only filename-to-id parser. `adapt` and the card join's `local_ids` (`lua/parley/issue_finder.lua:365`) both call it, so the join counts exactly the files the scan turns into rows. This closes the last instance of the `parallel-path-resolution` family. BR-1 already made the join reuse the dirs the scan resolves, and the id is the only other fact `local_ids` derives.
+
+The new spec writes `000005-.md` next to a card-only `000005`. The old pattern `^(%d+)%-.*%.md$` matches an empty slug, so it would mark `000005` as local and hide the card. The spec waits for the card row, so it would time out on the old code. I did not run that revert, because the review is read-only; this follows from the pattern itself.
+
+I ran `make test-spec SPEC=issues/issue-management` and it passed: 0 failures across 14 spec files, including `issue_finder_tracker` 13/13, `issue_card_view` 6/6, `issue_tracker` 18/18, `issue_cards` 24/24 and `issue_finder_records` 13/13. Nothing new blocks shipping.
+
+1. **Strengths**
+   - There is one parser for filename → id/slug, and a comment states why it exists (`issue_finder_records.lua:42-46`).
+   - `details_dirs` is built from `roots_by_mode`, the same resolution the scan uses, so the join cannot look in a different directory (`issue_finder.lua:420-430`).
+   - The regression spec targets the exact divergence (an empty slug) rather than a generic case.
+   - `freshness` / `view_lines` (`issue_cards.lua`) are pure and unit-tested. The view module is a thin IO shell around them.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor:** none new. There is a residual edge in the same rule: a details file whose frontmatter fails to parse becomes a scan failure but still counts as "local", so its card is hidden. A parse failure is shown to the user anyway, so this is not worth a finding.
+
+5. **Test coverage**
+   - BR-5 has a behavioural regression spec that would fail without the fix.
+   - Earlier rounds' fixes (BR-1/2/3) keep their specs, and they are green in this run.
+
+6. **Architecture**
+   - ARCH-DRY: pass. The duplicated parser is gone.
+   - ARCH-PURE: pass. Card model and view text are pure; finder and view are the shell.
+   - ARCH-PURPOSE: pass. Done-when items are delivered and tested.
+   - ARCH-MOCK: pass. Tracker repo fixtures use real local git remotes.
+   - ARCH-CONSTRAINTS: pass. There is one directory listing per dir per delivery, and the finder caches repo-root lookups.
+   - ARCH-SECURE: pass. Card text is shown read-only and never written to disk.
+   - ARCH-ORDER: pass. BR-4 was withdrawn, and joined refresh plus fetch settling are covered by specs.
+   - ARCH-FUNERAL: pass. The view buffer has `bufhidden=wipe`, and its subscription is dropped when the buffer dies (`alive`).
+
+7. **Plan revisions:** add one line under Revisions for round 2: "BR-5: `local_ids` uses `issue_finder_records.parse_name`; regression spec with an empty-slug file."
+
+```findings
+dispose:
+  - id: BR-5
+    disposition: addressed
+    note: |
+      local_ids now calls issue_records.parse_name (issue_finder.lua:365), the same parser adapt uses; spec "counts only the files the scan turns into rows" pins the empty-slug case, which the old .* pattern would have counted as local.
+```

@@ -59,6 +59,16 @@ rounds:
           round: 2
       recipe: milestone-review
       blocked: false
+    - "n": 3
+      timestamp: "2026-09-30T23:03:14-07:00"
+      agent: claude
+      dispose:
+        - id: BR-5
+          disposition: addressed
+          note: local_ids now calls issue_records.parse_name (issue_finder.lua:365), the same parser adapt uses; spec "counts only the files the scan turns into rows" pins the empty-slug case, which the old .* pattern would have counted as local.
+          round: 3
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#309 (boundary-review)
@@ -90,6 +100,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-5** [Minor] `parallel-path-resolution` local_ids re-parses issue ids from filenames instead of reusing the scan's parser
   2nd in family. Rule: the card join derives every fact (dirs AND filename-to-id) from the scan's own resolution. issue_finder.lua local_ids uses ^(%d+)%-.*%.md$ while issue_finder_records.lua:47 uses ^(%d+)%-(.+)%.md$, so a name like 000123-.md is "local" to the join but has no scan row and vanishes. Expose the records parser and call it from local_ids. One remaining instance.
 
+## Round 3 — 2026-09-30T23:03:14-07:00 (claude) — passed
+
+### Disposed
+
+- BR-5 — addressed — local_ids now calls issue_records.parse_name (issue_finder.lua:365), the same parser adapt uses; spec "counts only the files the scan turns into rows" pins the empty-slug case, which the old .* pattern would have counted as local.
+
 ## Open findings
 
-- **BR-5** [Minor] `parallel-path-resolution` local_ids re-parses issue ids from filenames instead of reusing the scan's parser
+(none — every finding has been disposed)
