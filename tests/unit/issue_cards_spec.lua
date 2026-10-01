@@ -180,3 +180,96 @@ describe("issue_cards.annotations", function()
         assert.are.equal("← tracker: (empty)", by_field.created.text)
     end)
 end)
+
+-- #309: card-only issues (a card with no details file in this checkout).
+local CARD_305 = CARD_296:gsub("000296", "000305"):gsub("wontfix", "open")
+    .. "\n\nThe Problem text.\n"
+
+describe("issue_cards.parse_card body", function()
+    it("keeps the card text after the frontmatter, Problem included", function()
+        local card = cards.parse_card(CARD_305)
+        assert.truthy(card.body:find("^# Package Screenkey for app recordings"))
+        assert.truthy(card.body:find("## Problem\n\nThe Problem text.", 1, true))
+        assert.falsy(card.body:find("tracker:", 1, true))
+    end)
+end)
+
+describe("issue_cards.card_only_records", function()
+    local parsed = {
+        ["000305"] = cards.parse_card(CARD_305),
+        ["000296"] = cards.parse_card(CARD_296),
+        ["000001"] = cards.parse_card((CARD_296:gsub("000296", "000001"))),
+    }
+    local function terminal(status) return status == "wontfix" or status == "done" end
+
+    it("synthesizes one record per card without local details", function()
+        local records = cards.card_only_records(parsed, { ["000001"] = true },
+            { root = "/r", repo_name = "repo", is_terminal = terminal })
+        table.sort(records, function(a, b) return a.id < b.id end)
+        assert.are.equal(2, #records)
+        local open, closed = records[2], records[1]
+        assert.are.equal("000305", open.id)
+        assert.is_true(open.card_only)
+        assert.are.equal("/r", open.card_root)
+        assert.are.equal("repo", open.repo_name)
+        assert.are.equal("open", open.status)
+        assert.is_false(open.archived)
+        assert.is_true(closed.archived)
+        assert.are.equal("parley-card:///r#000305", open.identity.key)
+        assert.are.equal(cards.card_ref("/r", "000305"), open.identity.source.unresolved)
+        assert.are.equal(os.time({ year = 2026, month = 9, day = 29, hour = 12 }), open.mtime)
+        assert.is_nil(open.github_issue)
+        assert.is_nil(open.path)
+    end)
+
+    it("returns nothing when every card has details", function()
+        assert.same({}, cards.card_only_records(parsed,
+            { ["000305"] = true, ["000296"] = true, ["000001"] = true },
+            { root = "/r", is_terminal = terminal }))
+    end)
+end)
+
+describe("issue_cards.freshness", function()
+    local t1 = os.time({ year = 2026, month = 9, day = 30, hour = 10, min = 0 })
+    local t2 = os.time({ year = 2026, month = 9, day = 30, hour = 10, min = 5 })
+
+    it("reports a successful fetch", function()
+        assert.are.equal("fetched 10:00", cards.freshness({ fetch_ok_at = t1 }))
+    end)
+    it("never claims freshness after a failure", function()
+        assert.are.equal("cached · last fetch failed 10:05: fatal: x",
+            cards.freshness({ fetch_ok_at = t1, fetch_failed_at = t2, fetch_error = "fatal: x\nmore" }))
+        assert.are.equal("cached · last fetch failed 10:05: unknown error",
+            cards.freshness({ fetch_failed_at = t2 }))
+    end)
+    it("says when nothing was fetched yet", function()
+        assert.are.equal("local ref · not fetched yet", cards.freshness({}))
+    end)
+    it("marks a running fetch", function()
+        assert.are.equal("fetched 10:00 · refreshing…", cards.freshness({ fetch_ok_at = t1, fetching = true }))
+    end)
+end)
+
+describe("issue_cards.view_lines", function()
+    local status = { ref = "origin/issue-tracker", tip = "abc1234def5678", fetch_ok_at = os.time() }
+
+    it("labels provenance and shows the card without its envelope", function()
+        local view = cards.view_lines(cards.parse_card(CARD_305), "000305", status)
+        assert.truthy(view.lines[1]:find("card only · read only", 1, true))
+        assert.truthy(view.lines[1]:find("origin/issue-tracker @ abc1234 ", 1, true))
+        assert.truthy(view.lines[2]:find("not in this checkout", 1, true))
+        assert.same({ 0 }, view.label_rows)
+        local text = table.concat(view.lines, "\n")
+        assert.truthy(text:find("\nstatus: open\n", 1, true))
+        assert.truthy(text:find("## Problem\n\nThe Problem text.", 1, true))
+        assert.falsy(text:find("tracker:", 1, true))
+        assert.falsy(text:find("version:", 1, true))
+        assert.falsy(text:find("## Spec", 1, true))
+        assert.falsy(text:find("## Plan", 1, true))
+    end)
+
+    it("says when the card left the tracker", function()
+        local view = cards.view_lines(nil, "000005", status)
+        assert.are.equal("Card #000005 is no longer on origin/issue-tracker.", view.lines[#view.lines])
+    end)
+end)

@@ -70,7 +70,8 @@ M.parse_card = function(text)
             break
         end
     end
-    return { id = fields.id, title = title, fields = fields }
+    local body = table.concat(vim.list_slice(lines, close + 1), "\n"):gsub("^\n+", "")
+    return { id = fields.id, title = title, fields = fields, body = body }
 end
 
 -- `git ls-tree <tip> -- <cards>/` output → { {oid, path, id} }.
@@ -227,6 +228,97 @@ M.annotations = function(lines, card, names)
         end
     end
     return notes
+end
+
+-- #309: a card with no details file in this checkout (its details may be on
+-- another branch) still gets a finder row and a read-only view.
+
+-- One name for a card-only issue: finder row value, identity key, buffer name.
+M.card_ref = function(root, id)
+    return "parley-card://" .. root .. "#" .. id
+end
+
+local function epoch(date)
+    local y, m, d = tostring(date or ""):match("^(%d%d%d%d)%-(%d%d)%-(%d%d)")
+    return y and os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = 12 }) or 0
+end
+
+-- Finder records for the cards whose id is not in `local_ids` (details ids from
+-- both the issues and the history dir of that repository). `opts = { root,
+-- repo_name, is_terminal }`. The records carry an identity, so the finder's
+-- dedupe/filter/sort run on them unchanged.
+M.card_only_records = function(cards, local_ids, opts)
+    local out = {}
+    for id, card in pairs(cards or {}) do
+        if not local_ids[id] then
+            local ref = M.card_ref(opts.root, id)
+            local f = card.fields
+            out[#out + 1] = {
+                id = id,
+                title = card.title,
+                slug = "",
+                deps = {},
+                status = f.status,
+                created = f.created,
+                updated = f.updated,
+                github_issue = not blank(f.github_issue) and f.github_issue or nil,
+                card_only = true,
+                card_root = opts.root,
+                repo_name = opts.repo_name,
+                archived = opts.is_terminal(f.status) == true,
+                mtime = epoch(f.updated),
+                identity = { key = ref, source = { root_ordinal = 0, unresolved = ref } },
+            }
+        end
+    end
+    return out
+end
+
+local function clock(t)
+    return os.date("%H:%M", t)
+end
+
+-- How current the shown cards are. A failure after the last success reports the
+-- failure: cached content never reads as freshly fetched.
+M.freshness = function(status)
+    local text
+    if status.fetch_failed_at and (not status.fetch_ok_at or status.fetch_failed_at >= status.fetch_ok_at) then
+        text = "cached · last fetch failed " .. clock(status.fetch_failed_at)
+            .. ": " .. ((status.fetch_error or ""):match("[^\n]+") or "unknown error")
+    elseif status.fetch_ok_at then
+        text = "fetched " .. clock(status.fetch_ok_at)
+    else
+        text = "local ref · not fetched yet"
+    end
+    return status.fetching and (text .. " · refreshing…") or text
+end
+
+local VIEW_FIELDS = { "status", "created", "updated", "github_issue", "estimate_hours" }
+
+-- The read-only card view: provenance label, the card's top-level fields (the
+-- `tracker:` envelope is sdlc's), then the card body as is. `card` nil means the
+-- card left the tracker. Nothing is fabricated.
+M.view_lines = function(card, id, status)
+    local ref = status.ref or "issue-tracker"
+    local lines = {
+        "card only · read only — " .. ref .. (status.tip and (" @ " .. status.tip:sub(1, 7)) or "")
+            .. " · " .. M.freshness(status),
+        "Details for #" .. id .. " are not in this checkout (they may be on another branch).",
+        "Card fields are sdlc's to change: `sdlc issue set-status`, `sdlc claim`.",
+        "",
+    }
+    if not card then
+        lines[#lines + 1] = "Card #" .. id .. " is no longer on " .. ref .. "."
+        return { lines = lines, label_rows = { 0 } }
+    end
+    for _, key in ipairs(VIEW_FIELDS) do
+        if card.fields[key] ~= nil then
+            lines[#lines + 1] = key .. ": " .. card.fields[key]
+        end
+    end
+    lines[#lines + 1] = ""
+    vim.list_extend(lines, vim.split(card.body or "", "\n", { plain = true }))
+    return { lines = lines, label_rows = { 0 } }
 end
 
 return M
