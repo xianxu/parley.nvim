@@ -119,3 +119,10 @@ Durable plan: [000309 plan](../plans/000309-tracker-only-issue-views-plan.md). S
   suffix), and reshaping #308's tracker state into a tagged outcome is a
   refactor beyond this issue.
 
+### 2026-09-30 — close review round 2 (SHIP, one advisory in the same family)
+- Advisory (parallel-path-resolution, second in its family): `local_ids` parsed
+  filenames with its own pattern. The rule the review named covers every
+  fact the join uses, not only the dirs. `issue_finder_records.parse_name` is
+  now the one parser shared by the scan and the join; the regression spec (a
+  skipped `000005-.md` must not hide card #000005) fails with the old pattern.
+

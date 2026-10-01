@@ -360,6 +360,13 @@ describe("IssueFinder card-only issues", function()
         assert.equals(1, rows)
     end)
 
+    it("counts only the files the scan turns into rows as local details", function()
+        -- The scan skips a name with an empty slug, so it must not hide the card.
+        vim.fn.writefile({ "---", "id: 000005", "---" }, repos.reader .. "/workshop/issues/000005-.md")
+        open_finder(0)
+        wait_items(has_card_row, "the card-only row despite a skipped file")
+    end)
+
     it("adds no card-only rows for an untracked repository", function()
         vim.fn.delete(repos.reader .. "/workshop/issue-tracker.json")
         open_finder(0)

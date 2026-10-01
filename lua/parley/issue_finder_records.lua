@@ -39,12 +39,18 @@ local function valid_input(input)
     return true
 end
 
+-- A details filename → id, slug (nil for anything else). The card join (#309)
+-- uses this same parser, so it counts exactly the files the scan turns into rows.
+M.parse_name = function(name)
+    return name:match("^(%d+)%-(.+)%.md$")
+end
+
 M.adapt = function(input)
     if not valid_input(input) then
         return failure()
     end
 
-    local id, slug = input.name:match("^(%d+)%-(.+)%.md$")
+    local id, slug = M.parse_name(input.name)
     if not id then
         return { kind = "skip" }
     end

@@ -362,7 +362,7 @@ local function local_ids(dirs)
             if not name then
                 break
             end
-            local id = name:match("^(%d+)%-.*%.md$")
+            local id = issue_records.parse_name(name)
             if id then
                 ids[id] = true
             end
