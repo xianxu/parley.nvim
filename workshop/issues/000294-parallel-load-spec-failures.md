@@ -44,6 +44,24 @@ Each passes alone. Suspected causes, none verified:
   depends on how the specs are scheduled.
 - Fix each at its class. Don't just raise `JOBS`-independent timeouts across the board.
 
+### Core concepts
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `load_factor` | tests/helpers/spec_runner.lua | new |
+| `install` | tests/helpers/jit_watch.lua | new |
+| `silence` | tests/helpers/jit_watch.lua | new |
+| `emit` | tests/helpers/jit_watch.lua | new |
+| `normal_edit` | lua/parley/spell_source.lua | changed |
+
+`load_factor(load1, ncpu)` is pure: how far a spec's deadline stretches for
+an oversubscribed machine, between 1x and `LOAD_CAP`. `jit_watch` is opt-in
+(`PARLEY_TEST_JITSTAT=1`): `install` samples VM states and counts trace
+flushes; `emit` writes to `PARLEY_TEST_JITSTAT_LOG` when make sets it;
+`silence` stops the scheduling parent from reporting. Lifetime: the per-spec
+`.jit` file is created by the first JIT line and removed by `RUN_SPEC` after
+it prints, pass or fail.
+
 ## Done when
 
 - Root cause per spec is in the Log, with evidence from a captured failing full run.
@@ -101,3 +119,10 @@ Each passes alone. Suspected causes, none verified:
   probe alone: 22.5s JIT on, 14.3s `jit.off()`, 22.3s with
   `maxmcode=65536,maxtrace=8000` (confirms the lessons.md note). LuaJIT
   2.1.1741730670, nvim 0.11.7, arm64 macOS.
+- Operator decisions: scale deadlines by machine load (not adaptive JOBS, not
+  "quiet machine only"); fix both deterministic arch failures here.
+- Fixed: local `main` fast-forwarded to origin/main in the primary checkout
+  (clean, 25 behind); #304's spell write now goes through
+  `buffer_edit.capture_user`/`apply_user` (f102dd36; spell specs and
+  buffer_mutation_spec green); deadlines stretch by `load_factor` (8c7dbdbb);
+  Core-concepts table added so `single_source_sweeps_spec` has rows to check.
