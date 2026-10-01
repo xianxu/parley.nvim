@@ -120,8 +120,7 @@ end
 -- One finder row: display + search text + highlight spans. Built from segments
 -- so a field the tracker card corrected (`tracker_stale`, #308) can be painted.
 M.render = function(issue)
-    -- A card-only issue (#309) always paints its provenance label.
-    local stale = vim.tbl_extend("force", issue.tracker_stale or {}, { card_only = issue.card_only or nil })
+    local stale = issue.tracker_stale or {}
     local parts, highlights, width = {}, {}, 0
     local function append(text, field)
         if field and stale[field] then
@@ -138,11 +137,9 @@ M.render = function(issue)
     else
         append(string.format("[%s]", issue.status or "?"), "status")
     end
-    append(" " .. issue.id .. " ")
-    if issue.card_only then
-        append("card only · read only", "card_only")
-        append(" ")
-    end
+    -- 🔒: the issue lives only on the tracker branch, with no details here to
+    -- pick up (#309); a stale details file keeps per-field amber, no lock.
+    append(" " .. issue.id .. (issue.card_only and "🔒" or "") .. " ")
     if issue.title ~= "" then
         append(issue.title, "title")
     else
@@ -159,10 +156,13 @@ M.render = function(issue)
         append(" ")
         append("[" .. issue.created .. "]", "created")
     end
+    local display = table.concat(parts)
+    if issue.card_only then
+        highlights = { { 0, #display, issue_cards.HIGHLIGHT } } -- the whole row is the card
+    end
     return {
-        display = table.concat(parts),
-        search_text = string.format("%s%s %s %s%s %s", repo_prefix, issue.status or "", issue.id,
-            issue.card_only and "card only " or "", issue.title, issue.slug),
+        display = display,
+        search_text = string.format("%s%s %s %s %s", repo_prefix, issue.status or "", issue.id, issue.title, issue.slug),
         highlights = highlights,
     }
 end

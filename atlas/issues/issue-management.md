@@ -67,9 +67,11 @@ Parley reads those cards read-only and shows them in two places:
 - **Card-only issues (#309):** a card with no details file in this checkout
   (the details may sit on another branch) still gets a finder row. Cards join
   details by repository and id across the issues *and* history dirs, so an
-  archived issue is never card-only. A card-only row reads
-  `card only · read only` in amber, sorts by card status, and lands in the
-  history view when its status is terminal. Selecting it opens a read-only
+  archived issue is never card-only. A card-only row is amber end to end and
+  carries 🔒 right after its id (the issue lives only on the tracker branch,
+  so it cannot be picked up in this checkout). A details file whose fields went
+  stale keeps per-field amber and no lock. The row sorts by card status and
+  lands in the history view when its status is terminal. Selecting it opens a read-only
   scratch buffer (`parley-card://<root>#<id>`, nomodifiable, wiped when hidden)
   with the provenance label, the source ref and tip, a freshness line, the
   card's top-level fields (not sdlc's `tracker:` envelope) and its body, the

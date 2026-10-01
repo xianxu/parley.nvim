@@ -44,7 +44,9 @@ relying on color alone.
 ## Done when
 
 - A card present only on origin/issue-tracker appears in the finder even when
-  its details exist only on another branch; normal search/filter/sort work.
+  its details exist only on another branch; normal search/filter/sort work. Its
+  row is amber end to end with 🔒 right after the id and no text label, unlike
+  a stale details file (per-field amber, no 🔒).
 - Opening it displays available card content in a read-only, nonmodifiable
   scratch buffer with an amber label and source ref; mutation actions refuse.
 - An asynchronous fetch discovers newly published cards and refreshes open
@@ -126,4 +128,14 @@ Durable plan: [000309 plan](../plans/000309-tracker-only-issue-views-plan.md). S
   fact the join uses, not only the dirs. `issue_finder_records.parse_name` is
   now the one parser shared by the scan and the join; the regression spec (a
   skipped `000005-.md` must not hide card #000005) fails with the old pattern.
+
+### 2026-10-01 — operator smoke test on :0
+- Feedback: drop the `card only · read only` text from finder rows (amber already
+  says it), paint the whole row amber, and add 🔒 right after the id so a
+  card-only issue (on the tracker branch only, not ready to pick up in this
+  worktree) differs from a stale details file (per-field amber, no lock).
+- Delta: `issue_finder_records.render` puts 🔒 after the id and one
+  full-row span on card-only rows. The 🔒 is the non-colour cue the Spec asked
+  for. The card view keeps its label line, since it explains the source and
+  freshness. Done when restated for the finder row.
 
