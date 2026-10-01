@@ -23,6 +23,7 @@ local INIT='tests/minimal_init.vim'
 local DEFAULT_TIMEOUT=50000 -- plenary.test_harness's own default
 function M.run(path)
     local harness=require('plenary.test_harness')
+    if vim.env.PARLEY_TEST_JITSTAT=='1' then require('tests.helpers.jit_watch').silence() end
     local opts=vim.tbl_extend('force',{minimal_init=INIT,timeout=DEFAULT_TIMEOUT},M.options(path) or {})
     vim.defer_fn(function()
         io.stdout:write(('DEADLINE: %s still running at its %ds deadline; killed\n'):format(path,opts.timeout/1000))

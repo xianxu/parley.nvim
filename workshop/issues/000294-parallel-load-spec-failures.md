@@ -77,3 +77,27 @@ Each passes alone. Suspected causes, none verified:
   via `jit.profile`, trace flushes via `jit.attach`), written from the profiler
   callback so a killed child still reports. `perf_document` alone: ~50% GC,
   ~10% compiler, 42 trace flushes in 17s.
+- Full run 1 also fails two arch specs, deterministically and not from load:
+  `buffer_mutation_spec` (#304's `spell_source.lua:61` writes with
+  `nvim_buf_set_text` outside the #254 boundary — on origin/main) and
+  `single_source_sweeps_spec` (local `main` ref is stale at c1b2173e, behind
+  origin/main a0930763, so `git merge-base HEAD main` reads #309's entities as
+  this issue's). Out of #294's class; they still block "5 green runs".
+- Runs 1–3 (2026-10-01, JOBS=8): run 1 killed `perf_ownership_spec` at 50s
+  (21s alone; it runs its work in 4 sequential grandchild nvims, so the child
+  sits in C and its own JIT profile shows nothing). Run 2: no load failures,
+  but `document_fold_retirement` took 87s vs 17s in run 1 — a 5x swing.
+  Run 3 overlapped another session's sharded ariadne `sdlc` Go tests (load
+  average 72 on this machine): `cliproxy_auth_login` (assert at :418, a 6s
+  `vim.wait` on a fixture-process round trip), `cliproxy_lifecycle` and
+  `cliproxy_update` (50s deadline kills, child idle in C, no JIT activity).
+- Harness gaps found: the make parent's JIT line can be the last one printed and
+  hide the child's; grandchild nvims' JIT lines land in output the spec captures.
+- With grandchild JIT lines routed to make (PARLEY_TEST_JITSTAT_LOG), a lone
+  `perf_ownership` run (27s, no other load from this suite) shows every
+  grandchild thrashing: J (compiler) 47–87% of samples; flushes 88, 844, 2856
+  (the 22s `chat_typing.start` probe) and 20,727 in a 1s `probe(100)`. That is
+  #293's mcode-allocation loop, deterministic here, not ~10%. The chat_typing
+  probe alone: 22.5s JIT on, 14.3s `jit.off()`, 22.3s with
+  `maxmcode=65536,maxtrace=8000` (confirms the lessons.md note). LuaJIT
+  2.1.1741730670, nvim 0.11.7, arm64 macOS.
