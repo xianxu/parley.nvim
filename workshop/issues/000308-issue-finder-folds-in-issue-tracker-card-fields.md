@@ -8,7 +8,7 @@ updated: 2026-09-30
 estimate_hours:
 card_mirror: 'c665520f81e5c7539038bb584a7305912b488ae1' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-30T17:08:06-07:00
-flow: {kind: quick, provenance: inferred, spec: "d106d99a", done: "eadc6421"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Issue finder folds in issue-tracker card fields
@@ -81,6 +81,8 @@ Durable plan: [000308 plan](../plans/000308-issue-finder-folds-in-issue-tracker-
 ## Log
 
 ### 2026-09-30
+- 2026-09-30: closed — Round 2 after BR-1 fix. New specs green: unit issue_cards(14), float_picker item spans, issue_finder_records render(4); integration issue_tracker(10: subscriber fan-out, closed-view pruning, plain-load move, failed re-read keeps cache, throttle, OID cache), issue_finder_tracker(4: incl. another view moving tip), issue_tracker_buffer(4: hidden buffer repaint under real 60s throttle). make lint clean. Manual on this repo: 307 cards load, #296 finder [wontfix] amber, buffer "← tracker: wontfix". make test residuals pre-existing/unrelated: arch buffer_mutation (spell_source.lua from #304, identical to main), #294 parallel-load flakes passing in isolation.; review verdict: SHIP
+- 2026-09-30: flow upgraded quick → full — 744 added lines in code files (limit 100); an earlier round of this close already ran the full review
 - Operator: amber for tracker values; scope = finder + issue buffer; freshness = local ref + throttled background fetch.
 - Implemented T1–T7: pure `issue_cards`, `float_picker` item highlight spans, segment-built finder rows, async `issue_tracker` (ls-tree + one cat-file batch, OID cache pruned per tip, throttled fetch), finder overlay with selection-preserving repaint, buffer virt_text, atlas. ARCH-MOCK: real git in throwaway repos (`tests/helpers/tracker_repo.lua`). ARCH-FUNERAL: in-memory state only, blob cache pruned to the current tree.
 - Discovery: the single-source arch guard needs every export as its own backticked name in a Core-concepts row, so the plan tables were split (plan Revisions).

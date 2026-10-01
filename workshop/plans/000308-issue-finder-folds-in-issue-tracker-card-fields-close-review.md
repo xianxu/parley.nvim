@@ -95,3 +95,88 @@ findings:
     title: |
       Remote selection uses the current branch's upstream, but the Spec says the default branch's upstream
 ```
+
+---
+
+## Re-review — 2026-09-30T17:47:56-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 308 — Issue finder folds in issue-tracker card fields |
+| repo | parley.nvim |
+| issue file | workshop/issues/000308-issue-finder-folds-in-issue-tracker-card-fields.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 8e3dfe3b3860a3a6c397e0b24a110b9622ac4f8c..c48559771d3be07f14b36e2f88ee121eea365d08 |
+| command | sdlc close --issue 308 |
+| reviewer | claude |
+| timestamp | 2026-09-30T17:47:56-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All four findings from the earlier round are fixed. BR-1 is fixed for the whole class, not just the one site: `issue_tracker.subscribe` gives each repository root a set of subscribers, and `read()` tells every live subscriber whenever the tracker tip moves. That covers loads, refreshes and moves fetched from another slot. Issue buffers also re-read the local ref on BufEnter. The new specs cover all three cases (a hidden buffer under the real 60s throttle, the finder hearing about a read made by another view, and a load seeing a ref another checkout fetched), and none of them could pass under the old caller-only `on_moved`. I ran every spec mapped to `issues/issue-management` with `make test-spec SPEC=issues/issue-management` and all of them pass, including the three tracker integration specs. One new problem remains, and it is Minor. The buffer's subscription is guarded by a buffer-local flag that outlives the subscription, so after an unload, or after the same buffer is attached twice, the buffer can stop getting pushes or later repaint an old card. It doesn't block the gate.
+
+1. **Strengths**
+   - `lua/parley/issue_tracker.lua:194-202`: subscribers are told only when the tip has actually moved. `live()` drops dead subscribers each time the set is changed or notified, so the set stays bounded by the views still open (ARCH-FUNERAL).
+   - `issue_tracker.lua:143-147`: when a re-read fails, it returns the last good `st.cards`. The test that points the ref at a blob covers this (`tests/integration/issue_tracker_spec.lua`, "keeps the last good cards").
+   - The pure core is cleanly separated. Parsing, overlay, annotations, remote selection and row segments live in `issue_cards` and `issue_finder_records.render` and have unit tests that use no IO. The IO side is a thin `vim.system` shell (ARCH-PURE).
+   - ARCH-MOCK: the tests run real git against throwaway repositories (`tests/helpers/tracker_repo.lua`). `fetch_enabled` is off under `PARLEY_TEST_MODE`, so no spec can reach a real remote.
+   - When the tracker drops a GitHub link, the row now shows `(#-)` in amber instead of hiding the difference, which keeps the overlay honest.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings**
+   - `lua/parley/issue_tracker_buffer.lua:86-94`: the buffer's subscription is guarded by `vim.b[buf].parley_issue_tracker_subscribed`. That variable is shared by every `attach` of the buffer, but the subscription itself belongs to only one attach.
+     - I checked in headless nvim that `b:` variables survive `:bunload`. So if anything prunes the subscriber while the buffer is unloaded, it is never re-registered when the buffer is read back in.
+     - When a buffer is re-attached (a second BufReadPost, e.g. `:e`), the old `show` closure stays subscribed and updates the old `card`. The new BufWritePost then repaints from the new closure's `card`, which can be older.
+     - This is the 2nd finding in family `change-notification-reaches-all-views`. The rule: key each subscription by the view's identity (root plus buffer, or the picker instance) and replace it whenever the view attaches again, or keep per-buffer state in one module table that the subscriber reads. Then whether a view is subscribed and whether it is alive come from the same fact, and no sticky flag can drift apart from the subscription. The finder already does this, because each `open` registers its own `picker_open` closure.
+
+5. **Test coverage notes:** the regression tests for BR-1 and BR-3 are real and would have failed before the fix. There is no spec for a buffer that is unloaded and reloaded, or attached twice (the Minor above). Nothing tests ordering between overlapping reads (`gen` superseding). It is reasoned to be correct, but there is no way to inject a completion order.
+
+6. **Architecture, principle by principle**
+   - **ARCH-DRY:** pass. Row rendering is a single `render` in `issue_finder_records`. Field names, the card directory and the tracker branch all come from the vocabulary.
+   - **ARCH-PURE:** pass.
+   - **ARCH-PURPOSE:** pass. Both the finder and the buffers derive from the card overlay, and the cycle-status write path is explicitly left as a follow-up that can be done separately.
+   - **ARCH-MOCK:** pass. Real git runs against local fixtures. A live conformance check isn't applicable because the behaviour depends on git plumbing, not a service.
+   - **ARCH-CONSTRAINTS:** pass. Rendering does no network work, fetches are throttled to at most one per 60s with a timeout, and the cat-file batch only reads blobs that changed.
+   - **ARCH-SECURE:** pass. Card blobs are parsed defensively (truncated frames and missing ids are rejected), git gets an argv array, and `GIT_TERMINAL_PROMPT=0` stops git from prompting for credentials.
+   - **ARCH-ORDER:** pass, with a note. `gen`, `loading` and `fetching` are a small set of flags rather than an enum. Superseding reads hand their waiters over correctly, but there is no seam for injecting an interleaving.
+   - **ARCH-FUNERAL:** pass. All state is in memory, the blob cache is pruned to the current tree, and subscribers are pruned once their view closes (apart from the flag edge case above).
+
+7. **Plan revision recommendations:** none. The Revisions entry already records the change to the current branch's upstream remote and the subscription-based freshness, and the restated Done-when matches the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      per-root subscribe fan-out from read() plus BufEnter re-read; hidden-buffer real-throttle and cross-view specs fail without it
+  - id: BR-2
+    disposition: addressed
+    note: |
+      blank card title ignored (issue_cards.lua overlay); dropped github link flagged stale and rendered as (#-), unit-tested
+  - id: BR-3
+    disposition: addressed
+    note: |
+      fail() finishes with st.cards; "keeps the last good cards when a re-read fails" spec corrupts the ref and asserts the old card
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Spec revised in Revisions to the current branch's upstream remote, matching issue_tracker.lua read()
+findings:
+  - id: new
+    severity: Minor
+    family: change-notification-reaches-all-views
+    title: |
+      Buffer subscription guarded by a sticky b: flag that outlives both the subscription and the attach closure
+    detail: |
+      2nd in family. b: vars survive :bunload, so a subscriber pruned while unloaded is never re-registered on reload, and a re-attach (:e) leaves the old show closure subscribed while BufWritePost repaints the new, possibly older, card. Rule: key each subscription by view identity and replace it on attach, so liveness and subscription derive from one fact.
+```
