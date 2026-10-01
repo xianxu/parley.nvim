@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000308-issue-finder-folds-in-issue-tracker-card-fields.md
         source_blob: c49676ee550e8cf4aad7caccf8c4b4fc406de26c
         destination: workshop/issues/000308-issue-finder-folds-in-issue-tracker-card-fields.md
+        main_commit: 8e3dfe3b3860a3a6c397e0b24a110b9622ac4f8c
 ---
 
 # Issue finder folds in issue-tracker card fields
