@@ -68,6 +68,22 @@ local function can_use_issue_actions()
     return true
 end
 
+-- #309: the text for a mutation aimed at a tracker card without local details.
+-- Text only: each caller logs through its own parley instance.
+M.card_only_warning = function(id)
+    return "#" .. id .. " is a tracker card without local details (read only)"
+end
+
+-- Buffer-scoped issue commands refuse the read-only card view (parley.issue_card_view).
+local function refuse_card_only()
+    local card = vim.b.parley_card_only
+    if not card then
+        return false
+    end
+    _parley.logger.warning(M.card_only_warning(card.id))
+    return true
+end
+
 M.default_status = function()
     local model, err = vocab()
     return model and model:category("open")[1] or nil, err
@@ -827,6 +843,7 @@ M.cmd_issue_new = function()
 end
 
 M.cmd_issue_status = function()
+    if refuse_card_only() then return end
     if not can_use_issue_actions() then return end
     local buf = vim.api.nvim_get_current_buf()
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -869,6 +886,7 @@ M.cmd_issue_next = function()
 end
 
 M.cmd_issue_decompose = function()
+    if refuse_card_only() then return end
     if not can_use_issue_actions() then return end
     local buf = vim.api.nvim_get_current_buf()
     local cursor = vim.api.nvim_win_get_cursor(0)
