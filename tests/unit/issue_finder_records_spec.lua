@@ -220,5 +220,19 @@ describe("Issue finder records", function()
             assert.equals("[open] 000296 Package Screenkey (#-) [2026-09-28]", row.display)
             assert.equals("(#-)", row.display:sub(row.highlights[1][1] + 1, row.highlights[1][2]))
         end)
+
+        it("labels a card-only issue in text and in the tracker highlight (#309)", function()
+            local row = records.render({
+                id = "000305", slug = "", title = "Separate completion", status = "open",
+                created = "2026-09-29", card_only = true,
+            })
+            assert.equals("[open] 000305 card only · read only Separate completion [2026-09-29]", row.display)
+            assert.equals(1, #row.highlights)
+            local span = row.highlights[1]
+            assert.equals("ParleyIssueTracker", span[3])
+            assert.equals("card only · read only", row.display:sub(span[1] + 1, span[2]))
+            assert.truthy(row.search_text:find("card only", 1, true))
+            assert.truthy(row.search_text:find("Separate completion", 1, true))
+        end)
     end)
 end)
