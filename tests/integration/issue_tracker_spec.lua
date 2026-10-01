@@ -23,6 +23,7 @@ describe("issue_tracker", function()
     before_each(function()
         tracker.reset_for_tests()
         tracker.fetch_interval_s = 0
+        tracker.fetch_enabled = true
         git_calls = {}
         tracker._on_git = function(argv)
             git_calls[#git_calls + 1] = argv[4]
@@ -36,6 +37,7 @@ describe("issue_tracker", function()
     after_each(function()
         tracker._on_git = nil
         tracker.fetch_interval_s = 60
+        tracker.fetch_enabled = false
         fixture.destroy(repos)
     end)
 

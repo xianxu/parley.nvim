@@ -20,6 +20,8 @@ local M = {}
 -- ariadne#252's cutover marker; the binary keeps the legacy flow without it.
 M.MARKER = "workshop/issue-tracker.json"
 M.fetch_interval_s = 60
+-- Specs never reach a real remote unless they opt in (their fixtures are local).
+M.fetch_enabled = vim.env.PARLEY_TEST_MODE ~= "1"
 M.fetch_timeout_ms = 15000
 M.read_timeout_ms = 10000
 M._on_git = nil -- test hook: observes each git argv before it runs
@@ -204,7 +206,7 @@ M.refresh = function(root, on_moved, on_settled)
     local found = discovery()
     local st = tracked(root) and found and states[root]
     local now = uv.now() / 1000
-    if not st or not st.remote or st.fetching
+    if not M.fetch_enabled or not st or not st.remote or st.fetching
         or (st.fetched_at and now - st.fetched_at < M.fetch_interval_s) then
         return vim.schedule(on_settled)
     end

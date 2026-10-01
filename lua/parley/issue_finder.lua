@@ -8,6 +8,8 @@ local finder_loader = require("parley.finder_loader")
 local finder_producer = require("parley.finder_producer")
 local async_file_source = require("parley.async_file_source")
 local issue_records = require("parley.issue_finder_records")
+local issue_cards = require("parley.issue_cards")
+local issue_tracker = require("parley.issue_tracker")
 
 local M = {}
 local _parley
@@ -367,6 +369,27 @@ M.open = function(_options)
         return
     end
     local session = new_session(snapshot)
+    -- #308: tracker cards per repository root, overlaid before sorting.
+    local raw_records = nil
+    local cards_by_root = {}
+    local root_of_dir = {}
+    local function repo_root_of(path)
+        local dir = vim.fn.fnamemodify(path, ":h")
+        if root_of_dir[dir] == nil then
+            root_of_dir[dir] = issue_tracker.repo_root(dir) or false
+        end
+        return root_of_dir[dir]
+    end
+    local function overlay_cards(records)
+        local names = issue_tracker.field_names()
+        local out = {}
+        for i, record in ipairs(records or {}) do
+            local root = repo_root_of(record.path)
+            local cards = root and cards_by_root[root]
+            out[i] = cards and issue_cards.overlay(record, cards[record.id], names) or record
+        end
+        return out
+    end
     local repo_facets = finder_facets.eligible_labels(roots, super_repo, function(root)
         return root.repo_name
     end)
@@ -481,7 +504,8 @@ M.open = function(_options)
             ))
         end,
         materialize = function(outcome)
-            sorted = issue_records.materialize(outcome.records, {
+            raw_records = outcome.records
+            sorted = issue_records.materialize(overlay_cards(raw_records), {
                 archived = M.includes_history(view_mode),
             })
             items, repo_tag_bar_tags = build_picker_data()
@@ -606,6 +630,39 @@ M.open = function(_options)
         picker_ref.update = loading.picker.update
     end
     session:start()
+
+    -- #308: fold in tracker cards as they arrive (local ref first, then after a
+    -- throttled background fetch), keeping the operator's selected row.
+    issue_tracker.ensure_highlight()
+    local function deliver(root, cards)
+        local picker = loading and loading.picker
+        if not cards or not picker or (picker.is_closed and picker.is_closed()) then
+            return
+        end
+        cards_by_root[root] = cards
+        if raw_records == nil then
+            return -- materialize overlays them when the scan settles
+        end
+        sorted = issue_records.materialize(overlay_cards(raw_records), {
+            archived = M.includes_history(view_mode),
+        })
+        items, repo_tag_bar_tags = build_picker_data()
+        local current = picker.selected and picker.selected()
+        picker.update(items, repo_tag_bar_tags, current and current.value or nil)
+    end
+    local seen_roots = {}
+    for _, root in ipairs(roots) do
+        local repo_root = issue_tracker.repo_root(root.path)
+        if repo_root and not seen_roots[repo_root] then
+            seen_roots[repo_root] = true
+            issue_tracker.load(repo_root, function(cards)
+                deliver(repo_root, cards)
+                issue_tracker.refresh(repo_root, function(moved)
+                    deliver(repo_root, moved)
+                end)
+            end)
+        end
+    end
 
     _parley._issue_finder.initial_index = nil
     _parley._issue_finder.initial_value = nil
