@@ -191,6 +191,30 @@ describe("issue_tracker", function()
         assert.is_nil(status.fetch_failed_at)
     end)
 
+    it("settles a refresh that found a fetch in flight only when that fetch settles", function()
+        load(repos.reader)
+        local first, second, fetching_at_second = false, false, nil
+        tracker.refresh(repos.reader, function() first = true end)
+        tracker.refresh(repos.reader, function()
+            second = true
+            fetching_at_second = tracker.status(repos.reader).fetching
+        end)
+        wait_for(function() return first and second end)
+        assert.is_false(fetching_at_second)
+        -- interval 0: the joiner gets its own follow-up fetch
+        assert.equals(2, count("fetch"))
+    end)
+
+    it("does not refetch for a joiner inside the throttle interval", function()
+        tracker.fetch_interval_s = 3600
+        load(repos.reader)
+        local first, second = false, false
+        tracker.refresh(repos.reader, function() first = true end)
+        tracker.refresh(repos.reader, function() second = true end)
+        wait_for(function() return first and second end)
+        assert.equals(1, count("fetch"))
+    end)
+
     it("fetches with an explicit refspec so a single-branch clone works", function()
         local reader = repos.base .. "/single"
         fixture.git(repos.base, { "clone", "-q", "--single-branch", "--branch", "main", repos.remote, reader })

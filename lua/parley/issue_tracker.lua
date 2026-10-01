@@ -29,7 +29,7 @@ M._on_git = nil -- test hook: observes each git argv before it runs
 local states = {}
 
 local function state(root)
-    states[root] = states[root] or { gen = 0, blobs = {}, waiters = {}, subscribers = {} }
+    states[root] = states[root] or { gen = 0, blobs = {}, waiters = {}, subscribers = {}, joiners = {} }
     return states[root]
 end
 
@@ -256,32 +256,52 @@ M.refresh = function(root, on_settled)
     local found = discovery()
     local st = tracked(root) and found and states[root]
     local now = uv.now() / 1000
-    if not M.fetch_enabled or not st or st.fetching
+    if st and st.fetching then
+        -- Wait for the fetch in flight: settling now would let a view report
+        -- "refreshing…" after it ends with an unchanged tip (no notify), and the
+        -- caller may be asking for a change made after that fetch began.
+        st.joiners[#st.joiners + 1] = on_settled
+        return
+    end
+    if not M.fetch_enabled or not st
         or (st.fetched_at and now - st.fetched_at < M.fetch_interval_s) then
         return vim.schedule(on_settled)
     end
     -- Stamp before resolving: the bootstrap path is throttled too, and a
-    -- concurrent refresh sees `fetching`.
+    -- concurrent refresh joins via `fetching`.
     st.fetching, st.fetched_at = true, now
+    local function settle()
+        st.fetching = false
+        local joiners = st.joiners
+        st.joiners = {}
+        on_settled()
+        if #joiners > 0 then
+            -- They asked after this fetch began: give them a follow-up refresh
+            -- (still throttled, so usually it settles at once).
+            M.refresh(root, function()
+                for _, joiner in ipairs(joiners) do
+                    joiner()
+                end
+            end)
+        end
+    end
     resolve_remote(root, st, function(remote)
         if not remote then
-            st.fetching = false
-            return on_settled()
+            return settle()
         end
         local refspec = "+refs/heads/" .. found.tracker .. ":refs/remotes/" .. remote .. "/" .. found.tracker
         git(root, { "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", remote, refspec },
             { timeout = M.fetch_timeout_ms }, function(ok, _, err)
-                st.fetching = false
                 if not ok then
                     logger.debug("issue tracker: fetch failed in " .. root .. ": " .. tostring(err))
                     st.fetch_failed_at, st.fetch_error = os.time(), tostring(err)
-                    return on_settled()
+                    return settle()
                 end
                 st.fetch_ok_at, st.fetch_failed_at, st.fetch_error = os.time(), nil, nil
                 st.remote = st.remote or remote -- provisional until the read confirms it
-                st.waiters[#st.waiters + 1] = function()
-                    on_settled()
-                end
+                -- `fetching` stays set until the post-fetch read lands, so a
+                -- joiner sees the new tip.
+                st.waiters[#st.waiters + 1] = settle
                 read(root, st, found) -- supersedes any read of the pre-fetch tip
             end)
     end)

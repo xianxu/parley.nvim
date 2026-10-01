@@ -16,9 +16,10 @@ local function render(buf, root, id, cards)
         return
     end
     local view = issue_cards.view_lines(cards and cards[id], id, issue_tracker.status(root) or {})
-    vim.bo[buf].modifiable = true
+    -- Lift both guards for the render only: writing a `readonly` buffer warns (W10).
+    vim.bo[buf].readonly, vim.bo[buf].modifiable = false, true
     buffer_edit.replace_all(buf, view.lines)
-    vim.bo[buf].modifiable = false
+    vim.bo[buf].readonly, vim.bo[buf].modifiable = true, false
     vim.bo[buf].modified = false
     vim.api.nvim_buf_clear_namespace(buf, M.NS, 0, -1)
     for _, row in ipairs(view.label_rows) do

@@ -80,6 +80,12 @@ describe("issue card view", function()
         assert.equals(0, vim.fn.filereadable(repos.reader .. "/workshop/issues/000005-remote.md"))
     end)
 
+    it("renders without readonly warnings", function()
+        vim.v.warningmsg = ""
+        open_settled()
+        assert.equals("", vim.v.warningmsg)
+    end)
+
     it("reuses one buffer per card while shown, and wipes it once hidden", function()
         local buf = open_settled()
         vim.cmd("split | enew") -- the card stays displayed in the other window
