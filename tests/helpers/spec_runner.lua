@@ -17,8 +17,16 @@ end
 -- (a per-process query dir, the wordless-refusal watch) cover every spec rather
 -- than the ones that remember to ask (#261 M5 review BR-71).
 local INIT='tests/minimal_init.vim'
+-- Plenary kills a child at its deadline without a word, so a deadline kill read
+-- as a failure with no assertion output (#294). The parent waits in vim.wait,
+-- where timers run; one at the deadline names the cause.
+local DEFAULT_TIMEOUT=50000 -- plenary.test_harness's own default
 function M.run(path)
     local harness=require('plenary.test_harness')
-    return harness.test_directory(path,vim.tbl_extend('force',{minimal_init=INIT},M.options(path) or {}))
+    local opts=vim.tbl_extend('force',{minimal_init=INIT,timeout=DEFAULT_TIMEOUT},M.options(path) or {})
+    vim.defer_fn(function()
+        io.stdout:write(('DEADLINE: %s still running at its %ds deadline; killed\n'):format(path,opts.timeout/1000))
+    end,opts.timeout)
+    return harness.test_directory(path,opts)
 end
 return M

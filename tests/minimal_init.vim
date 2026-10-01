@@ -85,6 +85,10 @@ vim.api.nvim_create_autocmd("VimLeavePre", { callback = drop_query_dir })
 -- definition, two triggers.
 require("tests.helpers.exit_with_parent").install(nil, drop_query_dir)
 
+-- #294: PARLEY_TEST_JITSTAT=1 reports each process's LuaJIT VM states and
+-- trace flushes, so a slow full-suite run says whether the JIT was thrashing.
+if vim.env.PARLEY_TEST_JITSTAT == "1" then require("tests.helpers.jit_watch").install() end
+
 -- A spec that exercises a wordless token on purpose names it in
 -- g:parley_expected_unkeyed, at file scope: nothing to restore, and the
 -- exemption is visible where the case lives.
