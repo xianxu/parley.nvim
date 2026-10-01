@@ -3,6 +3,19 @@
 Compact rules distilled from Parley.nvim's review and integration history.
 Incident detail belongs in the issue or plan that owns it.
 
+## 2026-09-30 (#309 — tracker-only card views)
+
+- An async "settled" callback must mean the work it reports on is finished. A
+  refresh that skipped because a fetch was in flight settled at once, and the
+  view showed "refreshing…" forever when the tip did not move. Join the
+  in-flight work, and test a second caller that arrives while the first is
+  running.
+- Put assertions outside scheduled callbacks. An assert inside one runs after
+  the flag the test waits on is set, and its error never reaches busted, so the
+  test passes vacuously.
+- Run a feature live outside the harness before close. The harness disables
+  fetching; the concurrency bug and the W10 warning only showed with it on.
+
 ## 2026-09-30 (#307 — setup defaults that read cwd)
 
 - Before widening a detection that reads cwd or env, run the full suite and

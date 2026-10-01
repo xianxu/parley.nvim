@@ -58,12 +58,12 @@ relying on color alone.
 
 Durable plan: [000309 plan](../plans/000309-tracker-only-issue-views-plan.md). Single pass, one close.
 
-- [ ] T1 pure card model: card body, card-only records, freshness, card view text
-- [ ] T2 card-only finder row label
-- [ ] T3 tracker first-fetch bootstrap + fetch status
-- [ ] T4 read-only card view + buffer-command refusals
-- [ ] T5 finder card-only rows, open, refusals
-- [ ] T6 atlas + live check (#305 is card-only in this repo today)
+- [x] T1 pure card model: card body, card-only records, freshness, card view text
+- [x] T2 card-only finder row label
+- [x] T3 tracker first-fetch bootstrap + fetch status
+- [x] T4 read-only card view + buffer-command refusals
+- [x] T5 finder card-only rows, open, refusals
+- [x] T6 atlas + live check (#305 is card-only in this repo today)
 
 ## Log
 
@@ -73,3 +73,28 @@ Durable plan: [000309 plan](../plans/000309-tracker-only-issue-views-plan.md). S
   remote-card reading and amber overlays exist, but standalone card rows and
   read-only views do not. This task records the extension; implementation has
   not started.
+
+- Design: durable plan `workshop/plans/000309-tracker-only-issue-views-plan.md`;
+  a fresh-context plan review found 5 blocking issues. The main one: the finder
+  spec's relative history_dir resolved to this repository through the real
+  parley's `project_root()`. Fixed, then approved on re-review.
+- change-code inferred the quick flow (design under the limit); the code diff
+  (~360 lines) leaves the shell, so close runs the full review.
+- Arch: the card view's render first called `nvim_buf_set_lines` directly and
+  tripped `tests/arch/buffer_mutation_spec.lua`. It now goes through a new
+  `buffer_edit.replace_all` instead of widening the allow list.
+- Live check in this repo (outside the harness, so fetch is on) found two bugs
+  the specs had missed, both now pinned by tests:
+  - the view stayed on "refreshing…": the finder's fetch was in flight, the
+    view's refresh settled at once, and an unchanged tip never notifies. A
+    refresh now joins the fetch in flight and gets a throttled follow-up. This
+    also fixed a pre-existing race in #308's "background fetch moves the
+    tracker" spec, which the longer `fetching` window exposed.
+  - every re-render raised W10 because the buffer was `readonly`.
+  Final live state: #305 is the only card-only row, and its view reads
+  `card only · read only — origin/issue-tracker @ 4a0d2e4 · fetched 22:38`
+  with the card's fields and Problem heading, nonmodifiable.
+- Suite: green except the two arch specs that also fail on main (only
+  `spell_source.lua:61` remains in buffer_mutation) and document-fold specs
+  that time out under parallel load but pass alone.
+
