@@ -1,12 +1,13 @@
 ---
 id: 000308
-status: open
+status: working
 deps: [ariadne#252]
 github_issue:
 created: 2026-09-30
 updated: 2026-09-30
 estimate_hours:
-card_mirror: 'fa35f36f29e7bc524ffad9be373133e7fd0b6cf6' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'c665520f81e5c7539038bb584a7305912b488ae1' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-09-30T17:08:06-07:00
 ---
 
 # Issue finder folds in issue-tracker card fields
@@ -65,8 +66,17 @@ route through `sdlc issue set-status`.
 
 ## Plan
 
-- [ ]
+Durable plan: [000308 plan](../plans/000308-issue-finder-folds-in-issue-tracker-card-fields-plan.md). Single pass, one close.
+
+- [ ] T1 pure issue_cards
+- [ ] T2 float_picker item highlight spans
+- [ ] T3 segment-built finder rows
+- [ ] T4 issue_tracker async reader + throttled fetch
+- [ ] T5 finder overlay wiring
+- [ ] T6 issue-buffer amber annotations
+- [ ] T7 atlas + verification
 
 ## Log
 
 ### 2026-09-30
+- Operator: amber for tracker values; scope = finder + issue buffer; freshness = local ref + throttled background fetch.
