@@ -4,12 +4,12 @@ status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-30
-updated: 2026-09-30
+updated: 2026-10-01
 estimate_hours:
-card_mirror: 'ecd033b8a4e0dcca28617aa50bb4f71ee92f12c1' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2fe90e3070cf17a11a06b7ad13cf31e05ed5696f' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-09-30T22:11:00-07:00
 flow: {kind: full, provenance: inferred}
-actual_hours: 0.85
+actual_hours: 1.28
 ---
 
 # Show tracker-only cards in issue finder and viewer
