@@ -13,6 +13,7 @@
 /.agents/skills/superpowers-verification-before-completion
 /.agents/skills/superpowers-writing-plans
 /.agents/skills/superpowers-writing-skills
+/.agents/skills/xx-couch
 /.agents/skills/xx-datatype
 /.agents/skills/xx-fix
 /.agents/skills/xx-interview-feedback
@@ -39,6 +40,7 @@
 /.claude/skills/superpowers-verification-before-completion
 /.claude/skills/superpowers-writing-plans
 /.claude/skills/superpowers-writing-skills
+/.claude/skills/xx-couch
 /.claude/skills/xx-datatype
 /.claude/skills/xx-fix
 /.claude/skills/xx-interview-feedback
