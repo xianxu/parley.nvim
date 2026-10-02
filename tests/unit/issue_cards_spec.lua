@@ -14,6 +14,9 @@ local CARD_296 = table.concat({
     "        token: move-e3d2ea715de8",
     "        source_branch: refs/heads/main",
     "started: 2026-09-28T17:32:50-07:00",
+    "claimant:",
+    "    operator: Xian Xu",
+    "    workspace: parley.nvim:1",
     "---",
     "",
     "# Package Screenkey for app recordings",
@@ -36,7 +39,9 @@ local DETAILS_296 = {
     "# Package Screenkey for app recordings",
 }
 
-local NAMES = { "status", "started", "created", "updated", "estimate_hours", "actual_hours", "github_issue", "title" }
+local NAMES = {
+    "status", "started", "created", "updated", "estimate_hours", "actual_hours", "github_issue", "claimant", "title",
+}
 
 describe("issue_cards.parse_card", function()
     it("reads top-level card fields and the H1, ignoring the tracker envelope", function()
@@ -48,6 +53,13 @@ describe("issue_cards.parse_card", function()
         assert.is_nil(card.fields.token)
         assert.is_nil(card.fields.handoff)
         assert.are.equal("Package Screenkey for app recordings", card.title)
+    end)
+
+    it("reads a nested field as its child lines, in order", function()
+        local card = cards.parse_card(CARD_296)
+        assert.are.same({ "operator: Xian Xu", "workspace: parley.nvim:1" }, card.fields.claimant)
+        assert.are.same({ "version: 1", "handoff:", "    token: move-e3d2ea715de8",
+            "    source_branch: refs/heads/main" }, card.fields.tracker)
     end)
 
     it("strips quotes and trailing comments", function()
@@ -126,7 +138,11 @@ describe("issue_cards.overlay", function()
         assert.are.equal("wontfix", out.status)
         assert.are.equal("2026-09-29", out.updated)
         assert.is_true(out.tracked)
-        assert.are.same({ status = true, updated = true }, out.tracker_stale)
+        -- Every vocabulary field is carried; fields the details lack count as differing.
+        assert.are.same({ status = true, updated = true, started = true, claimant = true }, out.tracker_stale)
+        assert.are.equal("2026-09-28T17:32:50-07:00", out.started)
+        assert.are.same({ "operator: Xian Xu", "workspace: parley.nvim:1" }, out.claimant)
+        assert.is_nil(out.tracker) -- the envelope is not a vocabulary field
         assert.are.equal("open", record.status) -- input untouched
     end)
 
@@ -159,6 +175,34 @@ describe("issue_cards.overlay", function()
     end)
 end)
 
+describe("issue_cards.missing", function()
+    it("lists card fields the details lack, as frontmatter lines in vocabulary order", function()
+        local card = cards.parse_card(CARD_296)
+        card.fields.actual_hours = "3.5"
+        assert.are.same({
+            row = 9,
+            lines = {
+                "started: 2026-09-28T17:32:50-07:00",
+                "actual_hours: 3.5",
+                "claimant:",
+                "    operator: Xian Xu",
+                "    workspace: parley.nvim:1",
+            },
+        }, cards.missing(DETAILS_296, card, NAMES))
+    end)
+
+    it("shows a field new to the vocabulary with no other change", function()
+        local card = cards.parse_card(CARD_296:gsub("\n%-%-%-\n", "\nreviewer: ada\n---\n", 1))
+        local out = cards.missing(DETAILS_296, card, { "reviewer" })
+        assert.are.same({ "reviewer: ada" }, out.lines)
+    end)
+
+    it("is nil when nothing is missing, or without a card", function()
+        assert.is_nil(cards.missing(DETAILS_296, cards.parse_card(CARD_296), { "status", "updated", "title" }))
+        assert.is_nil(cards.missing(DETAILS_296, nil, NAMES))
+    end)
+end)
+
 describe("issue_cards.annotations", function()
     it("annotates differing card-owned frontmatter lines only", function()
         local notes = cards.annotations(DETAILS_296, cards.parse_card(CARD_296), NAMES)
@@ -178,6 +222,24 @@ describe("issue_cards.annotations", function()
         assert.are.equal(11, by_field.title.row)
         assert.are.equal("← tracker: Renamed", by_field.title.text)
         assert.are.equal("← tracker: (empty)", by_field.created.text)
+    end)
+
+    it("compares a nested local field as a block (a refreshed mirror is not stale)", function()
+        local details = vim.list_extend(vim.list_slice(DETAILS_296, 1, 9),
+            { "claimant:", "    operator: Xian Xu", "    workspace: parley.nvim:1", "---" })
+        local card = cards.parse_card(CARD_296)
+        assert.are.same({}, cards.annotations(details, card, { "claimant" }))
+        assert.is_nil(cards.missing(details, card, { "claimant" }))
+        details[11] = "    operator: Ada"
+        assert.are.same({ 9 }, vim.tbl_map(function(n) return n.row end, cards.annotations(details, card, { "claimant" })))
+    end)
+
+    it("shows a nested card value inline beside a local line", function()
+        local details = vim.list_extend(vim.list_slice(DETAILS_296, 1, 9), { "claimant: me", "---" })
+        local notes = cards.annotations(details, cards.parse_card(CARD_296), { "claimant" })
+        assert.are.same({
+            { row = 9, field = "claimant", text = "← tracker: operator: Xian Xu, workspace: parley.nvim:1" },
+        }, notes)
     end)
 end)
 
@@ -254,13 +316,15 @@ describe("issue_cards.view_lines", function()
     local status = { ref = "origin/issue-tracker", tip = "abc1234def5678", fetch_ok_at = os.time() }
 
     it("labels provenance and shows the card without its envelope", function()
-        local view = cards.view_lines(cards.parse_card(CARD_305), "000305", status)
+        local view = cards.view_lines(cards.parse_card(CARD_305), "000305", status, true, NAMES)
         assert.truthy(view.lines[1]:find("card only · read only", 1, true))
         assert.truthy(view.lines[1]:find("origin/issue-tracker @ abc1234 ", 1, true))
         assert.truthy(view.lines[2]:find("not in this checkout", 1, true))
         assert.same({ 0 }, view.label_rows)
         local text = table.concat(view.lines, "\n")
         assert.truthy(text:find("\nstatus: open\n", 1, true))
+        assert.truthy(text:find("\nstarted: 2026-09-28T17:32:50-07:00\n", 1, true))
+        assert.truthy(text:find("\nclaimant:\n    operator: Xian Xu\n", 1, true))
         assert.truthy(text:find("## Problem\n\nThe Problem text.", 1, true))
         assert.falsy(text:find("tracker:", 1, true))
         assert.falsy(text:find("version:", 1, true))

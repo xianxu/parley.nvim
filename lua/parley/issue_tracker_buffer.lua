@@ -1,7 +1,8 @@
--- Amber end-of-line annotations on issue details buffers (#308): where the
+-- Amber tracker values on issue details buffers (#308, #310): where the
 -- details' card_mirror disagrees with the ariadne#252 tracker card, show the
--- card's value beside the stale line. Buffer bytes are never changed; card
--- fields stay sdlc's to write.
+-- card's value beside the stale line; card fields the details have no line for
+-- show as virtual frontmatter lines above the closing `---`. Buffer bytes are
+-- never changed; card fields stay sdlc's to write.
 
 local issue_cards = require("parley.issue_cards")
 local issue_tracker = require("parley.issue_tracker")
@@ -37,6 +38,17 @@ local function paint(buf, card, names)
         vim.api.nvim_buf_set_extmark(buf, M.NS, note.row, 0, {
             virt_text = { { "  " .. note.text, issue_cards.HIGHLIGHT } },
             virt_text_pos = "eol",
+        })
+    end
+    local missing = issue_cards.missing(lines, card, names)
+    if missing then
+        local virt_lines = {}
+        for _, text in ipairs(missing.lines) do
+            virt_lines[#virt_lines + 1] = { { text, issue_cards.HIGHLIGHT } }
+        end
+        vim.api.nvim_buf_set_extmark(buf, M.NS, missing.row, 0, {
+            virt_lines = virt_lines,
+            virt_lines_above = true,
         })
     end
 end
