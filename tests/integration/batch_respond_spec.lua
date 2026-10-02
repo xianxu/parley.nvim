@@ -159,7 +159,7 @@ describe('Document-backed batch response controller',function()
             for _,cb in ipairs(queue)do cb()end
         end
         scope();docs={}
-        collectgarbage('collect');collectgarbage('collect');collectgarbage('collect')
+        require('tests.helpers.reachability').collect()
         assert.is_nil(weak[1]);assert.equals('paused',R.snapshot(job).phase)
     end)
     it('preserves immediate rejection for a small resume whose proof is unavailable',function()

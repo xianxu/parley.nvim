@@ -330,7 +330,7 @@ describe('production response session composition',function()
         opts.host_payload={large=string.rep('x',10000)};retained[1]=opts.host_payload
         opts.prepare_input=function(_,cb)callbacks=cb;cb.prepared(input(buf));cb.resolved();return {}end
         opts.terminal=function()
-            collectgarbage('collect');collectgarbage('collect');observed=retained[1]
+            require('tests.helpers.reachability').collect();observed=retained[1]
         end
         local s=start(doc,spec(0),opts,sessions);opts=nil;pump(s)
         local p=processes.processes[4242];status(p);p:finish()

@@ -125,7 +125,7 @@ describe('captured exchange input revisions',function()
             D.detach(doc);assert.equals('obsolete',D.validate_revision(doc,retained).status)
         end
         fixture();docs={}
-        collectgarbage('collect');collectgarbage('collect');collectgarbage('collect')
+        require('tests.helpers.reachability').collect()
         assert.is_nil(weak[1]);assert.is_table(retained)
     end)
     it('makes tokens obsolete after native reload',function()

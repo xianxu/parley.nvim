@@ -681,6 +681,7 @@ atlas:
       - tests/helpers/spec_runner.lua
       - tests/helpers/jit_watch.lua
       - tests/helpers/jit_tuning.lua
+      - tests/helpers/reachability.lua
       - scripts/test-nvim.sh
       - tests/helpers/fixture_process.lua
       - tests/helpers/exit_with_parent.lua

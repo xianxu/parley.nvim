@@ -353,3 +353,13 @@ oracle, and the mutation that would make the test fail.
 - When shared external state changes, notify every open view of it, not just the caller that triggered the read. Throttled or coalesced refreshes otherwise drop the news for everyone else. Design a per-resource subscription whose liveness derives from the view itself, and test a hidden view under the real throttle.
 - Key a subscription by view identity and replace it on re-attach; never guard it with a sticky flag. Flags such as `b:` vars outlive unload and reload, so the subscription and its liveness drift apart.
 - Async specs that change external state must first wait for the component to go idle (reads as well as fetches). A request that joins an in-flight read started before the change will legitimately return the old state.
+- A weak-reference "was it collected?" probe measures the LuaJIT trace cache as
+  well as our references: a trace keeps the closures it specialized on (and what
+  they capture) until it is flushed. Probes about parley's references go through
+  `tests/helpers/reachability.collect()`, which flushes first; a probe whose
+  contract is reclamation under live traces says so and does not (#294). A
+  probe that passes only because the JIT kept flushing is passing by accident.
+- LuaJIT on arm64 macOS: count flushes and abort reasons (`jit.attach` "trace")
+  before tuning `jit.opt`. "failed to allocate mcode memory" is the OS ignoring
+  placement hints; whether a bigger `sizemcode` helps or is catastrophic depends
+  on the LuaJIT build (68354f4447, 2025-11), so gate any tuning on it (#294).

@@ -169,3 +169,14 @@ the set of buffers with a display.
     it at priority 200).
   - `branch_child` 13–14s alone on both versions; 35–50s in the 0.12 suite runs
     is contention, killed once at 50s.
+- Green run 1 on 0.12.5 + tuning failed `document_retention_spec:50` (2 of 50
+  documents retained). Tuned 0.12: 8/10 fail; untuned 0.12 and 0.11: 0/10;
+  tuned + `jit.flush()` before collecting: 0/10. Compiled traces keep the
+  closures they specialized on as constants; `highlighter.rebuild_structure`'s
+  per-document subscription closure captures its document. Constant flushing
+  had been releasing these by accident. #254 M4 (e72fd6cd) hit the same thing
+  in one spec and turned the JIT off there. Class fix:
+  `tests/helpers/reachability.collect()` flushes then collects, used by all 8
+  reference probes; `document_sequence_spec`'s storage-under-live-traces case
+  deliberately keeps its traces. Mutation: a planted strong reference in
+  `rebuild_structure` still fails the retention probe. Lesson added.

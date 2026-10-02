@@ -42,7 +42,7 @@ describe('asynchronous native response target resolution',function()
             end
         end
         populate();vim.wait(20,function()return false end,1)
-        collectgarbage('collect');collectgarbage('collect');collectgarbage('collect')
+        require('tests.helpers.reachability').collect()
         local retained=0;for _ in pairs(weak)do retained=retained+1 end
         assert.equals(0,retained);assert.equals(0,calls)
     end)

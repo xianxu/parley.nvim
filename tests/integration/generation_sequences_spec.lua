@@ -438,7 +438,7 @@ describe('runner terminal retention',function()
             -- Keep fixture locals off JIT traces while measuring reachability.
             -- The real Deferred.close retention mutation still fails this probe.
             jit.off(run,true)
-            run();collectgarbage('collect');collectgarbage('collect')
+            run();require('tests.helpers.reachability').collect()
             assert.is_nil(weak[1])
         end
     end)
