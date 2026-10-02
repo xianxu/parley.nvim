@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "bc44ac5a", done: "a21cf235"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Issue view: overlay all tracker card fields generically
@@ -109,6 +109,8 @@ same amber `ParleyIssueTracker` highlight as today.
 ## Log
 
 ### 2026-10-02
+- 2026-10-02: closed — make test green after round-1 fixes (lint 0/0; 416 spec files PASS). Unit: issue_cards_spec 32 cases incl. one case per missing() guard (blank scalar, empty block, title, unterminated); mutation-checked: removing the blank guard fails its case. Integration: issue_tracker_buffer_spec renders card-only started+claimant as amber virt_lines above the closing ---, bytes untouched. Headless check vs the live tracker card for #310: refreshed mirror shows no false stale notes; with the fields removed locally, missing() returns them.; review verdict: SHIP
+- 2026-10-02: flow upgraded quick → full — 125 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 Filed from operator request: ariadne's tracker gained fields that parley's
 issue view doesn't show. Root cause: annotations only cover fields with an
