@@ -22,6 +22,12 @@ local function diagnostic_floats()
     return floats
 end
 
+-- One event-loop turn: the display re-wraps there once the sign column the
+-- same update opened has its width (#294).
+local function settle()
+    vim.wait(20, function() return false end, 1)
+end
+
 local function virtual_rows(mark)
     local rows = {}
     for index, chunks in ipairs(mark[4].virt_lines or {}) do
@@ -221,6 +227,7 @@ describe("review.diag_display", function()
             severity = vim.diagnostic.severity.INFO,
             source = "parley-skill",
         } })
+        settle()
 
         local marks = display_marks(buf)
         assert.are.equal(1, #marks)
@@ -237,6 +244,59 @@ describe("review.diag_display", function()
         local wider_rows = virtual_rows(display_marks(buf)[1])
         assert.is_true(#wider_rows < #narrow_rows)
         assert.are.equal(message, vim.diagnostic.get(buf, { namespace = diag_ns })[1].message)
+    end)
+
+    -- Another handler opens an `auto` sign column in the same update, after this
+    -- one wrapped. Which handler runs first is `pairs` order over
+    -- vim.diagnostic.handlers, so the case plants that sign itself, right after
+    -- the set, to fix the order (#294). No WinResized or CursorMoved follows;
+    -- only the deferred re-wrap can fix the rows. The redraw is where Neovim
+    -- sizes an `auto` column.
+    local function narrow_buffer_with_signed_diagnostic()
+        -- From one window: a case that failed before its `close` leaves a split
+        -- behind, and wrapping to the narrowest window would hide the defect.
+        vim.cmd("silent! only")
+        local diag_ns = require("parley.skill_render").diag_namespace()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "reviewed text" })
+        vim.cmd("rightbelow vsplit") -- a lone window cannot be narrowed
+        vim.wo.signcolumn = "auto"
+        vim.api.nvim_win_set_width(0, 30)
+        dd.set(true)
+        vim.diagnostic.config({ signs = false }, diag_ns)
+        vim.cmd("redraw")
+        assert.are.equal(0, vim.fn.getwininfo(vim.api.nvim_get_current_win())[1].textoff)
+        vim.diagnostic.set(diag_ns, buf, { {
+            lnum = 0, col = 0, end_lnum = 0, end_col = 13, severity = vim.diagnostic.severity.INFO,
+            source = "parley-skill", message = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda",
+        } })
+        vim.api.nvim_buf_set_extmark(buf, vim.api.nvim_create_namespace("parley_test_late_sign"), 0, 0,
+            { sign_text = "S" })
+        return buf, diag_ns
+    end
+
+    it("re-wraps once a sign column opened later in the same update has its width", function()
+        local buf = narrow_buffer_with_signed_diagnostic()
+        vim.cmd("redraw")
+        settle()
+        local info = vim.fn.getwininfo(vim.api.nvim_get_current_win())[1]
+        assert.are.equal(30, info.width)
+        assert.is_true(info.textoff > 0, "the late sign did not open the sign column")
+        local usable = math.max(2, info.width - info.textoff - 2)
+        for _, row in ipairs(virtual_rows(display_marks(buf)[1])) do
+            assert.is_true(vim.fn.strdisplaywidth(row) <= usable, row .. " is wider than " .. usable)
+        end
+        vim.cmd("close")
+    end)
+
+    it("does not bring back a display hidden before the re-wrap ran", function()
+        local buf, diag_ns = narrow_buffer_with_signed_diagnostic()
+        vim.diagnostic.hide(diag_ns, buf)
+        vim.cmd("redraw")
+        settle()
+        assert.are.equal(0, #display_marks(buf))
+        vim.cmd("close")
     end)
 
     it("rerenders a visible non-current buffer on WinResized without opening a float", function()

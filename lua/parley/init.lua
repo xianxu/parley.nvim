@@ -2681,6 +2681,19 @@ M.prep_chat = function(buf, file_name)
 
 	M.prep_md(buf)
 
+	-- Neovim 0.12's markdown ftplugin starts treesitter on every markdown buffer.
+	-- Chats are drawn by parley's highlighter, and a second full-buffer parse on
+	-- every edit doubled the cost of chat edits (#294); `chat_treesitter` keeps
+	-- it. FileType re-runs the ftplugin (`:edit`, `:set ft`), so the stop
+	-- follows it there too.
+	if not M.config.chat_treesitter then
+		local function stop_treesitter()
+			pcall(vim.treesitter.stop, buf)
+		end
+		stop_treesitter()
+		vim.api.nvim_create_autocmd("FileType", { buffer = buf, callback = stop_treesitter })
+	end
+
 	-- Native continuation preserves Return mappings and keeps splits in the
 	-- user's undo transaction. Prompt buffers reserve Return for submission.
 	local note_prefix = M.config.chat_local_prefix

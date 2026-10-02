@@ -46,7 +46,12 @@ TEST_TMP = $(TEST_ENV_ROOT)/tmp
 # Quoted individually at the use site: an unquoted list word-splits, and a
 # checkout under a path with a space would make `rm -rf` target the fragments.
 LEGACY_TEST_DIRS = "$(CURDIR)/.test-home" "$(CURDIR)/.test-xdg" "$(CURDIR)/.test-tmp"
-TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)"
+# The nvim every spec process runs, children and grandchildren alike, found by
+# PATH: scripts/test-nvim.sh prefers one whose LuaJIT has the arm64 mcode fix
+# (#294). Probed on first use, once per make invocation, and only by targets
+# that expand TEST_ENV.
+TEST_NVIM_DIR = $(eval TEST_NVIM_DIR := $$(shell scripts/test-nvim.sh))$(TEST_NVIM_DIR)
+TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)" $(if $(TEST_NVIM_DIR),PATH="$(TEST_NVIM_DIR):$$PATH")
 
 # The orphan gate (#220). `before` reaps what an earlier interrupted run left;
 # `after` reports this run's survivors and fails. One owner, so a new test target
@@ -73,13 +78,15 @@ test:
 # Number of parallel test processes (override with JOBS=N).
 JOBS ?= 8
 
-# Per-file test runner. Captures the file's output; prints `PASS: <path>` on
-# success or a labelled `===FAIL: <path>===` block (with indented output) on
+# Per-file test runner. Captures the file's output; prints `PASS: <path> (<secs>s)` on
+# success or a labelled `===FAIL: <path> (<secs>s)===` block (with indented output) on
 # failure; appends the failing path to $FAILED_LOG so the recipe can print a
 # reliable summary after xargs finishes. Single-line PASS writes are atomic;
 # the FAIL block is best-effort across parallel jobs but the end-of-run
-# summary is authoritative either way.
-RUN_SPEC = sh -c 'out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); if nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s\n" "$$1"; rm -f "$$out"; else { printf "===FAIL: %s===\n" "$$1"; sed "s/^/  /" "$$out"; }; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
+# summary is authoritative either way. With PARLEY_TEST_JITSTAT=1, PASS and FAIL
+# also show each spec process's final LuaJIT line, grandchildren included
+# (tests/helpers/jit_watch.lua, #294).
+RUN_SPEC = sh -c 'jitstat() { [ -s "$$1" ] && awk "{last[\$$2]=\$$0} END {for (p in last) print \"  \" last[p]}" "$$1"; true; }; out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); t0=$$(date +%s); export PARLEY_TEST_JITSTAT_LOG="$$out.jit"; if nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s (%ss)\n" "$$1" $$(( $$(date +%s) - t0 )); jitstat "$$out.jit"; rm -f "$$out" "$$out.jit"; else { printf "===FAIL: %s (%ss)===\n" "$$1" $$(( $$(date +%s) - t0 )); sed "s/^/  /" "$$out"; jitstat "$$out.jit"; }; rm -f "$$out.jit"; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
 
 # Each spec file runs in its own Neovim process.
 test-unit:

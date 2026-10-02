@@ -73,7 +73,7 @@ describe('document user transactions',function()
     it('reclaims abandoned tokens and binds empty insertions to their containing row',function()
         local doc,fake=attach({'source','gap','tail'})
         local function abandoned()for _=1,64 do capture(doc,{region(0,0,0,6)})end end
-        abandoned();collectgarbage('collect');collectgarbage('collect')
+        abandoned();require('tests.helpers.reachability').collect()
         local token=capture(doc,{region(2,2,2,2)})
         fake:set_lines(0,0,{'before'})
         assert.equals(3,assert(D.resolve_user(doc,token)).regions[1].first.row)

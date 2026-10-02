@@ -679,6 +679,10 @@ atlas:
       - tests/helpers/ready_port.lua
       - tests/helpers/await.lua
       - tests/helpers/spec_runner.lua
+      - tests/helpers/jit_watch.lua
+      - tests/helpers/jit_tuning.lua
+      - tests/helpers/reachability.lua
+      - scripts/test-nvim.sh
       - tests/helpers/fixture_process.lua
       - tests/helpers/exit_with_parent.lua
       - scripts/reap-test-orphans.py
@@ -700,6 +704,7 @@ atlas:
       - tests/unit/ready_port_spec.lua
       - tests/unit/await_helper_spec.lua
       - tests/unit/spec_runner_spec.lua
+      - tests/unit/jit_tuning_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/fixture_reaping_spec.lua
       - tests/unit/reap_test_orphans_spec.lua
@@ -1110,6 +1115,7 @@ atlas:
       - lua/parley/copy.lua
       - lua/parley/highlight_structure.lua
     tests:
+      - tests/integration/chat_treesitter_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/integration/highlight_typing_spec.lua
       - tests/unit/timezone_diagnostics_spec.lua

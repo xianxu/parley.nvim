@@ -224,6 +224,26 @@ bootstraps can exceed 50 seconds under parallel load. The override applies to th
 exact repository files and is shared by mapped,
 full-suite, and direct `PlenaryBustedFile` invocations.
 
+### Deadlines, load, and the Neovim under test (#294)
+
+Every deadline above is a hang check sized for a quiet machine.
+`spec_runner.load_factor` stretches it by the 1-minute load average over the
+CPU count when the spec starts, from 1x up to a 4x cap, because other
+sessions' suites share the machine. A deadline kill prints
+`DEADLINE: <spec> … (<base>s x<factor> for load <n> on <cpus> CPUs); killed`;
+plenary itself kills silently. `PASS`/`===FAIL` lines carry wall time.
+
+`make test` runs the nvim chosen by `scripts/test-nvim.sh`, put first on
+`PATH` through `TEST_ENV` so spec children and `vim.fn.system` grandchildren
+all use it. It prefers a LuaJIT with upstream 68354f4447 (2025-11): on arm64
+macOS the OS ignores mcode placement hints, and older LuaJIT (Neovim 0.11.7
+bundles one) can only flush and retry. That was #293's "random 15x"
+slowdown: once 2.9M flushes for one 25s probe. `PARLEY_TEST_NVIM` overrides
+the choice. `tests/helpers/jit_tuning.lua` owns the version rule and gives such
+processes one 1MB mcode area (catastrophic on the old allocator, so gated).
+`PARLEY_TEST_JITSTAT=1 make test` prints each spec process's LuaJIT VM states
+and trace flushes (`tests/helpers/jit_watch.lua`), grandchildren included.
+
 ### Waiting on work that converges (#293)
 
 `tests/helpers/await.lua` `until_progress(predicate, progress, stall_ms, ceiling_ms)`

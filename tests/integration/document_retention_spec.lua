@@ -7,7 +7,7 @@ local config=require('parley.config')
 Highlighter.setup({config=config})
 local function collect()
     vim.wait(10,function()return false end,1)
-    collectgarbage('collect');collectgarbage('collect');collectgarbage('collect')
+    require('tests.helpers.reachability').collect()
 end
 local function populate(weak,folds)
     for i=1,50 do

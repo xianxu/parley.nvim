@@ -308,6 +308,11 @@ local config = {
 	chat_confirm_delete = true,
 	-- conceal model parameters in chat
 	chat_conceal_model_params = true,
+	-- Treesitter highlighting in chat buffers. Chats are drawn by parley's own
+	-- highlighter; Neovim 0.12's markdown ftplugin also starts treesitter, which
+	-- re-parses the whole chat on every edit (#294). `true` keeps it, with its
+	-- fenced-code injections and conceal, at that cost.
+	chat_treesitter = false,
 	-- Spell underlines and completion are independent. Blink is used only after
 	-- the host has configured it; legacy native typeahead remains explicit opt-in.
 	chat_spell = {
