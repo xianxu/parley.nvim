@@ -10,8 +10,12 @@
 local M = {}
 local profile_running = false
 
+-- Resolved at install: the profiler callback can run inside a libuv callback
+-- (a fast event), where Neovim 0.12 panics on any `vim.env` read.
+local log_path
+
 local function emit(line)
-    local path = vim.env.PARLEY_TEST_JITSTAT_LOG
+    local path = log_path
     if not path or path == "" then return io.stderr:write(line) end
     local f = io.open(path, "a")
     if f then f:write(line); f:close() end
@@ -29,6 +33,7 @@ end
 function M.install(every_s)
     every_s = every_s or 10
     local profile = require("jit.profile")
+    log_path = vim.env.PARLEY_TEST_JITSTAT_LOG
     profile_running = true
     local start, flushes, samples, last = vim.uv.hrtime(), 0, {}, vim.uv.hrtime()
     jit.attach(function(what)
