@@ -276,6 +276,7 @@ local function ensure_lifecycle()
         callback = function(args)
             if args.event == "BufWipeout" then
                 tracked_buffers[args.buf] = nil
+                shown[args.buf] = nil
                 if float_owner_buf == args.buf then
                     close_float()
                 end
