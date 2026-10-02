@@ -77,6 +77,13 @@ the set of buffers with a display.
 
 - Root cause per spec is in the Log, with evidence from a captured failing full run.
 - `make test` passes 5 consecutive full runs on this machine with no reruns.
+- `make test` runs a Neovim whose LuaJIT has the arm64 mcode placement fix when
+  one is installed, warns when none is, and applies the mcode tuning only there.
+- On Neovim 0.12, chat buffers do not run treesitter unless `chat_treesitter`
+  is set, and review diagnostics never wrap wider than the window's settled
+  usable width; each has a test that fails without its fix on 0.11.7 and 0.12.5.
+- Every reference-retention probe flushes compiled traces first, and still
+  fails on a planted strong reference.
 
 ## Plan
 
