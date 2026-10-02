@@ -76,6 +76,11 @@
                 "setter": "sdlc issue set-github"
             },
             {
+                "name": "claimant",
+                "kind": "claimant",
+                "setter": "sdlc claim"
+            },
+            {
                 "name": "title",
                 "kind": "title",
                 "required": true,
