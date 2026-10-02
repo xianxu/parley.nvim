@@ -1,6 +1,6 @@
 ---
 id: 000294
-status: codecomplete
+status: done
 created: 2026-09-27
 updated: 2026-10-01
 estimate_hours:
@@ -24,6 +24,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 380831d8685885cc9563c832e12af018c73a53f1
         evidence_commit: af826303461c3e8ec4cfc8bd43ca104ba4fcdf41
+        landed_commit: e8c994b4382d6c11203645fa87948e5d038b63af
 ---
 
 # Heavy specs fail only under parallel make test (document_semantic, perf_document, document_fold_batches)
