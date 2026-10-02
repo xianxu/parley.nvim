@@ -8,6 +8,7 @@ updated: 2026-10-01
 estimate_hours:
 card_mirror: '8eea3c81cb821f1fb147f1e7a42d0be192d7ce38' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-01T14:36:23-07:00
+flow: {kind: quick, provenance: inferred, spec: "821ff61e", done: "3e5f53e4"}
 ---
 
 # Heavy specs fail only under parallel make test (document_semantic, perf_document, document_fold_batches)
