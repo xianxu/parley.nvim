@@ -55,7 +55,11 @@ than broadening issue-management policy (`ARCH-DRY`, `ARCH-PURE`).
 A repository with the cutover marker `workshop/issue-tracker.json` keeps
 card-owned fields (status, dates, hours, GitHub link, title) on the
 `issue-tracker` branch; a details file only carries a `card_mirror` snapshot.
-Parley reads those cards read-only and shows them in two places:
+Which fields a card owns comes from the vocabulary's `card.fields`, never a
+parley-side list (#310), so a field ariadne adds shows up with no parley change.
+A nested field (e.g. `claimant:`) is read as a block of its child lines. Parley
+reads those cards read-only, the card winning over the details on display, and
+shows them in these places:
 
 - **Issue Finder:** rows overlay the card values before sorting, so status order
   follows the tracker. A field the mirror has wrong is painted amber
@@ -63,7 +67,9 @@ Parley reads those cards read-only and shows them in two places:
   `float_picker` item `highlights` spans.
 - **Issue buffers:** a details file in the repository's issue home gets amber
   end-of-line virtual text, `← tracker: <value>`, beside each stale card-owned
-  line and the H1. File bytes are never changed.
+  line and the H1 (a block prints inline). A card field the details have no
+  line for (e.g. `started`, `actual_hours`, `claimant`) shows as amber virtual
+  frontmatter lines above the closing `---` (#310). File bytes are never changed.
 - **Card-only issues (#309):** a card with no details file in this checkout
   (the details may sit on another branch) still gets a finder row. Cards join
   details by repository and id across the issues *and* history dirs, so an
@@ -74,7 +80,7 @@ Parley reads those cards read-only and shows them in two places:
   lands in the history view when its status is terminal. Selecting it opens a read-only
   scratch buffer (`parley-card://<root>#<id>`, nomodifiable, wiped when hidden)
   with the provenance label, the source ref and tip, a freshness line, the
-  card's top-level fields (not sdlc's `tracker:` envelope) and its body, the
+  card's vocabulary fields (not sdlc's `tracker:` envelope) and its body, the
   Problem included. No details file is created and no Spec or Plan is
   invented. The finder's delete and status-cycle keys, `:ParleyIssueStatus` and
   `:ParleyIssueDecompose` refuse these with

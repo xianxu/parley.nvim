@@ -19,10 +19,11 @@ function M.git(dir, args)
     return result.stdout
 end
 
+-- `fields.extra`: more frontmatter lines (e.g. `started:` or a nested
+-- `claimant:` block), after the envelope as sdlc appends them.
 local function card_text(name, fields)
     local id = name:match("^(%d+)")
-    local problem = fields.problem and { "## Problem", "", fields.problem, "" } or {}
-    return table.concat(vim.list_extend({
+    local lines = {
         "---",
         "id: " .. id,
         "status: " .. fields.status,
@@ -31,11 +32,13 @@ local function card_text(name, fields)
         "github_issue:",
         "tracker:",
         "    version: 1",
-        "---",
-        "",
-        "# " .. fields.title,
-        "",
-    }, problem), "\n")
+    }
+    vim.list_extend(lines, fields.extra or {})
+    vim.list_extend(lines, { "---", "", "# " .. fields.title, "" })
+    if fields.problem then
+        vim.list_extend(lines, { "## Problem", "", fields.problem, "" })
+    end
+    return table.concat(lines, "\n")
 end
 
 -- Details file as `sdlc issue new` leaves it: a card_mirror snapshot.

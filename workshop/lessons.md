@@ -371,3 +371,8 @@ oracle, and the mutation that would make the test fail.
   BR-1). A case that measures window layout starts from `silent! only`; an
   earlier case that failed before its `close` leaves a split behind, and a
   narrower leftover window can hide the very defect being tested.
+- Each guard in a pure filter needs its own case where it is the only filter
+  that applies. A fixture that an earlier guard already filters out (here, a
+  blank card value that also had a local line) leaves the later guard
+  untested: deleting it kept every test green (#310 BR-1). Mutation-check each
+  `and not …` clause.

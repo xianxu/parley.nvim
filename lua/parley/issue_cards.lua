@@ -11,9 +11,6 @@ local M = {}
 
 M.HIGHLIGHT = "ParleyIssueTracker"
 
--- Finder record fields a card can own (the rest stay with the details).
-local RECORD_FIELDS = { "status", "title", "created", "updated", "github_issue" }
-
 local function trim(value)
     return (value:gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -27,37 +24,80 @@ local function scalar(raw)
     return trim((value:gsub("%s+#.*$", "")))
 end
 
+-- A card value is a scalar string, or a block: the child lines of a nested
+-- field (e.g. `claimant:`), dedented and in order.
 local function blank(value)
-    return value == nil or value == ""
+    return value == nil or value == "" or (type(value) == "table" and #value == 0)
 end
 
 local function same(left, right)
     if blank(left) and blank(right) then
         return true
     end
-    return left == right
+    return vim.deep_equal(left, right)
 end
 
--- Card blob text → {id, title, fields} or nil. Only top-level `key: value`
--- lines are read; the indented `tracker:` envelope is internal to sdlc.
+-- One-line form of a card value, for an end-of-line note.
+local function inline(value)
+    return type(value) == "table" and table.concat(value, ", ") or value
+end
+
+-- `key: value` frontmatter lines for a card value; a block nests under `key:`.
+local function field_lines(key, value)
+    if type(value) ~= "table" then
+        return { key .. ": " .. value }
+    end
+    local out = { key .. ":" }
+    for _, child in ipairs(value) do
+        out[#out + 1] = "    " .. child
+    end
+    return out
+end
+
+-- Frontmatter lines → the closing `---` index (nil when unterminated) and the
+-- top-level entries { {row (0-based), key, value} }. A key with no value
+-- followed by indented lines takes a block value (the child lines, dedented).
+local function frontmatter(lines)
+    local entries = {}
+    if lines[1] ~= "---" then
+        return nil, entries
+    end
+    for i = 2, #lines do
+        if lines[i] == "---" then
+            return i, entries
+        end
+        local key, value = lines[i]:match("^([%w_]+):(.*)$")
+        if key then
+            value = scalar(value)
+            local indent = value == "" and lines[i + 1] and lines[i + 1]:match("^(%s+)%S")
+            if indent then
+                value = {}
+                for j = i + 1, #lines do
+                    if lines[j]:sub(1, #indent) ~= indent then
+                        break
+                    end
+                    value[#value + 1] = lines[j]:sub(#indent + 1)
+                end
+            end
+            entries[#entries + 1] = { row = i - 1, key = key:lower(), value = value }
+        end
+    end
+    return nil, entries
+end
+
+-- Card blob text → {id, title, fields} or nil. Top-level `key: value` lines
+-- give scalars; a key with no value followed by indented lines gives a block
+-- (the `tracker:` envelope included — it is not a vocabulary field, so nothing
+-- shows it).
 M.parse_card = function(text)
     if type(text) ~= "string" then
         return nil
     end
     local lines = vim.split(text, "\n", { plain = true })
-    if lines[1] ~= "---" then
-        return nil
-    end
-    local fields, close = {}, nil
-    for i = 2, #lines do
-        if lines[i] == "---" then
-            close = i
-            break
-        end
-        local key, value = lines[i]:match("^([%w_]+):(.*)$")
-        if key then
-            fields[key:lower()] = scalar(value)
-        end
+    local close, entries = frontmatter(lines)
+    local fields = {}
+    for _, entry in ipairs(entries) do
+        fields[entry.key] = entry.value
     end
     if not close or type(fields.id) ~= "string" or not fields.id:match("^%d+$") then
         return nil
@@ -150,8 +190,10 @@ local function card_value(card, name)
     return card.fields[name]
 end
 
--- A copy of `record` whose card-owned fields come from `card`; fields where the
--- card disagrees with the details are flagged in `tracker_stale`. Without a card
+-- A copy of `record` whose card-owned fields (`names`, from the vocabulary)
+-- come from `card`; fields where the card disagrees with the details are
+-- flagged in `tracker_stale` — a field the details lack counts too, so it is a
+-- per-field paint set (render paints the fields it shows), not a stale count. Without a card
 -- the record is returned as is (nothing fabricated).
 M.overlay = function(record, card, names)
     local out = {}
@@ -161,18 +203,14 @@ M.overlay = function(record, card, names)
     if not card then
         return out
     end
-    local owned = {}
-    for _, name in ipairs(names or {}) do
-        owned[name] = true
-    end
     out.tracked = true
     out.tracker_stale = {}
-    for _, name in ipairs(RECORD_FIELDS) do
+    for _, name in ipairs(names or {}) do
         local value = card_value(card, name)
         if name == "title" and blank(value) then
             value = nil -- a card always has a title; blank means no H1 was parsed
         end
-        if owned[name] and value ~= nil then
+        if value ~= nil then
             if not same(value, record[name]) then
                 out.tracker_stale[name] = true
             end
@@ -185,35 +223,34 @@ M.overlay = function(record, card, names)
     return out
 end
 
+local function set_of(names)
+    local out = {}
+    for _, name in ipairs(names or {}) do
+        out[name] = true
+    end
+    return out
+end
+
 -- Details buffer lines + card → { {row (0-based), field, text} } for every
 -- card-owned frontmatter line (and the H1 title) the card disagrees with.
 M.annotations = function(lines, card, names)
     local notes = {}
-    if not card or lines[1] ~= "---" then
+    if not card then
         return notes
     end
-    local owned = {}
-    for _, name in ipairs(names or {}) do
-        owned[name] = true
-    end
+    local owned = set_of(names)
     local function note(row, field, value)
         notes[#notes + 1] = {
             row = row,
             field = field,
-            text = "← tracker: " .. (blank(value) and "(empty)" or value),
+            text = "← tracker: " .. (blank(value) and "(empty)" or inline(value)),
         }
     end
-    local close
-    for i = 2, #lines do
-        if lines[i] == "---" then
-            close = i
-            break
-        end
-        local key, value = lines[i]:match("^([%w_]+):(.*)$")
-        key = key and key:lower()
-        if key and key ~= "title" and owned[key] and card.fields[key] ~= nil
-            and not same(card.fields[key], scalar(value)) then
-            note(i - 1, key, card.fields[key])
+    local close, entries = frontmatter(lines)
+    for _, entry in ipairs(entries) do
+        local key = entry.key
+        if key ~= "title" and owned[key] and card.fields[key] ~= nil and not same(card.fields[key], entry.value) then
+            note(entry.row, key, card.fields[key])
         end
     end
     if close and owned.title then
@@ -228,6 +265,29 @@ M.annotations = function(lines, card, names)
         end
     end
     return notes
+end
+
+-- Card-owned fields the details' frontmatter has no line for, as frontmatter
+-- lines in vocabulary order, to show above the closing `---` (`row`, 0-based).
+-- nil when there is no card, no closed frontmatter, or nothing to add. Blank card
+-- values add nothing; the title lives in the H1, which annotations covers.
+M.missing = function(lines, card, names)
+    local close, entries = frontmatter(lines)
+    if not card or not close then
+        return nil
+    end
+    local present = {}
+    for _, entry in ipairs(entries) do
+        present[entry.key] = true
+    end
+    local out = {}
+    for _, name in ipairs(names or {}) do
+        local value = card.fields[name]
+        if name ~= "title" and not present[name] and not blank(value) then
+            vim.list_extend(out, field_lines(name, value))
+        end
+    end
+    return #out > 0 and { row = close - 1, lines = out } or nil
 end
 
 -- #309: a card with no details file in this checkout (its details may be on
@@ -293,13 +353,12 @@ M.freshness = function(status)
     return status.fetching and (text .. " · refreshing…") or text
 end
 
-local VIEW_FIELDS = { "status", "created", "updated", "github_issue", "estimate_hours" }
-
--- The read-only card view: provenance label, the card's top-level fields (the
--- `tracker:` envelope is sdlc's), then the card body as is. Without a card,
+-- The read-only card view: provenance label, the card's vocabulary fields
+-- (`names`; the `tracker:` envelope is sdlc's), then the card body as is. No
+-- `names` (no vocabulary) shows no fields; the tracker is off then anyway. Without a card,
 -- `readable` tells a card that left the tracker (cards were read) from a
 -- tracker that could not be read at all. Nothing is fabricated.
-M.view_lines = function(card, id, status, readable)
+M.view_lines = function(card, id, status, readable, names)
     local ref = status.ref or "issue-tracker"
     local lines = {
         "card only · read only — " .. ref .. (status.tip and (" @ " .. status.tip:sub(1, 7)) or "")
@@ -313,9 +372,9 @@ M.view_lines = function(card, id, status, readable)
             or "No tracker cards are readable in this checkout right now."
         return { lines = lines, label_rows = { 0 } }
     end
-    for _, key in ipairs(VIEW_FIELDS) do
-        if card.fields[key] ~= nil then
-            lines[#lines + 1] = key .. ": " .. card.fields[key]
+    for _, name in ipairs(names or {}) do
+        if name ~= "title" and card.fields[name] ~= nil then
+            vim.list_extend(lines, field_lines(name, card.fields[name]))
         end
     end
     lines[#lines + 1] = ""

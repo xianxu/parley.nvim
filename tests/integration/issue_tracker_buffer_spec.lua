@@ -11,13 +11,29 @@ local issue_tracker = require("parley.issue_tracker")
 local tracker_buffer = require("parley.issue_tracker_buffer")
 local fixture = require("tests.helpers.tracker_repo")
 
+-- End-of-line notes; virtual frontmatter lines are `virtual_lines`'s.
 local function marks(buf)
     local out = {}
     for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, tracker_buffer.NS, 0, -1, { details = true })) do
-        local chunk = mark[4].virt_text[1]
-        out[#out + 1] = { row = mark[2], text = vim.trim(chunk[1]), group = chunk[2] }
+        local chunk = mark[4].virt_text and mark[4].virt_text[1]
+        if chunk then
+            out[#out + 1] = { row = mark[2], text = vim.trim(chunk[1]), group = chunk[2] }
+        end
     end
     return out
+end
+
+local function virtual_lines(buf)
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, tracker_buffer.NS, 0, -1, { details = true })) do
+        if mark[4].virt_lines then
+            local out = { row = mark[2], above = mark[4].virt_lines_above, lines = {} }
+            for _, line in ipairs(mark[4].virt_lines) do
+                out.lines[#out.lines + 1] = { line[1][1], line[1][2] }
+            end
+            return out
+        end
+    end
+    return nil
 end
 
 describe("issue tracker buffer annotations", function()
@@ -89,6 +105,31 @@ describe("issue tracker buffer annotations", function()
             local m = marks(beta)
             return m[1] and m[1].text == "← tracker: working"
         end, 10), "the hidden buffer never heard of the move")
+    end)
+
+    it("shows card fields the details lack as amber frontmatter lines (#310)", function()
+        fixture.write_card(repos.writer, "000002-beta.md", {
+            status = "open",
+            title = "Beta",
+            extra = { "started: 2026-09-02T10:00:00-07:00", "claimant:", "    operator: Ada", "    workspace: beta:1" },
+        })
+        fixture.git(repos.reader, { "fetch", "-q", "origin", "issue-tracker" })
+        vim.cmd.edit(vim.fn.fnameescape(repos.reader .. "/workshop/issues/000002-beta.md"))
+        local buf = vim.api.nvim_get_current_buf()
+        assert(vim.wait(10000, function() return virtual_lines(buf) ~= nil end, 10), "no virtual lines appeared")
+        local group = "ParleyIssueTracker"
+        assert.same({
+            row = 8, -- the closing `---`
+            above = true,
+            lines = {
+                { "started: 2026-09-02T10:00:00-07:00", group },
+                { "claimant:", group },
+                { "    operator: Ada", group },
+                { "    workspace: beta:1", group },
+            },
+        }, virtual_lines(buf))
+        assert.same({}, marks(buf))
+        assert.same({ "---", "id: 000002" }, vim.api.nvim_buf_get_lines(buf, 0, 2, false)) -- bytes untouched
     end)
 
     it("leaves files outside a tracked issues home alone", function()
