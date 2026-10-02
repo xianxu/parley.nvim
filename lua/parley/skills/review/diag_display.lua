@@ -24,6 +24,9 @@ local float_win
 local float_buf
 local float_owner_buf
 local tracked_buffers = {}
+-- One token per shown display; any clear retires it, so a deferred re-wrap
+-- never brings back a display that was hidden in between.
+local shown = {}
 local lifecycle_registered = false
 
 -- Parley's review diagnostic namespace — single-sourced from skill_render (which
@@ -57,6 +60,7 @@ end
 
 local function clear(buf)
     ensure_display()
+    shown[buf] = nil
     if float_owner_buf == buf then
         close_float()
     end
@@ -327,6 +331,18 @@ local function register_handler()
                 tracked_buffers[bufnr] = true
             end
             render(bufnr, diagnostics, current_line_only)
+            -- vim.diagnostic.show runs handlers in `pairs` order, so the signs
+            -- handler can open the sign column after this one wrapped (Neovim
+            -- 0.12 reports it at once, #294). Re-wrap once the layout settles.
+            local token, width = {}, virtual_line_width(bufnr)
+            shown[bufnr] = token
+            vim.schedule(function()
+                if shown[bufnr] == token and M.enabled and vim.api.nvim_buf_is_valid(bufnr)
+                    and virtual_line_width(bufnr) ~= width
+                then
+                    render(bufnr, vim.diagnostic.get(bufnr, { namespace = ns() }), current_line_only)
+                end
+            end)
         end,
         hide = function(namespace, bufnr)
             if namespace ~= ns() then
