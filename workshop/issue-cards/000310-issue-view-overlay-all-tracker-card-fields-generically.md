@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000310-issue-view-overlay-all-tracker-card-fields-generically.md
         source_blob: e84e790e1a1f6f1dc6765415888c53d05dc291dc
         destination: workshop/issues/000310-issue-view-overlay-all-tracker-card-fields-generically.md
+        main_commit: 44e451db6459f8462976f5669ca7a8bb472c08cb
 ---
 
 # Issue view: overlay all tracker card fields generically
