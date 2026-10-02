@@ -194,3 +194,17 @@ the set of buffers with a display.
   416 spec files PASS each, 0 FAIL, 0 DEADLINE; load average at start 6–10 on
   12 CPUs. Thinnest margin left: `entity_delete_parity` 41–42s in-suite (21s
   alone) against 50s; load scaling does not engage below 12.
+
+## Revisions
+
+- 2026-10-01 — scope grew past the harness, with the operator's decisions:
+  the suite moved to Neovim 0.12.5 with gated mcode tuning; two 0.12 product
+  fixes landed (chat buffers stop treesitter; review diagnostics re-wrap once
+  the sign column settles); the JIT-anchoring class in reachability probes was
+  fixed. Close review round 1 (FIX-THEN-SHIP): BR-1 — the new re-wrap case
+  passed on 0.12 without the fix, because a split leaked from an earlier failing
+  case narrowed the wrap; the cases now start from one window and plant the late
+  sign themselves, and fail without the fix on 0.11.7 and 0.12.5. BR-2 — the
+  treesitter stop is user-visible: `chat_treesitter` (default `false`) keeps it,
+  documented in `atlas/ui/highlights.md`. Minor: the re-wrap reuses the
+  diagnostics `show` received; test env vars documented in TOOLING.md.

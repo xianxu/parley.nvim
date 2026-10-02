@@ -366,3 +366,8 @@ oracle, and the mutation that would make the test fail.
   before tuning `jit.opt`. "failed to allocate mcode memory" is the OS ignoring
   placement hints; whether a bigger `sizemcode` helps or is catastrophic depends
   on the LuaJIT build (68354f4447, 2025-11), so gate any tuning on it (#294).
+- Check a regression test fails without its fix on every Neovim the suite
+  supports, not just one: a case can pass by accident on one runtime (#294
+  BR-1). A case that measures window layout starts from `silent! only`; an
+  earlier case that failed before its `close` leaves a split behind, and a
+  narrower leftover window can hide the very defect being tested.

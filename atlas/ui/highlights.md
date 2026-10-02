@@ -83,6 +83,12 @@ never repairs by scanning the whole document.
   chat exchange color.
 - `🌿:` lines auto-rendered with debounced topic lookup from referenced files
 - `chat_conceal_model_params`: optional header param concealment
+- `chat_treesitter` (default `false`): chat buffers stop the treesitter
+  highlighter that Neovim 0.12's markdown ftplugin starts, and stop it again on
+  each `FileType`, because parley's highlighter already draws chats and the
+  extra full-buffer parse doubled edit cost (#294). `true` keeps treesitter's
+  fenced-code injections and conceal in chats. Markdown that is not a chat is
+  untouched.
 - UTC timestamps shaped like `YYYY-MM-DDTHH:MM:SSZ` get local-time INFO
   diagnostics in Parley chat and markdown buffers. The pure parser/formatter
   lives in `lua/parley/timezone_diagnostics.lua`; `highlighter.setup_buf_handler`

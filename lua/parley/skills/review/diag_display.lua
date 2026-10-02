@@ -341,7 +341,8 @@ local function register_handler()
                 if shown[bufnr] == token and M.enabled and vim.api.nvim_buf_is_valid(bufnr)
                     and virtual_line_width(bufnr) ~= width
                 then
-                    render(bufnr, vim.diagnostic.get(bufnr, { namespace = ns() }), current_line_only)
+                    -- The token proves no later show replaced these diagnostics.
+                    render(bufnr, diagnostics, current_line_only)
                 end
             end)
         end,

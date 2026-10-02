@@ -76,6 +76,17 @@ Run only one `make test` per checkout at a time: a second concurrent run deletes
 the first's scratch, loudly. Use a separate worktree for concurrent suites;
 a distinct `TEST_ENV_ROOT` isolates scratch but does not isolate the process census.
 
+## Which Neovim the tests run, and JIT stats
+
+`make test` runs the `nvim` that `scripts/test-nvim.sh` chooses, put first on
+`PATH` for every spec process. It prefers a LuaJIT with the arm64 macOS mcode
+placement fix (upstream, 2025-11; Neovim 0.12.5 has it, 0.11.7 does not) and
+warns when only an older one is installed. `PARLEY_TEST_NVIM=/path/to/nvim`
+picks one explicitly; the binary must be named `nvim`, because spec processes
+find it through `PATH`. `PARLEY_TEST_JITSTAT=1 make test` adds each spec
+process's final LuaJIT line (VM states and trace flushes, grandchildren
+included) under its `PASS`/`FAIL`. Why and how: `atlas/infra/test_harness.md`.
+
 ## Orphaned test processes
 
 Test targets reap processes left by an interrupted earlier run before starting,

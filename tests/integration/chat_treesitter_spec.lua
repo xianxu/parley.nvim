@@ -11,8 +11,9 @@ local function active(buf)
 	return vim.treesitter.highlighter.active[buf] ~= nil
 end
 
-local function open_chat()
-	parley.setup({ chat_dir = root .. "/chats", state_dir = root .. "/state", providers = {}, api_keys = {} })
+local function open_chat(extra)
+	parley.setup(vim.tbl_extend("force",
+		{ chat_dir = root .. "/chats", state_dir = root .. "/state", providers = {}, api_keys = {} }, extra or {}))
 	vim.fn.mkdir(parley.config.chat_dir, "p")
 	local path = parley.config.chat_dir .. "/2026-10-01-treesitter.md"
 	vim.fn.writefile({ "---", "topic: treesitter", "file: 2026-10-01-treesitter.md", "---", "", "💬: question" }, path)
@@ -43,6 +44,14 @@ describe("chat buffers and treesitter", function()
 		vim.treesitter.start(buf, "markdown")
 		vim.bo[buf].filetype = "markdown"
 		assert.is_false(active(buf))
+	end)
+
+	it("keeps treesitter in chats when chat_treesitter is on", function()
+		local buf, path = open_chat({ chat_treesitter = true })
+		parley.prep_chat(buf, path)
+		assert.is_true(active(buf))
+		vim.bo[buf].filetype = "markdown"
+		assert.is_true(active(buf))
 	end)
 
 	it("leaves markdown that is not a chat alone", function()
