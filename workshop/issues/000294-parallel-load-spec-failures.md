@@ -98,6 +98,7 @@ the set of buffers with a display.
 - Filed from #293's close (operator request); failure list from #292/#293 full runs.
 
 ### 2026-10-01
+- 2026-10-01: closed — 5 consecutive plain make test runs after cf8f8a1e on Neovim 0.12.5 (scripts/test-nvim.sh): rc=0 each, 416 spec files PASS, 0 FAIL, 0 DEADLINE, 118-125s, load 6-10 on 12 CPUs; after round-1 review fixes (6722a909) a further full make test: rc=0, 416 PASS, 0 FAIL. chat_treesitter_spec and the diag re-wrap case fail without their fixes on 0.11.7 and 0.12.5; hide case fails without the token guard on both; reachability probe fails on a planted strong reference. Root cause per spec with evidence in ## Log.; review verdict: SHIP
 - `make test` overrides `PlenaryBustedFile` → `spec_runner.run` → plenary
   `test_directory` with one path, so every spec runs in a child under a deadline:
   plenary's default 50s, or 180s for the four 50k-row corpora in `spec_runner.lua`.
