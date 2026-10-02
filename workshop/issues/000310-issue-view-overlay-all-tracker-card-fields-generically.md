@@ -1,12 +1,20 @@
 ---
 id: 000310
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-02
 updated: 2026-10-02
 estimate_hours:
-card_mirror: '62900d9ffca802fe597723f14d63f2729ac1f0a9' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '811b1e36e7655b6d73fcaed17af8d338fc004734' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-02T09:57:52-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Issue view: overlay all tracker card fields generically
@@ -70,6 +78,16 @@ same amber `ParleyIssueTracker` highlight as today.
 - [ ] `issue_tracker_buffer.paint` renders virtual lines with the amber highlight
 - [ ] `overlay` driven by vocabulary names; drop `RECORD_FIELDS`
 - [ ] Manual check on #294's details in a tracked checkout
+
+## Revisions
+
+### 2026-10-02 — scope folded in at planning
+- `claimant` is a nested map on the card (operator, machine, workspace, …);
+  `parse_card` only read flat `key: value` lines, so it came back as `""`.
+  Nested values now parse as a block (the child lines, dedented, in order), and
+  render as YAML-shaped virtual lines, or inline in an eol note.
+- The card-only view (`view_lines`, #309) has the same hardcoded list
+  (`VIEW_FIELDS`); it now takes the vocabulary names too. Same class, same fix.
 
 ## Log
 
