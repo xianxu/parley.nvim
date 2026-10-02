@@ -53,6 +53,11 @@ Each passes alone. Suspected causes, none verified:
 | `silence` | tests/helpers/jit_watch.lua | new |
 | `emit` | tests/helpers/jit_watch.lua | new |
 | `normal_edit` | lua/parley/spell_source.lua | changed |
+| `has_mcode_fix` | tests/helpers/jit_tuning.lua | new |
+| `options` | tests/helpers/jit_tuning.lua | new |
+| `apply` | tests/helpers/jit_tuning.lua | new |
+| `stop_treesitter` | lua/parley/init.lua | new |
+| `shown` | lua/parley/skills/review/diag_display.lua | new |
 
 `load_factor(load1, ncpu)` is pure: how far a spec's deadline stretches for
 an oversubscribed machine, between 1x and `LOAD_CAP`. `jit_watch` is opt-in
@@ -60,7 +65,12 @@ an oversubscribed machine, between 1x and `LOAD_CAP`. `jit_watch` is opt-in
 flushes; `emit` writes to `PARLEY_TEST_JITSTAT_LOG` when make sets it;
 `silence` stops the scheduling parent from reporting. Lifetime: the per-spec
 `.jit` file is created by the first JIT line and removed by `RUN_SPEC` after
-it prints, pass or fail.
+it prints, pass or fail. `jit_tuning` owns the "LuaJIT has the arm64 mcode
+fix" rule; `scripts/test-nvim.sh` asks it rather than restating the version.
+`stop_treesitter` keeps chat buffers on parley's highlighter on Neovim 0.12.
+`shown` holds one token per displayed review diagnostic; any clear retires it,
+so the deferred re-wrap cannot resurrect a hidden display. It never outgrows
+the set of buffers with a display.
 
 ## Done when
 

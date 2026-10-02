@@ -46,7 +46,12 @@ TEST_TMP = $(TEST_ENV_ROOT)/tmp
 # Quoted individually at the use site: an unquoted list word-splits, and a
 # checkout under a path with a space would make `rm -rf` target the fragments.
 LEGACY_TEST_DIRS = "$(CURDIR)/.test-home" "$(CURDIR)/.test-xdg" "$(CURDIR)/.test-tmp"
-TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)"
+# The nvim every spec process runs, children and grandchildren alike, found by
+# PATH: scripts/test-nvim.sh prefers one whose LuaJIT has the arm64 mcode fix
+# (#294). Probed on first use, once per make invocation, and only by targets
+# that expand TEST_ENV.
+TEST_NVIM_DIR = $(eval TEST_NVIM_DIR := $$(shell scripts/test-nvim.sh))$(TEST_NVIM_DIR)
+TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)" $(if $(TEST_NVIM_DIR),PATH="$(TEST_NVIM_DIR):$$PATH")
 
 # The orphan gate (#220). `before` reaps what an earlier interrupted run left;
 # `after` reports this run's survivors and fails. One owner, so a new test target

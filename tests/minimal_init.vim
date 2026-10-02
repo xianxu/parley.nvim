@@ -85,6 +85,9 @@ vim.api.nvim_create_autocmd("VimLeavePre", { callback = drop_query_dir })
 -- definition, two triggers.
 require("tests.helpers.exit_with_parent").install(nil, drop_query_dir)
 
+-- #294: one large mcode area where LuaJIT's allocator makes that safe (arm64
+-- macOS with the 2025-11 fix); see tests/helpers/jit_tuning.lua for why.
+require("tests.helpers.jit_tuning").apply()
 -- #294: PARLEY_TEST_JITSTAT=1 reports each process's LuaJIT VM states and
 -- trace flushes, so a slow full-suite run says whether the JIT was thrashing.
 if vim.env.PARLEY_TEST_JITSTAT == "1" then require("tests.helpers.jit_watch").install() end
