@@ -80,9 +80,9 @@ the set of buffers with a display.
 ## Plan
 
 - [x] Instrument (per-spec wall time, named deadline kill, VM-state profile) — ba0a5ea0
-- [ ] Capture failing full runs
-- [ ] Classify and fix per spec
-- [ ] 5 consecutive green `make test`
+- [x] Capture failing full runs
+- [x] Classify and fix per spec
+- [x] 5 consecutive green `make test`
 
 ## Log
 
@@ -180,3 +180,16 @@ the set of buffers with a display.
   reference probes; `document_sequence_spec`'s storage-under-live-traces case
   deliberately keeps its traces. Mutation: a planted strong reference in
   `rebuild_structure` still fails the retention probe. Lesson added.
+- Classification: `perf_ownership`, `perf_document`, `document_semantic`,
+  `document_fold_*` — JIT (mcode placement), fixed by the LuaJIT choice and
+  tuning; `cliproxy_*`, `packaging_vm`, `branch_child` — oversubscription,
+  fixed by load-scaled deadlines; `entity_delete_parity` — 0.12 treesitter,
+  fixed in chat buffers; `buffer_mutation`, `single_source_sweeps`,
+  `review_diag_display` — deterministic, fixed; `document_retention` and its
+  class — JIT trace anchoring in reachability probes, fixed. None asserted wall
+  time (class (b) was empty).
+- **Done-when evidence:** 5 consecutive plain `make test` runs after cf8f8a1e,
+  Neovim 0.12.5 picked by `scripts/test-nvim.sh`: rc=0 each, 125/122/119/118/118s,
+  416 spec files PASS each, 0 FAIL, 0 DEADLINE; load average at start 6–10 on
+  12 CPUs. Thinnest margin left: `entity_delete_parity` 41–42s in-suite (21s
+  alone) against 50s; load scaling does not engage below 12.
