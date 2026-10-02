@@ -190,8 +190,10 @@ local function card_value(card, name)
     return card.fields[name]
 end
 
--- A copy of `record` whose card-owned fields come from `card`; fields where the
--- card disagrees with the details are flagged in `tracker_stale`. Without a card
+-- A copy of `record` whose card-owned fields (`names`, from the vocabulary)
+-- come from `card`; fields where the card disagrees with the details are
+-- flagged in `tracker_stale` — a field the details lack counts too, so it is a
+-- per-field paint set (render paints the fields it shows), not a stale count. Without a card
 -- the record is returned as is (nothing fabricated).
 M.overlay = function(record, card, names)
     local out = {}
@@ -352,7 +354,8 @@ M.freshness = function(status)
 end
 
 -- The read-only card view: provenance label, the card's vocabulary fields
--- (`names`; the `tracker:` envelope is sdlc's), then the card body as is. Without a card,
+-- (`names`; the `tracker:` envelope is sdlc's), then the card body as is. No
+-- `names` (no vocabulary) shows no fields; the tracker is off then anyway. Without a card,
 -- `readable` tells a card that left the tracker (cards were read) from a
 -- tracker that could not be read at all. Nothing is fabricated.
 M.view_lines = function(card, id, status, readable, names)

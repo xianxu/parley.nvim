@@ -197,6 +197,22 @@ describe("issue_cards.missing", function()
         assert.are.same({ "reviewer: ada" }, out.lines)
     end)
 
+    it("adds nothing for a blank card value the details lack, scalar or block", function()
+        local card = cards.parse_card(CARD_296)
+        card.fields.actual_hours = ""
+        card.fields.claimant = {}
+        card.fields.started = nil
+        assert.is_nil(cards.missing(DETAILS_296, card, { "actual_hours", "claimant", "started" }))
+    end)
+
+    it("never adds the title (the H1 carries it) or reads unterminated frontmatter", function()
+        local card = cards.parse_card(CARD_296)
+        card.fields.title = "Renamed"
+        assert.is_nil(cards.missing(DETAILS_296, card, { "title" }))
+        local open = vim.list_slice(DETAILS_296, 1, 9) -- no closing ---
+        assert.is_nil(cards.missing(open, card, NAMES))
+    end)
+
     it("is nil when nothing is missing, or without a card", function()
         assert.is_nil(cards.missing(DETAILS_296, cards.parse_card(CARD_296), { "status", "updated", "title" }))
         assert.is_nil(cards.missing(DETAILS_296, nil, NAMES))

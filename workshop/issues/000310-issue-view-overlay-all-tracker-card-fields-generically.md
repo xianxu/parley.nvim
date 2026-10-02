@@ -122,3 +122,10 @@ child lines, dedented, so order is kept and `vim.deep_equal` compares it.
 `overlay` now flags fields the details lack (`started`, `claimant`) as differing.
 That is harmless: the finder only paints fields it renders. The arch sweep
 needs a Core-concepts table with a Status column, so one was added.
+
+Close review round 1 (FIX-THEN-SHIP): BR-1 Important — the blank-value skip in
+`missing()` was unreached. Fixed for the class: every `missing()` guard now has
+a case where it alone applies (blank scalar, empty block, title, unterminated
+frontmatter). A mutation check confirmed it: removing the blank guard fails the
+new case. Both Minor findings were addressed as doc comments (`overlay`'s
+`tracker_stale` semantics, `view_lines` with no names). Lesson added.
