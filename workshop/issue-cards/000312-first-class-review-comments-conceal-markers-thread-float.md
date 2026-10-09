@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000312-first-class-review-comments-conceal-markers-thread-float.md
         source_blob: f9b46e50cef2303d7969ce948ca91750578a66e7
         destination: workshop/issues/000312-first-class-review-comments-conceal-markers-thread-float.md
+        main_commit: 7d1eb92a1ddaa26ac701bf1f1a46881e61b495fa
 ---
 
 # First-class review comments: conceal markers + thread float
