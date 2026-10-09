@@ -1,13 +1,21 @@
 ---
 id: 000312
-status: open
+status: working
 deps: []
 github_issue:
 target: review-convention
 created: 2026-10-09
 updated: 2026-10-09
 estimate_hours:
-card_mirror: '20c0ba55666bf3cb6382f8e153b9fd539531a8f7' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'ac40debd10f1e31534e69777d1e6ebba4fe78a9f' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-09T16:15:36-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # First-class review comments: conceal markers + thread float
@@ -78,8 +86,14 @@ humans); comments in non-markdown files; "ask agent" from the float.
 
 ## Plan
 
-- [ ] (durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`)
+Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
+
+- [ ] M1 — compact rendering (view.layout → conceal in the decoration provider), broken-marker highlight, `concealcursor=nc` + normal-mode cursor snap (plan Tasks 1–6)
+- [ ] M2 — thread float with single-line `<br>` write-back, `<CR>` binding, single-line writers + `<br>` decode on resolve/gather, ariadne grammar revision, atlas (plan Tasks 7–11)
 
 ## Log
 
 ### 2026-10-09
+- Brainstormed with operator; decisions in the plan's "Decisions folded in".
+- Tension found: #125 deliberately made the parser multi-line tolerant. Resolution: parser keeps it (legacy docs, accept/reject, drill-in); view + writers go single-line; legacy multi-line markers paint `ParleyReviewBroken`.
+- Canonical grammar lives in `../ariadne/construct/local/fix/review-convention.md` → revision via an ariadne issue (plan Task 11).
