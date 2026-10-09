@@ -117,8 +117,10 @@
         {
             "from": "open",
             "to": "working",
-            "event": "claim",
-            "guards": []
+            "event": "start",
+            "guards": [
+                "owned"
+            ]
         },
         {
             "from": "working",
@@ -233,6 +235,61 @@
             "guards": []
         }
     ],
+    "ownership": {
+        "lock": "claimant",
+        "holdable": [
+            "open",
+            "working",
+            "blocked",
+            "codecomplete"
+        ],
+        "events": [
+            {
+                "event": "claim",
+                "owner": "none→me",
+                "statuses": [
+                    "open",
+                    "working",
+                    "blocked",
+                    "codecomplete"
+                ],
+                "when": "take the lock: to shape an open issue, or to take over unowned started work"
+            },
+            {
+                "event": "unclaim",
+                "owner": "me→none",
+                "statuses": [
+                    "open",
+                    "working",
+                    "blocked",
+                    "codecomplete"
+                ],
+                "when": "release the lock; started work stays started and is open for takeover"
+            },
+            {
+                "event": "reclaim",
+                "owner": "other→me",
+                "statuses": [
+                    "open",
+                    "working",
+                    "blocked",
+                    "codecomplete"
+                ],
+                "when": "operator-directed transfer from another slot, with a reason"
+            },
+            {
+                "event": "move",
+                "owner": "me→me",
+                "statuses": [
+                    "open",
+                    "working",
+                    "blocked",
+                    "codecomplete"
+                ],
+                "when": "relocate the owner's own work between worktrees on one machine"
+            }
+        ]
+    },
     "laws": {
         "documented-value": {
             "open": "created, not yet started",
@@ -250,6 +307,18 @@
             "done": true,
             "wontfix": true,
             "punt": true
+        },
+        "ownership-disjoint": {
+            "claim": false,
+            "unclaim": false,
+            "reclaim": false,
+            "move": false
+        },
+        "holdable-nonterminal": {
+            "open": false,
+            "working": false,
+            "blocked": false,
+            "codecomplete": false
         },
         "escapable": {
             "open": true,
