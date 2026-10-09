@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000311-demo-hand-recording-tooling-to-castcut.md
         source_blob: 6c96ce9943997501fae3c38679caee145f244ba3
         destination: workshop/issues/000311-demo-hand-recording-tooling-to-castcut.md
+        main_commit: fd5da3cfa54c8dc43027238144647332a65bc33b
 ---
 
 # demo: hand recording tooling to castcut
