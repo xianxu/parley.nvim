@@ -1,8 +1,9 @@
 -- comment/float.lua — the 🤖 comment thread float (#312).
 --
--- `<CR>` on a marker opens its chain in a plain scratch buffer, one turn per
--- line in raw bracket form (thread.to_lines), human and robot turns on their
--- own backgrounds, the cursor in the empty trailing `[]` reply slot. It is a
+-- `<CR>` on a marker opens its chain in a plain scratch buffer that reads like
+-- a parley chat (thread.to_lines): `💬: ` human turns, `🤖: ` robot turns, on
+-- their own backgrounds, the cursor in insert mode on the trailing `💬: ` reply
+-- slot. It is a
 -- focused nvim buffer: everything is editable; "reply on the last line" is a
 -- convention, not a rule. `:w` (or `:x` / `q`) writes the thread back as ONE
 -- line (thread.from_lines) over the marker's original bytes; `:q!` discards.
@@ -62,13 +63,10 @@ local function size_for(lines, title)
 end
 
 -- Re-derived from the current text so lines added while editing are painted
--- too: a line belongs to the turn its nearest opener started.
+-- too: a continuation line belongs to the turn above it.
 local function paint_roles(fbuf)
     vim.api.nvim_buf_clear_namespace(fbuf, NS, 0, -1)
-    local role = "user"
-    for i, l in ipairs(vim.api.nvim_buf_get_lines(fbuf, 0, -1, false)) do
-        local first = l:match("^%s*(.)")
-        if first == "[" then role = "user" elseif first == "{" then role = "agent" end
+    for i, role in ipairs(thread.roles(vim.api.nvim_buf_get_lines(fbuf, 0, -1, false))) do
         vim.api.nvim_buf_set_extmark(fbuf, NS, i - 1, 0, {
             line_hl_group = role == "agent" and "ParleyCommentAgent" or "ParleyCommentUser",
         })
@@ -126,7 +124,9 @@ function M.open_thread(buf)
     vim.wo[fwin].wrap = true
     vim.wo[fwin].linebreak = true
     paint_roles(fbuf)
-    vim.api.nvim_win_set_cursor(fwin, { #lines, 1 }) -- between the reply's brackets
+    -- Ready to reply: insert mode at the end of the trailing `💬: ` line.
+    vim.api.nvim_win_set_cursor(fwin, { #lines, #lines[#lines] })
+    vim.cmd("startinsert!")
 
     local group = vim.api.nvim_create_augroup("ParleyCommentThread" .. fbuf, { clear = true })
     vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {

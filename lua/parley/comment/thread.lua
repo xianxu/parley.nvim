@@ -1,35 +1,52 @@
 -- comment/thread.lua — PURE marker ↔ thread-float lines (#312).
 --
--- The float shows one turn per line in raw bracket form (`[human]`,
--- `{robot}`), a `<br>` inside a turn becoming a real line break, plus an empty
--- trailing `[]` for the reply. Writing back joins the turns into ONE line
--- (markers are single-line) through the same section parser the buffer uses.
+-- The float reads like a parley chat: each turn starts a line with `💬: `
+-- (human) or `🤖: ` (robot); a line with neither prefix continues the turn
+-- above (a `<br>` inside a turn becomes such a line break). A trailing `💬: `
+-- is the reply slot. Writing back joins the turns into ONE marker line
+-- (markers are single-line) and re-parses it with the buffer's own section
+-- parser, so text that would break the brackets is refused, not written.
 local codec = require("parley.comment.codec")
 
 local M = {}
 
+local PREFIX = { user = "💬:", agent = "🤖:" }
 local OPEN = { user = "[", agent = "{" }
 local CLOSE = { user = "]", agent = "}" }
-local UNBALANCED = "unbalanced brackets or stray text in the thread — fix it before closing"
+
+-- The role a line starts, or nil for a continuation line.
+local function role_of(line)
+    for role, prefix in pairs(PREFIX) do
+        if line:sub(1, #prefix) == prefix then return role, line:sub(#prefix + 1):gsub("^ ", "", 1) end
+    end
+end
+
+--- Role per float line ("user"|"agent"); a continuation line inherits.
+function M.roles(lines)
+    local out, role = {}, "user"
+    for i, l in ipairs(lines) do
+        role = role_of(l) or role
+        out[i] = role
+    end
+    return out
+end
 
 --- An existing empty trailing `[]` (a fresh `<M-q>` marker, or `{R}[]` = "go
---- ahead") IS the reply slot; otherwise an empty `[]` is appended for it.
---- @return string[] lines, string[] roles  ("user"|"agent" per line)
+--- ahead") IS the reply slot; otherwise an empty `💬: ` is appended for it.
+--- @return string[] lines, string[] roles
 --- @return boolean appended  whether the reply slot was added here
 function M.to_lines(marker)
-    local lines, roles = {}, {}
+    local lines = {}
     local function add(kind, text)
-        local turn = OPEN[kind] .. codec.decode(text) .. CLOSE[kind]
-        for _, part in ipairs(vim.split(turn, "\n", { plain = true })) do
-            lines[#lines + 1] = part
-            roles[#roles + 1] = kind
-        end
+        local parts = vim.split(codec.decode(text), "\n", { plain = true })
+        lines[#lines + 1] = PREFIX[kind] .. " " .. parts[1]
+        for i = 2, #parts do lines[#lines + 1] = parts[i] end
     end
     for _, s in ipairs(marker.sections) do add(s.type, s.text) end
     local last = marker.sections[#marker.sections]
     local appended = not (last and last.type == "user" and last.text == "")
     if appended then add("user", "") end
-    return lines, roles, appended
+    return lines, M.roles(lines), appended
 end
 
 --- @param prefix string  the marker's raw `🤖`, `🤖<X>` or `🤖~D~`
@@ -38,29 +55,41 @@ end
 ---   `{R}[]` means "go ahead".
 --- @return string|nil raw, string|nil err
 function M.from_lines(prefix, lines, appended)
-    local parse = require("parley.skills.review")._parse_marker_sections
-    local rest = table.concat(lines, "\n")
-    local sections = {}
-    -- The parser's chain stops at the `\n` between float lines, so parse one
-    -- adjacent run at a time, skipping the whitespace between turns.
-    while true do
-        rest = rest:gsub("^%s+", "")
-        if rest == "" then break end
-        local text = "🤖" .. rest
-        local run, stop = parse(text, 1, 4, { budget = #lines })
-        if #run == 0 then return nil, UNBALANCED end
-        vim.list_extend(sections, run)
-        rest = text:sub(stop)
+    local turns = {}
+    for _, l in ipairs(lines) do
+        local role, text = role_of(l)
+        if role then
+            turns[#turns + 1] = { type = role, parts = { text } }
+        elseif #turns > 0 then
+            table.insert(turns[#turns].parts, l)
+        elseif l:match("%S") then
+            return nil, "text before the first 💬: / 🤖: turn — start it with a prefix"
+        end
     end
-    local last = sections[#sections]
-    if appended and last and last.type == "user" and last.text:match("^%s*$") then
-        table.remove(sections)
+    for _, t in ipairs(turns) do
+        -- Trailing blank lines after a turn are layout, not content.
+        while #t.parts > 1 and not t.parts[#t.parts]:match("%S") do table.remove(t.parts) end
+        t.text = table.concat(t.parts, "\n")
+    end
+    local last = turns[#turns]
+    if appended and last and last.type == "user" and not last.text:match("%S") then
+        table.remove(turns)
     end
     local out = { prefix }
-    for _, s in ipairs(sections) do
-        out[#out + 1] = OPEN[s.type] .. codec.encode(s.text) .. CLOSE[s.type]
+    for _, t in ipairs(turns) do
+        out[#out + 1] = OPEN[t.type] .. codec.encode(t.text) .. CLOSE[t.type]
     end
-    return table.concat(out)
+    local raw = table.concat(out)
+    -- Re-parse: a stray `]` / `}` in a turn would end it early and leak the
+    -- rest of the thread into the document.
+    local parse = require("parley.skills.review")._parse_marker_sections
+    local sections, stop = parse(raw, 1, 4)
+    if raw:sub(1, 4) ~= "🤖" then sections = {} end
+    local whole = stop == #raw + 1 and #sections == #turns
+    if #turns > 0 and not whole then
+        return nil, "unbalanced [ ] or { } inside a turn — balance or remove them before saving"
+    end
+    return raw
 end
 
 return M

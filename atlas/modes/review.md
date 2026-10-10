@@ -74,12 +74,15 @@ Turn brackets are colored by speaker (`ParleyReviewUser` / `ParleyReviewAgent`).
   visible edge renders it raw + broken; `u` restores (fail visible, no revert
   guard).
 
-- **Thread float**: `lua/parley/comment/float.lua` opens the chain one turn
-  per line in raw bracket form (`comment/thread.lua`, pure), human/robot turns
-  on `ParleyCommentUser` / `ParleyCommentAgent` backgrounds, cursor in a trailing
-  empty `[]`. Plain nvim semantics: `:w` writes the thread back as one line over
+- **Thread float**: `lua/parley/comment/float.lua` opens the chain like a
+  parley chat (`comment/thread.lua`, pure): `💬: ` human turns, `🤖: ` robot
+  turns, unprefixed lines continue the turn above (a `<br>`), on
+  `ParleyCommentUser` / `ParleyCommentAgent` backgrounds; it opens in insert mode
+  on the trailing `💬: ` reply slot. Title `🤖 comment` / `🤖 on "X"`, footer
+  with the controls. Text that would unbalance the marker's brackets is refused
+  on save. Plain nvim semantics: `:w` writes the thread back as one line over
   the marker's original bytes (refused, text kept in `"`, if the marker changed
-  underneath or brackets don't balance), `:x` / `q` write and close, `:q!`
+  underneath or a turn's brackets don't balance), `:x` / `q` write and close, `:q!`
   discards. An empty trailing reply is dropped.
 - **Single-line writers**: `<M-q>` refuses a selection spanning lines (an anchor
   quotes one line). Turn text encodes a line break as `<br>` and a literal `<br>`

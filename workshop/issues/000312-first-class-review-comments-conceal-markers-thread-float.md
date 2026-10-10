@@ -165,3 +165,8 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
   display rule (fixes 1 too), insert mode may type inside the last human turn,
   turn brackets colored by speaker, and the float carries a `🤖 comment` /
   `🤖 on "X"` title and a `:w save · q save & close · :q! discard` footer.
+- **2026-10-10** — operator smoke test: the float reads like a parley chat
+  instead of raw brackets — `💬: ` human turns, `🤖: ` robot turns,
+  unprefixed lines continue a turn; it opens in insert mode on the `💬: `
+  reply slot. Brackets are no longer typed, so save re-parses the joined
+  marker and refuses a turn whose `[ ]` / `{ }` would break it.
