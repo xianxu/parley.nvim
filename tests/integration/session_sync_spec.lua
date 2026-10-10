@@ -13,7 +13,9 @@ describe("session-sync buffer", function()
         vim.fn.mkdir(root .. "/bin", "p")
         vim.fn.writefile({
             "#!/bin/sh",
-            'for a in "$@"; do printf "%s\\n" "$a" >> "' .. argv_file .. '"; done',
+            -- Written whole, then renamed: the spec polls for the file.
+            'for a in "$@"; do printf "%s\\n" "$a"; done > "' .. argv_file .. '.tmp"',
+            'mv "' .. argv_file .. '.tmp" "' .. argv_file .. '"',
             'if [ -n "$FAKE_COUCH_EXIT" ] && [ "$FAKE_COUCH_EXIT" != 0 ]; then echo "no such peer" >&2; exit "$FAKE_COUCH_EXIT"; fi',
         }, bin)
         assert.is_truthy(uv.fs_chmod(bin, 493))
