@@ -88,3 +88,9 @@
 - Lualine component removed, with `status(buf)` that only fed it.
 - `ParleySessionSyncOperator` is an explicit bright red band (bg `#d70000`, white bold), `ParleySessionSyncStale` an orange one (bg `#ff8700`); both `default = true`, so a colourscheme can still override them.
 - Re-check: operator red darkened to `#870000` (cterm 88).
+
+### 2026-10-10 — close review round 1 (BR-1, BR-2 + minors)
+- Supersedes the Core-concepts prose where it differs: `attach` idempotency comes from the module `state` table (not `vim.b`); the reminder is the `stale` state (no extmark); `unlock` rewrites the holder to `operator`; the 1s timer is a *watch* that runs whenever the turn is not the operator's.
+- BR-1: each submit carries a generation; its couch completion acts only while `state[buf]`, the generation and `holder: agent` all still match, so a late failure cannot hand back a turn that moved on (unlock, resubmit, reply).
+- BR-2: the watch also runs in the free turn and reloads an unmodified buffer when the file changes on disk; the buffer records the mtime it last read/wrote, the first edit warns if it is editing an old copy, and submit refuses to overwrite a file rewritten under it (without that guard Neovim's own write prompt blocks).
+- Minors: the idle timer is reused per buffer and reads the cached turn; attach starts the idle timer, so a reopened operator turn still turns stale.

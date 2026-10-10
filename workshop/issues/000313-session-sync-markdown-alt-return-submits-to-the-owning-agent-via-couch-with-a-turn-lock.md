@@ -86,3 +86,5 @@ Durable plan: `workshop/plans/000313-session-sync-submit-plan.md` (single pass, 
 - Live check handed to ops TL (message e2266ec8).
 - Live check: core flow confirmed by ops; rendering changes (full-width winbar, no lualine, bright red operator band) made for the re-check.
 - Re-check passed (full-width band, red operator turn, round trip). Red darkened to `#870000` per the operator.
+
+- Close review round 1: FIX-THEN-SHIP, BR-1 (late couch exit rewrote a moved-on turn) and BR-2 (free buffer could be stale; submit could clobber the agent's write) fixed as classes, with specs; mutation-checked (each spec fails with its guard removed; without the submit guard Neovim's write prompt hangs the run). Minors folded in. See the plan's Revisions.

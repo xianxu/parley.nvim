@@ -191,7 +191,12 @@ describe("session-sync buffer", function()
         vim.fn.writefile(update, file)
         edit("- edited on the old copy")
         assert.equals("holder: operator", holder())
-        keymap_cb("<M-CR>")()
+        local saved_notify, said = vim.notify, {}
+        vim.notify = function(msg) said[#said + 1] = msg end
+        local ok = pcall(keymap_cb("<M-CR>"))
+        vim.notify = saved_notify
+        assert.is_true(ok)
+        assert.matches("changed on disk since this buffer read it", table.concat(said, "\n"), 1, true)
         assert.equals("- new thread from TL", vim.fn.readfile(file)[8])
         assert.equals("holder: operator", holder())
         assert.is_true(vim.bo[buf].modifiable)
