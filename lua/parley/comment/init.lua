@@ -67,13 +67,16 @@ function M.attach(buf)
         callback = function() on_cursor(buf) end,
     })
     -- <CR> on a marker opens its thread; elsewhere it stays native. Declared
-    -- in keybinding_registry.native_overrides (a wrapped native key, like `*`).
-    vim.keymap.set("n", "<CR>", function()
+    -- in keybinding_registry.native_overrides (a wrapped native key, like `*`)
+    -- and, like every parley map, absent under default_keymaps = false.
+    local parley = package.loaded["parley"]
+    local keymaps_on = not (parley and parley.config and parley.config.default_keymaps == false)
+    if keymaps_on then vim.keymap.set("n", "<CR>", function()
         if not require("parley.comment.float").open_thread(buf) then
             local keys = (vim.v.count > 0 and tostring(vim.v.count) or "") .. "<CR>"
             vim.api.nvim_feedkeys(vim.keycode(keys), "n", false)
         end
-    end, { buffer = buf, desc = "Parley: open 🤖 comment thread (#312)" })
+    end, { buffer = buf, desc = "Parley: open 🤖 comment thread (#312)" }) end
     -- Leaving the buffer hands the window back with its own concealcursor.
     vim.api.nvim_create_autocmd("BufLeave", {
         group = group,

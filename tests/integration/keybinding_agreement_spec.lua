@@ -180,9 +180,13 @@ describe("keybinding registry vs. reality (#214 M2)", function()
     it("and the feature-gated key really is absent until the feature is on", function()
         setup()
         local buf, path = prepped_chat()
-        local live = parley_maps(buf)
+        -- Insert mode only: normal-mode <CR> is the #312 comment-thread
+        -- native override, a different key in a different mode.
+        local insert_cr = vim.api.nvim_buf_call(buf, function()
+            return vim.fn.maparg("<CR>", "i", false, true)
+        end)
         cleanup(buf, path)
-        assert.is_nil(live[canon("<CR>")],
+        assert.is_true(vim.tbl_isempty(insert_cr) or insert_cr.buffer ~= 1,
             "the spell <CR> map is installed even though typeahead ships off")
     end)
 
