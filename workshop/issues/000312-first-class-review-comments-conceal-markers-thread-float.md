@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: inferred}
 ---
 
 # First-class review comments: conceal markers + thread float
