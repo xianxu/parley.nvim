@@ -3068,6 +3068,7 @@ M.setup_markdown_keymaps = function(buf)
 	-- `shortcut = ""` disable raise on every markdown BufEnter. nil = journal
 	-- sidecar, which gets no review keys.
 	local review_skill = require("parley.skills.review")
+	local session_sync = require("parley.session_sync")
 	local review_cbs = review_skill.registry_callbacks(buf) or {}
 
 	-- Branch inserters: shared with chat buffers (#214). Markdown links INLINE
@@ -3164,13 +3165,16 @@ M.setup_markdown_keymaps = function(buf)
 			-- review scope (#214 C1) — callbacks from the skill, install here
 			review_edit = review_cbs.review_edit,
 			review_menu = review_cbs.review_menu,
-			review_next = review_cbs.review_next,
+			-- #313: <M-CR> submits a session-sync file to its owner instead.
+			review_next = review_cbs.review_next and session_sync.dispatch(buf, review_cbs.review_next),
+			session_sync_unlock = function() session_sync.unlock(buf) end,
 		},
 		M.helpers.set_keymap
 	)
 
 	-- #312: compact 🤖 markers (conceal + cursor snap), same as chat buffers.
 	require("parley.comment").attach(buf)
+	session_sync.attach(buf)
 end
 
 M.setup_buf_handler = function()

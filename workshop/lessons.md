@@ -3,6 +3,22 @@
 Compact rules distilled from Parley.nvim's review and integration history.
 Incident detail belongs in the issue or plan that owns it.
 
+## 2026-10-10 (#313 — session-sync turn file)
+
+- #313 close review BR-1: an async completion must check that the state it
+  reports on is still its own. A couch exit from an earlier submit handed back
+  a turn that had since been unlocked and resubmitted. Tag each request with a
+  generation and re-read the shared state before acting; test a slow failing
+  request overtaken by a newer one.
+- #313 close review BR-2: a buffer shared with another writer is stale while
+  nobody watches the disk; `autoread` alone reloads only on focus/checktime.
+  Watch the file whenever the other side may write, record the mtime the buffer
+  last read or wrote, and refuse to write over a newer file. Without that guard,
+  Neovim's interactive write prompt blocks.
+- A mutation check needs a sharp assertion: the refusal spec passed with its
+  guard removed until it asserted the refusal message. Neovim's own check
+  (and the hang it caused) masked the missing guard.
+
 ## 2026-09-30 (#309 — tracker-only card views)
 
 - An async "settled" callback must mean the work it reports on is finished. A

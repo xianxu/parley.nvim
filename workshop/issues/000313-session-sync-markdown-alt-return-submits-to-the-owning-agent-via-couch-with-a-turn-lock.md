@@ -1,12 +1,22 @@
 ---
 id: 000313
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-10
 updated: 2026-10-10
 estimate_hours:
-card_mirror: '74418c696a78fac96548b3a8a65711b227318f0e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd197fc5e27324399c0966669302547d3a7a58a3d' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-10T12:19:59-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: inferred}
+actual_hours: 0.91
 ---
 
 # session-sync markdown: Alt+Return submits to the owning agent via couch, with a turn lock
@@ -36,19 +46,50 @@ operator: xian-xu
 5. **Stale-lock reminder.** If the lock exists and the buffer has been idle for N minutes (default 5) without a submit, show virtual text: "unsent edits: Alt+Return to submit".
 6. **The agent side** isn't parley's: the owner diffs the file against its own shadow copy, resolves the markers, writes, and deletes the lock (documented in ops' `xx-tl` draft).
 
+## Revisions
+
+### 2026-10-10 — ownership must be obvious (ops TL, from the operator)
+- **Lock names the turn holder:** absent = free; `holder: operator` = the operator's turn; `holder: agent` = the agent's turn (buffer read-only). The first edit writes `holder: operator`; submit rewrites it to `holder: agent`; the agent deletes the lock when done and never writes it. A failed send rewrites it back to `operator`; the manual unlock (`<C-g>u`) does the same. The turn is read from disk, so a buffer reopened during the agent's turn is read-only too.
+- **Render the turn:** a window-local `winhighlight` StatusLine colour per state, a lualine component (text + colour), and a winbar label (`free: editing takes your turn` / `your turn, Alt+Return to submit` / `<owner> working, read-only`).
+- **Stale reminder** (spec §5) is now the `stale` state: the winbar reads `unsent edits, Alt+Return to submit` in the reminder colour. It replaces the end-of-line virtual text, which would have said the same thing twice.
+- Done-when additions: the lock body names the holder at each transition, and each state's winbar/StatusLine/lualine rendering is tested.
+
+### 2026-10-10 — live-check rendering changes (ops TL, from the operator)
+- The core flow passed the live check. Rendering: the winbar label spans the full width; the lualine component is removed; the operator's turn is a bright red band (the default-linked DiffAdd green was too subtle), stale is orange.
+- Re-check passed; the operator asked for a more subtle red: `#870000` (cterm 88), still white bold text.
+
 ## Done when
 
-- In a `session-sync` file, the first keystroke creates `<file>.lock`, and `<M-CR>` saves, sets the buffer read-only and sends one couch message to `owner` (a test with a fake couch on PATH asserts the exact argv).
-- When the file changes on disk and the lock is gone, the buffer reloads and is editable again (test).
+- In a `session-sync` file, the first keystroke creates `<file>.lock` with `holder: operator`, and `<M-CR>` saves, rewrites the holder to `agent`, sets the buffer read-only and sends one couch message to `owner` (a test with a fake couch on PATH asserts the exact argv). A failed send gives the turn back (`holder: operator`, editable).
+- When the lock is deleted after the agent rewrites the file, the buffer reloads and is editable again (test); a file reopened during the agent's turn is read-only (test); `<C-g>u` takes the turn back (test).
 - A markdown file without `type: session-sync` still gets the review action on `<M-CR>` (test).
-- The stale-lock reminder appears after the idle threshold (test with a short threshold).
+- Each turn renders as a full-width winbar band and a window-local StatusLine colour (free / operator in dark red / stale in orange after the idle threshold / agent), tested with a short threshold; no lualine component.
 - A live check with the ops TL: comment on `tl-status-xian-xu.md`, `<M-CR>`, and the TL's reply unlocks it.
-- The atlas documents the `session-sync` type and its keys.
+- The atlas documents the `session-sync` type, its keys, the lock protocol and the rendering.
 
 ## Plan
 
-- [ ]
+Durable plan: `workshop/plans/000313-session-sync-submit-plan.md` (single pass, no milestones).
+
+- [x] Pure header parser + lock body (unit spec)
+- [x] Controller: attach/lock/submit/poll/unlock/reminder + `<M-CR>` dispatch + `<C-g>u` (integration spec, fake couch)
+- [x] Atlas + traceability; full `make test`; live check with ops TL
 
 ## Log
 
 ### 2026-10-10
+- 2026-10-10: closed — make test green (424 files, exit 0) after the round-2 advisory fixes; session_sync specs (14 integration + 6 unit) cover holder transitions, exact couch argv via fake couch, failed send, late failing exit after unlock+resubmit (BR-1), free-turn disk follow, stale first edit reloads instead of taking the turn, stale-copy submit refusal (BR-2), reply reload, reopen during agent/operator turns, rendering; live check with ops TL passed (round trip + rendering), red #870000 per operator; atlas/modes/session_sync.md; review verdict: SHIP
+- 2026-10-10: closed — make test green (424 files, exit 0) after the BR-1/BR-2 fixes; session_sync specs (13 integration + 6 unit) cover holder transitions, exact couch argv via fake couch, failed send, late failing exit after unlock+resubmit (BR-1), free-turn disk follow + stale-copy submit refusal (BR-2), reply reload, reopen during agent/operator turns, rendering; new specs mutation-checked; live check with ops TL passed (round trip + rendering), red #870000 per operator; atlas/modes/session_sync.md; review verdict: SHIP
+- 2026-10-10: flow upgraded quick → full — 414 added lines in code files (limit 100); an earlier round of this close already ran the full review
+- Implemented `lua/parley/session_sync.lua` + `<M-CR>` dispatch / `<C-g>u` in `setup_markdown_keymaps`; specs `tests/unit/session_sync_spec.lua`, `tests/integration/session_sync_spec.lua` (fake `couch` on PATH asserts the exact argv).
+- Discovery: `BufModifiedSet` fires from the main loop on a keystroke (verified mid-insert in headless nvim with real input), never synchronously from `nvim_buf_set_lines`; the spec fires it after an API edit.
+- `<C-g>u` is bound in every markdown buffer (registry no-ghost contract, `keybinding_agreement_spec`); it no-ops outside session-sync files.
+- Scope fold from ops (see Revisions): holder-named lock, winbar/StatusLine/lualine rendering, stale state replaces the eol virt text.
+- Full `make test` green (424 files). One earlier run lost three specs to load-induced 50s deadlines (pass standalone) and exposed a fake-couch argv race, fixed by writing argv atomically.
+- Couch sends need the unsandboxed socket; the first, sandboxed send was never delivered (status: not retained) and was resent.
+- Live check handed to ops TL (message e2266ec8).
+- Live check: core flow confirmed by ops; rendering changes (full-width winbar, no lualine, bright red operator band) made for the re-check.
+- Re-check passed (full-width band, red operator turn, round trip). Red darkened to `#870000` per the operator.
+
+- Close review round 1: FIX-THEN-SHIP, BR-1 (late couch exit rewrote a moved-on turn) and BR-2 (free buffer could be stale; submit could clobber the agent's write) fixed as classes, with specs; mutation-checked (each spec fails with its guard removed; without the submit guard Neovim's write prompt hangs the run). Minors folded in. See the plan's Revisions.
+- Close round 2 SHIP with two advisories (repeat families), fixed before landing: the first edit on a stale copy now reloads instead of taking the turn (so auto-save/:w can never hit the overwrite prompt), with a spec; atlas now describes the free-turn watch and the refusals.
