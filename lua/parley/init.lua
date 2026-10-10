@@ -1894,6 +1894,12 @@ local function drill_in_visual(buf)
 	local sr, sc = sp[2], sp[3]
 	local er, ec = ep[2], ep[3]
 	if sr == 0 or er == 0 then return end
+	-- #312: markers are single-line. A quote is prose; encoding its newlines
+	-- as <br> would reshape the document while it is under comment.
+	if sr ~= er then
+		M.logger.warning("🤖 markers are single-line — select within one line")
+		return
+	end
 
 	local lines_in_range = vim.api.nvim_buf_get_lines(buf, sr - 1, er, false)
 	if #lines_in_range == 0 then return end

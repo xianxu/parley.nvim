@@ -1023,3 +1023,25 @@ describe("drill_in.narrow_replace_range (#133)", function()
         assert.same({ "A", "B" }, region)
     end)
 end)
+
+-- #312: markers are single-line; a newline inside a turn is `<br>`, decoded
+-- whenever a turn's text leaves the marker.
+describe("drill_in <br> decoding (#312)", function()
+    local function m(raw) return drill_in.parse(raw)[1] end
+    it("accepting a proposal inserts real newlines", function()
+        assert.equals("a\nb", drill_in.resolve(m("🤖{a<br>b}"), "accept"))
+        assert.equals("x\ny", drill_in.resolve(m("🤖~D~{x<br>y}"), "accept"))
+    end)
+    it("rejecting a strike restores its text", function()
+        assert.equals("D", drill_in.resolve(m("🤖~D~{x<br>y}"), "reject"))
+    end)
+    it("a quoted anchor survives either action", function()
+        assert.equals("X", drill_in.resolve(m("🤖<X>[q]"), "reject"))
+    end)
+    it("gathered turns render on separate lines", function()
+        local out = drill_in.format_block({ quoted = "Q", sections = {
+            { type = "user", text = "u1<br>u2" }, { type = "agent", text = "a1<br>a2" },
+            { type = "user", text = "last<br>line" } } })
+        assert.same({ "> [Q]", "> User: u1", "> u2", "> Agent: a1", "> a2", "", "last", "line" }, out)
+    end)
+end)

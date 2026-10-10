@@ -546,9 +546,11 @@ end
 --- @param marker table  parsed marker (from M.parse)
 --- @param mode string   "accept" | "reject"
 --- @return string
-function M.resolve(marker, mode)
-    assert(mode == "accept" or mode == "reject",
-        "drill_in.resolve: mode must be 'accept' or 'reject', got " .. tostring(mode))
+-- #312: a marker is one line; a newline inside its text is `<br>`, decoded
+-- whenever that text leaves the marker (resolution, gathered blocks).
+local function decode(text) return require("parley.comment.codec").decode(text) end
+
+local function resolve_raw(marker, mode)
     if marker.quoted then
         return marker.quoted.text
     end
@@ -567,6 +569,12 @@ function M.resolve(marker, mode)
         return ""
     end
     return ""
+end
+
+function M.resolve(marker, mode)
+    assert(mode == "accept" or mode == "reject",
+        "drill_in.resolve: mode must be 'accept' or 'reject', got " .. tostring(mode))
+    return decode(resolve_raw(marker, mode))
 end
 
 local function resolve_at_with_mode(text, offset, mode)
@@ -654,7 +662,7 @@ function M.format_block(block)
         -- #141: wrap the whole quoted block in [...] so it reads as an anchor
         -- matching the `[quoted text]` decoration left at the source location
         -- (and so `*`/`#` on it jumps between the two — see bracket_at).
-        local q_lines = split_lines(block.quoted)
+        local q_lines = split_lines(decode(block.quoted))
         for idx, line in ipairs(q_lines) do
             if idx == 1 then
                 line = "[" .. line
@@ -669,7 +677,7 @@ function M.format_block(block)
     for i = 1, n - 1 do
         local s = block.sections[i]
         local label = s.type == "user" and "User: " or "Agent: "
-        local s_lines = split_lines(s.text)
+        local s_lines = split_lines(decode(s.text))
         for j, line in ipairs(s_lines) do
             if j == 1 then
                 table.insert(out, "> " .. label .. line)
@@ -684,7 +692,7 @@ function M.format_block(block)
             table.insert(out, "")
         end
         local last = block.sections[n]
-        for _, line in ipairs(split_lines(last.text)) do
+        for _, line in ipairs(split_lines(decode(last.text))) do
             table.insert(out, line)
         end
     end
