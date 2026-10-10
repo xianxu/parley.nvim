@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000313-session-sync-markdown-alt-return-submits-to-the-owning-agent-via-couch-with-a-turn-lock.md
         source_blob: ac89a022bc09f863dd799fdf2d1e1e4ee87ace41
         destination: workshop/issues/000313-session-sync-markdown-alt-return-submits-to-the-owning-agent-via-couch-with-a-turn-lock.md
+        main_commit: 03dce091dce9b627d0142e44179c1ee6f5a2baa7
 ---
 
 # session-sync markdown: Alt+Return submits to the owning agent via couch, with a turn lock
