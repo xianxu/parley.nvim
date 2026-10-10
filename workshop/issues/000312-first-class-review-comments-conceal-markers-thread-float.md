@@ -1,13 +1,13 @@
 ---
 id: 000312
-status: working
+status: codecomplete
 deps: [ariadne#316]
 github_issue:
 target: review-convention
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-10
 estimate_hours: 4.88
-card_mirror: '5d13b7a45ae62416e28aaa425bd84b67a701e2af' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '6f3b59cfdc359ce13e97e6b7b9b0091b0b4f4c44' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-09T16:15:36-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 3.62
 ---
 
 # First-class review comments: conceal markers + thread float
