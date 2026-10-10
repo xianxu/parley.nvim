@@ -63,8 +63,11 @@ documents keep resolving.
   decoration provider turns it into ephemeral `conceal` extmarks (viewport-bounded,
   fenced code skipped), the cursor snap and the `<CR>` lookup read the same layout.
 - **Edit protection**: `lua/parley/comment/init.lua` `attach` sets
-  `conceallevel=2`, `concealcursor=nvic` and snaps the cursor (normal + insert) so
-  it never rests on a hidden byte. An edit that still breaks a marker from a
+  `conceallevel=2`, switches `concealcursor` to `nvic` only while the cursor is on
+  a marker line (the window's own value elsewhere, so other conceals behave as
+  before), and snaps the cursor so it never rests on hidden marker text — in
+  normal mode no hidden byte; in insert mode only the points before the 🤖, after
+  the marker, or inside the visible anchor. An edit that still breaks a marker from a
   visible edge renders it raw + broken; `u` restores (fail visible, no revert
   guard).
 

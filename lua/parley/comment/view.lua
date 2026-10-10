@@ -89,34 +89,69 @@ function M.layout(line)
     return out
 end
 
-local function hidden_at(markers, col)
+-- Where the cursor may NOT be, as half-open [a, b) spans of columns.
+-- Normal mode: the cursor sits ON a byte, so every hidden byte is off limits —
+-- even a range's first one (an `x` on the first char of a `…`-concealed
+-- comment keeps the marker parseable, so the edit would be silent).
+-- Insert mode: the cursor is an insertion POINT between bytes. Before the 🤖
+-- and after the marker are outside it; inside a visible anchor (both ends
+-- included) types into X/D; every other point inside the marker is hidden.
+local function blocked_spans(markers, insert)
+    local out = {}
     for _, m in ipairs(markers) do
-        for _, h in ipairs(m.hidden or {}) do
-            if col >= h[1] and col < h[2] then return h end
+        if not m.broken and #m.hidden > 0 then
+            if not insert then
+                for _, h in ipairs(m.hidden) do out[#out + 1] = { h[1], h[2] } end
+            elseif m.visible then
+                out[#out + 1] = { m.start + 1, m.visible[1] }
+                out[#out + 1] = { m.visible[2] + 1, m.stop }
+            else
+                out[#out + 1] = { m.start + 1, m.stop }
+            end
         end
+    end
+    return out
+end
+
+local function blocked_at(spans, col)
+    for _, sp in ipairs(spans) do
+        if col >= sp[1] and col < sp[2] then return sp end
     end
 end
 
--- First visible byte from `col` stepping in `dir` (+1/-1), or nil.
-local function visible_from(markers, col, dir, max_col)
+-- First allowed column from `col` stepping in `dir` (+1/-1), or nil.
+local function allowed_from(spans, col, dir, max_col)
     while col >= 0 and col <= max_col do
-        local h = hidden_at(markers, col)
-        if not h then return col end
-        col = dir > 0 and h[2] or h[1] - 1
+        local sp = blocked_at(spans, col)
+        if not sp then return col end
+        col = dir > 0 and sp[2] or sp[1] - 1
     end
     return nil
 end
 
---- Where the cursor must go so it never rests on a hidden byte — not even a
---- range's first one: a single-byte edit there (`x` on the first char of a
---- `…`-concealed comment) keeps the marker parseable, so it would be silent.
---- Moves in the direction of travel, else the other way; nil = stay.
---- `max_col`: `#line - 1` in normal mode, `#line` in insert mode.
-function M.snap(markers, prev_col, col, max_col)
-    if not hidden_at(markers, col) then return nil end
+--- Where the cursor must go so it never rests on hidden marker text. Moves in
+--- the direction of travel, else the other way; nil = stay where it is.
+--- `max_col`: `#line - 1` in normal mode, `#line` in insert mode. `line`
+--- (optional) lets a leftward landing back up to its UTF-8 char start.
+function M.snap(markers, prev_col, col, max_col, line, insert)
+    local spans = blocked_spans(markers, insert)
+    if not blocked_at(spans, col) then return nil end
     local dir = col >= prev_col and 1 or -1
-    return visible_from(markers, col, dir, max_col)
-        or visible_from(markers, col, -dir, max_col)
+    local to = allowed_from(spans, col, dir, max_col)
+        or allowed_from(spans, col, -dir, max_col)
+    if to and line and to < #line then
+        to = to + vim.str_utf_start(line, to + 1)
+    end
+    return to
+end
+
+--- Whether `line` carries any rendered marker (cheap pre-check included).
+function M.has_marker(line)
+    if not line:find("🤖", 1, true) then return false end
+    for _, m in ipairs(M.layout(line)) do
+        if not m.broken then return true end
+    end
+    return false
 end
 
 --- The rendered (non-broken) marker whose bytes contain `col`, or nil.

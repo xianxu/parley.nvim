@@ -2929,9 +2929,9 @@ M.prep_chat = function(buf, file_name)
 	)
 
 	-- conceallevel=2 for inline branch links, model header params and 🤖
-	-- markers. #312: concealcursor is now "nvic" (was ""), so branch links stay
-	-- concealed on the cursor line too — consistent with markers, whose hidden
-	-- bytes the cursor can never rest on.
+	-- markers. #312: concealcursor is the window's own ("" here) except on a
+	-- line carrying a marker, where it is "nvic" so the chain stays hidden.
+	vim.opt_local.concealcursor = ""
 	require("parley.comment").attach(buf)
 
 	-- conceal parameters in model header so it's not distracting

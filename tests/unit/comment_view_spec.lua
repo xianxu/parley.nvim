@@ -134,11 +134,17 @@ describe("comment.view.snap", function()
         local to = view.snap(b, b[1].hidden[1][1] - 1, b[1].hidden[1][1], #l - 1)
         assert.equals(b[1].hidden[1][1] - 1, to) -- the visible `[`
     end)
-    it("returns nil when no visible byte exists", function()
+    it("a line that starts with a quoted marker rests on its anchor", function()
         local l = "🤖<X>"
         local q = view.layout(l)
-        -- only X is visible; a line of nothing but hidden bytes has no rest
         assert.equals(q[1].visible[1], view.snap(q, 0, 0, #l - 1))
+    end)
+    it("a leftward landing backs up to a multibyte char start", function()
+        local l = "a 🤖<é>[c] z"
+        local q = view.layout(l)
+        local h2 = q[1].hidden[2]
+        local to = view.snap(q, h2[2], h2[1], #l - 1, l)
+        assert.equals(q[1].visible[1], to) -- start of é, not its 2nd byte
     end)
     it("visible text never snaps", function()
         assert.is_nil(view.snap(ms, 0, 1, max))
@@ -153,5 +159,46 @@ describe("comment.view.marker_at", function()
     it("ignores prose and broken markers", function()
         assert.is_nil(view.marker_at(ms, 0))
         assert.is_nil(view.marker_at(ms, ms[2].start))
+    end)
+end)
+
+describe("comment.view.snap (insert mode: insertion points)", function()
+    local l = "ab 🤖<X>[c] z"
+    local q = view.layout(l)
+    local m = q[1]
+    local function snap(prev, col) return view.snap(q, prev, col, #l, l, true) end
+    it("before the 🤖 is outside the marker", function()
+        assert.is_nil(snap(0, m.start))
+    end)
+    it("both ends of the anchor are inside X (typing edits X)", function()
+        assert.is_nil(snap(0, m.visible[1]))
+        assert.is_nil(snap(0, m.visible[2]))
+    end)
+    it("points between 🤖 and X move to the edge in the direction of travel", function()
+        assert.equals(m.visible[1], snap(m.start, m.start + 1))
+        assert.equals(m.start, snap(m.visible[1], m.visible[1] - 1))
+    end)
+    it("after the marker is outside it", function()
+        assert.is_nil(snap(#l, m.stop))
+    end)
+    it("a bare chain's only insertion points are before and after it", function()
+        local b = "x 🤖[hidden] y"
+        local bq = view.layout(b)
+        local bm = bq[1]
+        assert.equals(bm.stop, view.snap(bq, bm.start, bm.start + 5, #b, b, true))
+        assert.is_nil(view.snap(bq, 0, bm.start, #b, b, true))
+    end)
+    it("an empty 🤖[] stays typable between its brackets", function()
+        local e = "🤖[]"
+        assert.is_nil(view.snap(view.layout(e), 0, 5, #e, e, true))
+    end)
+end)
+
+describe("comment.view.has_marker", function()
+    it("is true only for a rendered marker", function()
+        assert.is_true(view.has_marker("a 🤖[c] b"))
+        assert.is_false(view.has_marker("🤖: chat prefix"))
+        assert.is_false(view.has_marker("🤖[unclosed"))
+        assert.is_false(view.has_marker("plain"))
     end)
 end)

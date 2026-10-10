@@ -700,7 +700,7 @@ M.setup_highlights = function()
     -- strikethrough is disabled buffer-wide (see disable_strikethrough)
     -- so this is the only place strikethrough renders.
     -- #312: the struck text is also the marker's visible anchor (the chain is
-    -- concealed), so it gets the quoted highlight too.
+    -- concealed), so it is reversed like a quoted anchor as well as struck.
     vim.api.nvim_set_hl(0, "ParleyReviewStrike", { strikethrough = true, reverse = true })
     -- #312: a 🤖 marker that doesn't close on its own line (markers are
     -- single-line; a #125 multi-line one, or one an edit just broke). Rendered

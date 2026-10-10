@@ -31,6 +31,7 @@
 | `layout` (view) | `lua/parley/comment/view.lua` | new |
 | `snap` (view) | `lua/parley/comment/view.lua` | new |
 | `marker_at` (view) | `lua/parley/comment/view.lua` | new |
+| `has_marker` (view) | `lua/parley/comment/view.lua` | new |
 | `to_lines` / `from_lines` (thread) | `lua/parley/comment/thread.lua` | new |
 | `_inline_code_ranges` (seam export of the existing inline-code scanner) | `lua/parley/skills/review/init.lua` | modified |
 | `resolve` (drill_in, decodes `<br>`) | `lua/parley/drill_in.lua` | modified |
@@ -693,3 +694,4 @@ Document `<CR>` in `atlas/ui/keybindings.md` next to the other native overrides.
 - **2026-10-09** — operator: if markers are effectively uneditable, there's no need to reveal the raw line in insert/visual mode. `concealcursor` `nc` → `nvic`; cursor snap extended to `CursorMovedI`. Raw text is reached via the float (or `conceallevel=0`).
 - **2026-10-09** — plan-quality round 1: snap never rests on a hidden byte (PQ-4: first `…` byte was silently editable); broken = any unclosed trailing opener (PQ-3); empty-anchor / quoted-only edges; Task 4b viewport-bound evidence (PQ-2); issue Spec/Done-when revised to the snap+fail-visible protection (PQ-1); `<CR>` moved to `native_overrides` per #141/#214 precedent; property tests for layout + thread round-trip; per-section `ParleyReview{User,Agent}` entries dropped (no raw display under `nvic`).
 - **2026-10-09** — M1 implementation: Core-concepts rows renamed to bare symbols (`layout`, `snap`, …) so the arch referent sweep (`tests/arch/single_source_sweeps_spec.lua`) can match them to definitions; added `_inline_code_ranges` (seam export) and `push_marker_decorations` (the shared chat+markdown decoration step — chat buffers did not render markers at all before, and fenced code is now skipped in both).
+- **2026-10-09** — M1 boundary review BR-3 (Important): `concealcursor=nvic` window-wide leaked onto every conceal (treesitter links/emphasis hidden while typing). Now "nvic" only while the cursor is on a line with a rendered marker (`has_marker`), the window's own value elsewhere, restored on `BufLeave`. Insert-mode snap now reasons about insertion points (before 🤖 / after the marker / inside the anchor are allowed), so typing just before a quoted marker no longer lands in `X`. Left snaps back up to a UTF-8 char start.

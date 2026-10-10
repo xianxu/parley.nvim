@@ -26,10 +26,20 @@ describe("comment.attach (#312)", function()
     local line = "ab 🤖<X>[c] z"
     local m = view.layout(line)[1]
 
-    it("sets conceal options that keep markers hidden in every mode", function()
-        open_markdown({ line })
+    it("keeps markers hidden on their line in every mode, nowhere else", function()
+        vim.wo.concealcursor = "n" -- the user's own value
+        local buf = open_markdown({ line, "a [link](http://x) line" })
         assert.equals(2, vim.wo.conceallevel)
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
         assert.equals("nvic", vim.wo.concealcursor)
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        assert.equals("n", vim.wo.concealcursor, "other conceals keep the user's setting")
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        vim.api.nvim_exec_autocmds("BufLeave", { buffer = buf })
+        assert.equals("n", vim.wo.concealcursor, "leaving the buffer restores it")
     end)
 
     it("snaps the normal-mode cursor out of hidden bytes", function()
@@ -51,7 +61,8 @@ describe("comment.attach (#312)", function()
         vim.api.nvim_exec_autocmds("CursorMovedI", { buffer = buf })
         local col = vim.api.nvim_win_get_cursor(0)[2]
         vim.cmd("stopinsert")
-        assert.is_nil(view.snap(view.layout(line), col, col, #line), "rests on a visible byte: " .. col)
+        assert.is_nil(view.snap(view.layout(line), col, col, #line, line, true),
+            "rests on an allowed insertion point: " .. col)
     end)
 
     it("leaves a marker-free line alone", function()

@@ -376,3 +376,13 @@ oracle, and the mutation that would make the test fail.
   blank card value that also had a local line) leaves the later guard
   untested: deleting it kept every test green (#310 BR-1). Mutation-check each
   `and not …` clause.
+- A window-wide option set for one feature changes every feature that reads
+  it. `concealcursor = "nvic"` was meant for 🤖 markers but also kept
+  treesitter's link and emphasis conceals hidden on the cursor line while
+  typing (#312 BR-3). Scope the change to where the feature lives (here, only
+  while the cursor is on a marker line), keep the window's own value
+  elsewhere, and test the "elsewhere" case.
+- An insertion point is not a byte. A cursor snap that is right for normal
+  mode (never rest ON a hidden byte) is wrong for insert mode, where the
+  position just before a marker is outside it but the rule snapped it into the
+  anchor (#312). Derive insert-mode legality from the gaps between bytes.
