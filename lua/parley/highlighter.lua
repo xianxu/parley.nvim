@@ -69,6 +69,27 @@ local function forget_structure(buf)
     subscriptions[buf] = nil
 end
 
+-- #312: 🤖 review markers render compactly — comment/view.layout owns what is
+-- hidden (conceal) and what stays visible (highlighted anchor); a marker that
+-- doesn't close on its line paints whole as ParleyReviewBroken. Callers skip
+-- fenced code, where a marker is an example, not a comment.
+local function push_marker_decorations(result, row, line)
+    if not line:find("🤖", 1, true) then return end
+    for _, m in ipairs(require("parley.comment.view").layout(line)) do
+        result[row] = result[row] or {}
+        if m.broken then
+            table.insert(result[row], { hl_group = "ParleyReviewBroken", col_start = m.start, col_end = m.stop })
+        else
+            if m.visible then
+                table.insert(result[row], { hl_group = m.visible[3], col_start = m.visible[1], col_end = m.visible[2] })
+            end
+            for _, h in ipairs(m.hidden) do
+                table.insert(result[row], { conceal = h[3], col_start = h[1], col_end = h[2] })
+            end
+        end
+    end
+end
+
 local function row_metadata(structure, row)
     return structure.document_rows and structure.document_rows[row]
 end
@@ -200,6 +221,9 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
         result[row] = result[row] or {}
 
         push_artifact_refs(result, row, line) -- #160: navigable artifact refs
+        if not in_code_block and not in_tool_block then
+            push_marker_decorations(result, row, line)
+        end
 
         local is_footer = is_footer_row(structure, row, footer_range)
         if is_footer then
@@ -371,43 +395,9 @@ local function compute_markdown_highlights(buf, start_line, end_line, reader, st
             result[row] = result[row] or {}
             table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
         end
-        -- Highlight 🤖<...>[...]{...} review markers
-        local review = require("parley.review")
-        local search_start = 1
-        while true do
-            local pos = line:find("🤖", search_start, true)
-            if not pos then break end
-            local sections, end_pos, quoted, strike = review._parse_marker_sections(line, pos, 4)
-            if quoted then
-                -- Highlight the 🤖 + `<…>` together so the whole "this marker
-                -- refers to a precise quote" prefix reads as one unit.
-                result[row] = result[row] or {}
-                table.insert(result[row], {
-                    hl_group = "ParleyReviewQuoted",
-                    col_start = pos - 1,             -- 0-indexed pos of 🤖
-                    col_end = quoted.byte_end,       -- inclusive close `>`
-                })
-            elseif strike then
-                -- Strikethrough for the `~X~` content (custom rendering — we
-                -- own this since markdown's strikethrough is disabled
-                -- buffer-wide to avoid false positives on `~/path` tildes).
-                result[row] = result[row] or {}
-                table.insert(result[row], {
-                    hl_group = "ParleyReviewStrike",
-                    col_start = pos - 1,             -- 0-indexed pos of 🤖
-                    col_end = strike.byte_end,       -- inclusive close `~`
-                })
-            end
-            for _, section in ipairs(sections) do
-                local hl = section.type == "agent" and "ParleyReviewAgent" or "ParleyReviewUser"
-                result[row] = result[row] or {}
-                table.insert(result[row], {
-                    hl_group = hl,
-                    col_start = section.byte_start - 1,  -- 0-indexed
-                    col_end = section.byte_end,           -- exclusive end
-                })
-            end
-            search_start = end_pos
+        local fence = render_state(structure, row, false)
+        if not fence.in_code and not require("parley.highlight_structure").is_fence_delim(line) then
+            push_marker_decorations(result, row, line)
         end
 
         -- #127: highlight drill-in referenced-span markers `[…]` left in the
@@ -709,7 +699,13 @@ M.setup_highlights = function()
     -- the visual cue per the review-convention target. Markdown's native
     -- strikethrough is disabled buffer-wide (see disable_strikethrough)
     -- so this is the only place strikethrough renders.
-    vim.api.nvim_set_hl(0, "ParleyReviewStrike", { strikethrough = true })
+    -- #312: the struck text is also the marker's visible anchor (the chain is
+    -- concealed), so it gets the quoted highlight too.
+    vim.api.nvim_set_hl(0, "ParleyReviewStrike", { strikethrough = true, reverse = true })
+    -- #312: a 🤖 marker that doesn't close on its own line (markers are
+    -- single-line; a #125 multi-line one, or one an edit just broke). Rendered
+    -- raw, so the damage is visible and `u` can restore it.
+    vim.api.nvim_set_hl(0, "ParleyReviewBroken", { link = "DiagnosticUnderlineError" })
     -- Accept/reject flash animation (<M-a>/<M-r>). The resolver flashes removed
     -- text red and inserted text green. Theme diff groups (DiffDelete/DiffAdd)
     -- are too muted in many colorschemes — often a grey "filler" delete and a
@@ -1183,6 +1179,7 @@ M.setup_buf_handler = function()
                             end_row = row,
                             end_col = end_col,
                             hl_group = hl.hl_group,
+                            conceal = hl.conceal, -- #312 marker chains
                             ephemeral = true,
                             -- 200 > treesitter's default 100, so our marker
                             -- highlights win over markdown syntax (which
