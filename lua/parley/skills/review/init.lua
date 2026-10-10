@@ -338,6 +338,9 @@ end
 
 -- Expose for highlighter.lua backward compatibility
 M._parse_marker_sections = parse_marker_sections
+-- comment/view.lua (#312) reuses the inline-code exclusion so a `🤖[x]` inside
+-- backticks never renders as a marker.
+M._inline_code_ranges = inline_code_ranges
 
 --------------------------------------------------------------------------------
 -- Quickfix helpers
