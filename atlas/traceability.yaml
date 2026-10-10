@@ -737,6 +737,13 @@ atlas:
       - tests/integration/comment_attach_spec.lua
       - tests/integration/comment_float_spec.lua
 
+  modes/session_sync:
+    code:
+      - lua/parley/session_sync.lua
+    tests:
+      - tests/unit/session_sync_spec.lua
+      - tests/integration/session_sync_spec.lua
+
   modes/interview:
     code:
       - lua/parley/interview.lua

@@ -24,6 +24,11 @@ follows a file or recognized artifact reference; `<M-o>` also follows Parley
 branch references before falling back to smart `gf`. See [Branching](../chat/inline_branch_links.md)
 and [Drill-In](../chat/drill_in.md) for placement and selection details.
 
+In a markdown file whose frontmatter says `type: session-sync`, `<M-CR>`
+submits the file to its owning agent instead of opening the review menu, and
+`<C-g>u` unlocks a submit the owner never answered; see
+[Session-Sync Files](../modes/session_sync.md).
+
 In a regular chat buffer, Insert-mode Return continues the private-note prefix
 (`🔒:` by default, configurable with `chat_local_prefix`). It also works when
 splitting a note mid-line or adding an empty note line. Delete the new prefix

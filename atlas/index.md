@@ -86,6 +86,7 @@ its feature pages, and the three tutorials without reading personal files.
 - [Interview Mode](modes/interview.md)
 - [Raw Mode](modes/raw_mode.md)
 - [Document Review](modes/review.md)
+- [Session-Sync Files](modes/session_sync.md)
 - [Super-Repo Mode](modes/super_repo.md)
 
 ## 9. Export

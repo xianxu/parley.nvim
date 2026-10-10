@@ -863,6 +863,16 @@ M.entries = {
 		help_desc = "Open review-mode menu",
 		buffer_local = true,
 	},
+	{
+		id = "session_sync_unlock",
+		config_key = "session_sync_shortcut_unlock",
+		default_key = "<C-g>u",
+		default_modes = { "n" },
+		scope = "markdown",
+		desc = "Parley session-sync: unlock a submitted file the owner never answered",
+		help_desc = "Session-sync: unlock after submit",
+		buffer_local = true,
+	},
 
 	-- ── Picker: Agent ───────────────────────────────────────────────────
 	{
