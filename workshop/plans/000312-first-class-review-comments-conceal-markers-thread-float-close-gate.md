@@ -229,6 +229,44 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: true
+    - "n": 6
+      timestamp: "2026-10-09T21:45:10-07:00"
+      agent: claude
+      dispose:
+        - id: BR-16
+          disposition: addressed
+          note: 'Issue frontmatter now carries deps: [ariadne#316] (4e5e86c0); Spec records merge pending and the weave dependency.'
+          round: 6
+        - id: BR-17
+          disposition: not-addressed
+          note: codec.lua unchanged on this axis; encode("a\\\nb") yields "a\\<br>b", which decodes to "a<br>b". Backslash is still not escaped.
+          round: 6
+        - id: BR-18
+          disposition: not-addressed
+          note: comment/init.lua:72-73 still re-derives default_keymaps gating; the arch guard still accepts a second install path.
+          round: 6
+        - id: BR-19
+          disposition: addressed
+          note: thread.to_lines treats an existing trailing empty [] as the reply slot (appended=false), and from_lines keeps it. Unit test plus integration test "a fresh <M-q> marker's empty [] is the reply slot"; both fail without the fix.
+          round: 6
+        - id: BR-20
+          disposition: addressed
+          note: atlas/chat/drill_in.md Lifecycle steps 1-2 and line 96 now describe single-line quotes, the float for multi-line, and decode at gather time; no other atlas page claims multi-line compose.
+          round: 6
+        - id: BR-21
+          disposition: not-addressed
+          note: float.lua:96 still discards to_lines' roles; paint_roles (float.lua:65-75) re-derives them by first-char rule.
+          round: 6
+      findings:
+        - id: BR-22
+          severity: Minor
+          title: :q! with edits overwrites the unnamed register and warns "closed without :w"
+          detail: The WinClosed handler (float.lua:142-151) cannot tell a deliberate :q! from an accidental close, so a discard clobbers " and shows a misleading warning, although the Spec says ":q! discards". Fix with a QuitPre/cmdline bang flag, or document the stash.
+          family: discard-path-side-effects
+          round: 6
+      boundary: M2
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#312 (boundary-review)
@@ -324,15 +362,29 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   3rd finding in comment-drift. Rule: a behavior change updates every prose description of it, including every caller's atlas page, in the same commit. Document the chat change and point multi-line questions to the float.
 - **BR-21** [Minor] `orphaned-definitions` thread.to_lines returns roles that the float ignores; paint_roles re-derives roles with a different rule
 
+## Round 6 — 2026-10-09T21:45:10-07:00 (claude) — passed
+
+### Disposed
+
+- BR-16 — addressed — Issue frontmatter now carries deps: [ariadne#316] (4e5e86c0); Spec records merge pending and the weave dependency.
+- BR-17 — not-addressed — codec.lua unchanged on this axis; encode("a\\\nb") yields "a\\<br>b", which decodes to "a<br>b". Backslash is still not escaped.
+- BR-18 — not-addressed — comment/init.lua:72-73 still re-derives default_keymaps gating; the arch guard still accepts a second install path.
+- BR-19 — addressed — thread.to_lines treats an existing trailing empty [] as the reply slot (appended=false), and from_lines keeps it. Unit test plus integration test "a fresh <M-q> marker's empty [] is the reply slot"; both fail without the fix.
+- BR-20 — addressed — atlas/chat/drill_in.md Lifecycle steps 1-2 and line 96 now describe single-line quotes, the float for multi-line, and decode at gather time; no other atlas page claims multi-line compose.
+- BR-21 — not-addressed — float.lua:96 still discards to_lines' roles; paint_roles (float.lua:65-75) re-derives them by first-char rule.
+
+### Raised
+
+- **BR-22** [Minor] `discard-path-side-effects` :q! with edits overwrites the unnamed register and warns "closed without :w"
+  The WinClosed handler (float.lua:142-151) cannot tell a deliberate :q! from an accidental close, so a discard clobbers " and shows a misleading warning, although the Spec says ":q! discards". Fix with a QuitPre/cmdline bang flag, or document the stash.
+
 ## Open findings
 
 - **BR-9** [Minor] `conceal-scope-widening` sync_concealcursor reads the window's base once and overwrites later user or prep_chat values
 - **BR-10** [Minor] `comment-drift` highlighter.lua:365, :691-697 and atlas/modes/review.md:257 still describe ParleyReviewUser/Agent painting marker sections
 - **BR-11** [Minor] `insert-edge-semantics` Concealed spans collapse two insert positions onto one screen column
 - **BR-12** [Minor] `done-when-contract-drift` Issue Spec/M1 row say concealcursor=nvic unqualified; BR-3 scoping revision recorded only in the plan
-- **BR-16** [Important] `cross-version-input-decode` Accept now decodes a literal <br> in legacy or old-grammar turn text into a newline before ariadne#316 lands
 - **BR-17** [Minor] `escape-totality` codec escape is not total; a backslash before a newline decodes to a literal <br>
 - **BR-18** [Minor] `keymap-install-single-path` comment/init re-implements native_map gating; the arch guard was widened to allow a second install path
-- **BR-19** [Critical] `reply-slot-normalization` Float on a fresh marker (empty []) writes back a doubled human turn
-- **BR-20** [Important] `comment-drift` atlas/chat/drill_in.md still documents multi-line quotes and multi-line compose; M2 made chat <M-q> single-line
 - **BR-21** [Minor] `orphaned-definitions` thread.to_lines returns roles that the float ignores; paint_roles re-derives roles with a different rule
+- **BR-22** [Minor] `discard-path-side-effects` :q! with edits overwrites the unnamed register and warns "closed without :w"

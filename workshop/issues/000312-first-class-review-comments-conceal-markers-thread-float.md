@@ -119,11 +119,12 @@ total: 4.88
 Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
 
 - [x] M1 — compact rendering (view.layout → conceal in the decoration provider), broken-marker highlight, `concealcursor=nvic` on marker lines + cursor snap in every mode (plan Tasks 1–6)
-- [ ] M2 — thread float with single-line `<br>` write-back, `<CR>` binding, single-line writers + `<br>` decode on resolve/gather, ariadne grammar revision, atlas (plan Tasks 7–11)
+- [x] M2 — thread float with single-line `<br>` write-back, `<CR>` binding, single-line writers + `<br>` decode on resolve/gather, ariadne grammar revision, atlas (plan Tasks 7–11)
 
 ## Log
 
 ### 2026-10-09
+- 2026-10-09: closed M2 — Unit: codec (incl. \<br> escape), thread 11/11 (round-trip property incl. escaped <br>; existing empty [] reused as reply slot; {R}[] kept), view, drill_in (turn-only decode; anchors verbatim). Integration: comment_float_spec 12/12 (open, :w one-line <br> write-back, repeated :w (BR-13), fresh <M-q> marker no doubled turn (BR-19), no-edit close untouched, stale marker refused + register, unbalanced refused, q save+close / :q! discard, free-standing chain, <CR> on marker vs native incl. count, <M-q> multi-line refused), keybinding_agreement 35/35, buffer_mutation, arch sweeps 25/25. deps: ariadne#316 (BR-16). make test green bar 3 load-sensitive specs that pass alone. Visual check pending operator.; review verdict: SHIP
 - 2026-10-09: closed M1 — Unit: comment_codec/view specs (33 view cases incl. property test over 3000 generated lines; insert-point snap; multibyte left snap). Integration: comment_render_spec (conceal + anchor hl in markdown and chat, broken marker, fenced code skipped, viewport bound 61 layout calls/frame on 5000 rows before and after an edit), comment_attach_spec (concealcursor nvic only on marker lines, user value elsewhere, restored on BufLeave; snap normal+insert). Neighbor specs green (highlighting, highlighter_document, keybinding_agreement, entity_textobj, drill_in, highlighter). BR-3 fixed. Visual check pending operator.; review verdict: FIX-THEN-SHIP
 - Brainstormed with operator; decisions in the plan's "Decisions folded in".
 - Tension found: #125 deliberately made the parser multi-line tolerant. Resolution: parser keeps it (legacy docs, accept/reject, drill-in); view + writers go single-line; legacy multi-line markers paint `ParleyReviewBroken`.

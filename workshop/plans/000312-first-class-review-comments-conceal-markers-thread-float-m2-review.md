@@ -246,3 +246,98 @@ findings:
     title: |
       thread.to_lines returns roles that the float ignores; paint_roles re-derives roles with a different rule
 ```
+
+---
+
+## Re-review — 2026-10-09T21:45:10-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 312 — First-class review comments: conceal markers + thread float |
+| repo | parley.nvim |
+| issue file | workshop/issues/000312-first-class-review-comments-conceal-markers-thread-float.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 5f6020e4ba4de11f4d929f8f4a3d3a1be2dece0e..4e5e86c0ee245ce8385d27c8a16351496bc7ac94 |
+| command | sdlc milestone-close --issue 312 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-10-09T21:45:10-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+**Summary.** The M2 window delivers what Plan Tasks 7–11 promise: a pure `thread` layout round-trip, the float glue, the `<CR>` native override, single-line `<M-q>`, decoding of turn text only, and the `\<br>` escape. The atlas was updated alongside. The one Critical from the last round (BR-19, a fresh `[]` written back as a doubled turn) is fixed, and a test fails without the fix. BR-16 and BR-20 are addressed. BR-17, BR-18 and BR-21 are Minor and remain open, so they don't block. I ran `make test-spec SPEC=modes/review` and it passed: 8 spec files, 0 failed. Those files include comment_float_spec (12 tests), comment_thread_spec (11, including a 500-case property test) and drill_in_spec (120). Nothing blocks SHIP. One new Minor: `:q!` triggers the "closed without :w" path.
+
+1. **Strengths**
+   - `lua/parley/comment/thread.lua` is pure and reuses the buffer's section parser (no second parser). It has a generated round-trip property test (`tests/unit/comment_thread_spec.lua:45-60`) that includes `\<br>` and nested-bracket words.
+   - The `appended` flag (`thread.lua:31`) gives one clear rule for the reply slot: an existing trailing empty `[]` is the slot. That covers both a fresh `<M-q>` marker and `{R}[]` ("go ahead").
+   - `write_back` checks that the marker's bytes are unchanged before writing. If they changed, it refuses and keeps the text in `"`. It also re-anchors the extmark after each write (`float.lua:31-48`). The tests cover a second `:w` with lead text and a source edit made underneath the float.
+   - Decoding is limited to turn text in `resolve` and `format_block` (`drill_in.lua:558,679,694`). Tests check that anchors stay verbatim (`drill_in_spec.lua:1049-1060`).
+   - The stale-override arch guard now reads the module named in `where`, so `<CR>` living outside `prep_chat` is still checked against the registry.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - `float.lua:142-151`: the WinClosed handler can't tell `:q!` apart from an accidental close. A deliberate `:q!` with edits still overwrites the unnamed register and warns "thread closed without :w". The Spec says `:q!` discards. Possible fixes: a `QuitPre` flag, or say in the Spec/atlas that `:q!` also stashes the text.
+   - BR-17, BR-18 and BR-21 are still open (see the dispositions below).
+
+5. **Test coverage**
+   - The BR-19 integration test builds the `🤖<sel>[]` marker directly instead of typing `<M-q>`. It exercises the same path: it fails without the fix because the float would show `{"[]","[]"}`.
+   - The `:q!` test checks the source buffer but not the register or the warning, which is why the Minor above went unnoticed.
+   - Codec totality (BR-17) has no test for a turn that ends in a backslash.
+
+6. **Architecture**
+   - **ARCH-DRY:** flag. The `default_keymaps` gating in `comment/init.lua:72-73` repeats logic that exists elsewhere (BR-18, still open).
+   - **ARCH-PURE:** pass. `thread` and `codec` are pure; `float` is thin glue around them.
+   - **ARCH-PURPOSE:** pass. Every consumer of turn text decodes (resolve, the two `format_block` sites). The review skill hands raw markers to the agent, which is correct by design.
+   - **ARCH-MOCK:** not applicable; there is no external binary or service.
+   - **ARCH-CONSTRAINTS:** pass. `paint_roles` repaints the whole float on every TextChangedI, but a thread is only a few lines.
+   - **ARCH-SECURE:** pass. File text goes through the parser, and unbalanced input is refused with a visible error. The `\1` sentinel is only a problem for buffers containing control bytes (same family as BR-17).
+   - **ARCH-ORDER:** pass. The float's state (`raw` and `mark`) is checked against the live source bytes before every write, so a concurrent edit to the source is detected and refused rather than overwritten.
+   - **ARCH-FUNERAL:** pass. The scratch buffer is wiped, the extmark and augroup are deleted on WinClosed, and the old extmark is removed when re-anchoring.
+   - **Next:** collapse the unused `roles` return into the single role rule that `paint_roles` uses, or remove it.
+
+7. **Plan revisions:** if the `:q!` behavior stays as it is, add a `## Revisions` line saying `:q!` also stashes unsaved thread text in `"`.
+
+```findings
+dispose:
+  - id: BR-16
+    disposition: addressed
+    note: |
+      Issue frontmatter now carries deps: [ariadne#316] (4e5e86c0); Spec records merge pending and the weave dependency.
+  - id: BR-17
+    disposition: not-addressed
+    note: |
+      codec.lua unchanged on this axis; encode("a\\\nb") yields "a\\<br>b", which decodes to "a<br>b". Backslash is still not escaped.
+  - id: BR-18
+    disposition: not-addressed
+    note: |
+      comment/init.lua:72-73 still re-derives default_keymaps gating; the arch guard still accepts a second install path.
+  - id: BR-19
+    disposition: addressed
+    note: |
+      thread.to_lines treats an existing trailing empty [] as the reply slot (appended=false), and from_lines keeps it. Unit test plus integration test "a fresh <M-q> marker's empty [] is the reply slot"; both fail without the fix.
+  - id: BR-20
+    disposition: addressed
+    note: |
+      atlas/chat/drill_in.md Lifecycle steps 1-2 and line 96 now describe single-line quotes, the float for multi-line, and decode at gather time; no other atlas page claims multi-line compose.
+  - id: BR-21
+    disposition: not-addressed
+    note: |
+      float.lua:96 still discards to_lines' roles; paint_roles (float.lua:65-75) re-derives them by first-char rule.
+findings:
+  - id: new
+    severity: Minor
+    family: discard-path-side-effects
+    title: |
+      :q! with edits overwrites the unnamed register and warns "closed without :w"
+    detail: |
+      The WinClosed handler (float.lua:142-151) cannot tell a deliberate :q! from an accidental close, so a discard clobbers " and shows a misleading warning, although the Spec says ":q! discards". Fix with a QuitPre/cmdline bang flag, or document the stash.
+```
