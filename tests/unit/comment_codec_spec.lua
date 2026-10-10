@@ -13,6 +13,12 @@ describe("comment.codec", function()
         local s = "line one\nline two\n\nend"
         assert.equals(s, codec.decode(codec.encode(s)))
     end)
+    it("a literal <br> (table cell) is escaped, not turned into a newline", function()
+        assert.equals("a | b\\<br>c | d", codec.encode("a | b<br>c | d"))
+        assert.equals("a | b<br>c | d", codec.decode("a | b\\<br>c | d"))
+        local s = "row one<br>cell\nnext line"
+        assert.equals(s, codec.decode(codec.encode(s)))
+    end)
     it("leaves single-line text alone", function()
         assert.equals("plain", codec.encode("plain"))
         assert.equals("plain", codec.decode("plain"))

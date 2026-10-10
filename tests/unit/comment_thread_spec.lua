@@ -33,7 +33,7 @@ describe("comment.thread", function()
     -- spaces, <br> and balanced [] / {} pairs).
     it("round-trips generated markers", function()
         math.randomseed(312)
-        local words = { "a", "b c", "x<br>y", "[n]", "{m}", "é", "t [u] v" }
+        local words = { "a", "b c", "x<br>y", "[n]", "{m}", "é", "t [u] v", "cell\\<br>two" }
         for _ = 1, 500 do
             local prefix = ({ "🤖", "🤖<Q>", "🤖~D~" })[math.random(3)]
             local raw = prefix
