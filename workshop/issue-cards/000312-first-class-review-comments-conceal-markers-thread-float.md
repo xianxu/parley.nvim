@@ -1,6 +1,6 @@
 ---
 id: 000312
-status: codecomplete
+status: done
 created: 2026-10-09
 updated: 2026-10-10
 estimate_hours: 4.88
@@ -31,6 +31,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 03b245448ae147a6d8aba3ebf8e53f05dcbab5e1
         evidence_commit: 47e6c6e8169ec773bf11ff47ab211b9785c06d7e
+        landed_commit: 420b2b3109fb83b6fa68470841d47261e96c4744
 ---
 
 # First-class review comments: conceal markers + thread float
