@@ -771,7 +771,12 @@ describe("arch: native key overrides are declared (#214)", function()
         for key, meta in pairs(reg.native_overrides) do
             local literal = src:find('native_map("' .. key .. '"', 1, true)
             local tabled = src:find('{ key = "' .. key .. '", back = ', 1, true)
-            if not literal and not tabled then
+            -- #312: an override installed outside prep_chat names its module
+            -- in `where`; it must map the key there with a plain keymap.set.
+            local module = meta.where:match("^([%w_/]+%.lua)")
+            local elsewhere = module and module ~= "init.lua"
+                and read("lua/parley/" .. module):find('keymap.set("n", "' .. key .. '"', 1, true)
+            if not literal and not tabled and not elsewhere then
                 stale[#stale + 1] = key .. " (" .. meta.where .. ")"
             end
         end

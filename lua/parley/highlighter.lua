@@ -706,6 +706,10 @@ M.setup_highlights = function()
     -- single-line; a #125 multi-line one, or one an edit just broke). Rendered
     -- raw, so the damage is visible and `u` can restore it.
     vim.api.nvim_set_hl(0, "ParleyReviewBroken", { link = "DiagnosticUnderlineError" })
+    -- #312: thread float backgrounds — one per speaker, theme-provided so they
+    -- read in light and dark schemes alike.
+    vim.api.nvim_set_hl(0, "ParleyCommentUser", { link = "DiffChange" })
+    vim.api.nvim_set_hl(0, "ParleyCommentAgent", { link = "DiffAdd" })
     -- Accept/reject flash animation (<M-a>/<M-r>). The resolver flashes removed
     -- text red and inserted text green. Theme diff groups (DiffDelete/DiffAdd)
     -- are too muted in many colorschemes — often a grey "filler" delete and a
