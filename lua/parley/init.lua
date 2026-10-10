@@ -2928,9 +2928,11 @@ M.prep_chat = function(buf, file_name)
 		M.helpers.set_keymap
 	)
 
-	-- conceallevel=2 for inline branch link concealing and model header params
-	vim.opt_local.conceallevel = 2
-	vim.opt_local.concealcursor = ""
+	-- conceallevel=2 for inline branch links, model header params and 🤖
+	-- markers. #312: concealcursor is now "nvic" (was ""), so branch links stay
+	-- concealed on the cursor line too — consistent with markers, whose hidden
+	-- bytes the cursor can never rest on.
+	require("parley.comment").attach(buf)
 
 	-- conceal parameters in model header so it's not distracting
 	if M.config.chat_conceal_model_params then
@@ -3161,6 +3163,8 @@ M.setup_markdown_keymaps = function(buf)
 		M.helpers.set_keymap
 	)
 
+	-- #312: compact 🤖 markers (conceal + cursor snap), same as chat buffers.
+	require("parley.comment").attach(buf)
 end
 
 M.setup_buf_handler = function()
