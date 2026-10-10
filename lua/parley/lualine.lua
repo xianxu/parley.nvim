@@ -354,6 +354,25 @@ M.create_component = function(parley_instance)
   }
 end
 
+-- #313: the session-sync turn (text + colour) for a `type: session-sync`
+-- markdown buffer; empty elsewhere.
+M.create_session_sync_component = function()
+  local session_sync = require("parley.session_sync")
+  return {
+    function()
+      local view = session_sync.status(vim.api.nvim_get_current_buf())
+      return view and view.label or ""
+    end,
+    cond = function()
+      return session_sync.status(vim.api.nvim_get_current_buf()) ~= nil
+    end,
+    color = function()
+      local view = session_sync.status(vim.api.nvim_get_current_buf())
+      return view and view.hl or nil
+    end,
+  }
+end
+
 function M.setup(parley)
   -- Immediately assign the parley reference
   _parley = parley
@@ -384,7 +403,7 @@ function M.setup(parley)
           local section = config.lualine.section or "lualine_z"
           local lualine_config = {
             sections = {
-              [section] = { parley_component }
+              [section] = { parley_component, M.create_session_sync_component() }
             }
           }
           lualine.setup(lualine_config)
@@ -458,6 +477,7 @@ function M.setup(parley)
           existing_config.sections[section] = {}
         end
         table.insert(existing_config.sections[section], parley_component)
+        table.insert(existing_config.sections[section], M.create_session_sync_component())
       end
 
       -- Refresh lualine with the updated config

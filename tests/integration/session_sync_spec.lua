@@ -1,5 +1,6 @@
--- #313: session-sync files — lock on first edit, <M-CR> submits over couch,
--- the owner's reply (rewrite + lock removed) unlocks.
+-- #313: session-sync files — the lock names the turn holder; the first edit
+-- takes it, <M-CR> hands it to the agent over couch, the reply (rewrite + lock
+-- removed) frees it. Every turn is rendered in the winbar and StatusLine.
 local ss = require("parley.session_sync")
 local uv = vim.uv or vim.loop
 
@@ -31,6 +32,9 @@ describe("session-sync buffer", function()
     end
 
     local function exists(path) return uv.fs_stat(path) ~= nil end
+    local function holder() return vim.fn.readfile(file .. ".lock")[1] end
+    local function winbar() return vim.wo[vim.fn.bufwinid(buf)].winbar end
+    local function winhl() return vim.wo[vim.fn.bufwinid(buf)].winhighlight end
 
     -- An edit as the operator makes it: BufModifiedSet fires from the main
     -- loop on a keystroke, never synchronously from an API edit, so a
@@ -65,36 +69,41 @@ describe("session-sync buffer", function()
         vim.fn.delete(root, "rf")
     end)
 
-    it("takes the lock on the first modification", function()
+    it("starts free, and the first modification takes the operator's turn", function()
         open(header)
         assert.is_false(exists(file .. ".lock"))
+        assert.equals("%#ParleySessionSyncFree# free: editing takes your turn %*", winbar())
         edit("- item 🤖[ok?]")
-        assert.is_true(exists(file .. ".lock"))
-        assert.equals("holder: xian-xu", vim.fn.readfile(file .. ".lock")[1])
+        assert.equals("holder: operator", holder())
+        assert.equals("%#ParleySessionSyncOperator# your turn, Alt+Return to submit %*", winbar())
+        assert.equals("StatusLine:ParleySessionSyncOperator", winhl())
     end)
 
-    it("<M-CR> saves, goes read-only and sends one couch message to the owner", function()
+    it("<M-CR> saves, hands the turn to the agent and sends one couch message", function()
         open(header)
         edit("- item 🤖[ok?]")
         keymap_cb("<M-CR>")()
         assert.is_false(vim.bo[buf].modifiable)
+        assert.equals("holder: agent", holder())
         assert.equals("- item 🤖[ok?]", vim.fn.readfile(file)[8])
+        assert.equals("%#ParleySessionSyncAgent# ops:0 working, read-only %*", winbar())
+        assert.equals("StatusLine:ParleySessionSyncAgent", winhl())
         assert.is_true(vim.wait(2000, function() return exists(argv_file) end))
         assert.same({ "--send-to", "ops:0", "--message", "submitted: " .. file }, vim.fn.readfile(argv_file))
         vim.wait(100)
         assert.is_false(vim.bo[buf].modifiable)
     end)
 
-    it("a failed send keeps the buffer editable", function()
+    it("a failed send gives the turn back to the operator", function()
         vim.env.FAKE_COUCH_EXIT = "3"
         open(header)
         edit("- edited")
         keymap_cb("<M-CR>")()
         assert.is_true(vim.wait(2000, function() return vim.bo[buf].modifiable end))
-        assert.is_true(exists(file .. ".lock"))
+        assert.equals("holder: operator", holder())
     end)
 
-    it("the owner's reply reloads the buffer and makes it editable", function()
+    it("the agent's reply reloads the buffer, frees the turn and makes it editable", function()
         open(header)
         edit("- edited")
         keymap_cb("<M-CR>")()
@@ -106,27 +115,45 @@ describe("session-sync buffer", function()
         assert.is_true(vim.wait(2000, function() return vim.bo[buf].modifiable end))
         assert.equals("- resolved by TL", vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1])
         assert.is_false(vim.bo[buf].modified)
+        assert.is_false(exists(file .. ".lock"))
+        assert.equals("%#ParleySessionSyncFree# free: editing takes your turn %*", winbar())
     end)
 
-    it("manual unlock after submit makes it editable and keeps the lock", function()
+    it("a file reopened while the agent holds the turn is read-only", function()
+        vim.fn.writefile({ "holder: agent" }, file .. ".lock")
+        open(header)
+        assert.is_false(vim.bo[buf].modifiable)
+        os.remove(file .. ".lock")
+        assert.is_true(vim.wait(2000, function() return vim.bo[buf].modifiable end))
+    end)
+
+    it("manual unlock after submit gives the operator the turn back", function()
         open(header)
         edit("- edited")
         keymap_cb("<M-CR>")()
         assert.is_true(vim.wait(2000, function() return exists(argv_file) end))
         keymap_cb("<C-g>u")()
         assert.is_true(vim.bo[buf].modifiable)
-        assert.is_true(exists(file .. ".lock"))
+        assert.equals("holder: operator", holder())
     end)
 
-    it("shows the unsent-edits reminder after the idle threshold", function()
+    it("an idle operator turn turns stale and renders in the reminder colour", function()
         p.config.session_sync_stale_minutes = 0.001
         open(header)
         edit("- edited")
-        local ns = vim.api.nvim_create_namespace("parley_session_sync")
         assert.is_true(vim.wait(2000, function()
-            local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
-            return #marks > 0 and marks[1][4].virt_text[1][1] == ss.REMINDER
+            return winbar() == "%#ParleySessionSyncStale# unsent edits, Alt+Return to submit %*"
         end))
+        assert.equals("StatusLine:ParleySessionSyncStale", winhl())
+    end)
+
+    it("the lualine component shows the turn's text and colour", function()
+        open(header)
+        edit("- edited")
+        local c = require("parley.lualine").create_session_sync_component()
+        assert.is_true(c.cond())
+        assert.equals("your turn, Alt+Return to submit", c[1]())
+        assert.equals("ParleySessionSyncOperator", c.color())
     end)
 
     it("plain markdown keeps the review action on <M-CR>, and unlock is a no-op", function()
@@ -138,5 +165,7 @@ describe("session-sync buffer", function()
         assert.is_true(vim.bo[buf].modifiable)
         assert.is_not_nil(keymap_cb("<M-CR>"))
         assert.is_false(exists(file .. ".lock"))
+        assert.equals("", winbar())
+        assert.is_false(require("parley.lualine").create_session_sync_component().cond())
     end)
 end)

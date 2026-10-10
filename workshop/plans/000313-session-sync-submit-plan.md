@@ -18,6 +18,8 @@
 |------|----------|--------|
 | `parse_header` | `lua/parley/session_sync.lua` | new |
 | `lock_body` | `lua/parley/session_sync.lua` | new |
+| `turn` | `lua/parley/session_sync.lua` | new |
+| `view` | `lua/parley/session_sync.lua` | new |
 
 - **parse_header(lines)** — top-level `key: value` pairs between the opening `---` and the closing `---`; returns `nil` unless `type == "session-sync"`, else `{ owner, operator }` (owner may be nil → submit refuses with a message). Unit-tested without IO.
   - **DRY rationale:** parley has three special-purpose frontmatter readers (`issues.parse_frontmatter`, `issue_cards.frontmatter`, chat headers), each shaped for its own record. None returns a generic key→value map; this one is ~12 lines and scoped to the module. If a fourth caller appears, promote it to a shared `frontmatter.lua`.
@@ -27,7 +29,14 @@
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `session_sync.attach / submit / unlock` | `lua/parley/session_sync.lua` | new | file system (lock sidecar), `couch` binary, uv timers, extmarks |
+| `attach` | `lua/parley/session_sync.lua` | new | autocmds, uv timers |
+| `submit` | `lua/parley/session_sync.lua` | new | `couch` binary, lock sidecar |
+| `unlock` | `lua/parley/session_sync.lua` | new | lock sidecar |
+| `dispatch` | `lua/parley/session_sync.lua` | new | the `<M-CR>` callback |
+| `is_session_sync` | `lua/parley/session_sync.lua` | new | buffer lines |
+| `lock_path` | `lua/parley/session_sync.lua` | new | file system |
+| `status` | `lua/parley/session_sync.lua` | new | buffer + lock → view |
+| `create_session_sync_component` | `lua/parley/lualine.lua` | new | lualine |
 | `setup_markdown_keymaps` | `lua/parley/init.lua` | modified | keybinding registry |
 | `session_sync_unlock` registry entry | `lua/parley/keybinding_registry.lua`, `lua/parley/config.lua` | new | keymap |
 
@@ -68,3 +77,10 @@
 ### Task 3: atlas + traceability
 - [ ] `atlas/modes/session_sync.md` (type, keys `owner`/`operator`, lock protocol, `<M-CR>`, `<C-g>u`, reminder, agent's side); link from `atlas/index.md`; add `<C-g>u` and the `<M-CR>` dispatch note to `atlas/ui/keybindings.md`; `modes/session_sync` entry in `atlas/traceability.yaml` mapping both specs.
 - [ ] Full `make test` before close; live check with the ops TL on `tl-status-xian-xu.md`.
+
+## Revisions
+
+### 2026-10-10 — turn holder in the lock + rendering (ops scope fold)
+- The lock body is `holder: operator|agent` (see the issue's Revisions). New pure `turn(lock_text)` → free/operator/agent and `view(turn, stale, owner)` → {state, label, hl}; all state is re-read from disk by one `refresh(buf)` that sets `modifiable`, runs the poll only during the agent's turn, and renders the winbar + window-local `winhighlight` (`StatusLine:ParleySessionSync{Free,Operator,Stale,Agent}`, default-linked to StatusLine/DiffAdd/DiffDelete/DiffChange). `status(buf)` feeds `lualine.create_session_sync_component()`, added next to the parley component in `lualine.section`.
+- The stale reminder became the `stale` state's winbar label and colour; the eol extmark is gone.
+- Core-concepts tables list one row per entity (the arch sweep checks rows by name).

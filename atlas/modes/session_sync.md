@@ -16,16 +16,29 @@ operator: xian-xu   # recorded as the lock holder
 | `<M-CR>` | Submit: save, make the buffer read-only, run `couch --send-to <owner> --message "submitted: <absolute path>"`. In any other markdown file it stays the review action. |
 | `<C-g>u` | Unlock a submit the owner never answered: the buffer is editable again and the lock stays, so `<M-CR>` resubmits. |
 
-**The turn.** The agent holds the file by default. The operator's first edit
-writes the sidecar `<file>.lock` (`holder:` and `time:`); while it exists the
-agent never writes the file. After a submit, parley polls the lock once a
-second. The owner replies by rewriting the file and deleting the lock; parley
-then reloads the buffer and makes it editable. A failed send leaves the buffer
-editable and shows couch's error.
+**The turn.** The sidecar `<file>.lock` names whose turn it is: absent =
+free (the agent may write); `holder: operator` = the operator's turn (the agent
+never writes the file); `holder: agent` = the agent's turn (the buffer is
+read-only). The operator's first edit writes `holder: operator`; `<M-CR>`
+rewrites it to `holder: agent`; the agent deletes the lock when done and never
+writes it. A failed send and `<C-g>u` both rewrite it to `holder: operator`.
+The turn is read from disk, so a buffer reopened during the agent's turn is
+read-only too. During the agent's turn parley polls the lock once a second; when
+it is gone, parley reloads the buffer and makes it editable.
 
-**Reminder.** While the operator holds the lock without submitting, an idle
-buffer (`session_sync_stale_minutes`, default 5) shows the virtual text
-"unsent edits: Alt+Return to submit".
+**Rendering.** Each window showing the file gets a winbar label and a
+window-local `winhighlight` for its StatusLine; lualine users also get
+`require('parley.lualine').create_session_sync_component()` (added
+automatically next to the parley component).
+
+| State | Winbar | Highlight (default link) |
+|---|---|---|
+| free | `free: editing takes your turn` | `ParleySessionSyncFree` (StatusLine) |
+| operator | `your turn, Alt+Return to submit` | `ParleySessionSyncOperator` (DiffAdd) |
+| stale | `unsent edits, Alt+Return to submit` | `ParleySessionSyncStale` (DiffDelete) |
+| agent | `<owner> working, read-only` | `ParleySessionSyncAgent` (DiffChange) |
+
+An operator turn left idle for `session_sync_stale_minutes` (default 5) is stale.
 
 **The agent's side** is not parley's: the owner diffs the file against its own
 copy, resolves the markers, writes, and deletes the lock.

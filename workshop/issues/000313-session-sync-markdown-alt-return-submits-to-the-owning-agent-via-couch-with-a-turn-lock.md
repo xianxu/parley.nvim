@@ -45,6 +45,14 @@ operator: xian-xu
 5. **Stale-lock reminder.** If the lock exists and the buffer has been idle for N minutes (default 5) without a submit, show virtual text: "unsent edits: Alt+Return to submit".
 6. **The agent side** isn't parley's: the owner diffs the file against its own shadow copy, resolves the markers, writes, and deletes the lock (documented in ops' `xx-tl` draft).
 
+## Revisions
+
+### 2026-10-10 — ownership must be obvious (ops TL, from the operator)
+- **Lock names the turn holder:** absent = free; `holder: operator` = the operator's turn; `holder: agent` = the agent's turn (buffer read-only). The first edit writes `holder: operator`; submit rewrites it to `holder: agent`; the agent deletes the lock when done and never writes it. A failed send rewrites it back to `operator`; the manual unlock (`<C-g>u`) does the same. The turn is read from disk, so a buffer reopened during the agent's turn is read-only too.
+- **Render the turn:** a window-local `winhighlight` StatusLine colour per state, a lualine component (text + colour), and a winbar label (`free: editing takes your turn` / `your turn, Alt+Return to submit` / `<owner> working, read-only`).
+- **Stale reminder** (spec §5) is now the `stale` state: the winbar reads `unsent edits, Alt+Return to submit` in the reminder colour. It replaces the end-of-line virtual text, which would have said the same thing twice.
+- Done-when additions: the lock body names the holder at each transition, and each state's winbar/StatusLine/lualine rendering is tested.
+
 ## Done when
 
 - In a `session-sync` file, the first keystroke creates `<file>.lock`, and `<M-CR>` saves, sets the buffer read-only and sends one couch message to `owner` (a test with a fake couch on PATH asserts the exact argv).
