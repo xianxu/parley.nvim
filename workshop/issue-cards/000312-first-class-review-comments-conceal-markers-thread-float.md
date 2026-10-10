@@ -22,8 +22,8 @@ claimant:
     operator: Xian Xu
     machine: 4716879978a7b90f6b583da1716fd0e9
     machine_name: MacBook Pro
-    workspace: parley.nvim:1
-    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    workspace: parley.nvim:0
+    worktree: /Users/xianxu/workspace/parley.nvim
     repository: github.com/xianxu/parley.nvim
 ---
 
