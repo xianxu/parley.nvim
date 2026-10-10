@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "2343b3eb", done: "fa54cbda"}
 ---
 
 # session-sync markdown: Alt+Return submits to the owning agent via couch, with a turn lock
