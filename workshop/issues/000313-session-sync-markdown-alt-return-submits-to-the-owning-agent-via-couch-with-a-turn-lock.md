@@ -72,7 +72,7 @@ Durable plan: `workshop/plans/000313-session-sync-submit-plan.md` (single pass, 
 
 - [x] Pure header parser + lock body (unit spec)
 - [x] Controller: attach/lock/submit/poll/unlock/reminder + `<M-CR>` dispatch + `<C-g>u` (integration spec, fake couch)
-- [ ] Atlas + traceability; full `make test`; live check with ops TL
+- [x] Atlas + traceability; full `make test`; live check with ops TL
 
 ## Log
 
