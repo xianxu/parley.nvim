@@ -14,7 +14,7 @@
 
 - Display table (issue `## Spec`): `🤖[…]`, `🤖{…}`, `<X>` highlighted, `~D~` highlighted + strikethrough. Conceal-only — no virtual text: `🤖[H]{R}` keeps `🤖[` visible, conceals `H]{R` as `…` and the final `}` as `]`, yielding `🤖[…]`.
 - **Single-line rule.** Rendered only when the marker closes on its own line. A `🤖` immediately followed by `<`/`[`/`{` that does not close on the line is painted `ParleyReviewBroken` (red undercurl) — the stateless, viewport-bounded "fail visible" signal. This covers both legacy #125 multi-line markers and a marker an edit just broke. The PARSER keeps #125's bounded multi-line tolerance (accept/reject and chat drill-in must still work on old documents); only *writers* and the *view* become single-line.
-- **`<br>`** encodes a newline inside a turn. Decoded when a turn's text leaves the marker: float display, accept/reject result text, chat drill-in block formatting.
+- **`<br>`** encodes a newline inside a turn. Accepted edge: a legacy marker that already contains a literal `<br>` now decodes to a newline on resolve — rare, and the fix (an escape) has one home in `codec`. Decoded when a turn's text leaves the marker: float display, accept/reject result text, chat drill-in block formatting.
 - **Edit protection** = cursor snap in every mode + fail-visible. `concealcursor = "nvic"`: markers stay hidden on the cursor line in all modes, and the cursor can't rest inside hidden bytes (`CursorMoved` + `CursorMovedI`), so neither commands nor typing can target them. No raw-reveal mode — the raw text is reachable only via the float or by `conceallevel=0`. A partial edit that still reaches hidden bytes (e.g. `<BS>` at the start of a quoted `X` eats the `<`) breaks the marker, which then shows raw + broken highlight; `u` restores. No undo-reverting guard (YAGNI; revisit if real corruption shows up).
 - **Float**: plain nvim buffer, one turn per line in raw bracket form, human/robot line backgrounds, cursor in a trailing empty `[]`. No new actions; editing anything is allowed by convention. Write-back on `:w` / window close.
 - **Alt+q on a multi-line visual selection** refuses with a warning (an anchor quote is prose; encoding prose newlines as `<br>` would reshape the document while it's under comment).
@@ -41,10 +41,12 @@
   - **Future extensions:** escaping a literal `<br>` if prose ever needs it (`<br\>`), one place.
 - **view.layout(line) → markers** — for each `🤖` on the line, using `review._parse_marker_sections(line, pos, 4)` (no opts → single-text, the historical per-line behavior; a line has no `\n`, so "closes on this line" is exactly "parses"):
   `{ start, stop, kind = "bare"|"quoted"|"strike", visible = {s,e,hl}|nil, hidden = { {s,e,conceal}... } }` or `{ start, stop, broken = true }`. 0-based byte cols, `e` exclusive. Not a marker (plain `🤖`, `🤖:` chat prefix, `🤖` in inline code) → omitted. Tests in `tests/unit/comment_view_spec.lua`.
+  - **Broken** (rendered raw + `ParleyReviewBroken`, nothing hidden) = the parse left an *unclosed opener*: no sections/anchor at all, OR the byte right after the parsed chain is `[` / `{` (e.g. `🤖<X>[open`, `🤖[a]{open` — a #125 multi-line marker cut at the line end). One rule for the class "chain stops at an opener it couldn't close"; an unmatched `~` stays prose.
+  - **Empty anchor** (`🤖<>…`, `🤖~~…`): nothing to show, so nothing is hidden — render raw with no conceal (not broken). Quoted-only `🤖<X>` (no sections) hides `🤖<` and `>` like any quoted marker.
   - **Relationships:** 1 line : N markers; each marker 0–1 visible range, 1–3 hidden ranges.
   - **DRY rationale:** the single source of "what is hidden where" — consumed by the highlighter (conceal), the cursor snap, and the `<CR>` lookup. Section parsing stays in `review._parse_marker_sections` (no second parser).
   - **Future extensions:** a turn-count badge or per-kind conceal chars widen the `hidden` entries only.
-- **view.snap(markers, prev_col, col) → col|nil** — if `col` lies strictly inside a hidden range (not at its first byte), return the range edge in the direction of travel (`col > prev_col` → `e`, clamped to line; else `s`); nil if no move.
+- **view.snap(markers, prev_col, col, max_col) → col|nil** — **the cursor never rests on a hidden byte**, not even a range's first byte: a single-byte edit there (`x`/`r`/`i` on the first char of a `…`-concealed comment) keeps the marker parseable, so it would be a *silent* edit — the one class fail-visible doesn't catch. If `col ∈ [s, e)` of any hidden range, move in the direction of travel to the first visible byte: right → `e`, left → `s - 1`; if that falls outside `[0, max_col]`, take the other side; repeat across adjacent hidden ranges; nil if `col` is already visible or no visible byte exists (a line that is entirely one hidden marker). Legal rests on a marker are therefore only its visible bytes: `🤖` and the opener for bare chains, `X`/`D` for anchored ones — exactly where `<CR>` is pressed.
 - **view.marker_at(markers, col) → marker|nil** — the non-broken marker whose `[start, stop)` contains `col`.
 - **thread.to_lines(marker) → lines, roles** — one entry per section: `"[" .. text .. "]"` or `"{" .. text .. "}"`, with `codec.decode` splitting multi-line turns into several float lines; appends an empty `"[]"`. `roles[i]` = `"user"|"agent"` per float line (for backgrounds). Tests in `tests/unit/comment_thread_spec.lua`.
 - **thread.from_lines(prefix, lines) → raw|nil, err** — `prefix` is the marker's raw `🤖`, `🤖<X>`, or `🤖~D~`. Joins lines with `\n`, parses `"🤖" .. joined` with `_parse_marker_sections(..., { budget = #lines })`, rejects leftover non-blank text (unbalanced bracket → `err`), drops empty trailing `[]` sections, encodes each section's text, rebuilds the single line. Round-trip property: `from_lines(prefix, to_lines(m))` == original raw for any single-line marker.
@@ -56,13 +58,13 @@
 | marker decoration (conceal) | `lua/parley/highlighter.lua` | modified | ephemeral extmarks in the decoration provider |
 | `comment.attach` | `lua/parley/comment/init.lua` | new | window options, `CursorMoved` autocmd |
 | `comment.open_thread` | `lua/parley/comment/float.lua` | new | floating window + scratch buffer, source-buffer write-back |
-| `comment_open_thread` keybinding | `lua/parley/keybinding_registry.lua`, `lua/parley/init.lua` | new | buffer-local `<CR>` |
+| `<CR>` native override | `lua/parley/comment/init.lua`, `lua/parley/keybinding_registry.lua` (`native_overrides`) | new | buffer-local `<CR>` |
 | `drill_in_visual` | `lua/parley/init.lua` | modified | refuses multi-line selection |
 
 - **marker decoration** — `compute_markdown_highlights` replaces its inline marker loop with `view.layout`: visible range → `ParleyReviewQuoted`/`ParleyReviewStrike`, each hidden range → `{ conceal = c }` entry, broken → `ParleyReviewBroken` on `[start, stop)`. `on_line` passes `conceal` through to `nvim_buf_set_extmark(..., { ephemeral = true, conceal = c })`. Viewport-bounded and cached per (window, document) — the existing incremental machinery; nothing whole-buffer.
 - **comment.attach(buf)** — called from `setup_markdown_keymaps` and `prep_chat` (replacing chat's `concealcursor = ""`). Sets `conceallevel=2`, `concealcursor="nvic"` (window-local, like chat today); one buffer-local `CursorMoved`+`CursorMovedI` autocmd: cursor line → `view.layout` → `view.snap` with the window's previous col → `nvim_win_set_cursor`. Cost: one line parse per cursor move. Creates nothing durable (autocmd dies with the buffer; prev-col table keyed by window, cleared on `WinClosed`).
 - **comment.open_thread(buf)** — `view.marker_at` on the cursor line; none → return false (caller feeds a native `<CR>`). Else: tracking extmark on the marker's start; scratch buffer (`buftype=acwrite`, `bufhidden=wipe`, `filetype=markdown`, `wrap`, `linebreak`), float sized to content (max 80% editor), title = quoted/struck anchor (truncated) or `free-standing`; `line_hl_group` extmarks `ParleyCommentUser` / `ParleyCommentAgent` per `roles`; cursor between the final `[]`. `BufWriteCmd` and `WinClosed` → write-back: re-read the source line at the extmark, require the original raw bytes still at that col (else warn "marker changed underneath — reply kept in register `\"`", yank the float text), `thread.from_lines`, on `err` warn and keep the float open, on success `buffer_edit.replace_user_lines` for that one row. Creates nothing durable: buffer wiped on close, extmark deleted in write-back.
-- **keybinding** — registry entry `comment_open_thread`, `<CR>`, mode `n`, scope `parley_buffer`, `buffer_local`. Callback: `if not open_thread(buf) then feedkeys(count .. <CR>, "n") end`.
+- **`<CR>` native override** — installed by `comment.attach`, declared in `native_overrides` (precedent: `*`/`#`, `u`). `if not open_thread(buf) then feedkeys(count .. <CR>, "n") end`.
 
 ## ARCH notes
 
@@ -179,6 +181,40 @@ describe("comment.view.layout", function()
     it("handles two markers on one line", function()
         assert.equals("🤖[…] and A", shown("🤖[c1] and 🤖<A>[c2]"))
     end)
+    it("a chain ending in an unclosed opener is broken (#125 multi-line cut)", function()
+        assert.is_true(view.layout("🤖<X>[open")[1].broken)
+        assert.is_true(view.layout("🤖[a]{open")[1].broken)
+    end)
+    it("an empty anchor hides nothing", function()
+        assert.equals("🤖<>[c]", shown("🤖<>[c]"))
+    end)
+    it("quoted-only marker shows X", function()
+        assert.equals("a X b", shown("a 🤖<X> b"))
+    end)
+    -- Property: over generated lines seeded with whole, truncated and nested
+    -- markers, every range is in bounds, ranges don't overlap, and every
+    -- boundary sits on a UTF-8 char start (never inside 🤖's 4 bytes).
+    it("ranges are in-bounds, disjoint, on char boundaries", function()
+        local atoms = { "🤖", "[", "]", "{", "}", "<", ">", "~", "a", " ", "é", "`" }
+        math.randomseed(312)
+        for _ = 1, 2000 do
+            local parts = {}
+            for _ = 1, math.random(0, 14) do parts[#parts + 1] = atoms[math.random(#atoms)] end
+            local line = table.concat(parts)
+            local spans = {}
+            for _, m in ipairs(view.layout(line)) do
+                for _, h in ipairs(m.hidden or {}) do spans[#spans + 1] = h end
+                if m.visible then spans[#spans + 1] = m.visible end
+            end
+            table.sort(spans, function(a, b) return a[1] < b[1] end)
+            local last = 0
+            for _, r in ipairs(spans) do
+                assert.is_true(r[1] >= last and r[1] <= r[2] and r[2] <= #line, line)
+                assert.is_true(vim.str_utf_start(line, r[1] + 1) == 0 or r[1] == #line, line)
+                last = r[2]
+            end
+        end
+    end)
 end)
 ```
 
@@ -223,16 +259,20 @@ function M.layout(line)
         else
             local sections, stop, quoted, strike = parse(line, pos, MARK_LEN)
             local start0 = pos - 1
-            if #sections == 0 and not quoted and not strike then
-                if nxt ~= "~" then -- unmatched ~ is ordinary prose (~/path)
+            local after = line:sub(stop, stop)
+            local unclosed = after == "[" or after == "{"
+            if (#sections == 0 and not quoted and not strike) or unclosed then
+                if nxt ~= "~" or unclosed then -- unmatched ~ is ordinary prose (~/path)
                     out[#out + 1] = { start = start0, stop = #line, broken = true }
                 end
-                from = pos + MARK_LEN
+                from = unclosed and #line + 1 or pos + MARK_LEN
             else
                 local stop0 = stop - 1 -- 0-based exclusive
                 local m = { start = start0, stop = stop0 }
                 local anchor = quoted or strike
-                if anchor then
+                if anchor and anchor.text == "" then
+                    m.kind, m.hidden = quoted and "quoted" or "strike", {} -- nothing to show instead
+                elseif anchor then
                     m.kind = quoted and "quoted" or "strike"
                     m.visible = { anchor.byte_start, anchor.byte_end - 1,
                         quoted and "ParleyReviewQuoted" or "ParleyReviewStrike" }
@@ -266,17 +306,33 @@ describe("comment.view.snap", function()
     local line = "ab 🤖<X>[c]{d} z"
     local ms = view.layout(line)
     local h1, h2 = ms[1].hidden[1], ms[1].hidden[2]
-    it("moving right out of a hidden range jumps to its end", function()
-        assert.equals(h2[2], view.snap(ms, h2[1], h2[1] + 1))
+    local max = #line - 1
+    it("moving right into a hidden range lands past it", function()
+        assert.equals(h1[2], view.snap(ms, h1[1] - 1, h1[1], max))  -- onto X
+        assert.equals(h2[2], view.snap(ms, h2[1] - 1, h2[1], max))  -- past the chain
     end)
-    it("moving left into a hidden range jumps to its start", function()
-        assert.equals(h1[1], view.snap(ms, h1[2], h1[2] - 1))
+    it("moving left into a hidden range lands before it", function()
+        assert.equals(h2[1] - 1, view.snap(ms, h2[2], h2[2] - 1, max)) -- onto X
     end)
-    it("the first byte of a hidden range is a legal rest", function()
-        assert.is_nil(view.snap(ms, 0, h1[1]))
+    it("never rests on the first byte of a hidden range", function()
+        assert.is_not_nil(view.snap(ms, 0, h1[1], max))
+        local bare = view.layout("🤖[hidden text]")
+        local first_hidden = bare[1].hidden[1][1]
+        assert.is_not_nil(view.snap(bare, 0, first_hidden, #"🤖[hidden text]" - 1))
+    end)
+    it("crosses adjacent hidden ranges (bare chain …, closer)", function()
+        local l = "🤖[abc] z"
+        local b = view.layout(l)
+        assert.equals(b[1].stop, view.snap(b, b[1].hidden[1][1] - 1, b[1].hidden[1][1], #l - 1))
+    end)
+    it("falls back to the other side at line end", function()
+        local l = "z 🤖[abc]"
+        local b = view.layout(l)
+        local to = view.snap(b, b[1].hidden[1][1] - 1, b[1].hidden[1][1], #l - 1)
+        assert.equals(b[1].hidden[1][1] - 1, to) -- the visible `[`
     end)
     it("visible text never snaps", function()
-        assert.is_nil(view.snap(ms, 0, 1))
+        assert.is_nil(view.snap(ms, 0, 1, max))
     end)
 end)
 describe("comment.view.marker_at", function()
@@ -294,16 +350,29 @@ end)
 - [ ] **Step 2:** FAIL. **Step 3:** implement:
 
 ```lua
-function M.snap(markers, prev_col, col)
+local function hidden_at(markers, col)
     for _, m in ipairs(markers) do
         for _, h in ipairs(m.hidden or {}) do
-            if col > h[1] and col < h[2] then
-                if col > prev_col then return h[2] end
-                return h[1]
-            end
+            if col >= h[1] and col < h[2] then return h end
         end
     end
+end
+
+-- First visible byte from `col` stepping in `dir` (+1/-1), or nil.
+local function visible_from(markers, col, dir, max_col)
+    while col >= 0 and col <= max_col do
+        local h = hidden_at(markers, col)
+        if not h then return col end
+        col = dir > 0 and h[2] or h[1] - 1
+    end
     return nil
+end
+
+function M.snap(markers, prev_col, col, max_col)
+    if not hidden_at(markers, col) then return nil end
+    local dir = col >= prev_col and 1 or -1
+    return visible_from(markers, col, dir, max_col)
+        or visible_from(markers, col, -dir, max_col)
 end
 
 function M.marker_at(markers, col)
@@ -314,7 +383,7 @@ function M.marker_at(markers, col)
 end
 ```
 
-Note `h[2]` may equal `#line` (marker at EOL); the caller clamps to `#line - 1` in normal mode.
+`max_col` is `#line - 1` in normal mode and `#line` in insert mode (the caller passes it); in insert mode `#line` (after the last byte) is always a visible rest.
 
 - [ ] **Step 4:** PASS. **Step 5:** commit `#312 M1: cursor snap + marker lookup`.
 
@@ -322,7 +391,7 @@ Note `h[2]` may equal `#line` (marker at EOL); the caller clamps to `#line - 1` 
 
 **Files:** Modify `lua/parley/highlighter.lua` (marker loop ~L374–L410, `on_line` ~L1176), `lua/parley/highlighter.lua` `setup_highlights` (new groups), test `tests/unit/highlighter_spec.lua` (or `tests/integration/` if `compute_markdown_highlights` isn't reachable from a unit test — expose it as `M._compute_markdown_highlights` the way `M._scan_draft_blocks` is).
 
-- [ ] **Step 1: failing test** — entries for `"x 🤖<A>[c] y"` include `{hl_group="ParleyReviewQuoted"}` over `A`, two `{conceal=""}` entries over `🤖<` and `>[c]`, and no `ParleyReviewUser` entry; `"🤖[open"` yields one `ParleyReviewBroken` entry; a chain inside a fenced block yields nothing (existing fence handling).
+- [ ] **Step 1: failing test** — entries for `"x 🤖<A>[c] y"` include `{hl_group="ParleyReviewQuoted"}` over `A`, two `{conceal=""}` entries over `🤖<` and `>[c]`, and no `ParleyReviewUser`/`ParleyReviewAgent` entry (raw sections are never displayed under `nvic` — the only raw markers are broken ones, painted whole); `"🤖[open"` yields one `ParleyReviewBroken` entry; a chain inside a fenced block yields nothing (existing fence handling).
 - [ ] **Step 2:** FAIL.
 - [ ] **Step 3: implement** — replace the `while true do ... _parse_marker_sections ...` block with:
 
@@ -346,10 +415,18 @@ Note `h[2]` may equal `#line` (marker at EOL); the caller clamps to `#line - 1` 
         end
 ```
 
-In `on_line`'s non-draft branch add `conceal = hl.conceal` and only set `hl_group` when present. Define `ParleyReviewBroken` (link `DiagnosticUnderlineError`), `ParleyCommentUser` / `ParleyCommentAgent` (backgrounds derived from the existing `ParleyReviewUser` / `ParleyReviewAgent` colors) in `setup_highlights`. Keep `ParleyReviewUser`/`ParleyReviewAgent` defined — insert/visual mode reveal the raw line and should still color its sections: add their entries too (they're harmless under conceal), i.e. also emit the per-section `ParleyReviewUser/Agent` entries as before.
+In `on_line`'s non-draft branch add `conceal = hl.conceal` and only set `hl_group` when present. Define `ParleyReviewBroken` (link `DiagnosticUnderlineError`), `ParleyCommentUser` / `ParleyCommentAgent` (backgrounds derived from the existing `ParleyReviewUser` / `ParleyReviewAgent` colors) in `setup_highlights`. Stop emitting the per-section `ParleyReviewUser`/`ParleyReviewAgent` entries for markdown lines (nothing displays them now); keep the groups defined — the float uses their colors and other callers may reference them (grep before removing anything).
 
 - [ ] **Step 4:** PASS; `make test` green (the existing highlighter/review specs must not regress).
 - [ ] **Step 5:** commit `#312 M1: render markers compactly via conceal`.
+
+### Task 4b: render cost is viewport-bounded (Done-when evidence)
+
+**Files:** Test `tests/integration/comment_render_bound_spec.lua`; extend `tests/helpers/decoration.lua` `frame` to record `opts.conceal`.
+
+- [ ] **Step 1: test** — 5000-line markdown buffer, every line carrying a marker; capture the provider with `decoration.capture_provider(parley)`; wrap `require("parley.comment.view").layout` with a call counter; draw one frame over rows 0..40; edit one line (`nvim_buf_set_lines` row 10); draw the frame again. Assert: (a) both frames call `layout` at most `41 + HIGHLIGHT_VIEWPORT_MARGIN` times (never ~5000) and (b) the redrawn frame carries the edited line's new conceal ranges (`frame` entries with `conceal`). This is the "no whole-buffer reparse" evidence; record the measured counts in the issue `## Log`.
+- [ ] **Step 2:** run → PASS expected once Task 4 is in (if (a) fails, the decoration path is reaching past the viewport — STOP and re-plan).
+- [ ] **Step 3:** commit `#312 M1: test render cost is viewport-bounded`.
 
 ### Task 5: comment.attach — window options + cursor snap
 
@@ -377,11 +454,10 @@ function M.attach(buf)
             local win = vim.api.nvim_get_current_win()
             local row, col = unpack(vim.api.nvim_win_get_cursor(win))
             local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
-            local to = line:find("🤖", 1, true) and view.snap(view.layout(line), prev_col[win] or 0, col)
+            -- Normal mode can't rest past the last byte; insert mode can.
+            local max = vim.api.nvim_get_mode().mode:sub(1, 1) == "i" and #line or math.max(#line - 1, 0)
+            local to = line:find("🤖", 1, true) and view.snap(view.layout(line), prev_col[win] or 0, col, max)
             if to then
-                -- Normal mode can't rest past the last byte; insert mode can.
-                local max = vim.api.nvim_get_mode().mode:sub(1, 1) == "i" and #line or math.max(#line - 1, 0)
-                to = math.min(to, max)
                 vim.api.nvim_win_set_cursor(win, { row, to })
                 col = to
             end
@@ -445,6 +521,23 @@ describe("comment.thread", function()
     end)
     it("drops an empty trailing reply", function()
         assert.equals("🤖[q]", thread.from_lines("🤖", { "[q]", "[]" }))
+    end)
+    -- Property: from_lines(prefix, to_lines(m)) == raw over generated
+    -- single-line markers (random anchor kind, 0–4 turns of random text drawn
+    -- from letters, spaces, <br>, and balanced [] / {} pairs).
+    it("round-trips generated markers", function()
+        math.randomseed(312)
+        local words = { "a", "b c", "x<br>y", "[n]", "{m}", "é" }
+        for _ = 1, 500 do
+            local prefix = ({ "🤖", "🤖<Q>", "🤖~D~" })[math.random(3)]
+            local raw = prefix
+            for _ = 1, math.random(1, 4) do
+                local open = math.random(2) == 1
+                raw = raw .. (open and "[" or "{") .. words[math.random(#words)] .. (open and "]" or "}")
+            end
+            local m = marker(raw)
+            assert.equals(raw, thread.from_lines(prefix, (thread.to_lines(m))), raw)
+        end
     end)
     it("rejects unbalanced brackets", function()
         local raw, err = thread.from_lines("🤖", { "[q]", "[oops" })
@@ -544,38 +637,35 @@ end
 
 - [ ] **Step 4:** PASS. **Step 5:** commit `#312 M2: thread float with single-line write-back`.
 
-### Task 9: `<CR>` binding
+### Task 9: `<CR>` binding (native override)
 
-**Files:** Modify `lua/parley/keybinding_registry.lua` (after `chat_reject_drill_in`), `lua/parley/config.lua` (`chat_shortcut_open_thread`), `lua/parley/init.lua` (`drill_in_callbacks` + both registration tables); test: extend `tests/integration/comment_float_spec.lua`.
+`<CR>` wraps a native key and falls through to it off-marker — the repo's precedent for that is `keybinding_registry.native_overrides` (`*`/`#`, #141; `u`, #214), not an owned registry entry (an owned entry implies the key is parley's to rebind; `<CR>` stays native everywhere but on a marker). Installed in `comment.attach`, so chat and markdown share the one install site.
 
-- [ ] **Step 1: failing test** — `feedkeys("\r", "x")` on a marker opens the float; on prose the cursor moves down one line (native `<CR>` preserved); `3<CR>` on prose moves 3 lines.
-- [ ] **Step 2:** FAIL. **Step 3: implement**
+**Files:** Modify `lua/parley/comment/init.lua` (`attach`), `lua/parley/keybinding_registry.lua` (`M.native_overrides`); test: extend `tests/integration/comment_float_spec.lua`; must pass `tests/integration/keybinding_agreement_spec.lua` (the help/reality leak guard — its allowance list is closed, so the `native_overrides` entry is what admits the new map).
+
+- [ ] **Step 1: failing tests** — `feedkeys("\r", "x")` on a marker opens the float; on prose the cursor moves down one line; `3<CR>` on prose moves 3 lines; `keybinding_agreement_spec` passes for both a chat and a markdown buffer.
+- [ ] **Step 2:** FAIL. **Step 3: implement** — in `M.native_overrides`:
 
 ```lua
-	{
-		id = "comment_open_thread",
-		config_key = "chat_shortcut_open_thread",
-		default_key = "<CR>",
-		default_modes = { "n" },
-		scope = "parley_buffer",
-		desc = "Parley open the 🤖 comment thread at cursor (native <CR> elsewhere)",
-		help_desc = "Open comment thread",
-		buffer_local = true,
+	["<CR>"] = {
+		where = "comment/init.lua attach (#312)",
+		why = "opens the 🤖 comment thread when the cursor is on a marker, else "
+			.. "native <CR> (count preserved)",
 	},
 ```
 
-Callback in `drill_in_callbacks`:
+in `comment.attach` (inside the once-per-buffer guard):
 
 ```lua
-		comment_open_thread = function()
-			if not require("parley.comment.float").open_thread(buf) then
-				local keys = (vim.v.count > 0 and tostring(vim.v.count) or "") .. "<CR>"
-				vim.api.nvim_feedkeys(vim.keycode(keys), "n", false)
-			end
-		end,
+    vim.keymap.set("n", "<CR>", function()
+        if not require("parley.comment.float").open_thread(buf) then
+            local keys = (vim.v.count > 0 and tostring(vim.v.count) or "") .. "<CR>"
+            vim.api.nvim_feedkeys(vim.keycode(keys), "n", false)
+        end
+    end, { buffer = buf, desc = "Parley: open 🤖 comment thread (#312)" })
 ```
 
-Wire `comment_open_thread = drill_in_cbs.comment_open_thread` into both `register_buffer` tables. Check `atlas/ui/keybindings.md` + any keybinding-registry spec that enumerates entries.
+Document `<CR>` in `atlas/ui/keybindings.md` next to the other native overrides.
 
 - [ ] **Step 4:** PASS + `make test`. **Step 5:** commit `#312 M2: <CR> opens the comment thread`.
 
@@ -600,3 +690,4 @@ Wire `comment_open_thread = drill_in_cbs.comment_open_thread` into both `registe
 ## Revisions
 
 - **2026-10-09** — operator: if markers are effectively uneditable, there's no need to reveal the raw line in insert/visual mode. `concealcursor` `nc` → `nvic`; cursor snap extended to `CursorMovedI`. Raw text is reached via the float (or `conceallevel=0`).
+- **2026-10-09** — plan-quality round 1: snap never rests on a hidden byte (PQ-4: first `…` byte was silently editable); broken = any unclosed trailing opener (PQ-3); empty-anchor / quoted-only edges; Task 4b viewport-bound evidence (PQ-2); issue Spec/Done-when revised to the snap+fail-visible protection (PQ-1); `<CR>` moved to `native_overrides` per #141/#214 precedent; property tests for layout + thread round-trip; per-section `ParleyReview{User,Agent}` entries dropped (no raw display under `nvic`).

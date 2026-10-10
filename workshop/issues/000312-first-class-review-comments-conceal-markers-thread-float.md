@@ -48,12 +48,13 @@ agents via the grammar) obey it. A pre-existing multi-line marker (#125 made
 the parser tolerate them) is left raw + gets a diagnostic, not rendered.
 Payoff: markers are line-local, so re-render touches only changed lines.
 
-**Edit protection — hidden bytes behave as one glyph.**
-1. Cursor snap: `CursorMoved` inside hidden bytes jumps to the span edge.
-2. Overlap guard: a buffer-attach callback reverts an edit that *partially*
-   overlaps a hidden span (with a notice); an edit covering the whole marker
-   (`dd`, deleting a sentence) is intentional and passes. Visible `X`/`D` is
-   ordinary prose and stays editable.
+**Edit protection — hidden bytes behave as one glyph** (revised, see
+Revisions). Markers stay hidden in every mode (`concealcursor=nvic`); the
+cursor never rests on a hidden byte (snap on `CursorMoved`/`CursorMovedI`), so
+commands and typing can't target hidden text. An edit that still reaches hidden
+bytes from a visible edge breaks the marker, which then renders raw + a broken
+highlight (fail-visible); `u` restores. Visible `X`/`D` is ordinary prose and
+stays editable.
 
 **Thread float — a focused plain nvim buffer.** One turn per line with its
 brackets kept (`[…]` / `{…}`), wrapped, human/robot turns on distinct
@@ -74,14 +75,14 @@ humans); comments in non-markdown files; "ask agent" from the float.
 
 - In any markdown buffer, each marker form renders per the table; `<CR>` on it
   opens the float; outside a marker `<CR>` is untouched.
-- Cursor cannot enter hidden bytes; partial-overlap edits are reverted,
-  whole-marker deletes pass; tests cover both.
+- Cursor cannot rest on hidden bytes in normal or insert mode; a partial edit
+  that breaks a marker renders it raw + `ParleyReviewBroken`; tests cover both.
 - Float round-trips: open → reply (multi-line) → close writes a single-line
   marker with `<br>`, byte-identical elsewhere; empty reply leaves the buffer
   unchanged.
 - Multi-line markers stay raw with a diagnostic.
-- Re-render is incremental by changed lines (test or trace shows no
-  whole-buffer reparse on a single-line edit).
+- Re-render is viewport-bounded: a test on a 5000-line buffer shows a redraw
+  after a one-line edit calls the marker layout only for viewport rows.
 - `review-convention` target carries the revision; atlas updated.
 
 ## Plan
@@ -97,3 +98,11 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
 - Brainstormed with operator; decisions in the plan's "Decisions folded in".
 - Tension found: #125 deliberately made the parser multi-line tolerant. Resolution: parser keeps it (legacy docs, accept/reject, drill-in); view + writers go single-line; legacy multi-line markers paint `ParleyReviewBroken`.
 - Canonical grammar lives in `../ariadne/construct/local/fix/review-convention.md` → revision via an ariadne issue (plan Task 11).
+
+## Revisions
+
+- **2026-10-09** — edit protection: dropped the partial-edit revert guard in
+  favor of snap-in-every-mode + fail-visible (operator: "works good enough";
+  markers never reveal raw since `concealcursor=nvic`). Done-when's
+  re-render criterion restated as viewport-bounded (the decoration provider's
+  real cost model) with a concrete test.
