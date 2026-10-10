@@ -23,7 +23,6 @@
 - `require('parley.lualine').create_component()` for custom positioning
 - `require('parley.lualine').create_mode_component()` for the mode glyph (use with `replace_filetype = false`)
 - `require('parley.lualine').format_branch_label()` for the branch display rule
-- `require('parley.lualine').create_session_sync_component()` for the turn of a `type: session-sync` file (added automatically with the parley component; see [Session-Sync Files](../modes/session_sync.md))
 
 ## Implementation
 

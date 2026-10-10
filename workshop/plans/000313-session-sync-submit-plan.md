@@ -35,8 +35,6 @@
 | `dispatch` | `lua/parley/session_sync.lua` | new | the `<M-CR>` callback |
 | `is_session_sync` | `lua/parley/session_sync.lua` | new | buffer lines |
 | `lock_path` | `lua/parley/session_sync.lua` | new | file system |
-| `status` | `lua/parley/session_sync.lua` | new | buffer + lock → view |
-| `create_session_sync_component` | `lua/parley/lualine.lua` | new | lualine |
 | `setup_markdown_keymaps` | `lua/parley/init.lua` | modified | keybinding registry |
 | `session_sync_unlock` registry entry | `lua/parley/keybinding_registry.lua`, `lua/parley/config.lua` | new | keymap |
 
@@ -84,3 +82,8 @@
 - The lock body is `holder: operator|agent` (see the issue's Revisions). New pure `turn(lock_text)` → free/operator/agent and `view(turn, stale, owner)` → {state, label, hl}; all state is re-read from disk by one `refresh(buf)` that sets `modifiable`, runs the poll only during the agent's turn, and renders the winbar + window-local `winhighlight` (`StatusLine:ParleySessionSync{Free,Operator,Stale,Agent}`, default-linked to StatusLine/DiffAdd/DiffDelete/DiffChange). `status(buf)` feeds `lualine.create_session_sync_component()`, added next to the parley component in `lualine.section`.
 - The stale reminder became the `stale` state's winbar label and colour; the eol extmark is gone.
 - Core-concepts tables list one row per entity (the arch sweep checks rows by name).
+
+### 2026-10-10 — live-check rendering changes (ops TL, from the operator)
+- Winbar label is a full-width band (`%=` fills in the state's colour).
+- Lualine component removed, with `status(buf)` that only fed it.
+- `ParleySessionSyncOperator` is an explicit bright red band (bg `#d70000`, white bold), `ParleySessionSyncStale` an orange one (bg `#ff8700`); both `default = true`, so a colourscheme can still override them.

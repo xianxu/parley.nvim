@@ -127,24 +127,12 @@ local function close_timer(timer)
 	end
 end
 
---- The buffer's current view, or nil when it is not an attached session-sync buffer.
-M.status = function(buf)
-	local s = state[buf]
-	if not s or not vim.api.nvim_buf_is_valid(buf) then
-		return nil
-	end
-	local h = header(buf) or {}
-	return M.view(read_turn(buf), s.stale, h.owner)
-end
-
 local function render(buf, view)
 	for _, win in ipairs(vim.fn.win_findbuf(buf)) do
 		local opts = { win = win, scope = "local" }
 		vim.api.nvim_set_option_value("winhighlight", "StatusLine:" .. view.hl, opts)
-		vim.api.nvim_set_option_value("winbar", "%#" .. view.hl .. "# " .. view.label .. " %*", opts)
-	end
-	if package.loaded["lualine"] then
-		pcall(require("lualine").refresh)
+		-- `%=` fills the rest of the bar in the same colour: a full-width band.
+		vim.api.nvim_set_option_value("winbar", "%#" .. view.hl .. "# " .. view.label .. "%=", opts)
 	end
 end
 
@@ -228,15 +216,16 @@ local function restart_idle(buf)
 	end))
 end
 
+-- The operator's turn is bright red so it cannot be missed; stale is orange.
 local function define_highlights()
-	local links = {
-		ParleySessionSyncFree = "StatusLine",
-		ParleySessionSyncOperator = "DiffAdd",
-		ParleySessionSyncStale = "DiffDelete",
-		ParleySessionSyncAgent = "DiffChange",
+	local groups = {
+		ParleySessionSyncFree = { link = "StatusLine" },
+		ParleySessionSyncOperator = { bg = "#d70000", fg = "#ffffff", ctermbg = 160, ctermfg = 231, bold = true },
+		ParleySessionSyncStale = { bg = "#ff8700", fg = "#000000", ctermbg = 208, ctermfg = 16, bold = true },
+		ParleySessionSyncAgent = { link = "DiffChange" },
 	}
-	for name, target in pairs(links) do
-		vim.api.nvim_set_hl(0, name, { link = target, default = true })
+	for name, spec in pairs(groups) do
+		vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", spec, { default = true }))
 	end
 end
 

@@ -53,6 +53,9 @@ operator: xian-xu
 - **Stale reminder** (spec §5) is now the `stale` state: the winbar reads `unsent edits, Alt+Return to submit` in the reminder colour. It replaces the end-of-line virtual text, which would have said the same thing twice.
 - Done-when additions: the lock body names the holder at each transition, and each state's winbar/StatusLine/lualine rendering is tested.
 
+### 2026-10-10 — live-check rendering changes (ops TL, from the operator)
+- The core flow passed the live check. Rendering: the winbar label spans the full width; the lualine component is removed; the operator's turn is a bright red band (the default-linked DiffAdd green was too subtle), stale is orange.
+
 ## Done when
 
 - In a `session-sync` file, the first keystroke creates `<file>.lock`, and `<M-CR>` saves, sets the buffer read-only and sends one couch message to `owner` (a test with a fake couch on PATH asserts the exact argv).
@@ -80,3 +83,4 @@ Durable plan: `workshop/plans/000313-session-sync-submit-plan.md` (single pass, 
 - Full `make test` green (424 files). One earlier run lost three specs to load-induced 50s deadlines (pass standalone) and exposed a fake-couch argv race, fixed by writing argv atomically.
 - Couch sends need the unsandboxed socket; the first, sandboxed send was never delivered (status: not retained) and was resent.
 - Live check handed to ops TL (message e2266ec8).
+- Live check: core flow confirmed by ops; rendering changes (full-width winbar, no lualine, bright red operator band) made for the re-check.

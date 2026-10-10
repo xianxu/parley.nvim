@@ -740,7 +740,6 @@ atlas:
   modes/session_sync:
     code:
       - lua/parley/session_sync.lua
-      - lua/parley/lualine.lua
     tests:
       - tests/unit/session_sync_spec.lua
       - tests/integration/session_sync_spec.lua

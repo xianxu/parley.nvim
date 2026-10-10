@@ -26,16 +26,16 @@ The turn is read from disk, so a buffer reopened during the agent's turn is
 read-only too. During the agent's turn parley polls the lock once a second; when
 it is gone, parley reloads the buffer and makes it editable.
 
-**Rendering.** Each window showing the file gets a winbar label and a
-window-local `winhighlight` for its StatusLine; lualine users also get
-`require('parley.lualine').create_session_sync_component()` (added
-automatically next to the parley component).
+**Rendering.** Each window showing the file gets a full-width winbar band
+and a window-local `winhighlight` for its StatusLine, both in the state's
+colour. The groups are defined with `default = true`, so a colourscheme can
+override them.
 
 | State | Winbar | Highlight (default link) |
 |---|---|---|
 | free | `free: editing takes your turn` | `ParleySessionSyncFree` (StatusLine) |
-| operator | `your turn, Alt+Return to submit` | `ParleySessionSyncOperator` (DiffAdd) |
-| stale | `unsent edits, Alt+Return to submit` | `ParleySessionSyncStale` (DiffDelete) |
+| operator | `your turn, Alt+Return to submit` | `ParleySessionSyncOperator` (bright red, white bold) |
+| stale | `unsent edits, Alt+Return to submit` | `ParleySessionSyncStale` (orange, black bold) |
 | agent | `<owner> working, read-only` | `ParleySessionSyncAgent` (DiffChange) |
 
 An operator turn left idle for `session_sync_stale_minutes` (default 5) is stale.
