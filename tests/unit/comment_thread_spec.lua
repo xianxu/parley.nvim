@@ -48,10 +48,13 @@ describe("comment.thread", function()
     end)
     -- Property: from_lines(prefix, to_lines(m)) == raw over generated
     -- single-line markers (random anchor, 1–4 turns of text drawn from words,
-    -- spaces, <br>, escaped <br> and balanced [] / {} pairs).
+    -- spaces, <br>, escaped <br>, backslashes, balanced [] / {} pairs and
+    -- prefix-led continuation lines — the float layout's own delimiters).
+    -- A trailing <br> is excluded: save normalizes it away by design.
     it("round-trips generated markers", function()
         math.randomseed(312)
-        local words = { "a", "b c", "x<br>y", "[n]", "{m}", "é", "t [u] v", "cell\\<br>two", "" }
+        local words = { "a", "b c", "x<br>y", "[n]", "{m}", "é", "t [u] v", "cell\\<br>two", "",
+            "a<br>💬: b", "a<br>🤖: z", "a<br>\\💬: b", "a\\<br>b", "a\\\\<br>b", "C:\\x" }
         for _ = 1, 500 do
             local prefix = ({ "🤖", "🤖<Q>", "🤖~D~" })[math.random(3)]
             local raw = prefix
@@ -61,6 +64,12 @@ describe("comment.thread", function()
             end
             assert.equals(raw, round_trip(raw), raw)
         end
+    end)
+    it("a continuation line that looks like a prefix stays in its turn", function()
+        local lines = thread.to_lines(marker("🤖[a<br>💬: b]"))
+        assert.same({ "💬: a", "\\💬: b", "💬: " }, lines)
+        assert.equals("🤖[a<br>💬: b]", round_trip("🤖[a<br>💬: b]"))
+        assert.equals("🤖<X>[q]{a<br>🤖: z}", round_trip("🤖<X>[q]{a<br>🤖: z}"))
     end)
     it("appends a multi-line reply as one <br>-encoded turn", function()
         assert.equals("🤖<X>[q]{a}[line1<br>line2]",

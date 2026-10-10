@@ -86,7 +86,9 @@ Turn brackets are colored by speaker (`ParleyReviewUser` / `ParleyReviewAgent`).
   discards. An empty trailing reply is dropped.
 - **Single-line writers**: `<M-q>` refuses a selection spanning lines (an anchor
   quotes one line). Turn text encodes a line break as `<br>` and a literal `<br>`
-  as `\<br>` (`comment/codec.lua`); resolution (`drill_in.resolve`) and chat
+  as `\<br>` (`comment/codec.lua`; a backslash run before `<br>` doubles, so
+  odd = literal, even = newline). In the float, a continuation line that would
+  read as a `💬: ` / `🤖: ` prefix carries one extra leading `\`. Resolution (`drill_in.resolve`) and chat
   gathering decode **turn text only** — an anchor's X / D is the document's own
   prose, kept verbatim. Canonical grammar: ariadne#316 (review-convention §3, §5).
 

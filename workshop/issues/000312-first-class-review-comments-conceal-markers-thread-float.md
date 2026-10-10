@@ -125,6 +125,8 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
 
 ## Log
 
+
+- 2026-10-10: closed — make test 422/422 green; real-TUI pty render probe confirms 🤖[I'm typing] and 🤖[…]{…}[z] display; operator smoke-tested on :0 and approved; review verdict: FIX-THEN-SHIP
 ### 2026-10-09
 - 2026-10-09: closed M2 — Unit: codec (incl. \<br> escape), thread 11/11 (round-trip property incl. escaped <br>; existing empty [] reused as reply slot; {R}[] kept), view, drill_in (turn-only decode; anchors verbatim). Integration: comment_float_spec 12/12 (open, :w one-line <br> write-back, repeated :w (BR-13), fresh <M-q> marker no doubled turn (BR-19), no-edit close untouched, stale marker refused + register, unbalanced refused, q save+close / :q! discard, free-standing chain, <CR> on marker vs native incl. count, <M-q> multi-line refused), keybinding_agreement 35/35, buffer_mutation, arch sweeps 25/25. deps: ariadne#316 (BR-16). make test green bar 3 load-sensitive specs that pass alone. Visual check pending operator.; review verdict: SHIP
 - 2026-10-09: closed M1 — Unit: comment_codec/view specs (33 view cases incl. property test over 3000 generated lines; insert-point snap; multibyte left snap). Integration: comment_render_spec (conceal + anchor hl in markdown and chat, broken marker, fenced code skipped, viewport bound 61 layout calls/frame on 5000 rows before and after an edit), comment_attach_spec (concealcursor nvic only on marker lines, user value elsewhere, restored on BufLeave; snap normal+insert). Neighbor specs green (highlighting, highlighter_document, keybinding_agreement, entity_textobj, drill_in, highlighter). BR-3 fixed. Visual check pending operator.; review verdict: FIX-THEN-SHIP
@@ -141,6 +143,7 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
 - Measured actual is low (0.75h total at M2) relative to the session — recorded as measured, not adjusted.
 - M2 boundary review round 1 (REWORK): BR-13 Critical — a second `:w` in the float was always refused (rewriting the row dropped the tracking extmark's column) → re-anchor after each write, test added; BR-14 this Log had been spliced into the Spec (fixed); BR-15 Spec/plan synced to plain write/quit semantics + anchors verbatim; BR-16 legacy literal `<br>` in turn text → recorded as the accepted migration edge in Spec.
 - 2026-10-10 operator smoke test: typing in `🤖[|]` showed no brackets. Cause: treesitter markdown_inline conceals `[text]` as a shortcut link (`markup.link`, `conceal = ""`), and `concealcursor=nvic` keeps that on the marker line while typing. Fix: each turn bracket is re-asserted as a conceal of itself at priority 200 (> treesitter's 100). Verified on a real render: TUI nvim in a pty dumping `screenstring()` → `a 🤖[I'm typing] b`, `🤖[…]{…}[z]`, `quoted[c]` (before the fix: `🤖…{…}z`, `quotedc`).
+- 2026-10-10 close review (FIX-THEN-SHIP, escape-totality, BR-17 + new): the encodings weren't injective — `a\` + newline decoded as a literal `<br>`, and a float save split `🤖[a<br>💬: b]` into `🤖[a][b]`. Fix (the rule, not the instances): a backslash run before `<br>` doubles on encode (odd = literal, even = newline; `\<br>` keeps its meaning); a float continuation line that would read as a prefix gains a leading `\`. Property tests now draw from each layout's own delimiters (codec: 1000 cases; thread: prefix-led lines, backslash runs). A trailing `<br>` stays deliberately normalized away on save.
 
 ## Revisions
 
@@ -171,3 +174,7 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
   unprefixed lines continue a turn; it opens in insert mode on the `💬: `
   reply slot. Brackets are no longer typed, so save re-parses the joined
   marker and refuses a turn whose `[ ]` / `{ }` would break it.
+- **2026-10-10** — close review: escapes made injective. Codec: a
+  backslash run before `<br>` is doubled (odd run = literal `<br>`, even =
+  newline). Float: a continuation line that would start a turn is shown with
+  one extra leading `\`. A turn's trailing `<br>` is normalized away on save.

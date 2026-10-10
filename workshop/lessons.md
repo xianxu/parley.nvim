@@ -393,3 +393,10 @@ oracle, and the mutation that would make the test fail.
   dumping `screenstring()` cells, showed it at once. Check the other decoration
   providers on the same bytes (treesitter queries with `conceal`) whenever a
   feature hides or shows text.
+- **An escape must be injective over its own delimiters** (#312 close review).
+  `\<br>` escaped a literal `<br>` but not the backslash before it, and the
+  float's `💬:` line prefix wasn't escaped inside a turn, so a save silently
+  split or rewrote turns. Every encoding (codec, display layout) needs an
+  escape for each of its delimiters, including the escape character itself.
+  The round-trip property test must draw its input from those delimiters, not
+  from friendly words.

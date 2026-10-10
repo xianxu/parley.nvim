@@ -267,6 +267,51 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: false
+    - "n": 7
+      timestamp: "2026-10-10T11:23:56-07:00"
+      agent: claude
+      dispose:
+        - id: BR-9
+          disposition: addressed
+          note: sync_concealcursor re-reads the base each time it starts forcing and writes only when entering or leaving nvic; comment_attach_spec "keeps a later change to the window's own value" pins it.
+          round: 7
+        - id: BR-10
+          disposition: addressed
+          note: 'Overtaken by the smoke-test redesign: turns_hl paints turn ranges with ParleyReviewUser/Agent again (highlighter.lua:86-88), so the comments at :372 and :698 and atlas review.md:62 are accurate.'
+          round: 7
+        - id: BR-11
+          disposition: not-addressed
+          note: "Partially narrowed by the visible reply, but before-\U0001F916 and anchor-start are still two allowed insert points on one screen column (view.lua:117-118), and the choice is not documented."
+          round: 7
+        - id: BR-12
+          disposition: addressed
+          note: Issue Spec line 55 and the M1 row (line 123) now say nvic on marker lines; the issue Revisions carries the BR-3 entry.
+          round: 7
+        - id: BR-17
+          disposition: not-addressed
+          note: codec.lua is unchanged since M2; a backslash before a newline still decodes to a literal <br>.
+          round: 7
+        - id: BR-18
+          disposition: not-addressed
+          note: comment/init.lua:75-77 still re-derives the default_keymaps gating instead of using native_map.
+          round: 7
+        - id: BR-21
+          disposition: addressed
+          note: 'paint_roles now iterates thread.roles (float.lua:69), the same function to_lines returns; unit test "roles: continuation lines inherit, prefixes switch".'
+          round: 7
+        - id: BR-22
+          disposition: not-addressed
+          note: The WinClosed handler (float.lua:144-154) is unchanged; :q! with edits still overwrites the unnamed register and shows the warning.
+          round: 7
+      findings:
+        - id: BR-23
+          severity: Minor
+          title: The float's line grammar is not injective; :w silently splits or truncates turns containing its delimiters
+          detail: "2nd finding in escape-totality (BR-17 is the codec instance). Verified headless: \U0001F916[a<br>\U0001F4AC: b] becomes \U0001F916[a][b]; {a<br>\U0001F916: z} becomes {a}{z}; [a<br>] becomes [a]. Rule: every layout the codec or float encodes into must be injective, and the round-trip property test must generate turn text from the grammar's own delimiters (<br>, backslash, ]/}, line-start \U0001F4AC:/\U0001F916:, trailing <br>). Fix it by escaping prefix-led continuation lines and backslashes, then extend the generator's word list at comment_thread_spec.lua:54."
+          family: escape-totality
+          round: 7
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#312 (boundary-review)
@@ -378,13 +423,28 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-22** [Minor] `discard-path-side-effects` :q! with edits overwrites the unnamed register and warns "closed without :w"
   The WinClosed handler (float.lua:142-151) cannot tell a deliberate :q! from an accidental close, so a discard clobbers " and shows a misleading warning, although the Spec says ":q! discards". Fix with a QuitPre/cmdline bang flag, or document the stash.
 
+## Round 7 — 2026-10-10T11:23:56-07:00 (claude) — passed
+
+### Disposed
+
+- BR-9 — addressed — sync_concealcursor re-reads the base each time it starts forcing and writes only when entering or leaving nvic; comment_attach_spec "keeps a later change to the window's own value" pins it.
+- BR-10 — addressed — Overtaken by the smoke-test redesign: turns_hl paints turn ranges with ParleyReviewUser/Agent again (highlighter.lua:86-88), so the comments at :372 and :698 and atlas review.md:62 are accurate.
+- BR-11 — not-addressed — Partially narrowed by the visible reply, but before-🤖 and anchor-start are still two allowed insert points on one screen column (view.lua:117-118), and the choice is not documented.
+- BR-12 — addressed — Issue Spec line 55 and the M1 row (line 123) now say nvic on marker lines; the issue Revisions carries the BR-3 entry.
+- BR-17 — not-addressed — codec.lua is unchanged since M2; a backslash before a newline still decodes to a literal <br>.
+- BR-18 — not-addressed — comment/init.lua:75-77 still re-derives the default_keymaps gating instead of using native_map.
+- BR-21 — addressed — paint_roles now iterates thread.roles (float.lua:69), the same function to_lines returns; unit test "roles: continuation lines inherit, prefixes switch".
+- BR-22 — not-addressed — The WinClosed handler (float.lua:144-154) is unchanged; :q! with edits still overwrites the unnamed register and shows the warning.
+
+### Raised
+
+- **BR-23** [Minor] `escape-totality` The float's line grammar is not injective; :w silently splits or truncates turns containing its delimiters
+  2nd finding in escape-totality (BR-17 is the codec instance). Verified headless: 🤖[a<br>💬: b] becomes 🤖[a][b]; {a<br>🤖: z} becomes {a}{z}; [a<br>] becomes [a]. Rule: every layout the codec or float encodes into must be injective, and the round-trip property test must generate turn text from the grammar's own delimiters (<br>, backslash, ]/}, line-start 💬:/🤖:, trailing <br>). Fix it by escaping prefix-led continuation lines and backslashes, then extend the generator's word list at comment_thread_spec.lua:54.
+
 ## Open findings
 
-- **BR-9** [Minor] `conceal-scope-widening` sync_concealcursor reads the window's base once and overwrites later user or prep_chat values
-- **BR-10** [Minor] `comment-drift` highlighter.lua:365, :691-697 and atlas/modes/review.md:257 still describe ParleyReviewUser/Agent painting marker sections
 - **BR-11** [Minor] `insert-edge-semantics` Concealed spans collapse two insert positions onto one screen column
-- **BR-12** [Minor] `done-when-contract-drift` Issue Spec/M1 row say concealcursor=nvic unqualified; BR-3 scoping revision recorded only in the plan
 - **BR-17** [Minor] `escape-totality` codec escape is not total; a backslash before a newline decodes to a literal <br>
 - **BR-18** [Minor] `keymap-install-single-path` comment/init re-implements native_map gating; the arch guard was widened to allow a second install path
-- **BR-21** [Minor] `orphaned-definitions` thread.to_lines returns roles that the float ignores; paint_roles re-derives roles with a different rule
 - **BR-22** [Minor] `discard-path-side-effects` :q! with edits overwrites the unnamed register and warns "closed without :w"
+- **BR-23** [Minor] `escape-totality` The float's line grammar is not injective; :w silently splits or truncates turns containing its delimiters

@@ -14,6 +14,23 @@ local PREFIX = { user = "💬:", agent = "🤖:" }
 local OPEN = { user = "[", agent = "{" }
 local CLOSE = { user = "]", agent = "}" }
 
+-- A continuation line that would read as a turn start (`💬: x` inside a
+-- turn) is shown with one extra leading `\`; any `\`-run before a prefix
+-- gains one, so the float layout stays injective.
+local function prefix_led(line)
+    local rest = line:gsub("^\\+", "")
+    for _, prefix in pairs(PREFIX) do
+        if rest:sub(1, #prefix) == prefix then return true end
+    end
+    return false
+end
+
+local function escape_line(line) return prefix_led(line) and "\\" .. line or line end
+
+local function unescape_line(line)
+    return line:match("^\\") and prefix_led(line) and line:sub(2) or line
+end
+
 -- The role a line starts, or nil for a continuation line.
 local function role_of(line)
     for role, prefix in pairs(PREFIX) do
@@ -40,7 +57,7 @@ function M.to_lines(marker)
     local function add(kind, text)
         local parts = vim.split(codec.decode(text), "\n", { plain = true })
         lines[#lines + 1] = PREFIX[kind] .. " " .. parts[1]
-        for i = 2, #parts do lines[#lines + 1] = parts[i] end
+        for i = 2, #parts do lines[#lines + 1] = escape_line(parts[i]) end
     end
     for _, s in ipairs(marker.sections) do add(s.type, s.text) end
     local last = marker.sections[#marker.sections]
@@ -61,13 +78,14 @@ function M.from_lines(prefix, lines, appended)
         if role then
             turns[#turns + 1] = { type = role, parts = { text } }
         elseif #turns > 0 then
-            table.insert(turns[#turns].parts, l)
+            table.insert(turns[#turns].parts, unescape_line(l))
         elseif l:match("%S") then
             return nil, "text before the first 💬: / 🤖: turn — start it with a prefix"
         end
     end
     for _, t in ipairs(turns) do
-        -- Trailing blank lines after a turn are layout, not content.
+        -- Trailing blank lines after a turn are layout, not content: a turn's
+        -- trailing `<br>` is normalized away on save (deliberately lossy).
         while #t.parts > 1 and not t.parts[#t.parts]:match("%S") do table.remove(t.parts) end
         t.text = table.concat(t.parts, "\n")
     end
