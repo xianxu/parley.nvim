@@ -59,12 +59,12 @@ operator: xian-xu
 
 ## Done when
 
-- In a `session-sync` file, the first keystroke creates `<file>.lock`, and `<M-CR>` saves, sets the buffer read-only and sends one couch message to `owner` (a test with a fake couch on PATH asserts the exact argv).
-- When the file changes on disk and the lock is gone, the buffer reloads and is editable again (test).
+- In a `session-sync` file, the first keystroke creates `<file>.lock` with `holder: operator`, and `<M-CR>` saves, rewrites the holder to `agent`, sets the buffer read-only and sends one couch message to `owner` (a test with a fake couch on PATH asserts the exact argv). A failed send gives the turn back (`holder: operator`, editable).
+- When the lock is deleted after the agent rewrites the file, the buffer reloads and is editable again (test); a file reopened during the agent's turn is read-only (test); `<C-g>u` takes the turn back (test).
 - A markdown file without `type: session-sync` still gets the review action on `<M-CR>` (test).
-- The stale-lock reminder appears after the idle threshold (test with a short threshold).
+- Each turn renders as a full-width winbar band and a window-local StatusLine colour (free / operator in dark red / stale in orange after the idle threshold / agent), tested with a short threshold; no lualine component.
 - A live check with the ops TL: comment on `tl-status-xian-xu.md`, `<M-CR>`, and the TL's reply unlocks it.
-- The atlas documents the `session-sync` type and its keys.
+- The atlas documents the `session-sync` type, its keys, the lock protocol and the rendering.
 
 ## Plan
 
