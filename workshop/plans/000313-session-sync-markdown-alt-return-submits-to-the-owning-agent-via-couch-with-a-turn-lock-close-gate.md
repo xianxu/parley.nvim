@@ -76,6 +76,21 @@ rounds:
       recipe: milestone-review
       reviewed: 706d9f61858374f48d4f69e59bc87b9f87d77f05
       blocked: false
+    - "n": 3
+      timestamp: "2026-10-10T13:28:37-07:00"
+      agent: claude
+      dispose:
+        - id: BR-6
+          disposition: addressed
+          note: First-edit guard now reloads instead of taking the lock when disk_changed (session_sync.lua:268-281); regression test at integration spec :186 fails on the old lock-then-warn code.
+          round: 3
+        - id: BR-7
+          disposition: addressed
+          note: 'atlas/modes/session_sync.md now describes the watch outside the operator turn, the free-turn reload, the stale first-edit reload and submit refusal; operator: no longer called the lock holder.'
+          round: 3
+      recipe: milestone-review
+      reviewed: df3b00d600c47b9de78854214616b922db7d5a67
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#313 (boundary-review)
@@ -112,7 +127,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-7** [Minor] `plan-text-drift` The atlas still says the lock is polled only during the agent's turn and that operator: is recorded as the lock holder
   2nd finding in this family. Rule: a behaviour fix updates every place that restates that behaviour (module header, plan Revisions, atlas) in the same commit. The free-turn reload and the submit refusal are missing from atlas/modes/session_sync.md.
 
+## Round 3 — 2026-10-10T13:28:37-07:00 (claude) — passed
+
+### Disposed
+
+- BR-6 — addressed — First-edit guard now reloads instead of taking the lock when disk_changed (session_sync.lua:268-281); regression test at integration spec :186 fails on the old lock-then-warn code.
+- BR-7 — addressed — atlas/modes/session_sync.md now describes the watch outside the operator turn, the free-turn reload, the stale first-edit reload and submit refusal; operator: no longer called the lock holder.
+
 ## Open findings
 
-- **BR-6** [Minor] `free-state-disk-staleness` The markdown auto-save (init.lua:1818) can write a stale copy, which bypasses submit's disk_changed guard
-- **BR-7** [Minor] `plan-text-drift` The atlas still says the lock is polled only during the agent's turn and that operator: is recorded as the lock holder
+(none — every finding has been disposed)

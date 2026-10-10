@@ -78,6 +78,7 @@ Durable plan: `workshop/plans/000313-session-sync-submit-plan.md` (single pass, 
 ## Log
 
 ### 2026-10-10
+- 2026-10-10: closed — make test green (424 files, exit 0) after the round-2 advisory fixes; session_sync specs (14 integration + 6 unit) cover holder transitions, exact couch argv via fake couch, failed send, late failing exit after unlock+resubmit (BR-1), free-turn disk follow, stale first edit reloads instead of taking the turn, stale-copy submit refusal (BR-2), reply reload, reopen during agent/operator turns, rendering; live check with ops TL passed (round trip + rendering), red #870000 per operator; atlas/modes/session_sync.md; review verdict: SHIP
 - 2026-10-10: closed — make test green (424 files, exit 0) after the BR-1/BR-2 fixes; session_sync specs (13 integration + 6 unit) cover holder transitions, exact couch argv via fake couch, failed send, late failing exit after unlock+resubmit (BR-1), free-turn disk follow + stale-copy submit refusal (BR-2), reply reload, reopen during agent/operator turns, rendering; new specs mutation-checked; live check with ops TL passed (round trip + rendering), red #870000 per operator; atlas/modes/session_sync.md; review verdict: SHIP
 - 2026-10-10: flow upgraded quick → full — 414 added lines in code files (limit 100); an earlier round of this close already ran the full review
 - Implemented `lua/parley/session_sync.lua` + `<M-CR>` dispatch / `<C-g>u` in `setup_markdown_keymaps`; specs `tests/unit/session_sync_spec.lua`, `tests/integration/session_sync_spec.lua` (fake `couch` on PATH asserts the exact argv).

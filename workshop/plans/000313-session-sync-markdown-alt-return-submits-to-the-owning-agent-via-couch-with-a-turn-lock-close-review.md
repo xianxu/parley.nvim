@@ -211,3 +211,66 @@ findings:
     detail: |
       2nd finding in this family. Rule: a behaviour fix updates every place that restates that behaviour (module header, plan Revisions, atlas) in the same commit. The free-turn reload and the submit refusal are missing from atlas/modes/session_sync.md.
 ```
+
+---
+
+## Re-review — 2026-10-10T13:28:37-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 313 — session-sync markdown: Alt+Return submits to the owning agent via couch, with a turn lock |
+| repo | parley.nvim |
+| issue file | workshop/issues/000313-session-sync-markdown-alt-return-submits-to-the-owning-agent-via-couch-with-a-turn-lock.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 03dce091dce9b627d0142e44179c1ee6f5a2baa7..df3b00d600c47b9de78854214616b922db7d5a67 |
+| command | sdlc close --issue 313 |
+| reviewer | claude |
+| timestamp | 2026-10-10T13:28:37-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Reviewing #313's round-3 fix. Next I'm running the session-sync specs to confirm the stale-edit regression test passes.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+I recommend SHIP. Both open findings are fixed in df3b00d6, and nothing new reaches Minor or above. BR-6 is fixed in the right place. The disk-changed guard used to warn after the first edit had already taken the lock. It now runs before the lock is written, at `lua/parley/session_sync.lua:268-281`: if the file changed on disk, parley reloads the buffer and returns without taking the turn. So no writer (submit, auto-save or `:w`) can start an operator turn on an old copy. The new test "the first edit on a stale copy reloads instead of taking the turn" (`tests/integration/session_sync_spec.lua:186`) would fail on the old code, because the old code wrote the lock before warning and the test asserts that no lock exists. BR-7 is fixed too: `atlas/modes/session_sync.md` now says the file is watched whenever the turn is not the operator's, describes the reload on a stale first edit and the submit refusal, and no longer calls `operator:` the lock holder. `make test-spec SPEC=modes/session_sync` passes: 14 integration and 6 unit tests, no failures.
+
+1. **Strengths**
+   - The turn is always read from disk (`read_turn`), so a reopened buffer shows the right state, and a single check now protects every writer.
+   - The generation counter in `submit` (`session_sync.lua:327-333`) stops a late couch exit from changing a turn that has already moved on.
+   - The pure helpers (`parse_header`, `lock_body`, `turn`, `view`) have direct unit tests. The integration specs run against a fake `couch` on PATH that records the exact arguments it was called with.
+   - `<M-CR>` decides at call time whether the file is session-sync (`dispatch`), so editing the frontmatter takes effect at once.
+
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor** (below the bar, not raised as findings):
+   - The tests fire `BufModifiedSet` by hand. The `:edit!` reload inside that autocmd, triggered by a real keystroke in insert mode, is only checked in a headless run. It is worth one live check that typing on a stale copy reloads cleanly.
+   - `disk_changed` compares modification times, so a write that only touches the file (same content, new mtime) also drops the first keystroke. That is safe but a little noisy.
+5. **Test coverage:** every lock-holder transition, the late failing couch exit, a stale free buffer, the submit refusal, a reopened buffer, rendering, and the fallback to the review action are all covered.
+6. **Architecture:**
+   - **ARCH-DRY:** pass.
+   - **ARCH-PURE:** pass. The decision logic is pure; the IO stays in thin local helpers.
+   - **ARCH-PURPOSE:** pass. All the Done-when items are delivered.
+   - **ARCH-MOCK:** pass. The fake couch sits behind the same seam production uses (PATH lookup of `couch`).
+   - **ARCH-CONSTRAINTS:** pass. The watch polls once a second and only outside the operator's turn; the idle timer is reused.
+   - **ARCH-SECURE:** pass. Lock text that can't be parsed counts as the operator's turn, which is the safe side, and couch gets an argument list rather than a shell string.
+   - **ARCH-ORDER:** pass, with a note. Turn state is derived from the lock file rather than from a set of flags, and stale completions are guarded by generation and by re-reading the turn.
+   - **ARCH-FUNERAL:** pass. The lock is removed by the agent's reply, and timers are closed on `BufWipeout`.
+7. **Plan revisions:** none needed.
+
+```findings
+dispose:
+  - id: BR-6
+    disposition: addressed
+    note: |
+      First-edit guard now reloads instead of taking the lock when disk_changed (session_sync.lua:268-281); regression test at integration spec :186 fails on the old lock-then-warn code.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      atlas/modes/session_sync.md now describes the watch outside the operator turn, the free-turn reload, the stale first-edit reload and submit refusal; operator: no longer called the lock holder.
+```
