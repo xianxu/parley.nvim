@@ -96,9 +96,13 @@ function M.open_thread(buf)
     local lines, _, appended = thread.to_lines(marker)
     st.appended = appended
     local anchor = marker.quoted or marker.strike
-    local title = anchor and anchor.text or "free-standing"
-    if vim.fn.strdisplaywidth(title) > 50 then title = vim.fn.strcharpart(title, 0, 49) .. "…" end
-    title = " " .. title .. " "
+    local title = " 🤖 comment "
+    if anchor and anchor.text ~= "" then
+        local quote = anchor.text
+        if vim.fn.strdisplaywidth(quote) > 50 then quote = vim.fn.strcharpart(quote, 0, 49) .. "…" end
+        title = (' 🤖 on "%s" '):format(quote)
+    end
+    local footer = " :w save · q save & close · :q! discard "
 
     local fbuf = vim.api.nvim_create_buf(false, true)
     st.float_buf = fbuf
@@ -110,13 +114,14 @@ function M.open_thread(buf)
     vim.bo[fbuf].syntax = "markdown" -- not filetype: parley would claim a markdown buffer
     vim.bo[fbuf].modified = false
 
-    local width, height = size_for(lines, title)
+    local width, height = size_for(lines, title .. footer)
     local fwin = vim.api.nvim_open_win(fbuf, true, {
         relative = "editor", style = "minimal", border = "rounded",
         width = width, height = height,
         row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
         col = math.max(0, math.floor((vim.o.columns - width) / 2)),
         title = title, title_pos = "center",
+        footer = footer, footer_pos = "center",
     })
     vim.wo[fwin].wrap = true
     vim.wo[fwin].linebreak = true

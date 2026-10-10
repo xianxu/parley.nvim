@@ -41,6 +41,10 @@ describe("comment thread float (#312)", function()
         assert.is_true(vim.api.nvim_win_get_config(0).relative ~= "")
         assert.same({ "[q]", "{a}", "[ok]", "[]" }, float_lines())
         assert.same({ 4, 1 }, vim.api.nvim_win_get_cursor(0))
+        local cfg = vim.api.nvim_win_get_config(0)
+        local function text(chunks) return chunks[1][1] end
+        assert.equals(' 🤖 on "X" ', text(cfg.title))
+        assert.truthy(text(cfg.footer):find(":w save", 1, true), "footer explains how to finish")
     end)
 
     it(":w writes a multi-line reply back as one <br> line", function()

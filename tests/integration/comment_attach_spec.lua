@@ -61,10 +61,10 @@ describe("comment.attach (#312)", function()
         move(buf, 0)
         -- moving right onto 🤖 (hidden) lands on X
         assert.equals(m.visible[1], move(buf, m.hidden[1][1]))
-        -- moving right into `>[c]` lands past the marker
-        assert.equals(m.hidden[2][2], move(buf, m.hidden[2][1] + 1))
-        -- moving left (from past the marker) into it lands back on X
-        assert.equals(m.visible[2] - 1, move(buf, m.hidden[2][1] + 1))
+        -- moving right onto the hidden `>` lands on the visible `[`
+        assert.equals(m.hidden[2][2], move(buf, m.hidden[2][1]))
+        -- moving left onto it lands back on X
+        assert.equals(m.visible[2] - 1, move(buf, m.hidden[2][1]))
     end)
 
     it("snaps in insert mode too", function()

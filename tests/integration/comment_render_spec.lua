@@ -42,10 +42,10 @@ describe("comment rendering (#312)", function()
         local hidden = find(map[0], function(e) return e.conceal ~= nil end)
         assert.equals(2, #hidden)
         assert.equals("🤖<", line:sub(hidden[1].col_start + 1, hidden[1].col_end))
-        assert.equals(">[c]", line:sub(hidden[2].col_start + 1, hidden[2].col_end))
-        assert.same({}, find(map[0], function(e)
-            return e.hl_group == "ParleyReviewUser" or e.hl_group == "ParleyReviewAgent"
-        end))
+        assert.equals(">", line:sub(hidden[2].col_start + 1, hidden[2].col_end))
+        -- the last human turn stays visible and editable, colored as the human's
+        local user = find(map[0], function(e) return e.hl_group == "ParleyReviewUser" end)
+        assert.equals("[c]", line:sub(user[1].col_start + 1, user[1].col_end))
     end)
 
     it("paints an unclosed marker broken, conceals nothing", function()
@@ -86,7 +86,7 @@ describe("comment rendering (#312)", function()
             decoration.frame(provider, win, buf, 0, 40)
             local first = calls
             calls = 0
-            vim.api.nvim_buf_set_lines(buf, 10, 11, false, { "edited 🤖[new]" })
+            vim.api.nvim_buf_set_lines(buf, 10, 11, false, { "edited 🤖[new]{reply}" })
             local drawn = decoration.frame(provider, win, buf, 0, 40)
             print(("#312 layout calls: first frame %d, after edit %d (buffer 5000 rows)"):format(first, calls))
             assert.is_true(first <= 41 + 20, "first frame: " .. first)

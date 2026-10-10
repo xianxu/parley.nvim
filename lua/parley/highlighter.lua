@@ -83,6 +83,9 @@ local function push_marker_decorations(result, row, line)
             if m.visible then
                 table.insert(result[row], { hl_group = m.visible[3], col_start = m.visible[1], col_end = m.visible[2] })
             end
+            for _, t in ipairs(m.turns_hl) do
+                table.insert(result[row], { hl_group = t[3], col_start = t[1], col_end = t[2] })
+            end
             for _, h in ipairs(m.hidden) do
                 table.insert(result[row], { conceal = h[3], col_start = h[1], col_end = h[2] })
             end

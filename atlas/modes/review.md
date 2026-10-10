@@ -53,10 +53,13 @@ documents keep resolving.
 
 | Raw | Shown as |
 |---|---|
-| `🤖[H]…` / `🤖{N}…` | `🤖[…]` / `🤖{…}` |
-| `🤖<X>…` | `X`, highlighted `ParleyReviewQuoted` |
-| `🤖~D~…` | `D`, `ParleyReviewStrike` |
+| `🤖[H]{R}[last]` | `🤖[…]{…}[last]` — every turn collapses but a last human one, which stays editable inline |
+| `🤖[H]{R}` | `🤖[…]{…}` |
+| `🤖<X>[H]{R}[more]` | `X[…]{…}[more]`, `X` highlighted `ParleyReviewQuoted` |
+| `🤖~D~{N}` | `D{…}`, `D` struck (`ParleyReviewStrike`) |
 | doesn't close on its line | raw, `ParleyReviewBroken` |
+
+Turn brackets are colored by speaker (`ParleyReviewUser` / `ParleyReviewAgent`).
 
 - **Geometry**: `lua/parley/comment/view.lua` (pure) — `layout(line)` says what is
   hidden (with which conceal char) and what is visible; the highlighter's
@@ -67,7 +70,7 @@ documents keep resolving.
   a marker line (the window's own value elsewhere, so other conceals behave as
   before), and snaps the cursor so it never rests on hidden marker text — in
   normal mode no hidden byte; in insert mode only the points before the 🤖, after
-  the marker, or inside the visible anchor. An edit that still breaks a marker from a
+  the marker, inside the visible anchor, or inside the editable last human turn. An edit that still breaks a marker from a
   visible edge renders it raw + broken; `u` restores (fail visible, no revert
   guard).
 

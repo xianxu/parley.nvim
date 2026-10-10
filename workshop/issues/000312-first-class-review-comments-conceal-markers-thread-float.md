@@ -38,10 +38,12 @@ unchanged (the file stays the contract with xx-fix / agents / pair), only the
 
 | Raw | Shown as |
 |---|---|
-| `🤖[H]…` | `🤖[…]` |
-| `🤖{N}…` | `🤖{…}` |
-| `🤖<X>[…]…` / `🤖<X>{N}…` | `X` highlighted |
-| `🤖~D~…` / `🤖~D~{N}…` | `D` highlighted + strikethrough |
+| `🤖[H]{R}[last]` | `🤖[…]{…}[last]` (last human turn visible + editable) |
+| `🤖[H]{R}` / `🤖{N}` | `🤖[…]{…}` / `🤖{…}` |
+| `🤖<X>[H]{R}[more]` | `X[…]{…}[more]`, `X` highlighted |
+| `🤖~D~{N}` | `D{…}`, `D` highlighted + strikethrough |
+
+(Revised after the operator's smoke test — see Revisions.)
 
 **Single-line markers.** A marker never spans lines in the raw file; newlines
 inside a turn are encoded as `<br>`. All writers (float write-back, `Alt+q`,
@@ -155,3 +157,11 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
   their text in `"`), only turn text is `<br>`-decoded (anchors verbatim,
   ariadne#316 BR-1), and a literal `<br>` in a turn is `\<br>` (ariadne#316
   BR-6). Pre-grammar turns holding a literal `<br>` are an accepted edge.
+- **2026-10-09** — operator smoke test on :0: (1) typing in a fresh `🤖[]`
+  collapsed it to `🤖…]` and pushed further typing outside the marker; (2) the
+  wanted shape is every turn collapsed to `[…]`/`{…}` *except a last human
+  turn*, which stays visible and editable inline (`🤖[…]{…}[this is ok]`,
+  `X[…]{…}[more]`); (3) the thread float didn't say how to finish. Now: that
+  display rule (fixes 1 too), insert mode may type inside the last human turn,
+  turn brackets colored by speaker, and the float carries a `🤖 comment` /
+  `🤖 on "X"` title and a `:w save · q save & close · :q! discard` footer.

@@ -20,33 +20,45 @@ local function shown(line)
 end
 
 describe("comment.view.layout", function()
-    it("bare human chain shows 🤖[…]", function()
-        assert.equals("see 🤖[…] here", shown("see 🤖[why?]{because}[ok] here"))
+    it("collapses every turn but a last human one", function()
+        assert.equals("see 🤖[…]{…}[ok] here", shown("see 🤖[why?]{because}[ok] here"))
     end)
-    it("single human turn shows 🤖[…]", function()
-        assert.equals("🤖[…]", shown("🤖[why?]"))
+    it("a chain ending on the robot collapses entirely", function()
+        assert.equals("🤖[…]{…}", shown("🤖[why?]{because}"))
+        assert.equals("a 🤖{…} b", shown("a 🤖{insert this} b"))
     end)
-    it("a one-char turn still shows 🤖[…]", function()
-        assert.equals("🤖[…]", shown("🤖[a]"))
-    end)
-    it("empty 🤖[] stays as typed", function()
+    it("a lone human turn stays visible while it is being written", function()
+        assert.equals("🤖[why?]", shown("🤖[why?]"))
+        assert.equals("🤖[a]", shown("🤖[a]"))
         assert.equals("🤖[]", shown("🤖[]"))
     end)
-    it("bare robot proposal shows 🤖{…}", function()
-        assert.equals("a 🤖{…} b", shown("a 🤖{insert this}[hm] b"))
+    it("a robot proposal answered by the human", function()
+        assert.equals("a 🤖{…}[hm] b", shown("a 🤖{insert this}[hm] b"))
     end)
-    it("quoted shows only X, highlighted", function()
-        local line = "the 🤖<quick fox>[too cute]{agree} jumps"
-        assert.equals("the quick fox jumps", shown(line))
+    it("quoted shows X, the collapsed chain, and the last human turn", function()
+        local line = "the 🤖<quick fox>[too cute]{agree}[more] jumps"
+        assert.equals("the quick fox[…]{…}[more] jumps", shown(line))
         local m = view.layout(line)[1]
         assert.equals("quoted", m.kind)
         assert.equals("quick fox", line:sub(m.visible[1] + 1, m.visible[2]))
         assert.equals("ParleyReviewQuoted", m.visible[3])
+        assert.equals("more", line:sub(m.reply[1] + 1, m.reply[2]))
     end)
-    it("strike shows only D with strike highlight", function()
+    it("a fresh quoted marker shows X[] ready for typing", function()
+        assert.equals("a X[] b", shown("a 🤖<X>[] b"))
+    end)
+    it("strike shows D struck plus the collapsed proposal", function()
         local line = "x 🤖~old~{new} y"
-        assert.equals("x old y", shown(line))
+        assert.equals("x old{…} y", shown(line))
         assert.equals("ParleyReviewStrike", view.layout(line)[1].visible[3])
+    end)
+    it("colors each turn's brackets by speaker", function()
+        local line = "🤖[a]{b}[c]"
+        local hl = {}
+        for _, t in ipairs(view.layout(line)[1].turns_hl) do
+            hl[#hl + 1] = line:sub(t[1] + 1, t[2]) .. "=" .. t[3]
+        end
+        assert.same({ "[a]=ParleyReviewUser", "{b}=ParleyReviewAgent", "[c]=ParleyReviewUser" }, hl)
     end)
     it("an unclosed opener is broken, nothing hidden", function()
         local m = view.layout("start 🤖[never closed")[1]
@@ -67,9 +79,9 @@ describe("comment.view.layout", function()
         assert.same({}, view.layout("use `🤖[x]` syntax"))
     end)
     it("handles two markers on one line", function()
-        assert.equals("🤖[…] and A", shown("🤖[c1] and 🤖<A>[c2]"))
+        assert.equals("🤖[c1] and A[c2]", shown("🤖[c1] and 🤖<A>[c2]"))
     end)
-    it("an empty anchor hides nothing", function()
+    it("an empty anchor keeps its delimiters", function()
         assert.equals("🤖<>[c]", shown("🤖<>[c]"))
     end)
     it("quoted-only marker shows X", function()
@@ -105,49 +117,70 @@ describe("comment.view.layout", function()
     end)
 end)
 
-describe("comment.view.snap", function()
+describe("comment.view.snap (normal mode)", function()
     local line = "ab 🤖<X>[c]{d} z"
     local ms = view.layout(line)
-    local h1, h2 = ms[1].hidden[1], ms[1].hidden[2]
+    local m = ms[1]
     local max = #line - 1
-    it("moving right into a hidden range lands past it", function()
-        assert.equals(h1[2], view.snap(ms, h1[1] - 1, h1[1], max)) -- onto X
-        assert.equals(h2[2], view.snap(ms, h2[1] - 1, h2[1], max)) -- past the chain
+    it("moving right onto the hidden 🤖< lands on X", function()
+        assert.equals(m.visible[1], view.snap(ms, m.start - 1, m.start, max))
     end)
-    it("moving left into a hidden range lands before it", function()
-        assert.equals(h2[1] - 1, view.snap(ms, h2[2], h2[2] - 1, max)) -- onto X
+    it("moving left onto it lands before the marker", function()
+        assert.equals(m.start - 1, view.snap(ms, m.visible[1], m.visible[1] - 1, max))
     end)
-    it("never rests on the first byte of a hidden range", function()
-        assert.is_not_nil(view.snap(ms, 0, h1[1], max))
-        local l = "🤖[hidden text]"
-        local bare = view.layout(l)
-        assert.is_not_nil(view.snap(bare, 0, bare[1].hidden[1][1], #l - 1))
+    it("never rests inside a collapsed turn — not even its first byte", function()
+        local h = m.hidden[3] -- the `d` of {d}
+        assert.equals(h[2], view.snap(ms, h[1] - 1, h[1], max))
+        assert.equals(h[1] - 1, view.snap(ms, h[2], h[2] - 1, max))
     end)
-    it("crosses adjacent hidden ranges (bare chain …, closer)", function()
-        local l = "🤖[abc] z"
+    it("the brackets and the editable last turn are legal rests", function()
+        local l = "🤖[a]{b}[edit me]"
         local b = view.layout(l)
-        assert.equals(b[1].stop, view.snap(b, b[1].hidden[1][1] - 1, b[1].hidden[1][1], #l - 1))
-    end)
-    it("falls back to the other side at line end", function()
-        local l = "z 🤖[abc]"
-        local b = view.layout(l)
-        local to = view.snap(b, b[1].hidden[1][1] - 1, b[1].hidden[1][1], #l - 1)
-        assert.equals(b[1].hidden[1][1] - 1, to) -- the visible `[`
-    end)
-    it("a line that starts with a quoted marker rests on its anchor", function()
-        local l = "🤖<X>"
-        local q = view.layout(l)
-        assert.equals(q[1].visible[1], view.snap(q, 0, 0, #l - 1))
+        for col = b[1].reply[1], b[1].reply[2] do
+            assert.is_nil(view.snap(b, 0, col, #l - 1))
+        end
     end)
     it("a leftward landing backs up to a multibyte char start", function()
         local l = "a 🤖<é>[c] z"
         local q = view.layout(l)
-        local h2 = q[1].hidden[2]
-        local to = view.snap(q, h2[2], h2[1], #l - 1, l)
-        assert.equals(q[1].visible[1], to) -- start of é, not its 2nd byte
+        local h2 = q[1].hidden[2] -- the `>`
+        assert.equals(q[1].visible[1], view.snap(q, h2[2], h2[1], #l - 1, l))
     end)
     it("visible text never snaps", function()
         assert.is_nil(view.snap(ms, 0, 1, max))
+    end)
+end)
+
+describe("comment.view.snap (insert mode: insertion points)", function()
+    local function snap(ms, l, prev, col) return view.snap(ms, prev, col, #l, l, true) end
+    it("typing in a fresh 🤖[] stays inside its brackets", function()
+        local l = "x 🤖[] y"
+        local ms = view.layout(l)
+        local inside = ms[1].reply[1]
+        assert.is_nil(snap(ms, l, inside, inside))
+        local typed = "x 🤖[a] y" -- after the first character
+        local ms2 = view.layout(typed)
+        assert.is_nil(snap(ms2, typed, ms2[1].reply[2], ms2[1].reply[2]))
+    end)
+    it("before the 🤖 and after the marker are outside it", function()
+        local l = "ab 🤖<X>[c]{d} z"
+        local ms = view.layout(l)
+        assert.is_nil(snap(ms, l, 0, ms[1].start))
+        assert.is_nil(snap(ms, l, #l, ms[1].stop))
+    end)
+    it("both ends of the anchor are inside X", function()
+        local l = "ab 🤖<X>[c]{d} z"
+        local ms = view.layout(l)
+        assert.is_nil(snap(ms, l, 0, ms[1].visible[1]))
+        assert.is_nil(snap(ms, l, 0, ms[1].visible[2]))
+    end)
+    it("points inside a collapsed turn or between turns move to an allowed one", function()
+        local l = "🤖[a]{bbb}[last] z"
+        local ms = view.layout(l)
+        local m = ms[1]
+        local inside_b = m.hidden[2][1] + 1
+        assert.equals(m.reply[1], snap(ms, l, inside_b - 1, inside_b)) -- rightward → into [last]
+        assert.equals(m.start, snap(ms, l, inside_b + 1, inside_b))    -- leftward → before 🤖
     end)
 end)
 
@@ -159,38 +192,6 @@ describe("comment.view.marker_at", function()
     it("ignores prose and broken markers", function()
         assert.is_nil(view.marker_at(ms, 0))
         assert.is_nil(view.marker_at(ms, ms[2].start))
-    end)
-end)
-
-describe("comment.view.snap (insert mode: insertion points)", function()
-    local l = "ab 🤖<X>[c] z"
-    local q = view.layout(l)
-    local m = q[1]
-    local function snap(prev, col) return view.snap(q, prev, col, #l, l, true) end
-    it("before the 🤖 is outside the marker", function()
-        assert.is_nil(snap(0, m.start))
-    end)
-    it("both ends of the anchor are inside X (typing edits X)", function()
-        assert.is_nil(snap(0, m.visible[1]))
-        assert.is_nil(snap(0, m.visible[2]))
-    end)
-    it("points between 🤖 and X move to the edge in the direction of travel", function()
-        assert.equals(m.visible[1], snap(m.start, m.start + 1))
-        assert.equals(m.start, snap(m.visible[1], m.visible[1] - 1))
-    end)
-    it("after the marker is outside it", function()
-        assert.is_nil(snap(#l, m.stop))
-    end)
-    it("a bare chain's only insertion points are before and after it", function()
-        local b = "x 🤖[hidden] y"
-        local bq = view.layout(b)
-        local bm = bq[1]
-        assert.equals(bm.stop, view.snap(bq, bm.start, bm.start + 5, #b, b, true))
-        assert.is_nil(view.snap(bq, 0, bm.start, #b, b, true))
-    end)
-    it("an empty 🤖[] stays typable between its brackets", function()
-        local e = "🤖[]"
-        assert.is_nil(view.snap(view.layout(e), 0, 5, #e, e, true))
     end)
 end)
 

@@ -7,8 +7,13 @@
 --
 -- Columns are 0-based bytes; ranges are { s, e, extra } with `e` exclusive.
 --   marker = { start, stop, kind = "bare"|"quoted"|"strike",
---              visible = { s, e, hl_group } | nil,
---              hidden  = { { s, e, conceal_char }, ... } }
+--              visible  = { s, e, hl_group } | nil,  -- the anchor X / D
+--              hidden   = { { s, e, conceal_char }, ... },
+--              turns_hl = { { s, e, hl_group }, ... }, -- each turn's brackets
+--              reply    = { s, e } | nil }  -- editable last human turn:
+--                                           -- insertion points s..e
+-- Every turn collapses to `[…]` / `{…}` except a last human turn, which stays
+-- visible and editable inline: `🤖[…]{…}[this is ok]`, `X[…]{…}[more]`.
 --          | { start, stop, broken = true }
 -- A marker renders only when it closes on its own line (markers are
 -- single-line, newlines inside a turn are `<br>`); one whose chain stops at an
@@ -17,18 +22,23 @@ local M = {}
 
 local MARK, MARK_LEN = "🤖", 4
 local OPENERS = { ["<"] = true, ["["] = true, ["{"] = true, ["~"] = true }
-local CLOSER = { ["["] = "]", ["{"] = "}" }
+local CLOSER = { ["["] = "]", ["{"] = "}" } -- an unclosed opener → broken
 
--- Bare chain `🤖[H]{R}…`: keep `🤖[` visible, show the middle as `…` and the
--- last byte as the first opener's closer, so it reads 🤖[…] / 🤖{…}.
--- `first` is the 0-based col of the first `[`/`{`; `stop` 0-based exclusive.
-local function chain_hidden(line, first, stop)
-    if stop - first <= 2 then return {} end -- `[]` / `{}`: nothing to hide
-    local close = CLOSER[line:sub(first + 1, first + 1)]
-    return {
-        { first + 1, stop - 1, "…" },
-        { stop - 1, stop, close },
-    }
+local TURN_HL = { user = "ParleyReviewUser", agent = "ParleyReviewAgent" }
+
+-- The chain: every turn collapses to its brackets around `…` — except a last
+-- turn that is the human's, which stays visible and editable inline
+-- (`🤖[…]{…}[this is ok]`). Fills m.hidden / m.turns_hl / m.reply.
+local function lay_chain(m, sections)
+    for i, sec in ipairs(sections) do
+        local open, close = sec.byte_start - 1, sec.byte_end - 1 -- 0-based cols
+        m.turns_hl[#m.turns_hl + 1] = { open, close + 1, TURN_HL[sec.type] }
+        if i == #sections and sec.type == "user" then
+            m.reply = { open + 1, close } -- insertion points inside the brackets
+        elseif close > open + 1 then
+            m.hidden[#m.hidden + 1] = { open + 1, close, "…" }
+        end
+    end
 end
 
 function M.layout(line)
@@ -62,25 +72,18 @@ function M.layout(line)
                 from = pos + MARK_LEN
             else
                 local stop0 = stop - 1
-                local m = { start = start0, stop = stop0 }
+                local m = { start = start0, stop = stop0, hidden = {}, turns_hl = {} }
                 local anchor = quoted or strike
-                if anchor then
-                    m.kind = quoted and "quoted" or "strike"
-                    if anchor.text == "" then
-                        m.hidden = {} -- nothing to show in its place: leave it raw
-                    else
-                        -- anchor.byte_start / byte_end are the 1-based `<`/`>`.
-                        m.visible = { anchor.byte_start, anchor.byte_end - 1,
-                            quoted and "ParleyReviewQuoted" or "ParleyReviewStrike" }
-                        m.hidden = {
-                            { start0, anchor.byte_start, "" },
-                            { anchor.byte_end - 1, stop0, "" },
-                        }
-                    end
-                else
-                    m.kind = "bare"
-                    m.hidden = chain_hidden(line, sections[1].byte_start - 1, stop0)
+                m.kind = anchor and (quoted and "quoted" or "strike") or "bare"
+                -- An empty anchor has nothing to show in its place: leave it raw.
+                if anchor and anchor.text ~= "" then
+                    -- anchor.byte_start / byte_end are the 1-based `<`/`>`.
+                    m.visible = { anchor.byte_start, anchor.byte_end - 1,
+                        quoted and "ParleyReviewQuoted" or "ParleyReviewStrike" }
+                    m.hidden[1] = { start0, anchor.byte_start, "" }
+                    m.hidden[2] = { anchor.byte_end - 1, anchor.byte_end, "" }
                 end
+                lay_chain(m, sections)
                 out[#out + 1] = m
                 from = stop
             end
@@ -91,22 +94,26 @@ end
 
 -- Where the cursor may NOT be, as half-open [a, b) spans of columns.
 -- Normal mode: the cursor sits ON a byte, so every hidden byte is off limits —
--- even a range's first one (an `x` on the first char of a `…`-concealed
--- comment keeps the marker parseable, so the edit would be silent).
--- Insert mode: the cursor is an insertion POINT between bytes. Before the 🤖
--- and after the marker are outside it; inside a visible anchor (both ends
--- included) types into X/D; every other point inside the marker is hidden.
+-- even a range's first one (an `x` there would silently edit a collapsed turn).
+-- Insert mode: the cursor is an insertion POINT between bytes. The only points
+-- that edit what you can see are: before the marker, inside the visible anchor,
+-- inside the editable last human turn, and after the marker; every other point
+-- inside a marker would type into hidden text or between turns.
 local function blocked_spans(markers, insert)
     local out = {}
     for _, m in ipairs(markers) do
-        if not m.broken and #m.hidden > 0 then
+        if not m.broken then
             if not insert then
                 for _, h in ipairs(m.hidden) do out[#out + 1] = { h[1], h[2] } end
-            elseif m.visible then
-                out[#out + 1] = { m.start + 1, m.visible[1] }
-                out[#out + 1] = { m.visible[2] + 1, m.stop }
-            else
-                out[#out + 1] = { m.start + 1, m.stop }
+            elseif #m.hidden > 0 or m.visible then
+                local allowed = { { m.start, m.start } }
+                if m.visible then allowed[#allowed + 1] = { m.visible[1], m.visible[2] } end
+                if m.reply then allowed[#allowed + 1] = { m.reply[1], m.reply[2] } end
+                allowed[#allowed + 1] = { m.stop, m.stop }
+                for i = 1, #allowed - 1 do
+                    local a, b = allowed[i][2] + 1, allowed[i + 1][1]
+                    if b > a then out[#out + 1] = { a, b } end
+                end
             end
         end
     end
