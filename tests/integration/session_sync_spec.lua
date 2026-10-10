@@ -13,6 +13,7 @@ describe("session-sync buffer", function()
         vim.fn.mkdir(root .. "/bin", "p")
         vim.fn.writefile({
             "#!/bin/sh",
+            'if [ -n "$FAKE_COUCH_SLEEP" ]; then sleep "$FAKE_COUCH_SLEEP"; fi',
             -- Written whole, then renamed: the spec polls for the file.
             'for a in "$@"; do printf "%s\\n" "$a"; done > "' .. argv_file .. '.tmp"',
             'mv "' .. argv_file .. '.tmp" "' .. argv_file .. '"',
@@ -57,6 +58,7 @@ describe("session-sync buffer", function()
         saved_path, saved_poll = vim.env.PATH, ss.POLL_MS
         vim.env.PATH = root .. "/bin:" .. vim.env.PATH
         vim.env.FAKE_COUCH_EXIT = "0"
+        vim.env.FAKE_COUCH_SLEEP = nil
         ss.POLL_MS = 20
         p.config.review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" }
         p.config.session_sync_shortcut_unlock = { modes = { "n" }, shortcut = "<C-g>u" }
@@ -154,6 +156,56 @@ describe("session-sync buffer", function()
         local hl = vim.api.nvim_get_hl(0, { name = "ParleySessionSyncOperator", link = false })
         assert.equals(0x870000, hl.bg)
         assert.is_true(hl.bold)
+    end)
+
+    it("a late failing exit from an earlier submit leaves the current turn alone", function()
+        vim.env.FAKE_COUCH_EXIT, vim.env.FAKE_COUCH_SLEEP = "3", "0.4"
+        open(header)
+        edit("- edited")
+        keymap_cb("<M-CR>")()            -- slow send, will fail
+        keymap_cb("<C-g>u")()            -- operator takes the turn back...
+        vim.env.FAKE_COUCH_EXIT, vim.env.FAKE_COUCH_SLEEP = "0", nil
+        keymap_cb("<M-CR>")()            -- ...and resubmits; this send succeeds
+        assert.equals("holder: agent", holder())
+        vim.wait(800)                    -- the first send's failure lands
+        assert.equals("holder: agent", holder())
+        assert.is_false(vim.bo[buf].modifiable)
+    end)
+
+    it("a free buffer follows the agent's writes on disk", function()
+        open(header)
+        local update = vim.deepcopy(header)
+        update[8] = "- new thread from TL"
+        vim.fn.writefile(update, file)
+        assert.is_true(vim.wait(2000, function()
+            return vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1] == "- new thread from TL"
+        end))
+        assert.is_false(exists(file .. ".lock"))
+    end)
+
+    it("submit refuses to overwrite a file the agent rewrote under a stale buffer", function()
+        ss.POLL_MS = 60000               -- the watch never catches the write
+        open(header)
+        local update = vim.deepcopy(header)
+        update[8] = "- new thread from TL"
+        vim.fn.writefile(update, file)
+        edit("- edited on the old copy")
+        assert.equals("holder: operator", holder())
+        keymap_cb("<M-CR>")()
+        assert.equals("- new thread from TL", vim.fn.readfile(file)[8])
+        assert.equals("holder: operator", holder())
+        assert.is_true(vim.bo[buf].modifiable)
+        vim.wait(200)
+        assert.is_false(exists(argv_file))
+    end)
+
+    it("a file reopened during an operator turn still turns stale", function()
+        p.config.session_sync_stale_minutes = 0.001
+        vim.fn.writefile({ "holder: operator" }, file .. ".lock")
+        open(header)
+        assert.is_true(vim.wait(2000, function()
+            return winbar() == "%#ParleySessionSyncStale# unsent edits, Alt+Return to submit%="
+        end))
     end)
 
     it("plain markdown keeps the review action on <M-CR>, and unlock is a no-op", function()

@@ -9,13 +9,14 @@
 --   holder: agent    the agent's turn — the buffer is read-only
 -- <M-CR> saves, rewrites the holder to agent and tells the owner via
 -- `couch --send-to`. The agent replies by rewriting the file and deleting the
--- lock (it never writes the lock); a poll notices, reloads and unlocks.
+-- lock (it never writes the lock); a watch notices, reloads and unlocks.
 -- The turn is always read from disk, so a reopened buffer shows it too.
 --
 -- Lifecycles: the lock is removed by the agent's reply; an operator lock left
 -- idle turns stale and is shown in the reminder colour until submitted. The
--- poll timer lives only while the agent holds the turn (closed on any other
--- turn or BufWipeout); the idle timer is one per buffer, replaced on each edit.
+-- watch timer lives while the turn is free or the agent's (closed during the
+-- operator's turn and on BufWipeout); the idle timer is one per buffer,
+-- restarted on each edit and closed on BufWipeout.
 
 local M = {}
 
@@ -23,7 +24,8 @@ M.POLL_MS = 1000
 
 local ns_group = "ParleySessionSync"
 
--- Per-buffer state: { poll = timer|nil, idle = timer|nil, stale = bool }
+-- Per-buffer state: { turn, stale, gen (submit generation), loaded (disk
+-- mtime last read/written), watch = timer|nil, idle = timer|nil }
 local state = {}
 
 --- Frontmatter lines → { owner, operator } when `type: session-sync`, else nil.
@@ -136,37 +138,57 @@ local function render(buf, view)
 	end
 end
 
+-- The file's mtime on disk, comparable by equality ("" when missing).
+local function disk_mtime(buf)
+	local st = vim.uv.fs_stat(file_of(buf))
+	return st and (st.mtime.sec .. "." .. st.mtime.nsec) or ""
+end
+
+-- Whether the file on disk changed since the buffer last read or wrote it.
+local function disk_changed(buf)
+	local s = state[buf]
+	return s.loaded ~= nil and disk_mtime(buf) ~= s.loaded
+end
+
+local function reload(buf)
+	vim.bo[buf].modifiable = true
+	vim.api.nvim_buf_call(buf, function()
+		vim.cmd("silent edit!")
+	end)
+end
+
 local refresh
 
--- Poll the lock while the agent holds the turn; its removal is the reply.
-local function start_poll(buf, owner)
+-- Watch the file while the turn is not the operator's. During the agent's
+-- turn the lock's removal is the reply; during a free turn an agent write
+-- reloads the (unmodified) buffer, so the operator never edits a stale copy.
+local function start_watch(buf, owner)
 	local s = state[buf]
-	if s.poll then
+	if s.watch then
 		return
 	end
 	local timer = vim.uv.new_timer()
-	s.poll = timer
+	s.watch = timer
 	timer:start(M.POLL_MS, M.POLL_MS, vim.schedule_wrap(function()
-		if s.poll ~= timer or not vim.api.nvim_buf_is_valid(buf) then
+		if s.watch ~= timer or not vim.api.nvim_buf_is_valid(buf) then
 			close_timer(timer)
 			return
 		end
 		local turn = read_turn(buf)
-		if turn == "agent" then
-			return
-		end
-		if turn == "free" then
-			vim.bo[buf].modifiable = true
-			vim.api.nvim_buf_call(buf, function()
-				vim.cmd("silent edit!")
-			end)
+		if turn == "free" and s.turn == "agent" then
+			reload(buf)
 			notify((owner or "agent") .. " replied")
+		elseif turn == "free" and not vim.bo[buf].modified and disk_changed(buf) then
+			reload(buf)
 		end
-		refresh(buf)
+		if turn ~= s.turn then
+			refresh(buf)
+		end
 	end))
 end
 
--- Apply the on-disk turn: read-only while the agent holds it, poll only then.
+-- Apply the on-disk turn: read-only while the agent holds it, watched unless
+-- the operator holds it.
 refresh = function(buf)
 	local s = state[buf]
 	if not s or not vim.api.nvim_buf_is_valid(buf) then
@@ -174,42 +196,39 @@ refresh = function(buf)
 	end
 	local h = header(buf) or {}
 	local turn = read_turn(buf)
+	s.turn = turn
 	if turn ~= "operator" then
 		s.stale = false
 	end
 	vim.bo[buf].modifiable = turn ~= "agent"
-	if turn == "agent" then
-		start_poll(buf, h.owner)
+	if turn == "operator" then
+		close_timer(s.watch)
+		s.watch = nil
 	else
-		close_timer(s.poll)
-		s.poll = nil
+		start_watch(buf, h.owner)
 	end
 	render(buf, M.view(turn, s.stale, h.owner))
 end
 
--- Restart the idle timer; when it fires with the operator still holding the
--- turn, the lock is stale and renders in the reminder colour.
+-- Restart the idle timer (one per buffer, reused across keystrokes); when it
+-- fires with the operator still holding the turn, the turn is stale and
+-- renders in the reminder colour.
 local function restart_idle(buf)
 	local s = state[buf]
-	close_timer(s.idle)
-	s.idle = nil
 	if s.stale then
 		s.stale = false
 		refresh(buf)
 	end
-	if read_turn(buf) ~= "operator" then
+	if s.idle then
+		s.idle:stop()
+	end
+	if s.turn ~= "operator" then
 		return
 	end
+	s.idle = s.idle or vim.uv.new_timer()
 	local minutes = require("parley").config.session_sync_stale_minutes or 5
-	local timer = vim.uv.new_timer()
-	s.idle = timer
-	timer:start(math.floor(minutes * 60000), 0, vim.schedule_wrap(function()
-		close_timer(timer)
-		if s.idle ~= timer then
-			return
-		end
-		s.idle = nil
-		if vim.api.nvim_buf_is_valid(buf) and read_turn(buf) == "operator" then
+	s.idle:start(math.floor(minutes * 60000), 0, vim.schedule_wrap(function()
+		if state[buf] == s and vim.api.nvim_buf_is_valid(buf) and read_turn(buf) == "operator" then
 			s.stale = true
 			refresh(buf)
 		end
@@ -234,7 +253,8 @@ M.attach = function(buf)
 	if state[buf] or not M.is_session_sync(buf) then
 		return
 	end
-	state[buf] = { stale = false }
+	local s = { stale = false, gen = 0 }
+	state[buf] = s
 	define_highlights()
 	vim.bo[buf].autoread = true
 	local group = vim.api.nvim_create_augroup(ns_group .. buf, { clear = true })
@@ -245,11 +265,23 @@ M.attach = function(buf)
 		group = group,
 		buffer = buf,
 		callback = function()
-			if vim.bo[buf].modified and vim.bo[buf].modifiable and read_turn(buf) == "free"
-				and M.is_session_sync(buf) and write_lock(buf, "operator") then
+			if s.turn == "free" and vim.bo[buf].modified and vim.bo[buf].modifiable
+				and read_turn(buf) == "free" and M.is_session_sync(buf) and write_lock(buf, "operator") then
 				refresh(buf)
+				if disk_changed(buf) then
+					notify("the file changed on disk before this edit, so it edits an old copy;"
+						.. " :e! reloads (dropping the edit)", vim.log.levels.WARN)
+				end
 			end
 			restart_idle(buf)
+		end,
+	})
+	-- What the buffer last saw on disk: the base `disk_changed` compares to.
+	vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "FileChangedShellPost" }, {
+		group = group,
+		buffer = buf,
+		callback = function()
+			s.loaded = disk_mtime(buf)
 		end,
 	})
 	vim.api.nvim_create_autocmd("BufWinEnter", {
@@ -263,16 +295,15 @@ M.attach = function(buf)
 		group = group,
 		buffer = buf,
 		callback = function()
-			local s = state[buf]
-			if s then
-				close_timer(s.poll)
-				close_timer(s.idle)
-			end
+			close_timer(s.watch)
+			close_timer(s.idle)
 			state[buf] = nil
 			pcall(vim.api.nvim_del_augroup_by_id, group)
 		end,
 	})
+	s.loaded = disk_mtime(buf)
 	refresh(buf)
+	restart_idle(buf)
 end
 
 --- <M-CR>: save, hand the turn to the agent, tell the owner.
@@ -283,8 +314,14 @@ M.submit = function(buf)
 		return
 	end
 	M.attach(buf)
+	local s = state[buf]
 	if read_turn(buf) == "agent" then
 		notify("already submitted to " .. h.owner .. "; waiting for its reply", vim.log.levels.WARN)
+		return
+	end
+	if disk_changed(buf) then
+		notify("the file changed on disk since this buffer read it; not overwriting it."
+			.. " :e! reloads (dropping your edits)", vim.log.levels.ERROR)
 		return
 	end
 	vim.cmd("stopinsert")
@@ -295,21 +332,28 @@ M.submit = function(buf)
 		return
 	end
 	refresh(buf)
+	-- A completion belongs to its submit: once the turn has moved on (an
+	-- unlock, a resubmit, the agent's reply), a late exit must not touch it.
+	s.gen = s.gen + 1
+	local gen = s.gen
+	local function current()
+		return state[buf] == s and s.gen == gen and read_turn(buf) == "agent"
+	end
 	local function fail(why)
+		if not current() then
+			return
+		end
 		write_lock(buf, "operator")
 		refresh(buf)
 		notify("send to " .. h.owner .. " failed, your turn again: " .. why, vim.log.levels.ERROR)
 	end
 	local argv = { "couch", "--send-to", h.owner, "--message", "submitted: " .. file_of(buf) }
 	local ok, err = pcall(vim.system, argv, { text = true }, vim.schedule_wrap(function(obj)
-		if not state[buf] then
-			return
-		end
 		if obj.code ~= 0 then
 			fail(vim.trim(obj.stderr or ""))
-			return
+		elseif current() then
+			notify("submitted to " .. h.owner)
 		end
-		notify("submitted to " .. h.owner)
 	end))
 	if not ok then
 		fail(tostring(err))
@@ -328,6 +372,7 @@ M.unlock = function(buf)
 		notify("not waiting on the agent")
 		return
 	end
+	state[buf].gen = state[buf].gen + 1
 	write_lock(buf, "operator")
 	refresh(buf)
 	restart_idle(buf)
