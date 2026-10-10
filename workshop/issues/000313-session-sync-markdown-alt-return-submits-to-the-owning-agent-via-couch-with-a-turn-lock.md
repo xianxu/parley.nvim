@@ -6,7 +6,7 @@ github_issue:
 created: 2026-10-10
 updated: 2026-10-10
 estimate_hours:
-card_mirror: '111d34bb27f26bfddedf2305363f24289e409ed8' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd197fc5e27324399c0966669302547d3a7a58a3d' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-10T12:19:59-07:00
 claimant:
     operator: Xian Xu
@@ -16,7 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
-actual_hours: 0.84
+actual_hours: 0.91
 ---
 
 # session-sync markdown: Alt+Return submits to the owning agent via couch, with a turn lock
