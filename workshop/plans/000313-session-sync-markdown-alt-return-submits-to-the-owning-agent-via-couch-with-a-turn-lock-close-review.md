@@ -103,3 +103,111 @@ findings:
     title: |
       A buffer reopened with an existing holder: operator lock never starts the idle timer, so it shows "your turn" instead of "stale" until the next edit
 ```
+
+---
+
+## Re-review — 2026-10-10T13:24:43-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 313 — session-sync markdown: Alt+Return submits to the owning agent via couch, with a turn lock |
+| repo | parley.nvim |
+| issue file | workshop/issues/000313-session-sync-markdown-alt-return-submits-to-the-owning-agent-via-couch-with-a-turn-lock.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 03dce091dce9b627d0142e44179c1ee6f5a2baa7..706d9f61858374f48d4f69e59bc87b9f87d77f05 |
+| command | sdlc close --issue 313 |
+| reviewer | claude |
+| timestamp | 2026-10-10T13:24:43-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Prior fixes look sound so far. Next I'm checking whether parley's markdown auto-save can still overwrite the agent's rewrite (a BR-2 sibling).
+
+Running the session-sync specs now to confirm the fixes hold.
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+Round 2 at the close of #313. All five open findings from round 1 are fixed. BR-1 and BR-2 are fixed for every case, not just the one each finding named, and each fix has a spec that exercises it. The two session-sync spec files pass when I run them: 13 integration tests and 6 unit tests, with no failures. I found nothing that blocks the close. I'm raising two Minor findings, and both belong to families that are already open. The more important one: parley's markdown auto-save is a third way to write the file, and the round-1 submit guard doesn't cover it. Neovim's own "file changed since reading" prompt still stands in front of it, and parley has already warned the operator by then. So the agent's rewrite can only be lost if the operator answers that prompt "yes".
+
+**Strengths**
+- `lua/parley/session_sync.lua:337-349`: every completion checks three things before acting: the buffer state is the same, its submit generation still matches, and the lock on disk still says `holder: agent`. `unlock` also bumps the generation (`:375`). This covers late exits after an unlock, a resubmit or a reply, not just the one interleaving the finding named.
+- `refresh` (`:192`) is the one place that applies the turn. It reads the turn from disk, then sets `modifiable`, starts or stops the watch, and renders. The cached `s.turn` exists only to avoid re-reading the lock on every keystroke.
+- The pure functions `parse_header`, `turn`, `view` and `lock_body` have unit tests that need no IO. The couch call passes an argv array, so the `owner:` value can't inject shell syntax.
+- The new specs drive real orderings: a slow failing fake couch, a disk rewrite under a stale buffer, and a file reopened during the operator's turn.
+
+**Critical**
+None.
+
+**Important**
+None.
+
+**Minor**
+1. **The submit guard can be bypassed through auto-save** (`init.lua:1799-1820` and `session_sync.lua:271-274`).
+   - **Scenario:** the agent rewrites the file during a free turn, and the operator edits before the next watch poll (up to 1s later). The first edit only warns. Then `prep_md`'s auto-save runs `silent! write`. If the operator answers "yes" to Neovim's prompt, the agent's rewrite is overwritten, `s.loaded` advances, and `submit`'s `disk_changed` check passes.
+   - **Family:** this is the 2nd finding in `free-state-disk-staleness`. Don't add a guard at this one write path.
+   - **Rule:** the operator's turn must never start on a copy older than the file on disk. When taking the turn, if `disk_changed(buf)`, refuse the lock (reload, or undo the edit) instead of warning. Then every later writer (submit, auto-save, `:w`) is safe without needing its own guard.
+2. **The atlas prose drifted** (`atlas/modes/session_sync.md`).
+   - It says parley polls "during the agent's turn" only. The watch now also runs during free turns, reloading an unmodified buffer, and submit refuses when the file changed on disk. Neither change is documented.
+   - It says `operator:` is "recorded as the lock holder", but the lock literally records `holder: operator`, and the `operator` key is parsed but never used.
+   - **Family:** this is the 2nd finding in `plan-text-drift`. **Rule:** a behaviour fix updates every place that restates that behaviour (the module header comment, the plan's Revisions, the atlas) in the same commit.
+
+**Test coverage**
+- The late-exit spec depends on wall-clock timing: a 0.4s fake sleep against `vim.wait(800)`. Under heavy load it could show only one interleaving. A seam for completion order, such as an injected `system` function, would make it deterministic.
+- The specs don't wire `prep_md`'s auto-save, so the path in Minor 1 is not exercised.
+
+**Architecture**
+- **ARCH-DRY:** pass. The frontmatter reader is justified in the plan, and `reload` and `close_timer` are shared helpers.
+- **ARCH-PURE:** pass. The pure core is unit-tested; the shell around it is thin.
+- **ARCH-PURPOSE:** pass. All the Done-when items are delivered, including the live check.
+- **ARCH-MOCK:** pass, with a note. The fake couch on PATH is stateless, which is fine for a one-shot send. The only conformance check against the real binary was the manual live check.
+- **ARCH-CONSTRAINTS:** pass. Each keystroke is now cheap, and the 1s poll costs one stat plus one lock read per buffer.
+- **ARCH-SECURE:** pass. An unparseable lock counts as the operator's turn, which is the conservative reading.
+- **ARCH-ORDER:** acceptable, with a note. The turn is an enum read from disk, and `stale` matters only during the operator's turn. The ordering tests rely on timing (see Test coverage).
+- **ARCH-FUNERAL:** pass. The agent removes the lock; the timers close on BufWipeout.
+
+**Plan revisions**
+- None needed beyond the atlas fix in Minor 2.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Generation + state identity + read_turn==agent guard (session_sync.lua:337-349), unlock bumps gen; spec "a late failing exit..." passes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Free-turn watch reloads unmodified buffer; submit refuses when disk_changed; specs for both pass (auto-save sibling raised as Minor).
+  - id: BR-3
+    disposition: addressed
+    note: |
+      restart_idle uses cached s.turn and reuses one timer; first-edit read_turn short-circuits behind s.turn=="free".
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Plan Revisions "close review round 1" supersedes the vim.b / extmark / unlock prose (append-only convention).
+  - id: BR-5
+    disposition: addressed
+    note: |
+      attach now calls restart_idle; spec "a file reopened during an operator turn still turns stale" passes.
+findings:
+  - id: new
+    severity: Minor
+    family: free-state-disk-staleness
+    title: |
+      The markdown auto-save (init.lua:1818) can write a stale copy, which bypasses submit's disk_changed guard
+    detail: |
+      2nd finding in this family. Rule: the operator's turn must never start on a copy older than the file on disk. When taking the turn, refuse the lock (reload or undo) when disk_changed instead of warning, so every writer (submit, auto-save, :w) is safe without its own guard.
+  - id: new
+    severity: Minor
+    family: plan-text-drift
+    title: |
+      The atlas still says the lock is polled only during the agent's turn and that operator: is recorded as the lock holder
+    detail: |
+      2nd finding in this family. Rule: a behaviour fix updates every place that restates that behaviour (module header, plan Revisions, atlas) in the same commit. The free-turn reload and the submit refusal are missing from atlas/modes/session_sync.md.
+```

@@ -36,6 +36,46 @@ rounds:
           round: 1
       recipe: milestone-review
       blocked: true
+    - "n": 2
+      timestamp: "2026-10-10T13:24:43-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Generation + state identity + read_turn==agent guard (session_sync.lua:337-349), unlock bumps gen; spec "a late failing exit..." passes.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: Free-turn watch reloads unmodified buffer; submit refuses when disk_changed; specs for both pass (auto-save sibling raised as Minor).
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: restart_idle uses cached s.turn and reuses one timer; first-edit read_turn short-circuits behind s.turn=="free".
+          round: 2
+        - id: BR-4
+          disposition: addressed
+          note: Plan Revisions "close review round 1" supersedes the vim.b / extmark / unlock prose (append-only convention).
+          round: 2
+        - id: BR-5
+          disposition: addressed
+          note: attach now calls restart_idle; spec "a file reopened during an operator turn still turns stale" passes.
+          round: 2
+      findings:
+        - id: BR-6
+          severity: Minor
+          title: The markdown auto-save (init.lua:1818) can write a stale copy, which bypasses submit's disk_changed guard
+          detail: '2nd finding in this family. Rule: the operator''s turn must never start on a copy older than the file on disk. When taking the turn, refuse the lock (reload or undo) when disk_changed instead of warning, so every writer (submit, auto-save, :w) is safe without its own guard.'
+          family: free-state-disk-staleness
+          round: 2
+        - id: BR-7
+          severity: Minor
+          title: 'The atlas still says the lock is polled only during the agent''s turn and that operator: is recorded as the lock holder'
+          detail: '2nd finding in this family. Rule: a behaviour fix updates every place that restates that behaviour (module header, plan Revisions, atlas) in the same commit. The free-turn reload and the submit refusal are missing from atlas/modes/session_sync.md.'
+          family: plan-text-drift
+          round: 2
+      recipe: milestone-review
+      reviewed: 706d9f61858374f48d4f69e59bc87b9f87d77f05
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#313 (boundary-review)
@@ -55,10 +95,24 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Minor] `plan-text-drift` The plan's Core-concepts prose still describes vim.b idempotency, the eol extmark reminder and the old unlock-keeps-lock behaviour
 - **BR-5** [Minor] `idle-timer-on-attach` A buffer reopened with an existing holder: operator lock never starts the idle timer, so it shows "your turn" instead of "stale" until the next edit
 
+## Round 2 — 2026-10-10T13:24:43-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — Generation + state identity + read_turn==agent guard (session_sync.lua:337-349), unlock bumps gen; spec "a late failing exit..." passes.
+- BR-2 — addressed — Free-turn watch reloads unmodified buffer; submit refuses when disk_changed; specs for both pass (auto-save sibling raised as Minor).
+- BR-3 — addressed — restart_idle uses cached s.turn and reuses one timer; first-edit read_turn short-circuits behind s.turn=="free".
+- BR-4 — addressed — Plan Revisions "close review round 1" supersedes the vim.b / extmark / unlock prose (append-only convention).
+- BR-5 — addressed — attach now calls restart_idle; spec "a file reopened during an operator turn still turns stale" passes.
+
+### Raised
+
+- **BR-6** [Minor] `free-state-disk-staleness` The markdown auto-save (init.lua:1818) can write a stale copy, which bypasses submit's disk_changed guard
+  2nd finding in this family. Rule: the operator's turn must never start on a copy older than the file on disk. When taking the turn, refuse the lock (reload or undo) when disk_changed instead of warning, so every writer (submit, auto-save, :w) is safe without its own guard.
+- **BR-7** [Minor] `plan-text-drift` The atlas still says the lock is polled only during the agent's turn and that operator: is recorded as the lock holder
+  2nd finding in this family. Rule: a behaviour fix updates every place that restates that behaviour (module header, plan Revisions, atlas) in the same commit. The free-turn reload and the submit refusal are missing from atlas/modes/session_sync.md.
+
 ## Open findings
 
-- **BR-1** [Important] `stale-async-completion-guard` A late couch exit can rewrite the lock after the turn has moved on (unlock and resubmit, or the agent already replied)
-- **BR-2** [Important] `free-state-disk-staleness` In the free state the buffer can be stale, so the first keystroke takes the turn on outdated content and submit can overwrite the agent's rewrite
-- **BR-3** [Minor] `per-keystroke-io` restart_idle reads the lock file and recreates a uv timer on every TextChangedI
-- **BR-4** [Minor] `plan-text-drift` The plan's Core-concepts prose still describes vim.b idempotency, the eol extmark reminder and the old unlock-keeps-lock behaviour
-- **BR-5** [Minor] `idle-timer-on-attach` A buffer reopened with an existing holder: operator lock never starts the idle timer, so it shows "your turn" instead of "stale" until the next edit
+- **BR-6** [Minor] `free-state-disk-staleness` The markdown auto-save (init.lua:1818) can write a stale copy, which bypasses submit's disk_changed guard
+- **BR-7** [Minor] `plan-text-drift` The atlas still says the lock is polled only during the agent's turn and that operator: is recorded as the lock holder
