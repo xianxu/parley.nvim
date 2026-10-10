@@ -1,13 +1,13 @@
 ---
 id: 000312
-status: codecomplete
+status: done
 deps: [ariadne#316]
 github_issue:
 target: review-convention
 created: 2026-10-09
 updated: 2026-10-10
 estimate_hours: 4.88
-card_mirror: '6f3b59cfdc359ce13e97e6b7b9b0091b0b4f4c44' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a267124b649ebfaf10c2d1ec0b43adb0549004c3' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-09T16:15:36-07:00
 claimant:
     operator: Xian Xu
