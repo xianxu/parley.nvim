@@ -1,7 +1,7 @@
 ---
 id: 000312
 status: working
-deps: []
+deps: [ariadne#316]
 github_issue:
 target: review-convention
 created: 2026-10-09

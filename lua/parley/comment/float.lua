@@ -2,7 +2,7 @@
 --
 -- `<CR>` on a marker opens its chain in a plain scratch buffer, one turn per
 -- line in raw bracket form (thread.to_lines), human and robot turns on their
--- own backgrounds, the cursor in a trailing empty `[]` for the reply. It is a
+-- own backgrounds, the cursor in the empty trailing `[]` reply slot. It is a
 -- focused nvim buffer: everything is editable; "reply on the last line" is a
 -- convention, not a rule. `:w` (or `:x` / `q`) writes the thread back as ONE
 -- line (thread.from_lines) over the marker's original bytes; `:q!` discards.
@@ -34,7 +34,8 @@ local function write_back(st)
         vim.fn.setreg('"', float_text(st.float_buf))
         return false, 'the marker changed underneath — thread text kept in register "'
     end
-    local raw, err = thread.from_lines(st.prefix, vim.api.nvim_buf_get_lines(st.float_buf, 0, -1, false))
+    local raw, err = thread.from_lines(st.prefix, vim.api.nvim_buf_get_lines(st.float_buf, 0, -1, false),
+        st.appended)
     if not raw then return false, err end
     if raw ~= st.raw then
         local new = line:sub(1, col) .. raw .. line:sub(col + #st.raw + 1)
@@ -92,7 +93,8 @@ function M.open_thread(buf)
         prefix = raw:sub(1, (first and first.byte_start or #raw + 1) - 1),
         mark = vim.api.nvim_buf_set_extmark(buf, NS, row - 1, m.start, {}),
     }
-    local lines = thread.to_lines(marker)
+    local lines, _, appended = thread.to_lines(marker)
+    st.appended = appended
     local anchor = marker.quoted or marker.strike
     local title = anchor and anchor.text or "free-standing"
     if vim.fn.strdisplaywidth(title) > 50 then title = vim.fn.strcharpart(title, 0, 49) .. "…" end

@@ -176,6 +176,59 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: true
+    - "n": 5
+      timestamp: "2026-10-09T21:41:58-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: withdrawn
+          note: Overtaken by implementation; the risky functions shipped with the property test the finding asked for.
+          round: 5
+        - id: BR-13
+          disposition: addressed
+          note: float.lua:44-46 re-anchors; comment_float_spec "a second :w" uses a col>0 prefix, so it fails without the fix.
+          round: 5
+        - id: BR-14
+          disposition: addressed
+          note: Spec Grammar-change sentence is clean; Log carries the M2 bullets under its own heading.
+          round: 5
+        - id: BR-15
+          disposition: addressed
+          note: Plan Revisions "M2 as built" covers WinClosed, Task 10 anchor decode, and the codec escape; issue Spec and Done-when synced.
+          round: 5
+        - id: BR-16
+          disposition: not-addressed
+          note: 'Recorded as an accepted edge in Spec, but deps is still [] and nothing ties the #312 merge to ariadne#316 plus the re-weave.'
+          round: 5
+        - id: BR-17
+          disposition: not-addressed
+          note: 'Still true: decode(encode("a\\\nb")) == "a<br>b" (verified headless).'
+          round: 5
+        - id: BR-18
+          disposition: not-addressed
+          note: comment/init.lua:72-73 still re-implements the default_keymaps gating; single_source_sweeps_spec still widened.
+          round: 5
+      findings:
+        - id: BR-19
+          severity: Critical
+          title: Float on a fresh marker (empty []) writes back a doubled human turn
+          detail: "thread.to_lines always appends [] and from_lines drops only trailing empty turns, so \U0001F916<X>[] (the <M-q> output) plus a reply becomes \U0001F916<X>[][reply], and a no-edit :w deletes the []. Rule: a thread has exactly one empty reply slot. Add an integration test that runs <M-q>, then <CR>, a reply, and :w."
+          family: reply-slot-normalization
+          round: 5
+        - id: BR-20
+          severity: Important
+          title: atlas/chat/drill_in.md still documents multi-line quotes and multi-line compose; M2 made chat <M-q> single-line
+          detail: '3rd finding in comment-drift. Rule: a behavior change updates every prose description of it, including every caller''s atlas page, in the same commit. Document the chat change and point multi-line questions to the float.'
+          family: comment-drift
+          round: 5
+        - id: BR-21
+          severity: Minor
+          title: thread.to_lines returns roles that the float ignores; paint_roles re-derives roles with a different rule
+          family: orphaned-definitions
+          round: 5
+      boundary: M2
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#312 (boundary-review)
@@ -251,16 +304,35 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-17** [Minor] `escape-totality` codec escape is not total; a backslash before a newline decodes to a literal <br>
 - **BR-18** [Minor] `keymap-install-single-path` comment/init re-implements native_map gating; the arch guard was widened to allow a second install path
 
+## Round 5 — 2026-10-09T21:41:58-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-1 — withdrawn — Overtaken by implementation; the risky functions shipped with the property test the finding asked for.
+- BR-13 — addressed — float.lua:44-46 re-anchors; comment_float_spec "a second :w" uses a col>0 prefix, so it fails without the fix.
+- BR-14 — addressed — Spec Grammar-change sentence is clean; Log carries the M2 bullets under its own heading.
+- BR-15 — addressed — Plan Revisions "M2 as built" covers WinClosed, Task 10 anchor decode, and the codec escape; issue Spec and Done-when synced.
+- BR-16 — not-addressed — Recorded as an accepted edge in Spec, but deps is still [] and nothing ties the #312 merge to ariadne#316 plus the re-weave.
+- BR-17 — not-addressed — Still true: decode(encode("a\\\nb")) == "a<br>b" (verified headless).
+- BR-18 — not-addressed — comment/init.lua:72-73 still re-implements the default_keymaps gating; single_source_sweeps_spec still widened.
+
+### Raised
+
+- **BR-19** [Critical] `reply-slot-normalization` Float on a fresh marker (empty []) writes back a doubled human turn
+  thread.to_lines always appends [] and from_lines drops only trailing empty turns, so 🤖<X>[] (the <M-q> output) plus a reply becomes 🤖<X>[][reply], and a no-edit :w deletes the []. Rule: a thread has exactly one empty reply slot. Add an integration test that runs <M-q>, then <CR>, a reply, and :w.
+- **BR-20** [Important] `comment-drift` atlas/chat/drill_in.md still documents multi-line quotes and multi-line compose; M2 made chat <M-q> single-line
+  3rd finding in comment-drift. Rule: a behavior change updates every prose description of it, including every caller's atlas page, in the same commit. Document the chat change and point multi-line questions to the float.
+- **BR-21** [Minor] `orphaned-definitions` thread.to_lines returns roles that the float ignores; paint_roles re-derives roles with a different rule
+
 ## Open findings
 
-- **BR-1** [Minor] `test-prose-enumeration` Tasks 8 and 10 enumerate test cases in prose and Tasks 1-3 carry full test code; compress to one strategy line per risky function
 - **BR-9** [Minor] `conceal-scope-widening` sync_concealcursor reads the window's base once and overwrites later user or prep_chat values
 - **BR-10** [Minor] `comment-drift` highlighter.lua:365, :691-697 and atlas/modes/review.md:257 still describe ParleyReviewUser/Agent painting marker sections
 - **BR-11** [Minor] `insert-edge-semantics` Concealed spans collapse two insert positions onto one screen column
 - **BR-12** [Minor] `done-when-contract-drift` Issue Spec/M1 row say concealcursor=nvic unqualified; BR-3 scoping revision recorded only in the plan
-- **BR-13** [Critical] `edit-tracking-extmark` Thread float second :w is always refused; extmark drifts after replace_user_lines rewrites the row
-- **BR-14** [Important] `artifact-append-anchor` The log M2 commit spliced the M2 Log bullets into the Spec "Grammar change" sentence
-- **BR-15** [Important] `done-when-contract-drift` Plan/Spec still describe WinClosed auto-write and anchor decode; code does neither, and there is no M2 Revisions entry
 - **BR-16** [Important] `cross-version-input-decode` Accept now decodes a literal <br> in legacy or old-grammar turn text into a newline before ariadne#316 lands
 - **BR-17** [Minor] `escape-totality` codec escape is not total; a backslash before a newline decodes to a literal <br>
 - **BR-18** [Minor] `keymap-install-single-path` comment/init re-implements native_map gating; the arch guard was widened to allow a second install path
+- **BR-19** [Critical] `reply-slot-normalization` Float on a fresh marker (empty []) writes back a doubled human turn
+- **BR-20** [Important] `comment-drift` atlas/chat/drill_in.md still documents multi-line quotes and multi-line compose; M2 made chat <M-q> single-line
+- **BR-21** [Minor] `orphaned-definitions` thread.to_lines returns roles that the float ignores; paint_roles re-derives roles with a different rule

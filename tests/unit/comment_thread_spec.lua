@@ -23,9 +23,22 @@ describe("comment.thread", function()
     it("a marker with no turns opens with just the empty reply", function()
         assert.same({ "[]" }, (thread.to_lines(marker("🤖<X>"))))
     end)
+    it("an existing empty [] is the reply slot, not doubled (fresh <M-q> marker)", function()
+        local lines, _, appended = thread.to_lines(marker("🤖<sel>[]"))
+        assert.same({ "[]" }, lines)
+        assert.is_false(appended)
+        assert.equals("🤖<sel>[comment]", thread.from_lines("🤖<sel>", { "[comment]" }, appended))
+    end)
+    it("keeps a meaningful empty [] (`{R}[]` = go ahead)", function()
+        local lines, _, appended = thread.to_lines(marker("🤖{R}[]"))
+        assert.same({ "{R}", "[]" }, lines)
+        assert.equals("🤖{R}[]", thread.from_lines("🤖", lines, appended))
+    end)
     it("round-trips fixed single-line markers", function()
-        for _, raw in ipairs({ "🤖[q]", "🤖<X>[q]{a}[q2]", "🤖~D~{N}", "🤖{p}[h]", "🤖[a<br>b]{c}" }) do
-            assert.equals(raw, thread.from_lines(prefix_of(raw), (thread.to_lines(marker(raw)))))
+        for _, raw in ipairs({ "🤖[q]", "🤖<X>[q]{a}[q2]", "🤖~D~{N}", "🤖{p}[h]", "🤖[a<br>b]{c}",
+            "🤖<X>[]", "🤖{R}[]" }) do
+            local lines, _, appended = thread.to_lines(marker(raw))
+            assert.equals(raw, thread.from_lines(prefix_of(raw), lines, appended))
         end
     end)
     -- Property: from_lines(prefix, to_lines(m)) == raw over generated
@@ -41,16 +54,17 @@ describe("comment.thread", function()
                 local user = math.random(2) == 1
                 raw = raw .. (user and "[" or "{") .. words[math.random(#words)] .. (user and "]" or "}")
             end
-            assert.equals(raw, thread.from_lines(prefix, (thread.to_lines(marker(raw)))), raw)
+            local lines, _, appended = thread.to_lines(marker(raw))
+            assert.equals(raw, thread.from_lines(prefix, lines, appended), raw)
         end
     end)
     it("appends a multi-line reply as one <br>-encoded turn", function()
         assert.equals("🤖<X>[q]{a}[line1<br>line2]",
-            thread.from_lines("🤖<X>", { "[q]", "{a}", "[line1", "line2]" }))
+            thread.from_lines("🤖<X>", { "[q]", "{a}", "[line1", "line2]" }, true))
     end)
     it("drops an empty trailing reply", function()
-        assert.equals("🤖[q]", thread.from_lines("🤖", { "[q]", "[]" }))
-        assert.equals("🤖[q]", thread.from_lines("🤖", { "[q]", "[  ]", "" }))
+        assert.equals("🤖[q]", thread.from_lines("🤖", { "[q]", "[]" }, true))
+        assert.equals("🤖[q]", thread.from_lines("🤖", { "[q]", "[  ]", "" }, true))
     end)
     it("rejects unbalanced brackets", function()
         local raw, err = thread.from_lines("🤖", { "[q]", "[oops" })

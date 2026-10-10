@@ -114,6 +114,17 @@ describe("comment thread float (#312)", function()
         assert.same({ "see 🤖<X>[q]{a}[ok][kept] end" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
     end)
 
+    it("a fresh <M-q> marker's empty [] is the reply slot (no doubled turn)", function()
+        local l = "a 🤖<sel>[] b"
+        local buf = open_markdown({ l })
+        cursor_on(l, "sel")
+        float.open_thread(buf)
+        assert.same({ "[]" }, float_lines())
+        vim.api.nvim_buf_set_lines(0, 0, 1, false, { "[comment]" })
+        vim.cmd("write")
+        assert.same({ "a 🤖<sel>[comment] b" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    end)
+
     it("does nothing off a marker", function()
         local buf = open_markdown({ line })
         vim.api.nvim_win_set_cursor(0, { 1, 0 })

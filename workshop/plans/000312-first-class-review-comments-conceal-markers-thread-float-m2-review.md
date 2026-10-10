@@ -123,3 +123,126 @@ findings:
     title: |
       comment/init re-implements native_map gating; the arch guard was widened to allow a second install path
 ```
+
+---
+
+## Re-review — 2026-10-09T21:41:57-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 312 — First-class review comments: conceal markers + thread float |
+| repo | parley.nvim |
+| issue file | workshop/issues/000312-first-class-review-comments-conceal-markers-thread-float.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 5f6020e4ba4de11f4d929f8f4a3d3a1be2dece0e..18cd5bd81a10070f0e73f19a29d71b5aa05cd481 |
+| command | sdlc milestone-close --issue 312 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-10-09T21:41:57-07:00 |
+| verdict | REWORK |
+
+## Review
+
+I found one new Critical bug and one new Important doc gap, so the verdict is REWORK.
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Most of M2 is in good shape. The pure `thread.lua` is tested with a round-trip property test, and the float follows plain nvim write/quit semantics. Writing the thread back first checks that the original bytes are still in place, and the BR-13 re-anchor fix has a regression test. One new correctness bug blocks SHIP. In the main flow, `<M-q>` inserts `🤖<sel>[]` and `<CR>` then opens the float. That float has two empty `[]` lines. If you type in the reply slot and save, the result is `🤖<sel>[][comment]`: two human turns in a row, which the Spec lists as out of scope. I confirmed this in headless nvim. Smaller items: the chat drill-in atlas page still describes multi-line quotes, which M2 removed. BR-16 (no blocking dependency on ariadne#316), BR-17 and BR-18 are still open.
+
+**1. Strengths**
+- `lua/parley/comment/float.lua:28-49`: before writing, `write_back` checks that the original marker bytes are still at the tracked position. If they are not, it refuses and copies the float text to the `"` register, so nothing is lost silently. The re-anchor at :44-46 closes BR-13. The test "a second :w writes again" uses a line prefix (`lead text`), so it would fail without the fix.
+- `lua/parley/comment/thread.lua` is pure and reuses the existing section parser instead of adding a second one (ARCH-DRY). `tests/unit/comment_thread_spec.lua` round-trips 500 generated markers, including `\<br>` and nested brackets.
+- `drill_in.resolve` and `format_block` decode only the turn text. The anchor's X / D stays verbatim, and tests in `tests/unit/drill_in_spec.lua` pin this.
+- `<CR>` is declared in `native_overrides`, keeps the count when it falls back to native `<CR>`, and respects `default_keymaps`. There is an integration test of the real key press.
+
+**2. Critical**
+- **Empty reply slot gets doubled.**
+  - **Where:** `lua/parley/comment/thread.lua:25-26` (`to_lines` always appends `[]`) and `:48-50` (`from_lines` only drops *trailing* empty turns).
+  - **What happens:** for `🤖<first>[]` (exactly what `<M-q>` writes), `to_lines` returns `{"[]","[]"}`. With the reply typed on the last line, the write produces `🤖<first>[][my comment]`. This was verified in headless nvim.
+  - **Same rule, second symptom:** `:w` with no edits writes back `🤖<first>`, deleting the `[]`.
+  - **Rule:** a thread has exactly one empty reply slot. `to_lines` should not append one when the last turn is already an empty human turn, or `from_lines` should drop empty turns wherever they appear.
+  - **Test to add:** an integration test that runs `<M-q>`, then `<CR>`, types a reply, writes, and expects `🤖<X>[reply]`.
+
+**3. Important**
+- **Chat drill-in docs are out of date** (family `comment-drift`, 3rd finding).
+  - `atlas/chat/drill_in.md:32-34` still says "multi-line allowed", and its quote-block examples show multi-line T. In chat, `<M-q>` now refuses a selection that spans lines.
+  - In chat, pressing Enter inside a `[]` turn now produces a marker that renders as broken.
+  - **Rule:** when behavior changes, update every prose description of it in the same commit. That means the atlas pages of every caller, not only the module's own page. The atlas page should explain the chat change and suggest `<CR>` / the float for multi-line questions.
+
+**4. Minor**
+- `:q!` overwrites the `"` register and warns "closed without :w". `WinClosed` can't tell an explicit discard from an accidental close (`float.lua:136-142`).
+- `thread.to_lines` returns `roles`, but the float ignores it. `paint_roles` works out roles again with a different rule, so a continuation line that starts with `[` gets the wrong colour (ARCH-DRY).
+- BR-17 and BR-18 are still present (see the dispositions below).
+
+**5. Test coverage notes**
+- The float tests only use markers that already have turns. None start from a fresh `[]` marker, which is how the Critical bug got through.
+- No test covers `:x` or `q` when the brackets are unbalanced. As I read the code (not run), the window closes and the text goes to the register.
+
+**6. Architecture**
+- **ARCH-DRY:** flagged as Minor (roles worked out twice; BR-18).
+- **ARCH-PURE:** passes. `thread` is pure and `float` is a thin layer around it.
+- **ARCH-PURPOSE:** flagged by the Critical bug, since the main "insert, then comment" flow is broken.
+- **ARCH-MOCK:** not applicable; there are no external dependencies.
+- **ARCH-CONSTRAINTS:** passes. `<CR>` parses one line, and re-painting on every keystroke only covers the small thread buffer.
+- **ARCH-SECURE:** passes. Edited float text is parsed, and failures are reported to the user.
+- **ARCH-ORDER:** passes. An edit to the source underneath, or two floats on the same marker, is caught by the byte check before writing.
+- **ARCH-FUNERAL:** passes. The extmark and augroup are removed on `WinClosed`, and the buffer is wiped when closed.
+
+**7. Plan revisions**
+- Add a Revisions entry for the reply-slot rule once it is fixed.
+- Add a dependency on ariadne#316 to the issue (BR-16).
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: withdrawn
+    note: |
+      Overtaken by implementation; the risky functions shipped with the property test the finding asked for.
+  - id: BR-13
+    disposition: addressed
+    note: |
+      float.lua:44-46 re-anchors; comment_float_spec "a second :w" uses a col>0 prefix, so it fails without the fix.
+  - id: BR-14
+    disposition: addressed
+    note: |
+      Spec Grammar-change sentence is clean; Log carries the M2 bullets under its own heading.
+  - id: BR-15
+    disposition: addressed
+    note: |
+      Plan Revisions "M2 as built" covers WinClosed, Task 10 anchor decode, and the codec escape; issue Spec and Done-when synced.
+  - id: BR-16
+    disposition: not-addressed
+    note: |
+      Recorded as an accepted edge in Spec, but deps is still [] and nothing ties the #312 merge to ariadne#316 plus the re-weave.
+  - id: BR-17
+    disposition: not-addressed
+    note: |
+      Still true: decode(encode("a\\\nb")) == "a<br>b" (verified headless).
+  - id: BR-18
+    disposition: not-addressed
+    note: |
+      comment/init.lua:72-73 still re-implements the default_keymaps gating; single_source_sweeps_spec still widened.
+findings:
+  - id: new
+    severity: Critical
+    family: reply-slot-normalization
+    title: |
+      Float on a fresh marker (empty []) writes back a doubled human turn
+    detail: |
+      thread.to_lines always appends [] and from_lines drops only trailing empty turns, so 🤖<X>[] (the <M-q> output) plus a reply becomes 🤖<X>[][reply], and a no-edit :w deletes the []. Rule: a thread has exactly one empty reply slot. Add an integration test that runs <M-q>, then <CR>, a reply, and :w.
+  - id: new
+    severity: Important
+    family: comment-drift
+    title: |
+      atlas/chat/drill_in.md still documents multi-line quotes and multi-line compose; M2 made chat <M-q> single-line
+    detail: |
+      3rd finding in comment-drift. Rule: a behavior change updates every prose description of it, including every caller's atlas page, in the same commit. Document the chat change and point multi-line questions to the float.
+  - id: new
+    severity: Minor
+    family: orphaned-definitions
+    title: |
+      thread.to_lines returns roles that the float ignores; paint_roles re-derives roles with a different rule
+```

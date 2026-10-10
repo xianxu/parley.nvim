@@ -12,7 +12,10 @@ local OPEN = { user = "[", agent = "{" }
 local CLOSE = { user = "]", agent = "}" }
 local UNBALANCED = "unbalanced brackets or stray text in the thread — fix it before closing"
 
+--- An existing empty trailing `[]` (a fresh `<M-q>` marker, or `{R}[]` = "go
+--- ahead") IS the reply slot; otherwise an empty `[]` is appended for it.
 --- @return string[] lines, string[] roles  ("user"|"agent" per line)
+--- @return boolean appended  whether the reply slot was added here
 function M.to_lines(marker)
     local lines, roles = {}, {}
     local function add(kind, text)
@@ -23,13 +26,18 @@ function M.to_lines(marker)
         end
     end
     for _, s in ipairs(marker.sections) do add(s.type, s.text) end
-    add("user", "")
-    return lines, roles
+    local last = marker.sections[#marker.sections]
+    local appended = not (last and last.type == "user" and last.text == "")
+    if appended then add("user", "") end
+    return lines, roles, appended
 end
 
 --- @param prefix string  the marker's raw `🤖`, `🤖<X>` or `🤖~D~`
+--- @param appended boolean  to_lines added the reply slot: an empty one is
+---   dropped. A slot that was already in the marker is kept, empty or not —
+---   `{R}[]` means "go ahead".
 --- @return string|nil raw, string|nil err
-function M.from_lines(prefix, lines)
+function M.from_lines(prefix, lines, appended)
     local parse = require("parley.skills.review")._parse_marker_sections
     local rest = table.concat(lines, "\n")
     local sections = {}
@@ -44,7 +52,8 @@ function M.from_lines(prefix, lines)
         vim.list_extend(sections, run)
         rest = text:sub(stop)
     end
-    while #sections > 0 and sections[#sections].text:match("^%s*$") do
+    local last = sections[#sections]
+    if appended and last and last.type == "user" and last.text:match("^%s*$") then
         table.remove(sections)
     end
     local out = { prefix }
