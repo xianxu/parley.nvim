@@ -40,7 +40,10 @@ local function on_cursor(buf)
     local row, col = unpack(vim.api.nvim_win_get_cursor(win))
     local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
     sync_concealcursor(win, line)
-    if line:find("🤖", 1, true) then
+    -- Snap only while markers are actually hidden: with conceallevel 0 (the
+    -- app profile keeps markdown literal) the chain is on screen, and jumping
+    -- the cursor over visible text would be wrong.
+    if vim.wo[win].conceallevel > 0 and line:find("🤖", 1, true) then
         -- Normal mode can't rest past the last byte; insert mode can.
         local insert = vim.api.nvim_get_mode().mode:sub(1, 1) == "i"
         local max = insert and #line or math.max(#line - 1, 0)

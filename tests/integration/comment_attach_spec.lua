@@ -79,6 +79,13 @@ describe("comment.attach (#312)", function()
             "rests on an allowed insertion point: " .. col)
     end)
 
+    it("does not snap when the window shows markers literally (conceallevel 0)", function()
+        local buf = open_markdown({ line })
+        vim.wo.conceallevel = 0
+        move(buf, 0)
+        assert.equals(m.hidden[1][1] + 1, move(buf, m.hidden[1][1] + 1))
+    end)
+
     it("leaves a marker-free line alone", function()
         local buf = open_markdown({ "plain text" })
         assert.equals(4, move(buf, 4))
