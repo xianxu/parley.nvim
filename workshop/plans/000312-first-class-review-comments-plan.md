@@ -15,7 +15,7 @@
 - Display table (issue `## Spec`): `🤖[…]`, `🤖{…}`, `<X>` highlighted, `~D~` highlighted + strikethrough. Conceal-only — no virtual text: `🤖[H]{R}` keeps `🤖[` visible, conceals `H]{R` as `…` and the final `}` as `]`, yielding `🤖[…]`.
 - **Single-line rule.** Rendered only when the marker closes on its own line. A `🤖` immediately followed by `<`/`[`/`{` that does not close on the line is painted `ParleyReviewBroken` (red undercurl) — the stateless, viewport-bounded "fail visible" signal. This covers both legacy #125 multi-line markers and a marker an edit just broke. The PARSER keeps #125's bounded multi-line tolerance (accept/reject and chat drill-in must still work on old documents); only *writers* and the *view* become single-line.
 - **`<br>`** encodes a newline inside a turn. Decoded when a turn's text leaves the marker: float display, accept/reject result text, chat drill-in block formatting.
-- **Edit protection** = normal-mode cursor snap + fail-visible. `concealcursor = "nc"`: normal mode keeps markers hidden even on the cursor line and the cursor can't rest inside hidden bytes, so normal-mode commands can't target them; insert/visual mode reveal the raw line (the conscious raw-edit escape hatch; also keeps `<M-q>` visual selection columns honest). A partial edit that breaks a marker shows raw + broken highlight; `u` restores. No undo-reverting guard (YAGNI; revisit if real corruption shows up).
+- **Edit protection** = cursor snap in every mode + fail-visible. `concealcursor = "nvic"`: markers stay hidden on the cursor line in all modes, and the cursor can't rest inside hidden bytes (`CursorMoved` + `CursorMovedI`), so neither commands nor typing can target them. No raw-reveal mode — the raw text is reachable only via the float or by `conceallevel=0`. A partial edit that still reaches hidden bytes (e.g. `<BS>` at the start of a quoted `X` eats the `<`) breaks the marker, which then shows raw + broken highlight; `u` restores. No undo-reverting guard (YAGNI; revisit if real corruption shows up).
 - **Float**: plain nvim buffer, one turn per line in raw bracket form, human/robot line backgrounds, cursor in a trailing empty `[]`. No new actions; editing anything is allowed by convention. Write-back on `:w` / window close.
 - **Alt+q on a multi-line visual selection** refuses with a warning (an anchor quote is prose; encoding prose newlines as `<br>` would reshape the document while it's under comment).
 - Scope: every buffer `setup_markdown_keymaps` or `prep_chat` attaches (all parley markdown + chat).
@@ -60,7 +60,7 @@
 | `drill_in_visual` | `lua/parley/init.lua` | modified | refuses multi-line selection |
 
 - **marker decoration** — `compute_markdown_highlights` replaces its inline marker loop with `view.layout`: visible range → `ParleyReviewQuoted`/`ParleyReviewStrike`, each hidden range → `{ conceal = c }` entry, broken → `ParleyReviewBroken` on `[start, stop)`. `on_line` passes `conceal` through to `nvim_buf_set_extmark(..., { ephemeral = true, conceal = c })`. Viewport-bounded and cached per (window, document) — the existing incremental machinery; nothing whole-buffer.
-- **comment.attach(buf)** — called from `setup_markdown_keymaps` and `prep_chat` (replacing chat's `concealcursor = ""`). Sets `conceallevel=2`, `concealcursor="nc"` (window-local, like chat today); one buffer-local `CursorMoved` autocmd: cursor line → `view.layout` → `view.snap` with the window's previous col → `nvim_win_set_cursor`. Cost: one line parse per cursor move. Creates nothing durable (autocmd dies with the buffer; prev-col table keyed by window, cleared on `WinClosed`).
+- **comment.attach(buf)** — called from `setup_markdown_keymaps` and `prep_chat` (replacing chat's `concealcursor = ""`). Sets `conceallevel=2`, `concealcursor="nvic"` (window-local, like chat today); one buffer-local `CursorMoved`+`CursorMovedI` autocmd: cursor line → `view.layout` → `view.snap` with the window's previous col → `nvim_win_set_cursor`. Cost: one line parse per cursor move. Creates nothing durable (autocmd dies with the buffer; prev-col table keyed by window, cleared on `WinClosed`).
 - **comment.open_thread(buf)** — `view.marker_at` on the cursor line; none → return false (caller feeds a native `<CR>`). Else: tracking extmark on the marker's start; scratch buffer (`buftype=acwrite`, `bufhidden=wipe`, `filetype=markdown`, `wrap`, `linebreak`), float sized to content (max 80% editor), title = quoted/struck anchor (truncated) or `free-standing`; `line_hl_group` extmarks `ParleyCommentUser` / `ParleyCommentAgent` per `roles`; cursor between the final `[]`. `BufWriteCmd` and `WinClosed` → write-back: re-read the source line at the extmark, require the original raw bytes still at that col (else warn "marker changed underneath — reply kept in register `\"`", yank the float text), `thread.from_lines`, on `err` warn and keep the float open, on success `buffer_edit.replace_user_lines` for that one row. Creates nothing durable: buffer wiped on close, extmark deleted in write-back.
 - **keybinding** — registry entry `comment_open_thread`, `<CR>`, mode `n`, scope `parley_buffer`, `buffer_local`. Callback: `if not open_thread(buf) then feedkeys(count .. <CR>, "n") end`.
 
@@ -355,7 +355,7 @@ In `on_line`'s non-draft branch add `conceal = hl.conceal` and only set `hl_grou
 
 **Files:** Create `lua/parley/comment/init.lua`; modify `lua/parley/init.lua` (`setup_markdown_keymaps` ~L3056, `prep_chat` conceal block ~L2931); test `tests/integration/comment_attach_spec.lua`.
 
-- [ ] **Step 1: failing integration test** — open a scratch markdown buffer through the same path the plugin uses (follow an existing integration spec that calls `setup_markdown_keymaps`), set line `"ab 🤖<X>[c] z"`, assert `vim.wo.conceallevel == 2` and `vim.wo.concealcursor == "nc"`; set cursor to `(1, 3)` (the `🤖` start, a legal rest), then `nvim_win_set_cursor(0, {1, 5})` and `vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })` → cursor col is the end of hidden range 1 (start of `X`).
+- [ ] **Step 1: failing integration test** — open a scratch markdown buffer through the same path the plugin uses (follow an existing integration spec that calls `setup_markdown_keymaps`), set line `"ab 🤖<X>[c] z"`, assert `vim.wo.conceallevel == 2` and `vim.wo.concealcursor == "nvic"`; repeat the snap assertion via `CursorMovedI` in insert mode; set cursor to `(1, 3)` (the `🤖` start, a legal rest), then `nvim_win_set_cursor(0, {1, 5})` and `vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })` → cursor col is the end of hidden range 1 (start of `X`).
 - [ ] **Step 2:** FAIL.
 - [ ] **Step 3: implement**
 
@@ -367,11 +367,11 @@ local prev_col = {} -- [winid] = last cursor col; cleared on WinClosed
 
 function M.attach(buf)
     vim.opt_local.conceallevel = 2
-    vim.opt_local.concealcursor = "nc"
+    vim.opt_local.concealcursor = "nvic"
     if vim.b[buf].parley_comment_attached then return end
     vim.b[buf].parley_comment_attached = true
     local group = vim.api.nvim_create_augroup("ParleyComment" .. buf, { clear = true })
-    vim.api.nvim_create_autocmd("CursorMoved", {
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
         group = group, buffer = buf,
         callback = function()
             local win = vim.api.nvim_get_current_win()
@@ -379,7 +379,9 @@ function M.attach(buf)
             local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
             local to = line:find("🤖", 1, true) and view.snap(view.layout(line), prev_col[win] or 0, col)
             if to then
-                to = math.min(to, math.max(#line - 1, 0))
+                -- Normal mode can't rest past the last byte; insert mode can.
+                local max = vim.api.nvim_get_mode().mode:sub(1, 1) == "i" and #line or math.max(#line - 1, 0)
+                to = math.min(to, max)
                 vim.api.nvim_win_set_cursor(win, { row, to })
                 col = to
             end
@@ -394,13 +396,13 @@ end
 return M
 ```
 
-The `line:find("🤖")` short-circuit keeps the common no-marker cursor move at one plain `find`. Call `require("parley.comment").attach(buf)` at the end of `setup_markdown_keymaps`; in `prep_chat` replace the `conceallevel`/`concealcursor` pair with the same call (comment the deliberate change: branch links now stay concealed on the cursor line in normal mode too, consistent with markers).
+The `line:find("🤖")` short-circuit keeps the common no-marker cursor move at one plain `find`. Call `require("parley.comment").attach(buf)` at the end of `setup_markdown_keymaps`; in `prep_chat` replace the `conceallevel`/`concealcursor` pair with the same call (comment the deliberate change: branch links now stay concealed on the cursor line in every mode too, consistent with markers).
 
 - [ ] **Step 4:** PASS + `make test`. **Step 5:** commit `#312 M1: attach conceal options and cursor snap`.
 
 ### Task 6: M1 manual check + boundary
 
-- [ ] Manual (record in issue `## Log`): open a markdown file with each display-table form + a 3-line #125 marker; normal mode shows the compact forms, `l`/`h` jump over hidden bytes, `i` reveals the raw line, the multi-line marker shows the broken undercurl.
+- [ ] Manual (record in issue `## Log`): open a markdown file with each display-table form + a 3-line #125 marker; normal, insert and visual mode all show the compact forms; `l`/`h` and insert-mode arrows jump over hidden bytes; the multi-line marker shows the broken undercurl.
 - [ ] Update `atlas/modes/review.md` + `atlas/ui/highlights.md` (new groups) for the rendering surface.
 - [ ] `sdlc milestone-close --issue 312 --milestone M1`
 
@@ -594,3 +596,7 @@ Wire `comment_open_thread = drill_in_cbs.comment_open_thread` into both `registe
 - [ ] Atlas: `atlas/modes/review.md` (float, `<CR>`, single-line rule, `<br>`), `atlas/ui/keybindings.md` (`<CR>`), `atlas/index.md` if a new file is added.
 - [ ] Manual (record in `## Log`): reply in a float across two lines, close, confirm the file line has `<br>`; `<M-a>` on a `{…<br>…}` proposal inserts two lines.
 - [ ] `sdlc milestone-close --issue 312 --milestone M2`, then `sdlc close --issue 312 --verified '<evidence>'`.
+
+## Revisions
+
+- **2026-10-09** — operator: if markers are effectively uneditable, there's no need to reveal the raw line in insert/visual mode. `concealcursor` `nc` → `nvic`; cursor snap extended to `CursorMovedI`. Raw text is reached via the float (or `conceallevel=0`).
