@@ -89,4 +89,42 @@ function M.layout(line)
     return out
 end
 
+local function hidden_at(markers, col)
+    for _, m in ipairs(markers) do
+        for _, h in ipairs(m.hidden or {}) do
+            if col >= h[1] and col < h[2] then return h end
+        end
+    end
+end
+
+-- First visible byte from `col` stepping in `dir` (+1/-1), or nil.
+local function visible_from(markers, col, dir, max_col)
+    while col >= 0 and col <= max_col do
+        local h = hidden_at(markers, col)
+        if not h then return col end
+        col = dir > 0 and h[2] or h[1] - 1
+    end
+    return nil
+end
+
+--- Where the cursor must go so it never rests on a hidden byte — not even a
+--- range's first one: a single-byte edit there (`x` on the first char of a
+--- `…`-concealed comment) keeps the marker parseable, so it would be silent.
+--- Moves in the direction of travel, else the other way; nil = stay.
+--- `max_col`: `#line - 1` in normal mode, `#line` in insert mode.
+function M.snap(markers, prev_col, col, max_col)
+    if not hidden_at(markers, col) then return nil end
+    local dir = col >= prev_col and 1 or -1
+    return visible_from(markers, col, dir, max_col)
+        or visible_from(markers, col, -dir, max_col)
+end
+
+--- The rendered (non-broken) marker whose bytes contain `col`, or nil.
+function M.marker_at(markers, col)
+    for _, m in ipairs(markers) do
+        if not m.broken and col >= m.start and col < m.stop then return m end
+    end
+    return nil
+end
+
 return M

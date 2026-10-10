@@ -104,3 +104,54 @@ describe("comment.view.layout", function()
         end
     end)
 end)
+
+describe("comment.view.snap", function()
+    local line = "ab 🤖<X>[c]{d} z"
+    local ms = view.layout(line)
+    local h1, h2 = ms[1].hidden[1], ms[1].hidden[2]
+    local max = #line - 1
+    it("moving right into a hidden range lands past it", function()
+        assert.equals(h1[2], view.snap(ms, h1[1] - 1, h1[1], max)) -- onto X
+        assert.equals(h2[2], view.snap(ms, h2[1] - 1, h2[1], max)) -- past the chain
+    end)
+    it("moving left into a hidden range lands before it", function()
+        assert.equals(h2[1] - 1, view.snap(ms, h2[2], h2[2] - 1, max)) -- onto X
+    end)
+    it("never rests on the first byte of a hidden range", function()
+        assert.is_not_nil(view.snap(ms, 0, h1[1], max))
+        local l = "🤖[hidden text]"
+        local bare = view.layout(l)
+        assert.is_not_nil(view.snap(bare, 0, bare[1].hidden[1][1], #l - 1))
+    end)
+    it("crosses adjacent hidden ranges (bare chain …, closer)", function()
+        local l = "🤖[abc] z"
+        local b = view.layout(l)
+        assert.equals(b[1].stop, view.snap(b, b[1].hidden[1][1] - 1, b[1].hidden[1][1], #l - 1))
+    end)
+    it("falls back to the other side at line end", function()
+        local l = "z 🤖[abc]"
+        local b = view.layout(l)
+        local to = view.snap(b, b[1].hidden[1][1] - 1, b[1].hidden[1][1], #l - 1)
+        assert.equals(b[1].hidden[1][1] - 1, to) -- the visible `[`
+    end)
+    it("returns nil when no visible byte exists", function()
+        local l = "🤖<X>"
+        local q = view.layout(l)
+        -- only X is visible; a line of nothing but hidden bytes has no rest
+        assert.equals(q[1].visible[1], view.snap(q, 0, 0, #l - 1))
+    end)
+    it("visible text never snaps", function()
+        assert.is_nil(view.snap(ms, 0, 1, max))
+    end)
+end)
+
+describe("comment.view.marker_at", function()
+    local ms = view.layout("ab 🤖[c] z 🤖[x")
+    it("finds the marker under the cursor", function()
+        assert.equals(ms[1], view.marker_at(ms, ms[1].start))
+    end)
+    it("ignores prose and broken markers", function()
+        assert.is_nil(view.marker_at(ms, 0))
+        assert.is_nil(view.marker_at(ms, ms[2].start))
+    end)
+end)
