@@ -15,16 +15,24 @@ local prev_col = {} -- [winid] = last cursor col, for the snap's direction
 
 -- concealcursor is window-wide: forcing "nvic" everywhere would also keep
 -- treesitter's link/emphasis conceals hidden on the cursor line while typing.
--- So it is "nvic" only while the cursor sits on a line with a rendered marker,
--- and the window's own value everywhere else (remembered per window).
-local function sync_concealcursor(win, line)
-    local base = vim.w[win].parley_concealcursor_base
-    if base == nil then
-        base = vim.wo[win].concealcursor
-        vim.w[win].parley_concealcursor_base = base
+-- So it is "nvic" only while the cursor sits on a line with a rendered marker.
+-- The window's own value is re-read every time we are NOT forcing, so a later
+-- change by the user or another plugin is kept, not clobbered.
+local function restore_concealcursor(win)
+    if vim.w[win].parley_cc_forced then
+        vim.wo[win].concealcursor = vim.w[win].parley_cc_base or ""
+        vim.w[win].parley_cc_forced = false
     end
-    local want = view.has_marker(line) and "nvic" or base
-    if vim.wo[win].concealcursor ~= want then vim.wo[win].concealcursor = want end
+end
+
+local function sync_concealcursor(win, line)
+    if not view.has_marker(line) then
+        restore_concealcursor(win)
+    elseif not vim.w[win].parley_cc_forced then
+        vim.w[win].parley_cc_base = vim.wo[win].concealcursor
+        vim.w[win].parley_cc_forced = true
+        vim.wo[win].concealcursor = "nvic"
+    end
 end
 
 local function on_cursor(buf)
@@ -62,11 +70,7 @@ function M.attach(buf)
     vim.api.nvim_create_autocmd("BufLeave", {
         group = group,
         buffer = buf,
-        callback = function()
-            local win = vim.api.nvim_get_current_win()
-            local base = vim.w[win].parley_concealcursor_base
-            if base ~= nil then vim.wo[win].concealcursor = base end
-        end,
+        callback = function() restore_concealcursor(vim.api.nvim_get_current_win()) end,
     })
     vim.api.nvim_create_autocmd("WinClosed", {
         group = group,

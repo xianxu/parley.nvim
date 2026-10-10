@@ -42,6 +42,20 @@ describe("comment.attach (#312)", function()
         assert.equals("n", vim.wo.concealcursor, "leaving the buffer restores it")
     end)
 
+    it("keeps a later change to the window's own value", function()
+        vim.wo.concealcursor = ""
+        local buf = open_markdown({ line, "plain" })
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        vim.wo.concealcursor = "nc" -- user changes it later
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        assert.equals("nvic", vim.wo.concealcursor)
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
+        assert.equals("nc", vim.wo.concealcursor)
+    end)
+
     it("snaps the normal-mode cursor out of hidden bytes", function()
         local buf = open_markdown({ line })
         move(buf, 0)

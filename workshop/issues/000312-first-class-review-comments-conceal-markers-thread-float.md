@@ -50,8 +50,11 @@ the parser tolerate them) is left raw + painted `ParleyReviewBroken`, not render
 Payoff: markers are line-local, so re-render touches only changed lines.
 
 **Edit protection — hidden bytes behave as one glyph** (revised, see
-Revisions). Markers stay hidden in every mode (`concealcursor=nvic`); the
-cursor never rests on a hidden byte (snap on `CursorMoved`/`CursorMovedI`), so
+Revisions). Markers stay hidden in every mode (`concealcursor=nvic` while the
+cursor is on a marker line; the window's own value elsewhere, so other conceals
+are unaffected); the cursor never rests on hidden marker text (snap on
+`CursorMoved`/`CursorMovedI`: no hidden byte in normal mode; in insert mode
+only before the 🤖, after the marker, or inside the visible anchor), so
 commands and typing can't target hidden text. An edit that still reaches hidden
 bytes from a visible edge breaks the marker, which then renders raw + a broken
 highlight (fail-visible); `u` restores. Visible `X`/`D` is ordinary prose and
@@ -109,12 +112,13 @@ total: 4.88
 
 Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
 
-- [ ] M1 — compact rendering (view.layout → conceal in the decoration provider), broken-marker highlight, `concealcursor=nvic` + cursor snap in every mode (plan Tasks 1–6)
+- [x] M1 — compact rendering (view.layout → conceal in the decoration provider), broken-marker highlight, `concealcursor=nvic` on marker lines + cursor snap in every mode (plan Tasks 1–6)
 - [ ] M2 — thread float with single-line `<br>` write-back, `<CR>` binding, single-line writers + `<br>` decode on resolve/gather, ariadne grammar revision, atlas (plan Tasks 7–11)
 
 ## Log
 
 ### 2026-10-09
+- 2026-10-09: closed M1 — Unit: comment_codec/view specs (33 view cases incl. property test over 3000 generated lines; insert-point snap; multibyte left snap). Integration: comment_render_spec (conceal + anchor hl in markdown and chat, broken marker, fenced code skipped, viewport bound 61 layout calls/frame on 5000 rows before and after an edit), comment_attach_spec (concealcursor nvic only on marker lines, user value elsewhere, restored on BufLeave; snap normal+insert). Neighbor specs green (highlighting, highlighter_document, keybinding_agreement, entity_textobj, drill_in, highlighter). BR-3 fixed. Visual check pending operator.; review verdict: FIX-THEN-SHIP
 - Brainstormed with operator; decisions in the plan's "Decisions folded in".
 - Tension found: #125 deliberately made the parser multi-line tolerant. Resolution: parser keeps it (legacy docs, accept/reject, drill-in); view + writers go single-line; legacy multi-line markers paint `ParleyReviewBroken`.
 - Canonical grammar lives in `../ariadne/construct/local/fix/review-convention.md` → revision via an ariadne issue (plan Task 11).
@@ -130,3 +134,7 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
   markers never reveal raw since `concealcursor=nvic`). Done-when's
   re-render criterion restated as viewport-bounded (the decoration provider's
   real cost model) with a concrete test.
+- **2026-10-09** — M1 boundary review BR-3: `concealcursor=nvic` is scoped to
+  lines carrying a rendered marker (window's own value elsewhere, re-read when
+  not forcing, restored on `BufLeave`); insert-mode snap reasons about
+  insertion points, so typing just before a quoted marker stays outside it.
