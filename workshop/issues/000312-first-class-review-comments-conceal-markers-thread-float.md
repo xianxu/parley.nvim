@@ -70,7 +70,13 @@ The "only edit the last line" rule is convention, not enforced.
 
 **Grammar change.** Single-line + `<br>` escape go into the `review-convention`
 target (canonical in `../ariadne/construct/local/fix/review-convention.md`)
-as a `## Revisions` entry.
+as a `
+- M2 implemented: thread.to_lines/from_lines (round-trip property over generated markers), comment.float (focused nvim buffer; :w writes back one line; :x/q write+close; :q! discards; unsaved close keeps text in "), <CR> native override (honors default_keymaps=false; stale-override arch guard now reads the `where` module), <M-q> refuses multi-line, <br> decoded in TURN text only (anchors verbatim), literal <br> escaped as \<br> (ariadne#316 BR-6).
+- Grammar: ariadne#316 closed on its branch (review-convention §3/§5 + xx-fix SKILL.md single decode definition); not merged yet — parley's weaved `.agents/skills/xx-fix/review-convention.md` updates on the next weave after it lands.
+- Full `make test` green except load-sensitive cliproxy_auth_login / packaging_vm / branch_child (each passes alone: 21/21, 17/17, 63/63).
+- Measured actual is low (0.75h total at M2) relative to the session — recorded as measured, not adjusted.
+
+## Revisions` entry.
 
 **Out of scope (follow-ups):** consecutive human turns (`[][]{}[]`, multiple
 humans); comments in non-markdown files; "ask agent" from the float.
