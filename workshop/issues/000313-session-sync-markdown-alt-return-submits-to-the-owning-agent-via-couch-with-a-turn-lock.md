@@ -1,12 +1,20 @@
 ---
 id: 000313
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-10
 updated: 2026-10-10
 estimate_hours:
-card_mirror: '74418c696a78fac96548b3a8a65711b227318f0e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '76b4d4a05fb7c9623bdfbf1cb6322de837bcef75' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-10T12:19:59-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # session-sync markdown: Alt+Return submits to the owning agent via couch, with a turn lock
@@ -47,7 +55,11 @@ operator: xian-xu
 
 ## Plan
 
-- [ ]
+Durable plan: `workshop/plans/000313-session-sync-submit-plan.md` (single pass, no milestones).
+
+- [ ] Pure header parser + lock body (unit spec)
+- [ ] Controller: attach/lock/submit/poll/unlock/reminder + `<M-CR>` dispatch + `<C-g>u` (integration spec, fake couch)
+- [ ] Atlas + traceability; full `make test`; live check with ops TL
 
 ## Log
 
