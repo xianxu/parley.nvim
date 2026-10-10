@@ -30,8 +30,8 @@ Accept and reject for `~X~` and the full §5 table are wired via `<M-a>` / `<M-r
 
 ## Lifecycle
 
-1. **Create** — visual-mode `<C-g>q` (or `<M-q>`) wraps the selection as `🤖<T>[]` and drops the cursor inside the empty `[]` in insert mode.
-2. **Compose** — user types the question (multi-line allowed).
+1. **Create** — visual-mode `<C-g>q` (or `<M-q>`) wraps the selection as `🤖<T>[]` and drops the cursor inside the empty `[]` in insert mode. Markers are single-line (#312): a selection spanning lines is refused.
+2. **Compose** — user types the question on the marker's line; a multi-line question goes through the thread float (`<CR>` on the marker), which writes line breaks as `<br>`.
 3. **Submit** — `<M-CR>` / `<C-g><C-g>` (chat respond) processes ready markers. Two paths:
 
    - **Branch path** (cursor on a past exchange that contains ready markers): treats them as follow-up questions for that exchange. Strips them in place inside the exchange and **inserts a new user turn after that exchange's answer**, populated with the gathered quote+question blocks. The original Q/A is preserved (no resubmit). Pipeline `end_index` is capped at the inserted new turn, so subsequent (now stale) exchanges below stay in the buffer but are out of context for this turn.
@@ -93,7 +93,7 @@ For a chain `🤖<T>[U1]{A1}[U2]`:
 U2
 ```
 
-Continuation lines inside chain sections (multi-line `U1`/`A1`) stay inside the blockquote with `> ` (no per-line `User:`/`Agent:` prefix).
+Continuation lines inside chain sections (a `U1`/`A1` turn holding `<br>` line breaks, decoded at gather time — or a legacy multi-line marker) stay inside the blockquote with `> ` (no per-line `User:`/`Agent:` prefix). The quote `Q` is the document's own prose and is never decoded.
 
 For a no-quote marker `🤖[Q]`, an anchor `Q̂` is inferred from surrounding prose
 (#127) and emitted as the bracketed `> [Q̂]` line above `Q`. When no anchor can be
@@ -194,8 +194,8 @@ to the builtin motion via `normal!`. Wired directly in `prep_chat`
 markdown buffers.
 
 Known boundaries (single-line by design): `bracket_at` reads only the cursor
-line, so a `[…]` spanning multiple lines (a multi-line quote rendered `> [line1`
-… `> lineN]`) is not recognized and falls through to the builtin motion. A
+line, so a `[…]` spanning multiple lines (a legacy multi-line quote rendered
+`> [line1` … `> lineN]`; new quotes are single-line, #312) is not recognized and falls through to the builtin motion. A
 truncated inferred anchor (`generate_snippet` ellipsis) won't string-match its
 source span, so `*` finds no twin there. Both are acceptable for the common
 single-line `[quoted text]` ↔ `[T]` twin case this targets.

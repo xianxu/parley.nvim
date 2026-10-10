@@ -523,6 +523,10 @@ function M.gather_and_strip(text, opts)
     return blocks, new_text
 end
 
+-- #312: a marker is one line; a newline inside a turn is `<br>`, decoded
+-- whenever turn text leaves the marker (resolution, gathered blocks).
+local function decode(text) return require("parley.comment.codec").decode(text) end
+
 --- Resolve a marker to its final inline text per the review-convention §5
 --- table. Pure — no buffer side effects. Used by accept_at / reject_at;
 --- exposed for direct testing.
@@ -545,16 +549,19 @@ end
 ---        commentary: "" both modes.
 --- @param marker table  parsed marker (from M.parse)
 --- @param mode string   "accept" | "reject"
+---   #312: text taken from a `[]`/`{}` turn is `<br>`-decoded (markers are
+---   single-line); an anchor's X / D is the document's own prose, verbatim.
 --- @return string
 function M.resolve(marker, mode)
     assert(mode == "accept" or mode == "reject",
         "drill_in.resolve: mode must be 'accept' or 'reject', got " .. tostring(mode))
+    local function turn(section) return decode(section.text) end
     if marker.quoted then
         return marker.quoted.text
     end
     if marker.strike then
         if mode == "accept" and #marker.sections == 1 then
-            return marker.sections[1].text
+            return turn(marker.sections[1])
         end
         if mode == "reject" then
             return marker.strike.text
@@ -563,7 +570,7 @@ function M.resolve(marker, mode)
     end
     -- No anchor: only a bare `{R}` is a proposal; everything else is commentary.
     if #marker.sections == 1 and marker.sections[1].type == "agent" then
-        if mode == "accept" then return marker.sections[1].text end
+        if mode == "accept" then return turn(marker.sections[1]) end
         return ""
     end
     return ""
@@ -654,7 +661,7 @@ function M.format_block(block)
         -- #141: wrap the whole quoted block in [...] so it reads as an anchor
         -- matching the `[quoted text]` decoration left at the source location
         -- (and so `*`/`#` on it jumps between the two — see bracket_at).
-        local q_lines = split_lines(block.quoted)
+        local q_lines = split_lines(block.quoted) -- the document's own prose
         for idx, line in ipairs(q_lines) do
             if idx == 1 then
                 line = "[" .. line
@@ -669,7 +676,7 @@ function M.format_block(block)
     for i = 1, n - 1 do
         local s = block.sections[i]
         local label = s.type == "user" and "User: " or "Agent: "
-        local s_lines = split_lines(s.text)
+        local s_lines = split_lines(decode(s.text))
         for j, line in ipairs(s_lines) do
             if j == 1 then
                 table.insert(out, "> " .. label .. line)
@@ -684,7 +691,7 @@ function M.format_block(block)
             table.insert(out, "")
         end
         local last = block.sections[n]
-        for _, line in ipairs(split_lines(last.text)) do
+        for _, line in ipairs(split_lines(decode(last.text))) do
             table.insert(out, line)
         end
     end

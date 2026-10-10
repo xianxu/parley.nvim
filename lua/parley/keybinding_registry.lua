@@ -1219,6 +1219,11 @@ M.native_overrides = {
 	["#"] = { where = "init.lua prep_chat (bracket_jump, #141)", why = "backward twin of `*`" },
 	["g*"] = { where = "init.lua prep_chat (bracket_jump, #141)", why = "partial-match twin of `*`" },
 	["g#"] = { where = "init.lua prep_chat (bracket_jump, #141)", why = "partial-match twin of `#`" },
+	["<CR>"] = {
+		where = "comment/init.lua attach (#312)",
+		why = "opens the 🤖 comment thread when the cursor is on a marker, else "
+			.. "native <CR> (count preserved)",
+	},
 }
 
 -------------------------------------------------------------------

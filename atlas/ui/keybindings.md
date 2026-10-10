@@ -214,6 +214,7 @@ each one is where its decision becomes durable state:
 | `register_global` | global maps, at `setup()` | **yes** — it tracks what it installed and revokes those maps on the next `setup()`, skipping any key whose `desc` no longer matches (so a key the user rebound afterwards is left alone) |
 | `register_buffer` via `prep_chat` / `setup_markdown_keymaps` | buffer-local | governs buffers prepared *after* the flip; `_prepared_bufs` makes each buffer's sample permanent until it is reopened |
 | `native_map` | buffer-local | same rule as `register_buffer` |
+| `comment.attach` (`<CR>`, #312) | buffer-local, chat + markdown | same rule; declared in `native_overrides` with `where = comment/init.lua`, which the stale-override arch guard reads |
 
 Before #214 the global site had no teardown, so `setup()` followed by
 `setup({ default_keymaps = false })` left 43 global mappings live — the switch

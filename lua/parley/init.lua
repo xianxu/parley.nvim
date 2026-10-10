@@ -1894,6 +1894,12 @@ local function drill_in_visual(buf)
 	local sr, sc = sp[2], sp[3]
 	local er, ec = ep[2], ep[3]
 	if sr == 0 or er == 0 then return end
+	-- #312: markers are single-line. A quote is prose; encoding its newlines
+	-- as <br> would reshape the document while it is under comment.
+	if sr ~= er then
+		M.logger.warning("🤖 markers are single-line — select within one line")
+		return
+	end
 
 	local lines_in_range = vim.api.nvim_buf_get_lines(buf, sr - 1, er, false)
 	if #lines_in_range == 0 then return end
@@ -2928,9 +2934,11 @@ M.prep_chat = function(buf, file_name)
 		M.helpers.set_keymap
 	)
 
-	-- conceallevel=2 for inline branch link concealing and model header params
-	vim.opt_local.conceallevel = 2
+	-- conceallevel=2 for inline branch links, model header params and 🤖
+	-- markers. #312: concealcursor is the window's own ("" here) except on a
+	-- line carrying a marker, where it is "nvic" so the chain stays hidden.
 	vim.opt_local.concealcursor = ""
+	require("parley.comment").attach(buf)
 
 	-- conceal parameters in model header so it's not distracting
 	if M.config.chat_conceal_model_params then
@@ -3161,6 +3169,8 @@ M.setup_markdown_keymaps = function(buf)
 		M.helpers.set_keymap
 	)
 
+	-- #312: compact 🤖 markers (conceal + cursor snap), same as chat buffers.
+	require("parley.comment").attach(buf)
 end
 
 M.setup_buf_handler = function()

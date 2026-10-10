@@ -41,7 +41,56 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 - Pending (quickfix) = last section is non-empty `{}` (agent asked, needs human reply)
 - Markers inside fenced code blocks are ignored
 - `<text>` disambiguates "which text the marker refers to" — use it whenever the surrounding-text rule would be ambiguous (added in #123)
-- `<>`/`[]`/`{}` sections may span **multiple lines**, each bounded to ~50 lines (per-section budget) so a stray opener can't swallow the document; `~D~` strike stays single-line (added in #125). `parse_markers` parses over the whole buffer joined (offset→line/col map) rather than line-by-line; `find_matching_bracket` takes an optional `{budget, is_excluded}` so the shared `_parse_marker_sections` (highlighter, drill_in) keeps its single-text behavior. Unterminated openers fall back to silent non-recognition.
+- (Legacy, #125 — superseded for writers by single-line markers, #312) `<>`/`[]`/`{}` sections may span **multiple lines**, each bounded to ~50 lines (per-section budget) so a stray opener can't swallow the document; `~D~` strike stays single-line (added in #125). `parse_markers` parses over the whole buffer joined (offset→line/col map) rather than line-by-line; `find_matching_bracket` takes an optional `{budget, is_excluded}` so the shared `_parse_marker_sections` (highlighter, drill_in) keeps its single-text behavior. Unterminated openers fall back to silent non-recognition.
+
+## Compact rendering (#312)
+
+Markers render compactly in every parley markdown and chat buffer; the file's
+bytes never change, only the view. Markers are **single-line** in the view and
+in everything parley writes (a newline inside a turn is `<br>`, see
+`comment/codec.lua`); the parser still tolerates #125 multi-line markers so old
+documents keep resolving.
+
+| Raw | Shown as |
+|---|---|
+| `🤖[H]{R}[last]` | `🤖[…]{…}[last]` — every turn collapses but a last human one, which stays editable inline |
+| `🤖[H]{R}` | `🤖[…]{…}` |
+| `🤖<X>[H]{R}[more]` | `X[…]{…}[more]`, `X` highlighted `ParleyReviewQuoted` |
+| `🤖~D~{N}` | `D{…}`, `D` struck (`ParleyReviewStrike`) |
+| doesn't close on its line | raw, `ParleyReviewBroken` |
+
+Turn brackets are colored by speaker (`ParleyReviewUser` / `ParleyReviewAgent`).
+
+- **Geometry**: `lua/parley/comment/view.lua` (pure) — `layout(line)` says what is
+  hidden (with which conceal char) and what is visible; the highlighter's
+  decoration provider turns it into ephemeral `conceal` extmarks (viewport-bounded,
+  fenced code skipped), the cursor snap and the `<CR>` lookup read the same layout.
+- **Edit protection**: `lua/parley/comment/init.lua` `attach` sets
+  `conceallevel=2`, switches `concealcursor` to `nvic` only while the cursor is on
+  a marker line (the window's own value elsewhere, so other conceals behave as
+  before), and snaps the cursor so it never rests on hidden marker text — in
+  normal mode no hidden byte; in insert mode only the points before the 🤖, after
+  the marker, inside the visible anchor, or inside the editable last human turn. An edit that still breaks a marker from a
+  visible edge renders it raw + broken; `u` restores (fail visible, no revert
+  guard).
+
+- **Thread float**: `lua/parley/comment/float.lua` opens the chain like a
+  parley chat (`comment/thread.lua`, pure): `💬: ` human turns, `🤖: ` robot
+  turns, unprefixed lines continue the turn above (a `<br>`), on
+  `ParleyCommentUser` / `ParleyCommentAgent` backgrounds; it opens in insert mode
+  on the trailing `💬: ` reply slot. Title `🤖 comment` / `🤖 on "X"`, footer
+  with the controls. Text that would unbalance the marker's brackets is refused
+  on save. Plain nvim semantics: `:w` writes the thread back as one line over
+  the marker's original bytes (refused, text kept in `"`, if the marker changed
+  underneath or a turn's brackets don't balance), `:x` / `q` write and close, `:q!`
+  discards. An empty trailing reply is dropped.
+- **Single-line writers**: `<M-q>` refuses a selection spanning lines (an anchor
+  quotes one line). Turn text encodes a line break as `<br>` and a literal `<br>`
+  as `\<br>` (`comment/codec.lua`; a backslash run before `<br>` doubles, so
+  odd = literal, even = newline). In the float, a continuation line that would
+  read as a `💬: ` / `🤖: ` prefix carries one extra leading `\`. Resolution (`drill_in.resolve`) and chat
+  gathering decode **turn text only** — an anchor's X / D is the document's own
+  prose, kept verbatim. Canonical grammar: ariadne#316 (review-convention §3, §5).
 
 ## Keybindings (non-chat markdown only)
 
@@ -50,6 +99,7 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 | `<M-q>` / `<C-g>q` | Insert `🤖<sel>[]` (visual) or `🤖[]` (normal/insert). Shared with chat — see [drill-in](../chat/drill_in.md). |
 | `<M-a>`         | Accept the marker at cursor (rules below) |
 | `<M-r>`         | Reject the marker at cursor (rules below)            |
+| `<CR>`          | On a marker: open its thread float (#312). Elsewhere: native `<CR>` (count kept). Chat buffers too. |
 | `<C-g>ve`       | Run the review skill (agent edits per ready markers, legacy no-mode) |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
 | `<M-s>`         | Open the **skill picker** (review is one of the skills) |

@@ -13,7 +13,7 @@ function M.capture_provider(parley)
 end
 
 --- One redraw frame over rows [top, bot]: `false` when on_win declined to draw,
---- else every extmark on_line placed, as { row, col, end_col, hl_group }.
+--- else every extmark on_line placed, as { row, col, end_col, hl_group, conceal }.
 function M.frame(provider, win, buf, top, bot)
     if provider.on_win(nil, win, buf, top, bot) == false then
         return false
@@ -21,7 +21,8 @@ function M.frame(provider, win, buf, top, bot)
     local drawn = {}
     local original = vim.api.nvim_buf_set_extmark
     vim.api.nvim_buf_set_extmark = function(_, _, row, col, opts)
-        drawn[#drawn + 1] = { row = row, col = col, end_col = opts.end_col, hl_group = opts.hl_group }
+        drawn[#drawn + 1] = { row = row, col = col, end_col = opts.end_col, hl_group = opts.hl_group,
+            conceal = opts.conceal }
         return 1
     end
     local ok, err = pcall(function()
