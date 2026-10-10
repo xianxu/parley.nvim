@@ -13,7 +13,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.84
+actual_hours: 0.91
 tracker:
     version: 1
     handoff:
@@ -27,10 +27,10 @@ tracker:
         destination: workshop/issues/000313-session-sync-markdown-alt-return-submits-to-the-owning-agent-via-couch-with-a-turn-lock.md
         main_commit: 03dce091dce9b627d0142e44179c1ee6f5a2baa7
     completion:
-        token: close-5cd8228b85fe
+        token: close-b992511cc194
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 706d9f61858374f48d4f69e59bc87b9f87d77f05
-        evidence_commit: b20a0d1d21b9763cf0cf9b84de382667bdb22731
+        reviewed_head: df3b00d600c47b9de78854214616b922db7d5a67
+        evidence_commit: 37715870d4411dd862374fc96b0e00a13ef39844
 ---
 
 # session-sync markdown: Alt+Return submits to the owning agent via couch, with a turn lock
