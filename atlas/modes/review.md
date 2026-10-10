@@ -71,6 +71,19 @@ documents keep resolving.
   visible edge renders it raw + broken; `u` restores (fail visible, no revert
   guard).
 
+- **Thread float**: `lua/parley/comment/float.lua` opens the chain one turn
+  per line in raw bracket form (`comment/thread.lua`, pure), human/robot turns
+  on `ParleyCommentUser` / `ParleyCommentAgent` backgrounds, cursor in a trailing
+  empty `[]`. Plain nvim semantics: `:w` writes the thread back as one line over
+  the marker's original bytes (refused, text kept in `"`, if the marker changed
+  underneath or brackets don't balance), `:x` / `q` write and close, `:q!`
+  discards. An empty trailing reply is dropped.
+- **Single-line writers**: `<M-q>` refuses a selection spanning lines (an anchor
+  quotes one line). Turn text encodes a line break as `<br>` and a literal `<br>`
+  as `\<br>` (`comment/codec.lua`); resolution (`drill_in.resolve`) and chat
+  gathering decode **turn text only** — an anchor's X / D is the document's own
+  prose, kept verbatim. Canonical grammar: ariadne#316 (review-convention §3, §5).
+
 ## Keybindings (non-chat markdown only)
 
 | Binding         | Action                                                          |
@@ -78,6 +91,7 @@ documents keep resolving.
 | `<M-q>` / `<C-g>q` | Insert `🤖<sel>[]` (visual) or `🤖[]` (normal/insert). Shared with chat — see [drill-in](../chat/drill_in.md). |
 | `<M-a>`         | Accept the marker at cursor (rules below) |
 | `<M-r>`         | Reject the marker at cursor (rules below)            |
+| `<CR>`          | On a marker: open its thread float (#312). Elsewhere: native `<CR>` (count kept). Chat buffers too. |
 | `<C-g>ve`       | Run the review skill (agent edits per ready markers, legacy no-mode) |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
 | `<M-s>`         | Open the **skill picker** (review is one of the skills) |
