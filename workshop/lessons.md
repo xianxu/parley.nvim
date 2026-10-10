@@ -386,3 +386,10 @@ oracle, and the mutation that would make the test fail.
   mode (never rest ON a hidden byte) is wrong for insert mode, where the
   position just before a marker is outside it but the rule snapped it into the
   anchor (#312). Derive insert-mode legality from the gaps between bytes.
+- Test concealment on a rendered screen, not only through decoration entries.
+  #312's specs asserted parley's own conceal extmarks and passed, but
+  treesitter's markdown_inline also conceals `[text]` as a shortcut link, so
+  marker brackets vanished on screen. A real TUI nvim driven through a pty,
+  dumping `screenstring()` cells, showed it at once. Check the other decoration
+  providers on the same bytes (treesitter queries with `conceal`) whenever a
+  feature hides or shows text.

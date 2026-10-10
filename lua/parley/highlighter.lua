@@ -86,6 +86,10 @@ local function push_marker_decorations(result, row, line)
             for _, t in ipairs(m.turns_hl) do
                 table.insert(result[row], { hl_group = t[3], col_start = t[1], col_end = t[2] })
             end
+            -- Shown as themselves, over treesitter's shortcut-link conceal.
+            for _, b in ipairs(m.brackets) do
+                table.insert(result[row], { conceal = b[2], col_start = b[1], col_end = b[1] + 1 })
+            end
             for _, h in ipairs(m.hidden) do
                 table.insert(result[row], { conceal = h[3], col_start = h[1], col_end = h[2] })
             end

@@ -39,13 +39,27 @@ describe("comment rendering (#312)", function()
         local quoted = find(map[0], function(e) return e.hl_group == "ParleyReviewQuoted" end)
         assert.equals(1, #quoted)
         assert.equals("A", line:sub(quoted[1].col_start + 1, quoted[1].col_end))
-        local hidden = find(map[0], function(e) return e.conceal ~= nil end)
+        local hidden = find(map[0], function(e) return e.conceal == "" end)
         assert.equals(2, #hidden)
         assert.equals("🤖<", line:sub(hidden[1].col_start + 1, hidden[1].col_end))
         assert.equals(">", line:sub(hidden[2].col_start + 1, hidden[2].col_end))
         -- the last human turn stays visible and editable, colored as the human's
         local user = find(map[0], function(e) return e.hl_group == "ParleyReviewUser" end)
         assert.equals("[c]", line:sub(user[1].col_start + 1, user[1].col_end))
+    end)
+
+    -- Smoke test #312: treesitter's markdown_inline conceals `[text]` brackets
+    -- as a shortcut link; each turn bracket is re-asserted as itself.
+    it("keeps turn brackets visible over treesitter's link conceal", function()
+        local line = "a 🤖[typing] b"
+        local map = render(0, 0, setup({ line }))
+        local kept = {}
+        for _, e in ipairs(map[0]) do
+            if e.conceal and e.col_end - e.col_start == 1 then
+                kept[#kept + 1] = line:sub(e.col_start + 1, e.col_end) .. "=" .. e.conceal
+            end
+        end
+        assert.same({ "[=[", "]=]" }, kept)
     end)
 
     it("paints an unclosed marker broken, conceals nothing", function()
@@ -67,7 +81,7 @@ describe("comment rendering (#312)", function()
 
     it("conceals markers in chat answers too", function()
         local map = render(0, 2, setup({ "💬: q", "", "🤖: see 🤖[why]{because}" }, "chat"))
-        assert.equals(2, #find(map[2], function(e) return e.conceal ~= nil end))
+        assert.equals(2, #find(map[2], function(e) return e.conceal == "…" end))
     end)
 
     -- Done-when evidence: re-render is viewport-bounded, never a whole-buffer

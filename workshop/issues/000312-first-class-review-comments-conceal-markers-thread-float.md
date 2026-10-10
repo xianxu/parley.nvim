@@ -140,6 +140,7 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
 - Full `make test` green except load-sensitive cliproxy_auth_login / packaging_vm / branch_child (each passes alone: 21/21, 17/17, 63/63).
 - Measured actual is low (0.75h total at M2) relative to the session — recorded as measured, not adjusted.
 - M2 boundary review round 1 (REWORK): BR-13 Critical — a second `:w` in the float was always refused (rewriting the row dropped the tracking extmark's column) → re-anchor after each write, test added; BR-14 this Log had been spliced into the Spec (fixed); BR-15 Spec/plan synced to plain write/quit semantics + anchors verbatim; BR-16 legacy literal `<br>` in turn text → recorded as the accepted migration edge in Spec.
+- 2026-10-10 operator smoke test: typing in `🤖[|]` showed no brackets. Cause: treesitter markdown_inline conceals `[text]` as a shortcut link (`markup.link`, `conceal = ""`), and `concealcursor=nvic` keeps that on the marker line while typing. Fix: each turn bracket is re-asserted as a conceal of itself at priority 200 (> treesitter's 100). Verified on a real render: TUI nvim in a pty dumping `screenstring()` → `a 🤖[I'm typing] b`, `🤖[…]{…}[z]`, `quoted[c]` (before the fix: `🤖…{…}z`, `quotedc`).
 
 ## Revisions
 

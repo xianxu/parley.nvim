@@ -10,6 +10,7 @@
 --              visible  = { s, e, hl_group } | nil,  -- the anchor X / D
 --              hidden   = { { s, e, conceal_char }, ... },
 --              turns_hl = { { s, e, hl_group }, ... }, -- each turn's brackets
+--              brackets = { { col, char }, ... },      -- turn brackets, kept
 --              reply    = { s, e } | nil }  -- editable last human turn:
 --                                           -- insertion points s..e
 -- Every turn collapses to `[…]` / `{…}` except a last human turn, which stays
@@ -29,10 +30,20 @@ local TURN_HL = { user = "ParleyReviewUser", agent = "ParleyReviewAgent" }
 -- The chain: every turn collapses to its brackets around `…` — except a last
 -- turn that is the human's, which stays visible and editable inline
 -- (`🤖[…]{…}[this is ok]`). Fills m.hidden / m.turns_hl / m.reply.
+local function line_char(sec, opening)
+    if sec.type == "user" then return opening and "[" or "]" end
+    return opening and "{" or "}"
+end
+
 local function lay_chain(m, sections)
     for i, sec in ipairs(sections) do
         local open, close = sec.byte_start - 1, sec.byte_end - 1 -- 0-based cols
         m.turns_hl[#m.turns_hl + 1] = { open, close + 1, TURN_HL[sec.type] }
+        -- Treesitter's markdown_inline reads `[text]` as a shortcut link and
+        -- conceals its brackets; re-assert each bracket as itself so a turn
+        -- always reads `[…]` / `[typing]` (#312 smoke test).
+        m.brackets[#m.brackets + 1] = { open, line_char(sec, true) }
+        m.brackets[#m.brackets + 1] = { close, line_char(sec, false) }
         if i == #sections and sec.type == "user" then
             m.reply = { open + 1, close } -- insertion points inside the brackets
         elseif close > open + 1 then
@@ -72,7 +83,7 @@ function M.layout(line)
                 from = pos + MARK_LEN
             else
                 local stop0 = stop - 1
-                local m = { start = start0, stop = stop0, hidden = {}, turns_hl = {} }
+                local m = { start = start0, stop = stop0, hidden = {}, turns_hl = {}, brackets = {} }
                 local anchor = quoted or strike
                 m.kind = anchor and (quoted and "quoted" or "strike") or "bare"
                 -- An empty anchor has nothing to show in its place: leave it raw.
