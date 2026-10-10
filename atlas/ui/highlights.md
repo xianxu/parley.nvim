@@ -1,7 +1,7 @@
 # Spec: Syntax Highlighting
 
 ## Highlight Groups
-Custom groups (`ParleyQuestion`, `ParleyFileReference`, `ParleyChatReference`, `ParleyThinking`, `ParleyAnnotation`, `ParleyReference`, `ParleyFootnote`, `ParleyPickerApproximateMatch`, `InterviewTimestamp`, `InterviewThought`) linked to standard Neovim groups. `ParleyReference` (default underline) marks drill-in `[referenced span]` brackets — see [chat/drill_in](../chat/drill_in.md). `ParleyFootnote` (default `DiagnosticHint`) marks managed definition-footnote footer lines.
+Custom groups (`ParleyQuestion`, `ParleyFileReference`, `ParleyChatReference`, `ParleyThinking`, `ParleyAnnotation`, `ParleyReference`, `ParleyFootnote`, `ParleyPickerApproximateMatch`, `InterviewTimestamp`, `InterviewThought`) linked to standard Neovim groups. `ParleyReference` (default underline) marks drill-in `[referenced span]` brackets — see [chat/drill_in](../chat/drill_in.md). `ParleyFootnote` (default `DiagnosticHint`) marks managed definition-footnote footer lines. Review markers (#312, see [modes/review](../modes/review.md#compact-rendering-312)): `ParleyReviewQuoted` / `ParleyReviewStrike` paint a marker's visible anchor while its chain is concealed, `ParleyReviewBroken` (`DiagnosticUnderlineError`) a marker that doesn't close on its line.
 
 ## Exchange partitions contain fence state (#218)
 

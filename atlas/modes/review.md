@@ -41,7 +41,32 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 - Pending (quickfix) = last section is non-empty `{}` (agent asked, needs human reply)
 - Markers inside fenced code blocks are ignored
 - `<text>` disambiguates "which text the marker refers to" — use it whenever the surrounding-text rule would be ambiguous (added in #123)
-- `<>`/`[]`/`{}` sections may span **multiple lines**, each bounded to ~50 lines (per-section budget) so a stray opener can't swallow the document; `~D~` strike stays single-line (added in #125). `parse_markers` parses over the whole buffer joined (offset→line/col map) rather than line-by-line; `find_matching_bracket` takes an optional `{budget, is_excluded}` so the shared `_parse_marker_sections` (highlighter, drill_in) keeps its single-text behavior. Unterminated openers fall back to silent non-recognition.
+- (Legacy, #125 — superseded for writers by single-line markers, #312) `<>`/`[]`/`{}` sections may span **multiple lines**, each bounded to ~50 lines (per-section budget) so a stray opener can't swallow the document; `~D~` strike stays single-line (added in #125). `parse_markers` parses over the whole buffer joined (offset→line/col map) rather than line-by-line; `find_matching_bracket` takes an optional `{budget, is_excluded}` so the shared `_parse_marker_sections` (highlighter, drill_in) keeps its single-text behavior. Unterminated openers fall back to silent non-recognition.
+
+## Compact rendering (#312)
+
+Markers render compactly in every parley markdown and chat buffer; the file's
+bytes never change, only the view. Markers are **single-line** in the view and
+in everything parley writes (a newline inside a turn is `<br>`, see
+`comment/codec.lua`); the parser still tolerates #125 multi-line markers so old
+documents keep resolving.
+
+| Raw | Shown as |
+|---|---|
+| `🤖[H]…` / `🤖{N}…` | `🤖[…]` / `🤖{…}` |
+| `🤖<X>…` | `X`, highlighted `ParleyReviewQuoted` |
+| `🤖~D~…` | `D`, `ParleyReviewStrike` |
+| doesn't close on its line | raw, `ParleyReviewBroken` |
+
+- **Geometry**: `lua/parley/comment/view.lua` (pure) — `layout(line)` says what is
+  hidden (with which conceal char) and what is visible; the highlighter's
+  decoration provider turns it into ephemeral `conceal` extmarks (viewport-bounded,
+  fenced code skipped), the cursor snap and the `<CR>` lookup read the same layout.
+- **Edit protection**: `lua/parley/comment/init.lua` `attach` sets
+  `conceallevel=2`, `concealcursor=nvic` and snaps the cursor (normal + insert) so
+  it never rests on a hidden byte. An edit that still breaks a marker from a
+  visible edge renders it raw + broken; `u` restores (fail visible, no revert
+  guard).
 
 ## Keybindings (non-chat markdown only)
 

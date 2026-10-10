@@ -118,6 +118,10 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
 - Brainstormed with operator; decisions in the plan's "Decisions folded in".
 - Tension found: #125 deliberately made the parser multi-line tolerant. Resolution: parser keeps it (legacy docs, accept/reject, drill-in); view + writers go single-line; legacy multi-line markers paint `ParleyReviewBroken`.
 - Canonical grammar lives in `../ariadne/construct/local/fix/review-convention.md` → revision via an ariadne issue (plan Task 11).
+- M1 implemented (Tasks 1–5): codec, view layout/snap/marker_at, shared `push_marker_decorations` (chat buffers previously rendered no markers; fenced code now skipped in both), `comment.attach` (`conceallevel=2`, `concealcursor=nvic`, snap on CursorMoved/CursorMovedI). Viewport-bound evidence (comment_render_spec): 5000-row buffer, layout calls per frame = 61 (41 drawn rows + 20 margin) before and after a one-line edit.
+- Full `make test`: all green except `tests/arch/single_source_sweeps_spec.lua` "every symbol the plan tables name exists" → `open_thread`, the M2 float entry point not yet written (expected until M2).
+- Visual check NOT automated: an embedded nvim (`--embed` + `nvim_ui_attach` from a `-l` driver) exits on UI attach, and `--listen` sockets are sandbox-blocked; extmark conceal geometry is asserted via the decoration provider instead. Operator visual check pending.
+- Known limit: lines longer than the per-row read budget are decorated by chunk; a marker straddling a chunk edge paints broken (same constraint the old per-line highlight had).
 
 ## Revisions
 

@@ -718,6 +718,21 @@ atlas:
       - tests/integration/unscoped_kill_spec.lua
       - tests/unit/vault_spec.lua
 
+  modes/review:
+    code:
+      - lua/parley/comment/codec.lua
+      - lua/parley/comment/view.lua
+      - lua/parley/comment/init.lua
+      - lua/parley/drill_in.lua
+      - lua/parley/skills/review/init.lua
+    tests:
+      - tests/unit/comment_codec_spec.lua
+      - tests/unit/comment_view_spec.lua
+      - tests/unit/drill_in_spec.lua
+      - tests/unit/review_spec.lua
+      - tests/integration/comment_render_spec.lua
+      - tests/integration/comment_attach_spec.lua
+
   modes/interview:
     code:
       - lua/parley/interview.lua

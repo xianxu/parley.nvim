@@ -27,14 +27,15 @@
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `codec` (`encode`/`decode`) | `lua/parley/comment/codec.lua` | new |
-| `view.layout` | `lua/parley/comment/view.lua` | new |
-| `view.snap` | `lua/parley/comment/view.lua` | new |
-| `view.marker_at` | `lua/parley/comment/view.lua` | new |
-| `thread.to_lines` / `thread.from_lines` | `lua/parley/comment/thread.lua` | new |
-| `drill_in.resolve` | `lua/parley/drill_in.lua` | modified (decodes `<br>`) |
-| `drill_in.format_block` | `lua/parley/drill_in.lua` | modified (decodes `<br>`) |
-| `compute_markdown_highlights` entries | `lua/parley/highlighter.lua` | modified (optional `conceal` field) |
+| `encode` / `decode` (codec) | `lua/parley/comment/codec.lua` | new |
+| `layout` (view) | `lua/parley/comment/view.lua` | new |
+| `snap` (view) | `lua/parley/comment/view.lua` | new |
+| `marker_at` (view) | `lua/parley/comment/view.lua` | new |
+| `to_lines` / `from_lines` (thread) | `lua/parley/comment/thread.lua` | new |
+| `_inline_code_ranges` (seam export of the existing inline-code scanner) | `lua/parley/skills/review/init.lua` | modified |
+| `resolve` (drill_in, decodes `<br>`) | `lua/parley/drill_in.lua` | modified |
+| `format_block` (drill_in, decodes `<br>`) | `lua/parley/drill_in.lua` | modified |
+| `push_marker_decorations` (shared by chat + markdown highlight passes) | `lua/parley/highlighter.lua` | new |
 
 - **codec** — `encode(text)`: `\r?\n` → `<br>`; `decode(text)`: `<br>` → `\n`. Tests in `tests/unit/comment_codec_spec.lua`.
   - **DRY rationale:** three consumers (float, resolve, drill-in gather) would otherwise each hand-roll the escape.
@@ -55,10 +56,10 @@
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| marker decoration (conceal) | `lua/parley/highlighter.lua` | modified | ephemeral extmarks in the decoration provider |
-| `comment.attach` | `lua/parley/comment/init.lua` | new | window options, `CursorMoved` autocmd |
-| `comment.open_thread` | `lua/parley/comment/float.lua` | new | floating window + scratch buffer, source-buffer write-back |
-| `<CR>` native override | `lua/parley/comment/init.lua`, `lua/parley/keybinding_registry.lua` (`native_overrides`) | new | buffer-local `<CR>` |
+| `push_marker_decorations` → ephemeral conceal extmarks | `lua/parley/highlighter.lua` | modified | the decoration provider |
+| `attach` (comment) | `lua/parley/comment/init.lua` | new | window options, `CursorMoved`/`CursorMovedI` autocmds |
+| `open_thread` (float) | `lua/parley/comment/float.lua` | new | floating window + scratch buffer, source-buffer write-back |
+| `native_overrides` (`<CR>` entry) | `lua/parley/keybinding_registry.lua` | modified | buffer-local `<CR>` installed by `attach` |
 | `drill_in_visual` | `lua/parley/init.lua` | modified | refuses multi-line selection |
 
 - **marker decoration** — `compute_markdown_highlights` replaces its inline marker loop with `view.layout`: visible range → `ParleyReviewQuoted`/`ParleyReviewStrike`, each hidden range → `{ conceal = c }` entry, broken → `ParleyReviewBroken` on `[start, stop)`. `on_line` passes `conceal` through to `nvim_buf_set_extmark(..., { ephemeral = true, conceal = c })`. Viewport-bounded and cached per (window, document) — the existing incremental machinery; nothing whole-buffer.
@@ -691,3 +692,4 @@ Document `<CR>` in `atlas/ui/keybindings.md` next to the other native overrides.
 
 - **2026-10-09** — operator: if markers are effectively uneditable, there's no need to reveal the raw line in insert/visual mode. `concealcursor` `nc` → `nvic`; cursor snap extended to `CursorMovedI`. Raw text is reached via the float (or `conceallevel=0`).
 - **2026-10-09** — plan-quality round 1: snap never rests on a hidden byte (PQ-4: first `…` byte was silently editable); broken = any unclosed trailing opener (PQ-3); empty-anchor / quoted-only edges; Task 4b viewport-bound evidence (PQ-2); issue Spec/Done-when revised to the snap+fail-visible protection (PQ-1); `<CR>` moved to `native_overrides` per #141/#214 precedent; property tests for layout + thread round-trip; per-section `ParleyReview{User,Agent}` entries dropped (no raw display under `nvic`).
+- **2026-10-09** — M1 implementation: Core-concepts rows renamed to bare symbols (`layout`, `snap`, …) so the arch referent sweep (`tests/arch/single_source_sweeps_spec.lua`) can match them to definitions; added `_inline_code_ranges` (seam export) and `push_marker_decorations` (the shared chat+markdown decoration step — chat buffers did not render markers at all before, and fenced code is now skipped in both).
