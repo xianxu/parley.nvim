@@ -6,8 +6,8 @@ github_issue:
 target: review-convention
 created: 2026-10-09
 updated: 2026-10-09
-estimate_hours:
-card_mirror: 'ac40debd10f1e31534e69777d1e6ebba4fe78a9f' # card fields mirrored from issue-cards; edit via sdlc
+estimate_hours: 4.88
+card_mirror: '5d13b7a45ae62416e28aaa425bd84b67a701e2af' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-09T16:15:36-07:00
 claimant:
     operator: Xian Xu
@@ -45,7 +45,7 @@ unchanged (the file stays the contract with xx-fix / agents / pair), only the
 **Single-line markers.** A marker never spans lines in the raw file; newlines
 inside a turn are encoded as `<br>`. All writers (float write-back, `Alt+q`,
 agents via the grammar) obey it. A pre-existing multi-line marker (#125 made
-the parser tolerate them) is left raw + gets a diagnostic, not rendered.
+the parser tolerate them) is left raw + painted `ParleyReviewBroken`, not rendered.
 Payoff: markers are line-local, so re-render touches only changed lines.
 
 **Edit protection — hidden bytes behave as one glyph** (revised, see
@@ -80,16 +80,35 @@ humans); comments in non-markdown files; "ask agent" from the float.
 - Float round-trips: open → reply (multi-line) → close writes a single-line
   marker with `<br>`, byte-identical elsewhere; empty reply leaves the buffer
   unchanged.
-- Multi-line markers stay raw with a diagnostic.
+- Multi-line markers stay raw, painted `ParleyReviewBroken`.
 - Re-render is viewport-bounded: a test on a 5000-line buffer shows a redraw
   after a one-line edit calls the marker layout only for viewport rows.
 - `review-convention` target carries the revision; atlas updated.
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.* Two Lua/Neovim features (M1 render+snap, M2 float+write-back+writers), design ×0.2 for the pre-resolved durable plan; a UX iteration round budgeted for visual tuning after the first manual look.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec                 design=1.0 impl=0.1
+item: lua-neovim                 design=0.4 impl=0.6
+item: lua-neovim                 design=0.4 impl=0.6
+item: cross-repo-refactor-small  design=0.1 impl=0.1
+item: atlas-docs                 design=0.1 impl=0.08
+item: milestone-review           design=0.0 impl=0.2
+item: milestone-review           design=0.0 impl=0.2
+item: ux-rename-iteration        design=0.5 impl=0.12
+design-buffer: 0.15
+total: 4.88
+```
 
 ## Plan
 
 Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
 
-- [ ] M1 — compact rendering (view.layout → conceal in the decoration provider), broken-marker highlight, `concealcursor=nc` + normal-mode cursor snap (plan Tasks 1–6)
+- [ ] M1 — compact rendering (view.layout → conceal in the decoration provider), broken-marker highlight, `concealcursor=nvic` + cursor snap in every mode (plan Tasks 1–6)
 - [ ] M2 — thread float with single-line `<br>` write-back, `<CR>` binding, single-line writers + `<br>` decode on resolve/gather, ariadne grammar revision, atlas (plan Tasks 7–11)
 
 ## Log
