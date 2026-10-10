@@ -1,6 +1,6 @@
 ---
 id: 000313
-status: codecomplete
+status: done
 created: 2026-10-10
 updated: 2026-10-10
 estimate_hours:
@@ -31,6 +31,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: df3b00d600c47b9de78854214616b922db7d5a67
         evidence_commit: 37715870d4411dd862374fc96b0e00a13ef39844
+        landed_commit: aa726b6d17c36806e60feb0d2368b6fb56818a85
 ---
 
 # session-sync markdown: Alt+Return submits to the owning agent via couch, with a turn lock
