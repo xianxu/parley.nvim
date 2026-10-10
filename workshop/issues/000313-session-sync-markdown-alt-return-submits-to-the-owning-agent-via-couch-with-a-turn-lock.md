@@ -91,3 +91,4 @@ Durable plan: `workshop/plans/000313-session-sync-submit-plan.md` (single pass, 
 - Re-check passed (full-width band, red operator turn, round trip). Red darkened to `#870000` per the operator.
 
 - Close review round 1: FIX-THEN-SHIP, BR-1 (late couch exit rewrote a moved-on turn) and BR-2 (free buffer could be stale; submit could clobber the agent's write) fixed as classes, with specs; mutation-checked (each spec fails with its guard removed; without the submit guard Neovim's write prompt hangs the run). Minors folded in. See the plan's Revisions.
+- Close round 2 SHIP with two advisories (repeat families), fixed before landing: the first edit on a stale copy now reloads instead of taking the turn (so auto-save/:w can never hit the overwrite prompt), with a spec; atlas now describes the free-turn watch and the refusals.

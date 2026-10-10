@@ -266,11 +266,17 @@ M.attach = function(buf)
 		buffer = buf,
 		callback = function()
 			if s.turn == "free" and vim.bo[buf].modified and vim.bo[buf].modifiable
-				and read_turn(buf) == "free" and M.is_session_sync(buf) and write_lock(buf, "operator") then
-				refresh(buf)
+				and read_turn(buf) == "free" and M.is_session_sync(buf) then
+				-- The operator's turn never starts on a copy older than the
+				-- disk: then no writer (submit, auto-save, :w) can clobber it.
 				if disk_changed(buf) then
-					notify("the file changed on disk before this edit, so it edits an old copy;"
-						.. " :e! reloads (dropping the edit)", vim.log.levels.WARN)
+					reload(buf)
+					notify("the file changed on disk; reloaded the current copy, retype your edit",
+						vim.log.levels.WARN)
+					return
+				end
+				if write_lock(buf, "operator") then
+					refresh(buf)
 				end
 			end
 			restart_idle(buf)

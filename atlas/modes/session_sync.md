@@ -8,7 +8,7 @@ shared file between the operator and one agent (#313). The ops TL's status file
 ```yaml
 type: session-sync
 owner: ops:0        # couch address of the agent that keeps the file
-operator: xian-xu   # recorded as the lock holder
+operator: xian-xu   # who the operator is
 ```
 
 | Key | Action |
@@ -23,8 +23,12 @@ read-only). The operator's first edit writes `holder: operator`; `<M-CR>`
 rewrites it to `holder: agent`; the agent deletes the lock when done and never
 writes it. A failed send and `<C-g>u` both rewrite it to `holder: operator`.
 The turn is read from disk, so a buffer reopened during the agent's turn is
-read-only too. During the agent's turn parley polls the lock once a second; when
-it is gone, parley reloads the buffer and makes it editable.
+read-only too. Whenever the turn is not the operator's, parley watches the file
+once a second: during the agent's turn the lock's removal is the reply (parley
+reloads the buffer and makes it editable); during a free turn an agent write
+reloads the unmodified buffer. The operator's turn never starts on an old copy:
+a first edit made after the file changed on disk is dropped and the buffer
+reloaded, and submit refuses to overwrite a file rewritten under the buffer.
 
 **Rendering.** Each window showing the file gets a full-width winbar band
 and a window-local `winhighlight` for its StatusLine, both in the state's

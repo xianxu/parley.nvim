@@ -183,14 +183,26 @@ describe("session-sync buffer", function()
         assert.is_false(exists(file .. ".lock"))
     end)
 
-    it("submit refuses to overwrite a file the agent rewrote under a stale buffer", function()
+    it("the first edit on a stale copy reloads instead of taking the turn", function()
         ss.POLL_MS = 60000               -- the watch never catches the write
         open(header)
         local update = vim.deepcopy(header)
         update[8] = "- new thread from TL"
         vim.fn.writefile(update, file)
         edit("- edited on the old copy")
+        assert.is_false(exists(file .. ".lock"))
+        assert.equals("- new thread from TL", vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1])
+        assert.is_false(vim.bo[buf].modified)
+    end)
+
+    it("submit refuses to overwrite a file rewritten during the operator's turn", function()
+        ss.POLL_MS = 60000
+        open(header)
+        edit("- edited")
         assert.equals("holder: operator", holder())
+        local update = vim.deepcopy(header)
+        update[8] = "- new thread from TL"
+        vim.fn.writefile(update, file)   -- a writer ignoring the lock
         local saved_notify, said = vim.notify, {}
         vim.notify = function(msg) said[#said + 1] = msg end
         local ok = pcall(keymap_cb("<M-CR>"))
