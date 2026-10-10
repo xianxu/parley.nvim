@@ -63,20 +63,20 @@ stays editable.
 **Thread float — a focused plain nvim buffer.** One turn per line with its
 brackets kept (`[…]` / `{…}`), wrapped, human/robot turns on distinct
 background colors; cursor lands in an empty trailing `[]`. Full nvim, no new
-actions (existing `Alt+a`/`Alt+r` unchanged). On close/write: join turns to one
-line, encode newlines as `<br>`, replace the marker span; drop an empty
-trailing `[]`. The float re-parses with the same tokenizer (no second parser).
+actions (existing `Alt+a`/`Alt+r` unchanged). Plain nvim write/quit semantics
+(revised, see Revisions): `:w` joins turns to one line, encodes newlines as
+`<br>` (a literal `<br>` as `\<br>`) and replaces the marker span; `:x` / `q`
+write and close; `:q!` discards; a window closed otherwise with unsaved edits
+keeps its text in the unnamed register. An empty trailing `[]` is dropped.
+Only turn text is encoded/decoded — an anchor's X / D is the document's own
+prose, kept verbatim. Accepted migration edge: a turn written before this
+grammar that already holds a literal `<br>` decodes to a line break on accept
+(rare; the escape has one home in `comment/codec.lua`). The float re-parses with the same tokenizer (no second parser).
 The "only edit the last line" rule is convention, not enforced.
 
-**Grammar change.** Single-line + `<br>` escape go into the `review-convention`
+**Grammar change** (ariadne#316, closed on its branch; merge pending). Single-line + `<br>` escape go into the `review-convention`
 target (canonical in `../ariadne/construct/local/fix/review-convention.md`)
-as a `
-- M2 implemented: thread.to_lines/from_lines (round-trip property over generated markers), comment.float (focused nvim buffer; :w writes back one line; :x/q write+close; :q! discards; unsaved close keeps text in "), <CR> native override (honors default_keymaps=false; stale-override arch guard now reads the `where` module), <M-q> refuses multi-line, <br> decoded in TURN text only (anchors verbatim), literal <br> escaped as \<br> (ariadne#316 BR-6).
-- Grammar: ariadne#316 closed on its branch (review-convention §3/§5 + xx-fix SKILL.md single decode definition); not merged yet — parley's weaved `.agents/skills/xx-fix/review-convention.md` updates on the next weave after it lands.
-- Full `make test` green except load-sensitive cliproxy_auth_login / packaging_vm / branch_child (each passes alone: 21/21, 17/17, 63/63).
-- Measured actual is low (0.75h total at M2) relative to the session — recorded as measured, not adjusted.
-
-## Revisions` entry.
+as a `## Revisions` entry.
 
 **Out of scope (follow-ups):** consecutive human turns (`[][]{}[]`, multiple
 humans); comments in non-markdown files; "ask agent" from the float.
@@ -87,9 +87,9 @@ humans); comments in non-markdown files; "ask agent" from the float.
   opens the float; outside a marker `<CR>` is untouched.
 - Cursor cannot rest on hidden bytes in normal or insert mode; a partial edit
   that breaks a marker renders it raw + `ParleyReviewBroken`; tests cover both.
-- Float round-trips: open → reply (multi-line) → close writes a single-line
-  marker with `<br>`, byte-identical elsewhere; empty reply leaves the buffer
-  unchanged.
+- Float round-trips: open → reply (multi-line) → `:w` (or `:x` / `q`) writes a
+  single-line marker with `<br>`, byte-identical elsewhere; repeated `:w` keep
+  writing; `:q!` and a no-edit close leave the buffer unchanged.
 - Multi-line markers stay raw, painted `ParleyReviewBroken`.
 - Re-render is viewport-bounded: a test on a 5000-line buffer shows a redraw
   after a one-line edit calls the marker layout only for viewport rows.
@@ -132,6 +132,11 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
 - Full `make test`: all green except `tests/arch/single_source_sweeps_spec.lua` "every symbol the plan tables name exists" → `open_thread`, the M2 float entry point not yet written (expected until M2).
 - Visual check NOT automated: an embedded nvim (`--embed` + `nvim_ui_attach` from a `-l` driver) exits on UI attach, and `--listen` sockets are sandbox-blocked; extmark conceal geometry is asserted via the decoration provider instead. Operator visual check pending.
 - Known limit: lines longer than the per-row read budget are decorated by chunk; a marker straddling a chunk edge paints broken (same constraint the old per-line highlight had).
+- M2 implemented: thread.to_lines/from_lines (round-trip property over generated markers), comment.float (focused nvim buffer; :w writes back one line; :x/q write+close; :q! discards; unsaved close keeps text in "), <CR> native override (honors default_keymaps=false; stale-override arch guard now reads the `where` module), <M-q> refuses multi-line, <br> decoded in TURN text only (anchors verbatim), literal <br> escaped as \<br> (ariadne#316 BR-6).
+- Grammar: ariadne#316 closed on its branch (review-convention §3/§5 + xx-fix SKILL.md single decode definition); not merged yet — parley's weaved `.agents/skills/xx-fix/review-convention.md` updates on the next weave after it lands.
+- Full `make test` green except load-sensitive cliproxy_auth_login / packaging_vm / branch_child (each passes alone: 21/21, 17/17, 63/63).
+- Measured actual is low (0.75h total at M2) relative to the session — recorded as measured, not adjusted.
+- M2 boundary review round 1 (REWORK): BR-13 Critical — a second `:w` in the float was always refused (rewriting the row dropped the tracking extmark's column) → re-anchor after each write, test added; BR-14 this Log had been spliced into the Spec (fixed); BR-15 Spec/plan synced to plain write/quit semantics + anchors verbatim; BR-16 legacy literal `<br>` in turn text → recorded as the accepted migration edge in Spec.
 
 ## Revisions
 
@@ -144,3 +149,8 @@ Durable plan: `workshop/plans/000312-first-class-review-comments-plan.md`.
   lines carrying a rendered marker (window's own value elsewhere, re-read when
   not forcing, restored on `BufLeave`); insert-mode snap reasons about
   insertion points, so typing just before a quoted marker stays outside it.
+- **2026-10-09** — M2: the float follows plain nvim write/quit semantics
+  (no auto-write on close — `:q!` must be able to discard; unsaved closes keep
+  their text in `"`), only turn text is `<br>`-decoded (anchors verbatim,
+  ariadne#316 BR-1), and a literal `<br>` in a turn is `\<br>` (ariadne#316
+  BR-6). Pre-grammar turns holding a literal `<br>` are an accepted edge.

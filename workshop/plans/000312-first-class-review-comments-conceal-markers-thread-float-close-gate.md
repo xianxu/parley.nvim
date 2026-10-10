@@ -130,6 +130,52 @@ rounds:
       boundary: M1
       recipe: milestone-review
       blocked: false
+    - "n": 4
+      timestamp: "2026-10-09T21:37:52-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: not-addressed
+          note: Plan unchanged in this window; Tasks 8/10 still enumerate test cases in prose.
+          round: 4
+      findings:
+        - id: BR-13
+          severity: Critical
+          title: Thread float second :w is always refused; extmark drifts after replace_user_lines rewrites the row
+          detail: 'float.lua write_back replaces the whole row, moving the extmark off m.start, so the next write-back compares the wrong bytes and fails with "marker changed underneath" (reproduced: write r1, edit, write again leaves r1). Rule: a position tracked across a self-applied edit must be re-anchored after the edit (set_extmark with id) or the edit narrowed to the tracked span. Add multi-write and :w-then-q tests.'
+          family: edit-tracking-extmark
+          round: 4
+        - id: BR-14
+          severity: Important
+          title: The log M2 commit spliced the M2 Log bullets into the Spec "Grammar change" sentence
+          detail: 'The insert matched the first "## Revisions" substring inside Spec prose instead of the Log heading; Spec is corrupted, Log lacks M2 entries, and the first bullet is truncated. Rule: append by matching the section heading line, never a substring.'
+          family: artifact-append-anchor
+          round: 4
+        - id: BR-15
+          severity: Important
+          title: Plan/Spec still describe WinClosed auto-write and anchor decode; code does neither, and there is no M2 Revisions entry
+          detail: '3rd finding in this family. Rule: every change from a plan''s Integration-point or Task text lands as a Revisions entry in the same commit that makes the change. Sweep: (a) WinClosed write-back and close-writes in Spec/Done-when vs register-on-close, (b) Task 10 anchor decode vs turn-only, (c) codec future-extension <br\> vs shipped \<br>.'
+          family: done-when-contract-drift
+          round: 4
+        - id: BR-16
+          severity: Important
+          title: Accept now decodes a literal <br> in legacy or old-grammar turn text into a newline before ariadne#316 lands
+          detail: 'Agents following the currently deployed review-convention write a literal <br> in table-row proposals; M-a now inserts a newline and breaks the table without warning. Block the #312 merge on ariadne#316 landing and the re-weave, and record that dependency.'
+          family: cross-version-input-decode
+          round: 4
+        - id: BR-17
+          severity: Minor
+          title: codec escape is not total; a backslash before a newline decodes to a literal <br>
+          family: escape-totality
+          round: 4
+        - id: BR-18
+          severity: Minor
+          title: comment/init re-implements native_map gating; the arch guard was widened to allow a second install path
+          family: keymap-install-single-path
+          round: 4
+      boundary: M2
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#312 (boundary-review)
@@ -186,6 +232,25 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-12** [Minor] `done-when-contract-drift` Issue Spec/M1 row say concealcursor=nvic unqualified; BR-3 scoping revision recorded only in the plan
   2nd in family. Rule: every plan Revisions entry that changes a decision also updates the issue's Spec/Done-when/Plan rows and adds an issue Revisions entry in the same commit.
 
+## Round 4 — 2026-10-09T21:37:52-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-1 — not-addressed — Plan unchanged in this window; Tasks 8/10 still enumerate test cases in prose.
+
+### Raised
+
+- **BR-13** [Critical] `edit-tracking-extmark` Thread float second :w is always refused; extmark drifts after replace_user_lines rewrites the row
+  float.lua write_back replaces the whole row, moving the extmark off m.start, so the next write-back compares the wrong bytes and fails with "marker changed underneath" (reproduced: write r1, edit, write again leaves r1). Rule: a position tracked across a self-applied edit must be re-anchored after the edit (set_extmark with id) or the edit narrowed to the tracked span. Add multi-write and :w-then-q tests.
+- **BR-14** [Important] `artifact-append-anchor` The log M2 commit spliced the M2 Log bullets into the Spec "Grammar change" sentence
+  The insert matched the first "## Revisions" substring inside Spec prose instead of the Log heading; Spec is corrupted, Log lacks M2 entries, and the first bullet is truncated. Rule: append by matching the section heading line, never a substring.
+- **BR-15** [Important] `done-when-contract-drift` Plan/Spec still describe WinClosed auto-write and anchor decode; code does neither, and there is no M2 Revisions entry
+  3rd finding in this family. Rule: every change from a plan's Integration-point or Task text lands as a Revisions entry in the same commit that makes the change. Sweep: (a) WinClosed write-back and close-writes in Spec/Done-when vs register-on-close, (b) Task 10 anchor decode vs turn-only, (c) codec future-extension <br\> vs shipped \<br>.
+- **BR-16** [Important] `cross-version-input-decode` Accept now decodes a literal <br> in legacy or old-grammar turn text into a newline before ariadne#316 lands
+  Agents following the currently deployed review-convention write a literal <br> in table-row proposals; M-a now inserts a newline and breaks the table without warning. Block the #312 merge on ariadne#316 landing and the re-weave, and record that dependency.
+- **BR-17** [Minor] `escape-totality` codec escape is not total; a backslash before a newline decodes to a literal <br>
+- **BR-18** [Minor] `keymap-install-single-path` comment/init re-implements native_map gating; the arch guard was widened to allow a second install path
+
 ## Open findings
 
 - **BR-1** [Minor] `test-prose-enumeration` Tasks 8 and 10 enumerate test cases in prose and Tasks 1-3 carry full test code; compress to one strategy line per risky function
@@ -193,3 +258,9 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-10** [Minor] `comment-drift` highlighter.lua:365, :691-697 and atlas/modes/review.md:257 still describe ParleyReviewUser/Agent painting marker sections
 - **BR-11** [Minor] `insert-edge-semantics` Concealed spans collapse two insert positions onto one screen column
 - **BR-12** [Minor] `done-when-contract-drift` Issue Spec/M1 row say concealcursor=nvic unqualified; BR-3 scoping revision recorded only in the plan
+- **BR-13** [Critical] `edit-tracking-extmark` Thread float second :w is always refused; extmark drifts after replace_user_lines rewrites the row
+- **BR-14** [Important] `artifact-append-anchor` The log M2 commit spliced the M2 Log bullets into the Spec "Grammar change" sentence
+- **BR-15** [Important] `done-when-contract-drift` Plan/Spec still describe WinClosed auto-write and anchor decode; code does neither, and there is no M2 Revisions entry
+- **BR-16** [Important] `cross-version-input-decode` Accept now decodes a literal <br> in legacy or old-grammar turn text into a newline before ariadne#316 lands
+- **BR-17** [Minor] `escape-totality` codec escape is not total; a backslash before a newline decodes to a literal <br>
+- **BR-18** [Minor] `keymap-install-single-path` comment/init re-implements native_map gating; the arch guard was widened to allow a second install path

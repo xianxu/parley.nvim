@@ -40,6 +40,10 @@ local function write_back(st)
         local new = line:sub(1, col) .. raw .. line:sub(col + #st.raw + 1)
         require("parley.buffer_edit").replace_user_lines(st.src, row, row + 1, false, { new })
         st.raw = raw
+        -- Rewriting the row drops the tracking extmark's column; re-anchor it
+        -- at the marker's start so the next :w finds the bytes it wrote.
+        pcall(vim.api.nvim_buf_del_extmark, st.src, NS, st.mark)
+        st.mark = vim.api.nvim_buf_set_extmark(st.src, NS, row, col, {})
     end
     return true
 end
