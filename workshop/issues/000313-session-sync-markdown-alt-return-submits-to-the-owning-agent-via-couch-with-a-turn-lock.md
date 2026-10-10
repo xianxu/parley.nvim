@@ -66,10 +66,17 @@ operator: xian-xu
 
 Durable plan: `workshop/plans/000313-session-sync-submit-plan.md` (single pass, no milestones).
 
-- [ ] Pure header parser + lock body (unit spec)
-- [ ] Controller: attach/lock/submit/poll/unlock/reminder + `<M-CR>` dispatch + `<C-g>u` (integration spec, fake couch)
+- [x] Pure header parser + lock body (unit spec)
+- [x] Controller: attach/lock/submit/poll/unlock/reminder + `<M-CR>` dispatch + `<C-g>u` (integration spec, fake couch)
 - [ ] Atlas + traceability; full `make test`; live check with ops TL
 
 ## Log
 
 ### 2026-10-10
+- Implemented `lua/parley/session_sync.lua` + `<M-CR>` dispatch / `<C-g>u` in `setup_markdown_keymaps`; specs `tests/unit/session_sync_spec.lua`, `tests/integration/session_sync_spec.lua` (fake `couch` on PATH asserts the exact argv).
+- Discovery: `BufModifiedSet` fires from the main loop on a keystroke (verified mid-insert in headless nvim with real input), never synchronously from `nvim_buf_set_lines`; the spec fires it after an API edit.
+- `<C-g>u` is bound in every markdown buffer (registry no-ghost contract, `keybinding_agreement_spec`); it no-ops outside session-sync files.
+- Scope fold from ops (see Revisions): holder-named lock, winbar/StatusLine/lualine rendering, stale state replaces the eol virt text.
+- Full `make test` green (424 files). One earlier run lost three specs to load-induced 50s deadlines (pass standalone) and exposed a fake-couch argv race, fixed by writing argv atomically.
+- Couch sends need the unsandboxed socket; the first, sandboxed send was never delivered (status: not retained) and was resent.
+- Live check handed to ops TL (message e2266ec8).
