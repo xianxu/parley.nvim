@@ -55,6 +55,7 @@ operator: xian-xu
 
 ### 2026-10-10 — live-check rendering changes (ops TL, from the operator)
 - The core flow passed the live check. Rendering: the winbar label spans the full width; the lualine component is removed; the operator's turn is a bright red band (the default-linked DiffAdd green was too subtle), stale is orange.
+- Re-check passed; the operator asked for a more subtle red: `#870000` (cterm 88), still white bold text.
 
 ## Done when
 
@@ -84,3 +85,4 @@ Durable plan: `workshop/plans/000313-session-sync-submit-plan.md` (single pass, 
 - Couch sends need the unsandboxed socket; the first, sandboxed send was never delivered (status: not retained) and was resent.
 - Live check handed to ops TL (message e2266ec8).
 - Live check: core flow confirmed by ops; rendering changes (full-width winbar, no lualine, bright red operator band) made for the re-check.
+- Re-check passed (full-width band, red operator turn, round trip). Red darkened to `#870000` per the operator.

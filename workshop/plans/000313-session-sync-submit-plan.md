@@ -87,3 +87,4 @@
 - Winbar label is a full-width band (`%=` fills in the state's colour).
 - Lualine component removed, with `status(buf)` that only fed it.
 - `ParleySessionSyncOperator` is an explicit bright red band (bg `#d70000`, white bold), `ParleySessionSyncStale` an orange one (bg `#ff8700`); both `default = true`, so a colourscheme can still override them.
+- Re-check: operator red darkened to `#870000` (cterm 88).

@@ -216,11 +216,11 @@ local function restart_idle(buf)
 	end))
 end
 
--- The operator's turn is bright red so it cannot be missed; stale is orange.
+-- The operator's turn is a dark red band, unmistakable without glare; stale is orange.
 local function define_highlights()
 	local groups = {
 		ParleySessionSyncFree = { link = "StatusLine" },
-		ParleySessionSyncOperator = { bg = "#d70000", fg = "#ffffff", ctermbg = 160, ctermfg = 231, bold = true },
+		ParleySessionSyncOperator = { bg = "#870000", fg = "#ffffff", ctermbg = 88, ctermfg = 231, bold = true },
 		ParleySessionSyncStale = { bg = "#ff8700", fg = "#000000", ctermbg = 208, ctermfg = 16, bold = true },
 		ParleySessionSyncAgent = { link = "DiffChange" },
 	}

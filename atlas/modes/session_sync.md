@@ -34,7 +34,7 @@ override them.
 | State | Winbar | Highlight (default link) |
 |---|---|---|
 | free | `free: editing takes your turn` | `ParleySessionSyncFree` (StatusLine) |
-| operator | `your turn, Alt+Return to submit` | `ParleySessionSyncOperator` (bright red, white bold) |
+| operator | `your turn, Alt+Return to submit` | `ParleySessionSyncOperator` (dark red `#870000`, white bold) |
 | stale | `unsent edits, Alt+Return to submit` | `ParleySessionSyncStale` (orange, black bold) |
 | agent | `<owner> working, read-only` | `ParleySessionSyncAgent` (DiffChange) |
 

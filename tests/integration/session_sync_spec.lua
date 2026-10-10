@@ -149,10 +149,10 @@ describe("session-sync buffer", function()
         assert.equals("StatusLine:ParleySessionSyncStale", winhl())
     end)
 
-    it("the operator's turn is a bright red band", function()
+    it("the operator's turn is a dark red band", function()
         open(header)
         local hl = vim.api.nvim_get_hl(0, { name = "ParleySessionSyncOperator", link = false })
-        assert.equals(0xd70000, hl.bg)
+        assert.equals(0x870000, hl.bg)
         assert.is_true(hl.bold)
     end)
 
