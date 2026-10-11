@@ -6,30 +6,8 @@ local ss = require("parley.session_sync")
 local uv = vim.uv or vim.loop
 
 describe("session-sync buffer", function()
-    local root, file, argv_file, log_file, saved_path, saved_poll, saved_check, buf
+    local root, file, argv_file, log_file, saved_path, saved_poll, saved_check, saved_thread, buf
     local p = require("parley")
-
-    local function write_fake_couch()
-        local bin = root .. "/bin/couch"
-        vim.fn.mkdir(root .. "/bin", "p")
-        -- Queries answer from env (`--session-sync` exits 2 unless
-        -- FAKE_COUCH_STATUS is set: the verb before pair#437); every send
-        -- appends one line `<to>|<message>` to the log.
-        vim.fn.writefile({
-            "#!/bin/sh",
-            'case "$1" in',
-            '--actors) printf "%s" "$FAKE_COUCH_ACTORS"; exit 0;;',
-            '--session-sync) [ -n "$FAKE_COUCH_STATUS" ] || exit 2; printf "%s" "$FAKE_COUCH_STATUS"; exit 0;;',
-            'esac',
-            'if [ -n "$FAKE_COUCH_SLEEP" ]; then sleep "$FAKE_COUCH_SLEEP"; fi',
-            'printf "%s|%s\\n" "$2" "$4" >> "' .. log_file .. '"',
-            -- Written whole, then renamed: the spec polls for the file.
-            'for a in "$@"; do printf "%s\\n" "$a"; done > "' .. argv_file .. '.tmp"',
-            'mv "' .. argv_file .. '.tmp" "' .. argv_file .. '"',
-            'if [ -n "$FAKE_COUCH_EXIT" ] && [ "$FAKE_COUCH_EXIT" != 0 ]; then echo "no such peer" >&2; exit "$FAKE_COUCH_EXIT"; fi',
-        }, bin)
-        assert.is_truthy(uv.fs_chmod(bin, 493))
-    end
 
     local function open(lines)
         vim.fn.writefile(lines, file)
@@ -90,9 +68,13 @@ describe("session-sync buffer", function()
         file = root .. "/tl-status.md"
         argv_file = root .. "/argv"
         log_file = root .. "/sent"
-        write_fake_couch()
+        require("tests.helpers.fake_couch").write(root, log_file, argv_file)
         saved_path, saved_poll, saved_check = vim.env.PATH, ss.POLL_MS, ss.PING_CHECK_MS
         vim.env.PATH = root .. "/bin:" .. vim.env.PATH
+        -- Outside pair unless a spec says otherwise (the suite itself may run
+        -- inside a pair slot, whose env names a real thread).
+        saved_thread = { vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG }
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         vim.env.FAKE_COUCH_EXIT = "0"
         vim.env.FAKE_COUCH_SLEEP = nil
         vim.env.FAKE_COUCH_STATUS = nil
@@ -109,6 +91,7 @@ describe("session-sync buffer", function()
             vim.api.nvim_buf_delete(buf, { force = true })
         end
         vim.env.PATH, ss.POLL_MS, ss.PING_CHECK_MS = saved_path, saved_poll, saved_check
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = saved_thread[1], saved_thread[2]
         vim.fn.delete(root, "rf")
     end)
 
@@ -136,6 +119,57 @@ describe("session-sync buffer", function()
         -- The next keystroke takes the lock again.
         edit("- second thought")
         assert.equals("holder: operator", holder())
+    end)
+
+    describe("inside a pair slot, owner: is a check (#316)", function()
+        -- Two live slots; this editor runs in the one bound to scope s1/tag t1.
+        local function slots()
+            return vim.json.encode({ Code = "ok", Actors = {
+                { Binding = { Slot = "ops:0", Scope = "s0", Tag = "t0" }, Known = true },
+                { Binding = { Slot = "parley.nvim:1", Scope = "s1", Tag = "t1" }, Known = true },
+            } })
+        end
+        before_each(function()
+            vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "s1", "t1"
+            vim.env.FAKE_COUCH_ACTORS = slots()
+        end)
+
+        it("an owner that is another slot: warned, nothing saved, lock kept, nothing sent", function()
+            open(header) -- owner: ops:0
+            edit("- edited")
+            local warned
+            local saved_notify = vim.notify
+            vim.notify = function(msg) warned = msg end
+            keymap_cb("<M-CR>")()
+            assert.is_true(vim.wait(2000, function() return warned ~= nil end))
+            vim.notify = saved_notify
+            assert.truthy(warned:find("owner ops:0 is not this slot's agent (parley.nvim:1)", 1, true))
+            assert.equals("holder: operator", holder())
+            assert.is_true(vim.bo[buf].modified)
+            vim.wait(100)
+            assert.same({}, sent())
+        end)
+
+        it("an owner that is this slot (by a prefix spelling) submits", function()
+            local h = vim.deepcopy(header)
+            h[3] = "owner: parley:1"
+            open(h)
+            edit("- edited")
+            keymap_cb("<M-CR>")()
+            assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
+            assert.equals("parley:1|submitted: " .. file, sent()[1])
+            assert.is_false(exists(file .. ".lock"))
+        end)
+
+        it("a slot couch cannot resolve: nothing is submitted", function()
+            vim.env.FAKE_COUCH_ACTORS = vim.json.encode({ Code = "ok", Actors = {} })
+            open(header)
+            edit("- edited")
+            keymap_cb("<M-CR>")()
+            vim.wait(200)
+            assert.same({}, sent())
+            assert.equals("holder: operator", holder())
+        end)
     end)
 
     it("a failed send leaves the file free and the buffer editable (#315)", function()
@@ -573,11 +607,11 @@ describe("session-sync buffer", function()
         end))
     end)
 
-    it("plain markdown keeps the review action on <M-CR>", function()
+    -- What <M-CR> does in plain markdown is review_send's (#316,
+    -- tests/integration/review_send_spec.lua); here: no session-sync state.
+    it("plain markdown keeps <M-CR> and gets no lock or band", function()
         open({ "# just notes" })
-        local fallback_called = false
-        ss.dispatch(buf, function() fallback_called = true end)()
-        assert.is_true(fallback_called)
+        assert.is_false(ss.is_session_sync(buf))
         assert.is_not_nil(keymap_cb("<M-CR>"))
         assert.is_false(exists(file .. ".lock"))
         assert.equals("", winbar())

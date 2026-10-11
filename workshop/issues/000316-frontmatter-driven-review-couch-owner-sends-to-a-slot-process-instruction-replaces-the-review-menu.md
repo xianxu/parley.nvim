@@ -1,20 +1,22 @@
 ---
 id: 000316
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-11
 updated: 2026-10-11
 estimate_hours:
-card_mirror: 'ac79950472d75c3b8bbb059cab19429cd4b48795' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a94acc752d962aa689392a3ac38bd29d865ace4a' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-11T11:32:36-07:00
 claimant:
     operator: Xian Xu
     machine: 4716879978a7b90f6b583da1716fd0e9
-    machine_name: Xian’s MacBook Pro
-    workspace: parley.nvim:0
-    worktree: /Users/xianxu/workspace/parley.nvim
+    machine_name: MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: inferred}
+actual_hours: 1.15
 ---
 
 # Frontmatter-driven review: couch-owner sends to a slot; process-instruction replaces the review menu
@@ -49,10 +51,13 @@ Unify around frontmatter. Three independent keys:
 
 ## Plan
 
-- [ ] Frontmatter reader: hyphenated keys, raw `process-instruction`, `couch-owner` with the `owner` alias; audit strict readers for the `[`-leading value.
-- [ ] Alt+Return dispatch: `couch-owner` → generic couch send (path, instruction, diff since last send); else today's review path with the instruction.
-- [ ] `[name]` expansion from the mode files (knobs included); `[` completion in the value.
-- [ ] Remove `review_menu.lua` and its wiring; tests for the Done-when rows; update the parley docs/atlas.
+Durable plan: [workshop/plans/000316-frontmatter-driven-review-plan.md](../plans/000316-frontmatter-driven-review-plan.md) (decisions, core concepts, tasks).
+
+- [x] Frontmatter reader (`lua/parley/frontmatter.lua`): hyphenated keys, raw values, quote/unquote; session-sync uses it. YAML audit done: sdlc's yaml.v3 rejects `a: [copy-edit] keep the voice`, so parley writes the value quoted.
+- [x] `[name]` grammar + expansion (`skills/review/instruction.lua`), shared by the couch message and the review prompt; knobs from the first named mode.
+- [x] Couch seam extracted (`lua/parley/couch.lua`); own slot = the actor matching `COUCH_THREAD_SCOPE`/`TAG`.
+- [x] Alt+Return dispatch (`review_send.lua`): own slot → send with path, instruction, diff since last send; no slot → today's review path; session-sync `owner:` is a check; `[` completion; review menu removed.
+- [x] Atlas/docs; full suite + lint; manual e2e in a pair slot.
 
 ## Revisions
 
@@ -66,3 +71,14 @@ Unify around frontmatter. Three independent keys:
 ## Log
 
 ### 2026-10-11
+- 2026-10-11: closed — Round 2 after FIX-THEN-SHIP: BR-1 fixed with real-path specs (review_mode_load_spec multi-mode source(); skill_invoke_review_spec args.modes run + journal mode), mutation of has_mode caught; 4 minors fixed with specs (quoted_span + comment, requote closes opened quote, diff heading, live couch conformance passes against real couch). All touched specs green: frontmatter, review_instruction, couch, review_send (15), session_sync unit+integration (39), review_mode_load, skill_invoke_review, single_source_sweeps. Earlier full make test: only ~50s parallel-load timeouts, each passing alone. Live e2e delivery 41fd7a55 reached parley.nvim:1.; review verdict: SHIP
+- 2026-10-11: flow upgraded quick → full — 683 added lines in code files (limit 100); an earlier round of this close already ran the full review
+
+- Claimed from parley.nvim:1 (TL dispatch). Durable plan: `workshop/plans/000316-frontmatter-driven-review-plan.md`.
+- **Own slot:** pair sets `COUCH_THREAD_SCOPE`/`COUCH_THREAD_TAG` on every pane (checked on a live draft nvim via `ps eww`); `couch --actors --json` bindings carry `Scope`/`Tag`, so the slot is the actor matching both (the thread match couch's `LivenessForThread` uses), never an address string.
+- **YAML audit:** ran sdlc's `go.yaml.in/yaml/v3` on `a: [copy-edit] keep the voice` → `did not find expected key`; the double-quoted form parses. sdlc parses issue/project frontmatter strictly (`internal/issue/card.go`, `project/metadata.go`), so parley writes the value quoted when `frontmatter.needs_quote` says so (completion, the add-prompt) and reads both.
+- **Decisions:** `[copy-edit]` resolves by unique prefix (the Done-when's spelling; the file is `copy-editing.md`); several modes → every brief, the first one's knobs (ARCH-DRY: one `instruction.brief` for the slot message and the review prompt). Session-sync outside pair keeps sending to `owner:` (no slot to compare against); inside, a mismatch warns and changes nothing. In pair with no resolvable actor: error, never a silent fallback to an LLM round.
+- **ARCH-FUNERAL:** the send baseline is in memory (one string per file sent this session); nothing is written beside the file.
+- **Refactors:** `lua/parley/couch.lua` (send/query/find_actor moved out of session_sync, plus own-actor resolution); `lua/parley/frontmatter.lua` (session_sync's header reader rejected hyphenated keys); `tests/helpers/fake_couch.lua` (shared by both specs; logs one line per send, keeps the full last message).
+- **Test note:** TextChangedI never fires mid-typeahead in a `feedkeys(..., "x")` run, so the completion spec drives the installed handler via a `<Cmd>` mapping in real insert mode and asserts the autocmd is installed.
+- **Close review round 1 (FIX-THEN-SHIP):** BR-1 Important (multi-mode `source()`/`run_via_invoke` reached only through a stub): added real-path specs in `review_mode_load_spec` and `skill_invoke_review_spec`; mutation (old `has_mode`) fails the new spec. Minors fixed: a quoted value followed by `# comment` (`frontmatter.quoted_span`), the diff heading says it includes the agent's own edits, completion closes a quote the operator opened, and a live conformance spec checks the real `couch --actors` binds this thread (pending outside a reachable slot; passes here). Lesson added.

@@ -909,7 +909,7 @@ describe("open_file joins the alt family (#214)", function()
     -- <M-o> — which is why the skill picker moved to <M-s>.
     --
     -- Two entries may share a key when their scopes are DISJOINT — `<M-CR>` is
-    -- respond/define in a chat buffer and the review menu in a markdown one,
+    -- respond/define in a chat buffer and the review send in a markdown one,
     -- which is deliberate (#133) and cannot conflict at runtime because a
     -- buffer is never both. What must not happen is two owners whose scopes
     -- OVERLAP: one being an ancestor of the other means both bindings are live

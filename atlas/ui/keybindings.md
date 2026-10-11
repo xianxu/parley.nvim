@@ -24,8 +24,10 @@ follows a file or recognized artifact reference; `<M-o>` also follows Parley
 branch references before falling back to smart `gf`. See [Branching](../chat/inline_branch_links.md)
 and [Drill-In](../chat/drill_in.md) for placement and selection details.
 
-In a markdown file whose frontmatter says `type: session-sync`, `<M-CR>`
-submits the file to its owning agent instead of opening the review menu; see
+In a markdown file `<M-CR>` sends the document to the agent in this pair
+slot, steered by its `process-instruction:` frontmatter line (outside pair, a
+review round runs here); see [Review](../modes/review.md#altreturn-process-instruction-and-the-slot-send-316).
+A `type: session-sync` file submits instead; see
 [Session-Sync Files](../modes/session_sync.md).
 
 In a regular chat buffer, Insert-mode Return continues the private-note prefix
@@ -97,7 +99,7 @@ Two invariants over this forest are enforced by `tests/unit/keybindings_spec.lua
 
 1. **No key is live twice in the same buffer.** Two entries may share a key when
    their scopes are disjoint — `<M-CR>` is respond in a chat buffer and the
-   review menu in a markdown one, and `<C-g>d` is chat-delete vs delete-file the
+   review send in a markdown one, and `<C-g>d` is chat-delete vs delete-file the
    same way — because a buffer is never both. What must not happen is two owners
    whose scopes overlap (one an ancestor of the other, or the same scope) *and*
    whose modes intersect: both bindings are then live at once and the later

@@ -441,3 +441,9 @@ oracle, and the mutation that would make the test fail.
   only for someone else's write), and when it gives no verdict, leave the
   question open; never adopt the write (close review BR-1). Test with a
   spec that auto-saves from a non-nested autocmd.
+- **A seam stubbed in the dispatcher's spec hides the consumer's new path**
+  (#316 close review BR-1). `review_send`'s spec stubbed `run_via_invoke`, so
+  the new `args.modes` handling in the review skill's `source()`, its
+  `has_mode` gate and the journal's mode name were reached by no test. When a
+  change widens an argument shape across a seam, test the far side with the
+  new shape (and mutation-check it); the dispatcher's stub covers routing.

@@ -37,6 +37,22 @@ describe("review.run_via_invoke", function()
         assert.is_function(invoke_calls[1].opts.on_done)
     end)
 
+    -- #316 BR-1: a process-instruction run names `modes`; it proceeds with no
+    -- markers (a mode run) and journals every name.
+    it("an args.modes run proceeds without markers and journals every mode", function()
+        local journal = require("parley.skills.review.journal")
+        local orig_append, entry = journal.append, nil
+        journal.append = function(_, e) entry = e; return true end
+        vim.api.nvim_buf_set_name(buf, vim.fn.tempname() .. ".md")
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "plain text, no markers" })
+        review.run_via_invoke(buf, { modes = { "proofreading", "copy-editing" }, instruction = "x" })
+        assert.are.equal(1, #invoke_calls)
+        assert.same({ "proofreading", "copy-editing" }, invoke_calls[1].args.modes)
+        invoke_calls[1].opts.on_done({ ok = true, original = "a", new_content = "b" })
+        journal.append = orig_append
+        assert.equals("proofreading+copy-editing", entry.mode)
+    end)
+
     it("does NOT invoke when there are no markers", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "plain text, no markers" })
         review.run_via_invoke(buf, {})

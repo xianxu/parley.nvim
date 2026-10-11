@@ -28,6 +28,7 @@
 -- time per buffer.
 
 local M = {}
+local couch = require("parley.couch")
 
 M.POLL_MS = 1000
 M.PING_CHECK_MS = 60000
@@ -51,24 +52,11 @@ local state = {}
 ---@param lines string[]
 ---@return table|nil
 M.parse_header = function(lines)
-	if lines[1] ~= "---" then
+	local fm = require("parley.frontmatter").parse(lines)
+	if not fm or fm.fields.type ~= "session-sync" then
 		return nil
 	end
-	local fm = {}
-	for i = 2, #lines do
-		if lines[i] == "---" then
-			if fm.type ~= "session-sync" then
-				return nil
-			end
-			return { owner = fm.owner, operator = fm.operator }
-		end
-		local key, value = lines[i]:match("^([%w_]+):%s*(.-)%s*$")
-		if key then
-			value = value:gsub("%s+#.*$", "")
-			fm[key:lower()] = value ~= "" and value or nil
-		end
-	end
-	return nil
+	return { owner = fm.fields.owner, operator = fm.fields.operator }
 end
 
 --- The lock sidecar's text for a holder (parley only writes "operator").
@@ -138,25 +126,7 @@ M.parse_time = function(text)
 		+ tonumber(h) * 3600 + tonumber(mi) * 60 + tonumber(sec) - offset
 end
 
---- The actor (from `couch --actors --json`) a couch address names: the exact
---- slot, else the one slot whose repository starts with the address's (couch
---- resolves `parley:1` to `parley.nvim:1` the same way). nil when none or ambiguous.
-M.find_actor = function(actors, owner)
-	local repo, index = (owner or ""):match("^(.*):(%d+)$")
-	local prefixed = {}
-	for _, actor in ipairs(type(actors) == "table" and actors or {}) do
-		local binding = type(actor) == "table" and actor.Binding
-		local slot = type(binding) == "table" and type(binding.Slot) == "string" and binding.Slot or ""
-		if slot == owner then
-			return actor
-		end
-		local r, i = slot:match("^(.*):(%d+)$")
-		if repo and r and i == index and r:sub(1, #repo) == repo then
-			prefixed[#prefixed + 1] = actor
-		end
-	end
-	return #prefixed == 1 and prefixed[1] or nil
-end
+M.find_actor = couch.find_actor
 
 local function header(buf)
 	return M.parse_header(vim.api.nvim_buf_get_lines(buf, 0, 40, false))
@@ -204,33 +174,7 @@ local function write_lock(buf, holder)
 	return true
 end
 
--- One message to the owner; on_exit(obj) gets the result, in the main loop.
--- Every message leaves from this editor, so couch sees the operator's own
--- slot as the sender (pair#433 counts it as the operator's, not a peer's).
-local function send(owner, message, on_exit)
-	local argv = { "couch", "--send-to", owner, "--message", message }
-	local ok, err = pcall(vim.system, argv, { text = true }, vim.schedule_wrap(on_exit or function() end))
-	if not ok and on_exit then
-		on_exit({ code = -1, stderr = tostring(err) })
-	end
-end
-
--- A decoded JSON value as a list: anything but a table is empty.
-local function list(value)
-	return type(value) == "table" and value or {}
-end
-
--- Run a couch query; cb(decoded) with nil unless it exited 0 with Code "ok".
--- JSON null decodes to nil (never vim.NIL), so a missing field reads as absent.
-local function query(argv, cb)
-	local ok = pcall(vim.system, argv, { text = true }, vim.schedule_wrap(function(obj)
-		local decoded, data = pcall(vim.json.decode, obj.stdout or "", { luanil = { object = true, array = true } })
-		cb(obj.code == 0 and decoded and type(data) == "table" and data.Code == "ok" and data or nil)
-	end))
-	if not ok then
-		cb(nil)
-	end
-end
+local send, query, list = couch.send, couch.query, couch.list
 
 local function close_timer(timer)
 	if timer and not timer:is_closing() then
@@ -596,14 +540,36 @@ M.attach = function(buf)
 	restart_idle(buf)
 end
 
---- <M-CR>: save, delete the lock, tell the owner. The buffer stays editable;
---- the next edit takes the lock again (#315).
+local submit_now
+
+--- <M-CR> in a session-sync file. `owner:` is a check, not a route (#316):
+--- inside a pair slot, the file is submitted only when its owner is this
+--- slot's own agent. Outside pair there is no slot to compare, and the owner
+--- is sent to as before.
 M.submit = function(buf)
 	local h = header(buf)
 	if not h or not h.owner then
 		notify("no `owner:` in the frontmatter", vim.log.levels.ERROR)
 		return
 	end
+	couch.own_slot(function(actors, own)
+		if not vim.api.nvim_buf_is_valid(buf) then
+			return
+		end
+		if actors and not own then
+			notify("cannot resolve this slot's agent (couch --actors); not submitting", vim.log.levels.ERROR)
+		elseif own and not couch.same(own, couch.find_actor(actors, h.owner)) then
+			notify("owner " .. h.owner .. " is not this slot's agent (" .. tostring(couch.slot(own))
+				.. "); not submitting", vim.log.levels.WARN)
+		else
+			submit_now(buf, h)
+		end
+	end)
+end
+
+-- Save, delete the lock, tell the owner. The buffer stays editable; the
+-- next edit takes the lock again (#315).
+submit_now = function(buf, h)
 	M.attach(buf)
 	if disk_changed(buf) then
 		-- Under the operator's lock the operator's copy wins, unless the
@@ -642,18 +608,6 @@ M.submit = function(buf)
 			probe(buf)
 		end
 	end)
-end
-
---- The <M-CR> callback: submit in a session-sync buffer, else `fallback`.
---- Decided at call time, so editing the frontmatter takes effect at once.
-M.dispatch = function(buf, fallback)
-	return function()
-		if M.is_session_sync(buf) then
-			M.submit(buf)
-		else
-			fallback()
-		end
-	end
 end
 
 return M

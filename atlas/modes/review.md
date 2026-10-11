@@ -103,7 +103,7 @@ Turn brackets are colored by speaker (`ParleyReviewUser` / `ParleyReviewAgent`).
 | `<C-g>ve`       | Run the review skill (agent edits per ready markers, legacy no-mode) |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
 | `<M-s>`         | Open the **skill picker** (review is one of the skills) |
-| `<M-CR>`        | Open the **review-mode menu** (mode selector + instruction editor; sticky-preselected) |
+| `<M-CR>`        | **Send** the document as its `process-instruction:` line directs (below) |
 
 ## Accepting and rejecting markers
 
@@ -115,19 +115,43 @@ longer dialogue also accepts deletion because no single replacement is selected.
 Unanchored commentary disappears on either action. These rules are implemented
 by `drill_in.resolve` and tested with the shared marker parser.
 
-## Review menu
+## Alt+Return: process-instruction and the slot send (#316)
 
-`lua/parley/review_menu.lua` — a composite two-window float: a mode **selector**
-on top (the focused window; selection = its cursor line, so `j`/`k`/arrows/mouse
-move it natively; sticky-preselected to the last-used mode) + a multi-line
-**instruction editor** below. `Tab`/`i` jump to the editor; in it `Enter` =
-newline, `M-CR`/`C-s` submit, `Tab`/`Esc` return to the list; `Esc`/`C-c` cancel.
-On submit it calls
-`review.run_via_invoke(buf, { mode, instruction })`. Free-form mode requires a
-non-empty instruction. Reuses `float_picker.compute_layout` for geometry (now
-exported). The sidecar (`*.parley-journal.md`) is excluded from review
-attachment (`is_journal_sidecar`). `<M-CR>` is free here — chat-respond's `<M-CR>`
-is chat-buffer-only. The last-used mode is remembered only for the current session.
+The review-mode menu float (#133 M4) is gone. The standing instruction lives in
+the document's frontmatter, one line the operator edits per round:
+
+```yaml
+process-instruction: "[copy-edit] keep the voice"
+```
+
+- **Grammar** (`skills/review/instruction.lua`, PURE): each leading `[name]`
+  names a stock prompt — a `modes/<name>.md` file, or a unique prefix of one
+  (`[copy-edit]` → `copy-editing`); the rest is free text added to it. No
+  `[name]` means `free-form`. Several names contribute their briefs; the first
+  one's knobs (`scope`, `deletions`, `frontier`) give the round's directives.
+  `instruction.brief` renders it, for the slot message and for the in-editor
+  review's system prompt alike (`source(ctx)` takes `args.modes`).
+- **Quoting:** `[copy-edit] keep` is not valid YAML (sdlc's yaml.v3 rejects it in
+  issue frontmatter), so parley writes the value double-quoted when it needs it
+  (`frontmatter.needs_quote`) and reads either form. Typing `[` in the value
+  completes the mode names (from the modes directory); accepting one quotes the
+  line.
+- **Where it goes** (`lua/parley/review_send.lua`): to the agent in this
+  editor's own Couch slot — the `couch --actors` actor whose binding carries this
+  process's `COUCH_THREAD_SCOPE`/`COUCH_THREAD_TAG`, which pair sets on every
+  pane. The buffer is saved, then `couch --send-to <slot>` carries the path, the
+  instruction, the brief, and a unified diff since the last delivered send (an
+  in-memory baseline per file; the first send of a session says "read the whole
+  file"; capped at 200 diff lines). Outside pair (no thread env) the same
+  instruction runs `run_via_invoke` here. In pair with no resolvable actor it
+  errors and sends nothing.
+- **No line yet:** Alt+Return asks once and writes the answer into the
+  frontmatter (creating one), then sends. A `type: session-sync` file submits
+  instead ([Session-Sync Files](session_sync.md)).
+
+The sidecar (`*.parley-journal.md`) is excluded from review attachment
+(`is_journal_sidecar`). `<M-CR>` is free here — chat-respond's `<M-CR>` is
+chat-buffer-only.
 
 ## Architecture
 
@@ -256,7 +280,7 @@ review_highlight_duration = 2000, -- highlight fade time in ms
 review_shortcut_edit   = { modes = { "n" }, shortcut = "<C-g>ve" },
 review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 review_shortcut_menu   = { modes = { "n" }, shortcut = "<M-s>" },   -- skill picker
-review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- review-mode menu
+review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- send (process-instruction)
 -- Marker insertion: see drill_in_callbacks in lua/parley/init.lua
 -- (shared <M-q> / <C-g>q binding)
 ```
@@ -267,7 +291,10 @@ review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- revie
 - `lua/parley/skills/review/mode.lua` — Mode parse/directives (PURE) + load/list IO seam
 - `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files
 - `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam
-- `lua/parley/review_menu.lua` — composite review-mode menu (selector + instruction editor); `<M-CR>`
+- `lua/parley/review_send.lua` — `<M-CR>`: slot send / in-editor fallback, the add-instruction prompt, `[` completion
+- `lua/parley/skills/review/instruction.lua` — `process-instruction` grammar, mode expansion, brief (PURE)
+- `lua/parley/frontmatter.lua` — shared frontmatter reader (hyphenated keys, raw values, quoting; PURE)
+- `lua/parley/couch.lua` — the `couch` seam: send, query, this editor's own actor
 - `lua/parley/skills/review/projection.lua` — decoration projection: re-render style on undo/redo per content-state
 - `lua/parley/skills/review/diag_display.lua` — inline "why" display toggle (`:ParleyShowDiagnostics`, cursor-region auto-show)
 - `lua/parley/progress.lua` — detached progress bar (general reusable long-op feedback; review is the first user)

@@ -530,8 +530,8 @@ local function compute_layout(desired_w, desired_h, ui, tag_bar_h)
     return win_w, win_h, row, col, tag_bar_row, prompt_row, visible_tag_bar_h
 end
 
--- Exported so sibling composite floats (e.g. review_menu, #133) reuse the same
--- centered geometry instead of duplicating the math (ARCH-DRY).
+-- Exported so sibling composite floats reuse the same centered geometry
+-- instead of duplicating the math (ARCH-DRY).
 M.compute_layout = compute_layout
 
 local function display_text_units(text)

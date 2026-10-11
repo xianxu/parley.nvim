@@ -727,7 +727,15 @@ atlas:
       - lua/parley/comment/float.lua
       - lua/parley/drill_in.lua
       - lua/parley/skills/review/init.lua
+      - lua/parley/skills/review/instruction.lua
+      - lua/parley/review_send.lua
+      - lua/parley/frontmatter.lua
+      - lua/parley/couch.lua
     tests:
+      - tests/unit/review_instruction_spec.lua
+      - tests/unit/frontmatter_spec.lua
+      - tests/unit/couch_spec.lua
+      - tests/integration/review_send_spec.lua
       - tests/unit/comment_codec_spec.lua
       - tests/unit/comment_view_spec.lua
       - tests/unit/comment_thread_spec.lua
@@ -740,6 +748,8 @@ atlas:
   modes/session_sync:
     code:
       - lua/parley/session_sync.lua
+      - lua/parley/couch.lua
+      - lua/parley/frontmatter.lua
     tests:
       - tests/unit/session_sync_spec.lua
       - tests/integration/session_sync_spec.lua

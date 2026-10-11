@@ -13,7 +13,14 @@ operator: xian-xu   # who the operator is
 
 | Key | Action |
 |---|---|
-| `<M-CR>` | Submit: save, delete the lock, run `couch --send-to <owner> --message "submitted: <absolute path>"`. The buffer stays editable. In any other markdown file it stays the review action. |
+| `<M-CR>` | Submit: save, delete the lock, run `couch --send-to <owner> --message "submitted: <absolute path>"`. The buffer stays editable. In any other markdown file it is the [review send](review.md#altreturn-process-instruction-and-the-slot-send-316). |
+
+**`owner:` is a check, not a route (#316).** Inside a pair slot, submit first
+resolves this editor's own agent (`couch --actors`, matched on
+`COUCH_THREAD_SCOPE`/`TAG`) and the owner's; when they differ it warns and
+changes nothing (no save, the lock stays, no message). Outside pair there is no
+slot to compare, and the owner is sent to as before. pair also reads
+`couch-owner:` (pair#443); parley does not.
 
 **The lock (#315: pessimistic for the human, optimistic for the agent).**
 The operator's lock is the only lock. The sidecar `<file>.lock` is absent
