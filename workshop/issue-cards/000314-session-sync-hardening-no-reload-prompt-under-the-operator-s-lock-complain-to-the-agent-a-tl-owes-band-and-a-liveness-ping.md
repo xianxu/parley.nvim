@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000314-session-sync-hardening-no-reload-prompt-under-the-operator-s-lock-complain-to-the-agent-a-tl-owes-band-and-a-liveness-ping.md
         source_blob: 9842943fe1373301cf7fe6a625c7e0b180e3c595
         destination: workshop/issues/000314-session-sync-hardening-no-reload-prompt-under-the-operator-s-lock-complain-to-the-agent-a-tl-owes-band-and-a-liveness-ping.md
+        main_commit: 6a4bf805419155016eab0c3e42d250da591ab4b3
 ---
 
 # Session-sync hardening: no reload prompt under the operator's lock, complain to the agent, a 'TL owes' band, and a liveness ping
