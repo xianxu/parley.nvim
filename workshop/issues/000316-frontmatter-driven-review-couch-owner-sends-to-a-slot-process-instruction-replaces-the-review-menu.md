@@ -6,7 +6,15 @@ github_issue:
 created: 2026-10-11
 updated: 2026-10-11
 estimate_hours:
-card_mirror: '28c11faa3b112b34261a6a639cd8338d2cee07f0' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'ac79950472d75c3b8bbb059cab19429cd4b48795' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-11T11:32:36-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:0
+    worktree: /Users/xianxu/workspace/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Frontmatter-driven review: couch-owner sends to a slot; process-instruction replaces the review menu
@@ -45,6 +53,15 @@ Unify around frontmatter. Three independent keys:
 - [ ] Alt+Return dispatch: `couch-owner` → generic couch send (path, instruction, diff since last send); else today's review path with the instruction.
 - [ ] `[name]` expansion from the mode files (knobs included); `[` completion in the value.
 - [ ] Remove `review_menu.lua` and its wiring; tests for the Done-when rows; update the parley docs/atlas.
+
+## Revisions
+
+### 2026-10-11 11:4x — the send target is the slot's own actor; `couch-owner` dropped (operator)
+
+- **Target:** Alt+Return sends to the actor (agent) in the slot this nvim runs in. No frontmatter names it. The `couch-owner:` key is dropped from this issue (pair#443 already reads it and stays harmless; nothing writes it).
+- **No slot** (nvim outside pair): fall back to today's review path, with the same `process-instruction`.
+- **Session-sync files keep `owner:`**, set to the actor that started the file. It is a check, not a route: if this nvim's slot isn't the owner, parley warns and doesn't send.
+- Spec bullets and Done-when rows that name `couch-owner` read as "the slot's own actor" from here on; the first Done-when row becomes: Alt+Return in a markdown file opened in ariadne:2's pane (no frontmatter target) delivers to ariadne:2's actor. The TL no longer switches the status file to `couch-owner:`.
 
 ## Log
 
