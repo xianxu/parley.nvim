@@ -1,6 +1,6 @@
 ---
 id: 000316
-status: working
+status: codecomplete
 created: 2026-10-11
 updated: 2026-10-11
 estimate_hours:
@@ -13,6 +13,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 1.15
 tracker:
     version: 1
     handoff:
@@ -25,6 +26,11 @@ tracker:
         source_blob: 9ea67efea53ca58d4f71f4869c7ec212c8c7557e
         destination: workshop/issues/000316-frontmatter-driven-review-couch-owner-sends-to-a-slot-process-instruction-replaces-the-review-menu.md
         main_commit: 26d04fc17edacf94ff8e4fbc860be7bdd8821be3
+    completion:
+        token: close-8bbd5b8c2e14
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 847acc93440d696637352c6eb85daee07404dee3
+        evidence_commit: bc0bbced9c89589b7ee80b1d8d1c6ed01eedfd07
 ---
 
 # Frontmatter-driven review: couch-owner sends to a slot; process-instruction replaces the review menu
