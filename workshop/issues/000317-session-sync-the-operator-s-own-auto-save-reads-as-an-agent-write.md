@@ -46,6 +46,13 @@ Let Neovim, which records every write a buffer makes, decide whose write it was,
 - [x] `autoread` off; the first-edit race check runs in the scheduled callback.
 - [x] Tests for both Done-when rows; atlas note.
 
+Core concepts:
+
+| Name | Where | Role | Status |
+|---|---|---|---|
+| `disk_changed` | `lua/parley/session_sync.lua` | mtime cache, confirmed by Neovim through checktime | modified |
+| `attach` | `lua/parley/session_sync.lua` | autoread off; FileChangedShell records the foreign mtime | modified |
+
 ## Log
 
 ### 2026-10-11
