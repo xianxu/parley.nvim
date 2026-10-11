@@ -323,12 +323,17 @@ describe("session-sync buffer", function()
                     vim.cmd("silent write")
                 end
                 assert.same({ "- TL's update", "- operator comment" }, vim.list_slice(vim.fn.readfile(file), 8, 9))
-                vim.wait(300)            -- several watch ticks, and the first-edit check
+                vim.wait(300)            -- watch ticks (when on), and the first-edit check
                 vim.cmd("checktime")
                 vim.wait(50)
                 assert.is_false(exists(file .. ".clobbered"))
                 assert.equals(0, #sent())
                 assert.equals("%#ParleySessionSyncOperator# your turn, Alt+Return to submit%=", winbar())
+                -- Submit reads the baseline even with the watch off.
+                keymap_cb("<M-CR>")()
+                assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
+                assert.matches("|submitted: ", sent()[1], 1, true)
+                assert.is_false(exists(file .. ".clobbered"))
             end)
         end
     end
@@ -354,6 +359,32 @@ describe("session-sync buffer", function()
             assert.matches("|submitted: " .. file, sent()[1], 1, true)
             assert.is_false(exists(file .. ".clobbered"))
             assert.same({ "- TL's update", "- operator comment" }, vim.list_slice(vim.fn.readfile(file), 8, 9))
+        end)
+    end
+
+    -- Without Neovim's verdict a moved mtime stays undecided: never adopted
+    -- as the operator's own (close review BR-1).
+    for _, how in ipairs({ "checktime errors", "eventignore" }) do
+        it(("a foreign write is not adopted when %s, and is caught once Neovim can say (#317)"):format(how), function()
+            open(header)
+            edit("- edited")
+            vim.cmd("silent write")
+            local real_cmd, saved_ei = vim.cmd, vim.o.eventignore
+            if how == "checktime errors" then
+                vim.cmd = setmetatable({}, { __index = real_cmd, __call = function(_, c)
+                    if type(c) == "string" and c:match("^checktime") then error("E11: stubbed") end
+                    return real_cmd(c)
+                end })
+            else
+                vim.o.eventignore = "FileChangedShell"
+            end
+            agent_write("- TL ignored the lock")
+            vim.wait(300)                -- watch ticks without a verdict
+            vim.cmd, vim.o.eventignore = real_cmd, saved_ei
+            assert.is_false(exists(file .. ".clobbered"))
+            assert.is_true(vim.wait(2000, function() return exists(file .. ".clobbered") end))
+            assert.equals("- edited", vim.fn.readfile(file)[8])
+            assert.equals("- TL ignored the lock", vim.fn.readfile(file .. ".clobbered")[8])
         end)
     end
 

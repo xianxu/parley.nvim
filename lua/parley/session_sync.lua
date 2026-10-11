@@ -259,23 +259,38 @@ end
 -- on TextChanged) fires no BufWritePost, so when the mtime moved, Neovim, which
 -- records every write the buffer makes, decides: `:checktime` raises
 -- FileChangedShell (which records `s.foreign`) only for someone else's write
--- (#317). Never call it from inside an autocmd, where `:checktime` prompts.
+-- (#317). Only Neovim's verdict moves the baseline: when it gives none (the
+-- check errored, or `eventignore` hides the event) the write stays undecided,
+-- asked again next time, and Neovim's own overwrite warning still guards
+-- a save. Never call it from inside an autocmd, where `:checktime` prompts.
+local function mtime_moved(buf)
+	local s = state[buf]
+	return s.loaded ~= nil and disk_mtime(buf) ~= s.loaded
+end
+
 local function disk_changed(buf)
 	local s = state[buf]
-	local now = disk_mtime(buf)
-	if s.loaded == nil or now == s.loaded then
+	if not mtime_moved(buf) then
 		return false
 	end
-	if now ~= s.foreign then
-		s.checking = true
-		pcall(vim.cmd, "checktime " .. buf)
-		s.checking = false
-		if now ~= s.foreign then
-			s.loaded = now
-			return false
-		end
+	local now = disk_mtime(buf)
+	if now == s.foreign then
+		return true
 	end
-	return true
+	local ignored = vim.o.eventignore:lower()
+	if ignored:find("all", 1, true) or ignored:find("filechangedshell", 1, true) then
+		return false
+	end
+	s.checking = true
+	local ok = pcall(vim.cmd, "checktime " .. buf)
+	s.checking = false
+	if now == s.foreign then
+		return true
+	end
+	if ok then
+		s.loaded = now
+	end
+	return false
 end
 
 local refresh, probe
@@ -512,7 +527,7 @@ M.attach = function(buf)
 				-- text is kept and the agent's set aside (#315).
 				-- The mtime moved before this edit; whose write it was is
 				-- asked outside the autocmd (disk_changed may :checktime).
-				local moved = s.loaded ~= nil and disk_mtime(buf) ~= s.loaded
+				local moved = mtime_moved(buf)
 				if write_lock(buf, "operator") then
 					refresh(buf)
 					vim.schedule(function()
