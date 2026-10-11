@@ -27,6 +27,28 @@ describe("couch.same", function()
     end)
 end)
 
+-- ARCH-MOCK conformance (#316 close review): the fakes hand-write the
+-- --actors JSON; against the real couch, this editor's thread must resolve.
+-- Runs only inside a pair slot with couch reachable; pending elsewhere.
+describe("couch conformance (live)", function()
+    it("the real --actors JSON binds this thread by Scope and Tag", function()
+        local thread = couch.thread()
+        if not thread or vim.fn.executable("couch") == 0 then
+            pending("not inside a pair slot")
+            return
+        end
+        local out = vim.system({ "couch", "--actors", "--json" }, { text = true }):wait(10000)
+        local ok, data = pcall(vim.json.decode, out.stdout or "", { luanil = { object = true, array = true } })
+        if out.code ~= 0 or not ok or type(data) ~= "table" or data.Code ~= "ok" then
+            pending("couch unreachable here")
+            return
+        end
+        local own = couch.own_actor(data.Actors, thread)
+        assert.is_not_nil(own, "no actor bound to this thread")
+        assert.truthy((couch.slot(own) or ""):match("^.+:%d+$"))
+    end)
+end)
+
 describe("couch.thread", function()
     local saved
     before_each(function() saved = { vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG } end)

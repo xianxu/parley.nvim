@@ -67,6 +67,26 @@ describe("review skill source composition", function()
         assert.is_truthy(body:find("tighten the intro", 1, true), "includes operator instruction")
     end)
 
+    -- #316 BR-1: the `process-instruction` path (args.modes, several names)
+    -- through the real source(), not a stub.
+    it("composes several modes from args.modes: every brief, the first mode's directives", function()
+        local review = require("parley.skills.review")
+        local mode = require("parley.skills.review.mode")
+        local review_dir = (vim.api.nvim_get_runtime_file("lua/parley/skills/review", false) or {})[1]
+        local body = review.skill.source({
+            skill_md = "BASE",
+            skill_dir = review_dir,
+            args = { modes = { "proofreading", "copy-editing" }, instruction = "keep the voice" },
+        })
+        assert.is_truthy(body:find("## Review mode: proofreading", 1, true))
+        assert.is_truthy(body:find("## Review mode: copy-editing", 1, true))
+        local _, applies = body:gsub("## How to apply this round", "")
+        assert.equals(1, applies)
+        local first = assert(mode.load(review_dir .. "/modes", "proofreading"))
+        assert.is_truthy(body:find(mode.directives(first), 1, true))
+        assert.is_truthy(body:find("## Operator instruction\nkeep the voice", 1, true))
+    end)
+
     it("returns base SKILL.md alone when no mode is given (legacy marker-only review)", function()
         local review = require("parley.skills.review")
         local body = review.skill.source({ skill_md = "ONLY-BASE", args = {} })

@@ -41,6 +41,33 @@ M.needs_quote = function(s)
 		or s:match("%s$") ~= nil
 end
 
+--- The leading quoted scalar of `s` ("…" with backslash escapes, '…' with
+--- ''), quotes included; nil when `s` does not start with a closed one.
+---@param s string
+---@return string|nil
+M.quoted_span = function(s)
+	local q = s:sub(1, 1)
+	if q ~= '"' and q ~= "'" then
+		return nil
+	end
+	local i = 2
+	while i <= #s do
+		local c = s:sub(i, i)
+		if q == '"' and c == "\\" then
+			i = i + 2
+		elseif c == q then
+			if q == "'" and s:sub(i + 1, i + 1) == "'" then
+				i = i + 2
+			else
+				return s:sub(1, i)
+			end
+		else
+			i = i + 1
+		end
+	end
+	return nil
+end
+
 --- Parse the frontmatter at the top of `lines`.
 ---@param lines string[]
 ---@return table|nil { fields, raw, lnum, close } (lnum/close are 1-based), nil without a closed block
@@ -59,8 +86,9 @@ M.parse = function(lines)
 			key = key:lower()
 			fm.raw[key] = value
 			fm.lnum[key] = i
-			local plain = value:match("^[\"']") and value or value:gsub("%s+#.*$", "")
-			plain = M.unquote(plain)
+			-- A quoted scalar ends at its closing quote (a comment may follow).
+			local span = M.quoted_span(value)
+			local plain = span and M.unquote(span) or (value:gsub("%s+#.*$", ""))
 			fm.fields[key] = plain ~= "" and plain or nil
 		end
 	end

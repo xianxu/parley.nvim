@@ -26,7 +26,7 @@
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `parse`, `unquote`, `quote`, `needs_quote` (Frontmatter) | `lua/parley/frontmatter.lua` | new |
+| `parse`, `unquote`, `quote`, `needs_quote`, `quoted_span` (Frontmatter) | `lua/parley/frontmatter.lua` | new |
 | `expand`, `resolve`, `brief`, `complete` (Instruction; its `parse` above-named) | `lua/parley/skills/review/instruction.lua` | new |
 | `message`, `diff`, `placement`, `format_line`, `instruction_value`, `completion_start`, `requote` (SendMessage + pure send helpers) | `lua/parley/review_send.lua` | new |
 | `own_actor`, `same`, `slot`, `thread` (own-slot resolution) | `lua/parley/couch.lua` | new |

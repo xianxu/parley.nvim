@@ -33,13 +33,18 @@ local function modes()
 	return dir and require("parley.skills.review.mode").list(dir) or {}
 end
 
---- The instruction text from frontmatter lines, unquoted; nil when the key is absent.
+--- The instruction text from frontmatter lines; nil when the key is absent.
+--- A quoted value is its quoted scalar (a comment may follow it); a plain one
+--- is the whole line after the colon, `#` included.
 ---@param lines string[]
 ---@return string|nil
 M.instruction_value = function(lines)
 	local fm = frontmatter.parse(lines)
 	local raw = fm and fm.raw[M.KEY]
-	return raw and frontmatter.unquote(raw) or nil
+	if raw and frontmatter.quoted_span(raw) then
+		return fm.fields[M.KEY] or ""
+	end
+	return raw
 end
 
 --- The frontmatter line for a value, quoted when a strict YAML reader needs it.
@@ -95,7 +100,7 @@ M.message = function(m)
 		"",
 		m.brief,
 		"",
-		"## Changes since the last send",
+		"## Changes since the last send (by anyone: your own edits to the file included)",
 		change,
 	}, "\n")
 end
@@ -196,12 +201,20 @@ M.completion_start = function(before)
 	return #before + 1
 end
 
---- The line once completion ended: the value quoted when it needs it, and
---- the cursor column (0-based) on the same text. PURE.
+--- The line once completion ended: the value quoted when it needs it (an
+--- opened, unclosed quote gets its closing one), and the cursor column
+--- (0-based) on the same text. PURE.
 M.requote = function(line, col)
 	local head = line:match(LINE)
-	if not head or line:sub(#head + 1, #head + 1):match("[\"']") then
+	if not head then
 		return nil
+	end
+	local opened = line:sub(#head + 1, #head + 1)
+	if opened:match("[\"']") then
+		if frontmatter.quoted_span(line:sub(#head + 1)) then
+			return nil
+		end
+		return line .. opened, col
 	end
 	local value = line:sub(#head + 1)
 	if not frontmatter.needs_quote(value) then
