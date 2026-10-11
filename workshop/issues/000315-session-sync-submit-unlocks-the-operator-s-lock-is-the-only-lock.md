@@ -73,6 +73,7 @@ Design notes:
 ## Log
 
 ### 2026-10-11
+- 2026-10-11: closed — make test exit 0 (424 spec files pass, luacheck clean); session_sync specs 35/35 cover: submit deletes lock + buffer editable + one submitted: send; failed send leaves file free; clean-buffer silent reload via watch and :checktime; legacy holder:agent lock does not block; first-edit race keeps operator text with .clobbered; owed band and ping from fake couch status --json only (lock alone never owes); review verdict: SHIP
 
 - Claimed and started on parley.nvim:1 from the TL dispatch; design notes in ## Plan.
 - Implemented: turn is free/operator; submit saves, deletes the lock and sends; owed band + ping read couch's owed events only (probe forced after submit and reload); the first-edit race goes through `violation(buf, true)`; `<C-g>u` unlock removed (config, registry, init, atlas). `make test-spec SPEC=modes/session_sync`: 35/35 pass.
