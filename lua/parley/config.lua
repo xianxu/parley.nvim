@@ -480,9 +480,8 @@ local config = {
 	review_shortcut_menu = { modes = { "n" }, shortcut = "<M-s>" },
 	review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" },
 	-- #313: in a `type: session-sync` file <M-CR> submits to its owner over couch
-	-- instead; <C-g>u unlocks a submit the owner never answered, and the
-	-- "unsent edits" reminder shows after this many idle minutes holding the lock.
-	session_sync_shortcut_unlock = { modes = { "n" }, shortcut = "<C-g>u" },
+	-- instead, and the "unsent edits" reminder shows after this many idle
+	-- minutes holding the lock.
 	session_sync_stale_minutes = 5,
 	session_sync_ping_minutes = 5,
 	-- Agent for document review. NIL by default (#215): it used to name

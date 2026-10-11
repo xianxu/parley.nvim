@@ -25,8 +25,7 @@ branch references before falling back to smart `gf`. See [Branching](../chat/inl
 and [Drill-In](../chat/drill_in.md) for placement and selection details.
 
 In a markdown file whose frontmatter says `type: session-sync`, `<M-CR>`
-submits the file to its owning agent instead of opening the review menu, and
-`<C-g>u` unlocks a submit the owner never answered; see
+submits the file to its owning agent instead of opening the review menu; see
 [Session-Sync Files](../modes/session_sync.md).
 
 In a regular chat buffer, Insert-mode Return continues the private-note prefix

@@ -1,6 +1,7 @@
--- #313: session-sync files — the lock names the turn holder; the first edit
--- takes it, <M-CR> hands it to the agent over couch, the reply (rewrite + lock
--- removed) frees it. Every turn is rendered in the winbar and StatusLine.
+-- #313/#315: session-sync files — the operator's lock is the only lock: the
+-- first edit takes it, <M-CR> saves, deletes it and tells the agent over couch;
+-- a clean buffer follows the agent's writes. Owed work (couch's owed events)
+-- and the operator's turn are rendered in the winbar and StatusLine.
 local ss = require("parley.session_sync")
 local uv = vim.uv or vim.loop
 
@@ -53,6 +54,12 @@ describe("session-sync buffer", function()
               LastActivity = os.date("!%Y-%m-%dT%H:%M:%SZ", os.time() - (quiet and 60 or 0)) },
         } })
     end
+    -- couch's `--session-sync status` reporting one owed event `minutes` old.
+    local function owed(minutes)
+        return vim.json.encode({ Code = "ok", Status = { Owed = {
+            { ID = "d1", Kind = "delivery", At = os.date("!%Y-%m-%dT%H:%M:%SZ", os.time() - minutes * 60) },
+        } } })
+    end
     -- A lock (or file) last written `minutes` ago.
     local function age(path, minutes)
         local t = os.time() - minutes * 60
@@ -94,7 +101,6 @@ describe("session-sync buffer", function()
         ss.PING_CHECK_MS = 20
         p.config.session_sync_ping_minutes = 5
         p.config.review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" }
-        p.config.session_sync_shortcut_unlock = { modes = { "n" }, shortcut = "<C-g>u" }
         p.config.session_sync_stale_minutes = 5
     end)
 
@@ -116,62 +122,68 @@ describe("session-sync buffer", function()
         assert.equals("StatusLine:ParleySessionSyncOperator", winhl())
     end)
 
-    it("<M-CR> saves, hands the turn to the agent and sends one couch message", function()
+    it("<M-CR> saves, deletes the lock, leaves the buffer editable and sends one couch message (#315)", function()
         open(header)
         edit("- item 🤖[ok?]")
         keymap_cb("<M-CR>")()
-        assert.is_false(vim.bo[buf].modifiable)
-        assert.equals("holder: agent", holder())
+        assert.is_false(exists(file .. ".lock"))
+        assert.is_true(vim.bo[buf].modifiable)
+        assert.is_false(vim.bo[buf].modified)
         assert.equals("- item 🤖[ok?]", vim.fn.readfile(file)[8])
-        assert.equals("%#ParleySessionSyncAgent# ops:0 owes a response, 0 min, read-only%=", winbar())
-        assert.equals("StatusLine:ParleySessionSyncAgent", winhl())
+        assert.equals("%#ParleySessionSyncFree# free: editing takes your turn%=", winbar())
         assert.is_true(vim.wait(2000, function() return exists(argv_file) end))
         assert.same({ "--send-to", "ops:0", "--message", "submitted: " .. file }, vim.fn.readfile(argv_file))
-        vim.wait(100)
-        assert.is_false(vim.bo[buf].modifiable)
+        -- The next keystroke takes the lock again.
+        edit("- second thought")
+        assert.equals("holder: operator", holder())
     end)
 
-    it("a failed send gives the turn back to the operator", function()
+    it("a failed send leaves the file free and the buffer editable (#315)", function()
         vim.env.FAKE_COUCH_EXIT = "3"
         open(header)
         edit("- edited")
         keymap_cb("<M-CR>")()
-        assert.is_true(vim.wait(2000, function() return vim.bo[buf].modifiable end))
-        assert.equals("holder: operator", holder())
+        assert.is_true(vim.wait(2000, function() return exists(argv_file) end))
+        vim.wait(100)
+        assert.is_false(exists(file .. ".lock"))
+        assert.is_true(vim.bo[buf].modifiable)
+        assert.equals("- edited", vim.fn.readfile(file)[8])
     end)
 
-    it("the agent's reply reloads the buffer, frees the turn and makes it editable", function()
+    it("the agent's reply to a submit reloads the clean buffer silently (#315)", function()
         open(header)
         edit("- edited")
         keymap_cb("<M-CR>")()
         assert.is_true(vim.wait(2000, function() return exists(argv_file) end))
-        local reply = vim.deepcopy(header)
-        reply[8] = "- resolved by TL"
-        vim.fn.writefile(reply, file)
-        os.remove(file .. ".lock")
-        assert.is_true(vim.wait(2000, function() return vim.bo[buf].modifiable end))
-        assert.equals("- resolved by TL", vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1])
+        agent_write("- resolved by TL")
+        assert.is_true(vim.wait(2000, function()
+            return vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1] == "- resolved by TL"
+        end))
         assert.is_false(vim.bo[buf].modified)
         assert.is_false(exists(file .. ".lock"))
-        assert.equals("%#ParleySessionSyncFree# free: editing takes your turn%=", winbar())
+        assert.is_false(exists(file .. ".clobbered"))
+        assert.equals(1, #sent())            -- only the submit: no violation
     end)
 
-    it("a file reopened while the agent holds the turn is read-only", function()
-        vim.fn.writefile({ "holder: agent" }, file .. ".lock")
-        open(header)
-        assert.is_false(vim.bo[buf].modifiable)
-        os.remove(file .. ".lock")
-        assert.is_true(vim.wait(2000, function() return vim.bo[buf].modifiable end))
-    end)
-
-    it("manual unlock after submit gives the operator the turn back", function()
+    it("a reply noticed by :checktime reloads a clean buffer without a prompt (#315)", function()
+        ss.POLL_MS = 60000               -- only FileChangedShell can notice it
         open(header)
         edit("- edited")
         keymap_cb("<M-CR>")()
-        assert.is_true(vim.wait(2000, function() return exists(argv_file) end))
-        keymap_cb("<C-g>u")()
+        agent_write("- resolved by TL")
+        vim.cmd("checktime")
+        assert.equals("- resolved by TL", vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1])
+        assert.is_false(vim.bo[buf].modified)
+    end)
+
+    it("a legacy holder: agent lock does not block the operator (#315)", function()
+        vim.fn.writefile({ "holder: agent" }, file .. ".lock")
+        open(header)
         assert.is_true(vim.bo[buf].modifiable)
+        assert.equals("%#ParleySessionSyncFree# free: editing takes your turn%=", winbar())
+        edit("- edited")
         assert.equals("holder: operator", holder())
+        assert.equals("%#ParleySessionSyncOperator# your turn, Alt+Return to submit%=", winbar())
     end)
 
     it("an idle operator turn turns stale and renders in the reminder colour", function()
@@ -191,20 +203,6 @@ describe("session-sync buffer", function()
         assert.is_true(hl.bold)
     end)
 
-    it("a late failing exit from an earlier submit leaves the current turn alone", function()
-        vim.env.FAKE_COUCH_EXIT, vim.env.FAKE_COUCH_SLEEP = "3", "0.4"
-        open(header)
-        edit("- edited")
-        keymap_cb("<M-CR>")()            -- slow send, will fail
-        keymap_cb("<C-g>u")()            -- operator takes the turn back...
-        vim.env.FAKE_COUCH_EXIT, vim.env.FAKE_COUCH_SLEEP = "0", nil
-        keymap_cb("<M-CR>")()            -- ...and resubmits; this send succeeds
-        assert.equals("holder: agent", holder())
-        vim.wait(800)                    -- the first send's failure lands
-        assert.equals("holder: agent", holder())
-        assert.is_false(vim.bo[buf].modifiable)
-    end)
-
     it("a free buffer follows the agent's writes on disk", function()
         open(header)
         local update = vim.deepcopy(header)
@@ -216,16 +214,19 @@ describe("session-sync buffer", function()
         assert.is_false(exists(file .. ".lock"))
     end)
 
-    it("the first edit on a stale copy reloads instead of taking the turn", function()
+    it("an agent write racing the first edit: the operator's text is kept, theirs in .clobbered (#315)", function()
         ss.POLL_MS = 60000               -- the watch never catches the write
         open(header)
-        local update = vim.deepcopy(header)
-        update[8] = "- new thread from TL"
-        vim.fn.writefile(update, file)
+        agent_write("- new thread from TL")
         edit("- edited on the old copy")
-        assert.is_false(exists(file .. ".lock"))
-        assert.equals("- new thread from TL", vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1])
-        assert.is_false(vim.bo[buf].modified)
+        assert.equals("holder: operator", holder())
+        assert.is_true(vim.wait(2000, function() return exists(file .. ".clobbered") end))
+        assert.equals("- edited on the old copy", vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1])
+        assert.equals("- edited on the old copy", vim.fn.readfile(file)[8])
+        assert.equals("- new thread from TL", vim.fn.readfile(file .. ".clobbered")[8])
+        assert.equals("%#ParleySessionSyncOperator# ops:0 changed as you started typing: yours kept, theirs in .clobbered%=", winbar())
+        assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
+        assert.matches("as the operator started editing", sent()[1], 1, true)
     end)
 
     it("submit over a write made under the operator's lock keeps the operator's copy (#314)", function()
@@ -237,7 +238,7 @@ describe("session-sync buffer", function()
         keymap_cb("<M-CR>")()
         assert.equals("- edited", vim.fn.readfile(file)[8])
         assert.equals("- new thread from TL", vim.fn.readfile(file .. ".clobbered")[8])
-        assert.equals("holder: agent", holder())
+        assert.is_false(exists(file .. ".lock"))
         assert.is_true(vim.wait(2000, function() return #sent() == 2 end))
         local log = table.concat(sent(), "\n")
         assert.matches("ops:0|session-sync violation: " .. file, log, 1, true)
@@ -320,11 +321,29 @@ describe("session-sync buffer", function()
         assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
     end)
 
-    it("the agent band counts the minutes the owner owes a response (#314)", function()
+    it("the owed band counts the minutes from couch's oldest owed event (#315)", function()
+        vim.env.FAKE_COUCH_STATUS = owed(3)
+        open(header)
+        assert.is_true(vim.wait(2000, function()
+            return winbar() == "%#ParleySessionSyncOwed# ops:0 owes a response, 3 min%="
+        end))
+        assert.equals("StatusLine:ParleySessionSyncOwed", winhl())
+        -- The operator's turn outranks it; nothing owed is the neutral band.
+        edit("- edited")
+        assert.equals("%#ParleySessionSyncOperator# your turn, Alt+Return to submit%=", winbar())
+        vim.env.FAKE_COUCH_STATUS = '{"Code":"ok","Status":{"Owed":[]}}'
+        keymap_cb("<M-CR>")()
+        assert.is_true(vim.wait(2000, function()
+            return winbar() == "%#ParleySessionSyncFree# free: editing takes your turn%="
+        end))
+    end)
+
+    it("a lock alone never shows owed work (#315)", function()
         vim.fn.writefile({ "holder: agent" }, file .. ".lock")
         age(file .. ".lock", 3)
         open(header)
-        assert.equals("%#ParleySessionSyncAgent# ops:0 owes a response, 3 min, read-only%=", winbar())
+        vim.wait(200)
+        assert.equals("%#ParleySessionSyncFree# free: editing takes your turn%=", winbar())
     end)
 
     describe("liveness ping (#314)", function()
@@ -333,8 +352,7 @@ describe("session-sync buffer", function()
         end
 
         it("pings a quiet owner once when it has owed a response for the threshold", function()
-            vim.fn.writefile({ "holder: agent" }, file .. ".lock")
-            age(file .. ".lock", 6)
+            vim.env.FAKE_COUCH_STATUS = owed(6)
             open(header)
             assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
             assert.matches("^ops:0|session%-sync ping: " .. vim.pesc(file) .. " owes a response since ", pings()[1])
@@ -344,8 +362,7 @@ describe("session-sync buffer", function()
 
         it("does not ping an owner mid-turn, and does once it goes quiet", function()
             vim.env.FAKE_COUCH_ACTORS = actors("ops:0", false)
-            vim.fn.writefile({ "holder: agent" }, file .. ".lock")
-            age(file .. ".lock", 6)
+            vim.env.FAKE_COUCH_STATUS = owed(6)
             open(header)
             vim.wait(300)
             assert.equals(0, #pings())
@@ -354,21 +371,22 @@ describe("session-sync buffer", function()
         end)
 
         it("does not ping before the threshold, when nothing is owed, or when the owner is not live", function()
-            vim.fn.writefile({ "holder: agent" }, file .. ".lock")
-            age(file .. ".lock", 4)
+            vim.env.FAKE_COUCH_STATUS = owed(4)
             open(header)
             vim.wait(300)
             assert.equals(0, #pings())
             vim.api.nvim_buf_delete(buf, { force = true })
-            os.remove(file .. ".lock")
-            open(header)                 -- free turn, nothing owed, the file itself old
+            vim.env.FAKE_COUCH_STATUS = nil
+            vim.fn.writefile({ "holder: agent" }, file .. ".lock")
+            age(file .. ".lock", 60)     -- a legacy agent lock alone owes nothing (#315)
+            open(header)
             age(file, 60)
             vim.wait(300)
             assert.equals(0, #pings())
             vim.api.nvim_buf_delete(buf, { force = true })
+            os.remove(file .. ".lock")
             vim.env.FAKE_COUCH_ACTORS = actors("pair:0", true)
-            vim.fn.writefile({ "holder: agent" }, file .. ".lock")
-            age(file .. ".lock", 6)
+            vim.env.FAKE_COUCH_STATUS = owed(6)
             open(header)
             vim.wait(300)
             assert.equals(0, #pings())
@@ -377,20 +395,22 @@ describe("session-sync buffer", function()
         it("survives JSON nulls from couch and keeps probing (close review BR-1)", function()
             vim.env.FAKE_COUCH_STATUS = '{"Code":"ok","Status":{"Owed":null}}'
             vim.env.FAKE_COUCH_ACTORS = '{"Code":"ok","Actors":[{"Binding":null},{"Binding":{"Slot":"ops:0"},"Known":true,"LastActivity":null}]}'
-            vim.fn.writefile({ "holder: agent" }, file .. ".lock")
-            age(file .. ".lock", 6)
             open(header)
             vim.wait(300)
             assert.equals(0, #pings())
             vim.env.FAKE_COUCH_STATUS = '{"Code":"ok","Status":null}'
+            vim.wait(300)
+            assert.equals(0, #pings())
+            vim.env.FAKE_COUCH_STATUS = owed(6)
+            vim.wait(300)
+            assert.equals(0, #pings())       -- the null actor fields still decode
             vim.env.FAKE_COUCH_ACTORS = actors("ops:0", true)
             assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
         end)
 
-        it("pings for owed deliveries couch reports, with no lock", function()
-            vim.env.FAKE_COUCH_STATUS = vim.json.encode({ Code = "ok", Status = { Owed = {
-                { ID = "d1", Kind = "delivery", At = os.date("!%Y-%m-%dT%H:%M:%SZ", os.time() - 600) },
-            } } })
+        it("pings while the operator holds the lock too: owed events alone decide (#315)", function()
+            vim.env.FAKE_COUCH_STATUS = owed(10)
+            vim.fn.writefile({ "holder: operator" }, file .. ".lock")
             open(header)
             assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
         end)
@@ -405,13 +425,11 @@ describe("session-sync buffer", function()
         end))
     end)
 
-    it("plain markdown keeps the review action on <M-CR>, and unlock is a no-op", function()
+    it("plain markdown keeps the review action on <M-CR>", function()
         open({ "# just notes" })
         local fallback_called = false
         ss.dispatch(buf, function() fallback_called = true end)()
         assert.is_true(fallback_called)
-        keymap_cb("<C-g>u")()
-        assert.is_true(vim.bo[buf].modifiable)
         assert.is_not_nil(keymap_cb("<M-CR>"))
         assert.is_false(exists(file .. ".lock"))
         assert.equals("", winbar())

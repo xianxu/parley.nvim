@@ -3167,7 +3167,6 @@ M.setup_markdown_keymaps = function(buf)
 			review_menu = review_cbs.review_menu,
 			-- #313: <M-CR> submits a session-sync file to its owner instead.
 			review_next = review_cbs.review_next and session_sync.dispatch(buf, review_cbs.review_next),
-			session_sync_unlock = function() session_sync.unlock(buf) end,
 		},
 		M.helpers.set_keymap
 	)

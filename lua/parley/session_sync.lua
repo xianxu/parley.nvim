@@ -2,21 +2,23 @@
 --
 -- A markdown file whose frontmatter says `type: session-sync` is shared
 -- between the operator and the agent named by `owner:` (a couch address).
--- The sidecar `<file>.lock` names whose turn it is:
---   absent           free      — the agent may write; the operator's first
---                                 edit takes the turn (holder: operator)
+-- Pessimistic locking for the human, optimistic for the agent (#315): the
+-- operator's lock is the only lock. The sidecar `<file>.lock`:
+--   absent           free — the agent may write; a clean buffer follows its
+--                    writes silently; the operator's first edit takes the
+--                    turn (holder: operator)
 --   holder: operator the operator's turn — the agent never writes the file
---   holder: agent    the agent's turn — the buffer is read-only
--- <M-CR> saves, rewrites the holder to agent and tells the owner via
--- `couch --send-to`. The agent replies by rewriting the file and deleting the
--- lock (it never writes the lock); a watch notices, reloads and unlocks.
+-- A legacy `holder: agent` lock reads as free. <M-CR> saves, deletes the lock
+-- and tells the owner via `couch --send-to`; the buffer stays editable.
 -- The turn is always read from disk, so a reopened buffer shows it too.
--- An agent write under the operator's lock never prompts (#314): the
--- operator's copy is written back, the agent's kept as `<file>.clobbered`,
--- and the owner told once. While the owner owes a response for
--- `session_sync_ping_minutes` and its turn has ended, it is pinged once.
+-- An agent write under the operator's lock (or racing the first keystroke)
+-- never prompts (#314): the operator's copy is written back, the agent's
+-- kept as `<file>.clobbered`, and the owner told once. Whether the owner owes
+-- a response comes from couch's owed events alone: they drive the band, and
+-- while owed for `session_sync_ping_minutes` with its turn ended, the owner
+-- is pinged once.
 --
--- Lifecycles: the lock is removed by the agent's reply; an operator lock left
+-- Lifecycles: the lock is removed by submit; an operator lock left
 -- idle turns stale and is shown in the reminder colour until submitted. The
 -- watch timer lives while the buffer is loaded (closed on unload and
 -- BufWipeout, restarted by BufWinEnter); the idle
@@ -35,12 +37,12 @@ M.QUIET_SECONDS = 30
 
 local ns_group = "ParleySessionSync"
 
--- Per-buffer state: { turn, stale, gen (submit generation), loaded (disk
--- mtime last read/written), watch = timer|nil, idle = timer|nil, minutes
--- (the agent's turn so far), violated / complained (this operator turn),
--- unkept (the disk mtime of an agent copy that could not be kept),
--- probing / probed (vim.uv.now()
--- of the last probe), pinged (the owed-since time last pinged) }
+-- Per-buffer state: { turn, stale, loaded (disk mtime last read/written),
+-- watch = timer|nil, idle = timer|nil, owed (epoch of the oldest owed event
+-- couch last reported, or nil), minutes (rendered owed minutes), violated /
+-- complained (this operator turn), unkept (the disk mtime of an agent copy
+-- that could not be kept), probing / probed (vim.uv.now() of the last
+-- probe), pinged (the owed-since time last pinged) }
 local state = {}
 
 --- Frontmatter lines → { owner, operator } when `type: session-sync`, else nil.
@@ -67,33 +69,35 @@ M.parse_header = function(lines)
 	return nil
 end
 
---- The lock sidecar's text for a turn holder ("operator" | "agent").
+--- The lock sidecar's text for a holder (parley only writes "operator").
 M.lock_body = function(holder, epoch)
 	return "holder: " .. holder .. "\ntime: " .. os.date("!%Y-%m-%dT%H:%M:%SZ", epoch) .. "\n"
 end
 
---- Lock text (nil = no lock) → "free" | "operator" | "agent". A lock without
---- a recognisable holder still blocks the agent, so it counts as the operator's.
+--- Lock text (nil = no lock) → "free" | "operator". A legacy agent lock is
+--- no lock (#315); one without a recognisable holder still blocks the agent,
+--- so it counts as the operator's.
 M.turn = function(lock_text)
-	if not lock_text then
+	if not lock_text or lock_text:match("^holder:%s*agent%s*\n") then
 		return "free"
 	end
-	return lock_text:match("^holder:%s*agent%s*\n") and "agent" or "operator"
+	return "operator"
 end
 
 local VIEWS = {
 	free = { hl = "ParleySessionSyncFree", label = "free: editing takes your turn" },
 	operator = { hl = "ParleySessionSyncOperator", label = "your turn, Alt+Return to submit" },
 	stale = { hl = "ParleySessionSyncStale", label = "unsent edits, Alt+Return to submit" },
-	violated = { hl = "ParleySessionSyncOperator", label = "%s wrote under your lock: %s" },
-	agent = { hl = "ParleySessionSyncAgent", label = "%s owes a response, %d min, read-only" },
+	violated = { hl = "ParleySessionSyncOperator", label = "%s %s" },
+	owed = { hl = "ParleySessionSyncOwed", label = "%s owes a response, %d min" },
 }
 
---- (turn, { stale, violated (what became of it), minutes }, owner) →
---- { state, label, hl }: what every surface renders. A violation outranks staleness.
+--- (turn, { stale, violated (what became of it), minutes (owed, or nil) },
+--- owner) → { state, label, hl }: what every surface renders. The operator's
+--- turn outranks owed work; a violation outranks staleness.
 M.view = function(turn, flags, owner)
 	flags = flags or {}
-	local key = turn
+	local key = flags.minutes and "owed" or "free"
 	if turn == "operator" then
 		key = flags.violated and "violated" or flags.stale and "stale" or "operator"
 	end
@@ -254,34 +258,33 @@ local function disk_changed(buf)
 	return s.loaded ~= nil and disk_mtime(buf) ~= s.loaded
 end
 
+local refresh, probe
+
+-- A clean buffer follows the file on disk silently; the owed state is
+-- re-read at once, since a write is usually the agent's answer.
 local function reload(buf)
-	vim.bo[buf].modifiable = true
 	vim.api.nvim_buf_call(buf, function()
 		vim.cmd("silent edit!")
 	end)
+	state[buf].probed = nil
+	probe(buf)
 end
 
-local function lock_mtime(buf)
-	local st = vim.uv.fs_stat(M.lock_path(buf))
-	return st and st.mtime.sec
+-- Whole minutes the owner has owed a response, or nil when nothing is owed.
+local function owed_minutes(buf)
+	local since = state[buf].owed
+	return since and math.max(0, math.floor((os.time() - since) / 60)) or nil
 end
 
--- Whole minutes since the lock was written (the agent's turn so far).
-local function lock_minutes(buf)
-	return math.floor((os.time() - (lock_mtime(buf) or os.time())) / 60)
-end
-
-local refresh
-
--- The agent wrote (or deleted) the file while the operator held the lock.
--- Keep the agent's copy beside the file, write the operator's buffer back over
+-- The agent wrote (or deleted) the file while the operator held the lock, or
+-- (`race`) just before the operator's first keystroke took it. Keep the agent's copy beside the file, write the operator's buffer back over
 -- it (`write!`: no "changed since reading" prompt, now or on a later save),
 -- flag the band and tell the owner once per operator turn. A copy that cannot
 -- be kept is never overwritten: it is remembered by mtime (no retry each
 -- tick), submit refuses, and a plain save meets Neovim's own overwrite prompt.
 -- Returns whether the file on disk is the operator's copy; every caller that
 -- writes next must act on it.
-local function violation(buf)
+local function violation(buf, race)
 	local s = state[buf]
 	if not disk_changed(buf) then
 		return true
@@ -291,16 +294,18 @@ local function violation(buf)
 	end
 	local path = file_of(buf)
 	local clobbered = path .. ".clobbered"
+	local verb = race and "changed as you started typing:" or "wrote under your lock:"
+	local when = race and " as the operator started editing" or " while the operator held the lock"
 	local band, told
 	if not vim.uv.fs_stat(path) then
-		band, told = "deleted it, yours restored", "was deleted while the operator held the lock;"
+		band, told = "deleted it, yours restored", "was deleted" .. when .. ";"
 			.. " the operator's copy was restored"
 	elseif vim.uv.fs_copyfile(path, clobbered) then
-		band, told = "yours kept, theirs in .clobbered", "was written while the operator held the lock;"
+		band, told = "yours kept, theirs in .clobbered", "was written" .. when .. ";"
 			.. " the operator's copy was kept, yours is at " .. clobbered
 	else
-		band, told = "theirs could not be kept, file left as theirs", "was written while the operator held"
-			.. " the lock; your copy could not be kept at " .. clobbered .. ", so it was not overwritten"
+		band, told = "theirs could not be kept, file left as theirs", "was written" .. when
+			.. "; your copy could not be kept at " .. clobbered .. ", so it was not overwritten"
 	end
 	local kept = not band:find("not be kept", 1, true)
 	if not kept then
@@ -310,7 +315,7 @@ local function violation(buf)
 			vim.cmd("silent write!")
 		end)
 	end
-	s.violated = band
+	s.violated = verb .. " " .. band
 	refresh(buf)
 	local owner = owner_of(buf)
 	notify((owner or "the agent") .. " " .. path .. " " .. told, vim.log.levels.WARN)
@@ -321,13 +326,13 @@ local function violation(buf)
 	return kept
 end
 
--- Ping the owner once per episode of owed work: owed since the lock was
--- handed to it (the agent's turn), or since the oldest owed event couch's
--- `--session-sync status` reports (pair#437; any failure leaves the lock
--- alone as the condition). Only an owner that is live and quiet (its turn
--- ended: no activity for QUIET_SECONDS) is pinged: mid-turn the message would
--- only queue. (`Resting` names the slot's resting branch, not its turn.)
-local function probe(buf)
+-- Read the owed state: since the oldest owed event couch's `--session-sync
+-- status` reports (pair#437; any failure reads as nothing owed). It drives
+-- the band, and pings the owner once per episode of owed work. Only an owner
+-- that is live and quiet (its turn ended: no activity for QUIET_SECONDS) is
+-- pinged: mid-turn the message would only queue. (`Resting` names the slot's
+-- resting branch, not its turn.)
+probe = function(buf)
 	local s = state[buf]
 	local owner = owner_of(buf)
 	if not owner or s.probing or (s.probed and vim.uv.now() - s.probed < M.PING_CHECK_MS) then
@@ -335,20 +340,20 @@ local function probe(buf)
 	end
 	s.probing, s.probed = true, vim.uv.now()
 	local path = file_of(buf)
-	local function lock_owed()
-		return read_turn(buf) == "agent" and lock_mtime(buf) or nil
-	end
 	query({ "couch", "--session-sync", "status", "--json", path }, function(status)
 		if state[buf] ~= s then
 			return
 		end
-		local since = lock_owed()
-		local from_lock = since ~= nil
+		local since
 		for _, owed in ipairs(list(status and list(status.Status).Owed)) do
 			local at = type(owed) == "table" and M.parse_time(owed.At)
 			if at and (not since or at < since) then
-				since, from_lock = at, false
+				since = at
 			end
+		end
+		if s.owed ~= since then
+			s.owed = since
+			refresh(buf)
 		end
 		local after = (require("parley").config.session_sync_ping_minutes or 5) * 60
 		if not since or os.time() - since < after or s.pinged == since then
@@ -363,7 +368,7 @@ local function probe(buf)
 			local actor = actors and M.find_actor(actors.Actors, owner)
 			-- The reply may have landed while couch answered.
 			local active = actor and actor.Known and M.parse_time(actor.LastActivity)
-			if not active or os.time() - active < M.QUIET_SECONDS or (from_lock and lock_owed() ~= since) then
+			if not active or os.time() - active < M.QUIET_SECONDS or s.owed ~= since then
 				return
 			end
 			s.pinged = since
@@ -373,10 +378,9 @@ local function probe(buf)
 	end)
 end
 
--- Watch the file in every turn. During the agent's turn the lock's removal is
--- the reply; during a free turn an agent write reloads the (unmodified)
--- buffer, so the operator never edits a stale copy; during the operator's
--- turn an agent write is a violation.
+-- Watch the file in every turn. During a free turn an agent write reloads the
+-- (unmodified) buffer, so the operator never edits a stale copy; during the
+-- operator's turn an agent write is a violation.
 local function start_watch(buf)
 	local s = state[buf]
 	if s.watch then
@@ -397,20 +401,17 @@ local function start_watch(buf)
 		local turn = read_turn(buf)
 		if turn == "operator" and s.turn == "operator" and disk_changed(buf) then
 			violation(buf)
-		elseif turn == "free" and s.turn == "agent" then
-			reload(buf)
-			notify((owner_of(buf) or "agent") .. " replied")
 		elseif turn == "free" and not vim.bo[buf].modified and disk_changed(buf) then
 			reload(buf)
 		end
-		if turn ~= s.turn or (turn == "agent" and s.minutes ~= lock_minutes(buf)) then
+		if turn ~= s.turn or s.minutes ~= owed_minutes(buf) then
 			refresh(buf)
 		end
 		probe(buf)
 	end))
 end
 
--- Apply the on-disk turn: read-only while the agent holds it.
+-- Apply the on-disk turn and the owed state to the band.
 refresh = function(buf)
 	local s = state[buf]
 	if not s or not vim.api.nvim_buf_is_valid(buf) then
@@ -421,8 +422,7 @@ refresh = function(buf)
 	if turn ~= "operator" then
 		s.stale, s.violated, s.complained = false, false, false
 	end
-	s.minutes = turn == "agent" and lock_minutes(buf) or nil
-	vim.bo[buf].modifiable = turn ~= "agent"
+	s.minutes = owed_minutes(buf)
 	start_watch(buf)
 	render(buf, M.view(turn, s, owner_of(buf)))
 end
@@ -458,7 +458,7 @@ local function define_highlights()
 		ParleySessionSyncFree = { link = "StatusLine" },
 		ParleySessionSyncOperator = { bg = "#870000", fg = "#ffffff", ctermbg = 88, ctermfg = 231, bold = true },
 		ParleySessionSyncStale = { bg = "#ff8700", fg = "#000000", ctermbg = 208, ctermfg = 16, bold = true },
-		ParleySessionSyncAgent = { link = "DiffChange" },
+		ParleySessionSyncOwed = { link = "DiffChange" },
 	}
 	for name, spec in pairs(groups) do
 		vim.api.nvim_set_hl(0, name, vim.tbl_extend("force", spec, { default = true }))
@@ -470,7 +470,7 @@ M.attach = function(buf)
 	if state[buf] or not M.is_session_sync(buf) then
 		return
 	end
-	local s = { stale = false, gen = 0 }
+	local s = { stale = false }
 	state[buf] = s
 	define_highlights()
 	vim.bo[buf].autoread = true
@@ -482,18 +482,20 @@ M.attach = function(buf)
 		group = group,
 		buffer = buf,
 		callback = function()
-			if s.turn == "free" and vim.bo[buf].modified and vim.bo[buf].modifiable
+			if s.turn == "free" and vim.bo[buf].modified
 				and read_turn(buf) == "free" and M.is_session_sync(buf) then
-				-- The operator's turn never starts on a copy older than the
-				-- disk: then no writer (submit, auto-save, :w) can clobber it.
-				if disk_changed(buf) then
-					reload(buf)
-					notify("the file changed on disk; reloaded the current copy, retype your edit",
-						vim.log.levels.WARN)
-					return
-				end
+				-- Take the lock first; an agent write that landed since the
+				-- buffer last read the disk lost the race: the operator's
+				-- text is kept and the agent's set aside (#315).
 				if write_lock(buf, "operator") then
 					refresh(buf)
+					if disk_changed(buf) then
+						vim.schedule(function()
+							if state[buf] == s and vim.api.nvim_buf_is_loaded(buf) and read_turn(buf) == "operator" then
+								violation(buf, true)
+							end
+						end)
+					end
 				end
 			end
 			restart_idle(buf)
@@ -548,7 +550,8 @@ M.attach = function(buf)
 	restart_idle(buf)
 end
 
---- <M-CR>: save, hand the turn to the agent, tell the owner.
+--- <M-CR>: save, delete the lock, tell the owner. The buffer stays editable;
+--- the next edit takes the lock again (#315).
 M.submit = function(buf)
 	local h = header(buf)
 	if not h or not h.owner then
@@ -556,11 +559,6 @@ M.submit = function(buf)
 		return
 	end
 	M.attach(buf)
-	local s = state[buf]
-	if read_turn(buf) == "agent" then
-		notify("already submitted to " .. h.owner .. "; waiting for its reply", vim.log.levels.WARN)
-		return
-	end
 	if disk_changed(buf) then
 		-- Under the operator's lock the operator's copy wins, unless the
 		-- agent's could not be kept.
@@ -579,51 +577,25 @@ M.submit = function(buf)
 	vim.api.nvim_buf_call(buf, function()
 		vim.cmd("silent write")
 	end)
-	if not write_lock(buf, "agent") then
+	local lock = M.lock_path(buf)
+	if vim.uv.fs_stat(lock) and not os.remove(lock) then
+		notify("cannot remove " .. lock, vim.log.levels.ERROR)
 		return
 	end
-	refresh(buf)
-	-- A completion belongs to its submit: once the turn has moved on (an
-	-- unlock, a resubmit, the agent's reply), a late exit must not touch it.
-	s.gen = s.gen + 1
-	local gen = s.gen
-	local function current()
-		return state[buf] == s and s.gen == gen and read_turn(buf) == "agent"
-	end
-	local function fail(why)
-		if not current() then
-			return
-		end
-		write_lock(buf, "operator")
-		refresh(buf)
-		notify("send to " .. h.owner .. " failed, your turn again: " .. why, vim.log.levels.ERROR)
-	end
-	send(h.owner, "submitted: " .. file_of(buf), function(obj)
-		if obj.code ~= 0 then
-			fail(vim.trim(obj.stderr or ""))
-		elseif current() then
-			notify("submitted to " .. h.owner)
-		end
-	end)
-end
-
---- Manual escape when the owner never replies: the operator takes the turn
---- back (holder: operator); <M-CR> resubmits.
-M.unlock = function(buf)
-	-- Bound in every markdown buffer (the registry's no-ghost contract).
-	if not state[buf] then
-		notify("not a session-sync file", vim.log.levels.WARN)
-		return
-	end
-	if read_turn(buf) ~= "agent" then
-		notify("not waiting on the agent")
-		return
-	end
-	state[buf].gen = state[buf].gen + 1
-	write_lock(buf, "operator")
 	refresh(buf)
 	restart_idle(buf)
-	notify("your turn again; Alt+Return resubmits")
+	local s = state[buf]
+	send(h.owner, "submitted: " .. file_of(buf), function(obj)
+		if obj.code ~= 0 then
+			notify("send to " .. h.owner .. " failed, Alt+Return resends: " .. vim.trim(obj.stderr or ""),
+				vim.log.levels.ERROR)
+		elseif state[buf] == s then
+			notify("submitted to " .. h.owner)
+			-- The submit is now owed: show it without waiting a probe interval.
+			s.probed = nil
+			probe(buf)
+		end
+	end)
 end
 
 --- The <M-CR> callback: submit in a session-sync buffer, else `fallback`.

@@ -13,23 +13,22 @@ operator: xian-xu   # who the operator is
 
 | Key | Action |
 |---|---|
-| `<M-CR>` | Submit: save, make the buffer read-only, run `couch --send-to <owner> --message "submitted: <absolute path>"`. In any other markdown file it stays the review action. |
-| `<C-g>u` | Unlock a submit the owner never answered: the buffer is editable again and the lock stays, so `<M-CR>` resubmits. |
+| `<M-CR>` | Submit: save, delete the lock, run `couch --send-to <owner> --message "submitted: <absolute path>"`. The buffer stays editable. In any other markdown file it stays the review action. |
 
-**The turn.** The sidecar `<file>.lock` names whose turn it is: absent =
-free (the agent may write); `holder: operator` = the operator's turn (the agent
-never writes the file); `holder: agent` = the agent's turn (the buffer is
-read-only). The operator's first edit writes `holder: operator`; `<M-CR>`
-rewrites it to `holder: agent`; the agent deletes the lock when done and never
-writes it. A failed send and `<C-g>u` both rewrite it to `holder: operator`.
-The turn is read from disk, so a buffer reopened during the agent's turn is
-read-only too. While the buffer is loaded, parley watches the file once a
-second: during the agent's turn the lock's removal is the reply (parley
-reloads the buffer and makes it editable); during a free turn an agent write
-reloads the unmodified buffer. The operator's turn never starts on an old copy:
-a first edit made after the file changed on disk is dropped and the buffer
-reloaded, and outside the operator's turn submit refuses to overwrite a file
-rewritten under the buffer.
+**The lock (#315: pessimistic for the human, optimistic for the agent).**
+The operator's lock is the only lock. The sidecar `<file>.lock` is absent
+(free: the agent may write) or `holder: operator` (the agent never writes the
+file). The operator's first edit writes it; `<M-CR>` deletes it; the next
+edit takes it again. A legacy `holder: agent` lock reads as no lock and is
+overwritten by the first edit. A failed send leaves the file free; `<M-CR>`
+resends. The lock is read from disk, so a reopened buffer shows it too. While
+the buffer is loaded, parley watches the file once a second: during a free
+turn an agent write reloads the unmodified buffer silently (and so does a
+buffer-local `FileChangedShell` on focus or `:checktime`). The operator's turn
+never starts on an old copy unnoticed: an agent write that landed just before
+the first edit lost the race, and goes through the violation path below with
+the operator's text kept. Outside the operator's turn, submit refuses to
+overwrite a file rewritten under a modified buffer.
 
 **A write under the operator's lock (#314)** is a violation, never a prompt.
 The watch, a buffer-local `FileChangedShell` (focus, `:checktime`) and submit
@@ -40,11 +39,11 @@ sends the owner one `couch --send-to` message per operator turn
 (`session-sync violation: …`). Outside the operator's turn `FileChangedShell`
 does what autoread would.
 
-**Liveness ping (#314).** At most once a minute the watch probes whether the
-owner owes a response: since the lock was handed to it (the agent's turn), or
-since the oldest owed event `couch --session-sync status --json FILE` reports
-(pair#437; a failing or unknown verb leaves the lock as the only condition).
-When owed for `session_sync_ping_minutes` (default 5) and the owner's slot in
+**Owed work and the liveness ping (#314, #315).** At most once a minute (and
+right after a submit or a reload) the watch asks
+`couch --session-sync status --json FILE` (pair#437) whether the owner owes a
+response: since the oldest owed event it reports. Owed events alone decide; a
+failing or unknown verb reads as nothing owed. They drive the band. When owed for `session_sync_ping_minutes` (default 5) and the owner's slot in
 `couch --actors --json` is live and quiet (`LastActivity` at least 30 s old,
 couch's QuietInterval; `Resting` names the resting branch, not the turn),
 parley sends `session-sync ping: <path> owes a response since <time>` once per
@@ -58,16 +57,17 @@ override them.
 
 | State | Winbar | Highlight (default link) |
 |---|---|---|
-| free | `free: editing takes your turn` | `ParleySessionSyncFree` (StatusLine) |
+| free | `free: editing takes your turn` (no lock, nothing owed) | `ParleySessionSyncFree` (StatusLine) |
+| owed | `<owner> owes a response, N min` (N since the oldest owed event; no operator lock) | `ParleySessionSyncOwed` (DiffChange) |
 | operator | `your turn, Alt+Return to submit` | `ParleySessionSyncOperator` (dark red `#870000`, white bold) |
-| violated | `<owner> wrote under your lock: yours kept, theirs in .clobbered` | `ParleySessionSyncOperator` |
+| violated | `<owner> wrote under your lock: yours kept, theirs in .clobbered` (`changed as you started typing: …` for the race) | `ParleySessionSyncOperator` |
 | stale | `unsent edits, Alt+Return to submit` | `ParleySessionSyncStale` (orange, black bold) |
-| agent | `<owner> owes a response, N min, read-only` (N since the lock was written) | `ParleySessionSyncAgent` (DiffChange) |
 
 An operator turn left idle for `session_sync_stale_minutes` (default 5) is stale.
 
 **The agent's side** is not parley's: the owner diffs the file against its own
-copy, resolves the markers, writes, and deletes the lock.
+copy, resolves the markers and writes while no lock is held (Couch refuses a write
+under the operator's lock, pair#439). It never writes or deletes the lock.
 
 Code: `lua/parley/session_sync.lua`; dispatch and keys in
 `setup_markdown_keymaps` (`lua/parley/init.lua`).
