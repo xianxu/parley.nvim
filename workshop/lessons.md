@@ -427,3 +427,9 @@ oracle, and the mutation that would make the test fail.
   escape for each of its delimiters, including the escape character itself.
   The round-trip property test must draw its input from those delimiters, not
   from friendly words.
+- When a guard that re-read external state (a lock on disk) is ported to
+  in-memory state, check who writes that state. If only the same callback
+  writes it, and a busy flag blocks a second run, the guard is dead (#315
+  close review: the ping's "the reply may have landed" check). Likewise, a
+  "force a refresh now" call that returns early while a refresh is in
+  flight is not a guarantee. Make it a flag that the in-flight run honours.
