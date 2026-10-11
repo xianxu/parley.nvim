@@ -1,12 +1,20 @@
 ---
 id: 000315
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-11
 updated: 2026-10-11
 estimate_hours:
-card_mirror: '7542cc4abad2f21306500d4f5af43b3c3d65a73f' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '1e1ca0b50451e9d427d3240e81bf86cea9f9286c' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-11T09:10:41-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # session-sync: submit unlocks; the operator's lock is the only lock
@@ -42,6 +50,16 @@ Independent of pair#439's landing order: with today's Couch, a missing lock alre
 - [ ] Band and ping from owed events only; treat a legacy agent lock as none.
 - [ ] Tests for the Done-when rows; update the session-sync doc/atlas.
 
+Design notes:
+- Turn is `free` | `operator` only; `M.turn` reads a `holder: agent` lock as `free`. The first keystroke's `write_lock(operator)` overwrites it.
+- The race (disk changed before the first keystroke took the lock) now takes the lock and goes through `violation()` with its own wording ("changed as you started typing"), instead of reloading and dropping the keystroke: the human's text is kept, the agent's optimistic write is set aside in `.clobbered` and the agent is told.
+- A failed send leaves the file free (no lock to restore); the error says Alt+Return resends. The submit-generation guard goes with it.
+- `<C-g>u` unlock is removed (config key, registry entry, init binding): with no agent lock there is nothing to unlock.
+- Band: `owed` view (`<owner> owes a response, N min`, group `ParleySessionSyncOwed`) when no operator lock and couch reports owed events; operator states outrank it. `s.owed` = oldest `Owed[].At` from the latest status probe (nil on failure). The probe runs at most once per PING_CHECK_MS, and again right after a successful submit and after a reload, so the band follows within one tick.
+- Durable artifacts: none new; the lock is now created at first edit and deleted at submit (or overwritten by a later edit).
+
 ## Log
 
 ### 2026-10-11
+
+- Claimed and started on parley.nvim:1 from the TL dispatch; design notes in ## Plan.
