@@ -3165,8 +3165,9 @@ M.setup_markdown_keymaps = function(buf)
 			-- review scope (#214 C1) — callbacks from the skill, install here
 			review_edit = review_cbs.review_edit,
 			review_menu = review_cbs.review_menu,
-			-- #313: <M-CR> submits a session-sync file to its owner instead.
-			review_next = review_cbs.review_next and session_sync.dispatch(buf, review_cbs.review_next),
+			-- #316: <M-CR> sends the document to this slot's agent, steered by
+			-- its `process-instruction:` line (session-sync files submit).
+			review_next = review_cbs.review_next,
 		},
 		M.helpers.set_keymap
 	)
@@ -3174,6 +3175,9 @@ M.setup_markdown_keymaps = function(buf)
 	-- #312: compact 🤖 markers (conceal + cursor snap), same as chat buffers.
 	require("parley.comment").attach(buf)
 	session_sync.attach(buf)
+	if review_cbs.review_next then
+		require("parley.review_send").attach(buf)
+	end
 end
 
 M.setup_buf_handler = function()

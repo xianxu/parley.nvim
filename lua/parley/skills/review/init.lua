@@ -465,6 +465,14 @@ local function modes_dir()
     return (vim.api.nvim_get_runtime_file("lua/parley/skills/review/modes", false) or {})[1]
 end
 
+--- The modes a run names: `args.modes` (#316), else the single `args.mode`.
+M.mode_names = function(args)
+    if type(args.modes) == "table" and #args.modes > 0 then
+        return args.modes
+    end
+    return (args.mode and args.mode ~= "") and { args.mode } or {}
+end
+
 M.skill = {
     name = "review",
     description = "Edit document based on review markers",
@@ -494,15 +502,20 @@ M.skill = {
         local mode = require("parley.skills.review.mode")
         local args = ctx.args or {}
         local parts = { ctx.skill_md or "" }
-        if args.mode and args.mode ~= "" and ctx.skill_dir then
-            local m = mode.load(ctx.skill_dir .. "/modes", args.mode)
-            if m then
-                table.insert(parts, "\n\n## Review mode: " .. m.name .. "\n" .. m.body)
-                table.insert(parts, "\n\n" .. mode.directives(m))
+        -- #316: `modes` (from a `process-instruction:` line) may name several
+        -- stock prompts; the skill picker's `mode` arg names one.
+        local loaded = {}
+        if ctx.skill_dir then
+            for _, name in ipairs(M.mode_names(args)) do
+                local m = mode.load(ctx.skill_dir .. "/modes", name)
+                if m then
+                    table.insert(loaded, m)
+                end
             end
         end
-        if args.instruction and args.instruction ~= "" then
-            table.insert(parts, "\n\n## Operator instruction\n" .. args.instruction)
+        local brief = require("parley.skills.review.instruction").brief(loaded, args.instruction)
+        if brief ~= "" then
+            table.insert(parts, "\n\n" .. brief)
         end
         return table.concat(parts)
     end,
@@ -578,7 +591,7 @@ M.run_via_invoke = function(buf, args, resubmit_count)
     -- there's nothing to process.
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local markers = M.parse_markers(lines)
-    local has_mode = args.mode ~= nil and args.mode ~= ""
+    local has_mode = #M.mode_names(args) > 0
     local ready_count_before = count_ready(markers)
     if not has_mode then
         if #markers == 0 then
@@ -646,7 +659,7 @@ M.run_via_invoke = function(buf, args, resubmit_count)
                     end
                 end
                 local jok, jerr = journal.append(doc_path, {
-                    mode = args.mode,
+                    mode = table.concat(M.mode_names(args), "+"),
                     side = "agent",
                     ts = os.date("!%Y-%m-%dT%H:%M:%S"),
                     hash = journal.hash(result.new_content),
@@ -765,21 +778,17 @@ M.registry_callbacks = function(buf)
         review_edit = function()
             M.run_via_invoke(buf, {})
         end,
-        -- <M-s> opens the general SKILL PICKER (review is one of the skills);
-        -- <M-CR> is the DIRECT review trigger — it opens the review-mode menu
-        -- (sticky-preselected) and runs a round on submit with the chosen
-        -- {mode,instruction}. (#133 — operator: alt+o = skill selector,
-        -- alt+return = review. #225 moved the picker to <M-s>; <M-o> now opens
-        -- the link under the cursor, in chat and markdown alike.)
+        -- <M-s> opens the general SKILL PICKER (review is one of the skills).
+        -- (#133 — operator: alt+o = skill selector; #225 moved the picker to
+        -- <M-s>; <M-o> now opens the link under the cursor.)
         review_menu = function()
             require("parley.skill_picker").open()
         end,
+        -- <M-CR> sends the document as its `process-instruction:` line directs:
+        -- to this slot's agent, or (outside pair) a review round here (#316).
+        -- It replaced the review-mode menu float (#133 M4).
         review_next = function()
-            require("parley.review_menu").open({
-                on_submit = function(r)
-                    M.run_via_invoke(buf, { mode = r.mode, instruction = r.instruction })
-                end,
-            })
+            require("parley.review_send").submit(buf)
         end,
     }
 end

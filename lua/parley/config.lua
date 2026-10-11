@@ -473,14 +473,15 @@ local config = {
 	review_shortcut_edit = { modes = { "n" }, shortcut = "<C-g>ve" },
 	review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 	-- Review bindings (#133): <M-s> opens the general skill picker (review is one
-	-- of the skills); <M-CR> is the direct review trigger — it opens the review-mode
-	-- menu (sticky-preselected). (Free in markdown docs — chat-respond <M-CR> is
+	-- of the skills); <M-CR> sends the document to this pair slot's agent, steered
+	-- by its `process-instruction:` frontmatter line, or runs a review round here
+	-- outside pair (#316). (Free in markdown docs — chat-respond <M-CR> is
 	-- chat-buffer-only.) `review_shortcut_menu` is the skill-picker alias here.
 	-- #225: the picker was on <M-o> until open_file took it; s = skills.
 	review_shortcut_menu = { modes = { "n" }, shortcut = "<M-s>" },
 	review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" },
-	-- #313: in a `type: session-sync` file <M-CR> submits to its owner over couch
-	-- instead, and the "unsent edits" reminder shows after this many idle
+	-- #313: in a `type: session-sync` file <M-CR> submits it (its `owner:` must be
+	-- this slot's agent, #316), and the "unsent edits" reminder shows after this many idle
 	-- minutes holding the lock.
 	session_sync_stale_minutes = 5,
 	session_sync_ping_minutes = 5,

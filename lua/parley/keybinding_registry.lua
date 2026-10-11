@@ -859,8 +859,8 @@ M.entries = {
 		default_key = "<M-CR>",
 		default_modes = { "n", "i" },
 		scope = "markdown",
-		desc = "Parley review: open mode menu (direct trigger)",
-		help_desc = "Open review-mode menu",
+		desc = "Parley review: send as process-instruction directs",
+		help_desc = "Send to this slot's agent (process-instruction)",
 		buffer_local = true,
 	},
 
