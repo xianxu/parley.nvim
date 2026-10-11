@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "81a79b3d", done: "64344d3a"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Session-sync hardening: no reload prompt under the operator's lock, complain to the agent, a 'TL owes' band, and a liveness ping
@@ -62,6 +62,10 @@ Durable plan: `workshop/plans/000314-session-sync-hardening-plan.md`.
 
 ## Log
 
+
+
+- 2026-10-11: closed — make test-spec SPEC=modes/session_sync: 25 integration + 9 unit pass, incl. BR-6 (submit refuses after a failed copy; mutation ignoring the outcome fails the run). Full make test earlier green except the arch Core-concepts guard, fixed and rerun green.; review verdict: SHIP
+- 2026-10-11: flow upgraded quick → full — 279 added lines in code files (limit 100); an earlier round of this close already ran the full review
 ### 2026-10-10
 
 - Dispatched by ops:0. JSON shape for pair#437 `status --json` proposed to ops:0 and relayed to pair:5; the TL said proceed behind the seam. pair#433 keys the breaker on sender binding, so the ping/complaint (same nvim as submit) need no marker.
