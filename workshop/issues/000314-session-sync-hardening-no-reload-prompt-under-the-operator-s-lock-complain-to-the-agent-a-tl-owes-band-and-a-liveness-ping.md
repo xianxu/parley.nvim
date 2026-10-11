@@ -1,12 +1,12 @@
 ---
 id: 000314
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-10
-updated: 2026-10-10
+updated: 2026-10-11
 estimate_hours:
-card_mirror: 'eb349e8df26c6a59b9694975f0c44a7c96bda062' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'b8582b6d2d9a46bdb9efdd2063ba8063122f9b86' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-10T23:41:27-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 0.55
 ---
 
 # Session-sync hardening: no reload prompt under the operator's lock, complain to the agent, a 'TL owes' band, and a liveness ping
