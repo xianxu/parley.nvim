@@ -41,6 +41,35 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - "n": 2
+      timestamp: "2026-10-11T14:17:58-07:00"
+      dispatched: "2026-10-11T14:15:32-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: review_mode_load_spec drives the real source() with two modes; skill_invoke_review_spec covers has_mode and the journal name; the mutations go red.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: quoted_span is used by parse and instruction_value; the trailing-comment cases are pinned; reverting either site goes red.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: The message heading says the diff includes the agent's own edits (review_send.lua:103); asserted in review_send_spec.
+          round: 2
+        - id: BR-4
+          disposition: addressed
+          note: requote closes an opened, unclosed quote (review_send.lua:212-217); the new spec fails when this branch is reverted.
+          round: 2
+        - id: BR-5
+          disposition: addressed
+          note: couch_spec has a live conformance spec that resolves own_actor from the real couch --actors JSON; it is pending outside a pair slot.
+          round: 2
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 847acc93440d696637352c6eb85daee07404dee3
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#316 (boundary-review)
@@ -63,10 +92,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-5** [Minor] `fake-conformance-check` fake couch has no live conformance check for Binding.Scope/Tag in --actors JSON
   ARCH-MOCK: own-slot resolution depends on these fields; the fake is env-driven and nothing detects drift from real couch.
 
+## Round 2 — 2026-10-11T14:17:58-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — review_mode_load_spec drives the real source() with two modes; skill_invoke_review_spec covers has_mode and the journal name; the mutations go red.
+- BR-2 — addressed — quoted_span is used by parse and instruction_value; the trailing-comment cases are pinned; reverting either site goes red.
+- BR-3 — addressed — The message heading says the diff includes the agent's own edits (review_send.lua:103); asserted in review_send_spec.
+- BR-4 — addressed — requote closes an opened, unclosed quote (review_send.lua:212-217); the new spec fails when this branch is reverted.
+- BR-5 — addressed — couch_spec has a live conformance spec that resolves own_actor from the real couch --actors JSON; it is pending outside a pair slot.
+
 ## Open findings
 
-- **BR-1** [Important] `consumer-path-untested-behind-stub` review skill source() with multi-mode args.modes has no test; outside-pair spec stubs run_via_invoke
-- **BR-2** [Minor] `frontmatter-value-reading` quoted process-instruction followed by an inline comment is misread as free-form
-- **BR-3** [Minor] `send-diff-semantics` diff since last send includes the agent's own in-place edits
-- **BR-4** [Minor] `completion-quoting` completion inside an already-quoted value never closes the quote
-- **BR-5** [Minor] `fake-conformance-check` fake couch has no live conformance check for Binding.Scope/Tag in --actors JSON
+(none — every finding has been disposed)

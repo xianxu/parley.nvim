@@ -114,3 +114,95 @@ findings:
     detail: |
       ARCH-MOCK: own-slot resolution depends on these fields; the fake is env-driven and nothing detects drift from real couch.
 ```
+
+---
+
+## Re-review — 2026-10-11T14:17:58-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 316 — Frontmatter-driven review: couch-owner sends to a slot; process-instruction replaces the review menu |
+| repo | parley.nvim |
+| issue file | workshop/issues/000316-frontmatter-driven-review-couch-owner-sends-to-a-slot-process-instruction-replaces-the-review-menu.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c9b45a298f28841333cf2de87b98dc43a88c5643..847acc93440d696637352c6eb85daee07404dee3 |
+| command | sdlc close --issue 316 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-11T14:17:58-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Focus first on the latest fix commit, since prior findings are disposed there.
+
+Running the changed spec files through the repo's `make test-spec` harness now (`timeout` isn't on this machine).
+
+All changed specs pass. Now mutation-checking the claimed fixes (reverting each and confirming its test goes red).
+
+Now running mutations in the disposable checkout (restoring each after).
+
+All five fixes are pinned by tests that fail when reverted. Now checking the couch seam and fake for the BR-5 conformance claim, and the rest of the new code.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+**Verdict: SHIP.** All five findings from round 1 are fixed. I reverted each fix in this checkout, and every one turned at least one spec red. The changed and mapped specs all pass on the pinned head: `modes/review` and `modes/session_sync` through `make test-spec`, plus `review_mode_load_spec` (7), `skill_invoke_review_spec` (20), `keybindings_spec` (80) and `buffer_mutation_spec` (10) run directly. The round-1 review already covered the whole range. Looking at the fix commit (847acc93) and re-checking the new modules (`review_send.lua`, `couch.lua`, `frontmatter.lua`) against the Spec and Plan turned up nothing new above the noise floor, so nothing blocks the close.
+
+1. **Strengths**
+   - `frontmatter.quoted_span` (`lua/parley/frontmatter.lua:48-69`) is now the one reader of quoted values. Both `parse` and `review_send.instruction_value` (`lua/parley/review_send.lua:41-48`) use it, so there is one place that decides where a quoted value ends. It handles `\"` escapes and the doubled `''` in single-quoted values.
+   - The BR-1 test goes through the real `source()` (`tests/integration/review_mode_load_spec.lua:72-88`). It checks that every mode's brief appears, that the directives appear exactly once and come from the first mode, and that the operator instruction is included. A matching case in `skill_invoke_review_spec` checks the `has_mode` gate and the `+`-joined journal name.
+   - `couch.lua` keeps every `couch` call (send and query) behind one interface, with an explicit nil result when couch isn't there. Production and specs go through the same interface; specs just put a fake `couch` binary on PATH.
+   - The lessons entry (`workshop/lessons.md:444-449`) names the general rule ("when a change widens an argument shape across a seam, test the far side"), not just the one site.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings:** none new. One edge case, below the noise floor: `requote` closes a quote by appending it, so a value ending in a backslash (`"foo\`) becomes `"foo\"`, which is still open. Mode names never end in a backslash, so this isn't reachable in practice.
+
+5. **Test coverage notes.** Mutations I applied and reverted:
+   - **BR-1:** making `mode_names` ignore `args.modes` gave 1 failure in `review_mode_load_spec` and 2 in `skill_invoke_review_spec`. Loading only the first mode gave 1 failure.
+   - **BR-2:** restoring the old quoted-value handling in `parse` failed `frontmatter_spec` and `review_send_spec`. Bypassing `quoted_span` in `instruction_value` gave 4 failures.
+   - **BR-3:** the test asserts the new section heading is in the message.
+   - **BR-4:** removing the quote-closing branch failed `review_send_spec`.
+   - **BR-5:** the live conformance spec counts as `pending` (skipped, not passed) everywhere except inside a pair slot with couch reachable. That covers the operator's normal setup, but no scheduled job runs it.
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass.** Quoted-value reading has one source, `quoted_span`. Actor and binding reads go through `couch.binding`.
+   - **ARCH-PURE: pass.** `message`, `diff`, `placement`, `requote`, `completion_start`, `expand`, `brief` and `parse` are pure and unit-tested. The IO lives in `submit`, `send_to_slot` and `couch.*`.
+   - **ARCH-PURPOSE: pass.** Alt+Return is driven by the frontmatter, `review_menu.lua` is deleted, and both callers of the new modes argument (the skill's `source()` and `run_via_invoke`) handle it.
+   - **ARCH-MOCK: pass.** The fake couch sits behind the same binary and PATH boundary as production. It is stateful (send log, argv file, last message). The live spec now compares its `--actors` binding fields with the real couch.
+   - **ARCH-CONSTRAINTS: pass.** All couch calls are async (`vim.system` with a scheduled callback). The live spec's 10s `:wait` is test-only.
+   - **ARCH-SECURE: pass.** The message goes to `couch` as an argv array, not a shell string. The JSON from `--actors` is type-checked through `list` and `binding`, and a decode failure falls back to nil, which reads as "cannot resolve; nothing sent".
+   - **ARCH-ORDER: pass.** The only state carried between events is the per-path baseline, and it moves only after a send is confirmed delivered. A failed send leaves it in place, and a spec covers that. The completion flag is a single buffer-local boolean that is reset on `CompleteDone`.
+   - **ARCH-FUNERAL: pass.** Nothing durable is created: the baseline table is in memory and dies with the editor, and the autocmd group is removed on `BufWipeout`.
+
+7. **Plan revision recommendations:** none. The Core concepts row in the plan already lists `quoted_span`, and the rows match the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      review_mode_load_spec drives the real source() with two modes; skill_invoke_review_spec covers has_mode and the journal name; the mutations go red.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      quoted_span is used by parse and instruction_value; the trailing-comment cases are pinned; reverting either site goes red.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The message heading says the diff includes the agent's own edits (review_send.lua:103); asserted in review_send_spec.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      requote closes an opened, unclosed quote (review_send.lua:212-217); the new spec fails when this branch is reverted.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      couch_spec has a live conformance spec that resolves own_actor from the real couch --actors JSON; it is pending outside a pair slot.
+```

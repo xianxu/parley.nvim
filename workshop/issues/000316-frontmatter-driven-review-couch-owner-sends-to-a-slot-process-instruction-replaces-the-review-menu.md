@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "d85b80a4", done: "ce096737"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Frontmatter-driven review: couch-owner sends to a slot; process-instruction replaces the review menu
@@ -70,6 +70,8 @@ Durable plan: [workshop/plans/000316-frontmatter-driven-review-plan.md](../plans
 ## Log
 
 ### 2026-10-11
+- 2026-10-11: closed — Round 2 after FIX-THEN-SHIP: BR-1 fixed with real-path specs (review_mode_load_spec multi-mode source(); skill_invoke_review_spec args.modes run + journal mode), mutation of has_mode caught; 4 minors fixed with specs (quoted_span + comment, requote closes opened quote, diff heading, live couch conformance passes against real couch). All touched specs green: frontmatter, review_instruction, couch, review_send (15), session_sync unit+integration (39), review_mode_load, skill_invoke_review, single_source_sweeps. Earlier full make test: only ~50s parallel-load timeouts, each passing alone. Live e2e delivery 41fd7a55 reached parley.nvim:1.; review verdict: SHIP
+- 2026-10-11: flow upgraded quick → full — 683 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Claimed from parley.nvim:1 (TL dispatch). Durable plan: `workshop/plans/000316-frontmatter-driven-review-plan.md`.
 - **Own slot:** pair sets `COUCH_THREAD_SCOPE`/`COUCH_THREAD_TAG` on every pane (checked on a live draft nvim via `ps eww`); `couch --actors --json` bindings carry `Scope`/`Tag`, so the slot is the actor matching both (the thread match couch's `LivenessForThread` uses), never an address string.
