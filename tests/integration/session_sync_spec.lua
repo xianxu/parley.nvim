@@ -264,6 +264,31 @@ describe("session-sync buffer", function()
         assert.equals(1, #sent())
     end)
 
+    it("an agent deleting the file under the lock: the operator's copy is restored, nothing claimed kept (BR-2)", function()
+        open(header)
+        edit("- edited")
+        os.remove(file)
+        assert.is_true(vim.wait(2000, function() return exists(file) end))
+        assert.equals("- edited", vim.fn.readfile(file)[8])
+        assert.is_false(exists(file .. ".clobbered"))
+        assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
+        assert.matches("deleted while the operator held the lock", sent()[1], 1, true)
+        assert.is_nil(sent()[1]:find(".clobbered", 1, true))
+    end)
+
+    it("a copy that cannot be kept is not overwritten (BR-2)", function()
+        open(header)
+        edit("- edited")
+        vim.fn.mkdir(file .. ".clobbered", "p")   -- the copy will fail
+        agent_write("- TL ignored the lock")
+        assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
+        assert.equals("- TL ignored the lock", vim.fn.readfile(file)[8])
+        assert.equals("- edited", vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1])
+        assert.matches("could not be kept", sent()[1], 1, true)
+        vim.wait(200)
+        assert.equals(1, #sent())            -- no retry loop
+    end)
+
     it("an unloaded buffer stops watching: a later write is no violation (#314)", function()
         open(header)
         edit("- edited")
@@ -341,6 +366,19 @@ describe("session-sync buffer", function()
             open(header)
             vim.wait(300)
             assert.equals(0, #pings())
+        end)
+
+        it("survives JSON nulls from couch and keeps probing (close review BR-1)", function()
+            vim.env.FAKE_COUCH_STATUS = '{"Code":"ok","Status":{"Owed":null}}'
+            vim.env.FAKE_COUCH_ACTORS = '{"Code":"ok","Actors":[{"Binding":null},{"Binding":{"Slot":"ops:0"},"Known":true,"LastActivity":null}]}'
+            vim.fn.writefile({ "holder: agent" }, file .. ".lock")
+            age(file .. ".lock", 6)
+            open(header)
+            vim.wait(300)
+            assert.equals(0, #pings())
+            vim.env.FAKE_COUCH_STATUS = '{"Code":"ok","Status":null}'
+            vim.env.FAKE_COUCH_ACTORS = actors("ops:0", true)
+            assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
         end)
 
         it("pings for owed deliveries couch reports, with no lock", function()

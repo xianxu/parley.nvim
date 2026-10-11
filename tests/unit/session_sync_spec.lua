@@ -45,7 +45,7 @@ describe("session_sync.view", function()
     end)
     it("shows a violation over staleness, in the operator colour", function()
         assert.same({ state = "violated", label = "ops:0 wrote under your lock: yours kept, theirs in .clobbered",
-            hl = "ParleySessionSyncOperator" }, ss.view("operator", { stale = true, violated = true }, "ops:0"))
+            hl = "ParleySessionSyncOperator" }, ss.view("operator", { stale = true, violated = "yours kept, theirs in .clobbered" }, "ops:0"))
     end)
 end)
 
@@ -70,5 +70,6 @@ describe("session_sync.find_actor", function()
         assert.is_nil(ss.find_actor(actors, "pa:1"))       -- ambiguous
         assert.is_nil(ss.find_actor(actors, "parley:2"))
         assert.is_nil(ss.find_actor(nil, "ops:0"))
+        assert.is_nil(ss.find_actor({ {}, { Binding = vim.NIL }, "junk" }, "ops:0"))
     end)
 end)

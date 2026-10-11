@@ -84,12 +84,12 @@ local VIEWS = {
 	free = { hl = "ParleySessionSyncFree", label = "free: editing takes your turn" },
 	operator = { hl = "ParleySessionSyncOperator", label = "your turn, Alt+Return to submit" },
 	stale = { hl = "ParleySessionSyncStale", label = "unsent edits, Alt+Return to submit" },
-	violated = { hl = "ParleySessionSyncOperator", label = "%s wrote under your lock: yours kept, theirs in .clobbered" },
+	violated = { hl = "ParleySessionSyncOperator", label = "%s wrote under your lock: %s" },
 	agent = { hl = "ParleySessionSyncAgent", label = "%s owes a response, %d min, read-only" },
 }
 
---- (turn, { stale, violated, minutes }, owner) → { state, label, hl }: what
---- every surface renders. A violation outranks staleness.
+--- (turn, { stale, violated (what became of it), minutes }, owner) →
+--- { state, label, hl }: what every surface renders. A violation outranks staleness.
 M.view = function(turn, flags, owner)
 	flags = flags or {}
 	local key = turn
@@ -97,7 +97,8 @@ M.view = function(turn, flags, owner)
 		key = flags.violated and "violated" or flags.stale and "stale" or "operator"
 	end
 	local v = VIEWS[key]
-	return { state = key, label = v.label:format(owner or "agent", flags.minutes or 0), hl = v.hl }
+	local detail = key == "violated" and flags.violated or (flags.minutes or 0)
+	return { state = key, label = v.label:format(owner or "agent", detail), hl = v.hl }
 end
 
 -- Days since 1970-01-01 for a proleptic Gregorian date (no timezone involved).
@@ -136,8 +137,9 @@ end
 M.find_actor = function(actors, owner)
 	local repo, index = (owner or ""):match("^(.*):(%d+)$")
 	local prefixed = {}
-	for _, actor in ipairs(actors or {}) do
-		local slot = actor.Binding and actor.Binding.Slot or ""
+	for _, actor in ipairs(type(actors) == "table" and actors or {}) do
+		local binding = type(actor) == "table" and actor.Binding
+		local slot = type(binding) == "table" and type(binding.Slot) == "string" and binding.Slot or ""
 		if slot == owner then
 			return actor
 		end
@@ -206,10 +208,16 @@ local function send(owner, message, on_exit)
 	end
 end
 
+-- A decoded JSON value as a list: anything but a table is empty.
+local function list(value)
+	return type(value) == "table" and value or {}
+end
+
 -- Run a couch query; cb(decoded) with nil unless it exited 0 with Code "ok".
+-- JSON null decodes to nil (never vim.NIL), so a missing field reads as absent.
 local function query(argv, cb)
 	local ok = pcall(vim.system, argv, { text = true }, vim.schedule_wrap(function(obj)
-		local decoded, data = pcall(vim.json.decode, obj.stdout or "")
+		local decoded, data = pcall(vim.json.decode, obj.stdout or "", { luanil = { object = true, array = true } })
 		cb(obj.code == 0 and decoded and type(data) == "table" and data.Code == "ok" and data or nil)
 	end))
 	if not ok then
@@ -264,10 +272,12 @@ end
 
 local refresh
 
--- The agent wrote the file while the operator held the lock. Keep the
--- agent's copy beside the file, write the operator's buffer back over it
--- (`write!`: no "changed since reading" prompt, now or on a later save), flag
--- the band and tell the owner once per operator turn.
+-- The agent wrote (or deleted) the file while the operator held the lock.
+-- Keep the agent's copy beside the file, write the operator's buffer back over
+-- it (`write!`: no "changed since reading" prompt, now or on a later save),
+-- flag the band and tell the owner once per operator turn. A copy that cannot
+-- be kept is never overwritten: the buffer adopts the disk's mtime (no retry
+-- each tick) and a later save meets Neovim's own overwrite prompt.
 local function violation(buf)
 	local s = state[buf]
 	if not disk_changed(buf) then
@@ -275,19 +285,31 @@ local function violation(buf)
 	end
 	local path = file_of(buf)
 	local clobbered = path .. ".clobbered"
-	vim.uv.fs_copyfile(path, clobbered)
-	vim.api.nvim_buf_call(buf, function()
-		vim.cmd("silent write!")
-	end)
-	s.violated = true
+	local band, told
+	if not vim.uv.fs_stat(path) then
+		band, told = "deleted it, yours restored", "was deleted while the operator held the lock;"
+			.. " the operator's copy was restored"
+	elseif vim.uv.fs_copyfile(path, clobbered) then
+		band, told = "yours kept, theirs in .clobbered", "was written while the operator held the lock;"
+			.. " the operator's copy was kept, yours is at " .. clobbered
+	else
+		band, told = "theirs could not be kept, file left as theirs", "was written while the operator held"
+			.. " the lock; your copy could not be kept at " .. clobbered .. ", so it was not overwritten"
+	end
+	if band:find("not be kept", 1, true) then
+		s.loaded = disk_mtime(buf)
+	else
+		vim.api.nvim_buf_call(buf, function()
+			vim.cmd("silent write!")
+		end)
+	end
+	s.violated = band
 	refresh(buf)
 	local owner = owner_of(buf)
-	notify((owner or "the agent") .. " wrote the file under your lock; kept yours, theirs is in " .. clobbered,
-		vim.log.levels.WARN)
+	notify((owner or "the agent") .. " " .. path .. " " .. told, vim.log.levels.WARN)
 	if owner and not s.complained then
 		s.complained = true
-		send(owner, "session-sync violation: " .. path .. " was written while the operator held the lock;"
-			.. " the operator's copy was kept, yours is at " .. clobbered)
+		send(owner, "session-sync violation: " .. path .. " " .. told)
 	end
 end
 
@@ -314,8 +336,8 @@ local function probe(buf)
 		end
 		local since = lock_owed()
 		local from_lock = since ~= nil
-		for _, owed in ipairs(status and status.Status and status.Status.Owed or {}) do
-			local at = M.parse_time(owed.At)
+		for _, owed in ipairs(list(status and list(status.Status).Owed)) do
+			local at = type(owed) == "table" and M.parse_time(owed.At)
 			if at and (not since or at < since) then
 				since, from_lock = at, false
 			end
