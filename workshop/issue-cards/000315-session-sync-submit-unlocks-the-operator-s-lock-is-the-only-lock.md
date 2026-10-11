@@ -1,6 +1,6 @@
 ---
 id: 000315
-status: codecomplete
+status: done
 created: 2026-10-11
 updated: 2026-10-11
 estimate_hours:
@@ -31,6 +31,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: c260fa2e658b3a087a865568104fa3c620833b7f
         evidence_commit: eec2096223fd70d45bdaf62afb655b53365839d6
+        landed_commit: 0045d1c4ed5010911a5090a3fae5c1256da22785
 ---
 
 # session-sync: submit unlocks; the operator's lock is the only lock
