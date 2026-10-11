@@ -38,7 +38,7 @@ local ns_group = "ParleySessionSync"
 -- Per-buffer state: { turn, stale, gen (submit generation), loaded (disk
 -- mtime last read/written), watch = timer|nil, idle = timer|nil, minutes
 -- (the agent's turn so far), violated / complained (this operator turn),
--- pending (a violation FileChangedShell saw), probing / probed (vim.uv.now()
+-- probing / probed (vim.uv.now()
 -- of the last probe), pinged (the owed-since time last pinged) }
 local state = {}
 
@@ -270,10 +270,9 @@ local refresh
 -- the band and tell the owner once per operator turn.
 local function violation(buf)
 	local s = state[buf]
-	if not (s.pending or disk_changed(buf)) then
+	if not disk_changed(buf) then
 		return
 	end
-	s.pending = false
 	local path = file_of(buf)
 	local clobbered = path .. ".clobbered"
 	vim.uv.fs_copyfile(path, clobbered)
@@ -472,8 +471,7 @@ M.attach = function(buf)
 	})
 	-- No prompt about a file changed on disk: under the operator's lock it is
 	-- a violation (handled outside the autocmd, which may not write); else
-	-- what autoread would do. The check runs before FileChangedShellPost
-	-- records the new mtime.
+	-- what autoread would do.
 	vim.api.nvim_create_autocmd("FileChangedShell", {
 		group = group,
 		buffer = buf,
@@ -483,14 +481,11 @@ M.attach = function(buf)
 				return
 			end
 			vim.v.fcs_choice = ""
-			if disk_changed(buf) then
-				s.pending = true
-				vim.schedule(function()
-					if state[buf] == s and vim.api.nvim_buf_is_loaded(buf) and read_turn(buf) == "operator" then
-						violation(buf)
-					end
-				end)
-			end
+			vim.schedule(function()
+				if state[buf] == s and vim.api.nvim_buf_is_loaded(buf) and read_turn(buf) == "operator" then
+					violation(buf)
+				end
+			end)
 		end,
 	})
 	-- What the buffer last saw on disk: the base `disk_changed` compares to.
