@@ -1,6 +1,6 @@
 ---
 id: 000317
-status: codecomplete
+status: done
 created: 2026-10-11
 updated: 2026-10-11
 estimate_hours:
@@ -31,6 +31,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: d4051e8f9ec793d6506a770a8160be15bcd8b2a8
         evidence_commit: d3bc6d4aef17f74e4b1e99d337a62dc97b5b5bf1
+        landed_commit: 844244fb22c7d692177112c351fe6e25c480886d
 ---
 
 # session-sync: the operator's own auto-save reads as an agent write
