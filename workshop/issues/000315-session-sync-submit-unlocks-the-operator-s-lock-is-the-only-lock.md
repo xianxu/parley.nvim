@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "93f99eaf", done: "96fd1f6c"}
 ---
 
 # session-sync: submit unlocks; the operator's lock is the only lock
