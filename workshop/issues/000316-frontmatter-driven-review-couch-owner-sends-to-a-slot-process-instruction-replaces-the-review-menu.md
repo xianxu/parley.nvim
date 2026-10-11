@@ -70,3 +70,11 @@ Durable plan: [workshop/plans/000316-frontmatter-driven-review-plan.md](../plans
 ## Log
 
 ### 2026-10-11
+
+- Claimed from parley.nvim:1 (TL dispatch). Durable plan: `workshop/plans/000316-frontmatter-driven-review-plan.md`.
+- **Own slot:** pair sets `COUCH_THREAD_SCOPE`/`COUCH_THREAD_TAG` on every pane (checked on a live draft nvim via `ps eww`); `couch --actors --json` bindings carry `Scope`/`Tag`, so the slot is the actor matching both (the thread match couch's `LivenessForThread` uses), never an address string.
+- **YAML audit:** ran sdlc's `go.yaml.in/yaml/v3` on `a: [copy-edit] keep the voice` → `did not find expected key`; the double-quoted form parses. sdlc parses issue/project frontmatter strictly (`internal/issue/card.go`, `project/metadata.go`), so parley writes the value quoted when `frontmatter.needs_quote` says so (completion, the add-prompt) and reads both.
+- **Decisions:** `[copy-edit]` resolves by unique prefix (the Done-when's spelling; the file is `copy-editing.md`); several modes → every brief, the first one's knobs (ARCH-DRY: one `instruction.brief` for the slot message and the review prompt). Session-sync outside pair keeps sending to `owner:` (no slot to compare against); inside, a mismatch warns and changes nothing. In pair with no resolvable actor: error, never a silent fallback to an LLM round.
+- **ARCH-FUNERAL:** the send baseline is in memory (one string per file sent this session); nothing is written beside the file.
+- **Refactors:** `lua/parley/couch.lua` (send/query/find_actor moved out of session_sync, plus own-actor resolution); `lua/parley/frontmatter.lua` (session_sync's header reader rejected hyphenated keys); `tests/helpers/fake_couch.lua` (shared by both specs; logs one line per send, keeps the full last message).
+- **Test note:** TextChangedI never fires mid-typeahead in a `feedkeys(..., "x")` run, so the completion spec drives the installed handler via a `<Cmd>` mapping in real insert mode and asserts the autocmd is installed.

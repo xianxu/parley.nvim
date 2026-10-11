@@ -9,28 +9,6 @@ describe("session-sync buffer", function()
     local root, file, argv_file, log_file, saved_path, saved_poll, saved_check, saved_thread, buf
     local p = require("parley")
 
-    local function write_fake_couch()
-        local bin = root .. "/bin/couch"
-        vim.fn.mkdir(root .. "/bin", "p")
-        -- Queries answer from env (`--session-sync` exits 2 unless
-        -- FAKE_COUCH_STATUS is set: the verb before pair#437); every send
-        -- appends one line `<to>|<message>` to the log.
-        vim.fn.writefile({
-            "#!/bin/sh",
-            'case "$1" in',
-            '--actors) printf "%s" "$FAKE_COUCH_ACTORS"; exit 0;;',
-            '--session-sync) [ -n "$FAKE_COUCH_STATUS" ] || exit 2; printf "%s" "$FAKE_COUCH_STATUS"; exit 0;;',
-            'esac',
-            'if [ -n "$FAKE_COUCH_SLEEP" ]; then sleep "$FAKE_COUCH_SLEEP"; fi',
-            'printf "%s|%s\\n" "$2" "$4" >> "' .. log_file .. '"',
-            -- Written whole, then renamed: the spec polls for the file.
-            'for a in "$@"; do printf "%s\\n" "$a"; done > "' .. argv_file .. '.tmp"',
-            'mv "' .. argv_file .. '.tmp" "' .. argv_file .. '"',
-            'if [ -n "$FAKE_COUCH_EXIT" ] && [ "$FAKE_COUCH_EXIT" != 0 ]; then echo "no such peer" >&2; exit "$FAKE_COUCH_EXIT"; fi',
-        }, bin)
-        assert.is_truthy(uv.fs_chmod(bin, 493))
-    end
-
     local function open(lines)
         vim.fn.writefile(lines, file)
         vim.cmd("edit " .. vim.fn.fnameescape(file))
@@ -90,7 +68,7 @@ describe("session-sync buffer", function()
         file = root .. "/tl-status.md"
         argv_file = root .. "/argv"
         log_file = root .. "/sent"
-        write_fake_couch()
+        require("tests.helpers.fake_couch").write(root, log_file, argv_file)
         saved_path, saved_poll, saved_check = vim.env.PATH, ss.POLL_MS, ss.PING_CHECK_MS
         vim.env.PATH = root .. "/bin:" .. vim.env.PATH
         -- Outside pair unless a spec says otherwise (the suite itself may run

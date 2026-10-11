@@ -26,12 +26,13 @@
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `Frontmatter` | `lua/parley/frontmatter.lua` | new |
-| `Instruction` | `lua/parley/skills/review/instruction.lua` | new |
-| `SendMessage` (`review_send.message`) | `lua/parley/review_send.lua` | new |
-| `session_sync.parse_header` | `lua/parley/session_sync.lua` | modified |
-| review skill `source` | `lua/parley/skills/review/init.lua` | modified |
-| `review_menu` | `lua/parley/review_menu.lua` | deleted |
+| `parse`, `unquote`, `quote`, `needs_quote` (Frontmatter) | `lua/parley/frontmatter.lua` | new |
+| `expand`, `resolve`, `brief`, `complete` (Instruction; its `parse` above-named) | `lua/parley/skills/review/instruction.lua` | new |
+| `message`, `diff`, `placement`, `format_line`, `instruction_value`, `completion_start`, `requote` (SendMessage + pure send helpers) | `lua/parley/review_send.lua` | new |
+| `own_actor`, `same`, `slot`, `thread` (own-slot resolution) | `lua/parley/couch.lua` | new |
+| `parse_header` | `lua/parley/session_sync.lua` | modified |
+| `mode_names`, `run_via_invoke` (review skill `source` takes `args.modes`) | `lua/parley/skills/review/init.lua` | modified |
+| `lua/parley/review_menu.lua` (the review menu; also `session_sync.dispatch`) | `lua/parley/review_menu.lua` | deleted |
 
 - **Frontmatter** — `parse(lines, max)` → `{ fields = {key→value without inline comment, unquoted}, raw = {key→text after colon, trimmed}, lnum = {key→1-based line}, close = closing-fence line }` or nil. Key pattern `^([%w_][%w_-]*):` (accepts `-`; lowercased). `unquote(s)` (double: `\"`/`\\`; single: `''`), `quote(s)` (double, escaping `\` and `"`), `needs_quote(s)` (leading `[ { " ' & * ! | > % @ \``, or contains `: ` / ` #`).
   - **Relationships:** used by session_sync (header) and review_send (instruction line, insertion point).
@@ -44,10 +45,10 @@
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `couch` seam (`send`, `query`, `own_actor`, `find_actor`) | `lua/parley/couch.lua` | new (extracted) | `couch` binary via `vim.system` |
-| `review_send.submit` / `attach` | `lua/parley/review_send.lua` | new | buffer, `vim.ui.input`, `vim.fn.complete`, couch seam, review skill |
-| `session_sync.submit` | `lua/parley/session_sync.lua` | modified | adds the owner check via the couch seam |
-| markdown `<M-CR>` wiring | `lua/parley/init.lua`, `skills/review/init.lua`, `keybinding_registry.lua`, `config.lua` | modified | keymap registry |
+| `send`, `query`, `list`, `find_actor`, `own_slot` (couch seam) | `lua/parley/couch.lua` | new (extracted) | `couch` binary via `vim.system` |
+| `submit`, `attach`, `on_text_changed`, `on_complete_done` (review send) | `lua/parley/review_send.lua` | new | buffer, `vim.ui.input`, `vim.fn.complete`, couch seam, review skill |
+| `submit` (session-sync owner check) | `lua/parley/session_sync.lua` | modified | the couch seam |
+| `registry_callbacks` (markdown `<M-CR>` wiring) | `lua/parley/skills/review/init.lua` | modified | keymap registry |
 
 - **couch seam** — `send(to, message, on_exit)`, `query(argv, cb)` moved verbatim from session_sync; `own_actor(actors, env)` pure match on scope+tag; `find_actor` moved (session_sync re-exports it for its existing spec). `own_slot(cb)` = env check + actors query. Injected: tests point `PATH` at the fake couch and set/clear `vim.env.COUCH_THREAD_*`.
 - **Fake:** the existing fake couch script (log of `<to>|<message>`, `FAKE_COUCH_ACTORS`) — extend the actors JSON with `Binding.Scope/Tag`.
@@ -84,3 +85,9 @@
 ### Task 5: Docs, atlas, full suite
 - [ ] Update `atlas/modes/review.md` (process-instruction, slot send, menu gone), `atlas/modes/session_sync.md` (owner check), `atlas/ui/keybindings.md`, help/README mentions of the review menu (`grep -rn "review menu\|review_menu"`), `atlas/traceability.yaml` spec mapping.
 - [ ] `make test` and `make lint` green; manual e2e in a pair slot: Alt+Return on a scratch markdown delivers to this slot's agent.
+
+## Revisions
+
+### 2026-10-11 — Core-concepts tables name the real symbols
+
+The arch sweep (`tests/arch/single_source_sweeps_spec.lua`) requires every exported function the branch adds to appear in a table row, and every backticked row name to be defined. The rows named concepts (`Frontmatter`, `Instruction`, `SendMessage`); they now list the symbols, with the concept in parentheses. No design change.

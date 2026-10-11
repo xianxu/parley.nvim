@@ -9,7 +9,7 @@ declared arguments, then runs the selected skill without creating a chat buffer.
 
 | Skill | What it does | Entry or requirement |
 |---|---|---|
-| `review` | Apply document edits from ready markers or a review mode; show edit explanations | `<C-g>ve` for marker review; `<M-CR>` in Markdown for the mode menu |
+| `review` | Apply document edits from ready markers or a review mode; show edit explanations | `<C-g>ve` for marker review; `<M-CR>` in Markdown sends per `process-instruction:` (#316) |
 | `voice-apply` | Rewrite an artifact using a personal writing-style guide | Choose a style from `~/.personal/<slug>-writing-style.md` |
 | `define` | Produce an inline definition for a selected term | Visual definition action supplies the selected phrase and bounded context |
 
