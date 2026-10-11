@@ -433,3 +433,11 @@ oracle, and the mutation that would make the test fail.
   close review: the ping's "the reply may have landed" check). Likewise, a
   "force a refresh now" call that returns early while a refresh is in
   flight is not a guarantee. Make it a flag that the in-flight run honours.
+- A `:write` from inside a non-nested autocmd (a user's auto-save on
+  `TextChanged`) fires no `BufWritePost`. A baseline that only autocmds
+  update ("what this buffer last wrote") lags behind such writes, and the
+  buffer's own save reads as a foreign one (#317: false session-sync
+  violations). Ask Neovim instead (`:checktime` raises `FileChangedShell`
+  only for someone else's write), and when it gives no verdict, leave the
+  question open; never adopt the write (close review BR-1). Test with a
+  spec that auto-saves from a non-nested autocmd.
