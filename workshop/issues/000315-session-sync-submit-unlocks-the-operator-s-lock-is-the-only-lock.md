@@ -46,10 +46,21 @@ Independent of pair#439's landing order: with today's Couch, a missing lock alre
 
 ## Plan
 
-- [ ] Submit: save, delete the lock, send `submitted: <path>`; drop the holder rewrite and the read-only switch.
-- [ ] Clean-buffer silent reload on external change; keep the `.clobbered` path for the race.
-- [ ] Band and ping from owed events only; treat a legacy agent lock as none.
-- [ ] Tests for the Done-when rows; update the session-sync doc/atlas.
+- [x] Submit: save, delete the lock, send `submitted: <path>`; drop the holder rewrite and the read-only switch.
+- [x] Clean-buffer silent reload on external change; keep the `.clobbered` path for the race.
+- [x] Band and ping from owed events only; treat a legacy agent lock as none.
+- [x] Tests for the Done-when rows; update the session-sync doc/atlas.
+
+Core concepts:
+
+| Name | Where | Role | Status |
+|---|---|---|---|
+| `turn` | `lua/parley/session_sync.lua` | lock text → `free` / `operator`; a legacy agent lock reads as free | modified |
+| `view` | `lua/parley/session_sync.lua` | adds the `owed` state; operator states outrank it | modified |
+| `owed_minutes` | `lua/parley/session_sync.lua` | minutes since couch's oldest owed event, or nil | new |
+| `violation` | `lua/parley/session_sync.lua` | gains the `race` wording for a write just before the first edit | modified |
+| `lock_minutes` | `lua/parley/session_sync.lua` | the agent-lock age that fed the old band | deleted |
+| `unlock` | `lua/parley/session_sync.lua` | `<C-g>u` escape from an agent lock | deleted |
 
 Design notes:
 - Turn is `free` | `operator` only; `M.turn` reads a `holder: agent` lock as `free`. The first keystroke's `write_lock(operator)` overwrites it.
@@ -64,3 +75,5 @@ Design notes:
 ### 2026-10-11
 
 - Claimed and started on parley.nvim:1 from the TL dispatch; design notes in ## Plan.
+- Implemented: turn is free/operator; submit saves, deletes the lock and sends; owed band + ping read couch's owed events only (probe forced after submit and reload); the first-edit race goes through `violation(buf, true)`; `<C-g>u` unlock removed (config, registry, init, atlas). `make test-spec SPEC=modes/session_sync`: 35/35 pass.
+- The arch sweep `every symbol the Spec and plan tables name exists` needs a Core-concepts table on an issue branch; added one to ## Plan.

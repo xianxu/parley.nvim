@@ -27,7 +27,7 @@ describe("session_sync.turn", function()
     it("reads the turn holder from the lock text", function()
         assert.equals("free", ss.turn(nil))
         assert.equals("operator", ss.turn(ss.lock_body("operator", 0)))
-        assert.equals("agent", ss.turn(ss.lock_body("agent", 0)))
+        assert.equals("free", ss.turn(ss.lock_body("agent", 0)))   -- legacy agent lock is no lock (#315)
         assert.equals("operator", ss.turn("garbage"))
     end)
 end)
@@ -40,12 +40,15 @@ describe("session_sync.view", function()
             ss.view("operator", false, "ops:0"))
         assert.same({ state = "stale", label = "unsent edits, Alt+Return to submit", hl = "ParleySessionSyncStale" },
             ss.view("operator", { stale = true }, "ops:0"))
-        assert.same({ state = "agent", label = "ops:0 owes a response, 7 min, read-only", hl = "ParleySessionSyncAgent" },
-            ss.view("agent", { minutes = 7 }, "ops:0"))
+        assert.same({ state = "owed", label = "ops:0 owes a response, 7 min", hl = "ParleySessionSyncOwed" },
+            ss.view("free", { minutes = 7 }, "ops:0"))
+    end)
+    it("shows the operator's turn over owed work", function()
+        assert.equals("operator", ss.view("operator", { minutes = 7 }, "ops:0").state)
     end)
     it("shows a violation over staleness, in the operator colour", function()
         assert.same({ state = "violated", label = "ops:0 wrote under your lock: yours kept, theirs in .clobbered",
-            hl = "ParleySessionSyncOperator" }, ss.view("operator", { stale = true, violated = "yours kept, theirs in .clobbered" }, "ops:0"))
+            hl = "ParleySessionSyncOperator" }, ss.view("operator", { stale = true, violated = "wrote under your lock: yours kept, theirs in .clobbered" }, "ops:0"))
     end)
 end)
 
