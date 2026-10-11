@@ -23,12 +23,33 @@ read-only). The operator's first edit writes `holder: operator`; `<M-CR>`
 rewrites it to `holder: agent`; the agent deletes the lock when done and never
 writes it. A failed send and `<C-g>u` both rewrite it to `holder: operator`.
 The turn is read from disk, so a buffer reopened during the agent's turn is
-read-only too. Whenever the turn is not the operator's, parley watches the file
-once a second: during the agent's turn the lock's removal is the reply (parley
+read-only too. While the buffer is loaded, parley watches the file once a
+second: during the agent's turn the lock's removal is the reply (parley
 reloads the buffer and makes it editable); during a free turn an agent write
 reloads the unmodified buffer. The operator's turn never starts on an old copy:
 a first edit made after the file changed on disk is dropped and the buffer
-reloaded, and submit refuses to overwrite a file rewritten under the buffer.
+reloaded, and outside the operator's turn submit refuses to overwrite a file
+rewritten under the buffer.
+
+**A write under the operator's lock (#314)** is a violation, never a prompt.
+The watch, a buffer-local `FileChangedShell` (focus, `:checktime`) and submit
+all reach one handler: it copies the agent's file to `<file>.clobbered`
+(one per file, overwritten by the next violation), writes the operator's
+buffer back with `:write!` (so no save prompts later), flags the band, and
+sends the owner one `couch --send-to` message per operator turn
+(`session-sync violation: …`). Outside the operator's turn `FileChangedShell`
+does what autoread would.
+
+**Liveness ping (#314).** At most once a minute the watch probes whether the
+owner owes a response: since the lock was handed to it (the agent's turn), or
+since the oldest owed event `couch --session-sync status --json FILE` reports
+(pair#437; a failing or unknown verb leaves the lock as the only condition).
+When owed for `session_sync_ping_minutes` (default 5) and the owner's slot in
+`couch --actors --json` is live and quiet (`LastActivity` at least 30 s old,
+couch's QuietInterval; `Resting` names the resting branch, not the turn),
+parley sends `session-sync ping: <path> owes a response since <time>` once per
+owed episode. Every message leaves from the operator's editor, so pair#433's
+breaker counts it as the operator's, not a peer's.
 
 **Rendering.** Each window showing the file gets a full-width winbar band
 and a window-local `winhighlight` for its StatusLine, both in the state's
@@ -39,8 +60,9 @@ override them.
 |---|---|---|
 | free | `free: editing takes your turn` | `ParleySessionSyncFree` (StatusLine) |
 | operator | `your turn, Alt+Return to submit` | `ParleySessionSyncOperator` (dark red `#870000`, white bold) |
+| violated | `<owner> wrote under your lock: yours kept, theirs in .clobbered` | `ParleySessionSyncOperator` |
 | stale | `unsent edits, Alt+Return to submit` | `ParleySessionSyncStale` (orange, black bold) |
-| agent | `<owner> working, read-only` | `ParleySessionSyncAgent` (DiffChange) |
+| agent | `<owner> owes a response, N min, read-only` (N since the lock was written) | `ParleySessionSyncAgent` (DiffChange) |
 
 An operator turn left idle for `session_sync_stale_minutes` (default 5) is stale.
 
