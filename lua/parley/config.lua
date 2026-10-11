@@ -484,6 +484,7 @@ local config = {
 	-- "unsent edits" reminder shows after this many idle minutes holding the lock.
 	session_sync_shortcut_unlock = { modes = { "n" }, shortcut = "<C-g>u" },
 	session_sync_stale_minutes = 5,
+	session_sync_ping_minutes = 5,
 	-- Agent for document review. NIL by default (#215): it used to name
 	-- "Claude-Sonnet", which is absent from the shipped roster — and since
 	-- get_agent never returns nil, that did not fall through, it silently

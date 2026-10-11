@@ -11,21 +11,35 @@
 -- `couch --send-to`. The agent replies by rewriting the file and deleting the
 -- lock (it never writes the lock); a watch notices, reloads and unlocks.
 -- The turn is always read from disk, so a reopened buffer shows it too.
+-- An agent write under the operator's lock never prompts (#314): the
+-- operator's copy is written back, the agent's kept as `<file>.clobbered`,
+-- and the owner told once. While the owner owes a response for
+-- `session_sync_ping_minutes` and its turn has ended, it is pinged once.
 --
 -- Lifecycles: the lock is removed by the agent's reply; an operator lock left
 -- idle turns stale and is shown in the reminder colour until submitted. The
--- watch timer lives while the turn is free or the agent's (closed during the
--- operator's turn and on BufWipeout); the idle timer is one per buffer,
--- restarted on each edit and closed on BufWipeout.
+-- watch timer lives while the buffer is loaded (closed on unload and
+-- BufWipeout, restarted by BufWinEnter); the idle
+-- timer is one per buffer, restarted on each edit and closed on BufWipeout.
+-- `<file>.clobbered` is one per file, overwritten by the next violation and
+-- removed by whoever reads it. Probes are one-shot couch processes, one at a
+-- time per buffer.
 
 local M = {}
 
 M.POLL_MS = 1000
+M.PING_CHECK_MS = 60000
+-- An owner whose slot showed no activity for this long has ended its turn
+-- (couch's own QuietInterval, the rule its routing uses).
+M.QUIET_SECONDS = 30
 
 local ns_group = "ParleySessionSync"
 
 -- Per-buffer state: { turn, stale, gen (submit generation), loaded (disk
--- mtime last read/written), watch = timer|nil, idle = timer|nil }
+-- mtime last read/written), watch = timer|nil, idle = timer|nil, minutes
+-- (the agent's turn so far), violated / complained (this operator turn),
+-- pending (a violation FileChangedShell saw), probing / probed (vim.uv.now()
+-- of the last probe), pinged (the owed-since time last pinged) }
 local state = {}
 
 --- Frontmatter lines → { owner, operator } when `type: session-sync`, else nil.
@@ -70,14 +84,69 @@ local VIEWS = {
 	free = { hl = "ParleySessionSyncFree", label = "free: editing takes your turn" },
 	operator = { hl = "ParleySessionSyncOperator", label = "your turn, Alt+Return to submit" },
 	stale = { hl = "ParleySessionSyncStale", label = "unsent edits, Alt+Return to submit" },
-	agent = { hl = "ParleySessionSyncAgent", label = "%s working, read-only" },
+	violated = { hl = "ParleySessionSyncOperator", label = "%s wrote under your lock: yours kept, theirs in .clobbered" },
+	agent = { hl = "ParleySessionSyncAgent", label = "%s owes a response, %d min, read-only" },
 }
 
---- (turn, stale, owner) → { state, label, hl }: what every surface renders.
-M.view = function(turn, stale, owner)
-	local key = (turn == "operator" and stale) and "stale" or turn
+--- (turn, { stale, violated, minutes }, owner) → { state, label, hl }: what
+--- every surface renders. A violation outranks staleness.
+M.view = function(turn, flags, owner)
+	flags = flags or {}
+	local key = turn
+	if turn == "operator" then
+		key = flags.violated and "violated" or flags.stale and "stale" or "operator"
+	end
 	local v = VIEWS[key]
-	return { state = key, label = v.label:format(owner or "agent"), hl = v.hl }
+	return { state = key, label = v.label:format(owner or "agent", flags.minutes or 0), hl = v.hl }
+end
+
+-- Days since 1970-01-01 for a proleptic Gregorian date (no timezone involved).
+local function days_from_civil(y, m, d)
+	y = m <= 2 and y - 1 or y
+	local era = math.floor(y / 400)
+	local yoe = y - era * 400
+	local doy = math.floor((153 * (m > 2 and m - 3 or m + 9) + 2) / 5) + d - 1
+	return era * 146097 + yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy - 719468
+end
+
+--- RFC3339 text → epoch seconds, or nil.
+M.parse_time = function(text)
+	if type(text) ~= "string" then
+		return nil
+	end
+	local y, mo, d, h, mi, sec, tz = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)%.?%d*(.*)$")
+	if not y then
+		return nil
+	end
+	local offset = 0
+	if tz ~= "Z" then
+		local sign, oh, om = tz:match("^([+-])(%d%d):(%d%d)$")
+		if not sign then
+			return nil
+		end
+		offset = (sign == "-" and -60 or 60) * (tonumber(oh) * 60 + tonumber(om))
+	end
+	return days_from_civil(tonumber(y), tonumber(mo), tonumber(d)) * 86400
+		+ tonumber(h) * 3600 + tonumber(mi) * 60 + tonumber(sec) - offset
+end
+
+--- The actor (from `couch --actors --json`) a couch address names: the exact
+--- slot, else the one slot whose repository starts with the address's (couch
+--- resolves `parley:1` to `parley.nvim:1` the same way). nil when none or ambiguous.
+M.find_actor = function(actors, owner)
+	local repo, index = (owner or ""):match("^(.*):(%d+)$")
+	local prefixed = {}
+	for _, actor in ipairs(actors or {}) do
+		local slot = actor.Binding and actor.Binding.Slot or ""
+		if slot == owner then
+			return actor
+		end
+		local r, i = slot:match("^(.*):(%d+)$")
+		if repo and r and i == index and r:sub(1, #repo) == repo then
+			prefixed[#prefixed + 1] = actor
+		end
+	end
+	return #prefixed == 1 and prefixed[1] or nil
 end
 
 local function header(buf)
@@ -94,6 +163,10 @@ end
 
 M.lock_path = function(buf)
 	return file_of(buf) .. ".lock"
+end
+
+local function owner_of(buf)
+	return (header(buf) or {}).owner
 end
 
 local function read_turn(buf)
@@ -120,6 +193,28 @@ local function write_lock(buf, holder)
 	f:write(M.lock_body(holder, os.time()))
 	f:close()
 	return true
+end
+
+-- One message to the owner; on_exit(obj) gets the result, in the main loop.
+-- Every message leaves from this editor, so couch sees the operator's own
+-- slot as the sender (pair#433 counts it as the operator's, not a peer's).
+local function send(owner, message, on_exit)
+	local argv = { "couch", "--send-to", owner, "--message", message }
+	local ok, err = pcall(vim.system, argv, { text = true }, vim.schedule_wrap(on_exit or function() end))
+	if not ok and on_exit then
+		on_exit({ code = -1, stderr = tostring(err) })
+	end
+end
+
+-- Run a couch query; cb(decoded) with nil unless it exited 0 with Code "ok".
+local function query(argv, cb)
+	local ok = pcall(vim.system, argv, { text = true }, vim.schedule_wrap(function(obj)
+		local decoded, data = pcall(vim.json.decode, obj.stdout or "")
+		cb(obj.code == 0 and decoded and type(data) == "table" and data.Code == "ok" and data or nil)
+	end))
+	if not ok then
+		cb(nil)
+	end
 end
 
 local function close_timer(timer)
@@ -157,12 +252,103 @@ local function reload(buf)
 	end)
 end
 
+local function lock_mtime(buf)
+	local st = vim.uv.fs_stat(M.lock_path(buf))
+	return st and st.mtime.sec
+end
+
+-- Whole minutes since the lock was written (the agent's turn so far).
+local function lock_minutes(buf)
+	return math.floor((os.time() - (lock_mtime(buf) or os.time())) / 60)
+end
+
 local refresh
 
--- Watch the file while the turn is not the operator's. During the agent's
--- turn the lock's removal is the reply; during a free turn an agent write
--- reloads the (unmodified) buffer, so the operator never edits a stale copy.
-local function start_watch(buf, owner)
+-- The agent wrote the file while the operator held the lock. Keep the
+-- agent's copy beside the file, write the operator's buffer back over it
+-- (`write!`: no "changed since reading" prompt, now or on a later save), flag
+-- the band and tell the owner once per operator turn.
+local function violation(buf)
+	local s = state[buf]
+	if not (s.pending or disk_changed(buf)) then
+		return
+	end
+	s.pending = false
+	local path = file_of(buf)
+	local clobbered = path .. ".clobbered"
+	vim.uv.fs_copyfile(path, clobbered)
+	vim.api.nvim_buf_call(buf, function()
+		vim.cmd("silent write!")
+	end)
+	s.violated = true
+	refresh(buf)
+	local owner = owner_of(buf)
+	notify((owner or "the agent") .. " wrote the file under your lock; kept yours, theirs is in " .. clobbered,
+		vim.log.levels.WARN)
+	if owner and not s.complained then
+		s.complained = true
+		send(owner, "session-sync violation: " .. path .. " was written while the operator held the lock;"
+			.. " the operator's copy was kept, yours is at " .. clobbered)
+	end
+end
+
+-- Ping the owner once per episode of owed work: owed since the lock was
+-- handed to it (the agent's turn), or since the oldest owed event couch's
+-- `--session-sync status` reports (pair#437; any failure leaves the lock
+-- alone as the condition). Only an owner that is live and quiet (its turn
+-- ended: no activity for QUIET_SECONDS) is pinged: mid-turn the message would
+-- only queue. (`Resting` names the slot's resting branch, not its turn.)
+local function probe(buf)
+	local s = state[buf]
+	local owner = owner_of(buf)
+	if not owner or s.probing or (s.probed and vim.uv.now() - s.probed < M.PING_CHECK_MS) then
+		return
+	end
+	s.probing, s.probed = true, vim.uv.now()
+	local path = file_of(buf)
+	local function lock_owed()
+		return read_turn(buf) == "agent" and lock_mtime(buf) or nil
+	end
+	query({ "couch", "--session-sync", "status", "--json", path }, function(status)
+		if state[buf] ~= s then
+			return
+		end
+		local since = lock_owed()
+		local from_lock = since ~= nil
+		for _, owed in ipairs(status and status.Status and status.Status.Owed or {}) do
+			local at = M.parse_time(owed.At)
+			if at and (not since or at < since) then
+				since, from_lock = at, false
+			end
+		end
+		local after = (require("parley").config.session_sync_ping_minutes or 5) * 60
+		if not since or os.time() - since < after or s.pinged == since then
+			s.probing = false
+			return
+		end
+		query({ "couch", "--actors", "--json" }, function(actors)
+			if state[buf] ~= s then
+				return
+			end
+			s.probing = false
+			local actor = actors and M.find_actor(actors.Actors, owner)
+			-- The reply may have landed while couch answered.
+			local active = actor and actor.Known and M.parse_time(actor.LastActivity)
+			if not active or os.time() - active < M.QUIET_SECONDS or (from_lock and lock_owed() ~= since) then
+				return
+			end
+			s.pinged = since
+			send(owner, "session-sync ping: " .. path .. " owes a response since "
+				.. os.date("!%Y-%m-%dT%H:%M:%SZ", since))
+		end)
+	end)
+end
+
+-- Watch the file in every turn. During the agent's turn the lock's removal is
+-- the reply; during a free turn an agent write reloads the (unmodified)
+-- buffer, so the operator never edits a stale copy; during the operator's
+-- turn an agent write is a violation.
+local function start_watch(buf)
 	local s = state[buf]
 	if s.watch then
 		return
@@ -170,44 +356,46 @@ local function start_watch(buf, owner)
 	local timer = vim.uv.new_timer()
 	s.watch = timer
 	timer:start(M.POLL_MS, M.POLL_MS, vim.schedule_wrap(function()
-		if s.watch ~= timer or not vim.api.nvim_buf_is_valid(buf) then
+		-- An unloaded buffer (:bdelete) has no copy to keep: stop until
+		-- BufWinEnter shows it again.
+		if s.watch ~= timer or not vim.api.nvim_buf_is_loaded(buf) then
 			close_timer(timer)
+			if s.watch == timer then
+				s.watch = nil
+			end
 			return
 		end
 		local turn = read_turn(buf)
-		if turn == "free" and s.turn == "agent" then
+		if turn == "operator" and s.turn == "operator" and disk_changed(buf) then
+			violation(buf)
+		elseif turn == "free" and s.turn == "agent" then
 			reload(buf)
-			notify((owner or "agent") .. " replied")
+			notify((owner_of(buf) or "agent") .. " replied")
 		elseif turn == "free" and not vim.bo[buf].modified and disk_changed(buf) then
 			reload(buf)
 		end
-		if turn ~= s.turn then
+		if turn ~= s.turn or (turn == "agent" and s.minutes ~= lock_minutes(buf)) then
 			refresh(buf)
 		end
+		probe(buf)
 	end))
 end
 
--- Apply the on-disk turn: read-only while the agent holds it, watched unless
--- the operator holds it.
+-- Apply the on-disk turn: read-only while the agent holds it.
 refresh = function(buf)
 	local s = state[buf]
 	if not s or not vim.api.nvim_buf_is_valid(buf) then
 		return
 	end
-	local h = header(buf) or {}
 	local turn = read_turn(buf)
 	s.turn = turn
 	if turn ~= "operator" then
-		s.stale = false
+		s.stale, s.violated, s.complained = false, false, false
 	end
+	s.minutes = turn == "agent" and lock_minutes(buf) or nil
 	vim.bo[buf].modifiable = turn ~= "agent"
-	if turn == "operator" then
-		close_timer(s.watch)
-		s.watch = nil
-	else
-		start_watch(buf, h.owner)
-	end
-	render(buf, M.view(turn, s.stale, h.owner))
+	start_watch(buf)
+	render(buf, M.view(turn, s, owner_of(buf)))
 end
 
 -- Restart the idle timer (one per buffer, reused across keystrokes); when it
@@ -282,6 +470,29 @@ M.attach = function(buf)
 			restart_idle(buf)
 		end,
 	})
+	-- No prompt about a file changed on disk: under the operator's lock it is
+	-- a violation (handled outside the autocmd, which may not write); else
+	-- what autoread would do. The check runs before FileChangedShellPost
+	-- records the new mtime.
+	vim.api.nvim_create_autocmd("FileChangedShell", {
+		group = group,
+		buffer = buf,
+		callback = function()
+			if read_turn(buf) ~= "operator" then
+				vim.v.fcs_choice = vim.bo[buf].modified and "ask" or "reload"
+				return
+			end
+			vim.v.fcs_choice = ""
+			if disk_changed(buf) then
+				s.pending = true
+				vim.schedule(function()
+					if state[buf] == s and vim.api.nvim_buf_is_loaded(buf) and read_turn(buf) == "operator" then
+						violation(buf)
+					end
+				end)
+			end
+		end,
+	})
 	-- What the buffer last saw on disk: the base `disk_changed` compares to.
 	vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "FileChangedShellPost" }, {
 		group = group,
@@ -326,9 +537,14 @@ M.submit = function(buf)
 		return
 	end
 	if disk_changed(buf) then
-		notify("the file changed on disk since this buffer read it; not overwriting it."
-			.. " :e! reloads (dropping your edits)", vim.log.levels.ERROR)
-		return
+		-- Under the operator's lock the operator's copy wins.
+		if read_turn(buf) == "operator" then
+			violation(buf)
+		else
+			notify("the file changed on disk since this buffer read it; not overwriting it."
+				.. " :e! reloads (dropping your edits)", vim.log.levels.ERROR)
+			return
+		end
 	end
 	vim.cmd("stopinsert")
 	vim.api.nvim_buf_call(buf, function()
@@ -353,17 +569,13 @@ M.submit = function(buf)
 		refresh(buf)
 		notify("send to " .. h.owner .. " failed, your turn again: " .. why, vim.log.levels.ERROR)
 	end
-	local argv = { "couch", "--send-to", h.owner, "--message", "submitted: " .. file_of(buf) }
-	local ok, err = pcall(vim.system, argv, { text = true }, vim.schedule_wrap(function(obj)
+	send(h.owner, "submitted: " .. file_of(buf), function(obj)
 		if obj.code ~= 0 then
 			fail(vim.trim(obj.stderr or ""))
 		elseif current() then
 			notify("submitted to " .. h.owner)
 		end
-	end))
-	if not ok then
-		fail(tostring(err))
-	end
+	end)
 end
 
 --- Manual escape when the owner never replies: the operator takes the turn

@@ -39,8 +39,36 @@ describe("session_sync.view", function()
         assert.same({ state = "operator", label = "your turn, Alt+Return to submit", hl = "ParleySessionSyncOperator" },
             ss.view("operator", false, "ops:0"))
         assert.same({ state = "stale", label = "unsent edits, Alt+Return to submit", hl = "ParleySessionSyncStale" },
-            ss.view("operator", true, "ops:0"))
-        assert.same({ state = "agent", label = "ops:0 working, read-only", hl = "ParleySessionSyncAgent" },
-            ss.view("agent", false, "ops:0"))
+            ss.view("operator", { stale = true }, "ops:0"))
+        assert.same({ state = "agent", label = "ops:0 owes a response, 7 min, read-only", hl = "ParleySessionSyncAgent" },
+            ss.view("agent", { minutes = 7 }, "ops:0"))
+    end)
+    it("shows a violation over staleness, in the operator colour", function()
+        assert.same({ state = "violated", label = "ops:0 wrote under your lock: yours kept, theirs in .clobbered",
+            hl = "ParleySessionSyncOperator" }, ss.view("operator", { stale = true, violated = true }, "ops:0"))
+    end)
+end)
+
+describe("session_sync.parse_time", function()
+    it("reads RFC3339 in UTC, with fractions and offsets", function()
+        assert.equals(0, ss.parse_time("1970-01-01T00:00:00Z"))
+        assert.equals(1791696000, ss.parse_time("2026-10-11T05:20:00Z"))
+        assert.equals(1791696000, ss.parse_time("2026-10-10T22:20:00.123456-07:00"))
+        assert.equals(951782400, ss.parse_time("2000-02-29T00:00:00Z"))
+        assert.is_nil(ss.parse_time("yesterday"))
+        assert.is_nil(ss.parse_time(nil))
+    end)
+end)
+
+describe("session_sync.find_actor", function()
+    local function a(slot) return { Binding = { Slot = slot } } end
+    it("matches the exact slot, else a unique repository prefix with the same index", function()
+        local actors = { a("parley.nvim:1"), a("ops:0"), a("pair:1"), a("pair-two:1") }
+        assert.equals(actors[2], ss.find_actor(actors, "ops:0"))
+        assert.equals(actors[1], ss.find_actor(actors, "parley:1"))
+        assert.equals(actors[3], ss.find_actor(actors, "pair:1"))
+        assert.is_nil(ss.find_actor(actors, "pa:1"))       -- ambiguous
+        assert.is_nil(ss.find_actor(actors, "parley:2"))
+        assert.is_nil(ss.find_actor(nil, "ops:0"))
     end)
 end)

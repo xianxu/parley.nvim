@@ -84,3 +84,9 @@ Parley reads only `Code` and `Owed[].At` (RFC3339 → epoch via a small parser, 
 pair#433's breaker keys on sender binding, not text: a `couch --send-to` run from an editor inside the owner's
 slot counts as an operator submit. The complaint and the ping are sent by the same nvim process as the existing
 submit, so they share its binding; no new sending path (one from another slot's editor) is added.
+
+## Revisions
+
+- 2026-10-10 (TL correction via ops:0, overriding the dispatch and the issue spec): `Resting` in
+  `couch --actors --json` means the slot is on its resting branch, not that its turn ended. "Turn ended" is now
+  `now - LastActivity >= 30 s` (couch's QuietInterval, `M.QUIET_SECONDS`); step 4 of the ping reads `LastActivity`.
