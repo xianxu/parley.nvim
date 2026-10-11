@@ -1,12 +1,22 @@
 ---
 id: 000317
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-11
 updated: 2026-10-11
 estimate_hours:
-card_mirror: '65435c6a08b35d66a8c1e8e87f272da18913f4c1' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'c535fa0e8719fae5fb72bc511232b248f5611ba2' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-11T11:29:20-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "a1056189", done: "3f632b33"}
+actual_hours: 0.32
 ---
 
 # session-sync: the operator's own auto-save reads as an agent write
@@ -34,10 +44,23 @@ Let Neovim, which records every write a buffer makes, decide whose write it was,
 
 ## Plan
 
-- [ ] `disk_changed` asks Neovim through `:checktime` when the mtime moved; `FileChangedShell` records `s.foreign`.
-- [ ] `autoread` off; the first-edit race check runs in the scheduled callback.
-- [ ] Tests for both Done-when rows; atlas note.
+- [x] `disk_changed` asks Neovim through `:checktime` when the mtime moved; `FileChangedShell` records `s.foreign`.
+- [x] `autoread` off; the first-edit race check runs in the scheduled callback.
+- [x] Tests for both Done-when rows; atlas note.
+
+Core concepts:
+
+| Name | Where | Role | Status |
+|---|---|---|---|
+| `disk_changed` | `lua/parley/session_sync.lua` | mtime cache, confirmed by Neovim through checktime | modified |
+| `attach` | `lua/parley/session_sync.lua` | autoread off; FileChangedShell records the foreign mtime | modified |
 
 ## Log
 
 ### 2026-10-11
+- 2026-10-11: closed — make test exit 0. Repro: a non-nested TextChanged auto-save (as the operator's nvim config does) produced a false .clobbered + violation. The TL's sequences (agent write -> reload by watch or :checktime -> first edit -> auto-save or :w -> submit; agent write -> edit -> one Alt+Return submits, no .clobbered) pass with the fix (36/36 integration); the auto-save cases fail against origin/main's module. BR-1 fixed: an errored :checktime or eventignore leaves the write undecided; specs cover both and each guard's mutation fails its spec. Mutation: re-enabling autoread fails 3 specs.; review verdict: SHIP
+- Reproduced with a spec that auto-saves from a non-nested `TextChanged` autocmd, as `~/.config/nvim/lua/core/options.lua` does: false `.clobbered` + violation message before the fix. A second hazard showed up: with `autoread` on, `:checktime` reloaded the agent's write over a just-auto-saved buffer under the lock.
+- Fix: `disk_changed` treats `s.loaded` as a cache and asks Neovim (`:checktime`, `FileChangedShell` → `s.foreign`); `autoread` off; the first-edit race snapshots the mtime move and confirms it in the scheduled callback. Mutation: re-enabling `autoread` fails 3 specs.
+- TL's second report (11:34) and refinement: the flagged save was the operator's first Alt+Return after a TL write; a second press submitted. Added the exact sequences: agent write → reload (watch or :checktime) → first edit → auto-save or :w, and agent write → edit → one Alt+Return → submitted, no `.clobbered`. Against origin/main's session_sync.lua, 4 cases fail: own auto-save, watch reload + auto-save, Alt+Return + auto-save (at `.clobbered`), and the :checktime-no-reload case. The :checktime reload + auto-save case passed on base (watch off, the stale baseline never read; close review); it now ends with a submit, which reads the baseline. With the fix, 34/34 pass.
+- The TL's hypothesis (nvim notices a pre-lock write only at focus/Alt+Return) doesn't fit: the watch polls the mtime every second, the buffer had reloaded the TL's content before the edit, and `.clobbered` byte-identical to the file means the 'foreign' copy already held the operator's comment, i.e. it was the operator's own save. Comparing mtime with the lock time wouldn't catch it either (the auto-save is after the lock). Checking before taking the lock is what the first-edit step now does via :checktime.
+- Close review round 1: FIX-THEN-SHIP. BR-1 (Important): the `pcall` around :checktime failed open; an errored check or an `eventignore`d FileChangedShell adopted a foreign write. Fixed the class: only Neovim's verdict moves the baseline, and with no verdict the write stays undecided and is asked again (Neovim's own overwrite warning still guards a save). Specs stub :checktime to error and set eventignore; each guard's mutation fails its own spec. Minors: `mtime_moved` helper (ARCH-DRY), spec comment, this Log line.

@@ -265,6 +265,154 @@ describe("session-sync buffer", function()
         assert.equals(1, #sent())
     end)
 
+    -- The operator's config auto-saves markdown from a non-nested autocmd:
+    -- that write fires no BufWritePost (#317).
+    local function auto_save()
+        vim.api.nvim_create_autocmd("TextChanged", {
+            group = vim.api.nvim_create_augroup("SpecAutoSave", { clear = true }),
+            buffer = buf,
+            callback = function() vim.cmd("silent! write") end,
+        })
+    end
+    local function typed(text)
+        edit(text)
+        vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+    end
+
+    it("the operator's own auto-save from a non-nested autocmd is no violation (#317)", function()
+        open(header)
+        auto_save()
+        typed("- first comment")
+        assert.equals("holder: operator", holder())
+        assert.equals("- first comment", vim.fn.readfile(file)[8])
+        assert.is_false(vim.bo[buf].modified)
+        typed("- second comment")
+        vim.wait(300)                    -- several watch ticks
+        assert.is_false(exists(file .. ".clobbered"))
+        assert.equals(0, #sent())
+        assert.equals("%#ParleySessionSyncOperator# your turn, Alt+Return to submit%=", winbar())
+        keymap_cb("<M-CR>")()            -- submit sees no foreign write either
+        assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
+        assert.matches("submitted: ", sent()[1], 1, true)
+        assert.is_false(exists(file .. ".clobbered"))
+    end)
+
+    -- The TL's two reports (11:26, 11:34): an agent write, the clean buffer
+    -- reloads, the operator takes the lock, and their first save was flagged.
+    for _, case in ipairs({
+        { name = "the watch", reload = function() end },
+        { name = ":checktime", reload = function() vim.cmd("checktime") end },
+    }) do
+        for _, save in ipairs({ "auto-save", ":w" }) do
+            it(("agent write, reload by %s, first edit, then the operator's %s: no violation (#317)")
+                :format(case.name, save), function()
+                if case.name == ":checktime" then ss.POLL_MS = 60000 end
+                open(header)
+                if save == "auto-save" then auto_save() end
+                agent_write("- TL's update")
+                case.reload()
+                assert.is_true(vim.wait(2000, function()
+                    return vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1] == "- TL's update"
+                end))
+                vim.api.nvim_buf_set_lines(buf, 8, 8, false, { "- operator comment" })
+                vim.api.nvim_exec_autocmds("BufModifiedSet", { buffer = buf })
+                assert.equals("holder: operator", holder())
+                if save == "auto-save" then
+                    vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+                else
+                    vim.cmd("silent write")
+                end
+                assert.same({ "- TL's update", "- operator comment" }, vim.list_slice(vim.fn.readfile(file), 8, 9))
+                vim.wait(300)            -- watch ticks (when on), and the first-edit check
+                vim.cmd("checktime")
+                vim.wait(50)
+                assert.is_false(exists(file .. ".clobbered"))
+                assert.equals(0, #sent())
+                assert.equals("%#ParleySessionSyncOperator# your turn, Alt+Return to submit%=", winbar())
+                -- Submit reads the baseline even with the watch off.
+                keymap_cb("<M-CR>")()
+                assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
+                assert.matches("|submitted: ", sent()[1], 1, true)
+                assert.is_false(exists(file .. ".clobbered"))
+            end)
+        end
+    end
+
+    -- The refined report: it was the first Alt+Return after the TL's write
+    -- that was flagged, and that submit was dropped; a second one submitted.
+    for _, save in ipairs({ "plain", "auto-save" }) do
+        it(("agent write, operator edits, one Alt+Return submits with no violation (%s, #317)"):format(save), function()
+            open(header)
+            if save == "auto-save" then auto_save() end
+            agent_write("- TL's update")
+            assert.is_true(vim.wait(2000, function()
+                return vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1] == "- TL's update"
+            end))
+            vim.api.nvim_buf_set_lines(buf, 8, 8, false, { "- operator comment" })
+            vim.api.nvim_exec_autocmds("BufModifiedSet", { buffer = buf })
+            vim.api.nvim_exec_autocmds("TextChanged", { buffer = buf })
+            assert.equals("holder: operator", holder())
+            vim.wait(50)
+            keymap_cb("<M-CR>")()
+            assert.is_false(exists(file .. ".lock"))
+            assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
+            assert.matches("|submitted: " .. file, sent()[1], 1, true)
+            assert.is_false(exists(file .. ".clobbered"))
+            assert.same({ "- TL's update", "- operator comment" }, vim.list_slice(vim.fn.readfile(file), 8, 9))
+        end)
+    end
+
+    -- Without Neovim's verdict a moved mtime stays undecided: never adopted
+    -- as the operator's own (close review BR-1).
+    for _, how in ipairs({ "checktime errors", "eventignore" }) do
+        it(("a foreign write is not adopted when %s, and is caught once Neovim can say (#317)"):format(how), function()
+            open(header)
+            edit("- edited")
+            vim.cmd("silent write")
+            local real_cmd, saved_ei = vim.cmd, vim.o.eventignore
+            if how == "checktime errors" then
+                vim.cmd = setmetatable({}, { __index = real_cmd, __call = function(_, c)
+                    if type(c) == "string" and c:match("^checktime") then error("E11: stubbed") end
+                    return real_cmd(c)
+                end })
+            else
+                vim.o.eventignore = "FileChangedShell"
+            end
+            agent_write("- TL ignored the lock")
+            vim.wait(300)                -- watch ticks without a verdict
+            vim.cmd, vim.o.eventignore = real_cmd, saved_ei
+            assert.is_false(exists(file .. ".clobbered"))
+            assert.is_true(vim.wait(2000, function() return exists(file .. ".clobbered") end))
+            assert.equals("- edited", vim.fn.readfile(file)[8])
+            assert.equals("- TL ignored the lock", vim.fn.readfile(file .. ".clobbered")[8])
+        end)
+    end
+
+    it("an agent write under the lock over a just-auto-saved clean buffer is still a violation (#317)", function()
+        open(header)
+        auto_save()
+        typed("- my comment")
+        assert.is_false(vim.bo[buf].modified)
+        agent_write("- TL ignored the lock")
+        assert.is_true(vim.wait(2000, function() return exists(file .. ".clobbered") end))
+        assert.equals("- my comment", vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1])
+        assert.equals("- my comment", vim.fn.readfile(file)[8])
+        assert.equals("- TL ignored the lock", vim.fn.readfile(file .. ".clobbered")[8])
+        assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
+    end)
+
+    it("the same write noticed by :checktime does not reload over the operator's text (#317)", function()
+        ss.POLL_MS = 60000
+        open(header)
+        auto_save()
+        typed("- my comment")
+        agent_write("- TL ignored the lock")
+        vim.cmd("checktime")
+        assert.is_true(vim.wait(2000, function() return exists(file .. ".clobbered") end))
+        assert.equals("- my comment", vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1])
+        assert.equals("- my comment", vim.fn.readfile(file)[8])
+    end)
+
     it("an agent deleting the file under the lock: the operator's copy is restored, nothing claimed kept (BR-2)", function()
         open(header)
         edit("- edited")

@@ -38,6 +38,8 @@ M.QUIET_SECONDS = 30
 local ns_group = "ParleySessionSync"
 
 -- Per-buffer state: { turn, stale, loaded (disk mtime last read/written),
+-- foreign (the disk mtime of the last write Neovim saw as someone else's),
+-- checking (inside disk_changed's :checktime),
 -- watch = timer|nil, idle = timer|nil, owed (epoch of the oldest owed event
 -- couch last reported, or nil), minutes (rendered owed minutes), violated /
 -- complained (this operator turn), unkept (the disk mtime of an agent copy
@@ -253,9 +255,42 @@ local function disk_mtime(buf)
 end
 
 -- Whether the file on disk changed since the buffer last read or wrote it.
-local function disk_changed(buf)
+-- `s.loaded` is only a cache: a write from a non-nested autocmd (an auto-save
+-- on TextChanged) fires no BufWritePost, so when the mtime moved, Neovim, which
+-- records every write the buffer makes, decides: `:checktime` raises
+-- FileChangedShell (which records `s.foreign`) only for someone else's write
+-- (#317). Only Neovim's verdict moves the baseline: when it gives none (the
+-- check errored, or `eventignore` hides the event) the write stays undecided,
+-- asked again next time, and Neovim's own overwrite warning still guards
+-- a save. Never call it from inside an autocmd, where `:checktime` prompts.
+local function mtime_moved(buf)
 	local s = state[buf]
 	return s.loaded ~= nil and disk_mtime(buf) ~= s.loaded
+end
+
+local function disk_changed(buf)
+	local s = state[buf]
+	if not mtime_moved(buf) then
+		return false
+	end
+	local now = disk_mtime(buf)
+	if now == s.foreign then
+		return true
+	end
+	local ignored = vim.o.eventignore:lower()
+	if ignored:find("all", 1, true) or ignored:find("filechangedshell", 1, true) then
+		return false
+	end
+	s.checking = true
+	local ok = pcall(vim.cmd, "checktime " .. buf)
+	s.checking = false
+	if now == s.foreign then
+		return true
+	end
+	if ok then
+		s.loaded = now
+	end
+	return false
 end
 
 local refresh, probe
@@ -473,7 +508,10 @@ M.attach = function(buf)
 	local s = { stale = false }
 	state[buf] = s
 	define_highlights()
-	vim.bo[buf].autoread = true
+	-- With autoread an unmodified buffer reloads on :checktime without
+	-- FileChangedShell: an agent write under the lock right after an
+	-- auto-save would replace the operator's text (#317).
+	vim.bo[buf].autoread = false
 	local group = vim.api.nvim_create_augroup(ns_group .. buf, { clear = true })
 	-- The first edit takes the turn; every edit restarts the idle timer.
 	-- BufModifiedSet catches the first keystroke in either mode (it fires from
@@ -487,27 +525,35 @@ M.attach = function(buf)
 				-- Take the lock first; an agent write that landed since the
 				-- buffer last read the disk lost the race: the operator's
 				-- text is kept and the agent's set aside (#315).
+				-- The mtime moved before this edit; whose write it was is
+				-- asked outside the autocmd (disk_changed may :checktime).
+				local moved = mtime_moved(buf)
 				if write_lock(buf, "operator") then
 					refresh(buf)
-					if disk_changed(buf) then
-						vim.schedule(function()
-							if state[buf] == s and vim.api.nvim_buf_is_loaded(buf) and read_turn(buf) == "operator" then
-								violation(buf, true)
-							end
-						end)
-					end
+					vim.schedule(function()
+						if moved and state[buf] == s and vim.api.nvim_buf_is_loaded(buf)
+							and read_turn(buf) == "operator" and disk_changed(buf) then
+							violation(buf, true)
+						end
+					end)
 				end
 			end
 			restart_idle(buf)
 		end,
 	})
-	-- No prompt about a file changed on disk: under the operator's lock it is
-	-- a violation (handled outside the autocmd, which may not write); else
-	-- what autoread would do.
+	-- No prompt about a file changed on disk: someone else wrote it. During
+	-- disk_changed's own check, only record that; else under the operator's
+	-- lock it is a violation (handled outside the autocmd, which may not
+	-- write), and otherwise what autoread would do.
 	vim.api.nvim_create_autocmd("FileChangedShell", {
 		group = group,
 		buffer = buf,
 		callback = function()
+			s.foreign = disk_mtime(buf)
+			if s.checking then
+				vim.v.fcs_choice = ""
+				return
+			end
 			if read_turn(buf) ~= "operator" then
 				vim.v.fcs_choice = vim.bo[buf].modified and "ask" or "reload"
 				return

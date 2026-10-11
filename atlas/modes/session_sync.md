@@ -30,6 +30,13 @@ the first edit lost the race, and goes through the violation path below with
 the operator's text kept. Outside the operator's turn, submit refuses to
 overwrite a file rewritten under a modified buffer.
 
+**Whose write it was (#317).** parley keeps the mtime it last read or wrote
+as a cache, but a write from a non-nested autocmd (an auto-save on
+`TextChanged`) fires no `BufWritePost`. So when the mtime moves, parley asks
+Neovim with `:checktime <buf>`: Neovim records every write the buffer makes and
+raises `FileChangedShell` only for someone else's. The buffer's `autoread` is
+off, so an unmodified buffer never reloads on `:checktime` without that event.
+
 **A write under the operator's lock (#314)** is a violation, never a prompt.
 The watch, a buffer-local `FileChangedShell` (focus, `:checktime`) and submit
 all reach one handler: it copies the agent's file to `<file>.clobbered`
