@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000317-session-sync-the-operator-s-own-auto-save-reads-as-an-agent-write.md
         source_blob: 5f659a44a5a15701b3b6e2d26e11c566603ddd43
         destination: workshop/issues/000317-session-sync-the-operator-s-own-auto-save-reads-as-an-agent-write.md
+        main_commit: cb4af8d281e073c150960dcb08dbd8b2401f9b4e
 ---
 
 # session-sync: the operator's own auto-save reads as an agent write
