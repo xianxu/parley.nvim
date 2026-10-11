@@ -1,0 +1,51 @@
+---
+id: 000314
+status: open
+deps: []
+github_issue:
+created: 2026-10-10
+updated: 2026-10-10
+estimate_hours:
+card_mirror: '4e0aa6f1bc0c65c5659c539023c8cc185a8d0f14' # card fields mirrored from issue-cards; edit via sdlc
+---
+
+# Session-sync hardening: no reload prompt under the operator's lock, complain to the agent, a 'TL owes' band, and a liveness ping
+
+## Problem
+
+On 10-10 the ops TL wrote the session-sync status file while the operator held the lock (ops learnings kink 60). The
+buffer has `autoread` on and no `FileChangedShell` handler, so nvim looped "WARNING: The file has been changed since
+reading it!!! Do you really want to write to it (y/n)?" on every key that wasn't y or n. Separately, the TL ended a
+turn without folding the operator's submit into the file, and nothing showed the operator that the TL owed a response.
+The operator (10-10): parley is a good second line of defense, and keep it agent-neutral.
+
+## Spec
+
+- **Under the operator's lock, an external write never prompts.** A `FileChangedShell` handler keeps the operator's
+  buffer (`v:fcs_choice = ""`), marks the buffer "agent wrote under your lock" in the band, and sends the owner one
+  couch message naming the violation. The operator's next save wins without a W12 prompt (the buffer records the
+  disk version it overrode, so nothing is silently lost: e.g. keep it as `<file>.clobbered` beside the file).
+- **"TL owes a response, N min."** While the lock is held by `agent` after a submit, the band counts the minutes.
+- **Liveness ping.** Parley pings the owner (`couch --send-to <owner>`, once per episode) when **owed work** is
+  older than 5 minutes **and the owner's turn has ended**:
+  - Owed work: the agent holds the lock after a submit, or `couch --session-sync status --json` (pair, filed
+    alongside) lists owed deliveries.
+  - Turn ended: `couch --actors --json` reports the owner's `Resting: true`. A ping mid-turn would only queue.
+  - No ping when nothing is owed, however stale the file, and no ping to a slot that isn't live.
+  - Until the pair verb lands, use only the lock condition.
+- The ping is a session-sync-originated message; pair's breaker work (pair#433) should count it like a submit, not
+  spend the TL's allowance.
+
+## Done when
+
+- [ ] An external write while the operator holds the lock: no prompt, buffer kept, band flagged, one message sent (test).
+- [ ] The band shows "TL owes a response, N min" while the agent holds the lock (test).
+- [ ] The ping fires once when owed for 5 minutes with the owner resting, and not while it's mid-turn or owes nothing (test with fake couch).
+
+## Plan
+
+- [ ]
+
+## Log
+
+### 2026-10-10
