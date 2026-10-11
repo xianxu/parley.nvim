@@ -10,6 +10,16 @@ Single pass, one close (no Mx).
 - `:write!` then overwrites the newer disk file without the W12 "changed since reading it" prompt, and a later
   plain `:w` is quiet (the buffer's recorded mtime is current again).
 
+## Core concepts
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `view` | `lua/parley/session_sync.lua` | modified (flags table: stale, violated, minutes) |
+| `parse_time` | `lua/parley/session_sync.lua` | new (RFC3339 → epoch, offset-aware) |
+| `find_actor` | `lua/parley/session_sync.lua` | new (owner address → `couch --actors` entry) |
+| `violation` | `lua/parley/session_sync.lua` | new (local: keep operator copy, `.clobbered`, one complaint) |
+| `probe` | `lua/parley/session_sync.lua` | new (local: owed-since, quiet owner, one ping per episode) |
+
 ## Design
 
 ### 1. A write under the operator's lock (violation)
@@ -69,15 +79,15 @@ Parley reads only `Code` and `Owed[].At` (RFC3339 → epoch via a small parser, 
 
 ## Steps
 
-- [ ] Watch in every turn; `violation` + FileChangedShell + submit path; band flag; one complaint.
-- [ ] Agent view: owes N min, re-rendered as N changes.
-- [ ] Ping probe (status seam + lock condition, actors, once per episode), config key.
-- [ ] Tests (integration, fake couch extended for `--actors --json` and `--session-sync status --json` from env):
+- [x] Watch in every turn; `violation` + FileChangedShell + submit path; band flag; one complaint.
+- [x] Agent view: owes N min, re-rendered as N changes.
+- [x] Ping probe (status seam + lock condition, actors, once per episode), config key.
+- [x] Tests (integration, fake couch extended for `--actors --json` and `--session-sync status --json` from env):
   violation via watch and via FileChangedShell (no prompt, buffer kept, `.clobbered` holds the agent copy, band
   flagged, exactly one message); submit under a violation wins; owes band text with N; ping fires once when owed
   ≥ threshold and owner resting; not mid-turn; not when nothing owed; not when the owner isn't listed; status
   JSON owed (no lock) pings; a failing status verb falls back to the lock. Unit: RFC3339 parser, owner matching.
-- [ ] Atlas `atlas/modes/session_sync.md`; lessons if review finds any.
+- [x] Atlas `atlas/modes/session_sync.md`; lessons if review finds any.
 
 ### Sender identity (pair#433, via ops:0)
 

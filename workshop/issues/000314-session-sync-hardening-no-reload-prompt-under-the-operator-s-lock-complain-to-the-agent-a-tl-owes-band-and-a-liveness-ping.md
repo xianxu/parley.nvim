@@ -47,18 +47,18 @@ The operator (10-10): parley is a good second line of defense, and keep it agent
 
 ## Done when
 
-- [ ] An external write while the operator holds the lock: no prompt, buffer kept, band flagged, one message sent (test).
-- [ ] The band shows "TL owes a response, N min" while the agent holds the lock (test).
-- [ ] The ping fires once when owed for 5 minutes with the owner quiet (turn ended), and not while it's mid-turn or owes nothing (test with fake couch).
+- [x] An external write while the operator holds the lock: no prompt, buffer kept, band flagged, one message sent (test).
+- [x] The band shows "TL owes a response, N min" while the agent holds the lock (test).
+- [x] The ping fires once when owed for 5 minutes with the owner quiet (turn ended), and not while it's mid-turn or owes nothing (test with fake couch).
 
 ## Plan
 
 Durable plan: `workshop/plans/000314-session-sync-hardening-plan.md`.
 
-- [ ] Watch in every turn; violation handler (FileChangedShell, watch, submit); band flag; one complaint.
-- [ ] Agent band: "<owner> owes a response, N min".
-- [ ] Liveness ping behind the couch seam (lock condition + `--session-sync status --json`, `--actors --json` Resting), once per episode.
-- [ ] Tests (fake couch), atlas.
+- [x] Watch in every turn; violation handler (FileChangedShell, watch, submit); band flag; one complaint.
+- [x] Agent band: "<owner> owes a response, N min".
+- [x] Liveness ping behind the couch seam (lock condition + `--session-sync status --json`, `--actors --json` Resting), once per episode.
+- [x] Tests (fake couch), atlas.
 
 ## Log
 
