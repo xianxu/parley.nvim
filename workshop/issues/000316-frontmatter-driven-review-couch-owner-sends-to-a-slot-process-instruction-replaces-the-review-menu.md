@@ -52,11 +52,11 @@ Unify around frontmatter. Three independent keys:
 
 Durable plan: [workshop/plans/000316-frontmatter-driven-review-plan.md](../plans/000316-frontmatter-driven-review-plan.md) (decisions, core concepts, tasks).
 
-- [ ] Frontmatter reader (`lua/parley/frontmatter.lua`): hyphenated keys, raw values, quote/unquote; session-sync uses it. YAML audit done: sdlc's yaml.v3 rejects `a: [copy-edit] keep the voice`, so parley writes the value quoted.
-- [ ] `[name]` grammar + expansion (`skills/review/instruction.lua`), shared by the couch message and the review prompt; knobs from the first named mode.
-- [ ] Couch seam extracted (`lua/parley/couch.lua`); own slot = the actor matching `COUCH_THREAD_SCOPE`/`TAG`.
-- [ ] Alt+Return dispatch (`review_send.lua`): own slot → send with path, instruction, diff since last send; no slot → today's review path; session-sync `owner:` is a check; `[` completion; review menu removed.
-- [ ] Atlas/docs; full suite + lint; manual e2e in a pair slot.
+- [x] Frontmatter reader (`lua/parley/frontmatter.lua`): hyphenated keys, raw values, quote/unquote; session-sync uses it. YAML audit done: sdlc's yaml.v3 rejects `a: [copy-edit] keep the voice`, so parley writes the value quoted.
+- [x] `[name]` grammar + expansion (`skills/review/instruction.lua`), shared by the couch message and the review prompt; knobs from the first named mode.
+- [x] Couch seam extracted (`lua/parley/couch.lua`); own slot = the actor matching `COUCH_THREAD_SCOPE`/`TAG`.
+- [x] Alt+Return dispatch (`review_send.lua`): own slot → send with path, instruction, diff since last send; no slot → today's review path; session-sync `owner:` is a check; `[` completion; review menu removed.
+- [x] Atlas/docs; full suite + lint; manual e2e in a pair slot.
 
 ## Revisions
 
