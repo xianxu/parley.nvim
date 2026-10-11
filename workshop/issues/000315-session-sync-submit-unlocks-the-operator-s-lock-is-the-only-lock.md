@@ -58,7 +58,7 @@ Core concepts:
 | `turn` | `lua/parley/session_sync.lua` | lock text → `free` / `operator`; a legacy agent lock reads as free | modified |
 | `view` | `lua/parley/session_sync.lua` | adds the `owed` state; operator states outrank it | modified |
 | `owed_minutes` | `lua/parley/session_sync.lua` | minutes since couch's oldest owed event, or nil | new |
-| `violation` | `lua/parley/session_sync.lua` | gains the `race` wording for a write just before the first edit | modified |
+| `violation` | `lua/parley/session_sync.lua` | gains the race wording for a write just before the first edit | modified |
 | `lock_minutes` | `lua/parley/session_sync.lua` | the agent-lock age that fed the old band | deleted |
 | `unlock` | `lua/parley/session_sync.lua` | `<C-g>u` escape from an agent lock | deleted |
 
