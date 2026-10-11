@@ -16,6 +16,7 @@ tracker:
         source_path: workshop/issues/000315-session-sync-submit-unlocks-the-operator-s-lock-is-the-only-lock.md
         source_blob: 83e235fb9c09c4b3d5eeb72c2eceff2db2963c15
         destination: workshop/issues/000315-session-sync-submit-unlocks-the-operator-s-lock-is-the-only-lock.md
+        main_commit: bac7bc06253ae5212f7a7f3673b6cd4dc307217d
 ---
 
 # session-sync: submit unlocks; the operator's lock is the only lock
