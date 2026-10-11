@@ -1,12 +1,20 @@
 ---
 id: 000314
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-10
 updated: 2026-10-10
 estimate_hours:
-card_mirror: '4e0aa6f1bc0c65c5659c539023c8cc185a8d0f14' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'eb349e8df26c6a59b9694975f0c44a7c96bda062' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-10T23:41:27-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Session-sync hardening: no reload prompt under the operator's lock, complain to the agent, a 'TL owes' band, and a liveness ping
@@ -44,8 +52,16 @@ The operator (10-10): parley is a good second line of defense, and keep it agent
 
 ## Plan
 
-- [ ]
+Durable plan: `workshop/plans/000314-session-sync-hardening-plan.md`.
+
+- [ ] Watch in every turn; violation handler (FileChangedShell, watch, submit); band flag; one complaint.
+- [ ] Agent band: "<owner> owes a response, N min".
+- [ ] Liveness ping behind the couch seam (lock condition + `--session-sync status --json`, `--actors --json` Resting), once per episode.
+- [ ] Tests (fake couch), atlas.
 
 ## Log
 
 ### 2026-10-10
+
+- Dispatched by ops:0. JSON shape for pair#437 `status --json` proposed to ops:0 and relayed to pair:5; the TL said proceed behind the seam. pair#433 keys the breaker on sender binding, so the ping/complaint (same nvim as submit) need no marker.
+- Verified headless: buffer-local FileChangedShell with `fcs_choice=""` keeps the buffer without prompting; `:write!` then overwrites without W12, and later `:w` is quiet.
