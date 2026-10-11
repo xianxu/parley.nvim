@@ -1,12 +1,12 @@
 ---
 id: 000316
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-11
 updated: 2026-10-11
 estimate_hours:
-card_mirror: 'c9eac7420cea46878b5fb81a08e04e009848bbbf' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a94acc752d962aa689392a3ac38bd29d865ace4a' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-11T11:32:36-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 1.15
 ---
 
 # Frontmatter-driven review: couch-owner sends to a slot; process-instruction replaces the review menu
