@@ -3,6 +3,17 @@
 Compact rules distilled from Parley.nvim's review and integration history.
 Incident detail belongs in the issue or plan that owns it.
 
+## 2026-10-11 (#314 — session-sync hardening)
+
+- #314 close review BR-1: `vim.json.decode` turns JSON `null` into `vim.NIL`, a truthy userdata; `x and x.y or {}`
+  then indexes or iterates it and the callback dies, leaving any in-flight flag set forever. Decode external JSON
+  with `{ luanil = { object = true, array = true } }` and type-guard every list; test a payload of nulls.
+- #314 close review BR-2: a "keep their copy, then overwrite" step must check the keep. Branch on the outcome
+  (missing / copied / failed), never overwrite after a failed copy, and say only what actually happened.
+- `:bdelete` unloads without BufWipeout. A per-buffer timer must check `nvim_buf_is_loaded`, not `_is_valid`.
+- Mutation checks with BSD sed: `\t` in a pattern is a literal `t`, so the mutation silently never applies. Use
+  `perl -pi`, and confirm `git diff --stat` shows the mutation before trusting a pass.
+
 ## 2026-10-10 (#313 — session-sync turn file)
 
 - #313 close review BR-1: an async completion must check that the state it

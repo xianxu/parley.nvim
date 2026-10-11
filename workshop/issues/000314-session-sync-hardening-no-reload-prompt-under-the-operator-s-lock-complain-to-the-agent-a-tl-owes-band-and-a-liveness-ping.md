@@ -1,12 +1,22 @@
 ---
 id: 000314
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-10
-updated: 2026-10-10
+updated: 2026-10-11
 estimate_hours:
-card_mirror: '4e0aa6f1bc0c65c5659c539023c8cc185a8d0f14' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'b8582b6d2d9a46bdb9efdd2063ba8063122f9b86' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-10T23:41:27-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: inferred}
+actual_hours: 0.55
 ---
 
 # Session-sync hardening: no reload prompt under the operator's lock, complain to the agent, a 'TL owes' band, and a liveness ping
@@ -38,14 +48,42 @@ The operator (10-10): parley is a good second line of defense, and keep it agent
 
 ## Done when
 
-- [ ] An external write while the operator holds the lock: no prompt, buffer kept, band flagged, one message sent (test).
-- [ ] The band shows "TL owes a response, N min" while the agent holds the lock (test).
-- [ ] The ping fires once when owed for 5 minutes with the owner resting, and not while it's mid-turn or owes nothing (test with fake couch).
+- [x] An external write while the operator holds the lock: no prompt, buffer kept, band flagged, one message sent (test).
+- [x] The band shows "TL owes a response, N min" while the agent holds the lock (test).
+- [x] The ping fires once when owed for 5 minutes with the owner quiet (turn ended), and not while it's mid-turn or owes nothing (test with fake couch).
 
 ## Plan
 
-- [ ]
+Durable plan: `workshop/plans/000314-session-sync-hardening-plan.md`.
+
+- [x] Watch in every turn; violation handler (FileChangedShell, watch, submit); band flag; one complaint.
+- [x] Agent band: "<owner> owes a response, N min".
+- [x] Liveness ping behind the couch seam (lock condition + `--session-sync status --json`, `--actors --json` Resting), once per episode.
+- [x] Tests (fake couch), atlas.
 
 ## Log
 
+
+
+- 2026-10-11: closed — make test-spec SPEC=modes/session_sync: 25 integration + 9 unit pass, incl. BR-6 (submit refuses after a failed copy; mutation ignoring the outcome fails the run). Full make test earlier green except the arch Core-concepts guard, fixed and rerun green.; review verdict: SHIP
+- 2026-10-11: flow upgraded quick → full — 279 added lines in code files (limit 100); an earlier round of this close already ran the full review
 ### 2026-10-10
+
+- Dispatched by ops:0. JSON shape for pair#437 `status --json` proposed to ops:0 and relayed to pair:5; the TL said proceed behind the seam. pair#433 keys the breaker on sender binding, so the ping/complaint (same nvim as submit) need no marker.
+- Verified headless: buffer-local FileChangedShell with `fcs_choice=""` keeps the buffer without prompting; `:write!` then overwrites without W12, and later `:w` is quiet.
+- Close review round 1 (REWORK). BR-1: couch JSON nulls decoded to vim.NIL and crashed the probe with `probing`
+  stuck. Fixed for the class: every couch query decodes with `luanil` and each list is type-guarded (`list`,
+  `find_actor`); test feeds nulls and proves the probe recovers. BR-2: `violation` ignored a failed copy. It now
+  distinguishes deleted (restore, claim nothing kept), copied (restore), and copy-failed (never overwrite; adopt the
+  disk mtime so no retry loop; a later save meets Neovim's own prompt); band and message say which. Minors: the
+  violated flag now carries its outcome, not a bare boolean; the fake couch's conformance check waits for pair#437
+  to land (the verb doesn't exist yet); README never documented session-sync (atlas does), left as is.
+- Watch now stops on an unloaded buffer: `:bdelete` never fires BufWipeout, so the always-on watch kept handling a
+  closed file (found from a stray notice in the suite).
+
+## Revisions
+
+- 2026-10-10 (TL correction via ops:0, overrides the dispatch and the Spec's "Turn ended" bullet): `Resting` in
+  `couch --actors --json` means the slot is on its resting branch, not that its turn ended (ops:0 reads
+  `Resting: true` mid-turn). The owner's turn has ended when `now - LastActivity >= 30 s` (couch's QuietInterval,
+  the rule couch routing uses).
