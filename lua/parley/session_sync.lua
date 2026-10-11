@@ -38,6 +38,7 @@ local ns_group = "ParleySessionSync"
 -- Per-buffer state: { turn, stale, gen (submit generation), loaded (disk
 -- mtime last read/written), watch = timer|nil, idle = timer|nil, minutes
 -- (the agent's turn so far), violated / complained (this operator turn),
+-- unkept (the disk mtime of an agent copy that could not be kept),
 -- probing / probed (vim.uv.now()
 -- of the last probe), pinged (the owed-since time last pinged) }
 local state = {}
@@ -276,12 +277,17 @@ local refresh
 -- Keep the agent's copy beside the file, write the operator's buffer back over
 -- it (`write!`: no "changed since reading" prompt, now or on a later save),
 -- flag the band and tell the owner once per operator turn. A copy that cannot
--- be kept is never overwritten: the buffer adopts the disk's mtime (no retry
--- each tick) and a later save meets Neovim's own overwrite prompt.
+-- be kept is never overwritten: it is remembered by mtime (no retry each
+-- tick), submit refuses, and a plain save meets Neovim's own overwrite prompt.
+-- Returns whether the file on disk is the operator's copy; every caller that
+-- writes next must act on it.
 local function violation(buf)
 	local s = state[buf]
 	if not disk_changed(buf) then
-		return
+		return true
+	end
+	if s.unkept == disk_mtime(buf) then
+		return false
 	end
 	local path = file_of(buf)
 	local clobbered = path .. ".clobbered"
@@ -296,8 +302,9 @@ local function violation(buf)
 		band, told = "theirs could not be kept, file left as theirs", "was written while the operator held"
 			.. " the lock; your copy could not be kept at " .. clobbered .. ", so it was not overwritten"
 	end
-	if band:find("not be kept", 1, true) then
-		s.loaded = disk_mtime(buf)
+	local kept = not band:find("not be kept", 1, true)
+	if not kept then
+		s.unkept = disk_mtime(buf)
 	else
 		vim.api.nvim_buf_call(buf, function()
 			vim.cmd("silent write!")
@@ -311,6 +318,7 @@ local function violation(buf)
 		s.complained = true
 		send(owner, "session-sync violation: " .. path .. " " .. told)
 	end
+	return kept
 end
 
 -- Ping the owner once per episode of owed work: owed since the lock was
@@ -554,9 +562,13 @@ M.submit = function(buf)
 		return
 	end
 	if disk_changed(buf) then
-		-- Under the operator's lock the operator's copy wins.
+		-- Under the operator's lock the operator's copy wins, unless the
+		-- agent's could not be kept.
 		if read_turn(buf) == "operator" then
-			violation(buf)
+			if not violation(buf) then
+				notify("the agent's copy could not be kept beside the file; not overwriting it", vim.log.levels.ERROR)
+				return
+			end
 		else
 			notify("the file changed on disk since this buffer read it; not overwriting it."
 				.. " :e! reloads (dropping your edits)", vim.log.levels.ERROR)

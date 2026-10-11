@@ -287,6 +287,12 @@ describe("session-sync buffer", function()
         assert.matches("could not be kept", sent()[1], 1, true)
         vim.wait(200)
         assert.equals(1, #sent())            -- no retry loop
+        -- Submit refuses while the agent's copy is still the file (BR-6).
+        keymap_cb("<M-CR>")()
+        assert.equals("holder: operator", holder())
+        assert.equals("- TL ignored the lock", vim.fn.readfile(file)[8])
+        vim.wait(200)
+        assert.equals(1, #sent())
     end)
 
     it("an unloaded buffer stops watching: a later write is no violation (#314)", function()
