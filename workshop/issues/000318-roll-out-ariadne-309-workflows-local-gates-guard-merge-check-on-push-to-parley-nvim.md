@@ -36,7 +36,7 @@ Commit both files exactly as weave seeded them, byte-identical to ariadne's `ori
 
 - [x] Stash the seeded files with a tag, file and claim #318, start-plan, restore the stash onto the branch.
 - [x] Verify both files are byte-identical to ariadne `origin/main`.
-- [ ] Commit, close, merge.
+- [x] Commit the two files (close and merge run as the gates).
 
 ## Log
 
