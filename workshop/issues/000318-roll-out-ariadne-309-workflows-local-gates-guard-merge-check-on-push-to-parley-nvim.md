@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "d05cbe06", done: "68b0776e"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # roll out ariadne#309 workflows (local-gates-guard, merge-check on push) to parley.nvim
@@ -41,6 +41,8 @@ Commit both files exactly as weave seeded them, byte-identical to ariadne's `ori
 ## Log
 
 ### 2026-10-12
+- 2026-10-12: closed — Both workflow files byte-identical to ariadne origin/main (539eb793, #309): git show origin/main:.github/workflows/{local-gates-guard,merge-check}.yml | cmp passes. CI config rollout only, no parley code; --no-atlas: no new parley surface or flow.; review verdict: SHIP
+- 2026-10-12: flow upgraded quick → full — 152 added lines in code files (limit 100)
 
 - `sdlc start-plan`'s weave refresh re-seeded the same two files on the resting branch (still identical to the stash); I discarded those copies and restored from the stash on the issue branch.
 - `cmp` against ariadne `origin/main` (539eb793 merged #309) passes for both files.
