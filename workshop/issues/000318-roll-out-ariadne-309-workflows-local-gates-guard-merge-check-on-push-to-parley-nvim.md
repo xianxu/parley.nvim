@@ -1,12 +1,12 @@
 ---
 id: 000318
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-12
 updated: 2026-10-12
 estimate_hours:
-card_mirror: 'f04668f7d12395e165153e17376f4915db8346ce' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '1c1636c2769cd00ad608c0c7d2df8899c276076b' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-12T14:43:43-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 0.02
 ---
 
 # roll out ariadne#309 workflows (local-gates-guard, merge-check on push) to parley.nvim
