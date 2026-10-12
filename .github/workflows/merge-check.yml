@@ -5,6 +5,9 @@ name: merge-check
 on:
   pull_request:
     branches: [main]
+  # #309: main carries a CI status too; a push run checks before..after.
+  push:
+    branches: [main]
 
 jobs:
   merge-check:
@@ -35,10 +38,26 @@ jobs:
           if [ -x scripts/ci-setup.sh ]; then
             ./scripts/ci-setup.sh
           fi
-      - name: Run merge-checks over the PR range
+      - name: Run merge-checks over the change range
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
         run: |
           set -euo pipefail
-          base_tip="${{ github.event.pull_request.base.sha }}"
-          head="${{ github.event.pull_request.head.sha }}"
+          if [ "$EVENT" = push ]; then
+            base_tip="$PUSH_BEFORE"
+            head="$PUSH_AFTER"
+            # A new ref has an all-zero before: nothing to compare against.
+            case "$base_tip" in
+              *[!0]*) ;;
+              *) echo "merge-check: push without a previous main, nothing to compare"; exit 0 ;;
+            esac
+          else
+            base_tip="$PR_BASE"
+            head="$PR_HEAD"
+          fi
           base="$(git merge-base "$base_tip" "$head")"
           bash scripts/run-merge-checks.sh "$base" "$head"
