@@ -1,6 +1,6 @@
 ---
 id: 000318
-status: codecomplete
+status: done
 created: 2026-10-12
 updated: 2026-10-12
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 3be5288d15e544449cc0501c4205dba15722b84d
         evidence_commit: d32b5e9a74387d9c44123089b1cb68ee279f01bc
+        landed_commit: c7e2585c078de94465db623e43e461de9417cf5d
 ---
 
 # roll out ariadne#309 workflows (local-gates-guard, merge-check on push) to parley.nvim
