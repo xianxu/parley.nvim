@@ -1,0 +1,130 @@
+# Seeded as a real file (GitHub Actions ignores symlinked workflows). #309.
+#
+# The server's half of the local/server split: local sdlc gates do the heavy
+# checks, and this guard makes sure a PR has not quietly changed their
+# configuration. A PR touching a protected path fails unless the operator put
+# the `local-gates-verified` label on it. Agents never apply that label; a
+# local-gates change is its own issue with operator-held verification.
+#
+# Honest limit: agents share the operator's gh identity, so the label is an
+# explicit, audited acknowledgment, not a cryptographic one.
+#
+# pull_request_target runs MAIN's copy of this file, so a PR cannot weaken the
+# guard within itself. It never checks out or runs PR code: it fetches the PR
+# head by number and reads only the list of changed paths. PR values reach the
+# script through env:, never interpolated into it.
+#
+# The protected list is derived, not hand-picked (atlas/workflow/ci-merge-check.md):
+# base.manifest rows that run or configure a merge-blocking check or the agent's
+# sandbox and permissions; repo-root config sdlc and weave read; CI-only hooks.
+# Gate CODE (cmd/sdlc) is deliberately absent: the boundary review owns it.
+name: local-gates-guard
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  statuses: write
+
+# One decision per PR at a time: a newer event (a push, a label change)
+# cancels the older run, so a stale run cannot post the last verdict.
+concurrency:
+  group: local-gates-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  local-gates-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Refuse unverified changes to the local gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          protected=(
+            '.github/workflows/*'
+            'scripts/run-merge-checks.sh'
+            'scripts/merge-checks.d/*'
+            'scripts/ci-setup.sh'
+            'scripts/pre-merge-checks.sh'
+            'scripts/parallel-checks.sh'
+            'bootstrap.sh'
+            '.codex/config.toml'
+            '.claude/settings*.json'
+            '.claude/hooks/*'
+            '.gemini/settings.json'
+            '.openshell/policy.yaml'
+            '.sdlc/*'
+            'workshop/review.json'
+            'construct/base.manifest'
+            'construct/deps'
+          )
+          case "$PR_NUMBER" in ''|*[!0-9]*) echo "local-gates-guard: bad PR number '$PR_NUMBER'" >&2; exit 2 ;; esac
+          case "$HEAD_SHA" in *[!0-9a-f]*|'') echo "local-gates-guard: bad head SHA" >&2; exit 2 ;; esac
+          decided=""
+          verdict() {
+            decided=1
+            gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" \
+              -f state="$1" -f context=local-gates-guard/verdict -f description="$2" >/dev/null
+          }
+          # Absence must never read as green: the verdict is pending from the
+          # start, and any exit before a decision (an error, a cancellation)
+          # turns it into a failure. sdlc merge also requires this status
+          # whenever main carries this guard.
+          trap '[ -n "$decided" ] || verdict failure "local-gates-guard stopped before deciding"' EXIT
+          gh api -X POST "repos/$REPO/statuses/$HEAD_SHA" \
+            -f state=pending -f context=local-gates-guard/verdict -f description="deciding" >/dev/null
+          git fetch --no-tags --quiet origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head"
+          head="$(git rev-parse refs/remotes/pr/head)"
+          if [ "$head" != "$HEAD_SHA" ]; then
+            echo "local-gates-guard: the PR head moved to $head; the run for that push decides it"
+            # The event head is no longer mergeable (merge pins the PR head), so
+            # this run decides nothing; its pending status stays on the old head.
+            decided=1
+            exit 0
+          fi
+          base="$(git merge-base "$BASE_SHA" "$head")"
+          touched=()
+          while IFS= read -r -d '' path; do
+            [ -n "$path" ] || continue
+            for pattern in "${protected[@]}"; do
+              if [[ "$path" == $pattern ]]; then
+                touched+=("$path")
+                break
+              fi
+            done
+          done < <(git -c core.quotePath=false diff -z --name-only --no-renames "$base" "$head")
+          if [ "${#touched[@]}" -eq 0 ]; then
+            echo "local-gates-guard: no local-gates paths touched"
+            verdict success "no local-gates paths touched"
+            exit 0
+          fi
+          printf 'local-gates-guard: this PR touches local-gates configuration:\n'
+          printf '    %s\n' "${touched[@]}"
+          # Labels are read live at decision time, not from the event payload:
+          # a re-run of an old event, or a removal racing it, must see now.
+          labels="$(gh api "repos/$REPO/issues/$PR_NUMBER/labels" --jq '.[].name')" || {
+            echo "local-gates-guard: could not read the PR's labels" >&2
+            verdict failure "could not read the PR's labels"
+            exit 2
+          }
+          if printf '%s\n' "$labels" | grep -Fxq 'local-gates-verified'; then
+            echo "local-gates-guard: operator-verified (label local-gates-verified)"
+            verdict success "local-gates change, operator-verified"
+            exit 0
+          fi
+          echo "::error::This PR changes the local gates' configuration. The operator verifies such a change and applies the local-gates-verified label; agents never apply it."
+          verdict failure "local-gates change needs the operator's local-gates-verified label"
+          exit 1
