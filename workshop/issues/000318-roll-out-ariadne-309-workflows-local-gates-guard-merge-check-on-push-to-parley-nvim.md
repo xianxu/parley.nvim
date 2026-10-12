@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "d05cbe06", done: "68b0776e"}
 ---
 
 # roll out ariadne#309 workflows (local-gates-guard, merge-check on push) to parley.nvim
