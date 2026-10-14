@@ -176,3 +176,8 @@ README and upstream area/severity card metadata in the tracker atlas.
   changing only LastWrite in the fake response while advancing time let an
   older in-flight status reply become due. Real writes also change the file;
   the recent-write fixture now performs that write, exercising the mtime guard.
+
+- Final post-review `make test` passed: all 427 spec files, lint clean across
+  723 files, no surviving test processes; includes 66 session-sync cases.
+  Vocabulary freshness and branch whitespace checks passed. All BR-1–BR-4
+  fixes are ready for the second close review.
