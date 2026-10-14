@@ -66,6 +66,35 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - "n": 3
+      timestamp: "2026-10-13T23:27:28-07:00"
+      dispatched: "2026-10-13T23:24:27-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Shared timestamp validation protects LastWrite, Owed.At, and LastActivity. Tests pass; restoring the old parser independently caused two unit failures.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: session_sync.lua:137 and :147 define directly tested pure admission helpers, consumed at :364 and :377. Core concepts classifications match the implementation.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: Integration coverage loads the shipped default and tests 899/900 seconds separately from fallback and override cases. Restoring five minutes independently caused two integration failures.
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: README.md:48 documents the default and override matching config.lua:487; atlas/issues/issue-management.md:60 documents metadata matching the generated vocabulary and generic issue_cards.lua consumers.
+          round: 3
+        - id: BR-5
+          disposition: withdrawn
+          note: 'Independently ran the canonical checkout''s identical check-vocabulary.sh against this pinned artifact: exit 0, content matches upstream export. Confirmed blob 81cad8767aa6a444351e347dd551a408734c8738. Missing sibling dependency discovery in the review checkout does not establish product drift.'
+          round: 3
+      recipe: small-diff-review
+      isolation: fenced
+      reviewed: 6c3a89ede9ab0edecf027f969543fc08462bcfe3
+      blocked: false
 disputes:
     - id: BR-5
       rationale: The review checkout lacks the ../ariadne dependency named by construct/deps. The exporter reports no noun, not a content mismatch. The exact committed artifact is verified against the dependency model in the canonical checkout; changing product code or gate configuration to accommodate missing review dependencies is outside this consumer change.
@@ -106,6 +135,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - **BR-5** [Important] `boundary-verification-available` Vocabulary freshness verification remains unavailable
   Makefile.parley:269 invokes scripts/check-vocabulary.sh, but the pinned checkout's check fails with “no vocabulary noun "issue" (have: [])”. This is the sole failed verification command in this review. Restore the vocabulary dependency discovery needed by this checkout and rerun the check before crossing the boundary; no generated-content correction is established by this failure.
+
+## Round 3 — 2026-10-13T23:27:28-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Shared timestamp validation protects LastWrite, Owed.At, and LastActivity. Tests pass; restoring the old parser independently caused two unit failures.
+- BR-2 — addressed — session_sync.lua:137 and :147 define directly tested pure admission helpers, consumed at :364 and :377. Core concepts classifications match the implementation.
+- BR-3 — addressed — Integration coverage loads the shipped default and tests 899/900 seconds separately from fallback and override cases. Restoring five minutes independently caused two integration failures.
+- BR-4 — addressed — README.md:48 documents the default and override matching config.lua:487; atlas/issues/issue-management.md:60 documents metadata matching the generated vocabulary and generic issue_cards.lua consumers.
+- BR-5 — withdrawn — Independently ran the canonical checkout's identical check-vocabulary.sh against this pinned artifact: exit 0, content matches upstream export. Confirmed blob 81cad8767aa6a444351e347dd551a408734c8738. Missing sibling dependency discovery in the review checkout does not establish product drift.
 
 ## Disputes
 

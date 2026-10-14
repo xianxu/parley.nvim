@@ -171,3 +171,83 @@ findings:
 6. **Architecture:** ARCH-DRY passes: shared parser and existing Couch seam reused. ARCH-PURE passes: both policies are directly tested without I/O. ARCH-PURPOSE passes: the revised consumer contract is implemented; tracker views continue deriving fields from vocabulary metadata.
 
 7. **Plan revisions:** None required.
+
+---
+
+## Re-review — 2026-10-13T23:27:28-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 321 — session-sync: ping once after 15 minutes without a write while deliveries remain owed (pair#530 companion) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000321-session-sync-stale-write-ping.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 5a15ecabfe958cd8733d9e20de698acdf04460dd..6c3a89ede9ab0edecf027f969543fc08462bcfe3 |
+| command | sdlc close --issue 321 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-13T23:27:28-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned implementation satisfies the revised LastWrite-based contract. Prior fixes are supported by code inspection, passing tests, and mutation checks. BR-5 is withdrawn: independently checking the pinned vocabulary artifact through the canonical checkout’s dependency graph succeeds. No new findings.
+
+Done-when: current — its write-age, one-shot, fallback, override, and admission clauses cover the revised producer contract.
+
+1. **Strengths**
+   - Pure admission helpers separate policy from queries, clocks, and filesystem access (`lua/parley/session_sync.lua:137`).
+   - Both query phases recheck write/lock races before sending (`lua/parley/session_sync.lua:346`).
+   - Tests cover shipped defaults, runtime fallback, overrides, invalid timestamps, and delivery changes.
+   - README and atlas document the changed configuration and tracker metadata.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Full `make test`: passed all 427 spec files; lint clean across 723 files.
+   - Targeted session-sync tests: 66 passed.
+   - Old-parser mutation: two unit tests failed.
+   - Five-minute-default mutation: two integration tests failed.
+   - Pinned vocabulary comparison and range whitespace checks passed.
+   - Orphan counting was skipped because `ps` is unavailable. Mutation checkout removed; reviewed tree clean.
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass** — shared parser, Couch seam, and watcher reused.
+   - **ARCH-PURE: pass** — deterministic policies tested directly; I/O remains in the integration shell. Core concepts classifications match.
+   - **ARCH-PURPOSE: pass** — revised consumer behavior is delivered; tracker fields continue deriving from vocabulary metadata.
+
+7. **Plan revision recommendations:** None.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Shared timestamp validation protects LastWrite, Owed.At, and LastActivity. Tests pass; restoring the old parser independently caused two unit failures.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      session_sync.lua:137 and :147 define directly tested pure admission helpers, consumed at :364 and :377. Core concepts classifications match the implementation.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Integration coverage loads the shipped default and tests 899/900 seconds separately from fallback and override cases. Restoring five minutes independently caused two integration failures.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      README.md:48 documents the default and override matching config.lua:487; atlas/issues/issue-management.md:60 documents metadata matching the generated vocabulary and generic issue_cards.lua consumers.
+  - id: BR-5
+    disposition: withdrawn
+    note: |
+      Independently ran the canonical checkout's identical check-vocabulary.sh against this pinned artifact: exit 0, content matches upstream export. Confirmed blob 81cad8767aa6a444351e347dd551a408734c8738. Missing sibling dependency discovery in the review checkout does not establish product drift.
+```

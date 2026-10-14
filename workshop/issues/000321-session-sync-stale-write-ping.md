@@ -64,6 +64,7 @@ consumer lives in Parley; adding another watcher in Couch would duplicate it.
 ## Log
 
 ### 2026-10-13
+- 2026-10-13: closed — 427 spec files and lint 723 files passed; 66 session-sync tests and parser/default mutations passed. BR-1 through BR-4 accepted by review. BR-5 counter-measurement: exact committed vocabulary blob 81cad8767aa6a444351e347dd551a408734c8738 matches upstream export, both canonical and --artifact checks exit 0; review clone lacks ../ariadne. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 - Filed unclaimed from pair:7 at TL request. Dependencies are sequencing, not a
   request to start on an unlanded branch. No Parley implementation was changed.
