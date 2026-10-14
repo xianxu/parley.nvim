@@ -43,7 +43,7 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 ## Plan
 
 - [x] Reproduce with real child-Neovim UI input; cover dd/x/p/u/dot and insert initially and after an agent reload, including edits damaging frontmatter. Record events and guard values; clarify the operator's original edit location with the hub.
-- [ ] Repair attached-buffer turn reconciliation in the existing callback; add failing regression tests for clean undo, multi-step undo, redo, silent release, and saved-buffer/violation compatibility. Keep race handling and timer cleanup intact (ARCH-DRY, ARCH-STATE, ARCH-FUNERAL).
+- [x] Repair attached-buffer turn reconciliation in the existing callback; add failing regression tests for clean undo, multi-step undo, redo, silent release, and saved-buffer/violation compatibility. Keep race handling and timer cleanup intact (ARCH-DRY, ARCH-STATE, ARCH-FUNERAL).
 - [ ] Run targeted session-sync tests and the declared full suite, update atlas, obtain the required real-editor check through the hub, then close/review/land on SHIP.
 
 ## Log
@@ -53,6 +53,10 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 - Claimed and started on a fresh main-based branch. Start-plan refreshed the private Ariadne substrate and required a rerun with its rebuilt binary; no product source changed.
 - Root-cause probes use a child Neovim with attached headless UI and real nvim_input, not synthetic autocmd dispatch. Body dd acquires, including after agent write/checktime reload. Header ggdd fires TextChanged and BufModifiedSet with modified=true, but M.is_session_sync=false because the edit removed the opening delimiter, so acquisition is skipped. dd then u fires both events with modified=false while the lock remains: callback has acquisition only, no clean-edit release.
 - Sent the measured findings and proposed brief plan to the hub; original reported edit location remains unconfirmed. Preserve the distinction rather than claiming the body-only symptom reproduced. Temporary probe scripts: /tmp/parley324-probe.lua, /tmp/parley324-header-probe.lua, /tmp/parley324-reload-probe.lua.
+
+- Real-input red run: 16/19 new cases failed as expected (Normal edits with pre-existing auto-save, damaged YAML, and undo release); Insert acquisition and save retention passed. First implementation exposed :edit! detaching callbacks; measured on_detach in a probe, then made BufReadPost idempotently reattach. No unrelated changes.
+- Final targeted verification: make -k test-spec SPEC=modes/session_sync passed 26 native-input cases + 52 existing integration cases + 14 unit cases, with clean process census. Covers initial open, watcher reload, :checktime reload, submit/reload/first dd, undo/redo and multi-step undo, header edits, save retention, existing race/violation scenarios. Lint passed for source and new spec; git diff --check clean.
+- Real Couch conformance on an isolated temporary file: headless UI body dd with the operator's immediate auto-save produced holder: operator while modified=false; couch --session-sync write --section 'Operator instructions' then refused with exit 3 ('operator holds the lock'). No operator file changed. Fixture/probe under /tmp/parley324-live-contract/.
 
 ## Revisions
 

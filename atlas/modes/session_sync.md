@@ -26,7 +26,10 @@ slot to compare, and the owner is sent to as before. pair also reads
 The operator's lock is the only lock. The sidecar `<file>.lock` is absent
 (free: the agent may write) or `holder: operator` (the agent never writes the
 file). The operator's first edit writes it; `<M-CR>` deletes it; the next
-edit takes it again. A legacy `holder: agent` lock reads as no lock and is
+edit takes it again. An edit that returns the buffer to unmodified (for example,
+undoing back to the saved text) silently releases the turn without submitting or
+notifying the owner; redo away from that text takes it again. A save alone keeps
+the turn until submit. A legacy `holder: agent` lock reads as no lock and is
 overwritten by the first edit. A failed send leaves the file free; `<M-CR>`
 resends. The lock is read from disk, so a reopened buffer shows it too. While
 the buffer is loaded, parley watches the file once a second: during a free
@@ -36,6 +39,13 @@ never starts on an old copy unnoticed: an agent write that landed just before
 the first edit lost the race, and goes through the violation path below with
 the operator's text kept. Outside the operator's turn, submit refuses to
 overwrite a file rewritten under a modified buffer.
+
+**Edit ordering (#324).** Buffer edit notifications acquire the lock before
+`TextChanged` / `InsertLeave` auto-save can clear `modified`, for Normal and
+Insert edits alike. Recognition at attachment survives temporary edits to the
+frontmatter. Clean-edit release waits until Neovim settles `modified`; a write
+during that edit preserves the turn. The watcher’s `:edit!` detaches native
+buffer callbacks, so `BufReadPost` reinstalls them before the next keystroke.
 
 **Whose write it was (#317).** parley keeps the mtime it last read or wrote
 as a cache, but a write from a non-nested autocmd (an auto-save on
