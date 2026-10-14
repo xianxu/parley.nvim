@@ -110,20 +110,43 @@ M.parse_time = function(text)
 	if type(text) ~= "string" then
 		return nil
 	end
-	local y, mo, d, h, mi, sec, tz = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)%.?%d*(.*)$")
+	local y, mo, d, h, mi, sec, tz = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)(.*)$")
 	if not y then
 		return nil
 	end
+	y, mo, d, h, mi, sec = tonumber(y), tonumber(mo), tonumber(d), tonumber(h), tonumber(mi), tonumber(sec)
+	local leap = y % 4 == 0 and (y % 100 ~= 0 or y % 400 == 0)
+	local days = ({ 31, leap and 29 or 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 })[mo]
+	if not days or d < 1 or d > days or h > 23 or mi > 59 or sec > 59 then
+		return nil
+	end
+	tz = tz:match("^%.%d+(.+)$") or tz
 	local offset = 0
 	if tz ~= "Z" then
 		local sign, oh, om = tz:match("^([+-])(%d%d):(%d%d)$")
-		if not sign then
+		if not sign or tonumber(oh) > 23 or tonumber(om) > 59 then
 			return nil
 		end
 		offset = (sign == "-" and -60 or 60) * (tonumber(oh) * 60 + tonumber(om))
 	end
-	return days_from_civil(tonumber(y), tonumber(mo), tonumber(d)) * 86400
-		+ tonumber(h) * 3600 + tonumber(mi) * 60 + tonumber(sec) - offset
+	return days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + sec - offset
+end
+
+--- Eligible write generation, false for no recorded write, or nil to postpone.
+--- `since` is the oldest valid obligation time; nil means no known obligation.
+M.ping_generation = function(written, since, now, minutes, pinged)
+	local baseline = written == nil and since or M.parse_time(written)
+	local generation = written or false
+	if not since or not baseline or now - baseline < (minutes or 15) * 60 or pinged == generation then
+		return nil
+	end
+	return generation
+end
+
+--- Whether a known owner's observed turn has been quiet long enough.
+M.owner_quiet = function(actor, now)
+	local active = actor and actor.Known and M.parse_time(actor.LastActivity)
+	return not not (active and now - active >= M.QUIET_SECONDS)
 end
 
 M.find_actor = couch.find_actor
@@ -338,12 +361,9 @@ probe = function(buf)
 			s.owed = since
 			refresh(buf)
 		end
-		local written = observed.LastWrite
-		local baseline = written == nil and since or M.parse_time(written)
-		local generation = written or false
-		local after = (require("parley").config.session_sync_ping_minutes or 15) * 60
-		if #obligations == 0 or not baseline or os.time() - baseline < after
-			or s.pinged == generation or read_turn(buf) == "operator" then
+		local generation = M.ping_generation(observed.LastWrite, since, os.time(),
+			require("parley").config.session_sync_ping_minutes, s.pinged)
+		if generation == nil or read_turn(buf) == "operator" then
 			s.probing = false
 			return
 		end
@@ -354,14 +374,13 @@ probe = function(buf)
 			s.probing = false
 			local actor = actors and M.find_actor(actors.Actors, owner)
 			-- A write or operator edit while either query ran postpones the ping.
-			local active = actor and actor.Known and M.parse_time(actor.LastActivity)
-			if not active or os.time() - active < M.QUIET_SECONDS or read_turn(buf) == "operator"
+			if not M.owner_quiet(actor, os.time()) or read_turn(buf) == "operator"
 				or disk_mtime(buf) ~= mtime then
 				return
 			end
 			s.pinged = generation
 			send(owner, "session-sync ping: " .. path .. " owes a response since "
-				.. os.date("!%Y-%m-%dT%H:%M:%SZ", since or baseline))
+				.. os.date("!%Y-%m-%dT%H:%M:%SZ", since))
 		end)
 	end)
 end

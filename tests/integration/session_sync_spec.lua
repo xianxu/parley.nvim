@@ -549,7 +549,7 @@ describe("session-sync buffer", function()
                 initial = real_time()
                 now = initial
                 os.time = function() return now end -- luacheck: ignore 122
-                p.config.session_sync_ping_minutes = nil -- exercise runtime default
+                p.config.session_sync_ping_minutes = dofile("lua/parley/config.lua").session_sync_ping_minutes
                 vim.env.FAKE_COUCH_ACTORS = actors("ops:0", true)
             end)
             after_each(function() os.time, vim.system = real_time, real_system end) -- luacheck: ignore 122
@@ -572,6 +572,36 @@ describe("session-sync buffer", function()
                 now = initial + 1800
                 assert.is_true(vim.wait(2000, function() return #pings() == 2 end))
             end)
+
+            it("also uses fifteen minutes when configuration is absent", function()
+                p.config.session_sync_ping_minutes = nil
+                status(stamp(initial))
+                open(header)
+                now = initial + 899
+                settle()
+                assert.equals(0, #pings())
+                now = initial + 900
+                assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
+            end)
+
+            for _, source in ipairs({ "LastWrite", "Owed.At", "LastActivity" }) do
+                it("does not ping with an impossible calendar date in " .. source, function()
+                    status(stamp(initial - 900))
+                    local data = vim.json.decode(vim.env.FAKE_COUCH_STATUS)
+                    local invalid = "2020-00-00T00:00:00Z"
+                    if source == "LastWrite" then data.Status.LastWrite = invalid
+                    elseif source == "Owed.At" then data.Status.LastWrite = nil; data.Status.Owed[1].At = invalid
+                    else
+                        local live = vim.json.decode(actors("ops:0", true))
+                        live.Actors[1].LastActivity = invalid
+                        vim.env.FAKE_COUCH_ACTORS = vim.json.encode(live)
+                    end
+                    vim.env.FAKE_COUCH_STATUS = vim.json.encode(data)
+                    open(header)
+                    settle()
+                    assert.equals(0, #pings())
+                end)
+            end
 
             it("a recent write postpones the first ping despite older obligations", function()
                 status(stamp(initial - 899))

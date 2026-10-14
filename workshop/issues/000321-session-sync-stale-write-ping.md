@@ -153,7 +153,13 @@ README and upstream area/severity card metadata in the tracker atlas.
 | Entity | Kind | Status | Location | Responsibility |
 | --- | --- | --- | --- | --- |
 | `session_sync` | INTEGRATION | modified | `lua/parley/session_sync.lua` | Existing watcher, query and send shell. |
-| `config` | PURE | modified | `lua/parley/config.lua` | Configuration data, with existing environment-derived paths. |
+| `config` | INTEGRATION | modified | `lua/parley/config.lua` | Configuration data, with existing environment-derived paths. |
 | `parse_time` | PURE | modified | `lua/parley/session_sync.lua` | Strict calendar, clock, fraction and offset parsing. |
 | `ping_generation` | PURE | new | `lua/parley/session_sync.lua` | Write-age and one-shot admission from supplied observations. |
 | `owner_quiet` | PURE | new | `lua/parley/session_sync.lua` | Known-owner quiet-time threshold. |
+
+- Round-1 fixes verified with 66 targeted tests passing. Invalid-date regressions
+  failed before the shared-parser correction through all three timestamp inputs.
+  Pure policy tests cover threshold, override, absent-write identity and liveness.
+  Reverting only the shipped default to five minutes makes the new boundary
+  coverage fail; restored it to fifteen before the final full-suite rerun.

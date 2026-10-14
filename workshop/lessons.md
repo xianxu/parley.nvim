@@ -451,3 +451,14 @@ oracle, and the mutation that would make the test fail.
 - Quick-flow issues still need a Core concepts table naming their modified
   owners: the architecture symbol guard rejects an empty selection even when
   no public API is added (#321 full-suite discovery).
+
+- A timestamp pattern is not validation: reject impossible calendar dates,
+  out-of-range clock/offset components, and malformed fractions in the shared
+  parser used by every admission input (#321 BR-1).
+- Default-boundary tests must load the shipped configuration as well as test
+  the nil-config fallback. Mutation-check the actual default, not just the
+  consumer fallback (#321 BR-3).
+- Extract asynchronous admission decisions over explicit observations into
+  pure helpers; keep clock, file and process reads in the caller (#321 BR-2).
+- Sweep README for changed defaults and atlas for generated metadata changes;
+  a generated refresh can expose new fields through generic consumers (#321 BR-4).
