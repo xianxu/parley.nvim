@@ -107,3 +107,17 @@ been redesigned so thoroughly that it bears little resemblance to it. See [LICEN
 
 All sorts of AI coding agents were used to create Parley.
 
+
+## Paste screenshots into Markdown
+
+Press **Alt+v** in Normal or Insert mode to paste a clipboard image after the
+current line in any named Markdown file. Parley inserts an image link and saves
+it beside that file at `assets/<file-stem>/<timestamp>.<png|jpg>`. Chat files keep
+their existing timestamp asset folders. Spaces and punctuation in stems are
+percent-escaped in links; the on-disk folder keeps the stem.
+
+The existing image shrink step runs before saving: large PNGs become smaller
+JPEGs within the maximum edge. `assets.shrink` and `assets.shrink_cmd` retain
+their configured behavior; the paste notice reports any retained original.
+Deleting a link leaves its asset on disk. The Markdown file's owner handles
+sidecar moves and sweeps unreferenced assets (the TL for session and QA files).

@@ -3,6 +3,9 @@
 The transcript is the index; `<chat-dir>/assets/<chat-timestamp>/` holds only
 bytes a transcript line references. Keyed by the chat's timestamp, never its
 slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
+Ordinary Markdown uses `<file-dir>/assets/<file-stem>/`; links percent-escape
+the key segment; `assets.resolve_path` validates and decodes it exactly once
+for both send-budget stat and bounded reads.
 
 ## Surface
 - `<M-v>` (`paste_image`, `parley_buffer` scope, n/i): reads a PNG off the
@@ -11,8 +14,10 @@ slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
   line (the alt is the file name so markdown conceal shows a label rather than
   a blank line; edit it freely).
   Declines with a message when the clipboard holds no image, when no tool is
-  found (names what to install), when the buffer is not a timestamp-named
-  chat, or when a paste is already in flight for that buffer. A buffer closed
+  found (names what to install), when the buffer has no named Markdown path
+  with a directory, or when a paste is already in flight for that buffer.
+  Markdown stems use the same writer/shrink step and rollback as chat keys.
+  A buffer closed
   before the tool answers discards the image — no bytes without a transcript
   line. The paste is asynchronous and anchored by an extmark; insert mode is
   not left.
@@ -84,7 +89,10 @@ slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
 ## Lifecycle
 An asset lives as long as a transcript line references it, and is removed
 with its chat. A link line deleted by hand leaves the file until then; there
-is no sweep. Logs never hold the bytes.
+is no sweep. Ordinary Markdown sidecars belong to the file's owner:
+Parley leaves assets after link deletion; the owner handles sidecar moves and
+sweeps unreferenced assets (the TL for session and QA files). Logs never hold
+the bytes.
 Shrink input/output temporary files are both removed on every completed attempt
 (or a cleanup failure is reported);
 abnormal editor death leaves them to the operating system's temp cleanup.

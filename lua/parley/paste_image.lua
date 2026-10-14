@@ -71,14 +71,14 @@ local function rollback(abs, created)
     end
 end
 
---- Paste the clipboard image into the chat shown in `buf`.
+--- Paste the clipboard image into the markdown file shown in `buf`.
 --- @param buf integer
 --- @param deps table { config, notify, runner?, host_env? }
 function M.paste(buf, deps)
     local chat_path = vim.api.nvim_buf_get_name(buf)
     local folder, ferr = assets.folder_for(chat_path)
     if not folder then
-        deps.notify("Parley: image paste needs a timestamp-named chat (" .. ferr .. ")", "warn")
+        deps.notify("Parley: image paste needs a named markdown file (" .. ferr .. ")", "warn")
         return
     end
     if inflight[buf] then
