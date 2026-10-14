@@ -1,12 +1,20 @@
 ---
 id: 000325
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: '314d76a1f05c0abae38576672f58ef35dc397152' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'bc6774d0c9347ce07e6c86bbbb7ed0eafd95f22d' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-14T09:55:47-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Image paste (Alt+v) in any markdown file, not only timestamp-named chats: sidecar assets per file, for the TL session file and QA files
@@ -25,11 +33,17 @@ The operator wants to paste screenshots into the TL session file's `## Operator 
 
 ## Plan
 
-- [ ]
+- [ ] Add failing asset layout/round-trip and paste regressions for session and QA markdown, large-image shrinking, and rejection of non-markdown/unanchored paths.
+- [ ] Widen the pure asset key to file stems while retaining chat timestamp keys (ARCH-PURE/DRY); percent-encode link segments and validate/decode them in the existing attachment reader (ARCH-SECURE). Keep save, cap, shrink config, and paste rollback shared.
+- [ ] Document sidecar layout and file-owner sweep in README/atlas (ARCH-FUNERAL); run targeted make -k checks and the pushed-head suite through sdlc local-check, then close review.
 
 ## Log
 
 ### 2026-10-14
+
+- Claimed by parley.nvim:2 and entered planning. Refreshed Parley to 62a35b2aeb4a849cee910062a35ea02f0b5dba29 and private Ariadne to 407e48a39057503fab7cdecaf6c69ce338ce7631. Generated vocabulary drift belongs to concurrent #326; restored only that generated file per hub instruction and will integrate its landed main.
+- Design uses the existing async clipboard → save/shrink → anchored insert path, its 10 MiB source cap, one in-flight paste per buffer, and rollback on failed insertion (ARCH-CONSTRAINTS/ORDER). No new external dependency: existing fake_clipboard/fake_sips exercise the same command seam (ARCH-MOCK). Markdown owners sweep unreferenced sidecars; deleting a line does not remove an image.
+- Plan sent to ops:0 for approval; publication waits for SHIP.
 
 ## Revisions
 
