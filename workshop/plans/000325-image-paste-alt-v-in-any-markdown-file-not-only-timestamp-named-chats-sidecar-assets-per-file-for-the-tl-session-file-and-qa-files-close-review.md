@@ -78,3 +78,60 @@ findings:
 7. **Plan revision recommendations**
 
    Add `## Revisions` entries recording the complete stat/read consumer sweep and the updated small-PNG/large-JPEG acceptance criteria.
+
+---
+
+## Re-review — 2026-10-14T11:17:19-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 325 — Image paste (Alt+v) in any markdown file, not only timestamp-named chats: sidecar assets per file, for the TL session file and QA files |
+| repo | parley.nvim |
+| issue file | workshop/issues/000325-image-paste-alt-v-in-any-markdown-file-not-only-timestamp-named-chats-sidecar-assets-per-file-for-the-tl-session-file-and-qa-files.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 2a048860b52c104a51b66e35adc9c62f26a3f7b6..c4ab831355e1edcf135dd5509eef8ffdb30cd569 |
+| command | sdlc close --issue 325 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-14T11:17:19-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The implementation satisfies the documented scope, and both prior findings are addressed. Shared path resolution now reaches both message builders, with regression tests independently confirmed to fail without the fix. No new findings.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      assets.resolve_path is consumed by read_bounded and chat_respond.asset_size. Both builder regressions pass at head; restoring base chat_respond.lua in a disposable archive makes both fail with zero images instead of one. The archive was removed.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The issue's Done-when at lines 33–34 now distinguishes small PNG preservation from eligible large JPEG shrinking and retains chat regression requirements. This matches the shared save/shrink implementation and paste_image_spec.lua coverage.
+```
+
+1. **Strengths**
+   - One validated resolver serves budget stat and bounded reads (`lua/parley/assets.lua:1169`, `lua/parley/chat_respond.lua:400`).
+   - Tests cover escaped punctuation, Unicode, literal percent escapes, unsafe keys, and both builders.
+   - Ordinary Markdown reuses existing save, shrink, and rollback behavior.
+   - README and atlas document layout, keybinding, and ownership.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage:** All 17 mapped attachment spec files passed; live clipboard/shrink checks remain opt-in. The mutation check produced exactly two expected builder failures. `git diff --check` passed; checkout remains clean.
+
+6. **Architecture:** **ARCH-DRY: pass**—shared writer and resolver. **ARCH-PURE: pass**—path transformations remain pure; IO stays behind existing seams. **ARCH-PURPOSE: pass**—session/QA paste, shrinking, owner-managed lifecycle, and both send consumers are covered.
+
+7. **Plan revisions:** None required.

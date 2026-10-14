@@ -44,6 +44,7 @@ After verification: close review, then publish/merge on SHIP.
 ## Log
 
 ### 2026-10-14
+- 2026-10-14: closed — BR-1: shared assets.resolve_path used by budget stat and bounded read; both message-builder regressions observed red (0 images), then green for space/punctuation/Unicode/percent/dotted stems. BR-2: Done-when explicitly covers small PNG, eligible large JPEG within max edge, shrink configuration, and unchanged chat folders. 17 mapped specs plus lint pass via make -k. Full suite passes on f721457ecbefcefa8c61b8a2a77b383c1bb14db7 (1m56s, log 2012be564fda); PR 234 merge-check 38610361921 green. Live sips non-chat save independently verified 6481758 bytes at 1800x1200 to 27563 bytes at 1600x1066.; review verdict: SHIP
 
 - Claimed by parley.nvim:2 and entered planning. Refreshed Parley to 62a35b2aeb4a849cee910062a35ea02f0b5dba29 and private Ariadne to 407e48a39057503fab7cdecaf6c69ce338ce7631. Generated vocabulary drift belongs to concurrent #326; restored only that generated file per hub instruction and will integrate its landed main.
 - Design uses the existing async clipboard → save/shrink → anchored insert path, its 10 MiB source cap, one in-flight paste per buffer, and rollback on failed insertion (ARCH-CONSTRAINTS/ORDER). No new external dependency: existing fake_clipboard/fake_sips exercise the same command seam (ARCH-MOCK). Markdown owners sweep unreferenced sidecars; deleting a line does not remove an image.
