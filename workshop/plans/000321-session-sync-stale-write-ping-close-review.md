@@ -97,3 +97,77 @@ findings:
     detail: |
       README.md is unchanged despite the session_sync_ping_minutes default change at lua/parley/config.lua:487. The generated vocabulary also adds area/severity card fields and setters at construct/generated/vocabulary/issue.json:108–119, plus repository-enum metadata at line 25; the only atlas change covers session-sync. These fields affect existing vocabulary-driven tracker consumers, including lua/parley/issue_cards.lua:172 and :375. Enumerated documentation gaps are the ping configuration/default, area and severity tracker fields/setters, and .sdlc/vocabulary.json repository-enum convention. Add appropriate README guidance and update the tracker atlas documentation.
 ```
+
+---
+
+## Re-review — 2026-10-13T23:22:44-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 321 — session-sync: ping once after 15 minutes without a write while deliveries remain owed (pair#530 companion) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000321-session-sync-stale-write-ping.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 5a15ecabfe958cd8733d9e20de698acdf04460dd..1335484b20d1642bedcc3d59d7caaa48c352d2b4 |
+| command | sdlc close --issue 321 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-13T23:22:44-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-1–BR-4 are addressed, with passing tests and successful mutation checks. No new implementation defect was found. Shipping remains blocked on verification: `make check-vocabulary` could not export the upstream issue vocabulary. This is an inspection blocker, not evidence that the generated artifact is incorrect.
+
+Done-when: current — the clauses still cover the revised LastWrite baseline, absent-write fallback, one-shot behavior, overrides, and admission exclusions.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Shared parser validation covers calendar, clock, offset, and fraction errors. Restoring the old parser caused two unit failures and all three LastWrite/Owed.At/LastActivity integration regressions to fail.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      session_sync.lua:137–151 extracts both admission policies into deterministic helpers, called at lines 364 and 377. Direct unit tests require no timers, subprocesses, or filesystem observations; the Core concepts table now classifies the entities correctly.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Integration tests load the shipped configuration and exercise 899/900 seconds, with separate fallback and override cases. Reverting only the shipped default to five caused two integration failures.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      README.md:48–52 documents the fifteen-minute default and override, matching config.lua:487. atlas/issues/issue-management.md:60–68 documents tracker fields, setters, and repository-enum metadata, matching construct/generated/vocabulary/issue.json and the generic issue_cards.lua consumers.
+findings:
+  - id: new
+    severity: Important
+    family: boundary-verification-available
+    title: |
+      Vocabulary freshness verification remains unavailable
+    detail: |
+      Makefile.parley:269 invokes scripts/check-vocabulary.sh, but the pinned checkout's check fails with “no vocabulary noun "issue" (have: [])”. This is the sole failed verification command in this review. Restore the vocabulary dependency discovery needed by this checkout and rerun the check before crossing the boundary; no generated-content correction is established by this failure.
+```
+
+1. **Strengths**
+   - Shared timestamp validation protects all three admission inputs.
+   - Tests cover both query phases racing with writes or operator locks.
+   - Pure admission helpers separate policy from clock, filesystem, and process access.
+
+2. **Critical findings:** None remaining.
+
+3. **Important findings:** Vocabulary freshness verification is blocked as detailed above.
+
+4. **Minor findings:** None.
+
+5. **Test coverage:** Passed 66 session-sync tests, 16 vocabulary unit tests, lint across 723 files, and range whitespace checks. Parser and shipped-default mutations failed as expected. The full suite was not rerun. Disposable test copy removed; reviewed checkout unchanged.
+
+6. **Architecture:** ARCH-DRY passes: shared parser and existing Couch seam reused. ARCH-PURE passes: both policies are directly tested without I/O. ARCH-PURPOSE passes: the revised consumer contract is implemented; tracker views continue deriving fields from vocabulary metadata.
+
+7. **Plan revisions:** None required.

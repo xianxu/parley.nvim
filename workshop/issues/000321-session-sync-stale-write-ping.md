@@ -181,3 +181,15 @@ README and upstream area/severity card metadata in the tracker atlas.
   723 files, no surviving test processes; includes 66 session-sync cases.
   Vocabulary freshness and branch whitespace checks passed. All BR-1–BR-4
   fixes are ready for the second close review.
+
+- Close round 2 accepted BR-1 through BR-4, including independent parser and
+  shipped-default mutations. Only BR-5 remains: the disposable review checkout
+  cannot discover the upstream vocabulary model. This is a missing sibling
+  dependency, not generated-content drift: construct/deps points to ../ariadne;
+  vocabulary resolves CUE through that dependency graph.
+- Counter-measurement: `make check-vocabulary` exits 0 in the canonical checkout.
+  Exported the exact committed JSON to /tmp/parley-321-pinned-vocabulary.json
+  and ran `scripts/check-vocabulary.sh --artifact` on it: exits 0, content
+  matches upstream export. Artifact Git blob: 81cad8767aa6a444351e347dd551a408734c8738.
+  Review should distinguish unavailable dependency setup from a content mismatch;
+  no product or test-gate code change is justified by the missing review sibling.

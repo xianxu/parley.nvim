@@ -35,6 +35,37 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - "n": 2
+      timestamp: "2026-10-13T23:22:44-07:00"
+      dispatched: "2026-10-13T23:19:22-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Shared parser validation covers calendar, clock, offset, and fraction errors. Restoring the old parser caused two unit failures and all three LastWrite/Owed.At/LastActivity integration regressions to fail.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: session_sync.lua:137–151 extracts both admission policies into deterministic helpers, called at lines 364 and 377. Direct unit tests require no timers, subprocesses, or filesystem observations; the Core concepts table now classifies the entities correctly.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: Integration tests load the shipped configuration and exercise 899/900 seconds, with separate fallback and override cases. Reverting only the shipped default to five caused two integration failures.
+          round: 2
+        - id: BR-4
+          disposition: addressed
+          note: README.md:48–52 documents the fifteen-minute default and override, matching config.lua:487. atlas/issues/issue-management.md:60–68 documents tracker fields, setters, and repository-enum metadata, matching construct/generated/vocabulary/issue.json and the generic issue_cards.lua consumers.
+          round: 2
+      findings:
+        - id: BR-5
+          severity: Important
+          title: Vocabulary freshness verification remains unavailable
+          detail: 'Makefile.parley:269 invokes scripts/check-vocabulary.sh, but the pinned checkout''s check fails with “no vocabulary noun "issue" (have: [])”. This is the sole failed verification command in this review. Restore the vocabulary dependency discovery needed by this checkout and rerun the check before crossing the boundary; no generated-content correction is established by this failure.'
+          family: boundary-verification-available
+          round: 2
+      recipe: small-diff-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#321 (boundary-review)
@@ -55,9 +86,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Important] `changed-surface-documentation` README and atlas updates are missing for changed configuration and tracker surfaces
   README.md is unchanged despite the session_sync_ping_minutes default change at lua/parley/config.lua:487. The generated vocabulary also adds area/severity card fields and setters at construct/generated/vocabulary/issue.json:108–119, plus repository-enum metadata at line 25; the only atlas change covers session-sync. These fields affect existing vocabulary-driven tracker consumers, including lua/parley/issue_cards.lua:172 and :375. Enumerated documentation gaps are the ping configuration/default, area and severity tracker fields/setters, and .sdlc/vocabulary.json repository-enum convention. Add appropriate README guidance and update the tracker atlas documentation.
 
+## Round 2 — 2026-10-13T23:22:44-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Shared parser validation covers calendar, clock, offset, and fraction errors. Restoring the old parser caused two unit failures and all three LastWrite/Owed.At/LastActivity integration regressions to fail.
+- BR-2 — addressed — session_sync.lua:137–151 extracts both admission policies into deterministic helpers, called at lines 364 and 377. Direct unit tests require no timers, subprocesses, or filesystem observations; the Core concepts table now classifies the entities correctly.
+- BR-3 — addressed — Integration tests load the shipped configuration and exercise 899/900 seconds, with separate fallback and override cases. Reverting only the shipped default to five caused two integration failures.
+- BR-4 — addressed — README.md:48–52 documents the fifteen-minute default and override, matching config.lua:487. atlas/issues/issue-management.md:60–68 documents tracker fields, setters, and repository-enum metadata, matching construct/generated/vocabulary/issue.json and the generic issue_cards.lua consumers.
+
+### Raised
+
+- **BR-5** [Important] `boundary-verification-available` Vocabulary freshness verification remains unavailable
+  Makefile.parley:269 invokes scripts/check-vocabulary.sh, but the pinned checkout's check fails with “no vocabulary noun "issue" (have: [])”. This is the sole failed verification command in this review. Restore the vocabulary dependency discovery needed by this checkout and rerun the check before crossing the boundary; no generated-content correction is established by this failure.
+
 ## Open findings
 
-- **BR-1** [Critical] `invalid-time-must-remain-unknown` Invalid LastWrite timestamps can trigger stale-work pings
-- **BR-2** [Important] `admission-policy-pure-boundary` ARCH-PURE: separate ping admission policy from the query callback
-- **BR-3** [Important] `shipped-default-regression-coverage` Boundary tests bypass the shipped fifteen-minute default
-- **BR-4** [Important] `changed-surface-documentation` README and atlas updates are missing for changed configuration and tracker surfaces
+- **BR-5** [Important] `boundary-verification-available` Vocabulary freshness verification remains unavailable
