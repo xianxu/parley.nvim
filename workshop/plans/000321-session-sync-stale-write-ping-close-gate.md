@@ -66,6 +66,13 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+disputes:
+    - id: BR-5
+      rationale: The review checkout lacks the ../ariadne dependency named by construct/deps. The exporter reports no noun, not a content mismatch. The exact committed artifact is verified against the dependency model in the canonical checkout; changing product code or gate configuration to accommodate missing review dependencies is outside this consumer change.
+      evidence: 'Re-ran make check-vocabulary: exit 0, issue vocabulary content matches upstream export. Also git show HEAD:construct/generated/vocabulary/issue.json to /tmp/parley-321-pinned-vocabulary.json then scripts/check-vocabulary.sh --artifact /tmp/parley-321-pinned-vocabulary.json: exit 0. Both pinned and working artifact Git blob 81cad8767aa6a444351e347dd551a408734c8738. Full make test passes all 427 files.'
+      after: 2
+      timestamp: "2026-10-14T06:23:59Z"
+      by: Xian Xu on Xian’s MacBook Pro at parley.nvim:1 (/Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim)
 ---
 
 # Gate ledger — parley.nvim#321 (boundary-review)
@@ -100,6 +107,15 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-5** [Important] `boundary-verification-available` Vocabulary freshness verification remains unavailable
   Makefile.parley:269 invokes scripts/check-vocabulary.sh, but the pinned checkout's check fails with “no vocabulary noun "issue" (have: [])”. This is the sole failed verification command in this review. Restore the vocabulary dependency discovery needed by this checkout and rerun the check before crossing the boundary; no generated-content correction is established by this failure.
 
+## Disputes
+
+Findings the implementer declined (`sdlc finding dispute`), each answered by the
+next review round.
+
+- **BR-5** — after round 2 (2026-10-14T06:23:59Z, Xian Xu on Xian’s MacBook Pro at parley.nvim:1 (/Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim))
+  rationale: The review checkout lacks the ../ariadne dependency named by construct/deps. The exporter reports no noun, not a content mismatch. The exact committed artifact is verified against the dependency model in the canonical checkout; changing product code or gate configuration to accommodate missing review dependencies is outside this consumer change.
+  evidence: Re-ran make check-vocabulary: exit 0, issue vocabulary content matches upstream export. Also git show HEAD:construct/generated/vocabulary/issue.json to /tmp/parley-321-pinned-vocabulary.json then scripts/check-vocabulary.sh --artifact /tmp/parley-321-pinned-vocabulary.json: exit 0. Both pinned and working artifact Git blob 81cad8767aa6a444351e347dd551a408734c8738. Full make test passes all 427 files.
+
 ## Open findings
 
-- **BR-5** [Important] `boundary-verification-available` Vocabulary freshness verification remains unavailable
+(none — every finding has been disposed)
