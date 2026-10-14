@@ -58,6 +58,8 @@ After verification: close review, then publish/merge on SHIP.
 
 - Close round 1 returned REWORK: BR-1 identified the budget stat in chat_respond.asset_size using encoded URL text as a disk path; both build_messages and build_messages_from_model share it. BR-2 identified stale PNG-only Done-when. Added regressions for both builders over space/punctuation/Unicode/percent/dotted stems; will use one pure assets.resolve_path for budget stat and bounded read. Swept all att.path consumers: parser/content keep URL text, export uses image src URLs; only budget stat and bounded read touch the image disk path.
 
+- BR-1 fix: assets.resolve_path is the shared pure resolver for read_bounded and chat_respond.asset_size (both builders). New parsed/live builder tests were red (0 images instead of 1), then green over every escaped-stem class; they assert both stat calls use the same absolute path and the image bytes reach the payload. The resolver round-trip and unsafe-path cases also pass. BR-2 fix: Done-when now covers small PNG, eligible large JPEG within max edge, configured shrink policy, and unchanged chats. make -k test-spec SPEC=chat/attachments lint passes, 0 warnings/errors; full suite will be rerun on the fix head.
+
 ## Revisions
 
 - 2026-10-14 — add (operator): images must not be stored at full fidelity. The new sidecar path reuses the existing `assets` shrink step (sips/magick/…, JPEG within the max edge; `assets.shrink`/`shrink_cmd` honoured); add a test that a large paste into a non-chat markdown file lands shrunk.

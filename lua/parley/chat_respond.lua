@@ -396,11 +396,12 @@ local function asset_size(chat_path, rel)
     if chat_path == nil or chat_path == "" then
         return nil, "chat_path not supplied to build_messages"
     end
-    local dir = chat_path:match("^(.*)/[^/]+$")
-    if not dir then
-        return nil, "chat path has no directory: " .. tostring(chat_path)
+    local assets = require("parley.assets")
+    local path, err = assets.resolve_path(chat_path, rel)
+    if not path then
+        return nil, err
     end
-    return require("parley.assets").default_io.stat(dir .. "/" .. rel)
+    return assets.default_io.stat(path)
 end
 
 --- Resolve one request's deferred question slots against ONE budget

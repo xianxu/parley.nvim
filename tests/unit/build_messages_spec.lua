@@ -1833,7 +1833,7 @@ describe("attachments (#231): both builders, one budget", function()
             start_index = 1, end_index = 999, exchange_idx = opts.exchange_idx or #exchanges,
             agent = agent(), config = parley.config,
             helpers = stub_helpers, logger = opts.logger or stub_logger,
-            chat_path = (not opts.no_chat_path) and chat_path or nil,
+            chat_path = (not opts.no_chat_path) and (opts.chat_path or chat_path) or nil,
         })
     end
 
@@ -1942,6 +1942,34 @@ describe("attachments (#231): both builders, one budget", function()
     end
 
     local agent_info = { system_prompt = "You are a helpful assistant.", model = "gpt-4o", provider = "openai" }
+
+    for _, builder in ipairs({ "parsed", "live" }) do
+        it(builder .. " builder budgets and reads escaped markdown sidecars from the same disk path", function()
+            for _, stem in ipairs({ "answer (QA)", "截图 100%", "literal%2F", "a..b" }) do
+                local path = chat_dir .. "/" .. stem .. ".md"
+                local relative, absolute = assets.save(path, PNG, "png")
+                local link = assets.markdown_link(relative)
+                recording_io(function(reads, stats)
+                    local messages
+                    if builder == "parsed" then
+                        local ex = exchange("what?\n" .. link)
+                        ex.question.attachments = { assert(assets.parse_attachment(link)) }
+                        messages = build({ ex }, { chat_path = path })
+                    else
+                        local buf, model = live_chat({ { q = { "💬: what?", link } } })
+                        messages = chat_respond.build_messages_from_model(buf, model, 1, agent_info,
+                            { chat_path = path, max_exchanges = 2 })
+                        vim.api.nvim_buf_delete(buf, { force = true })
+                    end
+                    assert.equals(1, total_images(messages), stem)
+                    local content = user_messages(messages)[1].content
+                    assert.equals(vim.base64.encode(PNG), content[1].source.data)
+                    assert.same({ relative }, reads)
+                    assert.same({ absolute, absolute }, stats, "budget stat and bounded read share resolution")
+                end)
+            end
+        end)
+    end
 
     it("a preserved question carries image blocks first, then the text", function()
         local messages = build({ att_exchange("what?") })

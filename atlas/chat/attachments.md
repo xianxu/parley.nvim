@@ -4,7 +4,8 @@ The transcript is the index; `<chat-dir>/assets/<chat-timestamp>/` holds only
 bytes a transcript line references. Keyed by the chat's timestamp, never its
 slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
 Ordinary Markdown uses `<file-dir>/assets/<file-stem>/`; links percent-escape
-the key segment and the reader validates and decodes it exactly once.
+the key segment; `assets.resolve_path` validates and decodes it exactly once
+for both send-budget stat and bounded reads.
 
 ## Surface
 - `<M-v>` (`paste_image`, `parley_buffer` scope, n/i): reads a PNG off the

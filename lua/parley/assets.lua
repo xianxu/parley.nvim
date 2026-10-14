@@ -1162,6 +1162,23 @@ function M.save(chat_path, bytes, ext, io_)
     return M.relative_path(M.key_for(chat_path), name), abs, nil, outcome
 end
 
+--- Resolve an asset URL to a validated disk path; shared by stat and read.
+---@param chat_path string
+---@param relative string
+---@return string|nil path
+---@return string|nil err
+function M.resolve_path(chat_path, relative)
+    local dir = split(chat_path)
+    if not dir then
+        return nil, "chat path has no directory: " .. tostring(chat_path)
+    end
+    local attachment = M.parse_attachment("![](" .. tostring(relative) .. ")")
+    if not attachment then
+        return nil, "not a markdown-relative asset path: " .. tostring(relative)
+    end
+    return M.folder_in(dir, attachment.ts) .. "/" .. attachment.name
+end
+
 --- Bytes of an asset named by its transcript-relative path, bounded and
 --- checked: stat first (a non-regular file or one over MAX_BYTES → refused
 --- without reading), then read at most MAX_BYTES + 1 and check the size
@@ -1177,15 +1194,10 @@ end
 ---@return string|nil err
 function M.read_bounded(chat_path, relative, io_)
     io_ = io_ or M.default_io
-    local dir = split(chat_path)
-    if not dir then
-        return nil, "chat path has no directory: " .. tostring(chat_path)
+    local p, path_err = M.resolve_path(chat_path, relative)
+    if not p then
+        return nil, path_err
     end
-    local attachment = M.parse_attachment("![](" .. tostring(relative) .. ")")
-    if not attachment then
-        return nil, "not a markdown-relative asset path: " .. tostring(relative)
-    end
-    local p = M.folder_in(dir, attachment.ts) .. "/" .. attachment.name
     local size, serr = io_.stat(p)
     if not size then
         return nil, serr

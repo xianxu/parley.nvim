@@ -159,6 +159,8 @@ describe("assets: layout", function()
             local io_ = fake_io()
             local rel, abs = assets.save(path, PNG_BYTES, "png", io_)
             assert.is_string(rel, stem)
+            assert.is_function(assets.resolve_path)
+            assert.equals(abs, assets.resolve_path(path, rel))
             assert.equals("/roots/notes/assets/" .. stem .. "/2026-09-12.10-00-00.001.png", abs)
             local att = assets.parse_attachment(assets.markdown_link(rel))
             assert.is_not_nil(att, rel)
@@ -173,6 +175,7 @@ describe("assets: layout", function()
         for _, key in ipairs({ "%2E%2E", "%2Ftmp", "a%2Fb", "a%5Cb", "%00", "%0A", "bad%ZZ", "..", "." }) do
             local rel = "assets/" .. key .. "/a.png"
             assert.is_nil(assets.parse_attachment(assets.markdown_link(rel)), key)
+            assert.is_nil(assets.resolve_path("/roots/notes/todo.md", rel), key)
             assert.is_nil(assets.read_bounded("/roots/notes/todo.md", rel, io_), key)
         end
         for _, path in ipairs({ "/roots/notes/..md", "/roots/notes/...md", "/roots/notes/a\\b.md" }) do

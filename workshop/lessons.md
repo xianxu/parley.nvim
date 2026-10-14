@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-10-14 (#325 — Markdown sidecar links)
+
+- Escaped URLs and disk paths are different values. Share one validated resolver across every disk consumer, including stat before read; round-trip tests must reach message-builder budget admission as well as the byte reader (close BR-1).
+- A scope revision needs matching Done-when criteria. Small PNG preservation does not cover the separate large-image shrinking contract (close BR-2).
+
 ## 2026-10-14 (#326 — generated vocabulary CI)
 
 - Keep close-time verification checkboxes separate from post-landing CI confirmation. Tick only observed results; a passed PR check cannot prove the future main run (close review BR-1).
