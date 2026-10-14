@@ -63,6 +63,48 @@ describe("session_sync.parse_time", function()
     end)
 end)
 
+describe("session_sync strict timestamps and ping policy (#321)", function()
+    it("rejects malformed calendars, clocks, offsets and fractions", function()
+        for _, text in ipairs({
+            "2020-00-00T00:00:00Z", "2020-13-01T00:00:00Z", "2020-01-32T00:00:00Z",
+            "2021-02-29T00:00:00Z", "1900-02-29T00:00:00Z", "2020-04-31T00:00:00Z",
+            "2020-01-01T24:00:00Z", "2020-01-01T00:60:00Z", "2020-01-01T00:00:61Z",
+            "2020-01-01T00:00:00+24:00", "2020-01-01T00:00:00-00:60",
+            "2020-01-01T00:00:00.Z", "2020-01-01T00:00:001Z",
+        }) do
+            assert.is_nil(ss.parse_time(text), text)
+        end
+    end)
+
+    it("admits a write generation once at the default and configured boundaries", function()
+        local written = "1970-01-01T00:00:00Z"
+        assert.is_nil(ss.ping_generation(written, -3600, 899, nil, nil))
+        assert.equals(written, ss.ping_generation(written, -3600, 900, nil, nil))
+        assert.is_nil(ss.ping_generation(written, -7200, 900, nil, written))
+        assert.is_nil(ss.ping_generation(written, nil, 900, nil, nil))
+        assert.is_nil(ss.ping_generation("invalid", -3600, 900, nil, nil))
+        assert.is_nil(ss.ping_generation(written, -3600, 119, 2, nil))
+        assert.equals(written, ss.ping_generation(written, -3600, 120, 2, nil))
+    end)
+
+    it("uses one absent-write generation regardless of changes to obligations", function()
+        assert.is_nil(ss.ping_generation(nil, 0, 899, nil, nil))
+        assert.is_false(ss.ping_generation(nil, 0, 900, nil, nil))
+        assert.is_nil(ss.ping_generation(nil, -1000, 900, nil, false))
+    end)
+
+    it("requires a known owner and a valid activity time at least thirty seconds old", function()
+        local actor = { Known = true, LastActivity = "1970-01-01T00:00:00Z" }
+        assert.is_false(ss.owner_quiet(actor, 29))
+        assert.is_true(ss.owner_quiet(actor, 30))
+        actor.Known = false
+        assert.is_false(ss.owner_quiet(actor, 30))
+        actor.Known, actor.LastActivity = true, "2020-00-00T00:00:00Z"
+        assert.is_false(ss.owner_quiet(actor, 2000000000))
+        assert.is_false(ss.owner_quiet(nil, 30))
+    end)
+end)
+
 describe("session_sync.find_actor", function()
     local function a(slot) return { Binding = { Slot = slot } } end
     it("matches the exact slot, else a unique repository prefix with the same index", function()

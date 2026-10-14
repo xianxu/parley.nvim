@@ -447,3 +447,24 @@ oracle, and the mutation that would make the test fail.
   `has_mode` gate and the journal's mode name were reached by no test. When a
   change widens an argument shape across a seam, test the far side with the
   new shape (and mutation-check it); the dispatcher's stub covers routing.
+
+- Quick-flow issues still need a Core concepts table naming their modified
+  owners: use the exact `## Core concepts` section with a following level-two
+  heading. The architecture guard selects that section for new symbols, and
+  rejects an empty selection even without new public API (#321).
+
+- A timestamp pattern is not validation: reject impossible calendar dates,
+  out-of-range clock/offset components, and malformed fractions in the shared
+  parser used by every admission input (#321 BR-1).
+- Default-boundary tests must load the shipped configuration as well as test
+  the nil-config fallback. Mutation-check the actual default, not just the
+  consumer fallback (#321 BR-3).
+- Extract asynchronous admission decisions over explicit observations into
+  pure helpers; keep clock, file and process reads in the caller (#321 BR-2).
+- Sweep README for changed defaults and atlas for generated metadata changes;
+  a generated refresh can expose new fields through generic consumers (#321 BR-4).
+
+- A fake writer update must include both its status response and filesystem
+  effect. Advancing a fake clock while only changing future subprocess env
+  leaves in-flight snapshots valid in ways the real write would invalidate
+  (#321 recent-write fixture race).

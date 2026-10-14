@@ -57,6 +57,16 @@ card-owned fields (status, dates, hours, GitHub link, title) on the
 `issue-tracker` branch; a details file only carries a `card_mirror` snapshot.
 Which fields a card owns comes from the vocabulary's `card.fields`, never a
 parley-side list (#310), so a field ariadne adds shows up with no parley change.
+The shared vocabulary also declares optional `severity` (`critical`, `high`,
+`medium`, `low`) and multi-valued `area` card fields. Change them through
+`sdlc issue set-severity` and `sdlc issue set-area`, not the details mirror.
+`area` values are repository-defined in `.sdlc/vocabulary.json`: lowercase
+slash-separated paths, at most four segments and eight values per card;
+allowed values and their ancestors come from that repository declaration.
+An absent declaration provides no allowed areas. The generated `repoEnums`
+metadata describes this convention; Parley's card views derive the fields
+from `card.fields`, while SDLC owns membership validation and setters.
+
 A nested field (e.g. `claimant:`) is read as a block of its child lines. Parley
 reads those cards read-only, the card winning over the details on display, and
 shows them in these places:

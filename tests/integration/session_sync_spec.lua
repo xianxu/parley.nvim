@@ -533,6 +533,162 @@ describe("session-sync buffer", function()
             return vim.tbl_filter(function(l) return l:find("session-sync ping:", 1, true) end, sent())
         end
 
+        describe("write-age baseline (#321)", function()
+            local real_time, real_system, now, initial
+            local function stamp(at) return os.date("!%Y-%m-%dT%H:%M:%SZ", at) end
+            local function status(write, delivery)
+                vim.env.FAKE_COUCH_STATUS = vim.json.encode({ Code = "ok", Status = {
+                    LastWrite = write, Owed = delivery == false and {} or {
+                        { ID = "delivery", At = stamp(delivery or initial - 3600) },
+                    },
+                } })
+            end
+            local function settle() vim.wait(300) end
+            before_each(function()
+                real_time, real_system = os.time, vim.system
+                initial = real_time()
+                now = initial
+                os.time = function() return now end -- luacheck: ignore 122
+                p.config.session_sync_ping_minutes = dofile("lua/parley/config.lua").session_sync_ping_minutes
+                vim.env.FAKE_COUCH_ACTORS = actors("ops:0", true)
+            end)
+            after_each(function() os.time, vim.system = real_time, real_system end) -- luacheck: ignore 122
+
+            it("waits fifteen minutes after a write, pings once, and only a new write rearms", function()
+                status(stamp(initial))
+                open(header)
+                now = initial + 899
+                settle()
+                assert.equals(0, #pings())
+                now = initial + 900
+                assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
+                status(stamp(initial), initial - 1800) -- old delivery folded; another remains
+                settle()
+                assert.equals(1, #pings())
+                status(stamp(now)) -- write folds nothing
+                now = initial + 1799
+                settle()
+                assert.equals(1, #pings())
+                now = initial + 1800
+                assert.is_true(vim.wait(2000, function() return #pings() == 2 end))
+            end)
+
+            it("also uses fifteen minutes when configuration is absent", function()
+                p.config.session_sync_ping_minutes = nil
+                status(stamp(initial))
+                open(header)
+                now = initial + 899
+                settle()
+                assert.equals(0, #pings())
+                now = initial + 900
+                assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
+            end)
+
+            for _, source in ipairs({ "LastWrite", "Owed.At", "LastActivity" }) do
+                it("does not ping with an impossible calendar date in " .. source, function()
+                    status(stamp(initial - 900))
+                    local data = vim.json.decode(vim.env.FAKE_COUCH_STATUS)
+                    local invalid = "2020-00-00T00:00:00Z"
+                    if source == "LastWrite" then data.Status.LastWrite = invalid
+                    elseif source == "Owed.At" then data.Status.LastWrite = nil; data.Status.Owed[1].At = invalid
+                    else
+                        local live = vim.json.decode(actors("ops:0", true))
+                        live.Actors[1].LastActivity = invalid
+                        vim.env.FAKE_COUCH_ACTORS = vim.json.encode(live)
+                    end
+                    vim.env.FAKE_COUCH_STATUS = vim.json.encode(data)
+                    open(header)
+                    settle()
+                    assert.equals(0, #pings())
+                end)
+            end
+
+            it("a recent write postpones the first ping despite older obligations", function()
+                status(stamp(initial - 899))
+                open(header)
+                settle()
+                assert.equals(0, #pings())
+                status(stamp(initial))
+                agent_write("- updated without folding old deliveries")
+                now = initial + 1
+                settle()
+                assert.equals(0, #pings())
+            end)
+
+            it("falls back when LastWrite is absent without rearming on delivery changes", function()
+                status(nil, initial - 900)
+                open(header)
+                assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
+                status(nil, initial - 1000)
+                settle()
+                assert.equals(1, #pings())
+                status(nil, false)
+                settle()
+                status(nil, initial - 1100)
+                settle()
+                assert.equals(1, #pings())
+            end)
+
+            it("honors a configured threshold measured from LastWrite", function()
+                p.config.session_sync_ping_minutes = 2
+                status(stamp(initial))
+                open(header)
+                now = initial + 119
+                settle()
+                assert.equals(0, #pings())
+                now = initial + 120
+                assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
+            end)
+
+            for _, phase in ipairs({ "--actors", "--session-sync" }) do
+                for _, interruption in ipairs({ "operator lock", "file write" }) do
+                    it("postpones a ping for " .. interruption .. " during " .. phase, function()
+                        local pending, response
+                        vim.system = function(argv, opts, cb)
+                            if argv[2] == phase and not pending then
+                                pending = cb
+                                response = phase == "--actors" and actors("ops:0", true) or vim.env.FAKE_COUCH_STATUS
+                                return {}
+                            end
+                            return real_system(argv, opts, cb)
+                        end
+                        status(stamp(initial - 900))
+                        open(header)
+                        assert.is_true(vim.wait(2000, function() return pending ~= nil end))
+                        ss.PING_CHECK_MS = 60000 -- observe this completion alone
+                        if interruption == "operator lock" then
+                            edit("- operator editing")
+                        else
+                            agent_write("- owner update")
+                            status(stamp(initial))
+                        end
+                        pending({ code = 0, stdout = response })
+                        settle()
+                        assert.equals(0, #pings())
+                        -- Admission failure did not consume this write generation.
+                        os.remove(file .. ".lock")
+                        vim.system = real_system
+                        now = initial + 900
+                        ss.PING_CHECK_MS = 20
+                        assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
+                    end)
+                end
+            end
+
+            it("does not infer stale work from invalid writes or failed status", function()
+                status("invalid")
+                open(header)
+                settle()
+                assert.equals(0, #pings())
+                vim.env.FAKE_COUCH_STATUS = '{"Code":"delivery-gap","Status":{"Owed":[]}}'
+                settle()
+                assert.equals(0, #pings())
+                status(stamp(initial - 900), false)
+                settle()
+                assert.equals(0, #pings())
+            end)
+        end)
+
         it("pings a quiet owner once when it has owed a response for the threshold", function()
             vim.env.FAKE_COUCH_STATUS = owed(6)
             open(header)
@@ -590,11 +746,12 @@ describe("session-sync buffer", function()
             assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
         end)
 
-        it("pings while the operator holds the lock too: owed events alone decide (#315)", function()
+        it("does not ping while the operator holds the lock (#321)", function()
             vim.env.FAKE_COUCH_STATUS = owed(10)
             vim.fn.writefile({ "holder: operator" }, file .. ".lock")
             open(header)
-            assert.is_true(vim.wait(2000, function() return #pings() == 1 end))
+            vim.wait(300)
+            assert.equals(0, #pings())
         end)
     end)
 

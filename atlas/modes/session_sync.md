@@ -57,11 +57,19 @@ does what autoread would.
 right after a submit or a reload) the watch asks
 `couch --session-sync status --json FILE` (pair#437) whether the owner owes a
 response: since the oldest owed event it reports. Owed events alone decide; a
-failing or unknown verb reads as nothing owed. They drive the band. When owed for `session_sync_ping_minutes` (default 5) and the owner's slot in
-`couch --actors --json` is live and quiet (`LastActivity` at least 30 s old,
-couch's QuietInterval; `Resting` names the resting branch, not the turn),
-parley sends `session-sync ping: <path> owes a response since <time>` once per
-owed episode. Every message leaves from the operator's editor, so pair#433's
+failing or unknown verb reads as nothing owed. They drive the band. With owed
+events and no operator lock, the ping waits `session_sync_ping_minutes`
+(default 15) since `LastWrite`, the owner's last session-sync write. When that
+field is absent/null, the oldest owed event supplies the age; an invalid write
+timestamp never proves staleness. A write postpones the ping even when it folds
+no deliveries. The owner's slot in `couch --actors --json` must be live and
+quiet (`LastActivity` at least 30 s old, couch's QuietInterval; `Resting` names
+the resting branch, not the turn). Parley sends
+`session-sync ping: <path> owes a response since <time>` once per write value
+in the buffer lifetime (once while no write has been recorded). New deliveries
+or folding old ones cannot rearm it. A write or operator lock acquired while
+either query is running postpones sending until a later probe.
+Every message leaves from the operator's editor, so pair#433's
 breaker counts it as the operator's, not a peer's.
 
 **Rendering.** Each window showing the file gets a full-width winbar band

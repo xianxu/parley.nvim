@@ -15,8 +15,8 @@
 -- never prompts (#314): the operator's copy is written back, the agent's
 -- kept as `<file>.clobbered`, and the owner told once. Whether the owner owes
 -- a response comes from couch's owed events alone: they drive the band, and
--- while owed for `session_sync_ping_minutes` with its turn ended, the owner
--- is pinged once.
+-- after `session_sync_ping_minutes` without a write and with its turn ended,
+-- the owner is pinged once per write generation (outside the operator lock).
 --
 -- Lifecycles: the lock is removed by submit; an operator lock left
 -- idle turns stale and is shown in the reminder colour until submitted. The
@@ -45,7 +45,7 @@ local ns_group = "ParleySessionSync"
 -- couch last reported, or nil), minutes (rendered owed minutes), violated /
 -- complained (this operator turn), unkept (the disk mtime of an agent copy
 -- that could not be kept), probing / probed (vim.uv.now() of the last
--- probe), pinged (the owed-since time last pinged) }
+-- probe), pinged (the LastWrite value last pinged; false when absent) }
 local state = {}
 
 --- Frontmatter lines → { owner, operator } when `type: session-sync`, else nil.
@@ -110,20 +110,43 @@ M.parse_time = function(text)
 	if type(text) ~= "string" then
 		return nil
 	end
-	local y, mo, d, h, mi, sec, tz = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)%.?%d*(.*)$")
+	local y, mo, d, h, mi, sec, tz = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)(.*)$")
 	if not y then
 		return nil
 	end
+	y, mo, d, h, mi, sec = tonumber(y), tonumber(mo), tonumber(d), tonumber(h), tonumber(mi), tonumber(sec)
+	local leap = y % 4 == 0 and (y % 100 ~= 0 or y % 400 == 0)
+	local days = ({ 31, leap and 29 or 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 })[mo]
+	if not days or d < 1 or d > days or h > 23 or mi > 59 or sec > 59 then
+		return nil
+	end
+	tz = tz:match("^%.%d+(.+)$") or tz
 	local offset = 0
 	if tz ~= "Z" then
 		local sign, oh, om = tz:match("^([+-])(%d%d):(%d%d)$")
-		if not sign then
+		if not sign or tonumber(oh) > 23 or tonumber(om) > 59 then
 			return nil
 		end
 		offset = (sign == "-" and -60 or 60) * (tonumber(oh) * 60 + tonumber(om))
 	end
-	return days_from_civil(tonumber(y), tonumber(mo), tonumber(d)) * 86400
-		+ tonumber(h) * 3600 + tonumber(mi) * 60 + tonumber(sec) - offset
+	return days_from_civil(y, mo, d) * 86400 + h * 3600 + mi * 60 + sec - offset
+end
+
+--- Eligible write generation, false for no recorded write, or nil to postpone.
+--- `since` is the oldest valid obligation time; nil means no known obligation.
+M.ping_generation = function(written, since, now, minutes, pinged)
+	local baseline = written == nil and since or M.parse_time(written)
+	local generation = written or false
+	if not since or not baseline or now - baseline < (minutes or 15) * 60 or pinged == generation then
+		return nil
+	end
+	return generation
+end
+
+--- Whether a known owner's observed turn has been quiet long enough.
+M.owner_quiet = function(actor, now)
+	local active = actor and actor.Known and M.parse_time(actor.LastActivity)
+	return not not (active and now - active >= M.QUIET_SECONDS)
 end
 
 M.find_actor = couch.find_actor
@@ -307,7 +330,8 @@ end
 
 -- Read the owed state: since the oldest owed event couch's `--session-sync
 -- status` reports (pair#437; any failure reads as nothing owed). It drives
--- the band, and pings the owner once per episode of owed work. Only an owner
+-- the band. Pings use LastWrite (oldest owed time only when absent), once
+-- per write generation; changing deliveries never rearms them. Only an owner
 -- that is live and quiet (its turn ended: no activity for QUIET_SECONDS) is
 -- pinged: mid-turn the message would only queue. (`Resting` names the slot's
 -- resting branch, not its turn.)
@@ -319,12 +343,15 @@ probe = function(buf)
 	end
 	s.probing, s.probed = true, vim.uv.now()
 	local path = file_of(buf)
+	local mtime = disk_mtime(buf)
 	query({ "couch", "--session-sync", "status", "--json", path }, function(status)
 		if state[buf] ~= s then
 			return
 		end
+		local observed = list(status and status.Status)
+		local obligations = list(observed.Owed)
 		local since
-		for _, owed in ipairs(list(status and list(status.Status).Owed)) do
+		for _, owed in ipairs(obligations) do
 			local at = type(owed) == "table" and M.parse_time(owed.At)
 			if at and (not since or at < since) then
 				since = at
@@ -334,8 +361,9 @@ probe = function(buf)
 			s.owed = since
 			refresh(buf)
 		end
-		local after = (require("parley").config.session_sync_ping_minutes or 5) * 60
-		if not since or os.time() - since < after or s.pinged == since then
+		local generation = M.ping_generation(observed.LastWrite, since, os.time(),
+			require("parley").config.session_sync_ping_minutes, s.pinged)
+		if generation == nil or read_turn(buf) == "operator" then
 			s.probing = false
 			return
 		end
@@ -345,12 +373,12 @@ probe = function(buf)
 			end
 			s.probing = false
 			local actor = actors and M.find_actor(actors.Actors, owner)
-			-- The reply may have landed while couch answered.
-			local active = actor and actor.Known and M.parse_time(actor.LastActivity)
-			if not active or os.time() - active < M.QUIET_SECONDS or s.owed ~= since then
+			-- A write or operator edit while either query ran postpones the ping.
+			if not M.owner_quiet(actor, os.time()) or read_turn(buf) == "operator"
+				or disk_mtime(buf) ~= mtime then
 				return
 			end
-			s.pinged = since
+			s.pinged = generation
 			send(owner, "session-sync ping: " .. path .. " owes a response since "
 				.. os.date("!%Y-%m-%dT%H:%M:%SZ", since))
 		end)

@@ -14,6 +14,26 @@
             "punt"
         ]
     },
+    "enums": {
+        "severity": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+        ]
+    },
+    "repoEnums": {
+        "declarationPath": ".sdlc/vocabulary.json",
+        "fields": {
+            "area": {
+                "syntax": "path",
+                "segment": "[a-z0-9][a-z0-9-]*",
+                "maxDepth": 4,
+                "multi": true,
+                "maxItems": 8
+            }
+        }
+    },
     "when": {
         "open": "created, not yet started",
         "working": "actively in progress",
@@ -85,6 +105,18 @@
                 "kind": "title",
                 "required": true,
                 "setter": "sdlc issue set-title"
+            },
+            {
+                "name": "area",
+                "kind": "repo-enum",
+                "enum": "area",
+                "setter": "sdlc issue set-area"
+            },
+            {
+                "name": "severity",
+                "kind": "enum",
+                "enum": "severity",
+                "setter": "sdlc issue set-severity"
             }
         ],
         "internal": {
@@ -319,6 +351,10 @@
             "working": false,
             "blocked": false,
             "codecomplete": false
+        },
+        "card-enums-declared": {
+            "severity": true,
+            "area": true
         },
         "escapable": {
             "open": true,
