@@ -30,13 +30,14 @@ The operator wants to paste screenshots into the TL session file's `## Operator 
 
 ## Done when
 
-- Alt+v in a non-chat markdown file (e.g. `tl-status-xian-xu.md`) saves `assets/tl-status-xian-xu/<ts>.png` and inserts `![](assets/tl-status-xian-xu/<ts>.png)` (test); chats unchanged (regression test).
+- Alt+v in ordinary Markdown (session and QA files) saves a small PNG under `assets/<file-stem>/<ts>.png` and inserts its image link; deleting that link leaves owner-managed bytes. Chats retain timestamp folders (regression tests).
+- An eligible large paste uses the existing shrink step and lands a smaller JPEG within the configured maximum edge; `assets.shrink`/`shrink_cmd` remain honored. Escaped stems resolve to the same bytes through reads and both message-builder budget checks (tests).
 
 ## Plan
 
 - [x] Add failing asset layout/round-trip and paste regressions for session and QA markdown, large-image shrinking, and rejection of non-markdown/unanchored paths.
 - [x] Widen the pure asset key to file stems while retaining chat timestamp keys (ARCH-PURE/DRY); percent-encode link segments and validate/decode them in the existing attachment reader (ARCH-SECURE). Keep save, cap, shrink config, and paste rollback shared.
-- [x] Document sidecar layout and file-owner sweep in README/atlas (ARCH-FUNERAL); run targeted make -k checks and the pushed-head suite through sdlc local-check.
+- [ ] Document sidecar layout and file-owner sweep in README/atlas (ARCH-FUNERAL); run targeted make -k checks and the pushed-head suite through sdlc local-check.
 
 After verification: close review, then publish/merge on SHIP.
 
@@ -55,8 +56,12 @@ After verification: close review, then publish/merge on SHIP.
 
 - Full suite passed through sdlc local-check run --name suite on 422923118c212f5910e8dd3d8215f19c700722d0: exit 0, 2m27s, log sha256 prefix 7ea1e5bd15ae, no surviving test processes. PR #234 merge-check 38608792185 and local-gates guard both pass. Final targeted checks covered 17 mapped specs; git diff --check passed.
 
+- Close round 1 returned REWORK: BR-1 identified the budget stat in chat_respond.asset_size using encoded URL text as a disk path; both build_messages and build_messages_from_model share it. BR-2 identified stale PNG-only Done-when. Added regressions for both builders over space/punctuation/Unicode/percent/dotted stems; will use one pure assets.resolve_path for budget stat and bounded read. Swept all att.path consumers: parser/content keep URL text, export uses image src URLs; only budget stat and bounded read touch the image disk path.
+
 ## Revisions
 
 - 2026-10-14 — add (operator): images must not be stored at full fidelity. The new sidecar path reuses the existing `assets` shrink step (sips/magick/…, JPEG within the max edge; `assets.shrink`/`shrink_cmd` honoured); add a test that a large paste into a non-chat markdown file lands shrunk.
 
 - 2026-10-14 — plan clarification after #326 review: separate close-time verification from subsequent close/landing steps; the final checkbox now covers docs and completed checks only.
+
+- 2026-10-14 — close BR-1/BR-2: expand verification to both send builders, centralize validated URL-to-disk resolution, and replace PNG-only Done-when with explicit small PNG/large JPEG and chat-preservation criteria. The writer/shrink contract is unchanged.
