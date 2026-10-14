@@ -32,3 +32,13 @@ Lift the review protocol into ariadne as one agent skill (working name `xx-unive
 ## Log
 
 ### 2026-10-13
+
+## Revisions
+
+- 2026-10-14 — revise (operator): with QA-file follow-ups the review send is now frequent, and the embedded
+  boilerplate is noise. The send should be just:
+  `review request: <abs path> process-instruction: <the file's process-instruction> Respond by editing the file in place (review convention: 🤖 markers).`
+  plus, at most, the name of the skill that defines a round (e.g. "use the xx-universal-review skill"). Drop the
+  "Review mode" brief, the "How to apply this round" block, the repeated operator instruction, and the
+  "Changes since the last send" header when it says "first send" (keep a real diff when there is one, since
+  that's new information). The mode semantics live in the skill, not in every message.
