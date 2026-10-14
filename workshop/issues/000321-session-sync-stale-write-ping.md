@@ -119,3 +119,16 @@ refreshed by start-plan. Include the generated area/severity metadata from
 ariadne#348 (no lifecycle or policy changes); applying the preserved generated
 output makes `make check-vocabulary` pass. This supersedes its initial exclusion
 above. The consumer design is unchanged.
+
+### 2026-10-13 — architecture guard documentation
+
+The full suite requires a Core concepts table even for a small issue with no
+new public entities. Record the modified owners so the symbol guard has an
+explicit selection; no implementation change.
+
+### Core concepts
+
+| Entity | Status | Location | Responsibility |
+| --- | --- | --- | --- |
+| `session_sync` | modified | `lua/parley/session_sync.lua` | Existing probe owns write-age admission and one-shot memory. |
+| `config` | modified | `lua/parley/config.lua` | Fifteen-minute default; explicit overrides remain supported. |
