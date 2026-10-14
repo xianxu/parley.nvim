@@ -1,12 +1,20 @@
 ---
 id: 000321
-status: open
+status: working
 deps: [pair#530]
 github_issue:
 created: 2026-10-13
 updated: 2026-10-13
 estimate_hours:
-card_mirror: '2d944a66dc1810c44651d4cc1f79698233affd40' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'e6c96170eb4d190fa5badb3cd93ca8ad47e62c83' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-13T22:34:38-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # session-sync: ping once after 15 minutes without a write while deliveries remain owed (pair#530 companion)
@@ -58,3 +66,34 @@ consumer lives in Parley; adding another watcher in Couch would duplicate it.
 
 - Filed unclaimed from pair:7 at TL request. Dependencies are sequencing, not a
   request to start on an unlanded branch. No Parley implementation was changed.
+
+## Revisions
+
+### 2026-10-13 — landed producer contract (TL ops:0)
+
+pair#530 landed as PR #324, merge 0fe5cc59e6e26212f04eea8b4085389c18607057,
+without FileWriteAt. Supersedes the FileWriteAt/mtime requirement above: use
+LastWrite alone, falling back to the oldest Owed.At only when LastWrite is
+absent. Invalid LastWrite remains unknown. One ping per LastWrite value;
+without a write, remember the fallback generation so changing deliveries
+cannot rearm it. The fifteen-minute default, override, band, and Done-when
+admission requirements remain.
+
+### Implementation plan
+
+- Reuse the existing probe and couch seam (ARCH-DRY), keeping owed-band age
+  separate from write-age ping admission (ARCH-PURE).
+- Remember the last pinged write value (or one absent-write sentinel) for the
+  buffer lifetime; actor queries recheck the operator lock before sending.
+- Exercise default boundary, recent writes, delivery changes, fallback,
+  overrides, invalid status and admission through the existing fake couch.
+- Run targeted session-sync specs, then the full suite and SDLC close review.
+
+### Architecture assessment
+
+ARCH-PURPOSE: fulfill the revised producer contract. ARCH-MOCK: retain the
+external fake-couch seam. ARCH-CONSTRAINTS: same minute probe, one in-flight
+query per buffer. ARCH-SECURE: invalid status never proves stale work.
+ARCH-ORDER: writes rearm; delivery changes do not; lock acquisition while
+querying suppresses sending. ARCH-FUNERAL: state dies with the existing buffer,
+no new timer, persistent artifact or queue.
