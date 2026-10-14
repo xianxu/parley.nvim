@@ -1,6 +1,6 @@
 ---
 id: 000329
-status: working
+status: codecomplete
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.81
+tracker:
+    version: 1
+    completion:
+        token: close-7ea61abf0af1
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: e718dddf04f63a90c91a600216aecbb45b87d34c
+        evidence_commit: ed154c88c948db99eb355576268001832f63f8de
 ---
 
 # Track generated TL skill ignore entries
