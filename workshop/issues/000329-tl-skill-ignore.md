@@ -49,6 +49,7 @@ Commit exactly the four weave-generated lines: /.agents/skills/xx-tl-lead, /.age
 ## Log
 
 ### 2026-10-14
+- 2026-10-14: closed — BR-1 measured host proof in issue Log: pinned code/substrate Git hashes, weave compile exit 0, .gitignore SHA256 identical before/after, empty porcelain status before/after, unchanged HEAD. Exact config diff remains four generated ignore additions and all four match Git rules. Full suite passed all 427 spec files on the code-equivalent 4d893eaba7b8310f887810369cc3ead3e5bd7b6c; preserved log checksum was independently verified in round 1. GitHub success recording retry remains pending and merge must wait. No new architectural surface: generated ignore metadata only.; review verdict: SHIP
 
 - Hub unfroze only this essential chore; #319 remains frozen. Resting-branch weave refresh advanced Parley to 113d94f364db2a80876e614768ec17847e7f932c and private Ariadne to 7a7223628f1ec78a213ad4dd6ea4f0f9761c9f31. Confirmed the entire tracked diff was exactly 4 additions and 0 deletions in .gitignore, with the requested paths; preserved the generated file in /tmp, then restored the tracked file to allow issue branching. start-plan admitted the issue despite a docs-only catch-up warning caused by the four now-unignored generated links.
 - This is generated ignore metadata only: no new runtime state, IO, dependencies, user flow, or artifact family. Verification uses the real generator and Git ignore engine; no implementation-mirroring test is needed for four reversible config entries.
