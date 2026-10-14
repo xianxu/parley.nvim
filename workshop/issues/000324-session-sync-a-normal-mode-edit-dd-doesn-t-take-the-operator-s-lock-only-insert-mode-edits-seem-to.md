@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "1dff2098", done: "cb6b284b"}
 ---
 
 # session-sync: a normal-mode edit (dd) doesn't take the operator's lock; only insert-mode edits seem to
