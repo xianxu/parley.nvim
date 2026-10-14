@@ -1,6 +1,6 @@
 ---
 id: 000325
-status: codecomplete
+status: done
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: c4ab831355e1edcf135dd5509eef8ffdb30cd569
         evidence_commit: b9d54ffd75a4fe1e16d64942da2e2b905ad74ea7
+        landed_commit: bd2a859a4f8d3911ac900fcf343a5e7210531dc3
 ---
 
 # Image paste (Alt+v) in any markdown file, not only timestamp-named chats: sidecar assets per file, for the TL session file and QA files
