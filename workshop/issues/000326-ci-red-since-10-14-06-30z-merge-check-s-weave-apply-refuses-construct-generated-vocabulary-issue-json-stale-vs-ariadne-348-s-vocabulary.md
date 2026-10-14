@@ -37,7 +37,7 @@ Regenerate parley's `construct/generated/` from current ariadne main (weave refr
 
 - [x] Confirm stale vocabulary with make -k check-vocabulary, regenerate through weave compile, and verify parity (ARCH-DRY).
 - [x] Explain cold-checkout ownership versus live upstream generation in Log; file the upstream class fix without changing CI gates here (ARCH-SECURE/PURPOSE).
-- [ ] Run pushed-head suite, close review, publish/merge through SDLC and verify main merge-check green.
+- [x] Run pushed-head suite and candidate CI; close review/merge through SDLC, then confirm main merge-check green.
 
 ## Log
 
@@ -51,3 +51,5 @@ Regenerate parley's `construct/generated/` from current ariadne main (weave refr
 - weave compile regenerated exactly one setter string; make -k check-vocabulary now passes, and git diff --check is clean. No CI/local-gate configuration changes.
 
 - PR #233 at bdfbefa7b8290f2bb56d7f7063eb208100a9041e passed merge-check run 38602841874 (1m32s), including formerly failing bootstrap, and local-gates-guard. Suite requested on the same pushed head, awaiting the machine queue.
+
+- sdlc local-check run --name suite passed on bdfbefa7b8290f2bb56d7f7063eb208100a9041e: exit 0, 1m47s, log sha256 prefix 97e3c7a14100, no surviving test processes. Main CI confirmation follows landing; PR candidate bootstrap/merge-check is already green.
