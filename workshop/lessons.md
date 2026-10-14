@@ -1,5 +1,9 @@
 # Lessons
 
+## 2026-10-14 (#326 — generated vocabulary CI)
+
+- Keep close-time verification checkboxes separate from post-landing CI confirmation. Tick only observed results; a passed PR check cannot prove the future main run (close review BR-1).
+
 Compact rules distilled from Parley.nvim's review and integration history.
 Incident detail belongs in the issue or plan that owns it.
 

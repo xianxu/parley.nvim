@@ -88,7 +88,7 @@
             {
                 "name": "actual_hours",
                 "kind": "actual",
-                "setter": "sdlc close"
+                "setter": "sdlc close or sdlc issue correct-actual"
             },
             {
                 "name": "github_issue",
