@@ -41,7 +41,7 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 
 ## Plan
 
-- [ ] Reproduce with real child-Neovim UI input; cover dd/x/p/u/dot and insert initially and after an agent reload, including edits damaging frontmatter. Record events and guard values; clarify the operator's original edit location with the hub.
+- [x] Reproduce with real child-Neovim UI input; cover dd/x/p/u/dot and insert initially and after an agent reload, including edits damaging frontmatter. Record events and guard values; clarify the operator's original edit location with the hub.
 - [ ] Repair attached-buffer turn reconciliation in the existing callback; add failing regression tests for clean undo, multi-step undo, redo, silent release, and saved-buffer/violation compatibility. Keep race handling and timer cleanup intact (ARCH-DRY, ARCH-STATE, ARCH-FUNERAL).
 - [ ] Run targeted session-sync tests and the declared full suite, update atlas, obtain the required real-editor check through the hub, then close/review/land on SHIP.
 
@@ -61,3 +61,6 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 - 2026-10-14 — proposed delta pending hub approval: acquire in the buffer edit notification before auto-save, keep attached identity through header edits, and reconcile a clean edit only when no save intervened. An unconditional modified=false release after a save would negate the Normal-mode fix and violate #317's existing saved-turn tests; asked the hub to confirm this interpretation.
 
 - Confirmed the live operator configuration read-only at ~/.config/nvim/lua/core/options.lua:48–56: global InsertLeave/TextChanged for *.md immediately writes when modified. Parley's own prep_md is debounced; the regression fixture must reproduce the operator's immediate global callback installed before session attachment. This closes the body-only reproduction gap.
+
+- 2026-10-14 — TL confirmed the original edit was in the body. The operator's exact immediate auto-save configuration reproduces that failure. Live hub peek shows approval of the edit-before-save design and retaining save semantics; implementation is within the dispatch's explicit build/land authorization.
+- 2026-10-14 — revised design: attach on_lines to acquire synchronously before TextChanged/auto-save; defer clean-edit reconciliation until modified settles, guarded by the edit's disk-mtime snapshot so saves do not release. Ignore reload notifications as operator edits; retain/reinstall the attachment across reloads and wipeout with the existing lifecycle. Real UI tests install the operator-style global InsertLeave/TextChanged auto-save before attachment. First edit still schedules the existing foreign-write race check.
