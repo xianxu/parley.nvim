@@ -1,6 +1,6 @@
 ---
 id: 000329
-status: codecomplete
+status: done
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: e718dddf04f63a90c91a600216aecbb45b87d34c
         evidence_commit: ed154c88c948db99eb355576268001832f63f8de
+        landed_commit: 1b8d1b2cdc26144167f56d9e76442e4cef1e3eff
 ---
 
 # Track generated TL skill ignore entries
