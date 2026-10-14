@@ -1,5 +1,9 @@
 # Lessons
 
+## 2026-10-14 (#329 — generated skill ignores)
+
+- Isolated reviewers may lack a declared substrate. For generator-cleanliness claims, capture the code/substrate pins, compiler exit, before/after output checksums, and clean status as measured host evidence; a prose success claim alone is insufficient (BR-1).
+
 ## 2026-10-14 (#325 — Markdown sidecar links)
 
 - Escaped URLs and disk paths are different values. Share one validated resolver across every disk consumer, including stat before read; round-trip tests must reach message-builder budget admission as well as the byte reader (close BR-1).

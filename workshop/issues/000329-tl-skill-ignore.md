@@ -60,3 +60,22 @@ Commit exactly the four weave-generated lines: /.agents/skills/xx-tl-lead, /.age
 - Main in a real detached Git worktree also passed all 17 packaging_vm cases. The unmodified spec failed once on the issue checkout, while a temporary diagnostic copy adding a confinement-state print passed without production changes. This is evidence of an intermittent/context-dependent failure, not a proven .gitignore defect or a repaired packaging issue. Retrying the required full suite once; if it recurs, report the blocking gate to the hub rather than broaden this chore under the freeze. Temporary diagnostics live outside the branch.
 
 - The retry on 4d893eaba7b8310f887810369cc3ead3e5bd7b6c passed every test, including packaging_vm_spec.lua, with a clean process census. SDLC then failed to upload its success because api.github.com was unreachable. Preserved the passing log at /tmp/parley329-suite-pass-unrecorded.log (sha256 b0c84626368dcec928cf7644b257a458b5ee08cef5890eecbe546a4e7eb156e5). The binary has no record-only recovery verb, so an unrestricted-network rerun is queued on that same code head. Close review can use the executed passing suite; landing must still wait for recorded success. No packaging patch or scope expansion was made.
+
+### BR-1 — measured host compile evidence
+
+Measured on parley.nvim:2 with a clean tree and the intended private substrate. Captured Git HEAD and substrate HEAD using git rev-parse, captured git status --porcelain and .gitignore SHA256, ran weave compile, then repeated all observations. The command exited 0 and reported applied 115 actions. No bootstrap workaround or reviewer-environment configuration was changed.
+
+```json
+{
+  "head": "1369357e7e9c478eb1a93056a70934148775eb3a",
+  "substrate_head": "7a7223628f1ec78a213ad4dd6ea4f0f9761c9f31",
+  "compile_exit": 0,
+  "ignore_sha256_before": "a5aaf9187de66c1e5146ee6545bd019af269c3ea7e5c88ac0da64b69fe3f0d40",
+  "ignore_sha256_after": "a5aaf9187de66c1e5146ee6545bd019af269c3ea7e5c88ac0da64b69fe3f0d40",
+  "status_porcelain_before": "",
+  "status_porcelain_after": "",
+  "head_after": "1369357e7e9c478eb1a93056a70934148775eb3a"
+}
+```
+
+The measured head adds only review metadata beyond the first review pin; .gitignore is identical at both heads. This supplies the requested proof for all four generated entries without expanding the implementation. Compiler stdout is preserved at /tmp/parley329-compile-evidence.log.
