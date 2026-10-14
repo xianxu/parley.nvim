@@ -142,3 +142,18 @@ explicit selection; no implementation change.
   both async write/lock races, and the corrected architecture symbol guard.
   `make check-vocabulary` and branch `git diff --check` passed. Baseline result
   reported to ops:0; PR #232 awaits close review before landing.
+
+### 2026-10-13 — close review round 1
+
+REWORK BR-1 through BR-4: validate the shared RFC3339 parser across LastWrite,
+Owed.At and LastActivity; extract pure ping-generation and quiet-owner decisions;
+test both shipped default and runtime fallback; document ping configuration in
+README and upstream area/severity card metadata in the tracker atlas.
+
+| Entity | Kind | Status | Location | Responsibility |
+| --- | --- | --- | --- | --- |
+| `session_sync` | INTEGRATION | modified | `lua/parley/session_sync.lua` | Existing watcher, query and send shell. |
+| `config` | PURE | modified | `lua/parley/config.lua` | Configuration data, with existing environment-derived paths. |
+| `parse_time` | PURE | modified | `lua/parley/session_sync.lua` | Strict calendar, clock, fraction and offset parsing. |
+| `ping_generation` | PURE | new | `lua/parley/session_sync.lua` | Write-age and one-shot admission from supplied observations. |
+| `owner_quiet` | PURE | new | `lua/parley/session_sync.lua` | Known-owner quiet-time threshold. |

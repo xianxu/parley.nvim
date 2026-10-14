@@ -1,0 +1,63 @@
+---
+gate: boundary-review
+issue: 321
+id_prefix: BR
+rounds:
+    - "n": 1
+      timestamp: "2026-10-13T23:02:08-07:00"
+      dispatched: "2026-10-13T22:56:13-07:00"
+      agent: codex
+      findings:
+        - id: BR-1
+          severity: Critical
+          title: Invalid LastWrite timestamps can trigger stale-work pings
+          detail: lua/parley/session_sync.lua:342 trusts parse_time, whose implementation at lines 109–126 accepts invalid calendar dates, clock components, offsets, and malformed fractional syntax. A direct execution with LastWrite="2020-00-00T00:00:00Z", valid owed work, and a quiet owner sent one ping. The complete timestamp-consumer family in this probe is LastWrite at line 342, fallback Owed.At at line 332, and LastActivity at line 357. Validate through the shared parser and cover impossible dates, out-of-range times/offsets, and malformed fractions; the new test at tests/integration/session_sync_spec.lua:648 only checks "invalid".
+          family: invalid-time-must-remain-unknown
+          round: 1
+        - id: BR-2
+          severity: Important
+          title: 'ARCH-PURE: separate ping admission policy from the query callback'
+          detail: lua/parley/session_sync.lua:341–346 mixes baseline selection, generation identity, and threshold admission with configuration access, the clock, and lock-file reads; the related actor admission at lines 355–359 also combines policy and I/O. Extract deterministic decisions over supplied observations and retain queries, lock/mtime reads, state mutation, and sending in the shell. These are the two admission sites in this window. Test the policy without timers or subprocesses, and update the Core concepts table at workshop/issues/000321-session-sync-stale-write-ping.md:131 with PURE/INTEGRATION kinds.
+          family: admission-policy-pure-boundary
+          round: 1
+        - id: BR-3
+          severity: Important
+          title: Boundary tests bypass the shipped fifteen-minute default
+          detail: tests/integration/session_sync_spec.lua:552 sets session_sync_ping_minutes=nil, while the outer fixture at line 84 sets it to five. Consequently the new boundary tests cover only session_sync.lua:344's fallback; reverting config.lua:487 to five would leave them green. The complete default family is the shipped configuration and the runtime fallback. Exercise the shipped value at 899 and 900 seconds, retaining separate fallback and explicit-override coverage.
+          family: shipped-default-regression-coverage
+          round: 1
+        - id: BR-4
+          severity: Important
+          title: README and atlas updates are missing for changed configuration and tracker surfaces
+          detail: README.md is unchanged despite the session_sync_ping_minutes default change at lua/parley/config.lua:487. The generated vocabulary also adds area/severity card fields and setters at construct/generated/vocabulary/issue.json:108–119, plus repository-enum metadata at line 25; the only atlas change covers session-sync. These fields affect existing vocabulary-driven tracker consumers, including lua/parley/issue_cards.lua:172 and :375. Enumerated documentation gaps are the ping configuration/default, area and severity tracker fields/setters, and .sdlc/vocabulary.json repository-enum convention. Add appropriate README guidance and update the tracker atlas documentation.
+          family: changed-surface-documentation
+          round: 1
+      recipe: small-diff-review
+      isolation: fenced
+      blocked: true
+---
+
+# Gate ledger — parley.nvim#321 (boundary-review)
+
+Findings this gate raised, the stable ids the binary assigned them, and how
+later rounds disposed of them. Generated — edit the gate, not this file.
+
+## Round 1 — 2026-10-13T23:02:08-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-1** [Critical] `invalid-time-must-remain-unknown` Invalid LastWrite timestamps can trigger stale-work pings
+  lua/parley/session_sync.lua:342 trusts parse_time, whose implementation at lines 109–126 accepts invalid calendar dates, clock components, offsets, and malformed fractional syntax. A direct execution with LastWrite="2020-00-00T00:00:00Z", valid owed work, and a quiet owner sent one ping. The complete timestamp-consumer family in this probe is LastWrite at line 342, fallback Owed.At at line 332, and LastActivity at line 357. Validate through the shared parser and cover impossible dates, out-of-range times/offsets, and malformed fractions; the new test at tests/integration/session_sync_spec.lua:648 only checks "invalid".
+- **BR-2** [Important] `admission-policy-pure-boundary` ARCH-PURE: separate ping admission policy from the query callback
+  lua/parley/session_sync.lua:341–346 mixes baseline selection, generation identity, and threshold admission with configuration access, the clock, and lock-file reads; the related actor admission at lines 355–359 also combines policy and I/O. Extract deterministic decisions over supplied observations and retain queries, lock/mtime reads, state mutation, and sending in the shell. These are the two admission sites in this window. Test the policy without timers or subprocesses, and update the Core concepts table at workshop/issues/000321-session-sync-stale-write-ping.md:131 with PURE/INTEGRATION kinds.
+- **BR-3** [Important] `shipped-default-regression-coverage` Boundary tests bypass the shipped fifteen-minute default
+  tests/integration/session_sync_spec.lua:552 sets session_sync_ping_minutes=nil, while the outer fixture at line 84 sets it to five. Consequently the new boundary tests cover only session_sync.lua:344's fallback; reverting config.lua:487 to five would leave them green. The complete default family is the shipped configuration and the runtime fallback. Exercise the shipped value at 899 and 900 seconds, retaining separate fallback and explicit-override coverage.
+- **BR-4** [Important] `changed-surface-documentation` README and atlas updates are missing for changed configuration and tracker surfaces
+  README.md is unchanged despite the session_sync_ping_minutes default change at lua/parley/config.lua:487. The generated vocabulary also adds area/severity card fields and setters at construct/generated/vocabulary/issue.json:108–119, plus repository-enum metadata at line 25; the only atlas change covers session-sync. These fields affect existing vocabulary-driven tracker consumers, including lua/parley/issue_cards.lua:172 and :375. Enumerated documentation gaps are the ping configuration/default, area and severity tracker fields/setters, and .sdlc/vocabulary.json repository-enum convention. Add appropriate README guidance and update the tracker atlas documentation.
+
+## Open findings
+
+- **BR-1** [Critical] `invalid-time-must-remain-unknown` Invalid LastWrite timestamps can trigger stale-work pings
+- **BR-2** [Important] `admission-policy-pure-boundary` ARCH-PURE: separate ping admission policy from the query callback
+- **BR-3** [Important] `shipped-default-regression-coverage` Boundary tests bypass the shipped fifteen-minute default
+- **BR-4** [Important] `changed-surface-documentation` README and atlas updates are missing for changed configuration and tracker surfaces
