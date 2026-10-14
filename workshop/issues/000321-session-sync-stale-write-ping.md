@@ -111,3 +111,11 @@ no new timer, persistent artifact or queue.
 - SDLC dependency catch-up generated unrelated vocabulary drift before branch
   creation. Preserved separately in stash named "weave generated vocabulary
   during 321 start-plan"; excluded from this consumer change.
+
+### 2026-10-13 — generated vocabulary prerequisite
+
+The required vocabulary freshness check fails against the dependency version
+refreshed by start-plan. Include the generated area/severity metadata from
+ariadne#348 (no lifecycle or policy changes); applying the preserved generated
+output makes `make check-vocabulary` pass. This supersedes its initial exclusion
+above. The consumer design is unchanged.
