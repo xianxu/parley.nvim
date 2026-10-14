@@ -43,7 +43,7 @@ Commit exactly the four weave-generated lines: /.agents/skills/xx-tl-lead, /.age
 
 ## Plan
 
-- [ ] Restore the verified generated four-line diff on this issue branch and check exact scope/ignore behavior.
+- [x] Restore the verified generated four-line diff on this issue branch and check exact scope/ignore behavior.
 - [ ] Verify compile is idempotent and run the pushed-head full suite.
 
 ## Log
@@ -52,3 +52,5 @@ Commit exactly the four weave-generated lines: /.agents/skills/xx-tl-lead, /.age
 
 - Hub unfroze only this essential chore; #319 remains frozen. Resting-branch weave refresh advanced Parley to 113d94f364db2a80876e614768ec17847e7f932c and private Ariadne to 7a7223628f1ec78a213ad4dd6ea4f0f9761c9f31. Confirmed the entire tracked diff was exactly 4 additions and 0 deletions in .gitignore, with the requested paths; preserved the generated file in /tmp, then restored the tracked file to allow issue branching. start-plan admitted the issue despite a docs-only catch-up warning caused by the four now-unignored generated links.
 - This is generated ignore metadata only: no new runtime state, IO, dependencies, user flow, or artifact family. Verification uses the real generator and Git ignore engine; no implementation-mirroring test is needed for four reversible config entries.
+
+- Applied only the captured generated entries after change-code. git check-ignore --no-index -v identifies the exact entry for all four skill links. weave compile completed and .gitignore remains byte-identical to the captured generator output; the only tracked implementation diff is 4 additions / 0 deletions in .gitignore. git diff --check passes.
