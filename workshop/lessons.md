@@ -449,8 +449,9 @@ oracle, and the mutation that would make the test fail.
   new shape (and mutation-check it); the dispatcher's stub covers routing.
 
 - Quick-flow issues still need a Core concepts table naming their modified
-  owners: the architecture symbol guard rejects an empty selection even when
-  no public API is added (#321 full-suite discovery).
+  owners: use the exact `## Core concepts` section with a following level-two
+  heading. The architecture guard selects that section for new symbols, and
+  rejects an empty selection even without new public API (#321).
 
 - A timestamp pattern is not validation: reject impossible calendar dates,
   out-of-range clock/offset components, and malformed fractions in the shared

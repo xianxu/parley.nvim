@@ -126,7 +126,7 @@ The full suite requires a Core concepts table even for a small issue with no
 new public entities. Record the modified owners so the symbol guard has an
 explicit selection; no implementation change.
 
-### Core concepts
+### Initial owner map
 
 | Entity | Status | Location | Responsibility |
 | --- | --- | --- | --- |
@@ -150,6 +150,8 @@ Owed.At and LastActivity; extract pure ping-generation and quiet-owner decisions
 test both shipped default and runtime fallback; document ping configuration in
 README and upstream area/severity card metadata in the tracker atlas.
 
+## Core concepts
+
 | Entity | Kind | Status | Location | Responsibility |
 | --- | --- | --- | --- | --- |
 | `session_sync` | INTEGRATION | modified | `lua/parley/session_sync.lua` | Existing watcher, query and send shell. |
@@ -158,8 +160,14 @@ README and upstream area/severity card metadata in the tracker atlas.
 | `ping_generation` | PURE | new | `lua/parley/session_sync.lua` | Write-age and one-shot admission from supplied observations. |
 | `owner_quiet` | PURE | new | `lua/parley/session_sync.lua` | Known-owner quiet-time threshold. |
 
+## Review fix verification
+
 - Round-1 fixes verified with 66 targeted tests passing. Invalid-date regressions
   failed before the shared-parser correction through all three timestamp inputs.
   Pure policy tests cover threshold, override, absent-write identity and liveness.
   Reverting only the shipped default to five minutes makes the new boundary
   coverage fail; restored it to fifteen before the final full-suite rerun.
+
+- The architecture guard selects the named Core concepts section, ending at
+  the next level-two heading; tables inside revision prose did not satisfy its
+  new-symbol direction. Promoted the revised table to that canonical section.
