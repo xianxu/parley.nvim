@@ -1,12 +1,21 @@
 ---
 id: 000326
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: '680cb8c981a057afd6686b23cfe90b39dd83bcc4' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '8083f61ce3efd86eb05a73a0af5e42f78f9c28f0' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-14T09:57:13-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "574d76e4", done: "92bf68d1"}
 ---
 
 # CI red since 10-14 06:30Z: merge-check's weave apply refuses construct/generated/vocabulary/issue.json (stale vs ariadne#348's vocabulary)
@@ -26,8 +35,13 @@ Regenerate parley's `construct/generated/` from current ariadne main (weave refr
 
 ## Plan
 
-- [ ]
+- [ ] Confirm stale vocabulary with make -k check-vocabulary, regenerate through weave compile, and verify parity (ARCH-DRY).
+- [ ] Explain cold-checkout ownership versus live upstream generation in Log; file the upstream class fix without changing CI gates here (ARCH-SECURE/PURPOSE).
+- [ ] Run pushed-head suite, close review, publish/merge through SDLC and verify main merge-check green.
 
 ## Log
 
 ### 2026-10-14
+
+- Hub reprioritized #326 ahead of #325. Started from main 62a35b2aeb4a849cee910062a35ea02f0b5dba29, using private Ariadne 407e48a39057503fab7cdecaf6c69ce338ce7631.
+- Before regeneration, make -k check-vocabulary fails: issue vocabulary content drift. Current delta is the actual_hours setter adding sdlc issue correct-actual, beyond the earlier #348 category additions already present in this main.
