@@ -1,6 +1,6 @@
 -- lua/parley/assets.lua
 --
--- Chat assets: the per-chat sidecar folder for what markdown cannot hold.
+-- Markdown assets: the per-file sidecar folder for what markdown cannot hold.
 --
 -- THE TRANSCRIPT IS THE INDEX; this folder holds only bytes that a transcript
 -- line references — nothing reads the folder to discover content. It is keyed
@@ -11,6 +11,8 @@
 --   <chat-dir>/assets/<chat-timestamp>/<asset-timestamp>.<ext>
 --
 -- referenced from the chat as `![](assets/<chat-timestamp>/<file>)`.
+-- Ordinary markdown uses <file-stem> instead; link keys are percent-escaped.
+-- Its owner handles sidecar moves and sweeps unreferenced assets.
 --
 -- ONE WRITER: `save` is the only code that creates the folder, names a file
 -- and forms a link. The clipboard paste, #239's model-generated images, both
@@ -61,6 +63,8 @@ M.BLOCK_OVERHEAD = 256
 
 M.OMITTED_NOTE = "[An image was attached to this question; it is no longer included.]"
 
+local MARKDOWN_EXTENSIONS = { md = true, markdown = true, mdown = true, mkd = true, mkdn = true }
+
 local MEDIA_TYPES = {
     png = "image/png",
     jpg = "image/jpeg",
@@ -83,21 +87,35 @@ end
 -- Layout
 --------------------------------------------------------------------------------
 
---- The chat's asset key: its timestamp prefix. nil for a file that is not a
---- timestamp-named chat — a plain note has no stable identity to key on.
---- Widening this to notes is the one place a notes-side paste would change.
+-- One directory segment after decoding; never a traversal or control byte.
+local function safe_key(key)
+    return key ~= "" and key ~= "." and key ~= ".."
+        and not key:find("/", 1, true) and not key:find("\\", 1, true)
+        and not key:find("%c")
+end
+
+local function encode_key(key)
+    return (key:gsub("[^A-Za-z0-9._~%-]", function(byte)
+        return ("%%%02X"):format(byte:byte())
+    end))
+end
+
+--- Chats keep their timestamp identity; other markdown files use their stem.
 ---@param chat_path string|nil
----@return string|nil ts
+---@return string|nil key
 function M.key_for(chat_path)
     if chat_path == nil then
         return nil
     end
     local _, base = split(chat_path)
-    local ts = chat_slug.parse_filename(base)
-    return ts
+    local stem, extension = base:match("^(.*)%.([^.]+)$")
+    if not stem or not MARKDOWN_EXTENSIONS[extension:lower()] or not safe_key(stem) then
+        return nil
+    end
+    return chat_slug.parse_filename(stem .. ".md") or stem
 end
 
---- Absolute asset folder for a chat, or nil + reason.
+--- Absolute asset folder for a named markdown file, or nil + reason.
 ---@param chat_path string
 ---@return string|nil folder
 ---@return string|nil err
@@ -105,7 +123,7 @@ function M.folder_for(chat_path)
     local dir = split(chat_path)
     local ts = M.key_for(chat_path)
     if not dir or not ts then
-        return nil, "not a timestamp-named chat: " .. tostring(chat_path)
+        return nil, "not a named markdown file with a directory: " .. tostring(chat_path)
     end
     return M.folder_in(dir, ts)
 end
@@ -124,7 +142,7 @@ end
 ---@param filename string
 ---@return string
 function M.relative_path(ts, filename)
-    return M.DIR .. "/" .. ts .. "/" .. filename
+    return M.DIR .. "/" .. encode_key(ts) .. "/" .. filename
 end
 
 --- The one link shape written into the transcript.
@@ -672,9 +690,9 @@ end
 --------------------------------------------------------------------------------
 
 -- A line that is exactly `![…](assets/<ts>/<name>)`, blanks allowed either
--- side, where <ts> is exactly a chat timestamp (no slug) and <name> is
+-- side, where <ts> is a timestamp or escaped markdown stem and <name> is
 -- [A-Za-z0-9][A-Za-z0-9._-]* without `..` and with an accepted image
--- extension. Anything else — absolute, `..`, URL, backtick, wrong folder,
+-- extension. Anything else — absolute, traversal, URL, backtick in name, wrong folder,
 -- inline in prose, a second link on the line — is prose, never read.
 local LINK = "^%s*!%[[^%]]*%]%((" .. M.DIR .. "/([^/%)%s]+)/([^/%)%s]+))%)%s*$"
 local NAME = "^[A-Za-z0-9][A-Za-z0-9._%-]*$"
@@ -690,8 +708,12 @@ function M.parse_attachment(line)
     if not rel then
         return nil
     end
-    -- parse_filename returns the timestamp PREFIX; equality rejects a slug.
-    if chat_slug.parse_filename(ts) ~= ts then
+    local key = ts:gsub("%%(%x%x)", function(hex)
+        return string.char(tonumber(hex, 16))
+    end)
+    -- Require the canonical escaped segment, and preserve chat key grammar.
+    -- Decode exactly once: a literal %2F in a stem stays a literal %2F.
+    if not safe_key(key) or encode_key(key) ~= ts or M.key_for(key .. ".md") ~= key then
         return nil
     end
     if not name:match(NAME) or name:find("..", 1, true) then
@@ -701,7 +723,7 @@ function M.parse_attachment(line)
     if not media_type then
         return nil
     end
-    return { path = rel, ts = ts, name = name, media_type = media_type }
+    return { path = rel, ts = key, name = name, media_type = media_type }
 end
 
 --- Every attachment line in a block of text, in order. The buffer-block
@@ -1100,7 +1122,7 @@ M.default_io = {
 
 --- THE writer. Saves `bytes` as a new asset of `chat_path` and returns the
 --- link target relative to the chat file plus the absolute path. Refuses a
---- non-chat path and an oversized image before touching disk; a failed mkdir
+--- non-markdown path and an oversized image before touching disk; a failed mkdir
 --- writes nothing; a failed write leaves no partial file (default_io.write
 --- removes it).
 ---@param chat_path string
@@ -1146,7 +1168,7 @@ end
 --- again in case the file grew, then check the bytes begin with the
 --- signature of the media type the extension declares (`looks_like`) — an
 --- empty, truncated, or mismatched file is `nil, "not a <mime> image"`. The
---- relative path must stay inside the chat's directory — the grammar already
+--- relative path must stay inside the markdown file's directory — the grammar already
 --- guarantees that for parsed lines; this is the second lock on the door.
 ---@param chat_path string
 ---@param relative string
@@ -1159,10 +1181,11 @@ function M.read_bounded(chat_path, relative, io_)
     if not dir then
         return nil, "chat path has no directory: " .. tostring(chat_path)
     end
-    if relative == nil or relative == "" or relative:sub(1, 1) == "/" or relative:find("..", 1, true) then
-        return nil, "not a chat-relative asset path: " .. tostring(relative)
+    local attachment = M.parse_attachment("![](" .. tostring(relative) .. ")")
+    if not attachment then
+        return nil, "not a markdown-relative asset path: " .. tostring(relative)
     end
-    local p = dir .. "/" .. relative
+    local p = M.folder_in(dir, attachment.ts) .. "/" .. attachment.name
     local size, serr = io_.stat(p)
     if not size then
         return nil, serr

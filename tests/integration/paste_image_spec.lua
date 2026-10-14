@@ -94,6 +94,53 @@ describe("paste image (#231)", function()
         assert.equals(vim.fn.resolve(path), vim.fn.resolve(vim.api.nvim_buf_get_name(buf)))
     end)
 
+    it("Alt+v pastes into session and nested QA markdown sidecars", function()
+        vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. png
+        for _, name in ipairs({ "tl-status-xian-xu.md", "teams/qa/answer (QA).md" }) do
+            vim.fn.mkdir(vim.fs.dirname(root .. "/" .. name), "p")
+            local buf, path = open_chat(name, { "## Operator instructions", "my question", "next question" })
+            vim.api.nvim_win_set_cursor(0, { 2, 0 })
+            local mapping = vim.fn.maparg("<M-v>", "n", false, true)
+            assert.is_function(mapping.callback, "normal markdown mapping installed")
+            assert.is_function(vim.fn.maparg("<M-v>", "i", false, true).callback)
+            mapping.callback()
+            assert.is_true(wait_for(function() return line_count(buf) == 4 end), "link inserted through key")
+            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            local att = assets.parse_attachment(lines[3])
+            assert.is_not_nil(att, lines[3])
+            local stem = vim.fn.fnamemodify(path, ":t:r")
+            assert.equals(stem, att.ts)
+            local folder = vim.fs.dirname(path) .. "/assets/" .. stem
+            assert.equals(bytes_of(png), bytes_of(folder .. "/" .. att.name))
+            assert.equals("next question", lines[4])
+            vim.api.nvim_buf_set_lines(buf, 2, 3, false, {})
+            assert.equals(1, vim.fn.filereadable(folder .. "/" .. att.name), "owner sweeps assets after link deletion")
+            assert.is_nil(vim.b[buf].parley_chat, "ordinary markdown remains ordinary markdown")
+        end
+    end)
+
+    it("rolls back a non-chat sidecar when the link cannot land", function()
+        vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. png
+        local buf = open_chat("tl-status.md", { "question" })
+        local old_save = assets.save
+        assets.save = function(...)
+            local rel, abs, err, outcome = old_save(...)
+            vim.bo[buf].modifiable = false
+            return rel, abs, err, outcome
+        end
+        local ok, err = pcall(function()
+            parley.paste_image(buf, { notify = notify })
+            assert.is_true(wait_for(function() return #notices > 0 end))
+        end)
+        assets.save = old_save
+        vim.bo[buf].modifiable = true
+        assert.is_true(ok, err)
+        assert.matches("could not insert the link", notices[1].msg)
+        assert.equals(1, line_count(buf))
+        assert.same({}, vim.fn.glob(root .. "/assets/**", false, true))
+        assert.equals(0, vim.fn.isdirectory(root .. "/assets"))
+    end)
+
     it("declines a text clipboard, writes nothing, and says why", function()
         vim.env.PARLEY_FAKE_CLIPBOARD = "text"
         local buf = open_chat(TS .. "_text.md", chat_lines())
@@ -119,12 +166,12 @@ describe("paste image (#231)", function()
         assert.equals(9, line_count(buf))
     end)
 
-    it("declines a markdown file without a timestamp name, without reading the clipboard", function()
+    it("declines a non-markdown file without reading the clipboard", function()
         vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. png
-        local buf = open_chat("notes.md", { "# note" })
+        local buf = open_chat("notes.txt", { "# note" })
         parley.paste_image(buf, { notify = notify })
         assert.equals(1, #notices)
-        assert.matches("timestamp%-named chat", notices[1].msg)
+        assert.matches("named markdown file", notices[1].msg)
         assert.equals(0, reads())
     end)
 
@@ -423,6 +470,26 @@ describe("paste image: shrink on save (#244)", function()
         assert.equals(1, #runs)
         local args = vim.json.decode(runs[1])
         assert.same({ "--resampleHeightWidthMax", "1600" }, { args[1], args[2] })
+    end)
+
+    it("a large paste into ordinary markdown uses the shared JPEG shrink step", function()
+        setup_with({ shrink_cmd = { fake_sips, "--resampleHeightWidthMax", "{max}", "{in}", "--out", "{out}" } })
+        vim.env.PARLEY_FAKE_SIPS = "ok:" .. jpg
+        local buf = open_chat("tl-status-xian-xu.md", { "## Operator instructions", "screenshot question" })
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        local n = paste_and_wait(buf)
+        assert.equals("info", n.level)
+        local att = assets.parse_attachment(vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
+        assert.is_not_nil(att, n.msg)
+        assert.equals("tl-status-xian-xu", att.ts)
+        assert.equals("image/jpeg", att.media_type)
+        local bytes = bytes_of(root .. "/" .. att.path)
+        assert.equals(bytes_of(jpg), bytes)
+        assert.is_true(#bytes < #bytes_of(big_png))
+        local width, height = assets.dimensions(att.media_type, bytes)
+        assert.is_true(width <= 1600 and height <= 1600)
+        assert.equals(1, #shrink_runs())
+        assert.equals(0, #vim.fn.glob(root .. "/assets/**/*.png", false, true), "no full-fidelity source saved")
     end)
 
     it("a small PNG is stored byte-identical and the tool is never run", function()

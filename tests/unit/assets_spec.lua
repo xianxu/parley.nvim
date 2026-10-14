@@ -137,18 +137,47 @@ describe("assets: layout", function()
     it("keys a chat by its timestamp, never its slug", function()
         assert.equals(TS, assets.key_for(CHAT))
         assert.equals(TS, assets.key_for("/roots/chats/" .. TS .. ".md"))
-        assert.is_nil(assets.key_for("/roots/notes/todo.md"))
+        assert.equals("todo", assets.key_for("/roots/notes/todo.md"))
+        assert.equals("todo", assets.key_for("/roots/notes/todo.markdown"))
+        assert.is_nil(assets.key_for("/roots/notes/todo.txt"))
         assert.is_nil(assets.key_for(nil))
     end)
 
     it("folder_for is <dir>/assets/<ts>", function()
         assert.equals(FOLDER, assets.folder_for(CHAT))
         local folder, err = assets.folder_for("/roots/notes/todo.md")
-        assert.is_nil(folder)
-        assert.matches("not a timestamp%-named chat", err)
+        assert.equals("/roots/notes/assets/todo", folder)
+        assert.is_nil(err)
         folder, err = assets.folder_for(TS .. ".md")
         assert.is_nil(folder, "a bare basename has no directory to anchor the folder")
         assert.is_string(err)
+    end)
+
+    it("round-trips markdown stems through escaped links and reads", function()
+        for _, stem in ipairs({ "tl-status-xian-xu", "answer (QA)", "截图 100%", ".note", "a..b", "literal%2F" }) do
+            local path = "/roots/notes/" .. stem .. ".md"
+            local io_ = fake_io()
+            local rel, abs = assets.save(path, PNG_BYTES, "png", io_)
+            assert.is_string(rel, stem)
+            assert.equals("/roots/notes/assets/" .. stem .. "/2026-09-12.10-00-00.001.png", abs)
+            local att = assets.parse_attachment(assets.markdown_link(rel))
+            assert.is_not_nil(att, rel)
+            assert.equals(stem, att.ts)
+            assert.equals(PNG_BYTES, assets.read_bounded(path, rel, io_))
+        end
+    end)
+
+    it("rejects unsafe decoded keys before any read", function()
+        local io_ = fake_io()
+        io_.stat = function() error("must not stat unsafe paths") end
+        for _, key in ipairs({ "%2E%2E", "%2Ftmp", "a%2Fb", "a%5Cb", "%00", "%0A", "bad%ZZ", "..", "." }) do
+            local rel = "assets/" .. key .. "/a.png"
+            assert.is_nil(assets.parse_attachment(assets.markdown_link(rel)), key)
+            assert.is_nil(assets.read_bounded("/roots/notes/todo.md", rel, io_), key)
+        end
+        for _, path in ipairs({ "/roots/notes/..md", "/roots/notes/...md", "/roots/notes/a\\b.md" }) do
+            assert.is_nil(assets.folder_for(path), path)
+        end
     end)
 
     it("folder_in composes the destination form", function()
@@ -216,7 +245,6 @@ describe("assets: attachment grammar", function()
             "![](assets/" .. TS .. "/x.svg)", -- unsupported type
             "![](assets/" .. TS .. "/x)", -- no extension
             "![](assets/" .. TS .. "/`id`.png)", -- backtick
-            "![](assets/notatimestamp/x.png)", -- ts not a timestamp
             "![](assets/" .. TS .. "_slug/x.png)", -- ts with a slug is not the key
             "![](https://example.com/x.png)", -- URL
             "see ![](assets/" .. TS .. "/x.png) here", -- inline in prose
@@ -1171,12 +1199,12 @@ describe("assets: save and read_bounded", function()
         assert.equals("2", io_.files[FOLDER .. "/same-2.png"])
     end)
 
-    it("refuses a non-chat path and an oversized image before touching disk", function()
+    it("refuses a non-markdown path and an oversized image before touching disk", function()
         local io_ = fake_io()
-        local rel, abs, err = assets.save("/roots/notes/todo.md", "x", "png", io_)
+        local rel, abs, err = assets.save("/roots/notes/todo.txt", "x", "png", io_)
         assert.is_nil(rel)
         assert.is_nil(abs)
-        assert.matches("not a timestamp%-named chat", err)
+        assert.matches("not a named markdown file", err)
         rel, abs, err = assets.save(CHAT, string.rep("x", assets.MAX_BYTES + 1), "png", io_)
         assert.is_nil(rel)
         assert.is_nil(abs)
