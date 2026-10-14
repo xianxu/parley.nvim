@@ -42,6 +42,7 @@ Regenerate parley's `construct/generated/` from current ariadne main (weave refr
 ## Log
 
 ### 2026-10-14
+- 2026-10-14: closed — Vocabulary check failed before regeneration and passes afterward; PR 233 merge-check 38602841874 and local-gates guard pass; sdlc-local/suite passes on bdfbefa7b8290f2bb56d7f7063eb208100a9041e (1m47s, log 97e3c7a14100). Class cause and ariadne#368 recorded. No new architecture: only regenerated vocabulary metadata; main CI will be confirmed after landing.; review verdict: SHIP
 
 - Hub reprioritized #326 ahead of #325. Started from main 62a35b2aeb4a849cee910062a35ea02f0b5dba29, using private Ariadne 407e48a39057503fab7cdecaf6c69ce338ce7631.
 - Before regeneration, make -k check-vocabulary fails: issue vocabulary content drift. Current delta is the actual_hours setter adding sdlc issue correct-actual, beyond the earlier #348 category additions already present in this main.
