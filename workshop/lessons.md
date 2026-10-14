@@ -463,3 +463,8 @@ oracle, and the mutation that would make the test fail.
   pure helpers; keep clock, file and process reads in the caller (#321 BR-2).
 - Sweep README for changed defaults and atlas for generated metadata changes;
   a generated refresh can expose new fields through generic consumers (#321 BR-4).
+
+- A fake writer update must include both its status response and filesystem
+  effect. Advancing a fake clock while only changing future subprocess env
+  leaves in-flight snapshots valid in ways the real write would invalidate
+  (#321 recent-write fixture race).

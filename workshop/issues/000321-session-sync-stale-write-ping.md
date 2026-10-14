@@ -171,3 +171,8 @@ README and upstream area/severity card metadata in the tracker atlas.
 - The architecture guard selects the named Core concepts section, ending at
   the next level-two heading; tables inside revision prose did not satisfy its
   new-symbol direction. Promoted the revised table to that canonical section.
+
+- Final full run passed the architecture guard but exposed a fixture race:
+  changing only LastWrite in the fake response while advancing time let an
+  older in-flight status reply become due. Real writes also change the file;
+  the recent-write fixture now performs that write, exercising the mtime guard.

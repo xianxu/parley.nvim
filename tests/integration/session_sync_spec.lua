@@ -609,6 +609,7 @@ describe("session-sync buffer", function()
                 settle()
                 assert.equals(0, #pings())
                 status(stamp(initial))
+                agent_write("- updated without folding old deliveries")
                 now = initial + 1
                 settle()
                 assert.equals(0, #pings())
