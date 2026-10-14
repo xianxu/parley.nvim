@@ -1,12 +1,20 @@
 ---
 id: 000324
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: 'b063a1640933ccaea54fb582d9865d73b5cc8ca9' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '8e33dd6f23166bcee4d8f964f61f5f992e38a177' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-14T16:45:23-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # session-sync: a normal-mode edit (dd) doesn't take the operator's lock; only insert-mode edits seem to
@@ -23,13 +31,27 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 
 - `dd` (and `x`, `p`, `u`, `.`) as the first edit creates the lock with holder operator; an agent `couch --session-sync write` then refuses (exit 3).
 
+## Core concepts
+
+| Concept | Owner / invariant |
+|---|---|
+| Attached session file | Recognized at attach; temporarily editing its YAML does not revoke protection. |
+| Operator turn | On-disk sidecar; first dirty edit acquires, undo to unmodified releases silently, submit saves/releases/notifies. |
+| Saved buffer | Explicit save/auto-save preserves the existing submit/violation protocol; it is not an undo. |
+
 ## Plan
 
-- [ ]
+- [ ] Reproduce with real child-Neovim UI input; cover dd/x/p/u/dot and insert initially and after an agent reload, including edits damaging frontmatter. Record events and guard values; clarify the operator's original edit location with the hub.
+- [ ] Repair attached-buffer turn reconciliation in the existing callback; add failing regression tests for clean undo, multi-step undo, redo, silent release, and saved-buffer/violation compatibility. Keep race handling and timer cleanup intact (ARCH-DRY, ARCH-STATE, ARCH-FUNERAL).
+- [ ] Run targeted session-sync tests and the declared full suite, update atlas, obtain the required real-editor check through the hub, then close/review/land on SHIP.
 
 ## Log
 
 ### 2026-10-14
+
+- Claimed and started on a fresh main-based branch. Start-plan refreshed the private Ariadne substrate and required a rerun with its rebuilt binary; no product source changed.
+- Root-cause probes use a child Neovim with attached headless UI and real nvim_input, not synthetic autocmd dispatch. Body dd acquires, including after agent write/checktime reload. Header ggdd fires TextChanged and BufModifiedSet with modified=true, but M.is_session_sync=false because the edit removed the opening delimiter, so acquisition is skipped. dd then u fires both events with modified=false while the lock remains: callback has acquisition only, no clean-edit release.
+- Sent the measured findings and proposed brief plan to the hub; original reported edit location remains unconfirmed. Preserve the distinction rather than claiming the body-only symptom reproduced. Temporary probe scripts: /tmp/parley324-probe.lua, /tmp/parley324-header-probe.lua, /tmp/parley324-reload-probe.lua.
 
 ## Revisions
 
