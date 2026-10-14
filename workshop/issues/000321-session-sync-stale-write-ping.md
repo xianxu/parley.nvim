@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "85beaec0", done: "94474f5c"}
 ---
 
 # session-sync: ping once after 15 minutes without a write while deliveries remain owed (pair#530 companion)
