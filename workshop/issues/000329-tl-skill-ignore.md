@@ -44,7 +44,7 @@ Commit exactly the four weave-generated lines: /.agents/skills/xx-tl-lead, /.age
 ## Plan
 
 - [x] Restore the verified generated four-line diff on this issue branch and check exact scope/ignore behavior.
-- [ ] Verify compile is idempotent and run the pushed-head full suite.
+- [x] Verify compile is idempotent and run the pushed-head full suite.
 
 ## Log
 
@@ -58,3 +58,5 @@ Commit exactly the four weave-generated lines: /.agents/skills/xx-tl-lead, /.age
 - First full suite finished all remaining checks: only tests/integration/packaging_vm_spec.lua failed, in the guest fake chat's final current-buffer confinement assertion (guest chat file escaped isolated profile); all other files passed and the process census was clean. Suite exit 2, 3m16s, log prefix 534889349f49. The same spec passed all 17 cases against an isolated archive of main bb2ce85c3a4afb83efbfc97ca6f2420045eeb1aa. Checking the issue branch in isolation before a single justified full-suite retry; no packaging code changes are in scope.
 
 - Main in a real detached Git worktree also passed all 17 packaging_vm cases. The unmodified spec failed once on the issue checkout, while a temporary diagnostic copy adding a confinement-state print passed without production changes. This is evidence of an intermittent/context-dependent failure, not a proven .gitignore defect or a repaired packaging issue. Retrying the required full suite once; if it recurs, report the blocking gate to the hub rather than broaden this chore under the freeze. Temporary diagnostics live outside the branch.
+
+- The retry on 4d893eaba7b8310f887810369cc3ead3e5bd7b6c passed every test, including packaging_vm_spec.lua, with a clean process census. SDLC then failed to upload its success because api.github.com was unreachable. Preserved the passing log at /tmp/parley329-suite-pass-unrecorded.log (sha256 b0c84626368dcec928cf7644b257a458b5ee08cef5890eecbe546a4e7eb156e5). The binary has no record-only recovery verb, so an unrestricted-network rerun is queued on that same code head. Close review can use the executed passing suite; landing must still wait for recorded success. No packaging patch or scope expansion was made.
