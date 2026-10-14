@@ -59,7 +59,7 @@ consumer lives in Parley; adding another watcher in Couch would duplicate it.
 
 - [x] Read pair#530's landed observation contract and plan this companion.
 - [x] Update the existing ping computation, defaults, tests and docs.
-- [ ] Verify both halves together; report the baseline outcome to the hub.
+- [x] Verify both halves together; report the baseline outcome to the hub.
 
 ## Log
 
@@ -132,3 +132,13 @@ explicit selection; no implementation change.
 | --- | --- | --- | --- |
 | `session_sync` | modified | `lua/parley/session_sync.lua` | Existing probe owns write-age admission and one-shot memory. |
 | `config` | modified | `lua/parley/config.lua` | Fifteen-minute default; explicit overrides remain supported. |
+
+- First full suite: lint clean (723 files), unit and session-sync integration
+  pass; only failure was the architecture guard's absent Core concepts table.
+  Table added above; rerunning the complete suite against the final tree.
+
+- Final `make test` passed: 427 spec files; lint 723 files with zero warnings
+  and errors; no surviving test processes. Includes session-sync write-age,
+  both async write/lock races, and the corrected architecture symbol guard.
+  `make check-vocabulary` and branch `git diff --check` passed. Baseline result
+  reported to ops:0; PR #232 awaits close review before landing.

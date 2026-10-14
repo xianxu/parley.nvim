@@ -447,3 +447,7 @@ oracle, and the mutation that would make the test fail.
   `has_mode` gate and the journal's mode name were reached by no test. When a
   change widens an argument shape across a seam, test the far side with the
   new shape (and mutation-check it); the dispatcher's stub covers routing.
+
+- Quick-flow issues still need a Core concepts table naming their modified
+  owners: the architecture symbol guard rejects an empty selection even when
+  no public API is added (#321 full-suite discovery).
