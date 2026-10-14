@@ -1,6 +1,6 @@
 ---
 id: 000321
-status: codecomplete
+status: done
 created: 2026-10-13
 updated: 2026-10-13
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 6c3a89ede9ab0edecf027f969543fc08462bcfe3
         evidence_commit: f6b045234cac8bbe2579124e504893114a4dda51
+        landed_commit: 5f6f459acbbdc3cadbd6609af22a47dc9c94b0d9
 ---
 
 # session-sync: ping once after 15 minutes without a write while deliveries remain owed (pair#530 companion)
