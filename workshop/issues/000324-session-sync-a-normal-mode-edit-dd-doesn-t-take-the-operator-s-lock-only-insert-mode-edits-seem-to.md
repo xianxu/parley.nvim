@@ -30,3 +30,7 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 ## Log
 
 ### 2026-10-14
+
+## Revisions
+
+- 2026-10-14 — add (operator): **undo back to the lock releases it.** If the operator undoes back to the point where their edit took the lock, the buffer equals the file on disk again (not modified), so release the operator lock without a submit and without telling the owner. Criterion: on TextChanged/BufModifiedSet, `&modified` is false (content matches disk), not an undo-sequence comparison, so redo, retyping the same text, or an undo through several changes all behave. Same autocmd as the first-edit fix, so it belongs in this issue. Test: dd → u releases; dd → x → u → u releases; dd → u → Ctrl-r takes it again.
