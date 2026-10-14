@@ -30,3 +30,7 @@ The operator wants to paste screenshots into the TL session file's `## Operator 
 ## Log
 
 ### 2026-10-14
+
+## Revisions
+
+- 2026-10-14 — add (operator): images must not be stored at full fidelity. The new sidecar path reuses the existing `assets` shrink step (sips/magick/…, JPEG within the max edge; `assets.shrink`/`shrink_cmd` honoured); add a test that a large paste into a non-chat markdown file lands shrunk.
