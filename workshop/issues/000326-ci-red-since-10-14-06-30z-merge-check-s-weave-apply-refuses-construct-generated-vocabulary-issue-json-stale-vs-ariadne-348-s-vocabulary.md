@@ -1,12 +1,12 @@
 ---
 id: 000326
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: '8083f61ce3efd86eb05a73a0af5e42f78f9c28f0' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '4de5657e6680cd661fb8bbb6a37ec4389dadb564' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-14T09:57:13-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "574d76e4", done: "92bf68d1"}
+actual_hours: 0.52
 ---
 
 # CI red since 10-14 06:30Z: merge-check's weave apply refuses construct/generated/vocabulary/issue.json (stale vs ariadne#348's vocabulary)
