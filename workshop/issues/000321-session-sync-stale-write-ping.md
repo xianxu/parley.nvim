@@ -57,8 +57,8 @@ consumer lives in Parley; adding another watcher in Couch would duplicate it.
 
 ## Plan
 
-- [ ] Read pair#530's landed observation contract and plan this companion.
-- [ ] Update the existing ping computation, defaults, tests and docs.
+- [x] Read pair#530's landed observation contract and plan this companion.
+- [x] Update the existing ping computation, defaults, tests and docs.
 - [ ] Verify both halves together; report the baseline outcome to the hub.
 
 ## Log
@@ -98,3 +98,16 @@ query per buffer. ARCH-SECURE: invalid status never proves stale work.
 ARCH-ORDER: writes rearm; delivery changes do not; lock acquisition while
 querying suppresses sending. ARCH-FUNERAL: state dies with the existing buffer,
 no new timer, persistent artifact or queue.
+
+### 2026-10-13 — implementation and regression evidence
+
+- Existing probe now keys age and one-shot memory to LastWrite, with the revised
+  absent-write fallback. Ping default is 15; the owed band and stale-edit band
+  retain their existing clocks. Operator lock suppresses a ping.
+- Initial targeted regression run: six expected failures; core fix: 54/54 pass.
+  Controlled actor-query races passed; extending to a write during status
+  exposed one failure. Capture mtime before both queries so either write race
+  postpones sending. Full suite queued for final verification.
+- SDLC dependency catch-up generated unrelated vocabulary drift before branch
+  creation. Preserved separately in stash named "weave generated vocabulary
+  during 321 start-plan"; excluded from this consumer change.
