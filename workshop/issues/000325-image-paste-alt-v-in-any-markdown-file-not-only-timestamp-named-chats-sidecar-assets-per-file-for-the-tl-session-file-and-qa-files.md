@@ -1,12 +1,12 @@
 ---
 id: 000325
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: 'bc6774d0c9347ce07e6c86bbbb7ed0eafd95f22d' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '5c0f35a77c2bb489079d5200e0eff3f4ce21680d' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-14T09:55:47-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "d37ce80b", done: "fd08213e"}
+actual_hours: 1.33
 ---
 
 # Image paste (Alt+v) in any markdown file, not only timestamp-named chats: sidecar assets per file, for the TL session file and QA files
