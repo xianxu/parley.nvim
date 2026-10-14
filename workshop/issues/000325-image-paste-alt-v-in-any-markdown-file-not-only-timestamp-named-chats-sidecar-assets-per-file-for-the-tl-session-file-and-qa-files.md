@@ -37,7 +37,7 @@ The operator wants to paste screenshots into the TL session file's `## Operator 
 
 - [x] Add failing asset layout/round-trip and paste regressions for session and QA markdown, large-image shrinking, and rejection of non-markdown/unanchored paths.
 - [x] Widen the pure asset key to file stems while retaining chat timestamp keys (ARCH-PURE/DRY); percent-encode link segments and validate/decode them in the existing attachment reader (ARCH-SECURE). Keep save, cap, shrink config, and paste rollback shared.
-- [ ] Document sidecar layout and file-owner sweep in README/atlas (ARCH-FUNERAL); run targeted make -k checks and the pushed-head suite through sdlc local-check.
+- [x] Document sidecar layout and file-owner sweep in README/atlas (ARCH-FUNERAL); run targeted make -k checks and the pushed-head suite through sdlc local-check.
 
 After verification: close review, then publish/merge on SHIP.
 
@@ -59,6 +59,8 @@ After verification: close review, then publish/merge on SHIP.
 - Close round 1 returned REWORK: BR-1 identified the budget stat in chat_respond.asset_size using encoded URL text as a disk path; both build_messages and build_messages_from_model share it. BR-2 identified stale PNG-only Done-when. Added regressions for both builders over space/punctuation/Unicode/percent/dotted stems; will use one pure assets.resolve_path for budget stat and bounded read. Swept all att.path consumers: parser/content keep URL text, export uses image src URLs; only budget stat and bounded read touch the image disk path.
 
 - BR-1 fix: assets.resolve_path is the shared pure resolver for read_bounded and chat_respond.asset_size (both builders). New parsed/live builder tests were red (0 images instead of 1), then green over every escaped-stem class; they assert both stat calls use the same absolute path and the image bytes reach the payload. The resolver round-trip and unsafe-path cases also pass. BR-2 fix: Done-when now covers small PNG, eligible large JPEG within max edge, configured shrink policy, and unchanged chats. make -k test-spec SPEC=chat/attachments lint passes, 0 warnings/errors; full suite will be rerun on the fix head.
+
+- Fix-head full suite passed via sdlc local-check on f721457ecbefcefa8c61b8a2a77b383c1bb14db7: exit 0, 1m56s, log sha256 prefix 2012be564fda, no surviving test processes. PR #234 merge-check 38610361921 is green. Both review families now have their full consumer/contract correction and red→green evidence; ready for round 2.
 
 ## Revisions
 
