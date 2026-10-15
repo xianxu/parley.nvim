@@ -788,6 +788,107 @@ describe('enclosing entity navigation', function()
         assert.is_truthy(tostring(err):find('E447',1,true))
         assert.same(cursor,vim.api.nvim_win_get_cursor(0))
     end)
+    it('opens a wrapped label from either row and target ahead of nested issue references', function()
+        local target = write_markdown('wrapped-answer.md', {'# Answer'})
+        local lines = {'1. See #370 and [discussion: is this a new',
+            '   landing #371 workflow?](wrapped-answer.md)', '2. Next'}
+        for _, cursor in ipairs({{1, 20}, {2, 11}, {2, 29}}) do
+            source(lines, cursor[1], cursor[2])
+            invoke()
+            same_path(target, opened[#opened])
+            assert.is_nil(picker)
+        end
+        assert.equals(3, #opened)
+        assert.equals(0, fallback)
+    end)
+    it('offers a wrapped entity link alongside an outside artifact and opens the chosen full span', function()
+        local target = write_markdown('wrapped-choice.md', {'# Answer'})
+        source({'1. Investigate #370', '   → [discussion: is this a new',
+            '   landing workflow?](wrapped-choice.md)', '2. Next'}, 1, 3)
+        invoke()
+        assert.equals(2, #picker.items)
+        assert.equals('artifact', picker.items[1].kind)
+        assert.equals('markdown', picker.items[2].kind)
+        picker.cb(picker.items[2], 2)
+        same_path(target, opened[1])
+        assert.equals(0, fallback)
+    end)
+    it('puts unsupported wrapped-link fallback on the actual destination row', function()
+        local lines = {'1. Pick a document', '   [a long', '   label](https://example.invalid/side)'}
+        local buf = source(lines, 1, 3)
+        local before = vim.api.nvim_win_get_cursor(0)
+        local seen
+        parley.cmd.ResolveRefOrGotoFile = function() seen = vim.api.nvim_win_get_cursor(0) end
+        invoke()
+        assert.same({3, lines[3]:find('https', 1, true) - 1}, seen)
+        assert.same(before, vim.api.nvim_win_get_cursor(0))
+        assert.equals(buf, vim.api.nvim_get_current_buf())
+    end)
+    it('keeps unsupported direct wrapped links separate from nested @@ targets', function()
+        local present = write_markdown('nested-present.md', {'# Nested'})
+        for _, nested in ipairs({present, docs_dir .. '/nested-missing.md'}) do
+            local lines = {'[long @@' .. nested .. '@@', 'label](https://example.invalid/side)'}
+            for _, cursor in ipairs({{1, 2}, {2, 2}}) do
+                source(lines, cursor[1], cursor[2])
+                local seen
+                parley.cmd.ResolveRefOrGotoFile = function() seen = vim.api.nvim_win_get_cursor(0) end
+                invoke()
+                assert.same({2, lines[2]:find('https', 1, true) - 1}, seen)
+                assert.same(cursor, vim.api.nvim_win_get_cursor(0))
+                assert.equals(0, #opened)
+                assert.equals(0, #warnings)
+                assert.is_nil(picker)
+            end
+        end
+    end)
+    it('does not join wrapped labels across any transcript structural marker', function()
+        local target = write_markdown('boundary-target.md', {'# Target'})
+        local patterns = require('parley.document.lexical').patterns(parley.config)
+        for _, field in ipairs({'user_prefix','assistant_prefix','summary_prefix','reasoning_prefix',
+            'tool_use_prefix','tool_result_prefix','branch_prefix','local_prefix'}) do
+            local ending = patterns[field] .. ' label](' .. target .. ')'
+            local chat = write_chat('2026-03-24.18-40-00.002_boundary.md', {'[unfinished', ending})
+            assert.is_nil(open_at(chat, ending, #patterns[field] + 3).opened)
+        end
+    end)
+    it('ignores wrapped labels in plain Markdown fences with chat-looking prefixes', function()
+        local target = write_markdown('fenced-wrapped.md', {'# Target'})
+        local patterns = require('parley.document.lexical').patterns(parley.config)
+        for _, fence in ipairs({'```', '~~~'}) do
+            for _, field in ipairs({'user_prefix','assistant_prefix','summary_prefix','reasoning_prefix',
+                'tool_use_prefix','tool_result_prefix','branch_prefix','local_prefix'}) do
+                local lines = {fence, patterns[field] .. ' [long', 'label](' .. target .. ')', fence}
+                source(lines, 3, 2)
+                invoke()
+                assert.equals(0, #opened)
+                assert.is_nil(picker)
+            end
+        end
+    end)
+    it('never opens a wrapped label completed across another Markdown block', function()
+        local target = write_markdown('block-target.md', {'# Target'})
+        for _, boundary in ipairs({'---', '- - -', '***', '* * *', '___', '_ _ _', '===', '=', '--',
+            '> quoted', '  > quoted', '#### Heading', '###### Heading'}) do
+            source({'[unfinished', boundary, 'label](' .. target .. ')'}, 3, 2)
+            invoke()
+            assert.equals(0, #opened, boundary)
+            assert.is_nil(picker)
+        end
+    end)
+    it('treats empty and nonempty ATX headings at every level and indent as paragraph walls', function()
+        local target = write_markdown('atx-target.md', {'# Target'})
+        for level = 1, 6 do
+            for indent = 0, 3 do
+                for _, suffix in ipairs({'', ' title', '\t'}) do
+                    local boundary = string.rep(' ', indent) .. string.rep('#', level) .. suffix
+                    source({'[unfinished', boundary, 'label](' .. target .. ')'}, 3, 2)
+                    invoke()
+                    assert.equals(0, #opened, boundary)
+                    assert.is_nil(picker)
+                end
+            end
+        end
+    end)
     it('keeps direct Markdown priority over other entity choices', function()
         local target = write_markdown('direct.md', {'# D'})
         source({'1. [direct](direct.md)','   [other](missing.md)'},1,6)

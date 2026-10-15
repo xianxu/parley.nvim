@@ -131,6 +131,8 @@ question to open its sole reference, including an answer link on the last line.
 Several references show a picker; cancel leaves the source alone. A reference
 directly under the cursor takes priority. With no reference in the entity,
 Parley uses its existing artifact resolver and Vim file navigation.
+Markdown link labels can wrap across lines within a paragraph; Alt+o on either
+line opens the link, and the entity picker retains it as one reference.
 
 ## Paste screenshots into Markdown
 
