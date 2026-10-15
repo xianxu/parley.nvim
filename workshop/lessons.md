@@ -487,3 +487,7 @@ oracle, and the mutation that would make the test fail.
 - Test the real event order when a pre-existing auto-save participates: synthetic BufModifiedSet before TextChanged hid the Normal-mode acquisition defect. Install the operator's callback first and drive child-Neovim input.
 - Every new ownership-release path must reconcile pending external effects through the existing preservation handler first, including overwrite, deletion, failed copy and undecided probes. Equality to a per-edit mtime does not establish equality to the loaded baseline.
 - Cross-process file existence is not readiness: enumerate every positive wait and await each complete expected payload (lock, notification, preserved/restored file), rather than fixing only the first helper. A scheduler sentinel makes deferred-state assertions observe the transition rather than a lucky ordering.
+
+## 2026-10-14 (#330 — undo baseline under auto-save)
+
+- Disk equality and modified=false describe the latest save, not the operator turn's original content. Freeze the pre-edit content at lock acquisition, retain it through auto-save, and test partial undo, full undo, redo, reloads and explicit saves against that same baseline. Save restored baseline text before releasing the lock so an agent cannot observe free ownership with stale disk contents.

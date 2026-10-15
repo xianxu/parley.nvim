@@ -75,3 +75,5 @@ ARCH-DRY/PURE: reuse native edit attachment and existing disk_changed/violation;
 - Native safety expansion: pending overwrite/deletion/failed preservation now runs with auto-save both enabled and disabled; unknown pre-existing locks and failed baseline saves retain protection. In the ignored/errored classification + auto-save sequence, restoring checks does not necessarily repeat Neovim's disk-change event; tests assert that the lock and exact foreign content remain intact. They do not fabricate another external write to declare recovery.
 
 - Expanded targeted verification passed: make -k test-spec SPEC=modes/session_sync (43 native + 52 integration + 14 unit = 109 cases, 0 failures); luacheck clean and git diff --check clean. Only 26 source lines added.
+
+- Declared full suite passed via sdlc local-check run --name suite on 8f14544a8f2476e9a865236044fcd0d11aaccae0: 428 spec files, lint 724 files with 0 warnings/errors, no surviving processes; run time 2m13s after 43m41s capacity wait; log sha256 prefix fe3545a713a2. TL explicitly directed close review before staging/operator check; final Plan row remains open until live acceptance and landing.
