@@ -343,6 +343,8 @@ local config = {
 	-- Sampled when a buffer is prepared, so it takes effect on buffers opened
 	-- after `setup()`; buffers already open keep what they were given.
 	default_keymaps = true,
+	-- File-level Back, independent of same-file cursor jumps.
+	global_shortcut_file_back = { modes = { "n", "i" }, shortcut = "<M-O>" },
 	-- local shortcuts bound to the chat buffer
 	-- (be careful to choose something which will work across specified modes)
 	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = { "<C-g><C-g>" } },
