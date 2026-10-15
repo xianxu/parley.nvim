@@ -106,6 +106,8 @@ Post-close acceptance remains pending: obtain SHIP, then after pair#573 lands an
 
 - 2026-10-15 — feedback RED/green:18 admission cases and64 native edit cases pass after observing13/5 and60/4 RED. Success is set after the actual send succeeds, stays through own writes/owed probes and clears before auto-save on the next edit or on foreign write. Registration/owner resolution/lookup/send errors show a bounded literal winbar error, including before attachment. #322 is superseded by this implementation; duplicate triage does not claim parent landing. Full suite and close remain pending on the final code head.
 
+- 2026-10-15 — required suite on e9a1622d completed lint (745 files, zero warnings/errors), all unit files and all architecture/integration recipes; only packaging_vm_spec failed the same guest current-buffer confinement assertion tracked as #336. Full failed log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/894c995da011381b869a9bd450c9545b.log. No close/stage or waiver. Reported blocker to the hub for a separate main-based fix. Isolated real/fake production-client conformance and corrupted-negative rejection pass against clean installed Couch build6d65c4c4ef29bcdea3ea5b45f3dfdeed41ce1154, independently verified to contain pair#573 merge55ae58b124219edbd63c2782e8c00327eeda1327; /tmp/parley332-conformance-landed.log.
+
 ## Revisions
 
 - 2026-10-15 — record the already-approved persistent-feedback acceptance explicitly in Done when. Separate implementation verification from post-close staging/live/landing so the checklist records observed work without claiming future acceptance. The required suite is still pending; no close waiver or live acceptance is implied.
