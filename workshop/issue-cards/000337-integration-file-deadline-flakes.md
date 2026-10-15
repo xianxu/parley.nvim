@@ -1,6 +1,6 @@
 ---
 id: 000337
-status: open
+status: working
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
