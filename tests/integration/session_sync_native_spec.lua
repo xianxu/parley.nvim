@@ -114,9 +114,95 @@ describe("session-sync native edits", function()
         vim.fn.delete(root, "rf")
     end)
 
+    local function feedback(message, is_error)
+        return exec([[
+            local message, is_error = ...
+            local ss = require("parley.session_sync")
+            return type(ss.set_submission_feedback) == "function" and ss.set_submission_feedback(0, message, is_error)
+        ]], message, is_error or false)
+    end
+
     local function make_plain()
         vim.fn.writefile({"---", "type: prose", "owner: business", "operator: test", "---", "", "## Operator instructions", "first bullet", "second bullet", "third bullet"}, file)
     end
+    it("keeps submitted feedback through own save and actual owed refresh until the next edit before autosave", function()
+        make_plain(); open(true, false, false, true)
+        assert.is_true(feedback("submitted to ops:0 · 14:23"))
+        exec([[
+            vim.cmd("silent write")
+            vim.api.nvim_exec_autocmds("BufWinEnter", { buffer = 0 })
+            local couch = require("parley.couch")
+            local run = couch.run
+            couch.run = function(argv, callback, options)
+                return run(argv, function(result)
+                    callback(result)
+                    if argv[2] == "--session-sync" and argv[3] == "status" then _G.feedback_status_refreshed = true end
+                end, options)
+            end
+            vim.env.FAKE_COUCH_STATUS = vim.json.encode({ Code = "ok", Status = {
+                Owed = { { ID = "owed", At = "2026-10-14T12:00:00Z" } }, LastWrite = "2026-10-14T11:00:00Z",
+            } })
+            require("parley.session_sync").PING_CHECK_MS = 0
+        ]])
+        wait_for("return _G.feedback_status_refreshed == true")
+        assert.is_true(exec("return vim.wo.winbar:find('submitted to ops:0 · 14:23', 1, true) ~= nil"))
+        exec([[
+            require("parley.session_sync").PING_CHECK_MS = 60000
+            local command = vim.cmd
+            vim.cmd = setmetatable({}, { __call = function(_, value)
+                if value == "silent! write" then
+                    _G.feedback_at_auto_save = vim.wo.winbar:find("submitted to", 1, true) ~= nil
+                end
+                return command(value)
+            end, __index = command })
+        ]])
+        keys("x"); locked()
+        wait_for("return _G.feedback_at_auto_save ~= nil and not vim.bo.modified")
+        assert.is_false(exec("return _G.feedback_at_auto_save"))
+        assert.is_false(exec("return vim.wo.winbar:find('submitted to', 1, true) ~= nil"))
+        payload(file, function(lines) return lines[8] == "irst bullet" end)
+    end)
+
+    it("clears submission feedback when a foreign write is observed and reloaded", function()
+        make_plain(); open(false, false, false, true)
+        assert.is_true(feedback("submitted to ops:0 · 14:23"))
+        agent_reload(true)
+        assert.is_false(exec("return vim.wo.winbar:find('submitted to', 1, true) ~= nil"))
+        assert.equals("StatusLine:ParleySessionSyncFree", exec("return vim.wo.winhighlight"))
+    end)
+
+    it("renders bounded single-line literal error feedback and lets the next submission replace it", function()
+        make_plain(); open(false, false, true, true)
+        local message = "submit failed: bad%{1+1}\nnext\r\n" .. string.rep("x", 400)
+        assert.is_true(feedback(message, true))
+        local observed = exec([[
+            local message = ...
+            local view = require("parley.session_sync").feedback_view(message, true)
+            vim.cmd("silent write")
+            vim.api.nvim_exec_autocmds("BufWinEnter", { buffer = 0 })
+            return { view = view, rendered = vim.api.nvim_eval_statusline(vim.wo.winbar,
+                { winid = 0, use_winbar = true, maxwidth = 1000 }).str, highlight = vim.wo.winhighlight,
+                bounded = vim.fn.strchars(view.label) <= 160 }
+        ]], message)
+        assert.equals("DiagnosticError", observed.view.hl)
+        assert.equals("StatusLine:DiagnosticError", observed.highlight)
+        assert.is_true(observed.bounded)
+        assert.is_nil(observed.view.label:find("[\r\n]"))
+        assert.is_truthy(observed.rendered:find("bad%{1+1}", 1, true))
+        assert.is_true(feedback("submitted to other:2 · 15:10"))
+        assert.is_true(exec("return vim.wo.winbar:find('submitted to other:2 · 15:10', 1, true) ~= nil"))
+        assert.is_false(exec("return vim.wo.winbar:find('submit failed:', 1, true) ~= nil"))
+        assert.equals("StatusLine:DiagnosticOk", exec("return vim.wo.winhighlight"))
+    end)
+
+    it("does not attach or change the band when feedback is requested for an unattached buffer", function()
+        local before = exec("return vim.wo.winbar")
+        assert.equals("function", exec("return type(require('parley.session_sync').set_submission_feedback)"))
+        assert.is_false(feedback("submit failed: offline", true))
+        assert.equals(before, exec("return vim.wo.winbar"))
+        assert.is_true(exec("return require('parley.session_sync').identity(0) == nil"))
+    end)
+
     for _, case in ipairs({
         { name = "dd", input = "dd" }, { name = "x", input = "x" },
         { name = "p", input = '"ap' }, { name = "u", input = "u", undo = true },

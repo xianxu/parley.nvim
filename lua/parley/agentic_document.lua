@@ -47,18 +47,36 @@ local function valid(s)
             or (s.move and canonical(vim.api.nvim_buf_get_name(s.buf)) == s.move.new_path))
 end
 
-local function band(s, message)
+local function band(s, message, highlight)
     for _, win in ipairs(vim.fn.win_findbuf(s.buf)) do
         local old = s.bands[win]
         if message ~= "" then
             if not old then old = { before = vim.wo[win].winbar }; s.bands[win] = old end
-            old.installed = "%#WarningMsg# " .. message .. "%="
+            old.installed = "%#" .. (highlight or "WarningMsg") .. "# " .. message:gsub("%%", "%%%%") .. "%="
             vim.wo[win].winbar = old.installed
         elseif old then
             if vim.wo[win].winbar == old.installed then vim.wo[win].winbar = old.before end
             s.bands[win] = nil
         end
     end
+end
+
+local function show_feedback(s, message, is_error)
+    local ss = require("parley.session_sync")
+    if ss.set_submission_feedback(s.buf, message, is_error) then
+        s.feedback = nil
+        band(s, "")
+    else
+        local view = ss.feedback_view(message, is_error)
+        s.feedback = { label = view.label, hl = view.hl, is_error = is_error }
+        band(s, view.label, view.hl)
+    end
+end
+
+local function clear_feedback(s)
+    if not s.feedback then return end
+    s.feedback = nil
+    band(s, s.model.snapshot().phase == "unknown" and "Couch unavailable: agentic state unknown" or "")
 end
 
 local function cache(s, registration, remove)
@@ -112,9 +130,12 @@ local function cache(s, registration, remove)
 end
 
 local function adopt(s, registration)
+    local feedback = s.feedback
+    s.feedback = nil
     band(s, "")
     local ss = require("parley.session_sync")
     ss.attach(s.buf, registration)
+    if feedback then ss.set_submission_feedback(s.buf, feedback.label, feedback.is_error) end
     if s.outstanding or vim.bo[s.buf].modified then
         ss.acquire_observed(s.buf, { baseline = s.baseline or s.content, loaded = s.loaded, outstanding = true })
     end
@@ -181,13 +202,20 @@ local function execute(s, effects)
             if moving.metadata_done then moving.metadata_done({ kind = "registered", registration = effect.registration }) end
         elseif kind == "send" then
             require("parley.session_sync").send_registered(s.buf, effect.registration, function(result)
-                if valid(s) then dispatch(s, { type = "sent", witness = effect.witness, ok = result.code == 0, error = result.stderr }) end
+                if valid(s) then
+                    if result.code == 0 then
+                        show_feedback(s, "submitted to " .. effect.registration.Owner .. " · " .. os.date("%H:%M"), false)
+                    end
+                    dispatch(s, { type = "sent", witness = effect.witness, ok = result.code == 0, error = result.stderr })
+                end
             end)
         elseif kind == "band" then
-            band(s, effect.message)
+            if s.feedback then band(s, s.feedback.label, s.feedback.hl) else band(s, effect.message) end
             if effect.message ~= "" then ensure_retry() else s.baseline, s.outstanding = nil, false end
         elseif kind == "notify" or kind == "reconcile" then
-            notify(effect.message or effect.error or "Operation outcome pending; Alt+Return retries confirmation")
+            local message = effect.message or effect.error or "Operation outcome pending; Alt+Return retries confirmation"
+            show_feedback(s, "operation failed: " .. tostring(message), true)
+            notify(message)
         elseif kind == "cancel" then
             if s.request then s.request.cancel(); s.request = nil end
         end
@@ -232,6 +260,7 @@ function M.attach(buf)
                 if states[buf] ~= s then return true end
                 local previous = s.content; s.content = hash(buf)
                 if vim.bo[buf].modified then
+                    if previous ~= s.content then clear_feedback(s) end
                     s.revision = (s.revision or 0) + 1
                     if not M.identity(buf) then
                         s.baseline = s.baseline or previous
@@ -241,7 +270,7 @@ function M.attach(buf)
                     if phase == "busy" then dispatch(s, { type = "changed" }) end
                 end
             end,
-            on_reload = function() s.content = hash(buf) end,
+            on_reload = function() s.content = hash(buf); clear_feedback(s) end,
             on_detach = function() s.edits_attached = false end,
         })
     end
@@ -290,7 +319,11 @@ function M.submit(buf)
     couch.own_slot(function(_, own)
         s.resolving = false
         if not valid(s) or s.revision ~= revision then return end
-        if not own then notify("cannot resolve this pane's agent; nothing submitted"); return end
+        if not own then
+            show_feedback(s, "submit failed: cannot resolve this pane's agent", true)
+            notify("cannot resolve this pane's agent; nothing submitted")
+            return
+        end
         dispatch(s, { type = "submit", owner = couch.slot(own) })
     end)
     return true

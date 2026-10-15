@@ -40,7 +40,7 @@ This slice includes moving an existing sibling `<stem>.side/` and its parent bac
 | `acquire` — cross-editor operation lease | INTEGRATION | `lua/parley/document_lease.lua` | new |
 | `attach`, `identity`, `is_session_sync`, `detach`, `acquire_observed` — stable attachment and observed edits | INTEGRATION | `lua/parley/session_sync.lua` | modified |
 | `prepare_submit`, `send_registered`, `release_if_baseline` — shared save, send and turn release | INTEGRATION | `lua/parley/session_sync.lua` | modified |
-| `begin_move`, `install_move_lock`, `finish_move`, `abort_move`, `restore_move`, `set_submission_feedback` — turn-preserving migration handoff | INTEGRATION | `lua/parley/session_sync.lua` | modified |
+| `begin_move`, `install_move_lock`, `finish_move`, `abort_move`, `restore_move`, `set_submission_feedback`, `feedback_view` — turn-preserving migration handoff | INTEGRATION | `lua/parley/session_sync.lua` | modified |
 | `write_file_atomic`, `table_to_file_atomic` — atomic byte writer and JSON wrapper | INTEGRATION | `lua/parley/helper.lua` | modified |
 | `write` — stateful executable registry fake | INTEGRATION | `tests/helpers/fake_couch.lua` | modified |
 

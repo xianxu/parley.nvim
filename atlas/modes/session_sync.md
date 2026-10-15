@@ -114,6 +114,12 @@ override them.
 | violated | `<owner> wrote under your lock: yours kept, theirs in .clobbered` (`changed as you started typing: …` for the race) | `ParleySessionSyncOperator` |
 | stale | `unsent edits, Alt+Return to submit` | `ParleySessionSyncStale` (orange, black bold) |
 
+A completed Couch-pane submission overlays the band with `submitted to OWNER ·
+HH:MM` (DiagnosticOk), retained through saves and status probes until the next
+operator edit or observed agent write. Explicit submit failures show a bounded
+literal error (DiagnosticError), including before registry attachment; this
+feedback changes neither turn ownership nor the acquisition baseline.
+
 An operator turn left idle for `session_sync_stale_minutes` (default 5) is stale.
 
 **The agent's side** is not parley's: the owner diffs the file against its own

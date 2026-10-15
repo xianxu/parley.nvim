@@ -47,7 +47,8 @@ local ns_group = "ParleySessionSync"
 -- couch last reported, or nil), minutes (rendered owed minutes), violated /
 -- complained (this operator turn), unkept (the disk mtime of an agent copy
 -- that could not be kept), probing / probed (vim.uv.now() of the last
--- probe), pinged (the LastWrite value last pinged; false when absent) }
+-- probe), pinged (the LastWrite value last pinged; false when absent),
+-- feedback (bounded submission receipt/error, cleared by operator edit or foreign reload) }
 local state = {}
 
 --- Frontmatter lines → normalized { owner, operator } for session-sync.
@@ -97,6 +98,14 @@ M.view = function(turn, flags, owner)
 	local v = VIEWS[key]
 	local detail = key == "violated" and flags.violated or (flags.minutes or 0)
 	return { state = key, label = v.label:format(owner or "agent", detail), hl = v.hl }
+end
+
+-- Submission receipts and errors share one literal, bounded label with the
+-- pre-attachment coordinator. Escape percent signs only at each UI boundary.
+M.feedback_view = function(message, is_error)
+    local label = type(message) == "string" and message or tostring(message or "")
+    label = label:gsub("[\r\n]+", " "):gsub("%c", " ")
+    return { label = vim.fn.strcharpart(label, 0, 160), hl = is_error and "DiagnosticError" or "DiagnosticOk" }
 end
 
 -- Days since 1970-01-01 for a proleptic Gregorian date (no timezone involved).
@@ -236,7 +245,7 @@ local function render(buf, view)
         }
         local owned = s.windows[win]
         owned.installed_highlight = "StatusLine:" .. view.hl
-        owned.installed_bar = "%#" .. view.hl .. "# " .. view.label .. "%="
+        owned.installed_bar = "%#" .. view.hl .. "# " .. view.label:gsub("%%", "%%%%") .. "%="
         vim.api.nvim_set_option_value("winhighlight", owned.installed_highlight, opts)
         vim.api.nvim_set_option_value("winbar", owned.installed_bar, opts)
 	end
@@ -465,7 +474,18 @@ refresh = function(buf)
 	end
 	s.minutes = owed_minutes(buf)
 	start_watch(buf)
-	render(buf, M.view(turn, s, owner_of(buf)))
+	render(buf, s.feedback or M.view(turn, s, owner_of(buf)))
+end
+
+-- Completion belongs to the coordinator; this engine retains its receipt
+-- across normal saves/status refreshes until actual document activity follows.
+M.set_submission_feedback = function(buf, message, is_error)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    if not s or not vim.api.nvim_buf_is_valid(buf) then return false end
+    s.feedback = M.feedback_view(message, is_error)
+    refresh(buf)
+    return true
 end
 
 -- Restart the idle timer (one per buffer, reused across keystrokes); when it
@@ -546,6 +566,10 @@ M.attach = function(buf, identity, observed)
                 local previous = s.content
                 s.content = content_hash(buf)
                 if s.moving then return end
+                if s.feedback and previous ~= s.content and vim.bo[buf].modified then
+                    s.feedback = nil
+                    refresh(buf) -- synchronous: an earlier TextChanged auto-save must see it cleared
+                end
                 local epoch = s.epoch
 				if vim.bo[buf].modified and read_turn(buf) == "free" then
 					local moved = mtime_moved(buf)
@@ -579,6 +603,8 @@ M.attach = function(buf, identity, observed)
 			on_reload = function()
 				s.content = content_hash(buf)
 				s.edit = nil
+                s.feedback = nil
+                refresh(buf)
 			end,
 			on_detach = function()
 				s.edits_attached, s.edit = false, nil
@@ -597,6 +623,7 @@ M.attach = function(buf, identity, observed)
             if s.moving then vim.v.fcs_choice = ""; return end
             local epoch = s.epoch
             s.foreign = disk_mtime(buf)
+            if s.feedback then s.feedback = nil; refresh(buf) end
 			if s.checking then
 				vim.v.fcs_choice = ""
 				return
@@ -617,9 +644,10 @@ M.attach = function(buf, identity, observed)
 	vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "FileChangedShellPost" }, {
 		group = group,
 		buffer = buf,
-        callback = function()
+        callback = function(event)
             if s.moving then return end
             s.loaded = disk_mtime(buf)
+            if event.event ~= "BufWritePost" and s.feedback then s.feedback = nil; refresh(buf) end
 			attach_edits() -- :edit! detaches buffer callbacks before BufReadPost.
 		end,
 	})

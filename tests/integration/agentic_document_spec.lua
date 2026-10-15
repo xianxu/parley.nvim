@@ -40,6 +40,7 @@ describe("agentic markdown admission", function()
             registry = vim.env.FAKE_COUCH_REGISTRY, actors = vim.env.FAKE_COUCH_ACTORS,
             mode = vim.env.FAKE_COUCH_REGISTRY_MODE, state_dir = require("parley").config.state_dir,
             input = vim.ui.input, own_slot = require("parley.couch").own_slot,
+            couch_run = require("parley.couch").run, ping_check = require("parley.session_sync").PING_CHECK_MS,
             exit = vim.env.FAKE_COUCH_EXIT, sleep = vim.env.FAKE_COUCH_SLEEP,
             log_delay = vim.env.FAKE_COUCH_LOG_DELAY, status = vim.env.FAKE_COUCH_STATUS }
         vim.env.PATH = root .. "/bin:" .. vim.env.PATH
@@ -72,6 +73,8 @@ describe("agentic markdown admission", function()
         vim.env.FAKE_COUCH_LOG_DELAY, vim.env.FAKE_COUCH_STATUS = saved.log_delay, saved.status
         require("parley").config.state_dir, vim.ui.input = saved.state_dir, saved.input
         require("parley.couch").own_slot = saved.own_slot
+        require("parley.couch").run = saved.couch_run
+        require("parley.session_sync").PING_CHECK_MS = saved.ping_check
         vim.fn.delete(root, "rf")
     end)
     it("opens plain, then saves registers and submits without changing frontmatter", function()
@@ -267,4 +270,114 @@ describe("agentic markdown admission", function()
         assert.equals(0, vim.fn.filereadable(root .. "/sent.last"))
         assert.equals(0, vim.fn.filereadable(root .. "/registry.json"))
     end)
+
+    local function feedback_bar()
+        return vim.wo[vim.fn.bufwinid(buf)].winbar
+    end
+    local function success_feedback()
+        return feedback_bar():find("submitted to ops:0 · %d%d:%d%d") ~= nil
+    end
+    local function error_feedback()
+        local text=feedback_bar():lower()
+        return text:find("failed",1,true) ~= nil or text:find("error",1,true) ~= nil
+    end
+
+    it("retains submitted owner and time through refresh and save until an operator or agent edit", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        submit()
+        await_submitted()
+        assert.is_true(success_feedback(),feedback_bar())
+        local submitted_bar=feedback_bar()
+        local probe_finished=false
+        local couch=require("parley.couch")
+        local production_run=couch.run
+        -- Observe completion while preserving the real subprocess and reply.
+        -- Changed owed knowledge forces the ordinary probe refresh path.
+        couch.run=function(argv,callback,options)
+            return production_run(argv,function(result)
+                callback(result)
+                if argv[2] == "--session-sync" and argv[3] == "status" then probe_finished=true end
+            end,options)
+        end
+        require("parley.session_sync").PING_CHECK_MS=0
+        vim.env.FAKE_COUCH_STATUS=vim.json.encode({Code="ok",Status={Owed={
+            {ID="feedback-probe",Kind="delivery",At=os.date("!%Y-%m-%dT%H:%M:%SZ",os.time()-60)},
+        }}})
+        await(function() return probe_finished end)
+        assert.equals(submitted_bar,feedback_bar(),"completed owed probe must retain submission feedback")
+        vim.cmd("silent write")
+        vim.api.nvim_exec_autocmds("BufWinEnter",{buffer=buf})
+        await(function() local status=document.status(buf); return status.phase == "registered" and not status.operation end)
+        assert.equals(submitted_bar,feedback_bar(),"refresh, lookup and plain write must retain submission feedback")
+        vim.api.nvim_buf_set_lines(buf,4,5,false,{"next operator edit"})
+        assert.is_false(success_feedback(),"operator edit must clear prior submission feedback")
+        submit()
+        await_submitted()
+        assert.is_true(success_feedback(),feedback_bar())
+        local answer=vim.fn.readfile(file)
+        answer[5]="agent reply after submission"
+        vim.fn.writefile(answer,file)
+        vim.cmd("checktime")
+        await(function() return vim.api.nvim_buf_get_lines(buf,4,5,false)[1] == answer[5] end)
+        assert.is_false(success_feedback(),"observed agent write must clear submission feedback")
+    end)
+
+    it("shows registration failure in the winbar before a turn engine is attached", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        assert.is_nil(require("parley.session_sync").identity(buf))
+        vim.env.FAKE_COUCH_REGISTRY_MODE="unsupported"
+        submit()
+        await(function() return document.status(buf).phase == "pending" end)
+        assert.is_true(error_feedback(),feedback_bar())
+        assert.is_false(success_feedback())
+        assert.is_true(vim.bo[buf].modifiable)
+        assert.is_nil(require("parley.session_sync").identity(buf))
+        assert.is_nil(sent_payload())
+    end)
+
+    it("shows failed owner confirmation while retaining the attached operator turn", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        submit()
+        await_submitted()
+        vim.api.nvim_buf_set_lines(buf,4,5,false,{"unsent owner-confirmation edit"})
+        local old_payload=sent_payload()
+        local old_deliveries=vim.fn.readfile(root .. "/sent")
+        vim.env.FAKE_COUCH_REGISTRY_MODE="unsupported"
+        submit()
+        await(function() local status=document.status(buf); return status.phase == "registered" and not status.operation end)
+        assert.is_true(error_feedback(),feedback_bar())
+        assert.is_false(success_feedback())
+        assert.equals(1,vim.fn.filereadable(file .. ".lock"))
+        assert.equals(old_payload,sent_payload())
+        assert.same(old_deliveries,vim.fn.readfile(root .. "/sent"),"failed lookup must not send again")
+    end)
+
+    it("shows unresolved pane owner in the winbar without attaching or sending", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        vim.env.FAKE_COUCH_ACTORS=vim.json.encode({Code="ok",Actors={}})
+        submit()
+        await(error_feedback)
+        assert.is_false(success_feedback())
+        assert.is_nil(document.identity(buf))
+        assert.is_nil(require("parley.session_sync").identity(buf))
+        assert.is_nil(sent_payload())
+        assert.is_true(vim.bo[buf].modifiable)
+    end)
+
+    it("shows send failure in the winbar while retaining registration", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        vim.env.FAKE_COUCH_EXIT="1"
+        submit()
+        await(function()
+            local status=document.status(buf)
+            return status.phase == "registered" and not status.operation and sent_payload() == "submitted: " .. file
+        end)
+        assert.is_true(error_feedback(),feedback_bar())
+        assert.is_false(success_feedback())
+        assert.is_not_nil(document.identity(buf))
+        vim.api.nvim_exec_autocmds("BufWinEnter",{buffer=buf})
+        await(function() local status=document.status(buf); return status.phase == "registered" and not status.operation end)
+        assert.is_true(error_feedback(),"ordinary refresh must not silently clear send failure")
+    end)
+
 end)
