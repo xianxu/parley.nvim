@@ -7,6 +7,18 @@ describe("session_sync.parse_header", function()
         })
         assert.same({ owner = "ops:0", operator = "xian-xu" }, h)
     end)
+    for _, case in ipairs({
+        { name = "canonical only", fields = { "couch-owner: ops:0" } },
+        { name = "legacy only", fields = { "owner: ops:0" } },
+        { name = "canonical wins conflict", fields = { "owner: other:9", "couch-owner: 'ops:0' # canonical" } },
+    }) do
+        it("normalizes owner: " .. case.name, function()
+            local lines = { "---", "type: session-sync" }
+            vim.list_extend(lines, case.fields)
+            vim.list_extend(lines, { "---", "body" })
+            assert.equals("ops:0", ss.parse_header(lines).owner)
+        end)
+    end
     it("is nil for another type, no frontmatter, or an unterminated header", function()
         assert.is_nil(ss.parse_header({ "---", "type: pensive", "owner: ops:0", "---" }))
         assert.is_nil(ss.parse_header({ "# title", "type: session-sync" }))

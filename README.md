@@ -45,14 +45,16 @@ paths and settings. Existing Neovim users can use the
 `require('parley').setup({})` works as is; see
 [minimal config](atlas/infra/config.md#minimal-config) for typical overrides.
 
-For Couch users, [session-sync files](atlas/modes/session_sync.md) ping a quiet
+For Couch users, [session-sync files](atlas/modes/session_sync.md) name their
+agent with `couch-owner:` (`owner:` is the legacy fallback). They ping a quiet
 owner once when deliveries remain owed and its last write is at least 15 minutes
 old. Set `session_sync_ping_minutes` in `require('parley').setup({...})` to
 override that delay. A write postpones the ping; operator locks suppress it.
 The separate `session_sync_stale_minutes` reminder for unsent edits remains 5.
 The first edit in Normal or Insert mode takes your turn before auto-save runs.
-Undoing back to unmodified silently releases it; redo away from saved text takes
-it again. Saving alone keeps the turn until Alt+Return submits it. See the
+Undoing back to the content before that first edit silently releases it, even
+after auto-save; redo away from that baseline takes it again. Saves never move
+the baseline, and saving changed text keeps the turn until Alt+Return. See the
 [session-sync guide](atlas/modes/session_sync.md) for the full interaction.
 
 ## Learn by chatting
