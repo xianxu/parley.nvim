@@ -61,6 +61,7 @@ ARCH-DRY/PURE: add precedence at the existing pure parsing boundary, not in subm
 ## Log
 
 ### 2026-10-14
+- 2026-10-14: closed — 118 mapped cases pass (43 native, 58 integration, 17 unit), plus declared suite: 428 spec files, lint 724 clean, no survivors; log e4cb385d7540 on e4c74728. Three-variant matrix covers band, quiet ping, same-slot submit and violations. --no-plan-check acknowledges only the post-review publication/report row: TL explicitly directed land on SHIP and owns status-file migration after landing.; review verdict: SHIP
 
 - Root cause: parse_header currently reads only fm.fields.owner. Every owner consumer already derives from its normalized result (directly or through owner_of), so canonical precedence belongs there. Expected quick flow, well below 100 source lines. Claimed from main after #330 landed; refreshed Ariadne substrate to 5c321f59ed35b83bda4f1fc698c83c836ebc22bb before planning.
 
