@@ -110,6 +110,8 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 - Close round3 returned SHIP: BR-1 and BR-2 addressed, no new findings. Reviewer independently ran the mapped navigation/editing checks, all six live conformance cases and the wrong-kind negative probe. Close adopted measured actual5.04h; attribution reports a dominant196.3-minute segment including long machine-gate waits, so treat that calibration limitation explicitly rather than hand-adjusting hours. Final suite on the conformance-check commit remains queued; no stage or live acceptance is claimed yet.
 
+- Final declared suite on d09dfa7998a94abd21bc242b56c08a068966289d passed all431 spec files, lint728 files clean and clean process census; runtime2m5s, log sha256 prefix51fd03d27d16. This includes the conformance tooling revision; the separate opt-in real/fake six-case check also passes. Review round3 is SHIP with no open findings. Proceeding to the authorized :0 stage; live acceptance remains pending before merge.
+
 ## Estimate
 
 Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only; calibration source is marked stale, so figures remain provisional.
