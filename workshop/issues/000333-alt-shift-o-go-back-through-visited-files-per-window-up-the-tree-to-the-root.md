@@ -238,3 +238,11 @@ all 19 cases (/tmp/parley-333-starter-isolated.log). Clean process census; all
 navigation tests pass. Retrying full suite on the unchanged integrated code
 (/tmp/parley-333-integrated-full-retry.log). After a pass, run the required narrow
 conflict review with --fixed-then-ship and --full-suite evidence, then merge/stage.
+
+### 2026-10-15 — integrated full retry passes
+
+Unchanged integrated code passes make test on retry: exit 0, 433 passing files,
+zero lint warnings/errors across 732 files, and clean unit/integration censuses.
+starter_config_spec passes in the complete run as well as its isolated 19-case
+rerun. Evidence: /tmp/parley-333-integrated-full-retry.log. Vocabulary freshness
+and range whitespace checks pass. Entering the required narrow conflict review.
