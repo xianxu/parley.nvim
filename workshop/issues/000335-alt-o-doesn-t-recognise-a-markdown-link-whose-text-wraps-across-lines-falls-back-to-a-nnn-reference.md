@@ -59,6 +59,7 @@ that. A link with a line break inside its text is valid CommonMark, and agents' 
 | `markdown_spans` | PURE | `lua/parley/reference_candidates.lua` | new | Paragraph-scoped Markdown spans with row/byte coordinates and raw text. |
 | `markdown_links` | PURE | `lua/parley/reference_candidates.lua` | modified | Existing string pattern, with internal scan barriers and single-line destinations. |
 | `collect` | PURE | `lua/parley/reference_candidates.lua` | modified | Reserve full Markdown spans before collecting subordinate references. |
+| `open_markdown_reference` | INTEGRATION | `lua/parley/init.lua` | new | Shared Markdown-only dispatch retaining destination identity. |
 | `OpenFileUnderCursor` | INTEGRATION | `lua/parley/init.lua` | modified | Open direct/selected spans and retain fallback destination rows. |
 
 ## Log
@@ -106,3 +107,27 @@ in 732 files, and the final process census is clean
 in this full run. Mapped reference tests, check-vocabulary and git diff --check
 also pass. Actual-time measurement succeeds; close can adopt measured hours
 without a waiver. Ready for the single quick-flow boundary review.
+
+### 2026-10-15 — review correction red/green
+
+Round 1 returns REWORK with BR-1 (recognized Markdown identity) and BR-2
+(document boundaries). Four new cases fail without errors before correction
+(/tmp/parley-335-review-red.log). Both direct and selected Markdown dispatch
+now share open_markdown_reference; scanners reuse the navigation memo and
+receive transcript context, with lexical structural kinds as start barriers.
+All eight configured prefixes and backtick/tilde fences are covered in pure
+and command tests; existing/missing nested @@ destinations cannot override a
+wrapped unsupported URL. Mapped suite passes with clean census
+(/tmp/parley-335-review-green.log); vocabulary/whitespace pass. Full rerun
+started at /tmp/parley-335-review-full.log. Lessons and atlas updated.
+
+## Revisions
+
+### 2026-10-15 15:30 — close review BR-1 and BR-2
+
+Preserve recognized wrapped Markdown identity through Markdown-only dispatch in
+both direct and selected opening (ARCH-DRY). Pass document context through both
+scanner consumers: all eight transcript structural prefixes terminate a previous
+span, and plain Markdown fences never reset at chat-looking text (ARCH-PURPOSE).
+Add failing regressions for existing/missing nested @@ targets, each configured
+structural prefix, and both backtick/tilde fenced examples before correcting.

@@ -4864,6 +4864,11 @@ local function try_open_markdown_link(line, cursor_col, buf)
     return "failed"
 end
 
+local function open_markdown_reference(line, cursor_col, buf)
+	return try_open_src_link(line, cursor_col, buf) or try_open_inline_branch_link(line, cursor_col, buf)
+		or try_open_markdown_link(line, cursor_col, buf)
+end
+
 --- Open whatever reference sits under the cursor.
 ---
 --- One chain for chat buffers and markdown buffers alike (#225). They used to
@@ -4894,9 +4899,7 @@ local function open_reference_under_cursor(buf, current_line, cursor_col, is_cha
 
 	-- Link forms that carry their own target. Each reports its own failure, so
 	-- a non-nil answer is terminal either way.
-	local handled = try_open_src_link(current_line, cursor_col, buf)
-		or try_open_inline_branch_link(current_line, cursor_col, buf)
-		or try_open_markdown_link(current_line, cursor_col, buf)
+	local handled = open_markdown_reference(current_line, cursor_col, buf)
 		or open_branch_ref(current_line, buf)
 	if handled then
 		return handled
@@ -5058,24 +5061,27 @@ M.cmd.OpenFileUnderCursor = function()
 
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local candidates = require("parley.reference_candidates")
+	local parsed, status = require("parley.entity_textobj").parsed_for(buf, lines)
+	local range, in_code = require("parley.entity_range").navigation_range(parsed, lines, cursor[1],
+		{config = M.config})
+	local transcript = parsed ~= nil or require("parley.chat_parser").transcript_header_end(lines) ~= nil
+	local scan_opts = {config = M.config, in_code = in_code, transcript = transcript,
+		branch_prefix = get_branch_prefix()}
 	local direct
-	for _, item in ipairs(candidates.markdown_spans(lines, {first = 1, last = #lines}, {config = M.config})) do
+	for _, item in ipairs(candidates.markdown_spans(lines, {first = 1, last = #lines}, scan_opts)) do
 		if item.end_row > item.row and cursor[1] >= item.row and cursor[1] <= item.end_row
 			and (cursor[1] > item.row or cursor[2] >= item.col)
 			and (cursor[1] < item.end_row or cursor[2] < item.end_col) then direct = item; break end
 	end
-	local outcome = open_reference_under_cursor(buf, direct and direct.span or current_line,
-		direct and 0 or cursor[2], is_chat)
+	local outcome = direct and (open_markdown_reference(direct.span, 0, buf) or "none")
+		or open_reference_under_cursor(buf, current_line, cursor[2], is_chat)
 	if outcome ~= "none" then restore_insert(); return end
 	if direct then fallback(direct); return end
 	local artifact_ref = require("parley.artifact_ref")
 	if artifact_ref.parse_ref_at_cursor(current_line, cursor[2] + 1) then fallback(); return end
 
-	local parsed, status = require("parley.entity_textobj").parsed_for(buf, lines)
 	if status == "unparsable" then fallback(); return end
-	local range, in_code = require("parley.entity_range").navigation_range(parsed, lines, cursor[1],
-		{config = M.config})
-	local items = candidates.collect(lines, range, {in_code = in_code, branch_prefix = get_branch_prefix()})
+	local items = candidates.collect(lines, range, scan_opts)
 	local function open_item(item)
 		if not is_current() then return end
 		if item.kind == "artifact" then fallback(item); return end
@@ -5085,8 +5091,7 @@ M.cmd.OpenFileUnderCursor = function()
 			or lines[item.row]:sub(item.col + 1, item.end_col))
 		local result
 		if item.kind == "markdown" then
-			result = try_open_src_link(span, 0, buf) or try_open_inline_branch_link(span, 0, buf)
-				or try_open_markdown_link(span, 0, buf) or "none"
+			result = open_markdown_reference(span, 0, buf) or "none"
 		elseif item.kind == "branch" then
 			result = open_branch_ref(span, buf)
 		else

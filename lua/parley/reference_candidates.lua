@@ -20,13 +20,16 @@ function M.markdown_spans(lines, range, opts)
     if not range then return {} end
     opts = opts or {}
     local lexical = require("parley.document.lexical")
-    local in_code = opts.in_code or lexical.code_block_memo(lines, lexical.patterns(opts.config or {}), true)
+    local patterns = lexical.patterns(opts.config or {})
+    local in_code = opts.in_code or lexical.code_block_memo(lines, patterns, true, opts.transcript)
     local first, last = math.max(1, range.first), math.min(#lines, range.last)
     local chunks, starts, size = {}, {}, 0
     for row = first, last do
         local line = lines[row]
         local heading = require("parley.markdown_heading").level(line)
-        local boundary = heading or line:match("^%s*%d+[.)]%s") or line:match("^%s*[-+*]%s")
+        local kind = opts.transcript ~= false and lexical.classify(line, patterns).kind
+        local structural = lexical.is_structural_kind(kind) or kind == "reasoning" or kind == "reasoning_end"
+        local boundary = structural or heading or line:match("^%s*%d+[.)]%s") or line:match("^%s*[-+*]%s")
         local barrier = boundary and "\0" or ""
         local chunk = (in_code[row] or lexical.is_fence_delim(line, true) or line:match("^%s*$"))
             and "\0" or barrier .. line .. (heading and "\0" or "")
@@ -89,12 +92,12 @@ function M.collect(lines, range, opts)
     opts = opts or {}
     local lexical = require("parley.document.lexical")
     local patterns = lexical.patterns(opts.config or {})
-    local in_code = opts.in_code or lexical.code_block_memo(lines, patterns, true)
+    local in_code = opts.in_code or lexical.code_block_memo(lines, patterns, true, opts.transcript)
     local prefix = opts.branch_prefix or patterns.branch_prefix
     local artifact_ref = require("parley.artifact_ref")
     local out = {}
     local reserved, markdown = {}, {}
-    for _, item in ipairs(M.markdown_spans(lines, range, { in_code = in_code, config = opts.config })) do
+    for _, item in ipairs(M.markdown_spans(lines, range, { in_code = in_code, config = opts.config, transcript = opts.transcript })) do
         markdown[item.row] = markdown[item.row] or {}
         markdown[item.row][item.col + 1] = item
         for row = item.row, item.end_row do

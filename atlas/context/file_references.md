@@ -99,3 +99,9 @@ literals. Operator-configured paths have a separate audited allowlist.
 - `tests/integration/entity_resolve_spec.lua` — filesystem-backed resolver and stale-result suppression.
 - `scripts/check-sdlc-resolve-conformance.py` — opt-in real/fake resolver contract check with isolated temporary repositories; run `make -k check-sdlc-conformance` whenever the runner/fake changes and before closing that work.
 - `tests/arch/untrusted_path_spec.lua`, `tests/integration/untrusted_path_spec.lua` — expansion sinks and end-to-end inert path handling.
+
+Wrapped Markdown dispatch retains its identity for unsupported destinations: the
+direct and selected paths share the Markdown-only opener and fall back at the
+URL's row/byte position. Both scans receive the document-aware navigation fence
+memo; transcript structural prefixes stop cross-boundary joins, while chat-like
+text in plain Markdown never resets a fence.

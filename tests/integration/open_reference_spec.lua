@@ -824,6 +824,47 @@ describe('enclosing entity navigation', function()
         assert.same(before, vim.api.nvim_win_get_cursor(0))
         assert.equals(buf, vim.api.nvim_get_current_buf())
     end)
+    it('keeps unsupported direct wrapped links separate from nested @@ targets', function()
+        local present = write_markdown('nested-present.md', {'# Nested'})
+        for _, nested in ipairs({present, docs_dir .. '/nested-missing.md'}) do
+            local lines = {'[long @@' .. nested .. '@@', 'label](https://example.invalid/side)'}
+            for _, cursor in ipairs({{1, 2}, {2, 2}}) do
+                source(lines, cursor[1], cursor[2])
+                local seen
+                parley.cmd.ResolveRefOrGotoFile = function() seen = vim.api.nvim_win_get_cursor(0) end
+                invoke()
+                assert.same({2, lines[2]:find('https', 1, true) - 1}, seen)
+                assert.same(cursor, vim.api.nvim_win_get_cursor(0))
+                assert.equals(0, #opened)
+                assert.equals(0, #warnings)
+                assert.is_nil(picker)
+            end
+        end
+    end)
+    it('does not join wrapped labels across any transcript structural marker', function()
+        local target = write_markdown('boundary-target.md', {'# Target'})
+        local patterns = require('parley.document.lexical').patterns(parley.config)
+        for _, field in ipairs({'user_prefix','assistant_prefix','summary_prefix','reasoning_prefix',
+            'tool_use_prefix','tool_result_prefix','branch_prefix','local_prefix'}) do
+            local ending = patterns[field] .. ' label](' .. target .. ')'
+            local chat = write_chat('2026-03-24.18-40-00.002_boundary.md', {'[unfinished', ending})
+            assert.is_nil(open_at(chat, ending, #patterns[field] + 3).opened)
+        end
+    end)
+    it('ignores wrapped labels in plain Markdown fences with chat-looking prefixes', function()
+        local target = write_markdown('fenced-wrapped.md', {'# Target'})
+        local patterns = require('parley.document.lexical').patterns(parley.config)
+        for _, fence in ipairs({'```', '~~~'}) do
+            for _, field in ipairs({'user_prefix','assistant_prefix','summary_prefix','reasoning_prefix',
+                'tool_use_prefix','tool_result_prefix','branch_prefix','local_prefix'}) do
+                local lines = {fence, patterns[field] .. ' [long', 'label](' .. target .. ')', fence}
+                source(lines, 3, 2)
+                invoke()
+                assert.equals(0, #opened)
+                assert.is_nil(picker)
+            end
+        end
+    end)
     it('keeps direct Markdown priority over other entity choices', function()
         local target = write_markdown('direct.md', {'# D'})
         source({'1. [direct](direct.md)','   [other](missing.md)'},1,6)

@@ -40,6 +40,22 @@ describe("reference candidates", function()
         end
     end)
 
+    it("confines wrapped spans to transcript markers and preserves plain Markdown fences", function()
+        local patterns = require("parley.document.lexical").patterns({})
+        for _, field in ipairs({"user_prefix", "assistant_prefix", "summary_prefix", "reasoning_prefix",
+            "tool_use_prefix", "tool_result_prefix", "branch_prefix", "local_prefix"}) do
+            local lines = {"[unfinished", patterns[field] .. " label](side.md)"}
+            assert.same({}, candidates.markdown_spans(lines, {first = 1, last = 2}, {transcript = true}))
+            local got = candidates.collect(lines, {first = 1, last = 2}, {transcript = true})
+            for _, item in ipairs(got) do assert.is_not.equals("markdown", item.kind) end
+            for _, fence in ipairs({"```", "~~~"}) do
+                lines = {fence, patterns[field] .. " [long", "label](side.md)", fence}
+                assert.same({}, candidates.markdown_spans(lines, {first = 1, last = 4}, {transcript = false}))
+                assert.same({}, candidates.collect(lines, {first = 1, last = 4}, {transcript = false}))
+            end
+        end
+    end)
+
     it("enumerates only closed nonempty @@ spans and retains legacy starts", function()
         local line = "é @@  a@b.md  @@ and @@two.md@@ then @@unterminated"
         local refs = candidates.at_references(line)
