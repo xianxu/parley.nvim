@@ -32,6 +32,13 @@ Investigate and eliminate the guest probe timing/focus dependence without weaken
 
 A deterministic regression or controlled scheduling reproduces the failure, the root cause is fixed, and focused plus full parallel integration checks prove isolation without assuming the current buffer is the completed chat.
 
+## Core concepts
+
+| Entity | Kind | Status | Location | Responsibility |
+| --- | --- | --- | --- | --- |
+| `vm_chat` | INTEGRATION | modified | `tests/packaging/vm_chat.lua` | Guest probe settles the login's reopened picker; ask() reports the chat file it created. |
+| `packaging_vm_spec` | INTEGRATION | modified | `tests/integration/packaging_vm_spec.lua` | Guest confinement asserted on the created chat after a deliberate focus change. |
+
 ## Plan
 
 Root cause (traced): `agent_picker`'s login row runs `run_login`, whose success
@@ -56,7 +63,7 @@ window 0 is the picker's unnamed prompt, and `resolve('')` fails the
       then move focus to an unnamed scratch buffer (`enew`) before the
       confinement assertions, so they are provably focus-independent. Show that
       the old assertion fails deterministically under that focus change.
-- [ ] Verify: focused spec runs repeated, then the full parallel integration suite.
+- [x] Verify: focused spec runs repeated, then the full parallel integration suite.
 
 ## Log
 
@@ -65,3 +72,4 @@ First-seen head: b6c67239f20e820d85bf4144671f5c7cb8f98152. Command: make -k test
 - 2026-10-15 — reproduced in a second complete required suite, now on e9a1622d2102e71e66dc44d3a0dacb70e9921f92. Same packaging_vm_spec.lua:167 / generated fake-chat.lua:10 assertion,16pass/1fail. All other test files passed; lint745files clean. Durable log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/894c995da011381b869a9bd450c9545b.log. This blocks #332 close/staging; no rerun waiver. Cause remains unproven.
 
 - 2026-10-15 (:3): root cause traced to the reopened model picker (see Plan); TL approved plan f3a52c2e. Red: with only the regression (no-float assertion, `enew`, old buffer-0 assertion) the focused spec failed 16/1 with `guest chat file escaped isolated profile`, deterministically. Green: probe settles the reopened picker via its own `<Esc>` cancel mapping; `ask()` returns `chat_file`; the guest script asserts confinement on it. Focused spec 17/0 on three consecutive runs. Fix commit 6ab04a67.
+- Full suite (make -k test) on 6ab04a67: lint clean (732 files), packaging_vm_spec PASS (14s) under the parallel integration run; the only failure was the arch guard's absent Core concepts table, now added (arch spec 25/0).
