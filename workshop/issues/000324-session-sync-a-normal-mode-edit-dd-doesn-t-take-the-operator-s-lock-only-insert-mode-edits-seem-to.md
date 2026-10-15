@@ -1,12 +1,12 @@
 ---
 id: 000324
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: '8e33dd6f23166bcee4d8f964f61f5f992e38a177' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '11cb4ffb5ac893ac64583a7f970746a18331edcc' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-14T16:45:23-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "1dff2098", done: "cb6b284b"}
+actual_hours: 0.83
 ---
 
 # session-sync: a normal-mode edit (dd) doesn't take the operator's lock; only insert-mode edits seem to
