@@ -103,7 +103,7 @@ Turn brackets are colored by speaker (`ParleyReviewUser` / `ParleyReviewAgent`).
 | `<C-g>ve`       | Run the review skill (agent edits per ready markers, legacy no-mode) |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
 | `<M-s>`         | Open the **skill picker** (review is one of the skills) |
-| `<M-CR>`        | **Send** the document as its `process-instruction:` line directs (below) |
+| `<M-CR>`        | Submit the document in a Couch pane; run the existing instruction-based review outside Couch (below). |
 
 ## Accepting and rejecting markers
 
@@ -117,8 +117,18 @@ by `drill_in.resolve` and tested with the shared marker parser.
 
 ## Alt+Return: process-instruction and the slot send (#316)
 
-The review-mode menu float (#133 M4) is gone. The standing instruction lives in
-the document's frontmatter, one line the operator edits per round:
+Inside a Couch pane, Alt+Return in a named Markdown document follows
+[agentic document submission](session_sync.md) (#332): save, register on first
+submission, attach the existing turn engine and send `submitted: <absolute
+path>`. It adds no frontmatter and does not prompt for a process instruction.
+The pane's agent is the default owner; explicit `couch-owner:` overrides it,
+while a business `owner:` field does not. Confirmed membership survives header
+edits. Unknown offline membership stays editable with `Couch unavailable:
+agentic state unknown`; known attached/cached identities keep turn protection.
+
+Outside a Couch pane, the existing review behavior remains: the standing
+instruction lives in the document's frontmatter, one line the operator edits
+per round. The review-mode menu float (#133 M4) is gone.
 
 ```yaml
 process-instruction: "[copy-edit] keep the voice"
@@ -129,25 +139,18 @@ process-instruction: "[copy-edit] keep the voice"
   (`[copy-edit]` → `copy-editing`); the rest is free text added to it. No
   `[name]` means `free-form`. Several names contribute their briefs; the first
   one's knobs (`scope`, `deletions`, `frontier`) give the round's directives.
-  `instruction.brief` renders it, for the slot message and for the in-editor
-  review's system prompt alike (`source(ctx)` takes `args.modes`).
+  `instruction.brief` renders it for the in-editor review's system prompt
+  (`source(ctx)` takes `args.modes`).
 - **Quoting:** `[copy-edit] keep` is not valid YAML (sdlc's yaml.v3 rejects it in
   issue frontmatter), so parley writes the value double-quoted when it needs it
   (`frontmatter.needs_quote`) and reads either form. Typing `[` in the value
   completes the mode names (from the modes directory); accepting one quotes the
   line.
-- **Where it goes** (`lua/parley/review_send.lua`): to the agent in this
-  editor's own Couch slot — the `couch --actors` actor whose binding carries this
-  process's `COUCH_THREAD_SCOPE`/`COUCH_THREAD_TAG`, which pair sets on every
-  pane. The buffer is saved, then `couch --send-to <slot>` carries the path, the
-  instruction, the brief, and a unified diff since the last delivered send (an
-  in-memory baseline per file; the first send of a session says "read the whole
-  file"; capped at 200 diff lines). Outside pair (no thread env) the same
-  instruction runs `run_via_invoke` here. In pair with no resolvable actor it
-  errors and sends nothing.
-- **No line yet:** Alt+Return asks once and writes the answer into the
-  frontmatter (creating one), then sends. A `type: session-sync` file submits
-  instead ([Session-Sync Files](session_sync.md)).
+- **Where it goes** (`lua/parley/review_send.lua`): without a Couch thread,
+  the instruction runs `run_via_invoke` here. Typed legacy session-sync files
+  keep their dedicated submit path.
+- **No line yet:** outside Couch, Alt+Return asks once and writes the answer
+  into the frontmatter (creating one), then runs the review.
 
 The sidecar (`*.parley-journal.md`) is excluded from review attachment
 (`is_journal_sidecar`). `<M-CR>` is free here — chat-respond's `<M-CR>` is
@@ -280,7 +283,7 @@ review_highlight_duration = 2000, -- highlight fade time in ms
 review_shortcut_edit   = { modes = { "n" }, shortcut = "<C-g>ve" },
 review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 review_shortcut_menu   = { modes = { "n" }, shortcut = "<M-s>" },   -- skill picker
-review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- send (process-instruction)
+review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- submit in Couch; review elsewhere
 -- Marker insertion: see drill_in_callbacks in lua/parley/init.lua
 -- (shared <M-q> / <C-g>q binding)
 ```
@@ -291,7 +294,8 @@ review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- send 
 - `lua/parley/skills/review/mode.lua` — Mode parse/directives (PURE) + load/list IO seam
 - `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files
 - `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam
-- `lua/parley/review_send.lua` — `<M-CR>`: slot send / in-editor fallback, the add-instruction prompt, `[` completion
+- `lua/parley/review_send.lua` — `<M-CR>` dispatch to agentic submission in Couch; existing in-editor fallback, add-instruction prompt and `[` completion outside Couch
+- `lua/parley/agentic_document.lua` — named-document registration/admission and native rename hooks; see [session-sync](session_sync.md)
 - `lua/parley/skills/review/instruction.lua` — `process-instruction` grammar, mode expansion, brief (PURE)
 - `lua/parley/frontmatter.lua` — shared frontmatter reader (hyphenated keys, raw values, quoting; PURE)
 - `lua/parley/couch.lua` — the `couch` seam: send, query, this editor's own actor

@@ -3,6 +3,8 @@
 local M = {}
 local frontmatter = require('parley.frontmatter')
 local references = require('parley.reference_candidates')
+local structure = require('parley.highlight_structure')
+local assets = require('parley.assets')
 
 local function canonical(path)
     if type(path) ~= 'string' or #path > 4096 or path:sub(1, 1) ~= '/'
@@ -14,6 +16,24 @@ local function canonical(path)
     end
     return true
 end
+--- Filename classification shares the existing asset namespace's Markdown set.
+--- Registered parent admission is supplied by the caller, including filetype-
+--- Markdown files with no extension; this predicate classifies scanned children.
+function M.is_markdown_path(path)
+    return type(path) == 'string' and assets.key_for(path) ~= nil
+end
+
+--- A side directory uses the final filename stem. A leading dot alone is not
+--- an extension, and dots in parent directory names never affect the result.
+function M.side_path(path)
+    if type(path) ~= 'string' or path == '' then return nil end
+    local directory, basename = path:match('^(.*[/])([^/]+)$')
+    directory, basename = directory or '', basename or path
+    local stem = basename:match('^(.*)%.[^.]*$')
+    if not stem or stem == '' then stem = basename end
+    return directory .. stem .. '.side'
+end
+
 local function dirname(path) return path:match('^(.*)/[^/]+$') end
 local function contained(path, root) return path:sub(1, #root + 1) == root .. '/' end
 local function normalize(path)
@@ -130,10 +150,11 @@ function M.rewrite_parent(bytes, child_paths, parent_paths)
     local fence, width
     for row = fm_end + 1, #lines do
         local line = lines[row]
-        local marker = line:match('^%s*(```+)') or line:match('^%s*(~~~+)')
-        if marker then
-            if not fence then fence, width = marker:sub(1, 1), #marker
-            elseif marker:sub(1, 1) == fence and #marker >= width then fence, width = nil, nil end
+        local marker_width = structure.is_fence_delim(line, true)
+        if marker_width then
+            local marker_kind = structure.is_fence_delim(line) and '`' or '~'
+            if not fence then fence, width = marker_kind, marker_width
+            elseif marker_kind == fence and marker_width >= width then fence, width = nil, nil end
         elseif not fence then
             local mask, covered = code_mask(line), {}
             for _, link in ipairs(references.markdown_links(line)) do
@@ -175,15 +196,16 @@ end
 --- Effects execute under a lease, with the captured observations revalidated.
 function M.project(old, new, observations)
     local o = observations
-    if not canonical(old) or not canonical(new) or old == new or not old:match('%.md$') or not new:match('%.md$')
+    if not canonical(old) or not canonical(new) or old == new
         or type(o) ~= 'table' or type(o.id) ~= 'string' or o.id == '' or #o.id > 256
         or o.id:find('[%z\1-\31\127]') or type(o.entries) ~= 'table' then return nil, 'invalid move input' end
     for _, key in ipairs({ 'old_exists', 'new_exists', 'new_written', 'destination_registered', 'side_exists', 'target_side_exists' }) do
         if type(o[key]) ~= 'boolean' then return nil, 'missing move observation: ' .. key end
     end
-    local source, destination = old:gsub('%.md$', '.side'), new:gsub('%.md$', '.side')
+    local source, destination = M.side_path(old), M.side_path(new)
     if contained(destination, source) or contained(new, source) then return nil, 'move target inside source side directory' end
-    if o.destination_registered or o.target_side_exists then return nil, 'occupied move destination' end
+    if source == destination and o.side_exists ~= o.target_side_exists then return nil, 'inconsistent shared side observation' end
+    if o.destination_registered or (source ~= destination and o.target_side_exists) then return nil, 'occupied move destination' end
     local count, markdown, seen, entries = 0, 0, {}, {}
     for index, entry in pairs(o.entries) do
         count = count + 1
@@ -193,7 +215,7 @@ function M.project(old, new, observations)
             or seen[entry.path] then return nil, 'invalid side entry observation' end
         seen[entry.path] = true
         entries[#entries + 1] = entry
-        if entry.type == 'file' and entry.path:match('%.md$') then
+        if entry.type == 'file' and M.is_markdown_path(entry.path) then
             markdown = markdown + 1
             if markdown > 512 or type(entry.bytes) ~= 'string' then return nil, 'invalid Markdown entry observation' end
         end
@@ -207,10 +229,12 @@ function M.project(old, new, observations)
     end
     if not o.new_exists then return nil, 'new write has no destination file' end
     if o.side_exists then
-        result.effects[#result.effects + 1] = { kind = 'move_side', old = source, new = destination }
+        if source ~= destination then
+            result.effects[#result.effects + 1] = { kind = 'move_side', old = source, new = destination }
+        end
         table.sort(entries, function(a, b) return a.path < b.path end)
         for _, entry in ipairs(entries) do
-            if entry.type == 'file' and entry.path:match('%.md$') then
+            if entry.type == 'file' and M.is_markdown_path(entry.path) then
                 local path = destination .. entry.path:sub(#source + 1)
                 local after, err = M.rewrite_parent(entry.bytes, { old = entry.path, new = path }, { old = old, new = new })
                 if not after then return nil, err end

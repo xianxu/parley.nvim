@@ -6,7 +6,7 @@ local ss = require("parley.session_sync")
 local uv = vim.uv or vim.loop
 
 describe("session-sync buffer", function()
-    local root, file, argv_file, log_file, saved_path, saved_poll, saved_check, saved_thread, buf
+    local root, file, argv_file, log_file, saved_path, saved_poll, saved_check, saved_thread, saved_env, saved_state_dir, buf
     local p = require("parley")
 
     local function open(lines)
@@ -83,6 +83,15 @@ describe("session-sync buffer", function()
         -- Outside pair unless a spec says otherwise (the suite itself may run
         -- inside a pair slot, whose env names a real thread).
         saved_thread = { vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG }
+        saved_env = {}
+        for _, name in ipairs({ "FAKE_COUCH_REGISTRY", "FAKE_COUCH_REGISTRY_MODE", "FAKE_COUCH_STATUS",
+            "FAKE_COUCH_ACTORS", "FAKE_COUCH_EXIT", "FAKE_COUCH_SLEEP", "COUCH_ISOLATED_ROOT" }) do
+            saved_env[name] = vim.env[name] or false
+        end
+        saved_state_dir = p.config.state_dir
+        p.config.state_dir = root .. "/state"
+        vim.env.FAKE_COUCH_REGISTRY, vim.env.FAKE_COUCH_REGISTRY_MODE = nil, nil
+        vim.env.COUCH_ISOLATED_ROOT = root
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         vim.env.FAKE_COUCH_EXIT = "0"
         vim.env.FAKE_COUCH_SLEEP = nil
@@ -101,12 +110,26 @@ describe("session-sync buffer", function()
         end
         vim.env.PATH, ss.POLL_MS, ss.PING_CHECK_MS = saved_path, saved_poll, saved_check
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = saved_thread[1], saved_thread[2]
+        for name, value in pairs(saved_env) do vim.env[name] = value or nil end
+        p.config.state_dir = saved_state_dir
         vim.fn.delete(root, "rf")
     end)
 
-    -- The same normalized owner must reach every consumer, including actor
-    -- identity checks. The losing legacy actor is active, so choosing it would
-    -- also suppress the quiet-owner ping.
+    local function enable_registry()
+        vim.env.FAKE_COUCH_REGISTRY = root .. "/registry.json"
+    end
+
+    local function lookup_registration()
+        local result
+        require("parley.document_registry").request("lookup", {file}, {}, function(value) result = value end)
+        assert.is_true(vim.wait(3000, function() return result ~= nil end), "public registry lookup did not complete")
+        assert.equals("registered", result.kind, vim.inspect(result))
+        return result.registration
+    end
+
+    -- The normalized owner reaches every consumer. The losing actor is active,
+    -- so selecting it would suppress the quiet-owner ping. Pane submission
+    -- preserves this owner even when the pane itself belongs to that actor.
     for _, case in ipairs({
         { name = "canonical only", fields = { "couch-owner: ops:0" } },
         { name = "legacy only", fields = { "owner: ops:0" } },
@@ -118,7 +141,7 @@ describe("session-sync buffer", function()
             vim.list_extend(lines, { "operator: test", "---", "", "## Needs you", "- item" })
             return lines
         end
-        it(case.name .. " routes band, quiet ping and same-slot submit to the normalized owner", function()
+        it(case.name .. " routes band, quiet ping and pane submit to the normalized owner", function()
             local actor_list = {
                 { Binding = { Slot = "ops:0", Scope = "s0", Tag = "t0" }, Known = true,
                   LastActivity = os.date("!%Y-%m-%dT%H:%M:%SZ", os.time() - 60) },
@@ -132,12 +155,16 @@ describe("session-sync buffer", function()
             assert.is_true(vim.wait(2000, function() return winbar():find("ops:0 owes a response", 1, true) ~= nil end))
             wait_sent(1)
             assert.equals(1, sent()[1]:find("ops:0|session-sync ping: " .. file .. " owes a response since ", 1, true))
-            vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "s0", "t0"
+            vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "s9", "t9"
+            enable_registry()
             vim.api.nvim_buf_set_lines(buf, #lines - 1, #lines, false, { "- edited" })
             assert.equals("holder: operator", holder())
             keymap_cb("<M-CR>")()
             wait_sent(2)
             assert.equals("ops:0|submitted: " .. file, sent()[2])
+            local registration = lookup_registration()
+            assert.equals("ops:0", registration.Owner)
+            assert.equals("other:9", registration.RegisteredOwner)
             assert.is_false(exists(file .. ".lock"))
             assert.equals("- edited", vim.fn.readfile(file)[#lines])
         end)
@@ -182,7 +209,7 @@ describe("session-sync buffer", function()
         assert.equals("holder: operator", holder())
     end)
 
-    describe("inside a pair slot, owner: is a check (#316)", function()
+    describe("inside a Couch pane, confirmed typed owner overrides the pane (#332)", function()
         -- Two live slots; this editor runs in the one bound to scope s1/tag t1.
         local function slots()
             return vim.json.encode({ Code = "ok", Actors = {
@@ -193,25 +220,24 @@ describe("session-sync buffer", function()
         before_each(function()
             vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "s1", "t1"
             vim.env.FAKE_COUCH_ACTORS = slots()
+            enable_registry()
         end)
 
-        it("an owner that is another slot: warned, nothing saved, lock kept, nothing sent", function()
-            open(header) -- owner: ops:0
+        it("a typed owner in another slot is registered, saved and sent to that owner", function()
+            open(header) -- Legacy session-sync owner remains an explicit route.
             edit("- edited")
-            local warned
-            local saved_notify = vim.notify
-            vim.notify = function(msg) warned = msg end
             keymap_cb("<M-CR>")()
-            assert.is_true(vim.wait(2000, function() return warned ~= nil end))
-            vim.notify = saved_notify
-            assert.truthy(warned:find("owner ops:0 is not this slot's agent (parley.nvim:1)", 1, true))
-            assert.equals("holder: operator", holder())
-            assert.is_true(vim.bo[buf].modified)
-            vim.wait(100)
-            assert.same({}, sent())
+            wait_sent(1)
+            assert.equals("ops:0|submitted: " .. file, sent()[1])
+            assert.is_false(exists(file .. ".lock"))
+            assert.is_false(vim.bo[buf].modified)
+            assert.equals("- edited", vim.fn.readfile(file)[8])
+            local registration = lookup_registration()
+            assert.equals("ops:0", registration.Owner)
+            assert.equals("parley.nvim:1", registration.RegisteredOwner)
         end)
 
-        it("an owner that is this slot (by a prefix spelling) submits", function()
+        it("a legacy owner prefix is retained as the confirmed effective route", function()
             local h = vim.deepcopy(header)
             h[3] = "owner: parley:1"
             open(h)
@@ -219,6 +245,9 @@ describe("session-sync buffer", function()
             keymap_cb("<M-CR>")()
             wait_sent(1)
             assert.equals("parley:1|submitted: " .. file, sent()[1])
+            local registration = lookup_registration()
+            assert.equals("parley:1", registration.Owner)
+            assert.equals("parley.nvim:1", registration.RegisteredOwner)
             assert.is_false(exists(file .. ".lock"))
         end)
 

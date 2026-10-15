@@ -859,8 +859,8 @@ M.entries = {
 		default_key = "<M-CR>",
 		default_modes = { "n", "i" },
 		scope = "markdown",
-		desc = "Parley review: send as process-instruction directs",
-		help_desc = "Send to this slot's agent (process-instruction)",
+		desc = "Parley: submit document to its agent; review outside Couch",
+		help_desc = "Submit document to its agent (review outside Couch)",
 		buffer_local = true,
 	},
 

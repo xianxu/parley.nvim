@@ -160,24 +160,24 @@ Files: new document_session.lua, document_move_plan.lua, document_lease.lua and 
 
 Files: new agentic_document.lua; modify session_sync.lua, review_send.lua, init.lua and registry help descriptions. Tests: session-sync native/integration, review-send/keybinding specs and new agentic_document integration specs.
 
-- [ ] Add the production-trigger acceptance checks described by attach/submit and cached-admission strategies; observe the red behavior with real auto-save ordering.
-- [ ] Integrate the coordinator with the single edit-turn engine and normalized owner/path accessor, including the TL's editable-unknown policy.
-- [ ] Preserve outside-pane behavior and update deliberately superseded pane routing expectations; run mapped session-sync/review/keybinding groups sequentially, then commit.
+- [x] Add the production-trigger acceptance checks described by attach/submit and cached-admission strategies; observe the red behavior with real auto-save ordering.
+- [x] Integrate the coordinator with the single edit-turn engine and normalized owner/path accessor, including the TL's editable-unknown policy.
+- [x] Preserve outside-pane behavior and update deliberately superseded pane routing expectations; run mapped session-sync/review/keybinding groups sequentially, then commit.
 
 ### 3. Filesystem migration/recovery
 
 Files: new document_move.lua; modify helper.lua, agentic_document.lua, session_sync.lua and shared Parley-owned rename entry points. Tests: helper_io and new document_move specs plus the native production-trigger tests.
 
-- [ ] Write the project/rewrite/acquire/recover strategy tests, including a controlled two-editor schedule, before implementing effects.
-- [ ] Implement leased preflight, journaled filesystem effects, native-write ordering and confirmed metadata handoff as specified above.
-- [ ] Run recovery/cleanup strategies and the real native saveas/file+write checks green; commit.
+- [x] Write the project/rewrite/acquire/recover strategy tests, including a controlled two-editor schedule, before implementing effects.
+- [x] Implement leased preflight, journaled filesystem effects, native-write ordering and confirmed metadata handoff as specified above.
+- [x] Run recovery/cleanup strategies and the real native saveas/file+write checks green; commit.
 
 ### 4. Conformance, docs and delivery
 
 Files: existing session-sync/review atlas, traceability, README, TOOLING and new scripts/check-couch-registry-conformance.py/maintainer target.
 
-- [ ] Add the isolated real/fake driver. Set an absolute COUCH_ISOLATED_ROOT, scrub inherited outside storage/identity overrides, and bootstrap --adopt-store ABS_STORE --pair-data ABS_PAIR --identity-dir ABS_IDENTITY preview then --apply DIGEST, with all paths inside the root. Never fall back to the OS account singleton; refuse unsupported binaries. Follow the function strategy and require the deliberately corrupted fake to fail. Run after seam/fake changes and before close. Pair's targeted tests complement this check; they are not editor acceptance.
-- [ ] Update the existing atlas and adjacent README contract, including intentional owner routing and first-submit changes; map all new model/client/coordinator/lease/move tests. The TL owns the ops project.
+- [x] Add the isolated real/fake driver. Set an absolute COUCH_ISOLATED_ROOT, scrub inherited outside storage/identity overrides, and bootstrap --adopt-store ABS_STORE --pair-data ABS_PAIR --identity-dir ABS_IDENTITY preview then --apply DIGEST, with all paths inside the root. Never fall back to the OS account singleton; refuse unsupported binaries. Follow the function strategy and require the deliberately corrupted fake to fail. Run after seam/fake changes and before close. Pair's targeted tests complement this check; they are not editor acceptance.
+- [x] Update the existing atlas and adjacent README contract, including intentional owner routing and first-submit changes; map all new model/client/coordinator/lease/move tests. The TL owns the ops project.
 - [ ] Run make -k test-spec for modes/session_sync, modes/review and ui/keybindings sequentially plus focused helper/move targets; lint and diff checks. Push PR and run sdlc local-check run --name suite before close, preserving every failure.
 - [ ] Close through the mandatory fresh-context review and fix complete finding classes. After pair#573 lands and real conformance passes, obtain hub staging authorization and run sdlc stage --build for the combined live check. Land only after operator acceptance; clear stage and report verified PR/merge.
 

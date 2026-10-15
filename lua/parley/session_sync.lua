@@ -158,12 +158,24 @@ local function header(buf)
 	return M.parse_header(vim.api.nvim_buf_get_lines(buf, 0, 40, false))
 end
 
+local function buffer_id(buf)
+    return buf == 0 and vim.api.nvim_get_current_buf() or buf
+end
+
 M.is_session_sync = function(buf)
-	return header(buf) ~= nil
+    buf = buffer_id(buf)
+    return state[buf] ~= nil or header(buf) ~= nil
+end
+
+M.identity = function(buf)
+    local s = state[buffer_id(buf)]
+    return s and vim.deepcopy(s.identity) or nil
 end
 
 local function file_of(buf)
-	return vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p")
+    buf = buffer_id(buf)
+    return state[buf] and state[buf].identity.File
+        or vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p")
 end
 
 M.lock_path = function(buf)
@@ -171,7 +183,7 @@ M.lock_path = function(buf)
 end
 
 local function owner_of(buf)
-	return (header(buf) or {}).owner
+	return state[buffer_id(buf)] and state[buffer_id(buf)].identity.Owner or (header(buf) or {}).owner
 end
 
 local function read_turn(buf)
@@ -195,9 +207,13 @@ local function write_lock(buf, holder)
 		notify("cannot write " .. path, vim.log.levels.ERROR)
 		return false
 	end
-	f:write(M.lock_body(holder, os.time()))
-	f:close()
-	return true
+    local bytes = M.lock_body(holder, os.time())
+    local written = f:write(bytes)
+    local closed = f:close()
+    if not written or not closed then return false end
+    local s = state[buffer_id(buf)]
+    if s then s.owned_lock = bytes end
+    return true
 end
 
 local send, query, list = couch.send, couch.query, couch.list
@@ -212,9 +228,17 @@ end
 local function render(buf, view)
 	for _, win in ipairs(vim.fn.win_findbuf(buf)) do
 		local opts = { win = win, scope = "local" }
-		vim.api.nvim_set_option_value("winhighlight", "StatusLine:" .. view.hl, opts)
-		-- `%=` fills the rest of the bar in the same colour: a full-width band.
-		vim.api.nvim_set_option_value("winbar", "%#" .. view.hl .. "# " .. view.label .. "%=", opts)
+        local s = state[buf]
+        s.windows = s.windows or {}
+        s.windows[win] = s.windows[win] or {
+            winhighlight = vim.api.nvim_get_option_value("winhighlight", opts),
+            winbar = vim.api.nvim_get_option_value("winbar", opts),
+        }
+        local owned = s.windows[win]
+        owned.installed_highlight = "StatusLine:" .. view.hl
+        owned.installed_bar = "%#" .. view.hl .. "# " .. view.label .. "%="
+        vim.api.nvim_set_option_value("winhighlight", owned.installed_highlight, opts)
+        vim.api.nvim_set_option_value("winbar", owned.installed_bar, opts)
 	end
 end
 
@@ -347,14 +371,15 @@ end
 probe = function(buf)
 	local s = state[buf]
 	local owner = owner_of(buf)
-	if not owner or s.probing or (s.probed and vim.uv.now() - s.probed < M.PING_CHECK_MS) then
+	if not s or s.moving or not owner or s.probing or (s.probed and vim.uv.now() - s.probed < M.PING_CHECK_MS) then
 		return
 	end
 	s.probing, s.probed = true, vim.uv.now()
 	local path = file_of(buf)
 	local mtime = disk_mtime(buf)
+    local epoch = s.epoch
 	query({ "couch", "--session-sync", "status", "--json", path }, function(status)
-		if state[buf] ~= s then
+		if state[buf] ~= s or s.moving or s.epoch ~= epoch then
 			return
 		end
 		local observed = list(status and status.Status)
@@ -377,7 +402,7 @@ probe = function(buf)
 			return
 		end
 		query({ "couch", "--actors", "--json" }, function(actors)
-			if state[buf] ~= s then
+			if state[buf] ~= s or s.moving or s.epoch ~= epoch then
 				return
 			end
 			s.probing = false
@@ -399,7 +424,7 @@ end
 -- operator's turn an agent write is a violation.
 local function start_watch(buf)
 	local s = state[buf]
-	if s.watch then
+	if s.moving or s.watch then
 		return
 	end
 	local timer = vim.uv.new_timer()
@@ -407,7 +432,7 @@ local function start_watch(buf)
 	timer:start(M.POLL_MS, M.POLL_MS, vim.schedule_wrap(function()
 		-- An unloaded buffer (:bdelete) has no copy to keep: stop until
 		-- BufWinEnter shows it again.
-		if s.watch ~= timer or not vim.api.nvim_buf_is_loaded(buf) then
+		if state[buf] ~= s or s.moving or s.watch ~= timer or not vim.api.nvim_buf_is_loaded(buf) then
 			close_timer(timer)
 			if s.watch == timer then
 				s.watch = nil
@@ -430,13 +455,13 @@ end
 -- Apply the on-disk turn and the owed state to the band.
 refresh = function(buf)
 	local s = state[buf]
-	if not s or not vim.api.nvim_buf_is_valid(buf) then
+	if not s or s.moving or not vim.api.nvim_buf_is_valid(buf) then
 		return
 	end
 	local turn = read_turn(buf)
 	s.turn = turn
 	if turn ~= "operator" then
-		s.stale, s.violated, s.complained, s.baseline = false, false, false, nil
+		s.stale, s.violated, s.complained, s.baseline, s.owned_lock = false, false, false, nil, nil
 	end
 	s.minutes = owed_minutes(buf)
 	start_watch(buf)
@@ -448,6 +473,7 @@ end
 -- renders in the reminder colour.
 local function restart_idle(buf)
 	local s = state[buf]
+    if not s or s.moving then return end
 	if s.stale then
 		s.stale = false
 		refresh(buf)
@@ -461,7 +487,7 @@ local function restart_idle(buf)
 	s.idle = s.idle or vim.uv.new_timer()
 	local minutes = require("parley").config.session_sync_stale_minutes or 5
 	s.idle:start(math.floor(minutes * 60000), 0, vim.schedule_wrap(function()
-		if state[buf] == s and vim.api.nvim_buf_is_valid(buf) and read_turn(buf) == "operator" then
+		if state[buf] == s and not s.moving and vim.api.nvim_buf_is_valid(buf) and read_turn(buf) == "operator" then
 			s.stale = true
 			refresh(buf)
 		end
@@ -482,18 +508,30 @@ local function define_highlights()
 end
 
 --- Install the turn autocmds on a session-sync buffer and render its turn. Idempotent.
-M.attach = function(buf)
-	if state[buf] or not M.is_session_sync(buf) then
-		return
-	end
-	local s = { stale = false }
-	state[buf] = s
+M.attach = function(buf, identity, observed)
+    buf = buffer_id(buf)
+    if state[buf] then
+        local current = state[buf].identity
+        if identity and identity.File == current.File and (not current.ID or current.ID == identity.ID) then
+            state[buf].identity = vim.deepcopy(identity)
+        end
+        if observed then M.acquire_observed(buf, observed) end
+        return
+    end
+    local h = header(buf)
+    if not identity and not h then return end
+    identity = identity or { File = file_of(buf), Owner = h.owner }
+    if type(identity.File) ~= "string" or identity.File:sub(1, 1) ~= "/" then return end
+    local s = { stale = false, identity = vim.deepcopy(identity), epoch = 0,
+        previous_autoread = vim.bo[buf].autoread }
+    state[buf] = s
 	define_highlights()
 	-- With autoread an unmodified buffer reloads on :checktime without
 	-- FileChangedShell: an agent write under the lock right after an
 	-- auto-save would replace the operator's text (#317).
 	vim.bo[buf].autoread = false
 	local group = vim.api.nvim_create_augroup(ns_group .. buf, { clear = true })
+    s.group = group
 	-- Acquire in the edit notification, before TextChanged/InsertLeave auto-save
 	-- callbacks can clear 'modified' (#324). This buffer was identified at
 	-- attach: an edit to its YAML must not remove its protection.
@@ -505,15 +543,17 @@ M.attach = function(buf)
 				if state[buf] ~= s then
 					return true
 				end
-				local previous = s.content
-				s.content = content_hash(buf)
+                local previous = s.content
+                s.content = content_hash(buf)
+                if s.moving then return end
+                local epoch = s.epoch
 				if vim.bo[buf].modified and read_turn(buf) == "free" then
 					local moved = mtime_moved(buf)
 					if write_lock(buf, "operator") then
 						s.baseline = previous
 						refresh(buf)
 						vim.schedule(function()
-							if moved and state[buf] == s and vim.api.nvim_buf_is_loaded(buf)
+							if moved and state[buf] == s and not s.moving and s.epoch == epoch and vim.api.nvim_buf_is_loaded(buf)
 								and read_turn(buf) == "operator" and disk_changed(buf) then
 								violation(buf, true)
 							end
@@ -526,32 +566,12 @@ M.attach = function(buf)
 				local edit = {}
 				s.edit = edit
 				vim.schedule(function()
-					if state[buf] ~= s or s.edit ~= edit or not vim.api.nvim_buf_is_loaded(buf) then
+					if state[buf] ~= s or s.moving or s.epoch ~= epoch or s.edit ~= edit or not vim.api.nvim_buf_is_loaded(buf) then
 						return
 					end
-					if s.baseline and content_hash(buf) == s.baseline
-						and read_turn(buf) == "operator" then
-						-- A foreign write/deletion may predate this edit. Keep the
-						-- turn and preserve it before clean undo can release it.
-						if disk_changed(buf) then
-							violation(buf)
-							return
-						end
-						-- A failed/ignored checktime is still undecided, not free.
-						if mtime_moved(buf) then return end
-						-- Publish baseline text before the agent can see a free turn,
-						-- even when auto-save has not run (or is disabled).
-						if vim.bo[buf].modified then
-							local ok = pcall(vim.api.nvim_buf_call, buf, function()
-								vim.cmd("silent write")
-							end)
-							if not ok or vim.bo[buf].modified or content_hash(buf) ~= s.baseline then return end
-						end
-						if vim.fn.delete(M.lock_path(buf)) == 0 then
-							refresh(buf)
-							restart_idle(buf)
-						end
-					end
+                    if s.baseline and content_hash(buf) == s.baseline and read_turn(buf) == "operator" then
+                        M.release_if_baseline(buf)
+                    end
 				end)
 			end,
 			-- An external reload is not an operator edit; keep the attachment for
@@ -573,8 +593,10 @@ M.attach = function(buf)
 	vim.api.nvim_create_autocmd("FileChangedShell", {
 		group = group,
 		buffer = buf,
-		callback = function()
-			s.foreign = disk_mtime(buf)
+        callback = function()
+            if s.moving then vim.v.fcs_choice = ""; return end
+            local epoch = s.epoch
+            s.foreign = disk_mtime(buf)
 			if s.checking then
 				vim.v.fcs_choice = ""
 				return
@@ -585,7 +607,7 @@ M.attach = function(buf)
 			end
 			vim.v.fcs_choice = ""
 			vim.schedule(function()
-				if state[buf] == s and vim.api.nvim_buf_is_loaded(buf) and read_turn(buf) == "operator" then
+				if state[buf] == s and not s.moving and s.epoch == epoch and vim.api.nvim_buf_is_loaded(buf) and read_turn(buf) == "operator" then
 					violation(buf)
 				end
 			end)
@@ -595,8 +617,9 @@ M.attach = function(buf)
 	vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost", "FileChangedShellPost" }, {
 		group = group,
 		buffer = buf,
-		callback = function()
-			s.loaded = disk_mtime(buf)
+        callback = function()
+            if s.moving then return end
+            s.loaded = disk_mtime(buf)
 			attach_edits() -- :edit! detaches buffer callbacks before BufReadPost.
 		end,
 	})
@@ -611,15 +634,55 @@ M.attach = function(buf)
 		group = group,
 		buffer = buf,
 		callback = function()
-			close_timer(s.watch)
-			close_timer(s.idle)
-			state[buf] = nil
-			pcall(vim.api.nvim_del_augroup_by_id, group)
+            M.detach(buf)
 		end,
 	})
 	s.loaded = disk_mtime(buf)
-	refresh(buf)
-	restart_idle(buf)
+    refresh(buf)
+    restart_idle(buf)
+    if observed then M.acquire_observed(buf, observed) end
+end
+
+-- Restore only the values this attachment still owns; never release a turn.
+M.detach = function(buf)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    if not s then return end
+    state[buf] = nil
+    s.epoch, s.edit = s.epoch + 1, nil
+    close_timer(s.watch)
+    close_timer(s.idle)
+    if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].autoread == false then
+        vim.bo[buf].autoread = s.previous_autoread
+    end
+    for win, owned in pairs(s.windows or {}) do
+        if vim.api.nvim_win_is_valid(win) then
+            local opts = { win = win, scope = "local" }
+            for _, option in ipairs({ "winbar", "winhighlight" }) do
+                local installed = option == "winbar" and owned.installed_bar or owned.installed_highlight
+                if vim.api.nvim_get_option_value(option, opts) == installed then
+                    vim.api.nvim_set_option_value(option, owned[option], opts)
+                end
+            end
+        end
+    end
+    pcall(vim.api.nvim_del_augroup_by_id, s.group)
+end
+
+-- Unknown-period edits can already have been auto-saved: modified is not
+-- evidence that the operator has no outstanding edit turn.
+M.acquire_observed = function(buf, observed)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    if not s or s.moving or not observed or not observed.outstanding then return false end
+    if observed.loaded then s.loaded = observed.loaded end
+    if read_turn(buf) == "free" and not write_lock(buf, "operator") then return false end
+    s.baseline = s.baseline or observed.baseline
+    s.content = content_hash(buf)
+    refresh(buf)
+    restart_idle(buf)
+    if disk_changed(buf) then return violation(buf, true) end
+    return true
 end
 
 local submit_now
@@ -629,7 +692,8 @@ local submit_now
 --- slot's own agent. Outside pair there is no slot to compare, and the owner
 --- is sent to as before.
 M.submit = function(buf)
-	local h = header(buf)
+	buf = buffer_id(buf)
+    local h = state[buf] and { owner = owner_of(buf) } or header(buf)
 	if not h or not h.owner then
 		notify("no `couch-owner:` (or legacy `owner:`) in the frontmatter", vim.log.levels.ERROR)
 		return
@@ -649,47 +713,246 @@ M.submit = function(buf)
 	end)
 end
 
--- Save, delete the lock, tell the owner. The buffer stays editable; the
--- next edit takes the lock again (#315).
+local function lock_bytes(path)
+    local f = io.open(path, "rb")
+    if not f then return nil end
+    local bytes = f:read("*a")
+    f:close()
+    return bytes
+end
+
+
+-- Reconciliation and save are shared by legacy and registered submission.
+M.prepare_submit = function(buf)
+    buf = buffer_id(buf)
+    if not state[buf] then M.attach(buf) end
+    local s = state[buf]
+    if not s or s.moving then return false, "document is not available for submission" end
+    if disk_changed(buf) then
+        if read_turn(buf) == "operator" then
+            if not violation(buf) then return false, "the agent's copy could not be kept beside the file" end
+        else
+            return false, "the file changed on disk since this buffer read it; not overwriting it"
+        end
+    end
+    if mtime_moved(buf) then return false, "disk change could not be reconciled" end
+    vim.cmd("stopinsert")
+    local ok, err = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent write") end)
+    if not ok or vim.bo[buf].modified then return false, tostring(err or "save failed") end
+    return true
+end
+
+-- The same acquisition-baseline release serves native undo and synthetic
+-- migration protection. A matching content hash alone never owns a lock.
+M.release_if_baseline = function(buf)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    if not s or s.moving or not s.baseline or content_hash(buf) ~= s.baseline then return false end
+    if not s.owned_lock or lock_bytes(M.lock_path(buf)) ~= s.owned_lock then return false end
+    if disk_changed(buf) then
+        violation(buf)
+        return false
+    end
+    if mtime_moved(buf) then return false end
+    if vim.bo[buf].modified then
+        local ok = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("silent write") end)
+        if not ok or vim.bo[buf].modified or content_hash(buf) ~= s.baseline then return false end
+    end
+    if lock_bytes(M.lock_path(buf)) ~= s.owned_lock then return false end
+    local ok = os.remove(M.lock_path(buf))
+    if not ok then return false end
+    refresh(buf)
+    restart_idle(buf)
+    return true
+end
+
+local function release_and_send(buf, owner, callback)
+    local ok, err = M.prepare_submit(buf)
+    if not ok then
+        notify(err, vim.log.levels.ERROR)
+        if callback then callback({ code = 1, stderr = err }) end
+        return false, err
+    end
+    local lock = M.lock_path(buf)
+    if vim.uv.fs_stat(lock) and not os.remove(lock) then
+        err = "cannot remove " .. lock
+        notify(err, vim.log.levels.ERROR)
+        if callback then callback({ code = 1, stderr = err }) end
+        return false, err
+    end
+    refresh(buf)
+    restart_idle(buf)
+    local s = state[buf]
+    local epoch, path = s.epoch, file_of(buf)
+    send(owner, "submitted: " .. path, function(obj)
+        if state[buf] ~= s or s.moving or s.epoch ~= epoch then return end
+        if obj.code ~= 0 then
+            notify("send to " .. owner .. " failed, Alt+Return resends: " .. vim.trim(obj.stderr or ""), vim.log.levels.ERROR)
+        else
+            notify("submitted to " .. owner)
+            s.probed = nil
+            probe(buf)
+        end
+        if callback then callback(obj) end
+    end)
+    return true
+end
+
+-- Explicit registry routing uses Couch's confirmed effective owner.
+M.send_registered = function(buf, identity, callback)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    if not s or not identity or identity.ID ~= s.identity.ID or identity.File ~= s.identity.File
+        or identity.Owner ~= s.identity.Owner then
+        local err = "registered identity changed"
+        if callback then callback({ code = 1, stderr = err }) end
+        return false, err
+    end
+    return release_and_send(buf, s.identity.Owner, callback)
+end
+
 submit_now = function(buf, h)
-	M.attach(buf)
-	if disk_changed(buf) then
-		-- Under the operator's lock the operator's copy wins, unless the
-		-- agent's could not be kept.
-		if read_turn(buf) == "operator" then
-			if not violation(buf) then
-				notify("the agent's copy could not be kept beside the file; not overwriting it", vim.log.levels.ERROR)
-				return
-			end
-		else
-			notify("the file changed on disk since this buffer read it; not overwriting it."
-				.. " :e! reloads (dropping your edits)", vim.log.levels.ERROR)
-			return
-		end
-	end
-	vim.cmd("stopinsert")
-	vim.api.nvim_buf_call(buf, function()
-		vim.cmd("silent write")
-	end)
-	local lock = M.lock_path(buf)
-	if vim.uv.fs_stat(lock) and not os.remove(lock) then
-		notify("cannot remove " .. lock, vim.log.levels.ERROR)
-		return
-	end
-	refresh(buf)
-	restart_idle(buf)
-	local s = state[buf]
-	send(h.owner, "submitted: " .. file_of(buf), function(obj)
-		if obj.code ~= 0 then
-			notify("send to " .. h.owner .. " failed, Alt+Return resends: " .. vim.trim(obj.stderr or ""),
-				vim.log.levels.ERROR)
-		elseif state[buf] == s then
-			notify("submitted to " .. h.owner)
-			-- The submit is now owed: show it without waiting a probe interval.
-			s.probed = nil
-			probe(buf)
-		end
-	end)
+    M.attach(buf)
+    return release_and_send(buf, h.owner)
+end
+
+
+-- Suspend the existing engine after preserving any foreign write. The token
+-- is also the ownership proof for every later migration operation.
+M.begin_move = function(buf)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    if not s or s.moving then return nil, "document already moving or detached" end
+    if disk_changed(buf) then
+        if read_turn(buf) ~= "operator" or not violation(buf) then return nil, "foreign change requires reconciliation" end
+    end
+    if mtime_moved(buf) then return nil, "disk change could not be reconciled" end
+    local token = { old_path = file_of(buf), path = file_of(buf), lock = lock_bytes(M.lock_path(buf)), baseline = s.baseline }
+    s.moving = { token = token, old_path = token.old_path, lock = token.lock, baseline = s.baseline }
+    s.epoch, s.edit, s.probing = s.epoch + 1, nil, false
+    close_timer(s.watch)
+    close_timer(s.idle)
+    s.watch, s.idle = nil, nil
+    return token
+end
+
+-- Recovery runs only under the caller's validated journal and ID lease.
+-- Matching persisted bytes prove the turn; neither path is overwritten here.
+M.restore_move = function(buf, old_identity, new_path, protection)
+    buf = buffer_id(buf)
+    if not old_identity or type(old_identity.ID) ~= "string" or type(old_identity.File) ~= "string"
+        or old_identity.File:sub(1, 1) ~= "/" or type(new_path) ~= "string" or new_path:sub(1, 1) ~= "/"
+        or new_path == old_identity.File or type(protection) ~= "table" then
+        return nil, "invalid migration recovery proof"
+    end
+    if protection.old_lock ~= nil and type(protection.old_lock) ~= "string"
+        or protection.new_lock ~= nil and type(protection.new_lock) ~= "string"
+        or protection.baseline ~= nil and type(protection.baseline) ~= "string" then
+        return nil, "invalid migration protection bytes"
+    end
+    local old_lock = lock_bytes(old_identity.File .. ".lock")
+    local new_lock = lock_bytes(new_path .. ".lock")
+    if new_lock ~= protection.new_lock then return nil, "destination protection changed" end
+    if old_lock ~= protection.old_lock then
+        -- OLD cleanup can precede a crash after metadata confirmation. Only a
+        -- matching held NEW proof permits resuming that forward-only handoff.
+        if old_lock ~= nil or not protection.new_lock or new_lock ~= protection.new_lock then
+            return nil, "source protection changed"
+        end
+    end
+    if M.turn(protection.old_lock) == "operator" and M.turn(new_lock) ~= "operator" then
+        return nil, "destination operator protection missing"
+    end
+    local s = state[buf]
+    if s and (s.moving or s.identity.ID ~= old_identity.ID
+        or (s.identity.File ~= old_identity.File and s.identity.File ~= new_path)) then
+        return nil, "another document operation owns this buffer"
+    end
+    if not s then
+        M.attach(buf, old_identity)
+        s = state[buf]
+        if not s then return nil, "document could not be attached" end
+    end
+    s.identity = vim.deepcopy(old_identity)
+    s.baseline, s.owned_lock = protection.baseline, protection.baseline and protection.new_lock or nil
+    local token = { old_path = old_identity.File, path = old_identity.File,
+        lock = protection.old_lock, baseline = protection.baseline }
+    s.moving = { token = token, old_path = old_identity.File, lock = protection.old_lock,
+        baseline = protection.baseline, new_path = new_path, new_lock = protection.new_lock, effects = true }
+    s.epoch, s.edit, s.probing = s.epoch + 1, nil, false
+    close_timer(s.watch)
+    close_timer(s.idle)
+    s.watch, s.idle = nil, nil
+    return token
+end
+
+M.install_move_lock = function(buf, token, new_path)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    local moving = s and s.moving
+    if not moving or moving.token ~= token then return false, "stale move token" end
+    if type(new_path) ~= "string" or new_path:sub(1, 1) ~= "/" or new_path == moving.old_path then
+        return false, "invalid move destination"
+    end
+    if moving.new_path then return moving.new_path == new_path, "different move destination" end
+    if M.turn(moving.lock) == "operator" then
+        local fd, err = vim.uv.fs_open(new_path .. ".lock", "wx", 384)
+        if not fd then return false, err end
+        local written, write_err = vim.uv.fs_write(fd, moving.lock, 0)
+        local closed, close_err = vim.uv.fs_close(fd)
+        if written ~= #moving.lock or not closed then
+            -- Preserve a partial destination lock: an effect occurred and must
+            -- stay visible to recovery rather than enable unsafe cancellation.
+            moving.new_path, moving.effects = new_path, true
+            return false, write_err or close_err or "short lock write"
+        end
+        moving.effects = true
+        moving.new_lock = moving.lock
+    end
+    moving.new_path = new_path
+    return true
+end
+
+M.finish_move = function(buf, token, identity)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    local moving = s and s.moving
+    if not moving or moving.token ~= token then return false, "stale move token" end
+    if not identity or identity.ID ~= s.identity.ID or identity.File ~= moving.new_path then
+        return false, "move identity mismatch"
+    end
+    if M.turn(moving.lock) == "operator" and lock_bytes(identity.File .. ".lock") ~= moving.new_lock then
+        return false, "destination protection changed"
+    end
+    if lock_bytes(moving.old_path .. ".lock") == moving.lock and moving.lock then
+        local ok, err = os.remove(moving.old_path .. ".lock")
+        if not ok then return false, err end
+    end
+    s.identity = vim.deepcopy(identity)
+    s.loaded = disk_mtime(buf)
+    s.foreign, s.unkept, s.moving = nil, nil, nil
+    s.probed, s.probing = nil, false
+    s.content = content_hash(buf)
+    refresh(buf)
+    restart_idle(buf)
+    return true
+end
+
+M.abort_move = function(buf, token)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    local moving = s and s.moving
+    if not moving or moving.token ~= token then return false, "stale move token" end
+    local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p")
+    local current = vim.uv.fs_realpath(name) or name
+    local original = vim.uv.fs_realpath(moving.old_path) or moving.old_path
+    if moving.effects or current ~= original then
+        return false, "move effects require forward recovery"
+    end
+    s.moving = nil
+    refresh(buf)
+    restart_idle(buf)
+    return true
 end
 
 return M

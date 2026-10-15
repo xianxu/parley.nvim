@@ -68,7 +68,7 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 
 - [x] Add the pure lifecycle/reply model, shared transport, typed registry client and stateful fake with red/green coverage.
 - [x] Integrate first-submit/reopen admission with the existing native edit-turn engine and real Alt+Return routing.
-- [ ] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
+- [x] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
 - [ ] Add isolated real/fake conformance, docs/traceability and required checks; close on SHIP, then stage for the combined live check before landing.
 
 ## Log
@@ -135,3 +135,5 @@ total: 5.9075
 ```
 
 - 2026-10-15 — continued implementation verification: model18, registry7, lease9, Couch5, native edit-turn60, existing session-sync58, review-send18 and focused architecture25 checks pass; mapped keybindings exposed a duplicated documentation catalog timeout, corrected by keeping the symbol catalog in the durable plan (unchanged guard passes). Isolated production-client conformance passes against the unlanded pair candidate and the stateful fake, including the deliberately corrupted negative control. Native migration19/projection15 checks passed before extending actual Parley mover coverage. Actual public movers accept ordinary Markdown and rename before native hooks, requiring owned-file journal effects; executor RED observed (21 pass/7 expected failures). Initial public-door fixture itself errored on a private setup helper and is being corrected before claiming behavior evidence. Full suite, mandatory close review, stage and live acceptance remain pending.
+
+- 2026-10-15 — owned Parley mover integration green:8 real public-door checks (both doors, free/held turn, unloaded file, unavailable/occupied refusal, typed legacy ledger adoption) plus29 durable executor checks, including atomic no-replace race and crash recovery. The initial legacy public-door failure proved OLD was deleted before registration; admission now confirms register OLD first. Final mapped ui/keybindings exits0, full lint741 files0 warnings/errors, git diff check clean. Current isolated real/fake conformance exits0 after the fake-ledger changes; corrupted fake is rejected. Code is checkpointed before main integration and the required full suite; no close/stage/live acceptance claimed.

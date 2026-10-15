@@ -129,13 +129,20 @@ function M.new(context)
         if event.type == "retry" then
             if state.operation or not state.pending then return {} end
             local previous = state.pending
+            local captured = previous.witness
+            if captured.path ~= state.path or captured.namespace ~= state.namespace
+                or captured.incarnation ~= state.incarnation then
+                return pending(previous, "Pending mutation belongs to a different document context")
+            end
             state.pending = nil
             local operation = previous.witness.operation
             state.phase = (operation == "rename" or operation == "move") and "moving" or "busy"
             -- Registration confirmation must never automatically resend a message.
             local args = copy(previous.args)
             args.resume_only = true
-            return { issue(operation, args, previous.witness) }
+            local witness = copy(previous.witness)
+            witness.generation = state.generation
+            return { issue(operation, args, witness) }
         end
         if event.type == "open" then
             if state.operation or state.pending then return {} end
@@ -168,13 +175,29 @@ function M.new(context)
             state.phase = stable_phase()
             return {}
         end
+        if event.type == "turn_detached" and kind == "detach_turn" then
+            state.operation = nil
+            if not event.ok then
+                state.phase = stable_phase()
+                return notify(event.error)
+            end
+            state.registration = copy(operation.args.replacement)
+            if state.registration then
+                state.phase = "registered"
+                local effects = { { kind = "attach", registration = copy(state.registration), witness = copy(operation.witness) } }
+                if operation.args.submit then effects[2] = send() end
+                return effects
+            end
+            state.phase = "plain"
+            return { { kind = "band", message = "" } }
+        end
         if event.type == "saved" and kind == "save" then
             state.operation = nil
             if not event.ok then
                 state.phase = operation.args.previous_phase
                 return notify(event.error)
             end
-            if state.registration then return { send() } end
+            if state.registration then return { issue("lookup", { submit = true }) } end
             return { issue("register", { owner = operation.args.owner }) }
         end
         if event.type == "sent" and kind == "send" then
@@ -193,19 +216,28 @@ function M.new(context)
             local expected_path = kind == "rename" and operation.args.new_path or operation.witness.path
             valid = result.registration.File == expected_path
             if kind == "rename" then valid = valid and result.registration.ID == operation.args.registration.ID end
-            if state.registration and kind ~= "rename" then valid = valid and result.registration.ID == state.registration.ID end
+            if state.registration and kind == "register" then valid = valid and result.registration.ID == state.registration.ID end
         end
         if kind == "lookup" then
             state.operation = nil
+            if state.registration and (result.kind == "absent"
+                or (valid and result.registration.ID ~= state.registration.ID)) then
+                state.phase = "busy"
+                return { issue("detach_turn", { registration = state.registration,
+                    replacement = valid and result.registration or nil, submit = operation.args.submit }) }
+            end
             if valid then
                 state.registration, state.phase = copy(result.registration), "registered"
-                return { { kind = "attach", registration = copy(state.registration), witness = copy(operation.witness) } }
+                local effects = { { kind = "attach", registration = copy(state.registration), witness = copy(operation.witness) } }
+                if operation.args.submit then effects[2] = send() end
+                return effects
             end
             if result.kind == "absent" and not state.registration then
                 state.phase = "plain"
                 return { { kind = "band", message = "" } }
             end
             state.phase = stable_phase()
+            if operation.args.submit then return notify(result.error or "Registered owner could not be confirmed") end
             return state.registration and {} or { { kind = "band", message = "Couch unavailable: agentic state unknown" } }
         end
         if not valid then return pending(operation, result.error) end

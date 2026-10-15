@@ -87,6 +87,54 @@ describe("document_session lifecycle", function()
         assert.equals("attach", attached_effects[1].kind)
         assert.equals("registered", s.snapshot().phase)
     end)
+    it("forgets confirmed absence only after the turn engine reconciles and detaches", function()
+        local s = session()
+        attached(s)
+        local lookup = s.dispatch({ type="open" })[1]
+        local detach = reply(s, lookup, {kind="absent"})[1]
+        assert.equals("detach_turn", detach.kind)
+        assert.equals("doc-1", s.snapshot().registration.ID)
+        assert.equals("busy", s.snapshot().phase)
+        local effects = s.dispatch({type="turn_detached",witness=detach.witness,ok=true})
+        assert.equals("plain", s.snapshot().phase)
+        assert.is_nil(s.snapshot().registration)
+        assert.equals("band", effects[1].kind)
+        assert.same({}, s.dispatch({type="turn_detached",witness=detach.witness,ok=true}))
+    end)
+
+    it("retains confirmed identity when forgetting cannot reconcile the turn", function()
+        local s = session()
+        attached(s)
+        local lookup = s.dispatch({type="open"})[1]
+        local detach = reply(s, lookup, {kind="absent"})[1]
+        local effects = s.dispatch({type="turn_detached",witness=detach.witness,ok=false,error="foreign write unkept"})
+        assert.equals("registered", s.snapshot().phase)
+        assert.equals("doc-1", s.snapshot().registration.ID)
+        assert.equals("notify", effects[1].kind)
+        assert.equals("foreign write unkept", effects[1].message)
+    end)
+
+    it("replaces a confirmed same-path identity only through reconciled detach and attach", function()
+        local s = session()
+        attached(s)
+        local lookup = s.dispatch({type="open"})[1]
+        local replacement = outcome("registered")
+        replacement.registration.ID = "replacement"
+        replacement.registration.Owner = "other:2"
+        local detach = reply(s, lookup, replacement)[1]
+        assert.equals("detach_turn", detach.kind)
+        assert.equals("doc-1", detach.registration.ID)
+        assert.equals("replacement", detach.replacement.ID)
+        assert.equals("doc-1", s.snapshot().registration.ID)
+        detach.replacement.ID = "forged"
+        local effects = s.dispatch({type="turn_detached",witness=detach.witness,ok=true})
+        assert.equals("registered", s.snapshot().phase)
+        assert.equals("replacement", s.snapshot().registration.ID)
+        assert.equals("attach", effects[1].kind)
+        assert.equals("other:2", effects[1].registration.Owner)
+        assert.equals(1, #effects)
+    end)
+
     it("saves then registers then attaches and sends once", function()
         local s = session()
         plain(s)
@@ -105,6 +153,36 @@ describe("document_session lifecycle", function()
         assert.equals("doc-1", s.snapshot().registration.ID)
         assert.same({}, s.dispatch({ type = "sent", witness = effects[2].witness, ok = true }))
     end)
+    it("refreshes a registered owner through lookup before each explicit send", function()
+        local s = session()
+        attached(s)
+        local save = s.dispatch({ type="submit" })[1]
+        local lookup = s.dispatch({ type="saved", witness=save.witness, ok=true })[1]
+        assert.equals("lookup", lookup.kind)
+        assert.is_true(lookup.submit)
+        local refreshed = outcome("registered")
+        refreshed.registration.Owner = "other:2"
+        local effects = reply(s, lookup, refreshed)
+        assert.equals("attach", effects[1].kind)
+        assert.equals("other:2", effects[1].registration.Owner)
+        assert.equals("send", effects[2].kind)
+        assert.equals("other:2", effects[2].owner)
+        assert.equals("doc-1", s.snapshot().registration.ID)
+    end)
+
+    it("retains attached identity without send when submit owner confirmation fails", function()
+        local s = session()
+        attached(s)
+        local save = s.dispatch({ type="submit" })[1]
+        local lookup = s.dispatch({ type="saved", witness=save.witness, ok=true })[1]
+        local effects = reply(s, lookup, {kind="unavailable",error="offline"})
+        assert.equals("registered", s.snapshot().phase)
+        assert.equals("ops:1", s.snapshot().registration.Owner)
+        assert.equals(1, #effects)
+        assert.equals("notify", effects[1].kind)
+        assert.equals("offline", effects[1].message)
+    end)
+
     it("does not register or send on save failure", function()
         local s = session()
         plain(s)
@@ -143,6 +221,46 @@ describe("document_session lifecycle", function()
             end
         end
     end)
+    it("confirms a body-invalidated registration on retry without resending", function()
+        local s = session()
+        plain(s)
+        local save = s.dispatch({ type = "submit", owner = "ops:1" })[1]
+        local register = s.dispatch({ type = "saved", witness = save.witness, ok = true })[1]
+        s.dispatch({ type = "changed" })
+        reply(s, register, outcome("registered"))
+        assert.equals("pending", s.snapshot().phase)
+        local retry = s.dispatch({ type = "retry" })[1]
+        assert.equals("register", retry.kind)
+        assert.is_true(retry.resume_only)
+        assert.equals(register.witness.path, retry.witness.path)
+        assert.equals(register.owner, retry.owner)
+        assert.equals(s.snapshot().generation, retry.witness.generation)
+        local effects = reply(s, retry, outcome("registered"))
+        assert.equals("registered", s.snapshot().phase)
+        assert.equals("attach", effects[1].kind)
+        assert.equals(1, #effects)
+        assert.same({}, reply(s, retry, outcome("registered")))
+    end)
+
+    it("does not reauthorize a pending registration in another path or namespace", function()
+        for _, change in ipairs({ { type="changed", path="/other.md" }, { type="changed", namespace="another" } }) do
+            local s = session()
+            plain(s)
+            local save = s.dispatch({ type="submit", owner="ops:1" })[1]
+            local register = s.dispatch({ type="saved", witness=save.witness, ok=true })[1]
+            s.dispatch(change)
+            reply(s, register, outcome("registered"))
+            local effects = s.dispatch({ type="retry" })
+            for _, effect in ipairs(effects) do
+                assert.is_not.equals("attach", effect.kind)
+                assert.is_not.equals("send", effect.kind)
+                assert.is_not.equals("register", effect.kind)
+            end
+            assert.equals("pending", s.snapshot().phase)
+            assert.is_nil(s.snapshot().registration)
+        end
+    end)
+
     it("preserves a stable rename tuple through uncertain outcomes", function()
         local s = session()
         attached(s)

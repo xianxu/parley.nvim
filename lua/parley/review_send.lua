@@ -137,6 +137,7 @@ end
 
 --- <M-CR> in a markdown buffer.
 M.submit = function(buf)
+	if require("parley.agentic_document").submit(buf) then return end
 	if require("parley.session_sync").is_session_sync(buf) then
 		require("parley.session_sync").submit(buf)
 		return

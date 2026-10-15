@@ -45,17 +45,20 @@ paths and settings. Existing Neovim users can use the
 `require('parley').setup({})` works as is; see
 [minimal config](atlas/infra/config.md#minimal-config) for typical overrides.
 
-For Couch users, [session-sync files](atlas/modes/session_sync.md) name their
-agent with `couch-owner:` (`owner:` is the legacy fallback). They ping a quiet
-owner once when deliveries remain owed and its last write is at least 15 minutes
-old. Set `session_sync_ping_minutes` in `require('parley').setup({...})` to
-override that delay. A write postpones the ping; operator locks suppress it.
-The separate `session_sync_stale_minutes` reminder for unsent edits remains 5.
-The first edit in Normal or Insert mode takes your turn before auto-save runs.
-Undoing back to the content before that first edit silently releases it, even
-after auto-save; redo away from that baseline takes it again. Saves never move
-the baseline, and saving changed text keeps the turn until Alt+Return. See the
-[session-sync guide](atlas/modes/session_sync.md) for the full interaction.
+In a Couch pane, the first Alt+Return in any named Markdown document saves,
+registers and submits it to the pane's agent, without changing its frontmatter.
+An explicit `couch-owner:` overrides the default; a business `owner:` does not
+(`owner:` remains a fallback only for legacy `type: session-sync` files).
+[Agentic documents](atlas/modes/session_sync.md) use the existing turn engine:
+the first edit takes your turn before auto-save, undo back to the pre-edit
+baseline releases it, and redo takes it again. Saves never move that baseline.
+Quiet owners with owed deliveries are pinged after `session_sync_ping_minutes`
+(default 15); unsent edits become stale after `session_sync_stale_minutes`
+(default 5). Unknown offline membership stays editable with `Couch unavailable:
+agentic state unknown`, while known attached/cached documents keep turn
+protection. Supported moves retain identity and migrate existing `.side/`
+backlinks through a forward-only recovery journal. Outside a Couch pane, the
+existing [document review](atlas/modes/review.md) flow remains.
 
 ## Learn by chatting
 

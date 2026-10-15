@@ -1,3 +1,4 @@
+-- luacheck: globals vim
 -- Maintainer-only offline probe. The Python driver supplies fresh owned roots;
 -- every registry call goes through production request -> couch.run -> vim.system.
 vim.opt.runtimepath:append(assert(vim.env.PARLEY_CONFORMANCE_ROOT))

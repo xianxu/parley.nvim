@@ -17,6 +17,47 @@ describe('document move projection', function()
         assert.is_true(ok, tostring(module))
         plan = module
     end)
+    it('shares Markdown filename classification and derives side stems without damaging dotfiles', function()
+        for _, extension in ipairs({ '.md', '.markdown', '.MD', '.mdown', '.mkd', '.mkdn' }) do
+            assert.is_true(plan.is_markdown_path('/repo/file' .. extension))
+            assert.equals('/repo/file.side', plan.side_path('/repo/file' .. extension))
+        end
+        assert.is_false(plan.is_markdown_path('/repo/file'))
+        assert.is_false(plan.is_markdown_path('/repo/file.txt'))
+        assert.equals('/repo/file.side', plan.side_path('/repo/file'))
+        assert.equals('/repo/.hidden.side', plan.side_path('/repo/.hidden'))
+        assert.equals('/repo.dir/file.part.side', plan.side_path('/repo.dir/file.part.markdown'))
+    end)
+    for _, extension in ipairs({ '.markdown', '.MD', '.mdown', '' }) do
+        it('projects registered parent and supported child filenames for ' .. (extension ~= '' and extension or 'extensionless'), function()
+            local old_parent, new_parent = '/repo/old' .. extension, '/repo/new' .. extension
+            local o = observations(); o.entries = {}
+            for _, child_extension in ipairs({ '.markdown', '.MD', '.mdown' }) do
+                local path = '/repo/old.side/child' .. child_extension
+                o.entries[#o.entries + 1] = { path = path, resolved = path, type = 'file',
+                    bytes = '---\nparent: ../old' .. extension .. '\n---\n[up](../old' .. extension .. '#anchor)\n' }
+            end
+            local result = assert(plan.project(old_parent, new_parent, o))
+            assert.equals('/repo/old.side', result.effects[1].old)
+            assert.equals('/repo/new.side', result.effects[1].new)
+            assert.equals(5, #result.effects)
+            for index = 2, 4 do
+                assert.equals('rewrite_parent', result.effects[index].kind)
+                assert.truthy(result.effects[index].after:find('../new' .. extension .. '#anchor', 1, true))
+            end
+        end)
+    end
+    it('rewrites extension-only rename backlinks in the same side directory without moving it', function()
+        local o = observations(); o.target_side_exists = true
+        local path = '/repo/project.side/child.MD'
+        o.entries = { { path = path, resolved = path, type = 'file', bytes = '[up](../project.md#anchor)' } }
+        local result = assert(plan.project('/repo/project.md', '/repo/project.markdown', o))
+        assert.equals(2, #result.effects)
+        assert.same({ kind = 'rewrite_parent', path = path, before = '[up](../project.md#anchor)',
+            after = '[up](../project.markdown#anchor)' }, result.effects[1])
+        assert.equals('rename_metadata', result.effects[2].kind)
+        assert.equals('stable-7', result.effects[2].id)
+    end)
     it('orders contained side and backlink effects before the exact metadata tuple', function()
         local r = assert(plan.project(old, new, observations()))
         assert.equals('stable-7', r.id)
@@ -104,6 +145,12 @@ describe('parent backlink rewriting', function()
             local result, err = plan.rewrite_parent(input, children, parents)
             assert.is_nil(result, input); assert.is_string(err)
         end
+    end)
+    it('keeps tilde blocks closed only by matching fence kind and sufficient width', function()
+        local input = '  ~~~~md\n[inside](../../project.md)\n```\n~~~\n'
+            .. '[still inside](../../project.md)\n  ~~~~\n[outside](../../project.md#x)\n'
+        local expected = input:gsub('%[outside%]%(%.%./%.%./project%.md', '[outside](../../renamed.md')
+        assert.equals(expected, plan.rewrite_parent(input, children, parents))
     end)
     it('leaves code, escaped links and unrelated text byte-identical', function()
         local bytes = '```md\n[parent](../../project.md)\n```\n`[parent](../../project.md)`\n\\[parent](../../project.md)\nordinary [other](else.md)\n'

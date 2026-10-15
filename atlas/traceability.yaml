@@ -761,12 +761,30 @@ atlas:
   modes/session_sync:
     code:
       - lua/parley/session_sync.lua
+      - lua/parley/agentic_document.lua
+      - lua/parley/document_session.lua
+      - lua/parley/document_registry.lua
+      - lua/parley/document_move_plan.lua
+      - lua/parley/document_move.lua
+      - lua/parley/document_lease.lua
       - lua/parley/couch.lua
       - lua/parley/frontmatter.lua
+      - lua/parley/helper.lua
+      - scripts/check-couch-registry-conformance.py
+      - scripts/couch-registry-probe.lua
+      - tests/fixtures/fake_couch_registry.py
     tests:
       - tests/unit/session_sync_spec.lua
+      - tests/unit/document_session_spec.lua
+      - tests/unit/document_move_plan_spec.lua
+      - tests/unit/helper_io_spec.lua
       - tests/integration/session_sync_spec.lua
       - tests/integration/session_sync_native_spec.lua
+      - tests/integration/agentic_document_spec.lua
+      - tests/integration/agentic_document_owned_move_spec.lua
+      - tests/integration/document_registry_spec.lua
+      - tests/integration/document_lease_spec.lua
+      - tests/integration/document_move_spec.lua
 
   modes/interview:
     code:
