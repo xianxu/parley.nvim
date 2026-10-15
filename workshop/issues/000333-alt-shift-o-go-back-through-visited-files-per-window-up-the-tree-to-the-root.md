@@ -6,7 +6,7 @@ github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '6c0dcba59a7a1237cdcd53a861ac308b5fc1dd82' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd14ebbc031e5176e470b700576478cd19b7d2c5b' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T11:08:10-07:00
 claimant:
     operator: Xian Xu
@@ -16,7 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
-actual_hours: 2.03
+actual_hours: N/A
 ---
 
 # Alt+Shift+O: go back through visited files (per window), up the tree to the root
