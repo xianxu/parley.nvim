@@ -264,6 +264,93 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: e5e6dc8a-ae03-4ea2-b312-98d5aaceb31a
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000335"
+            recipe: small-diff-review
+            round: 4
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/7d69e7bebeb30de1
+            reviewed_head: bedfe98eba1d827d1aad6ac2fac7db796a5198f6
+            slot: parley.nvim:1
+            requested_at: "2026-10-15T23:10:54.659916Z"
+          phase: finished
+          pid: 90169
+          started_at: "2026-10-15T23:10:54.818335Z"
+          finished_at: "2026-10-15T23:12:22.117711Z"
+          session_id: 01a141d5-3861-7761-bfec-0d23339f30af
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: bedfe98eba1d827d1aad6ac2fac7db796a5198f6
+        tracker_head: 6f33900280b5db51d9e67071bc320b62987aacec
+        branch_point: 83f3893a133af1d8f96a677ecc0fa6b5e2c514c0
+        since: "2026-10-15T14:41:15-07:00"
+        until: "2026-10-15T16:10:30-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-15T14:41:15-07:00"
+              end: "2026-10-15T16:10:30-07:00"
+              began: "2026-10-15T14:41:15-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 6528e1de14e803ed600ce1c786c768b7fbaa913c1058211c9bd17a18edbc01c5
+              started: "2026-10-14T05:35:58.09Z"
+              spawned: false
+              bytes: 13521503
+              windows:
+                - start: "2026-10-15T14:41:15-07:00"
+                  end: "2026-10-15T16:10:30-07:00"
+            - harness: codex
+              id: 01a14183-71cd-7f63-8f66-cd1fe2633763
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 6a4848abe1f328f79916ea370d69c8b7a5b0524c934ef25811578aca2c088828
+              started: "2026-10-15T21:41:35.947Z"
+              spawned: true
+              bytes: 529137
+              windows:
+                - start: "2026-10-15T21:41:35.947Z"
+                  end: "2026-10-15T16:10:30-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 0.029516666666666667
+        cuts:
+            - dispatched: "2026-10-15T15:26:40-07:00"
+              finalized: "2026-10-15T15:28:34-07:00"
+              finalizing: false
+            - dispatched: "2026-10-15T15:43:43-07:00"
+              finalized: "2026-10-15T15:45:25-07:00"
+              finalizing: false
+            - dispatched: "2026-10-15T16:00:49-07:00"
+              finalized: "2026-10-15T16:02:43-07:00"
+              finalizing: false
+      "n": 4
+      timestamp: "2026-10-15T16:12:22-07:00"
+      dispatched: "2026-10-15T16:10:54-07:00"
+      agent: codex
+      dispose:
+        - id: BR-3
+          disposition: addressed
+          note: reference_candidates.lua:29–41 enforces the enumerated paragraph walls for both consumers. Unit and command regressions cover thematic breaks, Setext headings, blockquotes, and 72 ATX variants. In a disposable pinned-head checkout, replacing the scanner with versions before paragraph containment and before empty-heading recognition independently made the containment regression fail; current-head tests pass. The disposable checkout was removed.
+          round: 4
+      recipe: small-diff-review
+      isolation: fenced
+      reviewed: bedfe98eba1d827d1aad6ac2fac7db796a5198f6
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#335 (boundary-review)
@@ -298,6 +385,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - BR-3 — not-addressed — The original thematic-break, Setext, and blockquote probes now pass, but paragraph containment remains incomplete (ARCH-PURPOSE). lua/parley/reference_candidates.lua:30 requires whitespace after the heading hashes, missing empty ATX headings. Enumeration: "#" through "######", each with zero through three leading spaces (24 forms). For {"[unfinished", boundary, "label](README.md)"}, both markdown_spans and collect return one Markdown candidate for all 24 forms. OpenFileUnderCursor command probes across "#", "######", and "   ###" opened README.md from row 3. This repeats family preserve-document-scan-boundaries: maintain the complete paragraph-wall rule rather than patching individual spellings. Recognize empty and nonempty ATX headings at every supported level and indentation, then add failing regressions for both scanner consumers and command dispatch. Affected consumers remain lua/parley/init.lua:5071 and lua/parley/reference_candidates.lua:107.
 
+## Round 4 — 2026-10-15T16:12:22-07:00 (codex) — passed
+
+### Disposed
+
+- BR-3 — addressed — reference_candidates.lua:29–41 enforces the enumerated paragraph walls for both consumers. Unit and command regressions cover thematic breaks, Setext headings, blockquotes, and 72 ATX variants. In a disposable pinned-head checkout, replacing the scanner with versions before paragraph containment and before empty-heading recognition independently made the containment regression fail; current-head tests pass. The disposable checkout was removed.
+
 ## Open findings
 
-- **BR-3** [Critical] `preserve-document-scan-boundaries` (kind: defect) Wrapped links still cross Markdown block boundaries
+(none — every finding has been disposed)

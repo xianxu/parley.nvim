@@ -235,3 +235,70 @@ Done-when: current — it covers direct opening, entity choices, and invalid lin
    Add a `## Revisions` entry enumerating empty/nonempty ATX headings, all six levels, and zero-to-three-space indentation, with regressions covering direct scanning and entity collection.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"dc180abf-42b8-4290-9324-cc0dfa4c0146","repository":"github.com/xianxu/parley.nvim","issue_id":"000335","recipe":"small-diff-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/f495277c974dd9e6","reviewed_head":"baa846c09daa767d2154b0d697236ad503f4a8bc","slot":"parley.nvim:1","requested_at":"2026-10-15T23:00:49.348448Z"},"phase":"finished","pid":28620,"started_at":"2026-10-15T23:00:49.590474Z","finished_at":"2026-10-15T23:02:31.694659Z","session_id":"01a141cb-fcc4-7f22-9956-d3988bfc856c","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T16:12:22-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 335 — Alt+o doesn't recognise a markdown link whose text wraps across lines (falls back to a #NNN reference) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000335-alt-o-doesn-t-recognise-a-markdown-link-whose-text-wraps-across-lines-falls-back-to-a-nnn-reference.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 83f3893a133af1d8f96a677ecc0fa6b5e2c514c0..bedfe98eba1d827d1aad6ac2fac7db796a5198f6 |
+| command | sdlc close --issue 335 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T16:12:22-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range delivers wrapped-link navigation and entity collection while preserving destination identity and paragraph boundaries. BR-3 is addressed with meaningful regression coverage. No new blocking findings were found.
+
+```findings
+dispose:
+  - id: BR-3
+    disposition: addressed
+    note: |
+      reference_candidates.lua:29–41 enforces the enumerated paragraph walls for both consumers. Unit and command regressions cover thematic breaks, Setext headings, blockquotes, and 72 ATX variants. In a disposable pinned-head checkout, replacing the scanner with versions before paragraph containment and before empty-heading recognition independently made the containment regression fail; current-head tests pass. The disposable checkout was removed.
+```
+
+Done-when: current — the original clauses still cover the delivered behavior; revisions refine paragraph containment and destination handling.
+
+1. **Strengths**
+
+   - Shared `markdown_spans` retains full spans, byte coordinates, and destination rows.
+   - Collection masks references throughout wrapped labels, preventing spurious picker choices.
+   - Direct and selected Markdown navigation share destination-preserving dispatch.
+   - README and atlas document the changed behavior and containment rules.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - Mapped `context/file_references` suite passed, including 61 command tests and 17 candidate tests.
+   - Mutation checks confirmed BR-3 regressions fail without the corrections.
+   - Scanner and collection also executed under standalone Lua without Neovim or IO mocks.
+   - Whitespace checks passed; process census was clean. The full repository suite was not rerun during this review.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** both consumers use the shared scanner and Markdown dispatch.
+   - **ARCH-PURE — pass:** deterministic parsing remains separate from editor effects; Core concepts match their declared locations and classifications.
+   - **ARCH-PURPOSE — pass:** direct opening, entity selection, nested-reference masking, and the enumerated boundary classes are delivered.
+
+7. **Plan revision recommendations:** None. Existing revisions accurately describe the implementation.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e5e6dc8a-ae03-4ea2-b312-98d5aaceb31a","repository":"github.com/xianxu/parley.nvim","issue_id":"000335","recipe":"small-diff-review","round":4,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/7d69e7bebeb30de1","reviewed_head":"bedfe98eba1d827d1aad6ac2fac7db796a5198f6","slot":"parley.nvim:1","requested_at":"2026-10-15T23:10:54.659916Z"},"phase":"finished","pid":90169,"started_at":"2026-10-15T23:10:54.818335Z","finished_at":"2026-10-15T23:12:22.117711Z","session_id":"01a141d5-3861-7761-bfec-0d23339f30af","outcome":"returned"}] -->

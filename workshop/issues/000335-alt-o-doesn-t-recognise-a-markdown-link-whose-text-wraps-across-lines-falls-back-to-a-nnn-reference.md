@@ -65,6 +65,7 @@ that. A link with a line break inside its text is valid CommonMark, and agents' 
 ## Log
 
 ### 2026-10-15
+- 2026-10-15: closed — BR-3 ATX regression matrix fails before correction and passes afterward for levels 1-6, indentation 0-3 and empty/text/tab terminators in both scanner consumers and command dispatch; out-of-grammar continuation and prior regressions pass. Mapped context/file_references passes. Recorded local-check suite on 9329d34b exits 0: 433 test files, zero lint warnings/errors in 732 files, clean census, log sha256 07f1c75163bc; vocabulary/whitespace pass. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 Claimed from ops:0 delivery c44a6d6a-aa88-48ac-927e-9003073efd81. The Lua
 label pattern already accepts newlines, but consumers pass individual lines.
