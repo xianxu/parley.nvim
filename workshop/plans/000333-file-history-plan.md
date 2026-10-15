@@ -207,3 +207,18 @@ fix would repeat the assumption rather than establish parent identity (ARCH-ORDE
 Hub decision requested: capture Lua nvim_open_win arguments explicitly with a
 native-command focus fallback and documented RPC limitation, or narrow the split
 contract. Do not implement a parent heuristic while that decision is pending.
+
+### 2026-10-15 — TL-approved narrowed inheritance contract
+
+Delivery 0071ffce-140a-4b7b-a704-4752bce09148 approves narrowing and prohibits
+wrapping nvim_open_win. Inherit only a focused native source's immediate WinLeave
+before WinNew; consume that departure once and clear it at WinEnter. Native user
+split/tab commands and Parley's command-based openers retain strict inheritance.
+API-created windows emit WinNew first, so start with no inherited entries,
+including focused-parent API calls; RPC-created windows receive the same rule.
+Their initially displayed file becomes the root when observed. This replaces the
+last-focused-source assumption, without guessing parentage from buffers/layouts.
+Update README/atlas, revise all eight unfocused API cases to assert root no-op
+and independent subsequent visits, retain strict native split/tab tests, and
+cover API focused-source empty history. Re-run targeted/full checks and the SDLC
+review; BR-1 must be disposed before landing.

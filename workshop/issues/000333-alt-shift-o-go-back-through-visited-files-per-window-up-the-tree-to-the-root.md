@@ -158,3 +158,15 @@ Asked the hub to choose explicit Lua API argument capture with documented RPC
 limitations versus a narrowed split contract; implementation waits on that choice.
 The previously passing full-suite result applies to the reviewed head, not a BR-1
 fix. Preserve the red regressions and review sidecars as the recovery checkpoint.
+
+### 2026-10-15 — approved focused-command inheritance
+
+TL delivery 0071ffce-140a-4b7b-a704-4752bce09148 narrows split inheritance and
+rejects core API wrapping. Supersedes the universal parent-copy acceptance above:
+focused native split/tab commands (including Parley's openers) inherit the source
+history; other creations start fresh. Use the immediate WinLeave→WinNew event
+sequence, consumed once and cleared on WinEnter. API calls create the child
+before leaving the source and therefore start fresh, even with a focused parent;
+this observable boundary was reported back to the hub. The first displayed file
+is the new root. Keep native focused-source inheritance strict and adjust the
+eight unfocused API regressions to assert no inherited Back target.
