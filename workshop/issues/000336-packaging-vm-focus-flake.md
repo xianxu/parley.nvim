@@ -39,6 +39,7 @@ Investigate and eliminate the guest probe timing/focus dependence without weaken
 | Entity | Kind | Status | Location | Responsibility |
 | --- | --- | --- | --- | --- |
 | `vm_chat` | INTEGRATION | modified | `tests/packaging/vm_chat.lua` | Guest probe settles the login's reopened picker; ask() reports the chat file it created. |
+| `is_connecting` | PURE | new | `lua/parley/starter_onboarding.lua` | Reports whether a connection flow is still open (its returned picker unresolved). |
 | `packaging_vm_spec` | INTEGRATION | modified | `tests/integration/packaging_vm_spec.lua` | Guest confinement asserted on the created chat after a deliberate focus change. |
 
 ## Plan
@@ -75,3 +76,9 @@ First-seen head: b6c67239f20e820d85bf4144671f5c7cb8f98152. Command: make -k test
 
 - 2026-10-15 (:3): root cause traced to the reopened model picker (see Plan); TL approved plan f3a52c2e. Red: with only the regression (no-float assertion, `enew`, old buffer-0 assertion) the focused spec failed 16/1 with `guest chat file escaped isolated profile`, deterministically. Green: probe settles the reopened picker via its own `<Esc>` cancel mapping; `ask()` returns `chat_file`; the guest script asserts confinement on it. Focused spec 17/0 on three consecutive runs. Fix commit 6ab04a67.
 - Full suite (make -k test) on 6ab04a67: lint clean (732 files), packaging_vm_spec PASS (14s) under the parallel integration run; the only failure was the arch guard's absent Core concepts table, now added (arch spec 25/0).
+- Close review round 1 (BR-1, Important): deleting the settle block left the spec green, so that half of the fix had no failing regression. Fix: `starter_onboarding.is_connecting` exposes the existing open-connection state (cleared only when the returned picker resolves). `ask()` asserts it is closed before dispatch, and the settle wait now waits for the picker to close and the connection to settle. Mutation check: with the settle block deleted (temporary file copy, no stash), the focused spec failed 16/1 on two runs with `chat dispatch began while account connection was still open`. Restored: 17/0 ×3, unit starter_onboarding 7/0 (new open-until-resolved case), lint clean. Minor: maparg callbacks are now checked via `press()`; the float check uses one `is_float` helper.
+- Review observation (pre-existing, out of scope): with TMPDIR inside a git checkout, the starter's project discovery puts the guest chat root in that project (fails at the first `confined()`, before the probe runs). Reported to the TL for a separate issue.
+
+## Revisions
+
+- 2026-10-15: BR-1 changed the regression. The no-float check after `run()` cannot see a picker reopen still queued, so the deterministic oracle for the settle step is now `is_connecting` asserted in `ask()`. This adds a 6-line product query in `starter_onboarding` (it was test-and-probe only); the atlas starter entry documents it.
