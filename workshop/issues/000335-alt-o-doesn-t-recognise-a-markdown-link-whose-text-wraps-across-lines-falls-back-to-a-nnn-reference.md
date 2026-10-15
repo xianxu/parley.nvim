@@ -1,12 +1,20 @@
 ---
 id: 000335
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '130b0a702b52fdff36dda69a3fdfb15b9496912d' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '568c79004bc3b5309020624871ccb5ed32eca7e4' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T14:41:15-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Alt+o doesn't recognise a markdown link whose text wraps across lines (falls back to a #NNN reference)
@@ -39,8 +47,19 @@ that. A link with a line break inside its text is valid CommonMark, and agents' 
 
 ## Plan
 
-- [ ]
+- [ ] Add failing headless tests for wrapped labels under the cursor and in entity/picker scans, including nested references, byte positions, invalid links and scan boundaries.
+- [ ] Reuse the existing Markdown pattern through one pure multiline scanner; carry full spans and destination row/column through both consumers (ARCH-DRY, ARCH-ORDER).
+- [ ] Document the corrected navigation behavior; run mapped and full verification before SDLC close and land on SHIP.
 
 ## Log
 
 ### 2026-10-15
+
+Claimed from ops:0 delivery c44a6d6a-aa88-48ac-927e-9003073efd81. The Lua
+label pattern already accepts newlines, but consumers pass individual lines.
+Join eligible paragraph rows at the shared parsing boundary, retain byte/row
+coordinates, and mask complete link spans before subordinate reference scans.
+Reuse existing destination opening and fallback policies; no new link dialect,
+resolver, or second parser. Blank/fenced/range boundaries terminate a span.
+Keep the string parser API for existing consumers; this issue changes Alt+o's
+direct and entity paths. Quick flow authorized by the dispatch.
