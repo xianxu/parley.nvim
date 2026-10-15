@@ -103,6 +103,8 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 - BR-1 correction verified by the required full suite on 1e028d015f254691cc8ada4d79cec58a5d263475: all 431 spec files pass, lint728 files clean, no surviving test processes; runtime2m1s, log sha256 prefix4d4885404188. This run includes the complete prefix/fence class and unchanged editing behavior. Rerunning close review before staging; operator live acceptance remains pending.
 
+- Close round2 verified BR-1 by reverting the range correction and observing 22 range/four command failures, then passed all473 mapped tests at head. BR-2 requires live resolver conformance. Added an offline temporary-repository check covering six real/fake cases through production run_resolve/parse/dispatch: sole issue, family, milestone, external empty, missing issue and missing milestone. make -k check-sdlc-conformance passes; an alternate fake returning wrong-kind fails the consumed projection assertion (negative log /tmp/parley327-conformance-negative.log). Tooling documents execution after runner/fake changes and before close. Plugin behavior is unchanged; final suite and close review rerun before staging.
+
 ## Estimate
 
 Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only; calibration source is marked stale, so figures remain provisional.
