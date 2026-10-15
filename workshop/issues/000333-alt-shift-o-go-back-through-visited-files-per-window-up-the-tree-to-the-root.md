@@ -145,3 +145,16 @@ Both file-history specs and buffer_lookup_spec pass in that full run. Evidence:
 git diff --check pass. The complete ui/keybindings mapping also passes after
 the exact-name lookup correction. Implementation checklist is complete;
 entering the mandatory SDLC close review, then merge and stage on SHIP.
+
+### 2026-10-15 — boundary review BR-1 and parent-identification revision
+
+Round 1 returned REWORK: the focused-source assumption fails an explicit API
+split of an unfocused parent. Eight new real-editor regressions (four directions,
+active/inactive child) reproduce it. No landing has occurred. Native probes by
+an independent agent show that equalalways can make different parents produce
+identical WinNew layout/geometry/clone state; get_config.split describes position,
+not requested direction. Native-state inference cannot guarantee actual parentage.
+Asked the hub to choose explicit Lua API argument capture with documented RPC
+limitations versus a narrowed split contract; implementation waits on that choice.
+The previously passing full-suite result applies to the reviewed head, not a BR-1
+fix. Preserve the red regressions and review sidecars as the recovery checkpoint.

@@ -169,6 +169,32 @@ describe("per-window file Back (#333)", function()
         assert.equals(files.session, path())
     end)
 
+    for _, direction in ipairs({ "left", "right", "above", "below" }) do
+        for _, enter in ipairs({ false, true }) do
+            it("inherits from an unfocused API parent: " .. direction .. ", enter=" .. tostring(enter), function()
+                open("answer")
+                local parent, answer = api.nvim_get_current_win(), api.nvim_get_current_buf()
+                vim.cmd("vsplit")
+                open("other")
+                open("side")
+                local focused = api.nvim_get_current_win()
+                local child = api.nvim_open_win(answer, enter, { split = direction, win = parent })
+                assert.equals(enter and child or focused, api.nvim_get_current_win())
+                api.nvim_set_current_win(child)
+                assert.is_true(back())
+                assert.equals(files.session, path())
+                api.nvim_set_current_win(parent)
+                assert.equals(files.answer, path())
+                assert.is_true(back())
+                assert.equals(files.session, path())
+                api.nvim_set_current_win(focused)
+                assert.equals(files.side, path())
+                assert.is_true(back())
+                assert.equals(files.other, path())
+            end)
+        end
+    end
+
     it("inherits into a new tab and releases a closed split's navigation state", function()
         open("answer")
         local parent = api.nvim_get_current_win()

@@ -196,3 +196,14 @@ zero lint warnings/errors, and no surviving test processes. Complete keybinding
 mapping, focused 16-case adapter plus exact-name architecture guard, vocabulary
 freshness and committed-range whitespace checks pass. Close/merge/staging follow
 as authorized by the TL approval; no further scope change.
+
+### 2026-10-15 — BR-1 replanning checkpoint
+
+The boundary review correctly rejects focused-source inheritance for an explicit
+unfocused API parent. All eight new direction/active-inactive regressions fail.
+Native WinNew observations are ambiguous under equalalways (different parents
+can yield identical layout, geometry and cloned buffer/cursor). A geometry-only
+fix would repeat the assumption rather than establish parent identity (ARCH-ORDER).
+Hub decision requested: capture Lua nvim_open_win arguments explicitly with a
+native-command focus fallback and documented RPC limitation, or narrow the split
+contract. Do not implement a parent heuristic while that decision is pending.
