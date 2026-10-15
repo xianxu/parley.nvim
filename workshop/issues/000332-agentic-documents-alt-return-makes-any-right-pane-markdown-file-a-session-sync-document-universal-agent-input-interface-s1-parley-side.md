@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: operator}
 ---
 
 # Agentic documents: Alt+Return makes any right-pane markdown file a session-sync document (universal-agent-input-interface S1, parley side)

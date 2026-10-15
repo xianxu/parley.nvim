@@ -1,4 +1,24 @@
 ---
+reviewer_runs:
+    - version: 1
+      intent:
+        id: 55a9b78b-3746-4801-9c7a-7e38c15a7c30
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000332"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+        reviewed_head: 219bbfd359cefff264efebc9f56ceccc222d29cd
+        slot: parley.nvim:2
+        requested_at: "2026-10-15T20:37:33.1024Z"
+      phase: finished
+      pid: 88372
+      started_at: "2026-10-15T20:37:33.350267Z"
+      finished_at: "2026-10-15T20:38:00.824857Z"
+      session_id: 01a14148-d1e2-7301-9d8e-167ed3bc3b48
+      outcome: returned
 gate: plan-quality
 issue: 332
 id_prefix: PQ
@@ -83,7 +103,44 @@ rounds:
           note: Nested journal/backlink temporaries use lease-owned manifests; cache temporaries use a separate lease and managed bucket, with cleanup forbidden from deleting another live writer's files.
           round: 2
       blocked: false
-content_hash: c0f1a403fc8d8bc11edd2fd3dcfe399500bdc3b133cf006457acad29a56e3797
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: b482dfae-b543-460e-b4d3-5ae86e036a57
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000332"
+            recipe: plan-quality
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+            reviewed_head: 219bbfd359cefff264efebc9f56ceccc222d29cd
+            slot: parley.nvim:2
+            requested_at: "2026-10-15T20:36:59.293178Z"
+          phase: finished
+          pid: 83533
+          started_at: "2026-10-15T20:36:59.506571Z"
+          finished_at: "2026-10-15T20:37:31.586626Z"
+          session_id: 01a14148-4d6b-7bc1-a650-2ac9c3c9c103
+          outcome: returned
+      "n": 3
+      timestamp: "2026-10-15T13:37:31-07:00"
+      agent: codex
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: A kernel-owned lease governs execution and recovery of an immutable migration tuple.
+          round: 3
+        - id: PQ-2
+          disposition: addressed
+          note: Named risky functions each have a concise adversarial strategy and mechanical guard.
+          round: 3
+        - id: PQ-3
+          disposition: addressed
+          note: Manifested migration temporaries and managed cache temporaries have explicit lease-protected cleanup.
+          round: 3
+      blocked: false
+content_hash: dee2142333f79cf17d462a7da9ee06204459211b55a827dd497bf6c93facf9ce
 ---
 
 # Gate ledger — parley.nvim#332 (plan-quality)
@@ -109,6 +166,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - PQ-1 — addressed — Execution and recovery share a kernel-owned lease, reject conflicting tuples before effects, and verify owner-death takeover and inode races through controlled two-editor ordering.
 - PQ-2 — addressed — Verification now names risky functions, including classify_reply, dispatch, project, rewrite_parent and recover, with adversarial input classes and mechanical guards.
 - PQ-3 — addressed — Nested journal/backlink temporaries use lease-owned manifests; cache temporaries use a separate lease and managed bucket, with cleanup forbidden from deleting another live writer's files.
+
+## Round 3 — 2026-10-15T13:37:31-07:00 (codex) — passed
+
+### Disposed
+
+- PQ-1 — addressed — A kernel-owned lease governs execution and recovery of an immutable migration tuple.
+- PQ-2 — addressed — Named risky functions each have a concise adversarial strategy and mechanical guard.
+- PQ-3 — addressed — Manifested migration temporaries and managed cache temporaries have explicit lease-protected cleanup.
 
 ## Open findings
 
