@@ -35,6 +35,7 @@ This slice includes moving an existing sibling `<stem>.side/` and its parent bac
 | `run` — raw Couch process transport | INTEGRATION | `lua/parley/couch.lua` | modified |
 | `request`, `shutdown` — typed registry client and request lifetime | INTEGRATION | `lua/parley/document_registry.lua` | new |
 | `attach`, `identity`, `status`, `recheck`, `submit`, `detach`, `move_membership`, `move_path` — buffer admission and known-path cache | INTEGRATION | `lua/parley/agentic_document.lua` | new |
+| `not_chat` — shared transcript classification with optional supplied lines | PURE | `lua/parley/init.lua` | modified |
 | `begin`, `advance`, `pending`, `recover` — file migration and journal recovery | INTEGRATION | `lua/parley/document_move.lua` | new |
 | `acquire` — cross-editor operation lease | INTEGRATION | `lua/parley/document_lease.lua` | new |
 | `attach`, `identity`, `is_session_sync`, `detach`, `acquire_observed` — stable attachment and observed edits | INTEGRATION | `lua/parley/session_sync.lua` | modified |

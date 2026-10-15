@@ -1,6 +1,31 @@
 describe("agentic markdown admission", function()
     local root, file, buf, saved, document
-    local function await(predicate) assert.is_true(vim.wait(3000, predicate, 10)) end
+    local function sent_payload()
+        local stream = io.open(root .. "/sent.last", "rb")
+        if not stream then return nil end
+        local bytes = stream:read("*a")
+        stream:close()
+        return bytes
+    end
+    -- An end-to-end admission can include lookup, actor resolution, register,
+    -- send and scheduled completions. Each production request keeps its own
+    -- deadline; the test budget also permits suite-wide process contention.
+    local function await(predicate)
+        local ready, reason = vim.wait(10000, predicate, 10)
+        assert.is_true(ready, vim.inspect({
+            wait_reason = reason, path = file,
+            lifecycle = document and buf and document.status(buf),
+            sent_payload = sent_payload(),
+            modified = buf and vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].modified,
+        }))
+    end
+    local function await_submitted()
+        await(function()
+            local status = document.status(buf)
+            return status and status.phase == "registered" and not status.operation
+                and document.identity(buf) ~= nil and sent_payload() == "submitted: " .. file
+        end)
+    end
     local function submit()
         local mapping = vim.api.nvim_buf_call(buf, function() return vim.fn.maparg("<M-CR>", "n", false, true) end)
         assert.equals(1, mapping.buffer)
@@ -14,11 +39,15 @@ describe("agentic markdown admission", function()
         saved = { path = vim.env.PATH, scope = vim.env.COUCH_THREAD_SCOPE, tag = vim.env.COUCH_THREAD_TAG,
             registry = vim.env.FAKE_COUCH_REGISTRY, actors = vim.env.FAKE_COUCH_ACTORS,
             mode = vim.env.FAKE_COUCH_REGISTRY_MODE, state_dir = require("parley").config.state_dir,
-            input = vim.ui.input, own_slot = require("parley.couch").own_slot }
+            input = vim.ui.input, own_slot = require("parley.couch").own_slot,
+            exit = vim.env.FAKE_COUCH_EXIT, sleep = vim.env.FAKE_COUCH_SLEEP,
+            log_delay = vim.env.FAKE_COUCH_LOG_DELAY, status = vim.env.FAKE_COUCH_STATUS }
         vim.env.PATH = root .. "/bin:" .. vim.env.PATH
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "scope-test", "tag-test"
         vim.env.FAKE_COUCH_REGISTRY = root .. "/registry.json"
         vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+        vim.env.FAKE_COUCH_EXIT, vim.env.FAKE_COUCH_SLEEP = "0", nil
+        vim.env.FAKE_COUCH_LOG_DELAY, vim.env.FAKE_COUCH_STATUS = nil, nil
         vim.env.FAKE_COUCH_ACTORS = vim.json.encode({ Code = "ok", Actors = {
             { Binding = { Slot = "ops:0", Scope = "scope-test", Tag = "tag-test" } },
         } })
@@ -39,6 +68,8 @@ describe("agentic markdown admission", function()
         vim.env.PATH, vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = saved.path, saved.scope, saved.tag
         vim.env.FAKE_COUCH_REGISTRY, vim.env.FAKE_COUCH_ACTORS = saved.registry, saved.actors
         vim.env.FAKE_COUCH_REGISTRY_MODE = saved.mode
+        vim.env.FAKE_COUCH_EXIT, vim.env.FAKE_COUCH_SLEEP = saved.exit, saved.sleep
+        vim.env.FAKE_COUCH_LOG_DELAY, vim.env.FAKE_COUCH_STATUS = saved.log_delay, saved.status
         require("parley").config.state_dir, vim.ui.input = saved.state_dir, saved.input
         require("parley.couch").own_slot = saved.own_slot
         vim.fn.delete(root, "rf")
@@ -48,7 +79,7 @@ describe("agentic markdown admission", function()
         assert.equals(0, vim.fn.filereadable(file .. ".lock"))
         vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "edited question" })
         submit()
-        await(function() return vim.fn.filereadable(root .. "/sent.last") == 1 end)
+        await_submitted()
         assert.equals("submitted: " .. file, table.concat(vim.fn.readfile(root .. "/sent.last"), "\n"))
         assert.same({ "---", "owner: business-team", "---", "# Question", "edited question", "tail" }, vim.fn.readfile(file))
         assert.equals("ops:0", document.identity(buf).Owner)
@@ -77,7 +108,7 @@ describe("agentic markdown admission", function()
     end)
     it("uses the known namespace cache on an offline reopen", function()
         await(function() return document.status(buf).phase == "plain" end)
-        submit(); await(function() return document.identity(buf) ~= nil and vim.fn.filereadable(root .. "/sent.last") == 1 end)
+        submit(); await_submitted()
         document.detach(buf); vim.api.nvim_buf_delete(buf, { force = true })
         vim.env.FAKE_COUCH_REGISTRY_MODE = "unsupported"
         vim.cmd("edit " .. vim.fn.fnameescape(file)); buf = vim.api.nvim_get_current_buf()
@@ -88,7 +119,7 @@ describe("agentic markdown admission", function()
     end)
     it("treats corrupt cached entries as unknown rather than blocking editing", function()
         await(function() return document.status(buf).phase == "plain" end)
-        submit(); await(function() return document.identity(buf) ~= nil and vim.fn.filereadable(root .. "/sent.last") == 1 end)
+        submit(); await_submitted()
         local cache_file = vim.fn.glob(root .. "/state/document-cache/*/known.json")
         vim.fn.writefile({ '{"version":1,"entries":[1]}' }, cache_file)
         document.detach(buf); vim.api.nvim_buf_delete(buf, { force = true })
@@ -101,7 +132,7 @@ describe("agentic markdown admission", function()
     end)
     it("transfers registered native saveas identity with its side folder and backlinks", function()
         await(function() return document.status(buf).phase == "plain" end)
-        submit(); await(function() return document.identity(buf) ~= nil and vim.fn.filereadable(root .. "/sent.last") == 1 end)
+        submit(); await_submitted()
         local side = root .. "/ordinary.side"
         vim.fn.mkdir(side, "p")
         vim.fn.writefile({ "---", "parent: ../ordinary.md", "---", "[up](../ordinary.md#question)", "unrelated" }, side .. "/child.md")
@@ -119,7 +150,7 @@ describe("agentic markdown admission", function()
     end)
     it("recovers an uncertain published native move before admitting the reopened path", function()
         await(function() return document.status(buf).phase == "plain" end)
-        submit(); await(function() return document.identity(buf) ~= nil and vim.fn.filereadable(root .. "/sent.last") == 1 end)
+        submit(); await_submitted()
         vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "held edit" })
         local new = root .. "/recovered.md"
         vim.env.FAKE_COUCH_REGISTRY_MODE = "uncertain"
@@ -153,18 +184,18 @@ describe("agentic markdown admission", function()
     end)
     it("confirms a newly saved couch-owner override before routing a registered submit", function()
         await(function() return document.status(buf).phase == "plain" end)
-        submit(); await(function() return document.status(buf).phase == "registered" and vim.fn.filereadable(root .. "/sent.last") == 1 end)
+        submit(); await_submitted()
         vim.fn.delete(root .. "/sent.last")
         vim.api.nvim_buf_set_lines(buf, 1, 1, false, { "couch-owner: ops:9" })
         submit()
-        await(function() return document.status(buf).phase == "registered" and vim.fn.filereadable(root .. "/sent.last") == 1 end)
+        await_submitted()
         local sent = vim.fn.readfile(root .. "/sent")
         assert.equals("ops:9|submitted: " .. file, sent[#sent])
         assert.equals("ops:9", document.identity(buf).Owner)
     end)
     it("retires confirmed absent registration after preserving its existing operator lock", function()
         await(function() return document.status(buf).phase == "plain" end)
-        submit(); await(function() return document.identity(buf) ~= nil and vim.fn.filereadable(root .. "/sent.last") == 1 end)
+        submit(); await_submitted()
         vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "unsent edit" })
         local forgot = vim.system({ "couch", "--session-sync", "forget", file, "--json" }, { text = true }):wait(2000)
         assert.equals(0, forgot.code)
@@ -176,7 +207,7 @@ describe("agentic markdown admission", function()
     end)
     it("releases a synthetic free-turn migration lock after a successful unedited saveas", function()
         await(function() return document.status(buf).phase == "plain" end)
-        submit(); await(function() return document.status(buf).phase == "registered" end)
+        submit(); await_submitted()
         local new = root .. "/free-move.md"
         vim.cmd("saveas " .. vim.fn.fnameescape(new))
         await(function() return document.identity(buf).File == new end)
@@ -185,7 +216,7 @@ describe("agentic markdown admission", function()
     end)
     it("refuses an occupied target without overwriting it and permits no-effect return to OLD", function()
         await(function() return document.status(buf).phase == "plain" end)
-        submit(); await(function() return document.status(buf).phase == "registered" end)
+        submit(); await_submitted()
         local target = root .. "/occupied.md"
         vim.fn.writefile({ "other document" }, target)
         local registered
@@ -208,7 +239,7 @@ describe("agentic markdown admission", function()
         require("parley").setup_markdown_keymaps(buf)
         assert.is_not_nil(document.status(buf))
         await(function() return document.status(buf).phase == "plain" end)
-        submit(); await(function() return document.status(buf).phase == "registered" end)
+        submit(); await_submitted()
         local side = root .. "/long-form.side"
         vim.fn.mkdir(side, "p")
         vim.fn.writefile({ "[parent](../long-form.markdown)" }, side .. "/child.markdown")

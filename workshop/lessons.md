@@ -525,3 +525,10 @@ oracle, and the mutation that would make the test fail.
 - Native fallback errors are still completion paths. Restore temporary cursor placement in a protected call before propagating gf errors; test an absent non-Markdown target as well as recognized missing Markdown.
 - Reusing structural parsing does not mean reusing an editing operation's walls. Navigation boundaries must follow their own contract; sweep every default/configured structural prefix as content, a transcript turn, and a fenced sample. Share the resulting fence mask with candidate collection so those decisions cannot diverge (close BR-1).
 - A stateful subprocess fake needs a live contract check for the exact modeled command, not only executable/help discovery. Compare consumed fields and failure outcomes against isolated real fixtures, and document when maintainers rerun it (close BR-2).
+
+## 2026-10-15 (#332 — verification)
+
+- A filesystem preflight cannot establish no-clobber ownership: use an atomic no-replace operation for both the document and its side directory. Exercise a foreign destination appearing after the absence observation.
+- Match the complete shared document classifier when selecting a filesystem route; timestamp spelling alone also matches ordinary dated notes.
+- A subprocess output pathname can exist before its payload is written. Wait for exact bytes and lifecycle completion, and distinguish a per-request deadline from the budget for a multi-command editor interaction.
+- Register new state-directory readers in the corruption registry as they are introduced; reuse the shared directory and checked-write seams before the full-suite boundary.

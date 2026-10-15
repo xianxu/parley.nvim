@@ -66,7 +66,8 @@ local function cache(s, registration, remove)
     local lease = require("parley.document_lease").acquire(s.namespace, "known-cache", { root = root })
     if not lease then return nil end -- cache loss means unknown, never plain.
     local directory = root .. "/document-cache/" .. vim.fn.sha256(s.namespace)
-    vim.fn.mkdir(directory, "p", 448)
+    local made = pcall(require("parley.fs").ensure_dir, directory, 448)
+    if not made then lease.release(); return nil end
     local path, temporary = directory .. "/known.json", directory .. "/next.json"
     -- The one declared cache temp belongs to this namespace lease, including
     -- recovery after writer death. No sibling glob or age cleanup is used.
@@ -102,7 +103,8 @@ local function cache(s, registration, remove)
         while #entries > 256 do table.remove(entries) end
         local bytes = vim.json.encode({ version = 1, entries = entries })
         if #bytes <= 1024 * 1024 then
-            require("parley.helper").write_file_atomic(bytes, path, { temp_path = function() return temporary end })
+            local written = require("parley.helper").write_file_atomic(bytes, path, { temp_path = function() return temporary end })
+            if not written then lease.release(); return nil end
         end
     end
     lease.release()

@@ -785,6 +785,7 @@ atlas:
       - tests/integration/document_registry_spec.lua
       - tests/integration/document_lease_spec.lua
       - tests/integration/document_move_spec.lua
+      - tests/integration/sidecar_degrade_spec.lua
 
   modes/interview:
     code:
