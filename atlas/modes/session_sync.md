@@ -44,7 +44,9 @@ overwrite a file rewritten under a modified buffer.
 `TextChanged` / `InsertLeave` auto-save can clear `modified`, for Normal and
 Insert edits alike. Recognition at attachment survives temporary edits to the
 frontmatter. Clean-edit release waits until Neovim settles `modified`; a write
-during that edit preserves the turn. The watcher’s `:edit!` detaches native
+during that edit preserves the turn. Pending foreign writes/deletions are
+reconciled through the violation handler before release; an undecided disk check
+keeps the lock until the change can be classified. The watcher’s `:edit!` detaches native
 buffer callbacks, so `BufReadPost` reinstalls them before the next keystroke.
 
 **Whose write it was (#317).** parley keeps the mtime it last read or wrote

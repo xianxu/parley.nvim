@@ -481,3 +481,9 @@ oracle, and the mutation that would make the test fail.
   effect. Advancing a fake clock while only changing future subprocess env
   leaves in-flight snapshots valid in ways the real write would invalidate
   (#321 recent-write fixture race).
+
+## 2026-10-14 (#324 — native edits and clean release)
+
+- Test the real event order when a pre-existing auto-save participates: synthetic BufModifiedSet before TextChanged hid the Normal-mode acquisition defect. Install the operator's callback first and drive child-Neovim input.
+- Every new ownership-release path must reconcile pending external effects through the existing preservation handler first, including overwrite, deletion, failed copy and undecided probes. Equality to a per-edit mtime does not establish equality to the loaded baseline.
+- Cross-process file existence is not readiness: await the complete holder bytes. A scheduler sentinel makes deferred-state assertions observe the transition rather than a lucky ordering.

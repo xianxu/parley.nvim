@@ -13,12 +13,14 @@ describe("session-sync native edits", function()
         assert.is_true(vim.wait(2000, function() return exec(code) end), code)
     end
     local function locked()
-        assert.is_true(vim.wait(1000, exists), "operator lock missing")
-        assert.equals("holder: operator", vim.fn.readfile(file .. ".lock")[1])
+        assert.is_true(vim.wait(1000, function()
+            local ok, lines = pcall(vim.fn.readfile, file .. ".lock")
+            return ok and lines[1] == "holder: operator"
+        end), "complete operator lock missing")
     end
-    local function open(autosave, undo)
+    local function open(autosave, undo, slow_watch)
         exec([[
-            local path, autosave, undo = ...
+            local path, autosave, undo, slow_watch = ...
             _G.path, _G.auto_save, _G.pre_save_lock = path, autosave, nil
             vim.api.nvim_create_autocmd("TextChanged", { pattern = "*.md", callback = function()
                 _G.pre_save_lock = vim.fn.filereadable(path .. ".lock")
@@ -47,10 +49,10 @@ describe("session-sync native edits", function()
             vim.api.nvim_buf_delete(scratch, {force=true})
             vim.fn.setreg('a', 'pasted')
             local ss = require("parley.session_sync")
-            ss.POLL_MS = 20
+            ss.POLL_MS = slow_watch and 60000 or 20
             require("parley").setup_markdown_keymaps(session)
             vim.api.nvim_win_set_cursor(0, {8,0})
-        ]], file, autosave, undo)
+        ]], file, autosave, undo, slow_watch)
     end
     local function agent_reload(checktime)
         local lines = vim.fn.readfile(file)
@@ -73,6 +75,10 @@ describe("session-sync native edits", function()
         exec([[
             local runtime, root = ...
             vim.opt.rtp:append(runtime)
+            -- Capture notifications without builtin vim.notify's hit-enter UI;
+            -- foreign-write warnings are asserted through the fake owner's log.
+            _G.notifications = {}
+            vim.notify = function(message) notifications[#notifications+1] = message end
             vim.env.PATH = root .. "/bin:" .. vim.env.PATH
             vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
             vim.env.FAKE_COUCH_STATUS = nil
@@ -157,6 +163,79 @@ describe("session-sync native edits", function()
         wait_for("return _G.pre_save_lock ~= nil")
         assert.equals(1, exec("return _G.pre_save_lock"))
     end)
+
+    for _, change in ipairs({"overwrite", "delete", "unkeepable overwrite"}) do
+        it("clean undo preserves pending foreign " .. change .. " before release", function()
+            open(false, false, true) -- release callback must handle it before the watcher.
+            local original = vim.fn.readfile(file)
+            keys("dd"); locked()
+            exec([[
+                local change = ...
+                if change == "delete" then
+                    vim.fn.delete(path)
+                else
+                    local foreign = vim.fn.readfile(path)
+                    foreign[8] = "foreign agent text"
+                    vim.fn.writefile(foreign, path)
+                    if change == "unkeepable overwrite" then
+                        vim.fn.mkdir(path .. ".clobbered")
+                    end
+                end
+                vim.cmd("normal! u")
+            ]], change)
+            wait_for("return not vim.bo.modified")
+            if change == "overwrite" then
+                assert.is_true(vim.wait(1000, function()
+                    return vim.fn.filereadable(file .. ".clobbered") == 1
+                end), "foreign text was not preserved")
+                assert.equals("foreign agent text", vim.fn.readfile(file .. ".clobbered")[8])
+                assert.same(original, vim.fn.readfile(file))
+            elseif change == "delete" then
+                assert.is_true(vim.wait(1000, function() return vim.fn.filereadable(file) == 1 end), "deleted file was not restored")
+                assert.same(original, vim.fn.readfile(file))
+            else
+                assert.is_true(vim.wait(1000, function() return vim.fn.filereadable(sent_file) == 1 end))
+                assert.equals("foreign agent text", vim.fn.readfile(file)[8])
+            end
+            locked()
+            assert.is_true(vim.wait(1000, function() return vim.fn.filereadable(sent_file) == 1 end))
+            assert.matches("session-sync violation:", vim.fn.readfile(sent_file)[1], 1, true)
+        end)
+    end
+
+    for _, undecided in ipairs({"ignored", "errored"}) do
+        it("clean undo keeps undecided foreign writes locked when checktime is " .. undecided, function()
+            open(false, false, true)
+            local original = vim.fn.readfile(file)
+            keys("dd"); locked()
+            exec([[
+                local undecided = ...
+                local lines = vim.fn.readfile(path)
+                lines[8] = "unclassified foreign text"
+                vim.fn.writefile(lines, path)
+                _G.real_cmd = vim.cmd
+                if undecided == "ignored" then
+                    vim.o.eventignore = "FileChangedShell"
+                else
+                    vim.cmd = setmetatable({}, {__call=function(_, command)
+                        if command:match("^checktime") then error("checktime unavailable") end
+                        return real_cmd(command)
+                    end, __index=real_cmd})
+                end
+                vim.cmd("normal! u")
+            ]], undecided)
+            wait_for("return not vim.bo.modified")
+            exec("vim.schedule(function() _G.reconciled=true end)")
+            wait_for("return _G.reconciled == true")
+            assert.is_true(exists(), "an undecided disk change must retain protection")
+            assert.is_false(vim.fn.filereadable(file .. ".clobbered") == 1)
+            assert.equals("unclassified foreign text", vim.fn.readfile(file)[8])
+            exec("vim.cmd=real_cmd; vim.o.eventignore=''; vim.cmd('checktime')")
+            assert.is_true(vim.wait(1000, function() return vim.fn.filereadable(file .. ".clobbered") == 1 end))
+            assert.same(original, vim.fn.readfile(file))
+            locked()
+        end)
+    end
 
     it("an explicit save retains the turn, undo away from that save remains locked", function()
         open(false)

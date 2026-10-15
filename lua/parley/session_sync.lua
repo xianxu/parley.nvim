@@ -521,6 +521,14 @@ M.attach = function(buf)
 					end
 					if not vim.bo[buf].modified and disk_mtime(buf) == before
 						and read_turn(buf) == "operator" then
+						-- A foreign write/deletion may predate this edit. Keep the
+						-- turn and preserve it before clean undo can release it.
+						if disk_changed(buf) then
+							violation(buf)
+							return
+						end
+						-- A failed/ignored checktime is still undecided, not free.
+						if mtime_moved(buf) then return end
 						if vim.fn.delete(M.lock_path(buf)) == 0 then
 							refresh(buf)
 							restart_idle(buf)
