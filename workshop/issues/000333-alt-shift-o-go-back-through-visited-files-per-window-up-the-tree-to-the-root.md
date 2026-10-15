@@ -211,3 +211,11 @@ fails exactly the no-yield sequence; restoring the synchronous adapter yields
 attempt was invalidated by overlapping test runs and is excluded as evidence;
 the serial red/green rerun is /tmp/parley-333-order-{red-valid,restored}.log.
 Full verification and boundary re-review are pending on this correction.
+
+### 2026-10-15 — synchronous correction full verification
+
+make test exited 0 on 1fd0e752: 430 passing test files, zero lint warnings/errors
+in 728 files, and clean unit/integration process censuses. Evidence:
+/tmp/parley-333-sync-full.log. The file-history adapter including the no-yield
+sequence passes within that run. Vocabulary freshness and committed-range
+whitespace checks pass. Re-entering SDLC review for BR-2 with no deferred state.
