@@ -40,7 +40,7 @@ This slice includes moving an existing sibling `<stem>.side/` and its parent bac
 | `acquire` — cross-editor operation lease | INTEGRATION | `lua/parley/document_lease.lua` | new |
 | `attach`, `identity`, `is_session_sync`, `detach`, `acquire_observed` — stable attachment and observed edits | INTEGRATION | `lua/parley/session_sync.lua` | modified |
 | `prepare_submit`, `send_registered`, `release_if_baseline` — shared save, send and turn release | INTEGRATION | `lua/parley/session_sync.lua` | modified |
-| `begin_move`, `install_move_lock`, `finish_move`, `abort_move`, `restore_move` — turn-preserving migration handoff | INTEGRATION | `lua/parley/session_sync.lua` | modified |
+| `begin_move`, `install_move_lock`, `finish_move`, `abort_move`, `restore_move`, `set_submission_feedback` — turn-preserving migration handoff | INTEGRATION | `lua/parley/session_sync.lua` | modified |
 | `write_file_atomic`, `table_to_file_atomic` — atomic byte writer and JSON wrapper | INTEGRATION | `lua/parley/helper.lua` | modified |
 | `write` — stateful executable registry fake | INTEGRATION | `tests/helpers/fake_couch.lua` | modified |
 
@@ -209,3 +209,7 @@ ARCH-FUNERAL: per-buffer models, barriers, callbacks and handles die on wipeout;
 ### 2026-10-15 — Public mover ordering
 
 The actual move_chat and move_chat_tree doors accept ordinary Markdown and rename OLD before native buffer-name hooks run, with no subsequent write required. Route registered non-chat documents through the same durable migration executor before filesystem effects. Persist an owned-parent-rename intent, use atomic no-replace rename, and recover by captured inode/hash proof; native saveas retains its separate successful-write witness. Preflight tree membership before moving siblings. Regression tests exercise both real public doors, free and held locks, side/backlink preservation and restart cutpoints (ARCH-DRY, ARCH-MOCK).
+
+### 2026-10-15 — Persistent submission feedback and #322 coverage
+
+Operator-requested addition through the TL: after save/register/submit succeeds, retain a winbar confirmation, submitted to OWNER · HH:MM, until the next operator edit or agent write. All explicit submit failures show a visible error, including owner resolution and save/lookup/register failures before an edit-turn attachment exists. Reuse the existing session-sync renderer for attached documents; the admission coordinator owns the equivalent pre-attachment error band. Feedback never changes lock, baseline or owed semantics. Success is set only after the actual send callback succeeds; refresh/probe and own saves preserve it. Untrusted errors are bounded, flattened and escaped for literal winbar rendering. Add production-door plus native tests before implementation. Fold #322 into this acceptance and close it as covered once this behavior passes. The required suite queued for73459653 was cancelled before execution because the new scope requires a new final code head.
