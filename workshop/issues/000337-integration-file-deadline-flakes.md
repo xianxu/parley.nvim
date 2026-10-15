@@ -47,11 +47,13 @@ A controlled schedule or deterministic regression identifies why these passing f
 - [x] Freeze the diagnosed timeout model and obtain TL review of the progress/absolute-ceiling design.
 - [x] Observe deterministic RED for useful work past50s, stalled bootstrap/case/teardown, cap, load bounds and ignored arbitrary output; verify thin-runner wiring with controlled process events.
 - [x] Implement the smallest shared pure policy and owned child adapter, preserving Plenary assertions/output/exit codes; verify actual success, assertion failure and forced timeout children with cleanup.
-- [ ] Run focused harness and affected suites, update atlas/lessons, and pass the required full suite.
+- [x] Run focused harness and affected suites, update atlas/lessons, and pass the required full suite.
 
 After verification, close through the mandatory fresh review, fix any finding class, land on SHIP and report the merge to the hub.
 
 ## Log
+
+- 2026-10-15 — required full suite PASS on53b675f42f03d6d6bddd38d43891e03b4a8467ed in2m25s, /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/53b675f42f03d6d6bddd38d43891e03b4a8467ed/suite.log (sha256:b9ce2acbd238). All recipes completed, no failed files, no surviving test processes. In particular issue_tracker passed58s while making case progress, exceeding the old minimum without masking a stall; all six affected deadline files and packaging_vm passed. Focused22 cases and full lint pass. Close review/landing remain pending.
 
 First seen:2026-10-15. Failing head1eaefd96df59afcb8d0880ec621864b137a596a7, command sdlc local-check run --name suite. Log:/Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/572dbf1a77bfb77320a173d6409874e8.log. All three were killed at50s; no failed behavioral assertion preceded the kill. Previous full suite on e9a1622d2102e71e66dc44d3a0dacb70e9921f92 passed entity_delete_parity in83s, file_history in63s, issue_tracker in67s; log:/Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/894c995da011381b869a9bd450c9545b.log. The only diff between these heads is #332 issue documentation. That preceding run failed only the separate packaging VM flake #336, which passed on this run. No suite waiver or quarantine.
 
