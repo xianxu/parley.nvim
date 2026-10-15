@@ -159,3 +159,79 @@ Done-when: current — the original navigation and invalid-link outcomes remain 
    Add a `## Revisions` entry defining paragraph/block containment for both scanner consumers, enumerating the supported boundary classes, and requiring regression coverage for the confirmed thematic-break, Setext-heading, and blockquote cases.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"79884504-d136-4b45-b704-8dd120367d15","repository":"github.com/xianxu/parley.nvim","issue_id":"000335","recipe":"small-diff-review","round":2,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/84c1a2ac5fd10371","reviewed_head":"dcdb95cf023e8c1b2e0b465381608d91fbd07fdf","slot":"parley.nvim:1","requested_at":"2026-10-15T22:43:43.277005Z"},"phase":"finished","pid":98665,"started_at":"2026-10-15T22:43:43.399979Z","finished_at":"2026-10-15T22:45:25.153837Z","session_id":"01a141bc-54ea-77d0-9ff5-44e48912a835","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T16:02:43-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 335 — Alt+o doesn't recognise a markdown link whose text wraps across lines (falls back to a #NNN reference) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000335-alt-o-doesn-t-recognise-a-markdown-link-whose-text-wraps-across-lines-falls-back-to-a-nnn-reference.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 83f3893a133af1d8f96a677ecc0fa6b5e2c514c0..baa846c09daa767d2154b0d697236ad503f4a8bc |
+| command | sdlc close --issue 335 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T16:02:43-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The shared scanner and Markdown dispatch improve wrapped-link navigation, and the mapped test suite passes. BR-3 remains blocking: empty ATX headings still let links cross block boundaries.
+
+```findings
+dispose:
+  - id: BR-3
+    disposition: not-addressed
+    note: |
+      The original thematic-break, Setext, and blockquote probes now pass, but paragraph containment remains incomplete (ARCH-PURPOSE). lua/parley/reference_candidates.lua:30 requires whitespace after the heading hashes, missing empty ATX headings. Enumeration: "#" through "######", each with zero through three leading spaces (24 forms). For {"[unfinished", boundary, "label](README.md)"}, both markdown_spans and collect return one Markdown candidate for all 24 forms. OpenFileUnderCursor command probes across "#", "######", and "   ###" opened README.md from row 3. This repeats family preserve-document-scan-boundaries: maintain the complete paragraph-wall rule rather than patching individual spellings. Recognize empty and nonempty ATX headings at every supported level and indentation, then add failing regressions for both scanner consumers and command dispatch. Affected consumers remain lua/parley/init.lua:5071 and lua/parley/reference_candidates.lua:107.
+```
+
+Done-when: current — it covers direct opening, entity choices, and invalid links; the revisions refine the existing paragraph-containment requirement.
+
+1. **Strengths**
+
+   - Both navigation paths reuse `markdown_spans`, preserving full spans and destination coordinates.
+   - `open_markdown_reference` centralizes Markdown dispatch and retains recognized destination identity.
+   - README and atlas changes document the navigation behavior.
+   - Tests cover byte coordinates, nested references, transcript markers, and both fence styles.
+
+2. **Critical findings**
+
+   - **BR-3 remains open:** `lua/parley/reference_candidates.lua:30–31` misses empty headings. Accept end-of-line after one through six hashes, respecting the indentation rule, and test the complete enumeration above.
+
+3. **Important findings**
+
+   None.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - `make test-spec SPEC=context/file_references` passed; process census was clean.
+   - `git diff --check` passed.
+   - Before/head comparison confirmed the five original BR-3 boundary probes change from one candidate to zero.
+   - Additional scanner and command probes demonstrate the uncovered empty-heading defect. No tracked files were changed.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY: pass.** Shared scanning and dispatch avoid parallel implementations.
+   - **ARCH-PURE: pass.** Parsing remains deterministic; editor effects stay in command dispatch.
+   - **ARCH-PURPOSE: flag.** The declared paragraph-containment rule remains incomplete under BR-3.
+   - Core-concept entities exist at their stated locations and match their classifications.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry enumerating empty/nonempty ATX headings, all six levels, and zero-to-three-space indentation, with regressions covering direct scanning and entity collection.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"dc180abf-42b8-4290-9324-cc0dfa4c0146","repository":"github.com/xianxu/parley.nvim","issue_id":"000335","recipe":"small-diff-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/f495277c974dd9e6","reviewed_head":"baa846c09daa767d2154b0d697236ad503f4a8bc","slot":"parley.nvim:1","requested_at":"2026-10-15T23:00:49.348448Z"},"phase":"finished","pid":28620,"started_at":"2026-10-15T23:00:49.590474Z","finished_at":"2026-10-15T23:02:31.694659Z","session_id":"01a141cb-fcc4-7f22-9956-d3988bfc856c","outcome":"returned"}] -->

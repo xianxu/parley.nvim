@@ -148,6 +148,16 @@ warnings/errors in 732 files, clean process census
 (/tmp/parley-335-blocks-full.log). The mapped paragraph/direct-navigation
 regressions also pass. Ready for round 3 of the close review.
 
+### 2026-10-15 — empty-heading correction verified
+
+Round 3 retains BR-3 for empty ATX headings. Both new test groups fail without
+the correction (/tmp/parley-335-atx-red.log). Accepting end-of-line after the
+hash run makes the mapped suite pass with clean census
+(/tmp/parley-335-atx-green.log), covering 72 heading variants in each consumer
+and command dispatch, with seven-hash/four-space positive continuations.
+Whitespace passes. Run the full suite through sdlc local-check before re-close
+so its exact-head record also satisfies the landing gate.
+
 ## Revisions
 
 ### 2026-10-15 15:30 — close review BR-1 and BR-2
@@ -170,3 +180,11 @@ thematic forms, Setext variants, indented quote markers and ATX levels 4–6 in
 regressions, plus positive list/chat-anchor wrapping to preserve supported
 paragraph starts. This refines containment without changing the existing
 inline-link syntax or adding container/HTML parsing.
+
+### 2026-10-15 16:04 — BR-3 complete ATX enumeration
+
+Round 3 confirms prior walls but exposes empty headings. Enumerate ATX levels
+1–6, zero-to-three-space indentation, and empty/text/tab suffixes in both pure
+scanner consumers and command tests. Seven hashes and four-space-indented text
+remain paragraph continuations. The rule accepts whitespace OR end-of-line
+after the hash run; this completes the declared heading boundary class.

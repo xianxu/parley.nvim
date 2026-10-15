@@ -181,6 +181,89 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: dc180abf-42b8-4290-9324-cc0dfa4c0146
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000335"
+            recipe: small-diff-review
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/f495277c974dd9e6
+            reviewed_head: baa846c09daa767d2154b0d697236ad503f4a8bc
+            slot: parley.nvim:1
+            requested_at: "2026-10-15T23:00:49.348448Z"
+          phase: finished
+          pid: 28620
+          started_at: "2026-10-15T23:00:49.590474Z"
+          finished_at: "2026-10-15T23:02:31.694659Z"
+          session_id: 01a141cb-fcc4-7f22-9956-d3988bfc856c
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: baa846c09daa767d2154b0d697236ad503f4a8bc
+        tracker_head: a18afae87d8073e54f6dbd63cceadb5c6ed1dd73
+        branch_point: 83f3893a133af1d8f96a677ecc0fa6b5e2c514c0
+        since: "2026-10-15T14:41:15-07:00"
+        until: "2026-10-15T16:00:10-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-15T14:41:15-07:00"
+              end: "2026-10-15T16:00:10-07:00"
+              began: "2026-10-15T14:41:15-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: abf96a87e9f361743bf25925fedc1936470c72b85e6cc6d104de67af68b75830
+              started: "2026-10-14T05:35:58.09Z"
+              spawned: false
+              bytes: 13156685
+              windows:
+                - start: "2026-10-15T14:41:15-07:00"
+                  end: "2026-10-15T16:00:10-07:00"
+            - harness: codex
+              id: 01a14183-71cd-7f63-8f66-cd1fe2633763
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 6a4848abe1f328f79916ea370d69c8b7a5b0524c934ef25811578aca2c088828
+              started: "2026-10-15T21:41:35.947Z"
+              spawned: true
+              bytes: 529137
+              windows:
+                - start: "2026-10-15T21:41:35.947Z"
+                  end: "2026-10-15T16:00:10-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 0.029516666666666667
+        cuts:
+            - dispatched: "2026-10-15T15:26:40-07:00"
+              finalized: "2026-10-15T15:28:34-07:00"
+              finalizing: false
+            - dispatched: "2026-10-15T15:43:43-07:00"
+              finalized: "2026-10-15T15:45:25-07:00"
+              finalizing: false
+      "n": 3
+      timestamp: "2026-10-15T16:02:43-07:00"
+      dispatched: "2026-10-15T16:00:49-07:00"
+      agent: codex
+      dispose:
+        - id: BR-3
+          disposition: not-addressed
+          note: 'The original thematic-break, Setext, and blockquote probes now pass, but paragraph containment remains incomplete (ARCH-PURPOSE). lua/parley/reference_candidates.lua:30 requires whitespace after the heading hashes, missing empty ATX headings. Enumeration: "#" through "######", each with zero through three leading spaces (24 forms). For {"[unfinished", boundary, "label](README.md)"}, both markdown_spans and collect return one Markdown candidate for all 24 forms. OpenFileUnderCursor command probes across "#", "######", and "   ###" opened README.md from row 3. This repeats family preserve-document-scan-boundaries: maintain the complete paragraph-wall rule rather than patching individual spellings. Recognize empty and nonempty ATX headings at every supported level and indentation, then add failing regressions for both scanner consumers and command dispatch. Affected consumers remain lua/parley/init.lua:5071 and lua/parley/reference_candidates.lua:107.'
+          round: 3
+      recipe: small-diff-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#335 (boundary-review)
@@ -208,6 +291,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - **BR-3** [Critical] `preserve-document-scan-boundaries` (kind: defect) Wrapped links still cross Markdown block boundaries
   lua/parley/reference_candidates.lua:29–35 omits thematic breaks, Setext heading underlines, and blockquote transitions from its paragraph barriers. Headless probes using {"[unfinished", boundary, "label](<absolute README.md path>)"} with each boundary "---", "***", "___", "===", and "> quoted" produced one Markdown candidate and opened README.md through OpenFileUnderCursor from row 3. The affected sites are the shared boundary predicate, direct scanning at lua/parley/init.lua:5071, and collect's shared scan at lua/parley/reference_candidates.lua:100. This is the 2nd finding in family preserve-document-scan-boundaries. Earlier rounds fixed instances. Do NOT fix only these spellings: state the paragraph/block-containment rule, enumerate its boundary classes, and enforce it for both consumers with failing regressions (ARCH-PURPOSE).
+
+## Round 3 — 2026-10-15T16:02:43-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-3 — not-addressed — The original thematic-break, Setext, and blockquote probes now pass, but paragraph containment remains incomplete (ARCH-PURPOSE). lua/parley/reference_candidates.lua:30 requires whitespace after the heading hashes, missing empty ATX headings. Enumeration: "#" through "######", each with zero through three leading spaces (24 forms). For {"[unfinished", boundary, "label](README.md)"}, both markdown_spans and collect return one Markdown candidate for all 24 forms. OpenFileUnderCursor command probes across "#", "######", and "   ###" opened README.md from row 3. This repeats family preserve-document-scan-boundaries: maintain the complete paragraph-wall rule rather than patching individual spellings. Recognize empty and nonempty ATX headings at every supported level and indentation, then add failing regressions for both scanner consumers and command dispatch. Affected consumers remain lua/parley/init.lua:5071 and lua/parley/reference_candidates.lua:107.
 
 ## Open findings
 

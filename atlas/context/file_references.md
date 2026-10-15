@@ -109,3 +109,6 @@ text in plain Markdown never resets a fence.
 Paragraph walls include thematic breaks (compact or spaced), Setext underlines,
 all six ATX heading levels, and blockquote rows. A list/chat anchor may begin a
 wrapped label but never continue a span opened in an earlier block.
+
+ATX walls include empty and nonempty headings at levels 1–6 with up to three
+leading spaces; end-of-line after the hashes is a valid heading terminator.

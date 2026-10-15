@@ -875,6 +875,20 @@ describe('enclosing entity navigation', function()
             assert.is_nil(picker)
         end
     end)
+    it('treats empty and nonempty ATX headings at every level and indent as paragraph walls', function()
+        local target = write_markdown('atx-target.md', {'# Target'})
+        for level = 1, 6 do
+            for indent = 0, 3 do
+                for _, suffix in ipairs({'', ' title', '\t'}) do
+                    local boundary = string.rep(' ', indent) .. string.rep('#', level) .. suffix
+                    source({'[unfinished', boundary, 'label](' .. target .. ')'}, 3, 2)
+                    invoke()
+                    assert.equals(0, #opened, boundary)
+                    assert.is_nil(picker)
+                end
+            end
+        end
+    end)
     it('keeps direct Markdown priority over other entity choices', function()
         local target = write_markdown('direct.md', {'# D'})
         source({'1. [direct](direct.md)','   [other](missing.md)'},1,6)

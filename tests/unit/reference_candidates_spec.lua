@@ -63,7 +63,17 @@ describe("reference candidates", function()
             assert.same({}, candidates.markdown_spans(lines, {first = 1, last = 3}), boundary)
             assert.same({}, candidates.collect(lines, {first = 1, last = 3}), boundary)
         end
-        for _, continuation in ipairs({"= =", "    > text", "    #### text"}) do
+        for level = 1, 6 do
+            for indent = 0, 3 do
+                for _, suffix in ipairs({"", " title", "\t"}) do
+                    local boundary = string.rep(" ", indent) .. string.rep("#", level) .. suffix
+                    local lines = {"[unfinished", boundary, "label](side.md)"}
+                    assert.same({}, candidates.markdown_spans(lines, {first = 1, last = 3}), boundary)
+                    assert.same({}, candidates.collect(lines, {first = 1, last = 3}), boundary)
+                end
+            end
+        end
+        for _, continuation in ipairs({"= =", "    > text", "    #### text", "    #", "#######"}) do
             local got = candidates.markdown_spans({"[valid", continuation, "label](side.md)"},
                 {first = 1, last = 3}, {transcript = false})
             assert.equals(1, #got, continuation)

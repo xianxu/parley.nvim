@@ -27,7 +27,7 @@ function M.markdown_spans(lines, range, opts)
     for row = first, last do
         local line = lines[row]
         local content = line:match("^ ? ? ?(%S.*)$") or ""
-        local hashes = content:match("^(#+)%s")
+        local hashes = content:match("^(#+)%s") or content:match("^(#+)$")
         local heading = require("parley.markdown_heading").level(line) or (hashes and #hashes <= 6)
         local compact = content:gsub("%s", "")
         local wall = content:match("^%-+%s*$") or content:match("^=+%s*$") or content:match("^>")
