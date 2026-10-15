@@ -1,6 +1,6 @@
 ---
 id: 000333
-status: codecomplete
+status: done
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 9b6f9a48d4234263b100d03b730b75c73923d34c
         evidence_commit: e01ad0676cbde9434b4a0b30c7a32fbb7a9e7421
+        landed_commit: dac6547cfb5da8833118208ee5d866c375ff53e7
 ---
 
 # Alt+Shift+O: go back through visited files (per window), up the tree to the root
