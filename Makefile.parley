@@ -13,7 +13,7 @@ help-parley:
 	"  make test-changed     Run tests for changed spec files" \
 	"  make check-fresh-clone Verify startup and tests in an isolated archive" \
 	"  make check-vocabulary Compare shipped data to upstream (maintainer tools)" \
-	"  make check-sdlc-conformance Check optional sdlc discovery (maintainers)" \
+	"  make check-sdlc-conformance Compare real/fake sdlc resolver contracts (maintainers)" \
 	"  make perf             Report real headless chat-typing performance" \
 	"  make lint             Run luacheck on lua/ and tests/" \
 	"  make fixtures         Refresh SSE fixture files from real APIs" \
@@ -276,4 +276,4 @@ check-sdlc-conformance:
 	@command -v sdlc >/dev/null 2>&1 || { echo "Install sdlc to run the maintainer conformance check" >&2; exit 1; }
 	@sdlc --help >/dev/null
 	@sdlc issue new --help >/dev/null
-	@echo "sdlc command discovery/help conformance passed (read-only)"
+	@python3 scripts/check-sdlc-resolve-conformance.py

@@ -35,9 +35,25 @@ that every recursive tool round rereads those files.
 
 `<M-o>` (alias `<C-g>o`) opens the reference under the cursor in chat and Markdown
 buffers. It handles `src:` links, inline branch links, `🌿:` reference lines,
-`@@` references, and ordinary local Markdown links. If there is no recognized
-reference it falls back to [smart gf](artifact_refs.md). A recognized but missing
-target reports its own error and does not fall through.
+`@@` references, and ordinary local Markdown links. Direct references, including
+artifact references under the cursor, take priority. With no direct reference,
+it looks in the enclosing entity: a heading owns its section through the next
+same-or-higher heading; anywhere in a top-level numbered item owns that whole
+multi-line item. Interior blanks belong to the item, trailing blanks do not;
+the next numbered anchor or real heading ends it. Fenced examples contribute
+neither boundaries nor targets, and transcript headers/exchanges stay protected.
+Other body text uses its existing paragraph entity. Reference-bearing annotation
+prefixes remain numbered-item content; only real user/assistant turns bound an
+item in a transcript. Plain-Markdown navigation keeps chat-looking sample lines
+inside fences, while transcript navigation retains the shared turn-reset policy.
+
+One occurrence opens immediately. Several show a reference picker in document
+order (repeated destinations remain separate choices). Canceling leaves the
+source alone; edited/deleted sources, a different active buffer/window, or a
+newer invocation invalidate retained choices and delayed resolver results.
+With no occurrences, navigation falls back to [smart gf](artifact_refs.md).
+A recognized but missing target reports its own error and does not fall through.
+URL and fragment destination handling follows the existing opening policy.
 
 Relative Markdown `.md` links resolve from the source buffer's directory,
 independent of shell cwd. For `@@` links, relative or bare names are resolved
@@ -65,8 +81,15 @@ expansion/globbing that could execute backticks. All three share
 literals. Operator-configured paths have a separate audited allowlist.
 
 - `lua/parley/helper.lua`, `chat_parser.lua` — reference extraction and safe path helpers.
-- `lua/parley/init.lua` — editor opening chain and remote-context cache.
+- `lua/parley/init.lua` — editor opening chain, picker origin guard and remote-context cache.
+- `lua/parley/reference_candidates.lua` — shared occurrence scanners and pure picker completion.
+- `lua/parley/entity_range.lua` — navigation ranges sharing existing structural boundaries.
+- `lua/parley/artifact_ref.lua` — selected artifact resolution with optional final-effect validation.
 - `lua/parley/chat_respond.lua` — request inclusion.
 - `tests/unit/build_messages_spec.lua`, `tests/unit/remote_references_spec.lua` — context assembly and caching.
-- `tests/integration/open_reference_spec.lua` — navigation and one fallback boundary.
+- `tests/integration/open_reference_spec.lua` — navigation, direct priority and the fallback boundary.
+- `tests/unit/reference_candidates_spec.lua` — occurrence identity and completion transitions.
+- `tests/integration/entity_navigation_native_spec.lua` — real Normal/Insert Alt+o input.
+- `tests/integration/entity_resolve_spec.lua` — filesystem-backed resolver and stale-result suppression.
+- `scripts/check-sdlc-resolve-conformance.py` — opt-in real/fake resolver contract check with isolated temporary repositories; run `make -k check-sdlc-conformance` whenever the runner/fake changes and before closing that work.
 - `tests/arch/untrusted_path_spec.lua`, `tests/integration/untrusted_path_spec.lua` — expansion sinks and end-to-end inert path handling.

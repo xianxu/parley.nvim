@@ -124,6 +124,14 @@ been redesigned so thoroughly that it bears little resemblance to it. See [LICEN
 All sorts of AI coding agents were used to create Parley.
 
 
+## Follow links from a question
+
+Press **Alt+o** in a Markdown heading or anywhere in a numbered multi-line
+question to open its sole reference, including an answer link on the last line.
+Several references show a picker; cancel leaves the source alone. A reference
+directly under the cursor takes priority. With no reference in the entity,
+Parley uses its existing artifact resolver and Vim file navigation.
+
 ## Paste screenshots into Markdown
 
 Press **Alt+v** in Normal or Insert mode to paste a clipboard image after the
