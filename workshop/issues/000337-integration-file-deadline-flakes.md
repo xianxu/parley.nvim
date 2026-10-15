@@ -42,6 +42,10 @@ ARCH-PURE/ARCH-ORDER: one deterministic state transition with clock/progress/exi
 
 A controlled schedule or deterministic regression identifies why these passing files can overrun the selected deadline, a root-cause fix preserves their assertions, and focused plus full-suite evidence verifies bounded completion.
 
+- Deterministic policy tests allow completed-case progress beyond the old whole-file minimum, reject bootstrap/case/teardown stalls and stale/invalid frames, and enforce load bounds plus the independent absolute ceiling.
+- Real Plenary child conformance preserves successful/failed assertions, ignores arbitrary output as progress, and proves timeout termination and reaping with no live child PID.
+- Focused checks and the complete required suite pass with the affected behavioral assertions and existing corpus base budgets unchanged.
+
 ## Plan
 
 - [x] Freeze the diagnosed timeout model and obtain TL review of the progress/absolute-ceiling design.
@@ -69,3 +73,5 @@ First seen:2026-10-15. Failing head1eaefd96df59afcb8d0880ec621864b137a596a7, com
 - 2026-10-15 — focused harness GREEN22/0/0 (policy11, framing3, existing options2, real-child6), /tmp/parley337-all-harness-green.log. Actual child checks prove pass/fail propagation, completed-case count, arbitrary-output rejection, teardown coverage, progressing absolute cap and ESRCH after reap. No behavioral fixtures or timeout exceptions changed. Lint7files zero warnings/errors before docs update; final checks pending.
 
 - 2026-10-15 — final focused22 cases pass at /tmp/parley337-final-harness.log, full lint738files zero warnings/errors at /tmp/parley337-lint.log and diff check clean. Preserve the absolute/no-progress distinction in atlas and keep close/landing as post-check actions instead of claiming them in verification checkboxes. No suite rerun started yet on this implementation.
+
+- 2026-10-15 — close preflight requested bullet-form Done-when oracles for the quick flow. Added explicit checks for the already-approved policy, real-child boundary and full suite; no scope change, reviewer not dispatched yet.
