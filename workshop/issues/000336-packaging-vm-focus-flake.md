@@ -1,12 +1,20 @@
 ---
 id: 000336
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: 'ef7cc75200ca34930bb9e6ebae3eb6f613ecb4f4' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '94320e03ec09f3bda61c2db9522bbf4d5afeefde' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T15:41:39-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Flake: packaging VM guest chat confinement follows transient focus
@@ -25,7 +33,29 @@ A deterministic regression or controlled scheduling reproduces the failure, the 
 
 ## Plan
 
-- [ ]
+Root cause (traced): `agent_picker`'s login row runs `run_login`, whose success
+callback schedules `M.agent_picker(plugin, opts)` — the reopened model-choice
+picker (a floating prompt in insert mode; the failure log shows `-- (insert) --`
+twice, once per picker). The fake probe in `tests/packaging/vm_chat.lua` treats
+the credential FILE as login completion (lessons: file existence is not
+readiness), so the reopen races `ask()`. Credential health → settle → schedule
+lands either before `ask()` (then `nvim_set_current_buf` swaps the chat into the
+picker float and the run passes by accident) or during the response wait (then
+window 0 is the picker's unnamed prompt, and `resolve('')` fails the
+`guest chat file escaped` assertion). Confinement itself was never violated.
+
+- [ ] Probe: after the credential appears, wait for the login flow's own
+      completion signal, the reopened picker float, and dismiss it through its
+      cancel path, as an operator would, before `ask()`.
+- [ ] Probe: `ask()` returns the captured chat buffer's resolved file
+      (`chat_file`); the guest script asserts confinement on that file, never
+      on buffer 0.
+- [ ] Regression (packaging_vm_spec guest script): after `run("fake")`, assert
+      that no floating window remains (the login UI settled inside the probe),
+      then move focus to an unnamed scratch buffer (`enew`) before the
+      confinement assertions, so they are provably focus-independent. Show that
+      the old assertion fails deterministically under that focus change.
+- [ ] Verify: focused spec runs repeated, then the full parallel integration suite.
 
 ## Log
 
