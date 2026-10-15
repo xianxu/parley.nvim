@@ -42,7 +42,10 @@ same-or-higher heading; anywhere in a top-level numbered item owns that whole
 multi-line item. Interior blanks belong to the item, trailing blanks do not;
 the next numbered anchor or real heading ends it. Fenced examples contribute
 neither boundaries nor targets, and transcript headers/exchanges stay protected.
-Other body text uses its existing paragraph entity.
+Other body text uses its existing paragraph entity. Reference-bearing annotation
+prefixes remain numbered-item content; only real user/assistant turns bound an
+item in a transcript. Plain-Markdown navigation keeps chat-looking sample lines
+inside fences, while transcript navigation retains the shared turn-reset policy.
 
 One occurrence opens immediately. Several show a reference picker in document
 order (repeated destinations remain separate choices). Canceling leaves the

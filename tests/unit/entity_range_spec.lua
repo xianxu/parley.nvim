@@ -45,7 +45,7 @@ describe("entity_range navigation", function()
 		end
 	end)
 
-	it("clamps numbered items to transcript headers, exchanges and structural markers", function()
+	it("clamps numbered items to transcript headers and turns while retaining annotations", function()
 		local lines = {
 			"# topic: t", "- file: t.md", "---", "", "💬: question", "1. ask", "continued",
 			"🤖: [A]", "answer", "1. response", "[answer](a.md)", "📝: summary", "tail",
@@ -59,19 +59,102 @@ describe("entity_range navigation", function()
 		assert.same({ kind = "numbered", first = 6, last = 7 },
 			entity_range.navigation_range(parsed, lines, 7))
 		assert.same(entity_range.range(parsed, lines, 9), entity_range.navigation_range(parsed, lines, 9))
-		assert.same({ kind = "numbered", first = 10, last = 11 },
+		assert.same({ kind = "numbered", first = 10, last = 13 },
 			entity_range.navigation_range(parsed, lines, 11))
-		assert.same(entity_range.range(parsed, lines, 13), entity_range.navigation_range(parsed, lines, 13))
+		assert.same({ kind = "numbered", first = 10, last = 13 },
+			entity_range.navigation_range(parsed, lines, 13))
 		assert.same(entity_range.range(parsed, lines, 15), entity_range.navigation_range(parsed, lines, 15))
 	end)
 
-	it("uses configured structural prefixes as item boundaries", function()
-		local lines = { "1. question", "answer", "USER: next", "tail" }
-		local opts = { config = vim.tbl_extend("force", cfg, { chat_user_prefix = "USER:" }) }
-		assert.same({ kind = "numbered", first = 1, last = 2 },
-			entity_range.navigation_range(nil, lines, 1, opts))
-		assert.same(entity_range.range(nil, lines, 4, opts),
-			entity_range.navigation_range(nil, lines, 4, opts))
+	local vocabularies = {
+		{ name = "default", config = cfg },
+		{ name = "configured", config = vim.tbl_extend("force", cfg, {
+			chat_user_prefix = "USER+:", chat_assistant_prefix = { "ASSIST+:" },
+			chat_branch_prefix = "BRANCH+:", chat_local_prefix = "LOCAL+:",
+			chat_tool_use_prefix = "TOOL+:", chat_tool_result_prefix = "RESULT+:",
+			chat_memory = { enable = true, summary_prefix = "SUMMARY+:", reasoning_prefix = "THINK+:" },
+		}) },
+	}
+	for _, vocabulary in ipairs(vocabularies) do
+		local config = vocabulary.config
+		local patterns = require("parley.document.lexical").patterns(config)
+		for _, kind in ipairs({ "user", "assistant", "branch", "local", "summary", "reasoning",
+			"tool_use", "tool_result" }) do
+			it("keeps " .. vocabulary.name .. " " .. kind .. " samples fenced in plain Markdown", function()
+				local lines = {
+					"1. Follow up", "```markdown", patterns[kind .. "_prefix"] .. " sample",
+					"2. fake item", "# fake heading", "[sample](sample.md)", "```", "continued", "2. next",
+				}
+				for row = 1, 8 do
+					local range, in_code = entity_range.navigation_range(nil, lines, row, { config = config })
+					assert.same({ kind = "numbered", first = 1, last = 8 }, range)
+					assert.is_true(in_code[6], "collector must share the same fence mask")
+					assert.is_false(in_code[8])
+				end
+				local sample = { "```markdown", patterns[kind .. "_prefix"] .. " sample", "1. fake item", "```" }
+				local range = entity_range.navigation_range(nil, sample, 3, { config = config })
+				assert.is_true(range == nil or range.kind ~= "numbered")
+			end)
+		end
+
+		it("retains every " .. vocabulary.name .. " structural prefix in plain Markdown numbered items", function()
+			for _, kind in ipairs({ "user", "assistant", "branch", "local", "summary", "reasoning",
+				"tool_use", "tool_result" }) do
+				local lines = { "1. Follow up", patterns[kind .. "_prefix"] .. " answer.md: answer" }
+				for row = 1, 2 do
+					assert.same({ kind = "numbered", first = 1, last = 2 },
+						entity_range.navigation_range(nil, lines, row, { config = config }), kind)
+				end
+			end
+		end)
+
+		it("retains " .. vocabulary.name .. " annotations within real transcript numbered items", function()
+			for _, kind in ipairs({ "branch", "local", "summary", "reasoning", "tool_use", "tool_result" }) do
+				local lines = {
+					"# topic: t", "- file: t.md", "---", "", patterns.user_prefix .. " question",
+					patterns.assistant_prefix .. " [A]", "1. Follow up",
+					patterns[kind .. "_prefix"] .. " [answer](answer.md)", "continuation", "",
+					patterns.user_prefix .. " next", patterns.assistant_prefix .. " [A]", "tail",
+				}
+				local parsed = chat_parser.parse_chat(lines, chat_parser.find_header_end(lines), config)
+				for _, source in ipairs({ { parsed = parsed }, {} }) do
+					for row = 7, 9 do
+						assert.same({ kind = "numbered", first = 7, last = 9 },
+							entity_range.navigation_range(source.parsed, lines, row, { config = config }), kind)
+					end
+				end
+			end
+		end)
+
+		it("protects " .. vocabulary.name .. " transcript turns, even with no parsed snapshot", function()
+			for _, kind in ipairs({ "user", "assistant" }) do
+				local lines = {
+					"# topic: t", "- file: t.md", "---", "", patterns.user_prefix .. " question",
+					"1. Follow up", "answer", patterns[kind .. "_prefix"] .. " next", "tail",
+				}
+				local parsed = chat_parser.parse_chat(lines, chat_parser.find_header_end(lines), config)
+				for _, source in ipairs({ { parsed = parsed }, {} }) do
+					for row = 1, 3 do
+						assert.is_nil(entity_range.navigation_range(source.parsed, lines, row, { config = config }))
+					end
+					assert.same({ kind = "numbered", first = 6, last = 7 },
+						entity_range.navigation_range(source.parsed, lines, 7, { config = config }), kind)
+					assert.same(entity_range.range(source.parsed, lines, 9, { config = config }),
+						entity_range.navigation_range(source.parsed, lines, 9, { config = config }), kind)
+				end
+			end
+		end)
+	end
+
+	it("retains transcript turn resets for an unterminated code sample", function()
+		local lines = {
+			"# topic: t", "- file: t.md", "---", "", "💬: first", "🤖: [A]", "```markdown", "code",
+			"💬: next", "1. Follow up", "[answer](answer.md)",
+		}
+		local range, in_code = entity_range.navigation_range(nil, lines, 11)
+		assert.same({ kind = "numbered", first = 10, last = 11 }, range)
+		assert.is_true(in_code[8])
+		assert.is_false(in_code[9])
 	end)
 
 	it("shares a supplied fence memo between navigation and the existing range", function()

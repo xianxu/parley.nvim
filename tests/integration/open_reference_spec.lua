@@ -638,7 +638,7 @@ describe('enclosing entity navigation', function()
     local function invoke() parley.cmd.OpenFileUnderCursor() end
     before_each(function()
         saved = {open=parley.open_buf, warn=parley.logger.warning, select=vim.ui.select,
-            resolve=parley.cmd.ResolveRefOrGotoFile}
+            resolve=parley.cmd.ResolveRefOrGotoFile, branch_prefix=parley.config.chat_branch_prefix}
         opened, warnings, picker, fallback = {}, {}, nil, 0
         parley.open_buf = function(path) opened[#opened+1] = path end
         parley.logger.warning = function(message) warnings[#warnings+1] = message end
@@ -648,6 +648,7 @@ describe('enclosing entity navigation', function()
     after_each(function()
         parley.open_buf, parley.logger.warning = saved.open, saved.warn
         vim.ui.select, parley.cmd.ResolveRefOrGotoFile = saved.select, saved.resolve
+        parley.config.chat_branch_prefix = saved.branch_prefix
         vim.cmd('silent! %bwipeout!')
         vim.cmd('only')
     end)
@@ -663,6 +664,50 @@ describe('enclosing entity navigation', function()
         assert.equals(4,#opened)
         assert.equals(0,fallback)
         assert.is_nil(picker)
+    end)
+    it('keeps every structural-looking continuation in a plain Markdown numbered item', function()
+        local target = write_markdown('structural.md', {'# Answer'})
+        local patterns = require('parley.document.lexical').patterns(parley.config)
+        for _, field in ipairs({'user_prefix','assistant_prefix','summary_prefix','reasoning_prefix',
+            'tool_use_prefix','tool_result_prefix','branch_prefix','local_prefix'}) do
+            source({'1. Follow up',patterns[field]..' lead [answer](structural.md)','2. Next'})
+            invoke()
+            same_path(target,opened[#opened])
+        end
+        assert.equals(8,#opened)
+        assert.equals(0,fallback)
+    end)
+    it('opens a numbered item branch-reference continuation in plain Markdown and chat', function()
+        local target = write_markdown('branch-answer.md', {'# Answer'})
+        local item = '1. Follow the branch'
+        source({item,'🌿: '..target..': Answer','2. Next'})
+        invoke()
+        same_path(target,opened[1])
+        local chat = write_chat('2026-03-24.18-40-00.001_entity-branch.md',
+            {'',item,'🌿: '..target..': Answer','2. Next'})
+        same_path(target,open_at(chat,item,1).opened)
+        assert.equals(0,fallback)
+    end)
+    it('uses the configured branch prefix for a numbered item reference', function()
+        parley.config.chat_branch_prefix = 'BRANCH:'
+        local target = write_markdown('custom-branch.md', {'# Answer'})
+        source({'1. Follow up','BRANCH: '..target..': Answer','2. Next'})
+        invoke()
+        same_path(target,opened[1])
+    end)
+    it('ignores chat-looking lines inside plain Markdown fenced examples', function()
+        local target = write_markdown('outside-fence.md', {'# Answer'})
+        local patterns = require('parley.document.lexical').patterns(parley.config)
+        for _, field in ipairs({'user_prefix','assistant_prefix','summary_prefix','reasoning_prefix',
+            'tool_use_prefix','tool_result_prefix','branch_prefix','local_prefix'}) do
+            source({'1. Follow up','```md',patterns[field]..' sample [ignored](not-a-target.md)',
+                '2. sample item','```','[answer](outside-fence.md)','2. Next'})
+            invoke()
+            same_path(target,opened[#opened])
+        end
+        assert.equals(8,#opened)
+        assert.is_nil(picker)
+        assert.equals(0,fallback)
     end)
     it('opens a heading section link across nested headings and ignores fenced samples', function()
         local target = write_markdown('heading-answer.md', {'# Answer'})

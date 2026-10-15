@@ -5058,10 +5058,8 @@ M.cmd.OpenFileUnderCursor = function()
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local parsed, status = require("parley.entity_textobj").parsed_for(buf, lines)
 	if status == "unparsable" then fallback(); return end
-	local lexical = require("parley.document.lexical")
-	local in_code = lexical.code_block_memo(lines, lexical.patterns(M.config), true)
-	local range = require("parley.entity_range").navigation_range(parsed, lines, cursor[1],
-		{config = M.config, in_code = in_code})
+	local range, in_code = require("parley.entity_range").navigation_range(parsed, lines, cursor[1],
+		{config = M.config})
 	local candidates = require("parley.reference_candidates")
 	local items = candidates.collect(lines, range, {in_code = in_code, branch_prefix = get_branch_prefix()})
 	local function open_item(item)

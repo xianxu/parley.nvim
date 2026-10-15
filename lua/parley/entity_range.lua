@@ -278,7 +278,7 @@ local function summary_trim(range, parsed, idx, lines)
 	return range
 end
 
-local function range_context(parsed, lines, row, opts)
+local function range_context(parsed, lines, row, opts, navigation)
 	if type(lines) ~= "table" or #lines == 0 then
 		return nil
 	end
@@ -293,6 +293,7 @@ local function range_context(parsed, lines, row, opts)
 	-- buffer classifier did NOT call a chat.
 	local header_end = parsed and parsed.header_end
 		or require("parley.chat_parser").transcript_header_end(lines)
+	local transcript = parsed ~= nil or header_end ~= nil
 	local floor = (header_end or 0) + 1
 	if row < floor then
 		return nil
@@ -306,10 +307,14 @@ local function range_context(parsed, lines, row, opts)
 	local patterns = require("parley.document.lexical").patterns(
 		opts.config or require("parley.config"))
 	local in_code = opts.in_code
-		or require("parley.highlight_structure").code_block_memo(lines, patterns, true)
+		or require("parley.highlight_structure").code_block_memo(
+			lines, patterns, true, not navigation or transcript)
 
 	local idx, bounds = exchange_at(parsed, lines, row)
-	return { floor = floor, patterns = patterns, in_code = in_code, idx = idx, bounds = bounds }
+	return {
+		floor = floor, patterns = patterns, in_code = in_code, idx = idx, bounds = bounds,
+		transcript = transcript,
+	}
 end
 
 local function range_from_context(parsed, lines, row, opts, context)
@@ -398,31 +403,38 @@ end
 --- inside an item belong to it; its trailing blanks do not. Editing consumers
 --- retain M.range's existing paragraph/question dispatch (ARCH-PURPOSE).
 --- Accepts the same arguments and optional shared fence memo as M.range.
+--- Returns the navigation fence memo as a second result for reference collection.
 function M.navigation_range(parsed, lines, row, opts)
 	opts = opts or {}
-	local context = range_context(parsed, lines, row, opts)
+	local context = range_context(parsed, lines, row, opts, true)
 	if not context then return nil end
 	local lo = context.bounds and context.bounds.first or context.floor
 	local hi = context.bounds and context.bounds.last or #lines
-	local prefixes = structural_prefixes(opts.config)
+	local lexical = require("parley.document.lexical")
 	local item
 	for i = lo, hi + 1 do
 		local outside = not context.in_code[i]
 		local anchor = i <= hi and outside and lines[i]:match("^%d+%.%s")
+		-- Paragraph walls also include reference-bearing annotations. Those
+		-- belong to numbered items; only actual transcript turns delimit them.
+		-- Reuse the parser's lexical kinds and configured prefixes (ARCH-DRY).
+		local kind = i <= hi and outside and context.transcript
+			and lexical.classify(lines[i], context.patterns).kind
+		local turn = kind == "user" or kind == "assistant"
 		local boundary = i > hi or (outside and (anchor
-			or heading_level_at(lines, i, context.in_code) or is_structural(lines[i], prefixes)))
+			or heading_level_at(lines, i, context.in_code) or turn))
 		if boundary then
 			if item then
 				item.last = i - 1
 				trim_trailing_blanks(item, lines)
 				if row >= item.first and row <= item.last then
-					return item
+					return item, context.in_code
 				end
 			end
 			item = anchor and { kind = "numbered", first = i, last = hi } or nil
 		end
 	end
-	return range_from_context(parsed, lines, row, opts, context)
+	return range_from_context(parsed, lines, row, opts, context), context.in_code
 end
 
 return M

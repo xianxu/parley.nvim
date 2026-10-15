@@ -39,4 +39,15 @@ describe('shared document lexical grammar',function()
         assert.is_false(state.in_code)
         assert.is_false(state.in_tool)
     end)
+    it('can mask plain Markdown fences without treating chat-looking samples as partitions',function()
+        for _, config in ipairs({{}, {chat_user_prefix='USER>',chat_assistant_prefix={'BOT>'},
+            chat_branch_prefix='BRANCH>',chat_local_prefix='PRIVATE>'}}) do
+            local patterns=lexical.patterns(config)
+            for _, field in ipairs({'user_prefix','assistant_prefix','branch_prefix','local_prefix'}) do
+                local lines={'```',patterns[field]..' sample','2. sample','```','after'}
+                assert.same({true,true,true,false,false},lexical.code_block_memo(lines,patterns,true,false))
+                assert.same({true,false,false,true,true},lexical.code_block_memo(lines,patterns,true))
+            end
+        end
+    end)
 end)
