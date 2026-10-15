@@ -55,6 +55,7 @@ at its first Alt+Return.
 | Registry transport/client | INTEGRATION | lua/parley/couch.lua, lua/parley/document_registry.lua | modified/new |
 | Buffer admission and file migration | INTEGRATION | lua/parley/agentic_document.lua, lua/parley/document_move.lua | new |
 | Existing turn engine | INTEGRATION | lua/parley/session_sync.lua | modified |
+| Cross-editor operation lease | INTEGRATION | lua/parley/document_lease.lua | new |
 | Atomic byte writer | INTEGRATION | lua/parley/helper.lua | modified |
 | Stateful registry fake | INTEGRATION | tests/helpers/fake_couch.lua | modified |
 
@@ -80,6 +81,8 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 
 - Verified TL design approval f96cd3f0-f712-4ed6-917f-eb348dc75b8c (submitted): approves the full draft with editable unknown/cache policy, durable rename journal and save→register→submit. Source inspection resolves queued pair questions: Register imports typed legacy state/shadow/path history; rename requires an existing registration, so typed OLD must be registered before native move. COUCH_ISOLATED_ROOT and an isolated adopt-store preview/apply are required for standalone CLI conformance; HOME/XDG alone do not isolate the OS-account singleton. Candidate CLI execution remains pending; no installed-binary/live claim is made.
 
+- Plan-quality round1 raised PQ-1 cross-editor migration ownership, PQ-2 test-strategy inventories, and Minor PQ-3 cleanup coverage. Refined the whole ownership/cleanup class: per-ID POSIX kernel lease spans execution/recovery, exact pending tuples cannot be replaced, process death releases ownership, retired inode acquisition is revalidated, and only lease-owned manifested temps are cleaned. A local runtime probe confirmed LuaJIT FFI exports flock; unsupported platforms refuse unsafe migration while ordinary editing remains available. Test plan is now one strategy per risky function, with real two-editor ordering and native triggers.
+
 ## Revisions
 
 - 2026-10-15 — spell out agreed registry boundary and native rename/recovery work in the durable plan without changing the original S1 purpose. Explicit couch-owner is a route override per this issue, superseding #316 refusal only where that new requirement applies. Pending admission-failure policy requires TL review.
@@ -87,3 +90,5 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - 2026-10-15 — replace the draft read-only admission proposal with the TL-approved editable unknown state, local known-agentic cache and recovery reconciliation. This resolves the failure-policy question; plan review and pair legacy-adoption/isolation details remain pending.
 
 - 2026-10-15 — freeze callable boundaries and legacy/native-rename preflight from primary source; adopt the explicit temporary singleton setup for future conformance. Full design approved, ready for change-code plan-quality admission; estimate remains unset until it passes.
+
+- 2026-10-15 — PQ-1/PQ-2/PQ-3 refinement adds explicit cross-editor ownership and cleanup, and compresses test case prose into function strategies. Retains the approved purpose and editable offline policy.

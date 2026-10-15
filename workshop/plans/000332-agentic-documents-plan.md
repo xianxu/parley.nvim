@@ -36,6 +36,7 @@ This slice includes moving an existing sibling `<stem>.side/` and its parent bac
 | Registry client | INTEGRATION | lua/parley/document_registry.lua | new |
 | Agentic buffer coordinator and bounded known-path cache | INTEGRATION | lua/parley/agentic_document.lua | new |
 | File/side migration and journal | INTEGRATION | lua/parley/document_move.lua | new |
+| Cross-editor operation lease | INTEGRATION | lua/parley/document_lease.lua | new |
 | Shared edit turn | INTEGRATION | lua/parley/session_sync.lua | modified |
 | Atomic byte writer | INTEGRATION | lua/parley/helper.lua | modified |
 | Stateful registry fake | INTEGRATION | tests/helpers/fake_couch.lua | modified |
@@ -58,7 +59,7 @@ Use exact argv arrays; do not interpolate paths or owners into a shell. Capture 
 - document_registry.request(operation, arguments, witness, callback) executes exact CLI argv through couch.run and returns a bounded cancellation handle. Canceling a child cannot retract an already-applied registration/move.
 - agentic_document.attach/submit/identity/detach coordinate admission and return confirmed identity to the edit engine. Its bounded cache is knowledge, not a second registry authority.
 - session_sync.attach(buf, identity) and its factored acquisition/reconciliation helpers receive stable path/owner and any observed unknown-period edit baseline. begin_move/finish_move suspend/resume the same turn state; they do not create another lock machine.
-- document_move.begin/advance/recover implement the journaled effects through an injectable filesystem adapter and the pure lifecycle model. helper.write_file_atomic(text,path,adapter) is the canonical checked byte writer; table_to_file_atomic remains the encoding wrapper.
+- document_move.begin/advance/recover implement the journaled effects through an injectable filesystem adapter and the pure lifecycle model. document_lease.acquire(namespace,key) returns a nonblocking, kernel-owned exclusive handle or busy/unavailable; no filesystem effect is authorized without that handle. helper.write_file_atomic(text,path,adapter) is the canonical checked byte writer; table_to_file_atomic remains the encoding wrapper.
 
 ## Lifecycle and ordering (ARCH-ORDER)
 
@@ -90,7 +91,7 @@ The runtime may block local input while a submit/move is in progress; still test
 
 ## Admission, submit and existing turn engine
 
-- Add coordinator attachment from setup_markdown_keymaps. Route the real review_next callback through the coordinator before legacy review prompting. Preserve registry configuration switches and journal-sidecar exclusions; do not install competing Alt+Return mappings.
+- Add coordinator attachment from setup_markdown_keymaps. Route the real review_next callback through the coordinator before legacy review prompting. Preserve registry configuration switches and journal-sidecar marker/review exclusions; pane Alt+Return itself still applies to any named Markdown, including a journal file, without invoking its excluded marker scan. Install the callback through the existing registry entry, not competing mappings.
 - Typed legacy and valid cached-agentic attachment remain immediate. Ordinary files get only nonmutating lookup, not register on open/edit. Unknown files remain editable even on failure, with the approved band note; never install an unavailable-state modifiable/readonly barrier. New unnamed buffers retain the current save-first diagnostic; a named not-yet-written note can be authored and saved before registry admission, without creating registration as a side effect of editing.
 - Keep a namespace-scoped known-agentic cache in configured state_dir using the shared atomic writer: schema version, canonical path, stable ID, effective/fallback owner and last-confirmed observation. Bound it to256 entries/1MiB with least-recently-confirmed eviction. Cache eviction/corruption is unknown, never proof of plain; no age expiry changes agentic truth. Confirmed lookup absence removes the cached binding, rename updates it after metadata confirmation. Cache writes are local knowledge, not the registry authority. Validate cache input before offline attachment.
 - Observe edits while admission is unknown without creating a speculative lock. Preserve the pre-edit content hash and outstanding-edit state through auto-save; use that baseline if lookup later confirms registration. Check native modified=true too for preexisting unsaved edits. Reconcile any intervening foreign write/deletion through the existing preservation path before publishing release/reload. A plain result discards observation state and the unknown band without starting turn timers.
@@ -99,6 +100,16 @@ The runtime may block local input while a submit/move is in progress; still test
 - Attach the known canonical identity/path once. Every owner use (band, ping, violation and submit) derives from this accessor. Body/header edits cannot remove attachment. Owner changes refresh through validated confirmation rather than ad-hoc per-consumer parsing.
 - Refactor file_of/owner_of to use the attached stable identity and explicit migration phase, so a name change cannot silently switch disk operations to a free NEW path. Existing on_lines acquisition still runs before auto-save; saves never advance the acquisition baseline. Pending foreign write/deletion reconciliation still precedes every release or move.
 - Registered reopens restore turn from disk. Successful null lookup can detach only after reconciling existing state and preserving any operator lock; a failed lookup never detaches. Restore window options/autoread only if this coordinator still owns the installed values.
+
+## Exclusive migration ownership and temporary cleanup
+
+A namespace/registry-ID operation lease spans planning, filesystem execution, metadata confirmation and recovery. Acquire it before a native rename can cause filesystem effects or before reading a journal as recoverable. Its file descriptor remains held across async work; every declared effect carries the same lease generation. Another editor gets busy, may view the document, and cannot execute/recover/replace that journal. Under the lease, compare ID and the exact OLD→NEW tuple before effects; a different pending tuple refuses until the original finishes or a no-effect cancellation is proven.
+
+Use the existing POSIX kernel flock facility through LuaJIT FFI over a libuv-opened private lock-file descriptor; no new service/install. Nonblocking exclusive acquisition plus close-on-exec is required. Process death releases ownership in the kernel, so recovery acquires normally; never steal based on an age timeout or PID probe. A live but slow editor retains ownership. On unsupported backends or unknown native errors, migration is unavailable; ordinary editing and registration still work. Current targets are macOS and Linux Neovim/LuaJIT; the local macOS runtime was probed for the exported flock symbol before choosing this backend.
+
+Keep the lock inode stable during use. After acquisition compare the opened descriptor's device/inode with its named path; if unlink/replacement raced acquisition, close/retry before any effect. A GC operation also acquires the same lock and can remove a retired ID's file only after confirmed Couch absence, no pending journal and no cached/loaded owner. Descriptor/path revalidation prevents waiters on the retired inode from acting on a new lock file. Bound lease files to4096 IDs per namespace; cleanup is opportunistic on confirmed forgetting/completed recovery, never based on a failed registry probe. Overflow refuses a new migration before effects. Always release owned handles on completion/unload; keep an uncertain journal even when releasing its handle. A subsequent owner may only confirm/retry its exact tuple.
+
+New raw-writer temporaries use explicit operation-owned names/paths recorded BEFORE creation, not the legacy generic temp glob. Journal/backlink temporary paths belong to the migration manifest and can be cleaned only while holding that document's lease after owner death/confirmed completion; validate every recorded path against its managed journal location or side-folder root. Cache writes/cleanup use a separate namespace cache lease and managed temporary bucket. Never scan/delete another editor's live temp, an unmanifested file, or an arbitrary sibling with a similar suffix. Immediate failures clean only the current writer's own temp. Recovery cleans declared leftovers under the acquired lease. Corrupt/unprovable leftovers remain visible for bounded manual recovery; do not claim the existing nonrecursive startup cleanup covers these new locations.
 
 ## Rename/filesystem protocol
 
@@ -116,43 +127,57 @@ Backlinks: `<name>.side/` uses the source filename without its Markdown extensio
 
 Crash recovery journals live under configured state_dir, partitioned by the selected Couch namespace and stable registry ID. Store schema version, exact OLD/NEW tuple, content/path witnesses and completed step flags, not document contents or arbitrary snapshots. Recover on setup/affected-buffer open before normal admission. If a prepared journal cannot prove which filesystem effect completed, preserve it and show the concrete recovery needed rather than overwrite user data. Budget: at most32 pending journals/namespace, 256KiB each; refuse a new migration before effects when full. Scan at most4096 side-folder entries/512 Markdown backlinks; exceeding that bound stops with preserved progress. These are initial local workload bounds for TL review. Journals are removed on confirmed completion or a confirmed no-effect cancellation; unresolved journals are never aged out.
 
-## Work and verification steps
+## Function-level verification strategy
 
-### 1. Pure model, transport and stateful fake
+| Risky function | Adversarial class and mechanical guard |
+|---|---|
+| document_session.classify_reply | Generate malformed envelopes/exit/null-presence combinations; only the exact absence witness may produce absent, and invalid responses produce no mutation effects. |
+| document_session controller dispatch | Generate bounded event sequences with stale identities and uncertain outcomes; assert one operation, immutable identity, no stale send/unlock and no rollback of possibly completed effects. |
+| document_registry.request / couch.run | Use the persisted executable fake with release barriers; independently assert argv, typed outcomes, bounds and callback consumption across process completion order. |
+| agentic_document.attach/submit | Drive the actual Alt+Return mapping and native editor input with auto-save installed first; assert file bytes, registry/send order, owner routing and resumed lock/baseline behavior rather than mocked callback counts. |
+| Cached admission/recovery | Restart the child editor across unavailable/available observations and native edit sequences; assert unknown remains editable and cached or recovered identity never loses required protection to auto-save. |
+| document_move_plan.project | Generate path/entry observations at the trust boundary; assert only intended contained effects, no target overwrites and deterministic refusal of ambiguous input. |
+| document_move_plan.rewrite_parent | Fuzz quoted/malformed frontmatter and Markdown spans from corpus seeds; assert unrelated bytes stay identical and the validated parent rewrite is idempotent. |
+| document_lease.acquire | Controlled two-editor/process ordering proves exclusive execution, kernel release after process death and descriptor/path revalidation; unavailable acquisition authorizes no effects. |
+| document_move.begin/advance/recover | Inject interruption after each effect with two editor owners and delayed metadata confirmation; assert stable ID/tuple, preserved partial progress, turn/baseline continuity and no destructive rollback. |
+| helper.write_file_atomic / cleanup | Inject each IO-stage failure and overlap live writers; assert preservation of target content/mode, cleanup of only manifested owned temps and recovery of nested locations under their lease. |
+| Real/fake conformance driver | Run both executables through production Lua transport in the supported isolated singleton; compare consumed protocol semantics and reject a deliberately mutated fake. |
 
-Files: new document_session.lua, document_move_plan.lua, document_registry.lua; modify couch.lua and tests/helpers/fake_couch.lua. Tests: new tests/unit/document_session_spec.lua, tests/unit/document_move_plan_spec.lua, tests/integration/document_registry_spec.lua; existing tests/unit/couch_spec.lua.
+## Work steps (one close boundary)
 
-- [ ] Write pure reply/state-sequence tests and observe expected missing-feature reds, emphasizing explicit null versus missing, stale/duplicate events and irreversible uncertain mutations.
-- [ ] Add the raw Couch transport and typed registry adapter; keep existing send/query characterization green. All commands use the production argv/process seam.
-- [ ] Extend fake_couch with a per-test persistent registry/ID/rename ledger, exact registry-request log, controlled release barriers, failures and applied-but-reply-lost operations. Preserve existing actors/status/send env modes and send-only logs. Unknown verbs must not masquerade as sends.
-- [ ] Run the focused registry/model tests green, including fake self-conformance; commit the coherent change.
+### 1. Model, lease and registry boundary
 
-### 2. First-submit and shared-turn admission
+Files: new document_session.lua, document_move_plan.lua, document_lease.lua and document_registry.lua; modify couch.lua and tests/helpers/fake_couch.lua. Tests: new unit document_session/document_move_plan specs, integration document_lease/document_registry specs; existing couch_spec.
 
-Files: new agentic_document.lua; modify session_sync.lua, review_send.lua, init.lua and registry help descriptions. Tests: session_sync integration/native, review_send and keybinding specs; new tests/integration/agentic_document_spec.lua as needed.
+- [ ] Write the named function-strategy tests and observe expected missing-feature reds; record evidence before implementation.
+- [ ] Implement the pure controllers/projections and the one process seam, lease and typed client; preserve existing send/query characterization.
+- [ ] Extend the process fake with persisted identity/ledger state and controlled outcomes while preserving the current send-only log/env contract. Unknown verbs refuse.
+- [ ] Run focused model/client/lease tests green and commit the coherent change.
 
-- [ ] Drive the actual installed Alt+Return mapping red in a child Neovim with auto-save installed BEFORE opening/attachment. Pin first-submit disk bytes and register-before-send order, explicit owner priority, no-business-owner routing and never-submitted plain behavior. Exercise a known cached document reopened with Couch down, an uncached editable unknown document, and Couch recovery after edits auto-saved modified=false; verify the original edit baseline and resumed lock.
-- [ ] Integrate the pure model/coordinator with the single existing edit engine; exercise real dd/x/p/u/dot/insert after new attachment and after an agent reload, baseline undo/redo under auto-save, pre-existing lock and explicit-save behavior.
-- [ ] Control pending lookup/register completion across edit/rename/unload/repeat submit and actor changes. Assert no stale attachment/send/unlock and no automatic duplicate sends; exercise unsupported-binary and malformed envelopes.
-- [ ] Preserve typed/outside-pane behavior and deliberately update superseded pane review-prompt/same-slot-refusal expectations. Run the mapped session-sync, review and keybinding groups sequentially; commit.
+### 2. Admission and existing turn integration
 
-### 3. Migration and recovery
+Files: new agentic_document.lua; modify session_sync.lua, review_send.lua, init.lua and registry help descriptions. Tests: session-sync native/integration, review-send/keybinding specs and new agentic_document integration specs.
 
-Files: new document_move.lua; modify helper.lua, agentic_document.lua, session_sync.lua and shared Parley-owned rename entry points. Tests: helper_io plus new document-move specs and native rename cases.
+- [ ] Add the production-trigger acceptance checks described by attach/submit and cached-admission strategies; observe the red behavior with real auto-save ordering.
+- [ ] Integrate the coordinator with the single edit-turn engine and normalized owner/path accessor, including the TL's editable-unknown policy.
+- [ ] Preserve outside-pane behavior and update deliberately superseded pane routing expectations; run mapped session-sync/review/keybinding groups sequentially, then commit.
 
-- [ ] Add red pure/path/backlink tests plus real saveas/file+write event-order tests with a held operator turn, pending foreign overwrite/deletion and delayed OLD callbacks.
-- [ ] Implement preflight, exclusive NEW protection, journal, side-folder/backlink effects and confirmed metadata handoff. No destructive rollback of uncertain external effects.
-- [ ] Inject target collision, absent OLD, retained OLD after saveas, missing NEW, EXDEV, failed backlink/journal write, unkeepable agent copy and undecided disk observation. Assert each partial effect and recovery path, not only final notifications.
-- [ ] Restart the child editor at filesystem/metadata cut points; recover the same registry ID or retain a visible pending journal. Check no abandoned OLD lock or NEW protection gap on successful migration. Commit.
+### 3. Filesystem migration/recovery
+
+Files: new document_move.lua; modify helper.lua, agentic_document.lua, session_sync.lua and shared Parley-owned rename entry points. Tests: helper_io and new document_move specs plus the native production-trigger tests.
+
+- [ ] Write the project/rewrite/acquire/recover strategy tests, including a controlled two-editor schedule, before implementing effects.
+- [ ] Implement leased preflight, journaled filesystem effects, native-write ordering and confirmed metadata handoff as specified above.
+- [ ] Run recovery/cleanup strategies and the real native saveas/file+write checks green; commit.
 
 ### 4. Conformance, docs and delivery
 
-Files: atlas/modes/session_sync.md, atlas/modes/review.md, atlas/traceability.yaml, README.md, TOOLING.md and new scripts/check-couch-registry-conformance.py/maintainer target.
+Files: existing session-sync/review atlas, traceability, README, TOOLING and new scripts/check-couch-registry-conformance.py/maintainer target.
 
-- [ ] Add an opt-in real/fake conformance driver through production Lua transport using pair's supported isolated temporary namespace. Set an absolute COUCH_ISOLATED_ROOT, scrub inherited outside Couch/store/pair-data/identity overrides, and keep every source/fixture within that root. Bootstrap the singleton with --adopt-store ABS_STORE --pair-data ABS_PAIR --identity-dir ABS_IDENTITY preview, then apply its digest with --apply; never fall back to the OS account singleton. Registry verbs need no live actors/server after this selection exists. Refuse unsupported binaries and prove a stray outside override cannot touch production. Cover register→lookup→repeat register→metadata rename→old/new lookup, legacy adoption, distinct owner and unavailable/malformed failures. Confirm a mutated fake fails. Never use the operator registry. Run on runner/fake changes and before close; pair's targeted tests are complementary evidence, not editor acceptance.
-- [ ] Update the existing atlas pages and adjacent README behavior, with the intentional explicit-owner routing change and first-submit semantics. Map new model/client/coordinator/move tests; preserve index links. The TL owns the ops project file.
-- [ ] Run make -k test-spec SPEC=modes/session_sync, SPEC=modes/review and SPEC=ui/keybindings sequentially, plus focused helper/move targets; lint and git diff --check. Push PR; run sdlc local-check run --name suite before close. Keep all failures, not just the first.
-- [ ] Close through the one mandatory fresh-context review; fix each entire finding class and record evidence. After pair#573 lands and the real binary conformance passes, stage with sdlc stage --build on :0 only with hub authorization, for the combined operator check. Do not land before live acceptance. Land on SHIP, clear stage and report verified PR/merge to the hub.
+- [ ] Add the isolated real/fake driver. Set an absolute COUCH_ISOLATED_ROOT, scrub inherited outside storage/identity overrides, and bootstrap --adopt-store ABS_STORE --pair-data ABS_PAIR --identity-dir ABS_IDENTITY preview then --apply DIGEST, with all paths inside the root. Never fall back to the OS account singleton; refuse unsupported binaries. Follow the function strategy and require the deliberately corrupted fake to fail. Run after seam/fake changes and before close. Pair's targeted tests complement this check; they are not editor acceptance.
+- [ ] Update the existing atlas and adjacent README contract, including intentional owner routing and first-submit changes; map all new model/client/coordinator/lease/move tests. The TL owns the ops project.
+- [ ] Run make -k test-spec for modes/session_sync, modes/review and ui/keybindings sequentially plus focused helper/move targets; lint and diff checks. Push PR and run sdlc local-check run --name suite before close, preserving every failure.
+- [ ] Close through the mandatory fresh-context review and fix complete finding classes. After pair#573 lands and real conformance passes, obtain hub staging authorization and run sdlc stage --build for the combined live check. Land only after operator acceptance; clear stage and report verified PR/merge.
 
 ## Operating envelope, provenance and residue
 
@@ -160,7 +185,7 @@ ARCH-CONSTRAINTS: one-shot admission on named Markdown open, explicit submit and
 
 ARCH-SECURE: CLI output, paths, edited frontmatter, journal files and side-document text are untrusted inputs. Parse at their boundaries; bad version/schema/identity is unavailable/pending, not a fabricated default. No credentials, new services or network needed. Portable fake state and real conformance storage live in per-test temporary directories; ensure fixture environment cannot reach production registry/ledger.
 
-ARCH-FUNERAL: per-buffer models, barriers, callbacks and handles die on wipeout; generation guards prevent late effects. Couch owns bounded persistent registrations until forget. Parley owns a bounded cache (confirmed absence removes entries; eviction only loses offline knowledge) plus bounded pending migration journals and atomic-writer temporary files; completed journals are deleted, existing startup cleanup owns obsolete atomic temps, and uncertain journals remain explicitly recoverable. Existing `.lock`, `.clobbered` and `.side` lifecycles remain their documented owners; do not prune user side documents.
+ARCH-FUNERAL: per-buffer models, barriers, callbacks and handles die on wipeout; generation guards prevent late effects. Couch owns bounded persistent registrations until forget. Parley owns a bounded cache (confirmed absence removes entries; eviction only loses offline knowledge) plus bounded pending migration journals and atomic-writer temporary files; completed journals and their manifested temps are removed under the lease, managed cache temps have their own lease-protected cleanup, and uncertain journals remain explicitly recoverable. Existing `.lock`, `.clobbered` and `.side` lifecycles remain their documented owners; do not prune user side documents.
 
 ## Revisions
 
@@ -169,3 +194,5 @@ ARCH-FUNERAL: per-buffer models, barriers, callbacks and handles die on wipeout;
 - 2026-10-15 — TL availability decision supersedes the initial read-only proposal: all unknown/unavailable files stay editable because Couch is the exclusive CAS write path and cannot write while unreachable. Add a small bounded persistent known-agentic cache, unknown-state band, coalesced re-lookup and outstanding-edit observations that survive auto-save. A recovered registration acquires against the pre-edit baseline. Forward-only rename recovery is explicitly approved. No implementation yet.
 
 - 2026-10-15 — verified TL approval f96cd3f0-f712-4ed6-917f-eb348dc75b8c. Bounded read-only peer-source exploration resolves typed legacy adoption and supported isolated singleton setup; do not wait on a queued peer answer to rediscover explicit source behavior. The executable and real integration remain unverified until pair#573 is ready. Freeze callable boundaries and pre-register a typed OLD before native rename; a failed preflight blocks only that unsafe migration, never ordinary editing.
+
+- 2026-10-15 — plan gate PQ-1/PQ-2/PQ-3: define cross-editor execution/recovery ownership with a kernel advisory lease and exact-tuple rejection, replace test inventories with named adversarial function strategies, and correct the false recursive-cleanup assumption using lease-owned temp manifests. Include the native backend/unsupported failure policy and real two-editor tests. Also distinguish journal review exclusion from the any-Markdown pane submit requirement. No implementation yet.
