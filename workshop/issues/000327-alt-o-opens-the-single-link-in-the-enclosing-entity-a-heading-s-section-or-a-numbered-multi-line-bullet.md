@@ -55,6 +55,7 @@ fallback (`sdlc resolve`, then `gf`). A reference directly under the cursor alwa
 | Navigation entity | PURE | lua/parley/entity_range.lua navigation_range | New entry; existing text-object/delete behavior retained |
 | Reference occurrences and picker completion | PURE | lua/parley/reference_candidates.lua | New canonical enumeration and pending/settled transition |
 | Cursor parser consumers | PURE | lua/parley/issues.lua and lua/parley/init.lua | Derive from canonical scanner; preserve old behavior |
+| Selected artifact opening | INTEGRATION | lua/parley/artifact_ref.lua goto_ref_at_cursor | Optional origin guard through scheduled results and family selection |
 | Alt+o boundary | INTEGRATION | lua/parley/init.lua OpenFileUnderCursor | Extend after direct reference; reuse open/resolve/picker seams |
 
 ## Plan
@@ -63,7 +64,7 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 - [x] Add pure navigation ranges and shared occurrence parsing with regression coverage for existing consumers.
 - [x] Integrate sole-target opening and ambiguity picker; cover direct priority, cancellation/stale callback, source-relative paths, mode and zero-result fallback.
-- [ ] Update README/atlas/traceability and pass targeted/full checks for close review and staged delivery.
+- [x] Update README/atlas/traceability and pass targeted/full checks for close review and staged delivery.
 
 ## Delivery
 
@@ -95,6 +96,8 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 - Final failure-path audit found native gf errors skipped temporary cursor restoration for a selected non-Markdown target. A red test observed row2/col13 instead of original row1/col3; protected fallback execution now restores before propagating the same E447. All 49 open-reference tests plus six native cases pass. Canceled the obsolete queued suite (our own cwd-verified sdlc process, SIGINT exit130) before it executed; the corrected pushed head must receive the required full run.
 
 - Full suite on a8e7e972f552b07faa656300cb3b1eb0e1c03d3c completed in 2m14s after the long FIFO wait: lint728 files clean, 430 spec files passed and only tests/arch/single_resolver_spec.lua failed. Its broad path-reader heuristic treated pure candidate enumeration as a resolver consumer. Added the explicit pure-parser exemption with the existing annotation exemption, naming init.lua as the resolution owner; mapped the guard alongside navigation. All 17 focused architecture/scanner cases then passed. Full suite rerun is required on the updated test/mapping head; no remaining test phase was skipped.
+
+- Final required suite passed on 20e35d1adf71d1e4b67ca964267c49e4faff776b: all 431 spec files, lint728 files with zero warnings/errors, clean process census; runtime2m7s, log sha256 prefix3491086c673f. The full retry includes the fixed architecture guard, real native input, real fake-process resolution, deletion parity and packaging checks. PR239 server checks are green. Close review is next; operator live acceptance remains pending and mandatory before merge.
 
 ## Estimate
 
