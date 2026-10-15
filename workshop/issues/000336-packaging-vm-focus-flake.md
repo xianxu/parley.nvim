@@ -45,13 +45,13 @@ picker float and the run passes by accident) or during the response wait (then
 window 0 is the picker's unnamed prompt, and `resolve('')` fails the
 `guest chat file escaped` assertion). Confinement itself was never violated.
 
-- [ ] Probe: after the credential appears, wait for the login flow's own
+- [x] Probe: after the credential appears, wait for the login flow's own
       completion signal, the reopened picker float, and dismiss it through its
       cancel path, as an operator would, before `ask()`.
-- [ ] Probe: `ask()` returns the captured chat buffer's resolved file
+- [x] Probe: `ask()` returns the captured chat buffer's resolved file
       (`chat_file`); the guest script asserts confinement on that file, never
       on buffer 0.
-- [ ] Regression (packaging_vm_spec guest script): after `run("fake")`, assert
+- [x] Regression (packaging_vm_spec guest script): after `run("fake")`, assert
       that no floating window remains (the login UI settled inside the probe),
       then move focus to an unnamed scratch buffer (`enew`) before the
       confinement assertions, so they are provably focus-independent. Show that
@@ -63,3 +63,5 @@ window 0 is the picker's unnamed prompt, and `resolve('')` fails the
 First-seen head: b6c67239f20e820d85bf4144671f5c7cb8f98152. Command: make -k test-integration, after the required suite stopped at unit failures. Log: /tmp/parley332-full-remainder.log, packaging_vm_spec section, test line167, generated fake-chat.lua line10: guest chat file escaped isolated profile. Observed16pass/1fail, exit1. Unchanged command make -k test-spec SPEC=scratch MAP_FILE=/tmp/parley332-vm-map.yaml passed17/0; log /tmp/parley332-packaging-vm-repro.log. The failed combined remainder has four other named #332 failure classes, independently fixed; this flake had no packaging source changes.
 
 - 2026-10-15 — reproduced in a second complete required suite, now on e9a1622d2102e71e66dc44d3a0dacb70e9921f92. Same packaging_vm_spec.lua:167 / generated fake-chat.lua:10 assertion,16pass/1fail. All other test files passed; lint745files clean. Durable log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/894c995da011381b869a9bd450c9545b.log. This blocks #332 close/staging; no rerun waiver. Cause remains unproven.
+
+- 2026-10-15 (:3): root cause traced to the reopened model picker (see Plan); TL approved plan f3a52c2e. Red: with only the regression (no-float assertion, `enew`, old buffer-0 assertion) the focused spec failed 16/1 with `guest chat file escaped isolated profile`, deterministically. Green: probe settles the reopened picker via its own `<Esc>` cancel mapping; `ask()` returns `chat_file`; the guest script asserts confinement on it. Focused spec 17/0 on three consecutive runs. Fix commit 6ab04a67.
