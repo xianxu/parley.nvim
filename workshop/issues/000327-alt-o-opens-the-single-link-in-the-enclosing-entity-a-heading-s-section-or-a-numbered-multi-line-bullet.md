@@ -69,7 +69,7 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 ## Delivery
 
-- [ ] Close review on SHIP, then stage on parley.nvim:0 and report exact commit and pickup steps to the hub.
+- [x] Close review on SHIP, then stage on parley.nvim:0 and report exact commit and pickup steps to the hub.
 - [ ] Obtain operator live acceptance through the hub before landing, then clear the stage and report the verified merge.
 
 ## Log
@@ -113,6 +113,8 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 - Final declared suite on d09dfa7998a94abd21bc242b56c08a068966289d passed all431 spec files, lint728 files clean and clean process census; runtime2m5s, log sha256 prefix51fd03d27d16. This includes the conformance tooling revision; the separate opt-in real/fake six-case check also passes. Review round3 is SHIP with no open findings. Proceeding to the authorized :0 stage; live acceptance remains pending before merge.
 
 - Staged with sdlc stage --build on parley.nvim:0 at 381c516d3597163b9727cdb855bd55e0a0e82ce1; verified its exact HEAD and clean tree. No Go binaries apply to this Lua plugin. PR239 body contains validation and restart-Neovim pickup instructions. Hub report from /tmp/parley327-staged-to-hub.md returned uncertain delivery4f8dbde9-090e-4bc4-bbca-ad82a3fd814f (context deadline exceeded); receipt query says unavailable, and hub peek shows an idle composer without confirmation. Per Couch recovery, do not blindly resend or claim submitted. The first Delivery checkbox remains open solely for report confirmation; the build is staged and must remain there for operator acceptance before merge.
+
+- 2026-10-15: after the verified Couch restart/resend prompt and an explicit registration-unavailable refusal, messaging recovered. Reverified the existing :0 stage at381c516d3597163b9727cdb855bd55e0a0e82ce1 and resent the staging report; receipt5451bd0c-ec8e-43ce-bd61-e22ba5d4b84b is submitted to ops:0. First Delivery checkbox is now complete. Still waiting for operator live acceptance before landing. The independent #332 contract discussion remains provisional; no #332 implementation or claim started.
 
 ## Estimate
 
