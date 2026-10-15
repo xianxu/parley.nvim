@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "5f416a11", done: "747d985a"}
 ---
 
 # Alt+Shift+O: go back through visited files (per window), up the tree to the root
