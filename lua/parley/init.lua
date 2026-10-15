@@ -5050,31 +5050,39 @@ M.cmd.OpenFileUnderCursor = function()
 	-- Both zero-result and selected-destination fallback retain one owner.
 	local function fallback(item)
 		if in_insert_mode then vim.cmd("stopinsert") end
-		if item then vim.api.nvim_win_set_cursor(win, {item.row, item.fallback_col}) end
+		if item then vim.api.nvim_win_set_cursor(win, {item.fallback_row or item.row, item.fallback_col}) end
 		local ok, err = pcall(M.cmd.ResolveRefOrGotoFile, item and {is_current = is_current} or nil)
 		if item then restore_cursor() end
 		if not ok then error(err) end
 	end
 
-	local outcome = open_reference_under_cursor(buf, current_line, cursor[2], is_chat)
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local candidates = require("parley.reference_candidates")
+	local direct
+	for _, item in ipairs(candidates.markdown_spans(lines, {first = 1, last = #lines}, {config = M.config})) do
+		if item.end_row > item.row and cursor[1] >= item.row and cursor[1] <= item.end_row
+			and (cursor[1] > item.row or cursor[2] >= item.col)
+			and (cursor[1] < item.end_row or cursor[2] < item.end_col) then direct = item; break end
+	end
+	local outcome = open_reference_under_cursor(buf, direct and direct.span or current_line,
+		direct and 0 or cursor[2], is_chat)
 	if outcome ~= "none" then restore_insert(); return end
+	if direct then fallback(direct); return end
 	local artifact_ref = require("parley.artifact_ref")
 	if artifact_ref.parse_ref_at_cursor(current_line, cursor[2] + 1) then fallback(); return end
 
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local parsed, status = require("parley.entity_textobj").parsed_for(buf, lines)
 	if status == "unparsable" then fallback(); return end
 	local range, in_code = require("parley.entity_range").navigation_range(parsed, lines, cursor[1],
 		{config = M.config})
-	local candidates = require("parley.reference_candidates")
 	local items = candidates.collect(lines, range, {in_code = in_code, branch_prefix = get_branch_prefix()})
 	local function open_item(item)
 		if not is_current() then return end
 		if item.kind == "artifact" then fallback(item); return end
 		-- Isolating the chosen span preserves its identity even on mixed lines
 		-- where the legacy direct parser deliberately selects a nearby @@ form.
-		local span = item.kind == "branch" and lines[item.row]
-			or lines[item.row]:sub(item.col + 1, item.end_col)
+		local span = item.span or (item.kind == "branch" and lines[item.row]
+			or lines[item.row]:sub(item.col + 1, item.end_col))
 		local result
 		if item.kind == "markdown" then
 			result = try_open_src_link(span, 0, buf) or try_open_inline_branch_link(span, 0, buf)

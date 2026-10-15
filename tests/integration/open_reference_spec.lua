@@ -788,6 +788,42 @@ describe('enclosing entity navigation', function()
         assert.is_truthy(tostring(err):find('E447',1,true))
         assert.same(cursor,vim.api.nvim_win_get_cursor(0))
     end)
+    it('opens a wrapped label from either row and target ahead of nested issue references', function()
+        local target = write_markdown('wrapped-answer.md', {'# Answer'})
+        local lines = {'1. See #370 and [discussion: is this a new',
+            '   landing #371 workflow?](wrapped-answer.md)', '2. Next'}
+        for _, cursor in ipairs({{1, 20}, {2, 11}, {2, 29}}) do
+            source(lines, cursor[1], cursor[2])
+            invoke()
+            same_path(target, opened[#opened])
+            assert.is_nil(picker)
+        end
+        assert.equals(3, #opened)
+        assert.equals(0, fallback)
+    end)
+    it('offers a wrapped entity link alongside an outside artifact and opens the chosen full span', function()
+        local target = write_markdown('wrapped-choice.md', {'# Answer'})
+        source({'1. Investigate #370', '   → [discussion: is this a new',
+            '   landing workflow?](wrapped-choice.md)', '2. Next'}, 1, 3)
+        invoke()
+        assert.equals(2, #picker.items)
+        assert.equals('artifact', picker.items[1].kind)
+        assert.equals('markdown', picker.items[2].kind)
+        picker.cb(picker.items[2], 2)
+        same_path(target, opened[1])
+        assert.equals(0, fallback)
+    end)
+    it('puts unsupported wrapped-link fallback on the actual destination row', function()
+        local lines = {'1. Pick a document', '   [a long', '   label](https://example.invalid/side)'}
+        local buf = source(lines, 1, 3)
+        local before = vim.api.nvim_win_get_cursor(0)
+        local seen
+        parley.cmd.ResolveRefOrGotoFile = function() seen = vim.api.nvim_win_get_cursor(0) end
+        invoke()
+        assert.same({3, lines[3]:find('https', 1, true) - 1}, seen)
+        assert.same(before, vim.api.nvim_win_get_cursor(0))
+        assert.equals(buf, vim.api.nvim_get_current_buf())
+    end)
     it('keeps direct Markdown priority over other entity choices', function()
         local target = write_markdown('direct.md', {'# D'})
         source({'1. [direct](direct.md)','   [other](missing.md)'},1,6)

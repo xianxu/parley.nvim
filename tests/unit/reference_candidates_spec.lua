@@ -12,6 +12,34 @@ describe("reference candidates", function()
         assert.same({}, candidates.markdown_links("[empty]() [unclosed](x"))
     end)
 
+    it("keeps wrapped Markdown spans and masks references across continuation rows", function()
+        local lines = { "é → [long #370", "  @@hidden@@ label](side.md) and #42" }
+        local got = candidates.collect(lines, { first = 1, last = 2 })
+        assert.equals(2, #got)
+        assert.equals("markdown", got[1].kind)
+        assert.equals("side.md", got[1].target)
+        assert.equals(1, got[1].row)
+        assert.equals(#"é → ", got[1].col)
+        assert.equals(2, got[1].end_row)
+        assert.equals(lines[2]:find(")", 1, true), got[1].end_col)
+        assert.equals(2, got[1].fallback_row)
+        assert.equals(lines[2]:find("side.md", 1, true) - 1, got[1].fallback_col)
+        assert.equals("[long #370\n  @@hidden@@ label](side.md)", got[1].span)
+        assert.equals("#42", got[2].target)
+    end)
+
+    it("does not complete wrapped links across blanks, fences, headings or range edges", function()
+        for _, middle in ipairs({ "", "   ", "```", "~~~", "## Next" }) do
+            local lines = { "[not closed", middle, "label](side.md)" }
+            assert.same({}, candidates.collect(lines, { first = 1, last = 3 }))
+        end
+        assert.same({}, candidates.collect({ "[not closed", "label](side.md)" }, { first = 2, last = 2 }))
+        assert.same({}, candidates.collect({ "[not closed", "still open (side.md)" }, { first = 1, last = 2 }))
+        for _, next_item in ipairs({ "1. label](side.md)", "- label](side.md)" }) do
+            assert.same({}, candidates.collect({ "[not closed", next_item }, { first = 1, last = 2 }))
+        end
+    end)
+
     it("enumerates only closed nonempty @@ spans and retains legacy starts", function()
         local line = "é @@  a@b.md  @@ and @@two.md@@ then @@unterminated"
         local refs = candidates.at_references(line)

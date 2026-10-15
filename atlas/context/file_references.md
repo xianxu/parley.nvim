@@ -36,7 +36,13 @@ that every recursive tool round rereads those files.
 `<M-o>` (alias `<C-g>o`) opens the reference under the cursor in chat and Markdown
 buffers. It handles `src:` links, inline branch links, `🌿:` reference lines,
 `@@` references, and ordinary local Markdown links. Direct references, including
-artifact references under the cursor, take priority. With no direct reference,
+artifact references under the cursor, take priority.
+Inline Markdown link labels may wrap across lines within a paragraph: any part
+of the label or destination still opens that link. The shared scanner retains
+the complete byte span and destination row for opening and fallback; nested
+artifact/@@ spellings inside the label are not separate entity choices. Blank
+rows, headings, new list items, fences and entity range edges stop a wrapped span.
+With no direct reference,
 it looks in the enclosing entity: a heading owns its section through the next
 same-or-higher heading; anywhere in a top-level numbered item owns that whole
 multi-line item. Interior blanks belong to the item, trailing blanks do not;

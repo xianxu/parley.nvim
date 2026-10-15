@@ -518,6 +518,9 @@ oracle, and the mutation that would make the test fail.
   API callers can enter several real files before yielding. Start empty-window
   histories synchronously at BufEnter/Back, excluding a fresh WinEnter clone;
   test API creation followed immediately by multiple file entries (#333 BR-2).
+- A multiline occurrence needs its full raw span and destination row, not just
+  its opening row and columns. Reserve every row of that span before scanning
+  subordinate references; otherwise wrapped labels leak artifact/@@ choices (#335).
 ## 2026-10-15 (#327 — enclosing-entity navigation)
 
 - A selected occurrence is an identity, not a cursor hint. Dispatch its kind and exact span/target; replay through a legacy nearest-reference parser can open a sibling, and even an isolated Markdown span can reinterpret an embedded @@ label when its destination is unsupported (plan PQ-1).

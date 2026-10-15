@@ -48,8 +48,8 @@ that. A link with a line break inside its text is valid CommonMark, and agents' 
 
 ## Plan
 
-- [ ] Add failing headless tests for wrapped labels under the cursor and in entity/picker scans, including nested references, byte positions, invalid links and scan boundaries.
-- [ ] Reuse the existing Markdown pattern through one pure multiline scanner; carry full spans and destination row/column through both consumers (ARCH-DRY, ARCH-ORDER).
+- [x] Add failing headless tests for wrapped labels under the cursor and in entity/picker scans, including nested references, byte positions, invalid links and scan boundaries.
+- [x] Reuse the existing Markdown pattern through one pure multiline scanner; carry full spans and destination row/column through both consumers (ARCH-DRY, ARCH-ORDER).
 - [ ] Document the corrected navigation behavior; run mapped and full verification before SDLC close and land on SHIP.
 
 ## Log
@@ -64,3 +64,15 @@ Reuse existing destination opening and fallback policies; no new link dialect,
 resolver, or second parser. Blank/fenced/range boundaries terminate a span.
 Keep the string parser API for existing consumers; this issue changes Alt+o's
 direct and entity paths. Quick flow authorized by the dispatch.
+
+### 2026-10-15 — red/green evidence
+
+The mapped context/file_references baseline fails four new cases: direct wrapped
+opening, entity choice/opening, fallback destination row, and cross-row masking.
+The shared pure markdown_spans adapter reuses markdown_links and maps full spans
+to row/byte coordinates; both direct and selected navigation consume those spans.
+An added list-boundary case then fails until list anchors become span boundaries.
+Blank/fence/heading/range barriers preserve paragraph scope. Final mapped suite
+passes with no errors and a clean process census. Evidence:
+/tmp/parley-335-{red,block-red,final-targeted}.log. README and atlas updated;
+full verification remains pending. No external dependency or state is introduced.
