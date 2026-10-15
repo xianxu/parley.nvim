@@ -246,3 +246,14 @@ zero lint warnings/errors across 732 files, and clean unit/integration censuses.
 starter_config_spec passes in the complete run as well as its isolated 19-case
 rerun. Evidence: /tmp/parley-333-integrated-full-retry.log. Vocabulary freshness
 and range whitespace checks pass. Entering the required narrow conflict review.
+
+### 2026-10-15 — narrow-review measurement blocker
+
+The required --fixed-then-ship close cannot dispatch its review: actual measurement
+reports incomplete Qoder session metadata at
+/Users/xianxu/.qoder/projects/-Users-xianxu-workspace-pair/6d3388c7-e99a-4311-96b6-5d90f35d4067/subagents/agent-aExplore-2bcc142b6679e6be.jsonl.
+The gate directs the hub to restore this evidence. Reported it to ops:0; a
+subsequent sdlc actual --issue 333 confirms the same blocker. No actuals bypass.
+Integrated full suite remains green (433 files); branch/code is checkpointed.
+After repair: rerun actual, the narrow conflict close with the recorded full-suite
+evidence, sdlc pr/merge, refresh this resting slot by fast-forward, then stage :0.
