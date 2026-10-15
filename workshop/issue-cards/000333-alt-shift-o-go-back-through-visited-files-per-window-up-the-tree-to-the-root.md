@@ -1,6 +1,6 @@
 ---
 id: 000333
-status: working
+status: codecomplete
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 2.03
+tracker:
+    version: 1
+    completion:
+        token: close-89a9e8e90a22
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 8ce10d02789b1a5c8d487220a5c8eeefbcb899e9
+        evidence_commit: 7075fbfa8791b08435acefb13bb9160620e16868
 ---
 
 # Alt+Shift+O: go back through visited files (per window), up the tree to the root
