@@ -1,12 +1,20 @@
 ---
 id: 000337
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '7517acc769841145e4f217b02898452f10a8a42e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'f249409884bcb34df7338cecd04eefc84af8f890' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T16:04:16-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Flake: integration files exceed a load-dependent whole-file deadline
@@ -19,14 +27,32 @@ First seen 2026-10-15 during #332 verification: three integration files passed i
 
 Investigate the shared deadline/whole-file workload interaction for entity_delete_parity_spec.lua, file_history_spec.lua and issue_tracker_spec.lua. Preserve their behavioral assertions and the machine-wide suite budget. Fix the root cause rather than adding retries, sleeps or blindly increasing timeouts; split bounded workloads if evidence supports it.
 
+### Root cause and proposed design
+
+The runner takes one startup load sample and applies Plenary's50s default to a whole file, not a single stalled case. The sampled minimum says nothing about the amount of legitimate work: parity intentionally sweeps roughly500 buffers, file-history now has28 cases with full setup, and tracker has18 cases with216 Git setup commands before their bodies. Successful file durations56–83s therefore exceed the50s minimum without proving a hang. The last run also killed branch_child, packaging_release and starter_bootstrap after continuing successful assertions. Preserving one arbitrary whole-file deadline as these files grow is the wrong hang model.
+
+Proposed: keep the existing50s base and bounded1–4x load factor as a no-completed-case watchdog (including bootstrap, before/body/after and teardown), plus an independent absolute ceiling of base×4, the existing maximum envelope (ordinary files200s; existing large-corpus base180s retains720s maximum). Only structured completed-case frames from a thin child wrapper around actual Plenary execution refresh progress; arbitrary stdout never does. The pure deadline state decides running/stalled/absolute-expired from monotonic time and validated progress. The thin parent owns the child process, streams original output, retains exit codes, kills/reaps on either expiry, and closes its timer/handles. No retries, sleeps, skipped assertions, new longer-timeout path exceptions or workload-derived unbounded budgets.
+
+Alternative: reduce repeated fixture cost separately. That can improve throughput, but cannot correct the whole-file/one-case mismatch across all five deadline failures; avoid changing unrelated behavioral fixtures to hide the harness defect. A blanket timeout increase is rejected. Test-runner changes remain headless harness surface, not product editor behavior.
+
+ARCH-PURE/ARCH-ORDER: one deterministic state transition with clock/progress/exit inputs, no wall-clock sleeps in policy tests. ARCH-DRY: keep Plenary as the assertion/fixture executor; share one policy across ordinary and existing corpus budgets. ARCH-CONSTRAINTS/ARCH-FUNERAL: absolute runtime ceiling and one owned child/timer, terminated and reaped on failure; no durable state. ARCH-SECURE: harness-owned framed progress, not arbitrary log activity; tests stay in existing temporary profiles. The IO dependency is the same installed Neovim/Plenary exercised by isolated real-child conformance.
+
 ## Done when
 
 A controlled schedule or deterministic regression identifies why these passing files can overrun the selected deadline, a root-cause fix preserves their assertions, and focused plus full-suite evidence verifies bounded completion.
 
 ## Plan
 
-- [ ]
+- [ ] Freeze the diagnosed timeout model and obtain TL review of the progress/absolute-ceiling design.
+- [ ] Observe deterministic RED for useful work past50s, stalled bootstrap/case/teardown, cap, load bounds and ignored arbitrary output; verify thin-runner wiring with controlled process events.
+- [ ] Implement the smallest shared pure policy and owned child adapter, preserving Plenary assertions/output/exit codes; verify actual success, assertion failure and forced timeout children with cleanup.
+- [ ] Run focused harness and affected suites, update atlas/lessons, run the required full suite, close through mandatory fresh review and land on SHIP.
 
 ## Log
 
 First seen:2026-10-15. Failing head1eaefd96df59afcb8d0880ec621864b137a596a7, command sdlc local-check run --name suite. Log:/Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/572dbf1a77bfb77320a173d6409874e8.log. All three were killed at50s; no failed behavioral assertion preceded the kill. Previous full suite on e9a1622d2102e71e66dc44d3a0dacb70e9921f92 passed entity_delete_parity in83s, file_history in63s, issue_tracker in67s; log:/Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/894c995da011381b869a9bd450c9545b.log. The only diff between these heads is #332 issue documentation. That preceding run failed only the separate packaging VM flake #336, which passed on this run. No suite waiver or quarantine.
+
+
+## Revisions
+
+- 2026-10-15 — TL assigns #337 to this slot from main; #332 remains parked atce50b56d165838c309067433d220078b9a1f9b03. Expand the enumerated deadline class to branch_child, packaging_release and starter_bootstrap from the complete exact1eaefd96 run, failed/6f81bbfaed0b35a39900598fdc471e11.log. Read-only source/history establishes startup-sample and whole-file granularity as the shared model defect; fixture-cost improvements are a separate alternative, not presumed root cause. Design above awaits TL approval; no code/tests changed and no change-code yet.
