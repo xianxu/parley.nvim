@@ -51,8 +51,9 @@ old. Set `session_sync_ping_minutes` in `require('parley').setup({...})` to
 override that delay. A write postpones the ping; operator locks suppress it.
 The separate `session_sync_stale_minutes` reminder for unsent edits remains 5.
 The first edit in Normal or Insert mode takes your turn before auto-save runs.
-Undoing back to unmodified silently releases it; redo away from saved text takes
-it again. Saving alone keeps the turn until Alt+Return submits it. See the
+Undoing back to the content before that first edit silently releases it, even
+after auto-save; redo away from that baseline takes it again. Saves never move
+the baseline, and saving changed text keeps the turn until Alt+Return. See the
 [session-sync guide](atlas/modes/session_sync.md) for the full interaction.
 
 ## Learn by chatting

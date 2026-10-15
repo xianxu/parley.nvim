@@ -56,14 +56,14 @@ should release the lock if that `u` moves the file to a state of no change."
 
 ## Core concepts
 
-| Concept | Owner | Change |
-| --- | --- | --- |
-| Lock baseline | lua/parley/session_sync.lua | In-memory pre-edit content hash scoped to the lock this attachment acquired; rolling content hash supplies the pre-edit value because on_lines observes the completed edit. |
-| Release reconciliation | lua/parley/session_sync.lua | Existing deferred token and foreign-write preservation remain authoritative; baseline equality replaces disk equality. |
+| Concept | Implementing entities | Kind | Status | Change |
+| --- | --- | --- | --- | --- |
+| Lock baseline | lua/parley/session_sync.lua: content_hash and M.attach | INTEGRATION | new | In-memory pre-edit content hash scoped to the lock this attachment acquired; rolling content hash supplies the pre-edit value because on_lines observes the completed edit. |
+| Release reconciliation | lua/parley/session_sync.lua: M.attach | INTEGRATION | modified | Existing deferred token and foreign-write preservation remain authoritative; baseline equality replaces disk equality. |
 
 ## Design notes
 
-ARCH-DRY/PURE: reuse native edit attachment and existing disk_changed/violation; hashing deterministic line content adds no alternate writer or lock format. ARCH-PURPOSE: auto-save must never advance the acquisition baseline. ARCH-MOCK: retain fake Couch seam and real child-Neovim/file effects, then operator live check. ARCH-CONSTRAINTS: session markdown keystroke path, at most two SHA-256 hashes over buffer lines per edit (linear buffer size), constant retained hashes, no extra subprocesses. ARCH-SECURE: no new persisted input or secrets; unknown existing locks retain protection rather than invent a baseline. ARCH-ORDER: free+edit captures previous hash only on confirmed lock write; held+edit retains baseline; latest deferred equality reconciles disk then saves baseline before confirmed lock deletion; reload replaces rolling hash and invalidates deferred token; submit/free clears baseline. Failed probes/writes retain lock. ARCH-FUNERAL: no new durable artifact; hashes die with attachment/turn; existing lock deletion lifecycle unchanged.
+ARCH-DRY/PURE: reuse native edit attachment and existing disk_changed/violation; hashing deterministic line content adds no alternate writer or lock format. ARCH-PURPOSE: auto-save must never advance the acquisition baseline. ARCH-MOCK: retain fake Couch seam and real child-Neovim/file effects, then operator live check. ARCH-CONSTRAINTS: session markdown keystroke path, at most three SHA-256 hashes over buffer lines per edit (observation, deferred comparison, and post-write verification on successful baseline restoration; linear buffer size), constant retained hashes, no extra subprocesses. ARCH-SECURE: no new persisted input or secrets; unknown existing locks retain protection rather than invent a baseline. ARCH-ORDER: free+edit captures previous hash only on confirmed lock write; held+edit retains baseline; latest deferred equality reconciles disk then saves baseline before confirmed lock deletion; reload replaces rolling hash and invalidates deferred token; submit/free clears baseline. Failed probes/writes retain lock. ARCH-FUNERAL: no new durable artifact; hashes die with attachment/turn; existing lock deletion lifecycle unchanged.
 
 ## Log
 
@@ -77,3 +77,15 @@ ARCH-DRY/PURE: reuse native edit attachment and existing disk_changed/violation;
 - Expanded targeted verification passed: make -k test-spec SPEC=modes/session_sync (43 native + 52 integration + 14 unit = 109 cases, 0 failures); luacheck clean and git diff --check clean. Only 26 source lines added.
 
 - Declared full suite passed via sdlc local-check run --name suite on 8f14544a8f2476e9a865236044fcd0d11aaccae0: 428 spec files, lint 724 files with 0 warnings/errors, no surviving processes; run time 2m13s after 43m41s capacity wait; log sha256 prefix fe3545a713a2. TL explicitly directed close review before staging/operator check; final Plan row remains open until live acceptance and landing.
+
+## Revisions
+
+### 2026-10-14 22:23 PDT — close review documentation corrections
+
+- BR-1 (user-docs-match-behavior): README's two stale clauses (unmodified release and saved-text redo) now use the acquisition baseline. Swept README, docs, atlas and module comments; remaining unmodified references describe reload/overwrite handling or the historical Problem, not release.
+- BR-2 (core-concept-classification): both Core concepts rows now name implementing entities, INTEGRATION kind and new/modified status.
+- BR-3 (documented-work-bounds): correct the maximum from two to three hashes per edit; the third is post-write verification when restored baseline text needs saving. No implementation or Done-when change. Final acceptance/landing Plan row remains open.
+
+## Review log
+
+- Round 1: FIX-THEN-SHIP, but the ledger kept close unfinalized for one Important README finding; also two Minor plan corrections. Verified all three against source and corrected their full instance families. No runtime change; full-suite result remains applicable. Reviewer independently passed all 109 mapped tests.
