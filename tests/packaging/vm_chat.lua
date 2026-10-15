@@ -75,7 +75,8 @@ local function ask(model, image)
     if image then
         assert(require('parley.assets').has_image(query.payload), 'request omitted clipboard image')
     end
-    return {response_nonempty = true, image_sent = image or false, managed_route = true}
+    return {response_nonempty = true, image_sent = image or false, managed_route = true,
+        chat_file = vim.fn.resolve(vim.api.nvim_buf_get_name(buf))}
 end
 
 function M.live_model(proxy)
@@ -125,6 +126,14 @@ function M.run(phase)
             assert(vim.wait(30000, function()
                 return vim.fn.filereadable(root .. '/auth/claude-fake@example.com.json') == 1
             end, 20), 'guest fake managed login failed')
+            -- The credential file is not completion: a successful login settles
+            -- by reopening the model picker. Wait for that, then dismiss it as an
+            -- operator would, so it cannot open over the chat later (#336).
+            assert(vim.wait(30000, function() return vim.api.nvim_win_get_config(0).relative ~= '' end, 10),
+                'login did not return to the model picker')
+            vim.fn.maparg('<Esc>', 'n', false, true).callback()
+            assert(vim.wait(1000, function() return vim.api.nvim_win_get_config(0).relative == '' end, 10),
+                'model picker did not close')
             ready(proxy)
             local result = ask('gpt-5-codex', false)
             result.fake = true
