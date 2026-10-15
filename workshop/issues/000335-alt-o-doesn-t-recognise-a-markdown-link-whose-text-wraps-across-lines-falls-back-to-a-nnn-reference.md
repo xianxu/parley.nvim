@@ -52,6 +52,15 @@ that. A link with a line break inside its text is valid CommonMark, and agents' 
 - [x] Reuse the existing Markdown pattern through one pure multiline scanner; carry full spans and destination row/column through both consumers (ARCH-DRY, ARCH-ORDER).
 - [ ] Document the corrected navigation behavior; run mapped and full verification before SDLC close and land on SHIP.
 
+## Core concepts
+
+| Entity | Kind | Location | Status | Responsibility |
+| --- | --- | --- | --- | --- |
+| `markdown_spans` | PURE | `lua/parley/reference_candidates.lua` | new | Paragraph-scoped Markdown spans with row/byte coordinates and raw text. |
+| `markdown_links` | PURE | `lua/parley/reference_candidates.lua` | modified | Existing string pattern, with internal scan barriers and single-line destinations. |
+| `collect` | PURE | `lua/parley/reference_candidates.lua` | modified | Reserve full Markdown spans before collecting subordinate references. |
+| `OpenFileUnderCursor` | INTEGRATION | `lua/parley/init.lua` | modified | Open direct/selected spans and retain fallback destination rows. |
+
 ## Log
 
 ### 2026-10-15
@@ -76,3 +85,15 @@ Blank/fence/heading/range barriers preserve paragraph scope. Final mapped suite
 passes with no errors and a clean process census. Evidence:
 /tmp/parley-335-{red,block-red,final-targeted}.log. README and atlas updated;
 full verification remains pending. No external dependency or state is introduced.
+
+### 2026-10-15 — first full verification and isolated corrections
+
+The first full run passes wrapped-link unit/integration tests but fails the
+Core-concepts guard (missing scanner table, plus stale local main including
+already-landed #333 symbols) and one existing packaging VM state assertion.
+Added the actual Core concepts table. Confirmed main is unoccupied, then safely
+fast-forwarded it with git fetch origin main:main (6121476a→83f3893a), without
+changing the issue branch or any checkout. Isolated reruns pass all 25 architecture
+and 17 packaging cases (/tmp/parley-335-architecture-packaging.log); the packaging
+test/implementation were untouched. Clean process censuses. Retrying the full
+suite; /tmp/parley-335-full.log retains the first failure evidence.
