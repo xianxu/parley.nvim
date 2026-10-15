@@ -2,26 +2,25 @@
 
 > **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy) to determine the appropriate execution approach: use superpowers-subagent-driven-development (if subagents are suitable per AGENTS.md) or superpowers-executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Send a few lines plus real changes for document review, with one ariadne-owned review protocol and a working standalone fallback.
+**Goal:** Every Couch document submission carries only `submitted: PATH`; the shared skill owns instruction reading and change computation, while outside-Couch review retains its inline prompt.
 
-**Architecture:** Ariadne owns the round, six existing stock modes and canonical marker grammar. Parley ships generated snapshots for fallback/local review. After S1 lands, compose the review payload inside its existing registered-submission flow; retain S1 as the only owner of admission, transport, receipt reconciliation and retries.
+**Architecture:** Reuse S1's registered submission unchanged. Delete Parley's old Couch review message builder, diff computation and successful-send baseline. Ariadne #399 reads the submitted file's process-instruction and obtains changes since its last read through Couch; Parley's local review source consumes the canonical round/mode data for its existing in-editor fallback.
 
-**Tech Stack:** Lua/Neovim, Python standard library for deterministic snapshot generation, ariadne skill export, existing Couch transport and stateful fake.
+**Tech Stack:** Lua/Neovim, ariadne's shared skill/export, S1's existing Couch transport and stateful fake. No new transport, payload adapter, runtime capability probe or receipt machine.
 
-**State:** Proposed to the hub; do not run change-code until approved. Full flow is expected because canonical-source distribution and the S1 integration exceed a small message-only patch. One atomic Parley close, no milestone tags.
+**State:** Approved by ops:0 with the submitted-only revision, delivery 9111a425-a6cd-4098-9138-009139f4155c. Implementation waits for ariadne#399 and parley.nvim#332 (whose S1 dependency is pair#573) to land. Do not stack on their unlanded branches. Let change-code infer the flow from the final consumer patch; no milestone tags or estimate before its gate.
 
-## Dependencies and decisions
+## Approved payload and ownership
 
-- Shared half: **ariadne#399**, filed unclaimed for hub dispatch, depends on S1 (**parley.nvim#332**, **pair#573**). It must land first. Parley consumes the export; this slot does not implement ariadne's skill.
-- Read ops `teams/devinfra/projects/universal-agent-input-interface/design.md` S2 and `project.md` S2a. S2a lifts today's review modes; section-level collaborate/chat modes, side-doc lifecycle and new edit presentations remain their later project slices.
-- #332 owner confirmed its parked PR #241 routes every named Markdown Couch submit through `agentic_document.submit` -> `session_sync.prepare_submit` -> `session_sync.send_registered`. An explicit process-instruction does not bypass admission. Its final dedup/receipt work is still pending. Wait for that landing and confirm the final seam before implementation; never build on its unlanded branch.
-- **Approval needed:** extend the registered-send payload seam for explicit review instructions. Preserve S1's simple submitted message for files without an instruction and legacy session files. No second send, watcher, owner resolver or retry loop.
+```text
+submitted: /absolute/document.md
+```
 
-Alternatives considered:
+This is the entire Couch message, including for files with process-instruction. There is no mode brief, skill hint, inline fallback, diff, first-send notice or custom payload on this path. S1's send_registered remains the sole sender and owns registration, canonical identity/owner checks, save/reconcile, operator locks, deduplication, resend and receipt reconciliation.
 
-1. **Recommended:** a payload adapter within S1, plus generated canonical fallback. It serves the operator's actual Couch path and preserves S1 state ownership.
-2. Change only review_send.message. Smaller, but S1 bypasses it in Couch, so this would miss the motivating behavior.
-3. Keep S1's submitted-only body everywhere and have the skill read the instruction/diff from disk. Simpler transport, but changes the operator's revised payload contract and does not preserve the existing last-send diff. Requires a different explicit scope decision.
+Ariadne #399 supplies the skill that handles a submission: read the file's frontmatter process-instruction, resolve the existing review modes, and compute **changes since the agent's last read** with `couch --session-sync diff`. This replaces the previous last-editor-send baseline; it deliberately does not promise the old baseline semantics. The skill respects the existing operator lock, CAS write and owed-fold contracts. Section modes extend that skill in the later project slice.
+
+Outside Couch, Alt+Return continues the in-editor inline review via run_via_invoke, including the existing instruction prompt, stock mode selection/completion and propose_edits adapter. This fallback does not send to another agent and does not require an installed shared skill. Missing skill discovery never selects a second Couch payload format: skill rollout is the #399 prerequisite.
 
 ## Core concepts
 
@@ -29,121 +28,81 @@ Alternatives considered:
 
 | Name | Lives in | Status | Responsibility |
 | --- | --- | --- | --- |
-| `ReviewMessage` | `lua/parley/review_message.lua` | new | Build short or inline bodies from validated protocol data, raw instruction and optional real diff. |
-| `instruction.parse/resolve/expand/brief` | `lua/parley/skills/review/instruction.lua` | modified | Reuse existing mode selection and render generated canonical mode data; no second mode resolver. |
-| `ReviewBundle` | `lua/parley/review_protocol.lua` | new | Validate versioned bundle metadata and select shared versus inline use from explicit capability evidence. |
+| `message` | `lua/parley/review_send.lua` | deleted | Old verbose Couch review payload; no replacement builder. |
+| `diff` | `lua/parley/review_send.lua` | deleted | Editor-computed changes since last send; the agent reads Couch diff instead. |
+| `instruction.parse/resolve/expand/brief` | `lua/parley/skills/review/instruction.lua` | modified | Retain the existing local-review mode semantics using #399's canonical source data. |
 
-ReviewMessage receives values, never reads files or sends. Existing review_send.message remains a delegating compatibility entry point. ReviewBundle has one supported schema/version, fixed member names and validated dense mode records; malformed or missing installed data selects the packaged inline bundle. Both entities have direct unit tests without IO mocks.
+No ReviewMessage, capability decision model or new bundle-schema model is introduced. Retain the established pure mode helpers and direct unit coverage. The canonical-source consumer shape follows #399's landed export; do not build a speculative distribution framework.
 
 ### Integration points
 
 | Name | Lives in | Status | Wraps |
 | --- | --- | --- | --- | --- |
-| `ReviewProtocolLoader` | `lua/parley/review_protocol_io.lua` | new | Read bounded packaged/installed skill files and canonical paths. |
-| `ReviewSubmissionAdapter` | `lua/parley/review_send.lua` | modified | Save/content snapshot, existing baseline and pure message construction. |
-| `RegisteredSubmission` | `lua/parley/session_sync.lua`, `lua/parley/agentic_document.lua` (after #332) | modified | S1's single send, registration/identity, lock reconciliation and receipt callbacks. |
-| `ReviewSource` | `lua/parley/skills/review/init.lua` | modified | Compose generated round/grammar plus the local propose_edits adapter. |
-| `ReviewExportGenerator` | `scripts/sync-review-protocol.py` | new | Deterministic canonical inputs -> packaged protocol, modes and provenance manifest. |
-| `FakeCouch` | `tests/helpers/fake_couch.lua` and #332's registry fake | modified | Persist actor/registry state, message attempts and controlled receipt outcomes. |
+| `review_send.submit` | `lua/parley/review_send.lua` | modified | S1 admission first, otherwise the existing inline in-editor review. |
+| `send_to_slot` and `baseline` | `lua/parley/review_send.lua` | deleted | Retired legacy Couch review transport and editor-send state. |
+| `ReviewSource` | `lua/parley/skills/review/init.lua` and packaged round/modes | modified | Existing local prompt/tool adapter consumes the shared canonical review data. |
+| `RegisteredSubmission` | `lua/parley/agentic_document.lua`, `lua/parley/session_sync.lua` after #332 | reused | S1's unchanged submitted-only transport and receipt ownership. |
+| `FakeCouch` | `tests/helpers/fake_couch.lua` and #332's registry fake | reused | Persist registration/attempt/receipt state and capture the exact submitted payload. |
 
-## Canonical source and fallback contract
+## Canonical source and standalone fallback
 
-Ariadne #399 supplies `construct/local/universal-review/SKILL.md`, `round.md`, the six current `modes/*.md`, and a versioned export manifest naming these and `construct/local/fix/review-convention.md`. Its file-edit adapter owns Couch read/diff/write, lock and owed-fold instructions; its skill references the canonical grammar rather than restating it. Confirm the exact export names with that owner before generation.
+Wait for #399's final export contract before choosing filenames or adding generation code. Consume its round, the six existing stock modes and canonical marker grammar for Parley's local inline prompt. Preserve the local propose_edits transport adapter separately from generic round semantics. Release snapshots, if the export uses them, must be generated from that source and checked for freshness/integrity; no manually maintained second protocol or mode body.
 
-Parley generates `lua/parley/skills/review/round.md`, `review-convention.md`, the existing six `modes/*.md`, and `protocol.json` from that export. These are release snapshots with provenance and hashes, not independently authored rules. Keep one Parley-specific `local-adapter.md` for propose_edits invocation; generated SKILL.md composes shared round/grammar with that adapter. The inline file-edit fallback embeds the generated round, selected mode brief and ariadne file adapter, and names the absolute packaged grammar path for the agent to read. The grammar itself is already 8,774 bytes, larger than Couch's entire 8,192-byte message limit; do not paste the full grammar into a send. Local review prompts can compose the full generated grammar because they do not use the Couch message envelope. No consumer keeps a hand-maintained protocol or mode body (ARCH-DRY, ARCH-PURPOSE).
+A packaged plugin without a sibling ariadne checkout must retain a working local inline review. Reuse the existing source composition and mode resolver rather than creating new runtime loaders or probing the recipient's filesystem. The inline prompt is outside Couch, so no Couch message byte-budget/truncation system is required. The Couch send includes only a path; its existing transport limits/error behavior remain S1-owned.
 
-The generator has explicit `--source DIR`, `--output DIR`, and `--check` modes; it uses real temporary fixture directories in tests. `--check` exits nonzero for changed, missing or extra generated members. Releases retain the committed bundle and need no sibling ariadne or weave at runtime. Integration tests always check packaged hashes/member integrity, and compare against the pinned source when it is installed; standalone fixtures explicitly lack that source and still exercise the fallback. Run generator --check before close. Do not edit protected local-gate configuration in this issue.
+## Scope and architecture
 
-Capability is evidence about the receiving slot, not the document's repository or agent brand. On the pane's own verified actor, COUCH_TREE names its checkout. Probe that checkout's supported harness skill directories for a readable xx-universal-review skill and a compatible export version. Include its absolute skill path in the short use-skill line, so an already-running agent can read it even if its discovery menu predates installation. Do not derive a worktree from Binding.Repository: it is the shared Git directory. For another owner, missing root, missing skill, stale version or unreadable files, select inline fallback. Never suppress the send merely because optional shared-skill evidence is absent.
-
-## Payload and S1 seam
-
-For a compatible skill, no real diff:
-
-```text
-review request: /absolute/document.md
-process-instruction: [copy-edit] keep the voice
-Respond by editing the file in place (review convention: 🤖 markers).
-Use the xx-universal-review skill at /absolute/skill/SKILL.md.
-```
-
-No Review mode/How to apply/operator-instruction repetition, first-send banner, empty Changes heading or No change paragraph. A nonempty actual diff appends one concise last-delivered-send heading and a fenced diff; preserve the 200-line cap and explicit truncation notice. Do not send a diff against a failed/unconfirmed attempt.
-
-For an incompatible/unknown skill, append the generated file-edit protocol and existing expanded mode brief, plus the absolute packaged grammar path, then the same real diff. The mode prefix aliases, multiple modes and first-mode flags remain as today. Outside Couch, preserve the in-editor invocation path and its tool adapter. Session-file turn handling and S1's no-instruction submitted message remain unchanged.
-
-Proposed seam after #332 lands:
-
-- RegisteredSubmission captures a candidate only after save/registration/identity reconciliation, then calls the review adapter once with `{path, registration, own_actor, lines, submission_generation}` when an explicit process-instruction denotes a review round.
-- The adapter returns `{body, on_submitted}`. It uses the current successful-send baseline, validated bundle/capability and pure message builder. It does not call Couch or register a file.
-- S1 sends that frozen body through its existing send_registered path and owns retry/dedup/receipt handling. A retry of the same attempt uses the same body/identity; a fresh operator submission gets a fresh candidate. No payload builder runs again during receipt polling.
-- Only S1's confirmed submitted outcome invokes on_submitted with the captured content. Queued/unconfirmed, failed, cancelled, stale identity and superseded completions do not advance the baseline. Use #332's final tagged result/witness types, not a new parallel receipt machine. If its final interface cannot express this, stop and revise the plan with the hub.
-- Preserve the legacy review-send path for environments S1 does not admit, delegating its formatting to ReviewMessage and retaining its existing save/error behavior.
-
-The pure builder exposes a typed-result convention rather than substituting an
-empty string for an invalid round:
-
-```lua
--- ReviewMessage.build({path, instruction, protocol, shared_skill_path, diff})
--- -> {kind="ready", body=...} | {kind="refused", reason=...}
--- protocol contains validated generated round/file-adapter/mode values.
--- A nil shared_skill_path selects inline fallback. nil/empty diff adds nothing.
--- Reserve the complete base before fitting a real diff into remaining bytes.
--- On refused, the IO caller notifies and leaves the successful baseline alone.
-```
-
-## Architecture constraints and lifecycle
-
-- **ARCH-PURE/DRY:** pure message/bundle values; filesystem loading and S1 transport in explicit seams. Keep the existing mode resolver and Couch fake.
-- **ARCH-PURPOSE:** cover the actual registered Couch path, inline fallback and local review adapter; generated snapshots enforce the one-source claim.
-- **ARCH-MOCK:** extend the stateful Couch fake with the final S1 receipt contract, captured exact bodies and persisted attempts. Test success, failed/unconfirmed send, explicit retry, stale callback and registration/owner changes. A live staged check against the real Couch pane confirms the fake's consumed contract before landing.
-- **ARCH-CONSTRAINTS:** submit-time work, never typing/startup polling. No new process on the normal path; at most 256 KiB total protocol data per load and at most six stock modes (current requirement). File reads are bounded; invalid/oversized installed data selects packaged inline fallback. Keep the 200-line diff cap and enforce Couch's 8,192 UTF-8-byte envelope: calculate remaining bytes after the complete round, trim only the diff at a UTF-8 boundary with an explicit notice, and visibly refuse an oversized instruction/base body without sending or advancing the baseline. Require the generated fallback base to fit below 6 KiB for ordinary paths/instructions; test that budget with the actual generated bundle. Test representative first/repeated sends and large diffs; do not claim new latency guarantees without measuring them.
-- **ARCH-SECURE:** document/frontmatter text is data in argv arrays; no shell interpolation. Validate bundle schema/version, member paths and sizes at load. Only fixed protocol members are opened; broken symlinks, truncated JSON, unknown versions or hashes are incompatible rather than proof of capability. No credentials are created or read.
-- **ARCH-ORDER:** S1 remains authoritative for the stateful submission. The callback witness binds canonical file, registration/owner, content snapshot and generation; an unconfirmed receipt is not success. Sequence tests control callback order and prove late/duplicate completions cannot change the selected baseline. No detached background work or timer is added by this feature.
-- **ARCH-FUNERAL:** no new runtime files, cache, receipt journal or watcher. The existing baseline map dies with the editor. Bundled export files are fixed-size release artifacts replaced by generation; temporary test roots are removed by fixture teardown. S1 owns its existing durable attempt cleanup.
+- **ARCH-DRY/PURPOSE:** one submission payload and one S1 send path. The agent owns file instructions and diff interpretation. Remove both obsolete producers and their state, rather than leaving a dormant alternate sender. Shared-source consumption includes the standalone local review that still needs the rules.
+- **ARCH-PURE:** retain mode/instruction transformations as pure helpers; local source composition and S1 admission remain the thin integration boundaries. No new parser for process-instruction in Couch submission code.
+- **ARCH-MOCK:** reuse the stateful Couch/registry fake to exercise the real Alt+Return entry point and capture attempts. Preserve S1's receipt tests; verify explicit instructions and missing instructions use the same payload. A staged live check confirms the fake's consumed submission contract.
+- **ARCH-CONSTRAINTS:** remove editor diff work and protocol loading from Couch submission. No new subprocess, watcher or capability probe. Outside-Couch prompt construction follows the existing inline path; test packaged startup with no ariadne source installed. No new latency or memory budget is claimed.
+- **ARCH-SECURE:** no shell interpolation; paths travel through the existing argv seam and canonical registration checks. Shared exports are validated by their landed contract, and a broken packaged local prompt must fail visibly. No credentials are read or created.
+- **ARCH-ORDER:** S1 keeps all stateful admission/send/receipt transitions. This change removes the separate editor-success baseline and adds no new callbacks or authoritative submission state. Regressions prove repeated/failed/retried submits stay inside S1, without falling through to the retired sender. The agent's read/diff/write ordering is #399's responsibility.
+- **ARCH-FUNERAL:** delete the per-file baseline map and legacy sender; no new runtime files, timers or cache. Any fixed release snapshot is replaced by the existing/export generation process; temporary test roots are removed by fixture teardown.
 
 ## Execution tasks
 
-### 1. Confirm foundation and source export
+### 1. Wait for the foundations
 
-- [ ] Obtain hub approval for this plan and the explicit S1 payload extension; ariadne #399 is dispatched by the hub.
-- [ ] Wait for #332, pair#573 and #399 to land. Refresh from main through SDLC; do not stack on a parked issue branch.
-- [ ] Confirm #332's final callback/witness and dedup semantics with its owner. Record any interface delta in Revisions, then run `sdlc change-code --issue 319 --flow full` for plan-quality and the derived estimate before code.
+- [x] Record hub approval and the submitted-only contract; notify the #399 and #332 owners of this decision.
+- [ ] Wait for ariadne#399 and parley.nvim#332 to land; pair#573 remains the S1 prerequisite. Refresh through SDLC and inspect their final contracts before implementation.
+- [ ] Record concrete export paths from #399 and the final #332 entry point in the Log. Run `sdlc change-code --issue 319`; satisfy its inferred-flow plan-quality/estimate gates if applicable before editing code.
 
-### 2. Generate one protocol bundle
+### 2. Pin the one submission path with failing tests
 
-Files: create scripts/sync-review-protocol.py, protocol.json, round.md, review-convention.md and local-adapter.md; regenerate existing modes and SKILL.md. Tests: tests/integration/review_protocol_bundle_spec.lua.
+Files: tests/integration/review_send_spec.lua, #332's landed agentic-document submission tests and existing stateful fake; retain tests/unit/review_instruction_spec.lua.
 
-- [ ] Write fixture-based generator tests: valid six-mode export, deterministic output, stale snapshot, missing member, invalid manifest and standalone load without ariadne. Run the targeted mapped review suite and record failures.
-- [ ] Implement exact-member export and --check. Add provenance rather than authored copies; run the tests green and commit the canonical-source consumer.
-- [ ] Confirm copy-editing/developmental/fact-check/free-form/line-editing/proofreading names, flags and bodies match the source byte-for-byte. Do not invent generate or section modes.
+- [ ] Add keymap regressions for a named Markdown file with an explicit process-instruction and without one. Both must reach S1 and send exactly submitted: ABS_PATH, with one attempt and no protocol, mode hint or diff appended.
+- [ ] Test edit/resubmit, failed/uncertain receipt then explicit retry, and unavailable registration through S1's existing fake/control seam. Assert no fallback to a legacy sender or inline prompt while Couch admission owns the request.
+- [ ] Add outside-Couch regressions for explicit instruction, prompt-on-missing instruction, cancelled prompt and existing mode aliases. They must invoke the local review with its inline source, with no Couch send and no dependency on skill discovery.
+- [ ] Remove obsolete assertions that expect verbose Couch message bodies or an editor-side successful-send diff; retain unrelated pure instruction/frontmatter tests. Run mapped tests red and record the failures before deleting code.
 
-### 3. Build pure message and capability decisions
+### 3. Delete the retired producer and preserve inline review
 
-Files: create lua/parley/review_message.lua, review_protocol.lua, review_protocol_io.lua; modify review_send.lua and local source composition. Tests: tests/unit/review_message_spec.lua, tests/unit/review_protocol_spec.lua, tests/integration/review_protocol_bundle_spec.lua; retain tests/unit/review_instruction_spec.lua.
+Files: lua/parley/review_send.lua, lua/parley/skills/review/init.lua, instruction.lua, existing SKILL.md/modes and the landed #399 export consumer as required.
 
-- [ ] Write exact-output unit tests for short first/unchanged sends, real/truncated diff, the 8,192-byte boundary (including multibyte text and one huge diff line), oversized-base refusal, all existing modes and unique prefixes, inline fallback and raw instruction quoting. Test capability available/missing/stale/malformed/remote-owner choices as values.
-- [ ] Run targeted tests red. Implement deterministic message construction and bounded loader, without new transport or mode semantics. Run green and commit.
-- [ ] Verify a packaged plugin with no ariadne checkout still runs the local review and produces a complete inline round; generated grammar uses the canonical single-line marker/<br> contract.
+- [ ] Delete message, diff, DIFF_MAX_LINES, baseline and send_to_slot, and remove the now-unreachable legacy actor-query/send branch and stale module comments. Keep only imports used by the surviving paths.
+- [ ] Preserve S1-first admission and the outside-Couch inline review route. Do not modify send_registered's payload or add a callback/adapter to it.
+- [ ] Consume #399's canonical round/modes for the local prompt using its landed export mechanism. Keep the existing propose_edits adapter and completion/quoting behavior; verify all six stock modes and first-mode flags.
+- [ ] Add standalone fixture coverage with no ariadne checkout/shared-skill directory, proving the complete local review prompt remains available. If snapshots are generated, test deterministic output/freshness with the actual export; do not add a speculative runtime capability or version protocol.
+- [ ] Run targeted tests green, search all consumers for old verbose headings/baseline helpers, and commit the coherent deletion and fallback change.
 
-### 4. Connect the actual registered submission
+### 4. Verify, stage, review and land
 
-Files: modify review_send.lua and #332's landed session_sync.lua/agentic_document.lua seam only. Tests: tests/integration/review_send_spec.lua, #332's agentic-document/registry receipt specs and the existing fake.
+Files: README.md, atlas/modes/review.md, atlas/traceability.yaml, issue/plan Log. The hub owns the ops project record.
 
-- [ ] Add regressions that press the real Alt+Return keymap: an explicit instruction reaches the registered payload builder; absent instruction keeps submitted-only; actual chat/visual/session routes preserve their owners.
-- [ ] Test own-slot compatible skill -> four lines, unavailable skill -> complete inline round, explicit other owner -> conservative fallback. Ensure no registration/owner/admission check is bypassed and only one message is sent.
-- [ ] Add controlled outcome sequences: accepted/submitted -> edit -> real diff; failed -> retry against prior success; unconfirmed -> later receipt; duplicate/late/superseded callback; rename/registration change while outstanding. Confirm S1 alone owns dedup/resend and that the baseline changes only on confirmed current submission.
-- [ ] Run red, implement the agreed adapter seam, run green and commit. Reuse S1's final state transition; no second watcher, receipt journal or retry loop.
-
-### 5. Verify, stage, review and land
-
-Files: README.md, atlas/modes/review.md, atlas/traceability.yaml, issue Log/plan. The hub owns the ops project file.
-
-- [ ] Update documentation and traceability for the short message, fallback detection and shared source; document that mode semantics come from the ariadne export.
-- [ ] Run `make test-spec SPEC=modes/review`, `make check-vocabulary`, the new snapshot --check command, and `git diff --check`. Record red/green and conformance evidence.
-- [ ] Push through `sdlc pr`, run `sdlc local-check run --name suite` to record the full suite once, and retain the exact-head log/status.
-- [ ] Per tl-worker, stage with `sdlc stage --build`; ask the hub for the real-pane check: submit a file with instruction, inspect the short delivery, edit/resubmit and inspect the diff, then simulate unavailable shared skill in an isolated fixture for fallback. Do not change the operator's environment directly.
-- [ ] Run `sdlc close --issue 319 --verified '<concrete evidence>'`, address the binary's mandatory review, and land on SHIP using `sdlc merge --yes` with green checks. Clear a leftover stage if landing does not; report the PR/outcome to the hub.
+- [ ] Update docs to say Couch receives submitted: PATH and the shared skill reads frontmatter and Couch diff; document the outside-Couch inline review separately. Remove old last-send-diff descriptions.
+- [ ] Run `make test-spec SPEC=modes/review`, `make check-vocabulary`, any landed export freshness check, and `git diff --check`.
+- [ ] Publish with `sdlc pr`, then record the full suite once with `sdlc local-check run --name suite`; keep the pinned-head status/log.
+- [ ] Stage through `sdlc stage --build` under hub coordination. The live check submits a process-instruction file, verifies the exact submitted-only delivery and skill-driven response, edits/resubmits to verify changes-since-last-read handling, and exercises outside-Couch inline review in an isolated fixture.
+- [ ] Close with concrete evidence, address the binary-owned mandatory review, land on SHIP using `sdlc merge --yes`, clear any leftover stage, and report the PR/outcome to the hub.
 
 ## Revisions
 
-- 2026-10-15 — initial S2a proposal. #332 owner confirmed all named Markdown in Couch bypasses the old message builder; this plan therefore requests a payload extension inside S1 instead of changing an unreachable path. Shared half filed as ariadne#399. No implementation authorized until the hub approves this integration choice.
+### 2026-10-15 16:25 — approved submitted-only contract
+
+Reason: ops:0 chose submitted-only in delivery 9111a425-a6cd-4098-9138-009139f4155c, citing the operator's direction that the agent can compute the diff and submission should rely on the skill. Plan approved with this change.
+
+Delta: replace the proposed S1 payload adapter and capability-dependent messages with unchanged submitted: PATH for every Couch submit. Remove editor-side diff/baseline and verbose message construction. #399 reads process-instruction and computes changes since last read through Couch; retain canonical inline review only outside Couch. The prior plan's last-send semantics, byte-budget builder, capability probes and adapter callbacks are cancelled, not deferred.
+
+The complete original proposal is preserved verbatim in [the superseded proposal](000319-universal-review-send-proposal.md). This revision is the executable plan. No implementation has started; dependencies #399/#332 remain unlanded.

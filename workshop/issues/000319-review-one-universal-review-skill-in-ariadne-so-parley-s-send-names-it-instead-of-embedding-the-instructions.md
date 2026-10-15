@@ -35,10 +35,10 @@ Lift the review protocol into ariadne as one agent skill (working name `xx-unive
 
 ## Plan
 
-- [ ] Approve the S2a integration choice and land the shared skill (ariadne#399) plus S1 dependencies first.
-- [ ] Generate the canonical protocol bundle and implement pure short/inline message formatting with explicit capability evidence.
-- [ ] Integrate formatting inside S1's registered-send seam, preserving admission, lock, dedup/resend and confirmed-success baseline behavior.
-- [ ] Run targeted/full verification, stage for the hub's live check, close on SHIP and land.
+- [x] Record the hub-approved submitted-only revision and notify the shared-skill/S1 owners.
+- [ ] Wait for ariadne#399 and parley.nvim#332 (S1 depends on pair#573), then inspect their landed interfaces and run change-code.
+- [ ] Delete the verbose Couch builder, editor diff/baseline and alternate send branch; preserve S1's exact submitted-only payload and the canonical inline review outside Couch.
+- [ ] Run targeted/full verification, coordinate the staged live check, close on SHIP and land.
 
 Durable plan: [universal review submissions](../plans/000319-universal-review-send-plan.md).
 
@@ -81,3 +81,29 @@ artifacts; no implementation or runtime tests are claimed. Awaiting hub approval
   ownership and submitted-only behavior when no review instruction is present.
   See the durable plan for alternatives, contracts, tests and handoff. No code
   changed; awaiting plan approval.
+
+### 2026-10-15 16:25 — submitted-only revision (approved)
+
+Authority: ops:0 delivery 9111a425-a6cd-4098-9138-009139f4155c, submitted and
+verified. The hub selected the operator's simple-submission direction and
+approved the plan with this change.
+
+**Current payload contract:** every Couch Alt+Return sends only
+`submitted: ABS_PATH` through S1's existing send_registered flow, including
+files with process-instruction. No payload adapter, capability-dependent
+format, embedded mode/instruction, editor-computed diff or send baseline.
+Ariadne#399 reads the file's frontmatter process-instruction and computes
+changes since its last read with couch --session-sync diff; section modes come
+later. Outside Couch the existing in-editor review keeps a complete inline
+round derived from the canonical source. #319 waits for #399 and #332.
+
+**Revised acceptance:** the actual keymap uses the same exact submitted-only
+payload with/without process-instruction and on repeated sends; the old verbose
+builder/diff/baseline and alternate sender are removed; outside-Couch inline
+review still works without shared skill discovery. S1 continues to own
+registration, locks, dedup/resend and receipts. These clauses supersede the
+old Spec/Done-when wording about an editor-built diff and skill-dependent send.
+
+The original implementation proposal is retained verbatim as
+workshop/plans/000319-universal-review-send-proposal.md; the durable plan now
+records the approved execution tasks. No code changed in this revision.
