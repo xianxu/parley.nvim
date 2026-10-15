@@ -78,8 +78,12 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 
 - TL settled availability policy (verified submitted a70bb84a-9070-4d6b-a505-60f22af1a603): never block operator editing on unreachable Couch. Keep full protection for known/cached agentic paths; unknown/unavailable is editable with a one-line band and bounded re-lookup. Couch is the exclusive agent CAS writer, so down means no concurrent agent writes. Plan revised to include bounded local knowledge and preserve unknown-period edit baselines through auto-save. Durable forward-only rename recovery approved.
 
+- Verified TL design approval f96cd3f0-f712-4ed6-917f-eb348dc75b8c (submitted): approves the full draft with editable unknown/cache policy, durable rename journal and save→register→submit. Source inspection resolves queued pair questions: Register imports typed legacy state/shadow/path history; rename requires an existing registration, so typed OLD must be registered before native move. COUCH_ISOLATED_ROOT and an isolated adopt-store preview/apply are required for standalone CLI conformance; HOME/XDG alone do not isolate the OS-account singleton. Candidate CLI execution remains pending; no installed-binary/live claim is made.
+
 ## Revisions
 
 - 2026-10-15 — spell out agreed registry boundary and native rename/recovery work in the durable plan without changing the original S1 purpose. Explicit couch-owner is a route override per this issue, superseding #316 refusal only where that new requirement applies. Pending admission-failure policy requires TL review.
 
 - 2026-10-15 — replace the draft read-only admission proposal with the TL-approved editable unknown state, local known-agentic cache and recovery reconciliation. This resolves the failure-policy question; plan review and pair legacy-adoption/isolation details remain pending.
+
+- 2026-10-15 — freeze callable boundaries and legacy/native-rename preflight from primary source; adopt the explicit temporary singleton setup for future conformance. Full design approved, ready for change-code plan-quality admission; estimate remains unset until it passes.
