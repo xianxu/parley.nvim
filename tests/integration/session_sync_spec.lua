@@ -24,7 +24,10 @@ describe("session-sync buffer", function()
     local function exists(path) return uv.fs_stat(path) ~= nil end
     local function sent() return exists(log_file) and vim.fn.readfile(log_file) or {} end
     local function wait_sent(count)
-        assert.is_true(vim.wait(2000, function() return #sent() == count end), vim.inspect({
+        assert.is_true(vim.wait(2000, function()
+            local ok, lines = pcall(vim.fn.readfile, log_file, "b")
+            return ok and #lines == count + 1 and lines[#lines] == ""
+        end), vim.inspect({
             sent = sent(), argv = exists(argv_file) and vim.fn.readfile(argv_file) or {},
             locked = exists(file .. ".lock"), modified = vim.bo[buf].modified,
         }))
@@ -100,6 +103,58 @@ describe("session-sync buffer", function()
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = saved_thread[1], saved_thread[2]
         vim.fn.delete(root, "rf")
     end)
+
+    -- The same normalized owner must reach every consumer, including actor
+    -- identity checks. The losing legacy actor is active, so choosing it would
+    -- also suppress the quiet-owner ping.
+    for _, case in ipairs({
+        { name = "canonical only", fields = { "couch-owner: ops:0" } },
+        { name = "legacy only", fields = { "owner: ops:0" } },
+        { name = "both conflicting", fields = { "couch-owner: ops:0", "owner: other:9" } },
+    }) do
+        local function owner_header()
+            local lines = { "---", "type: session-sync" }
+            vim.list_extend(lines, case.fields)
+            vim.list_extend(lines, { "operator: test", "---", "", "## Needs you", "- item" })
+            return lines
+        end
+        it(case.name .. " routes band, quiet ping and same-slot submit to the normalized owner", function()
+            local actor_list = {
+                { Binding = { Slot = "ops:0", Scope = "s0", Tag = "t0" }, Known = true,
+                  LastActivity = os.date("!%Y-%m-%dT%H:%M:%SZ", os.time() - 60) },
+                { Binding = { Slot = "other:9", Scope = "s9", Tag = "t9" }, Known = true,
+                  LastActivity = os.date("!%Y-%m-%dT%H:%M:%SZ", os.time()) },
+            }
+            vim.env.FAKE_COUCH_ACTORS = vim.json.encode({ Code = "ok", Actors = actor_list })
+            vim.env.FAKE_COUCH_STATUS = owed(6)
+            local lines = owner_header()
+            open(lines)
+            assert.is_true(vim.wait(2000, function() return winbar():find("ops:0 owes a response", 1, true) ~= nil end))
+            wait_sent(1)
+            assert.equals(1, sent()[1]:find("ops:0|session-sync ping: " .. file .. " owes a response since ", 1, true))
+            vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "s0", "t0"
+            vim.api.nvim_buf_set_lines(buf, #lines - 1, #lines, false, { "- edited" })
+            assert.equals("holder: operator", holder())
+            keymap_cb("<M-CR>")()
+            wait_sent(2)
+            assert.equals("ops:0|submitted: " .. file, sent()[2])
+            assert.is_false(exists(file .. ".lock"))
+            assert.equals("- edited", vim.fn.readfile(file)[#lines])
+        end)
+        it(case.name .. " routes foreign-write violations to the normalized owner", function()
+            local lines = owner_header()
+            open(lines)
+            vim.api.nvim_buf_set_lines(buf, #lines - 1, #lines, false, { "- edited" })
+            assert.equals("holder: operator", holder())
+            lines[#lines] = "- foreign"
+            vim.fn.writefile(lines, file)
+            wait_sent(1)
+            assert.equals("ops:0|session-sync violation:", sent()[1]:sub(1, #"ops:0|session-sync violation:"))
+            assert.truthy(winbar():find("ops:0 wrote under your lock", 1, true))
+            assert.equals("- edited", vim.fn.readfile(file)[#lines])
+            assert.equals("- foreign", vim.fn.readfile(file .. ".clobbered")[#lines])
+        end)
+    end
 
     it("starts free, and the first modification takes the operator's turn", function()
         open(header)

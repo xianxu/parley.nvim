@@ -493,3 +493,7 @@ oracle, and the mutation that would make the test fail.
 - Disk equality and modified=false describe the latest save, not the operator turn's original content. Freeze the pre-edit content at lock acquisition, retain it through auto-save, and test partial undo, full undo, redo, reloads and explicit saves against that same baseline. Save restored baseline text before releasing the lock so an agent cannot observe free ownership with stale disk contents.
 
 - #330 close review: a symbol-name search can miss adjacent user-facing behavioral claims. Read the entire README feature paragraph when its atlas contract changes; sweep both undo and redo clauses. Plan work bounds must count exceptional success paths too (here, post-write verification adds a third hash).
+
+## 2026-10-14 (#331 — canonical owner compatibility)
+
+- Normalize renamed protocol fields once at the existing parsing boundary so validation, routing and rendering share precedence. Test canonical-only, legacy-only and conflicting values through consumers; give the losing actor different activity/identity so ping and same-slot validation cannot pass by accident.

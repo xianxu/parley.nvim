@@ -1,7 +1,7 @@
 -- parley.session_sync — turn-based shared markdown (#313).
 --
 -- A markdown file whose frontmatter says `type: session-sync` is shared
--- between the operator and the agent named by `owner:` (a couch address).
+-- between the operator and the agent named by `couch-owner:` (`owner:` is the legacy fallback).
 -- Pessimistic locking for the human, optimistic for the agent (#315): the
 -- operator's lock is the only lock. The sidecar `<file>.lock`:
 --   absent           free — the agent may write; a clean buffer follows its
@@ -50,7 +50,8 @@ local ns_group = "ParleySessionSync"
 -- probe), pinged (the LastWrite value last pinged; false when absent) }
 local state = {}
 
---- Frontmatter lines → { owner, operator } when `type: session-sync`, else nil.
+--- Frontmatter lines → normalized { owner, operator } for session-sync.
+--- This is the single owner accessor: couch-owner first, owner fallback.
 ---@param lines string[]
 ---@return table|nil
 M.parse_header = function(lines)
@@ -58,7 +59,7 @@ M.parse_header = function(lines)
 	if not fm or fm.fields.type ~= "session-sync" then
 		return nil
 	end
-	return { owner = fm.fields.owner, operator = fm.fields.operator }
+	return { owner = fm.fields["couch-owner"] or fm.fields.owner, operator = fm.fields.operator }
 end
 
 --- The lock sidecar's text for a holder (parley only writes "operator").
@@ -623,14 +624,14 @@ end
 
 local submit_now
 
---- <M-CR> in a session-sync file. `owner:` is a check, not a route (#316):
+--- <M-CR> in a session-sync file. `couch-owner:` is a check, not a route (#316):
 --- inside a pair slot, the file is submitted only when its owner is this
 --- slot's own agent. Outside pair there is no slot to compare, and the owner
 --- is sent to as before.
 M.submit = function(buf)
 	local h = header(buf)
 	if not h or not h.owner then
-		notify("no `owner:` in the frontmatter", vim.log.levels.ERROR)
+		notify("no `couch-owner:` (or legacy `owner:`) in the frontmatter", vim.log.levels.ERROR)
 		return
 	end
 	couch.own_slot(function(actors, own)
