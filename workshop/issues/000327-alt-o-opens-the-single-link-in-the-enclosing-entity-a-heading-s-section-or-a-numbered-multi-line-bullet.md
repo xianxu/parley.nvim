@@ -6,7 +6,7 @@ github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: '929685d8a8920098f3b1e5ce9dc228c7b4d77cf7' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '6f068ab476c4badcbf9eab04895c9ff62ccd08f9' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-14T20:54:49-07:00
 claimant:
     operator: Xian Xu
@@ -76,6 +76,10 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 - Plan handoff to hub used /tmp/parley327-plan-to-hub.md. Couch send b905c670-70d5-427e-9069-1dc581808f12 returned an uncertain timeout; receipt query said unavailable. Hub peek showed no confirmation. Do not treat delivery or design approval as established; no implementation/change-code yet. Earlier #324 landing report 52efaa47-22d0-48ce-a681-c1116592ebbd had the same uncertain/unavailable result; the proposed #327 handoff also records #324's verified landing and cleared stage. Follow Couch recovery, without blindly retrying unknown delivery.
 
+- Resumed #327 after #330 and #331 landed. Reclaimed its released branch, merged current main at integration 47aff671002a51456938f78004d386235b1a64cb, and reran start-plan. No implementation/change-code yet. The previous design approval remains unconfirmed; a new product-review handoff is being sent for this resumed work. Updated delivery instructions to worker-owned staging and mandatory live acceptance.
+
 ## Revisions
 
 - 2026-10-14 — initial design clarifies navigation-only range ownership, direct artifact priority, fenced-code exclusion, occurrence counting and stale-picker cancellation; existing URL/fragment destination policy is retained rather than broadening #327 into #323.
+
+- 2026-10-14 — resumption incorporates landed session-sync fixes; correct staging ownership/acceptance sequencing in the durable plan. No navigation scope change.

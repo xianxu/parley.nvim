@@ -114,7 +114,7 @@ Files: atlas/context/file_references.md and atlas/chat/entity_delete.md, atlas/t
 - [ ] Document entity lookup, ambiguity picker and priority in the existing navigation atlas and README; map every new test. Run make -k targeted tests plus luacheck/git diff --check.
 - [ ] Push PR and run `sdlc local-check run --name suite`; preserve/report every failure, including known packaging intermittency, without ending the remaining test run early.
 - [ ] Obtain boundary review through sdlc close; fix the complete class of any findings. No separate duplicate review.
-- [ ] Ask the hub to stage the reviewed candidate for the required real-editor Alt+o check; wait for operator confirmation if required by TL. Then integrate main, land on SHIP, clear stage and report the PR/verified merge hash to the hub.
+- [ ] Obtain hub approval to touch :0 unless already granted, then run sdlc stage --build from this worker slot for the required real-editor Alt+o check. Wait for the operator confirmation through the hub before landing. Then integrate main, land on SHIP, clear stage and report the PR/verified merge hash to the hub.
 
 ## Validation commands
 
@@ -125,3 +125,5 @@ Expected: red before new helpers/wiring; green after implementation, unchanged o
 ## Revisions
 
 - 2026-10-14 — initial plan. Navigation-only entity entry chosen over changing the existing entity-range dispatch for all text-object/delete consumers; both are viable, but the latter broadens the editing UX beyond this navigation request. Full flow expected because shared parsing, pure selection logic and editor integration exceed the 100-added-code-line quick shell; no artificial milestone split.
+
+- 2026-10-14 — resumed after #330 and #331 landed. Clarify worker-owned staging and mandatory real-editor acceptance before merge, following the current tl-worker contract. Navigation design is unchanged; approval remains pending.
