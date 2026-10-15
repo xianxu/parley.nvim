@@ -92,26 +92,26 @@ All selected paths still pass through existing expand_path/backtick refusal and 
 
 Files: modify lua/parley/entity_range.lua and lua/parley/issues.lua; create lua/parley/reference_candidates.lua; modify the two legacy pure parser wrappers in lua/parley/init.lua. Tests: tests/unit/entity_range_spec.lua, new tests/unit/reference_candidates_spec.lua, existing tests/unit/parse_at_reference_spec.lua and Markdown-link parser tests.
 
-- [ ] navigation_range: adversarial item/heading/fence/transcript boundaries, asserting containment and existing editing-range parity over every row.
-- [ ] markdown_links/at_references/branch_ref/collect: malformed and overlapping reference spans, asserting canonical byte spans, occurrence identity/order and fence exclusion; legacy parser wrappers retain existing characterization tests.
-- [ ] Run mapped entity/navigation/parser tests red; implement shared pure functions and derive old parser consumers; rerun existing range/text-object/delete parity and cursor-parser tests green.
-- [ ] Commit the pure ownership change with its tests.
+- [x] navigation_range: adversarial item/heading/fence/transcript boundaries, asserting containment and existing editing-range parity over every row.
+- [x] markdown_links/at_references/branch_ref/collect: malformed and overlapping reference spans, asserting canonical byte spans, occurrence identity/order and fence exclusion; legacy parser wrappers retain existing characterization tests.
+- [x] Run mapped entity/navigation/parser tests red; implement shared pure functions and derive old parser consumers; rerun existing range/text-object/delete parity and cursor-parser tests green.
+- [x] Commit the pure ownership change with its tests.
 
 ### 2. Opening and picker integration
 
 Files: modify lua/parley/init.lua; extend tests/integration/open_reference_spec.lua; unit-test picker completion in tests/unit/reference_candidates_spec.lua.
 
-- [ ] OpenFileUnderCursor: drive enclosing-entity versus direct-reference precedence through real editor state and temporary targets; assert exact selected destination and no forbidden fallback.
-- [ ] finish_selection: adversarial completion sequences against a value-based origin, asserting at most one effect and none after invalidation. artifact_ref.goto_ref_at_cursor: delay resolution and family selection across origin changes, asserting no stale or duplicate open.
-- [ ] Integrate the after-direct-reference branch with existing open helpers and resolver; avoid recursion and per-candidate IO. Preserve source-relative paths, missing-target diagnostics and Normal/Insert policy in chat and plain Markdown.
-- [ ] Run integration tests with the filesystem-backed fake_sdlc and temporary targets. Drive Alt+o with real child-Neovim input for heading and multi-line item. Verify picker cancellation leaves cursor/buffer untouched and no hidden fallback occurs.
-- [ ] Commit the integrated feature and tests.
+- [x] OpenFileUnderCursor: drive enclosing-entity versus direct-reference precedence through real editor state and temporary targets; assert exact selected destination and no forbidden fallback.
+- [x] finish_selection: adversarial completion sequences against a value-based origin, asserting at most one effect and none after invalidation. artifact_ref.goto_ref_at_cursor: delay resolution and family selection across origin changes, asserting no stale or duplicate open.
+- [x] Integrate the after-direct-reference branch with existing open helpers and resolver; avoid recursion and per-candidate IO. Preserve source-relative paths, missing-target diagnostics and Normal/Insert policy in chat and plain Markdown.
+- [x] Run integration tests with the filesystem-backed fake_sdlc and temporary targets. Drive Alt+o with real child-Neovim input for heading and multi-line item. Verify picker cancellation leaves cursor/buffer untouched and no hidden fallback occurs.
+- [x] Commit the integrated feature and tests.
 
 ### 3. Verification and delivery
 
 Files: atlas/context/file_references.md and atlas/chat/entity_delete.md, atlas/traceability.yaml, README.md, issue Log/Done when. Update these existing indexed atlas files; add no duplicate navigation page.
 
-- [ ] Document entity lookup, ambiguity picker and priority in the existing navigation atlas and README; map every new test. Run make -k targeted tests plus luacheck/git diff --check.
+- [x] Document entity lookup, ambiguity picker and priority in the existing navigation atlas and README; map every new test. Run make -k targeted tests plus luacheck/git diff --check.
 - [ ] Push PR and run `sdlc local-check run --name suite`; preserve/report every failure, including known packaging intermittency, without ending the remaining test run early.
 - [ ] Obtain boundary review through sdlc close; fix the complete class of any findings. No separate duplicate review.
 - [ ] Obtain hub approval to touch :0 unless already granted, then run sdlc stage --build from this worker slot for the required real-editor Alt+o check. Wait for the operator confirmation through the hub before landing. Then integrate main, land on SHIP, clear stage and report the PR/verified merge hash to the hub.
