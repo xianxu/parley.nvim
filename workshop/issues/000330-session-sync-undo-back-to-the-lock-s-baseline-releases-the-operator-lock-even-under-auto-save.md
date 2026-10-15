@@ -53,7 +53,7 @@ should release the lock if that `u` moves the file to a state of no change."
 - [x] Retain a rolling hash of attached buffer lines. At successful first-edit lock acquisition, freeze the previous (pre-edit) hash as this turn's baseline; saves never move it. Reload refreshes the rolling hash; submit/free clears the turn baseline. A pre-existing lock has no known baseline and cannot auto-release.
 - [x] Replace modified/mtime equality as the release predicate with baseline content equality. Keep the latest-edit token, reconcile foreign overwrite/deletion and undecided probes first; any violation retains the lock. If equality leaves unsaved baseline text, write it successfully before deleting the lock so an agent never observes a free turn with stale disk text.
 - [x] Native child-editor regressions: auto-save before attachment; dd/undo/redo after initial open and both reload paths; multi-step partial/full undo; explicit-save retention away from baseline and undo-to-baseline release; pending foreign overwrite/deletion/failed preservation and undecided checks. Assert baseline on disk and successful following agent reload after release.
-- [ ] Run make -k targeted session-sync tests and declared suite; close review, stage for operator acceptance, then land only after the live check.
+- [x] Run make -k targeted session-sync tests and declared suite; close review, stage for operator acceptance, then land only after the live check.
 
 ## Core concepts
 
@@ -91,3 +91,5 @@ ARCH-DRY/PURE: reuse native edit attachment and existing disk_changed/violation;
 ## Review log
 
 - Round 1: FIX-THEN-SHIP, but the ledger kept close unfinalized for one Important README finding; also two Minor plan corrections. Verified all three against source and corrected their full instance families. No runtime change; full-suite result remains applicable. Reviewer independently passed all 109 mapped tests.
+
+- Operator live acceptance relayed by TL (receipt 3d32dfc5-f05c-4832-a614-125bc0f5e9b8): "works as intended". All verification and staging complete; landing PR #237 is now explicitly authorized, then clear :0 stage.
