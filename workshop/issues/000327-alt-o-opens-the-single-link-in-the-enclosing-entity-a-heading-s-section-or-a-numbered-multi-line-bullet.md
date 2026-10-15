@@ -5,8 +5,8 @@ deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
-estimate_hours:
-card_mirror: '6f068ab476c4badcbf9eab04895c9ff62ccd08f9' # card fields mirrored from issue-cards; edit via sdlc
+estimate_hours: 2.424
+card_mirror: '1d647dd999b126756fc501c2fa9dd90b33b6c352' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-14T20:54:49-07:00
 claimant:
     operator: Xian Xu
@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: operator}
 ---
 
 # Alt+o opens the single link in the enclosing entity: a heading's section, or a numbered multi-line bullet
@@ -79,6 +80,24 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 - Resumed #327 after #330 and #331 landed. Reclaimed its released branch, merged current main at integration 47aff671002a51456938f78004d386235b1a64cb, and reran start-plan. No implementation/change-code yet. The previous design approval remains unconfirmed; a new product-review handoff is being sent for this resumed work. Updated delivery instructions to worker-owned staging and mandatory live acceptance.
 
 - TL approved the resumed full-flow design (Couch delivery 9c9ad248-287c-4ac9-9340-c8b4527dc3c0): navigation-only numbered ranges, shared scanner, direct-reference priority, guarded ambiguity picker, and existing zero-candidate fallback. Build, full suite and close review are authorized, followed by staging on parley.nvim:0. Hold landing for the operator's morning live check; :0 is on main at 41899819. Next: change-code plan-quality admission, then estimate and implementation. No implementation has started.
+
+## Estimate
+
+Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only; calibration source is marked stale, so figures remain provisional.
+
+Two focused Lua/Neovim concerns cover pure navigation/scanning and editor/picker integration; shared-parser refactoring, documentation and one close review are separate primitives. Existing entity/fence/opening libraries cover the work without new dependencies. Thorough approved APIs apply design ×0.2, familiar stack ×1.0, implementation ×0.4 per v3.1, and design buffer +15%. Chosen raw design/impl hours: Lua 2/1 and 2/1.5; refactor 0.6/0.35; docs 0.1/0.1; review 0.1/0.35.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.4
+item: lua-neovim design=0.4 impl=0.6
+item: cross-cutting-refactor design=0.12 impl=0.14
+item: atlas-docs design=0.02 impl=0.04
+item: milestone-review design=0.02 impl=0.14
+design-buffer: 0.15
+total: 2.424
+```
 
 ## Revisions
 
