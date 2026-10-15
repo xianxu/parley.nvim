@@ -38,6 +38,12 @@ function M.connect(parley, on_ready, on_cancel)
     end)
 end
 
+--- Whether a connection flow is still open: login settles only when its
+--- reopened model picker resolves, after the credential is written.
+function M.is_connecting(parley)
+    return connecting[parley or require('parley')] == true
+end
+
 --- Resolve account and model setup before a pending LLM action is prepared.
 function M.ensure_ready(parley, on_ready, on_cancel)
     local agent = (parley.agents or {})[(parley._state or {}).agent]

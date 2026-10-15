@@ -30,8 +30,20 @@ local function ready(proxy)
     assert(M.auth_is_private(auth, vim.fn.stdpath('data')), 'auth directory is not private')
 end
 
+local function is_float(win) return vim.api.nvim_win_get_config(win or 0).relative ~= '' end
+
+local function press(lhs, mode, what)
+    local map = vim.fn.maparg(lhs, mode, false, true)
+    assert(type(map.callback) == 'function', what)
+    map.callback()
+end
+
 local function ask(model, image)
     local p = require('parley')
+    -- A login settles through its reopened picker; dispatching before that lets
+    -- the picker open over the chat (#336).
+    assert(not require('parley.starter_onboarding').is_connecting(p),
+        'chat dispatch began while account connection was still open')
     -- This transport probe already selected a catalog model. Capture that
     -- choice through the same registration path as the interactive picker.
     p.register_live_agent({id = model})
@@ -75,7 +87,8 @@ local function ask(model, image)
     if image then
         assert(require('parley.assets').has_image(query.payload), 'request omitted clipboard image')
     end
-    return {response_nonempty = true, image_sent = image or false, managed_route = true}
+    return {response_nonempty = true, image_sent = image or false, managed_route = true,
+        chat_file = vim.fn.resolve(vim.api.nvim_buf_get_name(buf))}
 end
 
 function M.live_model(proxy)
@@ -116,15 +129,20 @@ function M.run(phase)
             vim.env.PARLEY_FAKE_MODE = 'healthy'
             vim.env.PARLEY_FAKE_LOGIN_MODE = nil -- login flags select the fixture's success path
             vim.cmd('ParleyProxy connect')
-            assert(vim.wait(1000, function() return vim.api.nvim_win_get_config(0).relative ~= '' end, 10),
-                'Connect did not open a floating picker')
-            vim.fn.maparg('<Down>', 'i', false, true).callback() -- skip live-section separator
-            local confirm = vim.fn.maparg('<CR>', 'i', false, true)
-            assert(type(confirm.callback) == 'function', 'provider picker has no Enter action')
-            confirm.callback() -- choose Claude through the common agent picker
+            assert(vim.wait(1000, is_float, 10), 'Connect did not open a floating picker')
+            press('<Down>', 'i', 'provider picker has no Down action') -- skip live-section separator
+            press('<CR>', 'i', 'provider picker has no Enter action') -- choose Claude through the common agent picker
             assert(vim.wait(30000, function()
                 return vim.fn.filereadable(root .. '/auth/claude-fake@example.com.json') == 1
             end, 20), 'guest fake managed login failed')
+            -- The credential file is not completion: a successful login settles
+            -- by reopening the model picker. Wait for that, then dismiss it as an
+            -- operator would, so it cannot open over the chat later (#336).
+            assert(vim.wait(30000, is_float, 10), 'login did not return to the model picker')
+            press('<Esc>', 'n', 'model picker has no Esc action')
+            assert(vim.wait(1000, function()
+                return not is_float() and not require('parley.starter_onboarding').is_connecting(p)
+            end, 10), 'model picker did not settle the connection')
             ready(proxy)
             local result = ask('gpt-5-codex', false)
             result.fake = true
