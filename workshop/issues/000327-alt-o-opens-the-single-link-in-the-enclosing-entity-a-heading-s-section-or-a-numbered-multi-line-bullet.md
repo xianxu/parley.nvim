@@ -116,6 +116,8 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 - 2026-10-15: after the verified Couch restart/resend prompt and an explicit registration-unavailable refusal, messaging recovered. Reverified the existing :0 stage at381c516d3597163b9727cdb855bd55e0a0e82ce1 and resent the staging report; receipt5451bd0c-ec8e-43ce-bd61-e22ba5d4b84b is submitted to ops:0. First Delivery checkbox is now complete. Still waiting for operator live acceptance before landing. The independent #332 contract discussion remains provisional; no #332 implementation or claim started.
 
+- 2026-10-15: TL live-acceptance/landing dispatch88dcb700-70d6-4e16-9de7-e7f017092dbb is verified submitted with matching sender, recipient and body. Operator confirms the real editor check: "yes this works". Authorized to land PR239 on SHIP, clear the :0 stage, then claim/plan #332. No further operator approval is outstanding for #327.
+
 ## Estimate
 
 Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only; calibration source is marked stale, so figures remain provisional.
