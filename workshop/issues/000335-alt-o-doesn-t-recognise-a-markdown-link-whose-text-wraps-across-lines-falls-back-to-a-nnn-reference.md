@@ -141,6 +141,13 @@ no errors and clean census (/tmp/parley-335-paragraph-final.log); whitespace
 passes. Positive list/chat-anchor spans remain supported. Atlas and lessons
 updated. Full verification rerun follows; production patch is 88 added lines.
 
+### 2026-10-15 — paragraph containment full verification
+
+Full make test exits 0 after BR-3 correction: all 433 files pass, zero lint
+warnings/errors in 732 files, clean process census
+(/tmp/parley-335-blocks-full.log). The mapped paragraph/direct-navigation
+regressions also pass. Ready for round 3 of the close review.
+
 ## Revisions
 
 ### 2026-10-15 15:30 — close review BR-1 and BR-2
