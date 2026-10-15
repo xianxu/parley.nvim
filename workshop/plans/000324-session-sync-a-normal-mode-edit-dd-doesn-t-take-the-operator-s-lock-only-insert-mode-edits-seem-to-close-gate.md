@@ -133,6 +133,74 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 1297e8d4ce147ffc6d477eed499d210353c35d8c
+        tracker_head: 31c6a5c2f1f2a59b17f8eb555f8820c42b9f0a8d
+        branch_point: dc5ac559cac017645cebce541af8e04625cd7b79
+        since: "2026-10-14T16:45:23-07:00"
+        until: "2026-10-14T20:07:39-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-14T16:45:23-07:00"
+              end: "2026-10-14T20:07:39-07:00"
+              began: "2026-10-14T16:45:23-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a13b56-32ec-7310-8650-104071939f2f
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: bfb6af84bc2c090b93446a6ebb07715f998cc9d8004e775a614575f8a6e6b773
+              started: "2026-10-14T16:54:39.906Z"
+              spawned: false
+              bytes: 8655967
+              windows:
+                - start: "2026-10-14T16:45:23-07:00"
+                  end: "2026-10-14T20:07:39-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 0.03128333333333334
+        cuts:
+            - dispatched: "2026-10-14T17:03:03-07:00"
+              finalized: "2026-10-14T17:06:40-07:00"
+              finalizing: false
+            - dispatched: "2026-10-14T20:00:58-07:00"
+              finalized: "2026-10-14T20:04:57-07:00"
+              finalizing: false
+      "n": 3
+      timestamp: "2026-10-14T20:15:41-07:00"
+      dispatched: "2026-10-14T20:08:23-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: The clean-release guard still reconciles foreign changes before release; all five preservation and undecided-check regressions pass.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: The shared lock helper awaits holder contents rather than path existence; native acquisition tests pass.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: Done when explicitly covers acquisition, reloads, damaged YAML, undo/redo, save retention, and foreign-change preservation.
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: session_sync_native_spec.lua:17–35 shares complete-payload readiness across notifications and file assertions. Restoring existence-only notification waits in a disposable checkout made all three foreign-change notification cases fail; pinned head passes.
+          round: 3
+        - id: BR-5
+          disposition: addressed
+          note: README.md:53–56 now documents silent undo release, redo acquisition, and save retention, linking to atlas/modes/session_sync.md:29–32 and 43–50.
+          round: 3
+      recipe: small-diff-review
+      isolation: fenced
+      reviewed: 1297e8d4ce147ffc6d477eed499d210353c35d8c
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#324 (boundary-review)
@@ -166,7 +234,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-5** [Important] `document-changed-user-interactions` (kind: defect) README update appears missing for clean-undo and redo turn handling
   atlas/modes/session_sync.md:29–32 introduces silent release on clean undo, reacquisition on redo, and save retention, but README.md has no change in the pinned range. The sole affected README entry is its Couch/session-sync paragraph at README.md:48–52. Add a concise explanation of these changed editing interactions, linking to the updated atlas.
 
+## Round 3 — 2026-10-14T20:15:41-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — The clean-release guard still reconciles foreign changes before release; all five preservation and undecided-check regressions pass.
+- BR-2 — addressed — The shared lock helper awaits holder contents rather than path existence; native acquisition tests pass.
+- BR-3 — addressed — Done when explicitly covers acquisition, reloads, damaged YAML, undo/redo, save retention, and foreign-change preservation.
+- BR-4 — addressed — session_sync_native_spec.lua:17–35 shares complete-payload readiness across notifications and file assertions. Restoring existence-only notification waits in a disposable checkout made all three foreign-change notification cases fail; pinned head passes.
+- BR-5 — addressed — README.md:53–56 now documents silent undo release, redo acquisition, and save retention, linking to atlas/modes/session_sync.md:29–32 and 43–50.
+
 ## Open findings
 
-- **BR-4** [Important] `await-complete-observable-state` (kind: defect) Native violation assertions still race notification-log contents
-- **BR-5** [Important] `document-changed-user-interactions` (kind: defect) README update appears missing for clean-undo and redo turn handling
+(none — every finding has been disposed)

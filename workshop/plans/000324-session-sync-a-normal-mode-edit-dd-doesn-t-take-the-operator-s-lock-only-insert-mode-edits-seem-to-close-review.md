@@ -187,3 +187,71 @@ findings:
 7. **Plan revision recommendations**
 
    Add a `## Revisions` entry establishing complete-payload polling for every cross-process readiness assertion, enumerating the three notification waits above. Include the README interaction update in the documentation completion step.
+
+---
+
+## Re-review — 2026-10-14T20:15:41-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 324 — session-sync: a normal-mode edit (dd) doesn't take the operator's lock; only insert-mode edits seem to |
+| repo | parley.nvim |
+| issue file | workshop/issues/000324-session-sync-a-normal-mode-edit-dd-doesn-t-take-the-operator-s-lock-only-insert-mode-edits-seem-to.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | dc5ac559cac017645cebce541af8e04625cd7b79..1297e8d4ce147ffc6d477eed499d210353c35d8c |
+| command | sdlc close --issue 324 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-14T20:15:41-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned implementation satisfies the revised editing contract. Both open findings are addressed, and no new defects were found. All 97 mapped tests and the full suite passed using external test scratch. Operator live-editor confirmation remains required before landing.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The clean-release guard still reconciles foreign changes before release; all five preservation and undecided-check regressions pass.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The shared lock helper awaits holder contents rather than path existence; native acquisition tests pass.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Done when explicitly covers acquisition, reloads, damaged YAML, undo/redo, save retention, and foreign-change preservation.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      session_sync_native_spec.lua:17–35 shares complete-payload readiness across notifications and file assertions. Restoring existence-only notification waits in a disposable checkout made all three foreign-change notification cases fail; pinned head passes.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      README.md:53–56 now documents silent undo release, redo acquisition, and save retention, linking to atlas/modes/session_sync.md:29–32 and 43–50.
+```
+
+1. **Strengths**
+   - Real child-Neovim input tests exercise all six edit kinds across open, watcher reload, and checktime reload.
+   - Clean release reuses the existing foreign-change preservation protocol.
+   - README, atlas, and test traceability reflect the changed interactions.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes:** All 97 mapped tests passed. BR-4 mutation testing produced three expected failures. Real Couch refused a write with exit 3 after `dd` acquired the lock and a save retained it. The full suite passed with `TEST_ENV_ROOT` outside the checkout; the default review `TMPDIR` caused scratch-placement failures. Lint reported zero warnings/errors, process census was clean, and disposable artifacts were removed.
+
+6. **Architectural notes:** **ARCH-DRY: pass**—existing lock and violation helpers are reused. **ARCH-PURE: pass**—the changed code handles editor/filesystem integration at the event boundary. **ARCH-PURPOSE: pass**—the implementation covers the revised contract and sweeps payload-readiness assertions. Core-concept classifications match the code.
+
+7. **Plan revision recommendations:** None. Retain the recorded operator-confirmation requirement before landing.

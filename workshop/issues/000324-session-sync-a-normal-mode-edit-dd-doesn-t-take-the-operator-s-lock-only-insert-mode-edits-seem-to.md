@@ -53,6 +53,7 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 ## Log
 
 ### 2026-10-14
+- 2026-10-14: closed — 97 targeted cases pass: 31 native real-input, 52 integration, 14 unit. Delayed empty-log fixture reproduced three BR-4 failures before the shared complete-payload helper; all positive cross-process waits now use that helper. BR-5 README interaction docs added. Foreign-change guard unchanged from full-suite-passing bce3f188 (2m23s, recorded success); full suite rerunning for final tests/docs head. Precise no-plan-check: TL requested parallel review; final Plan checkbox remains open for suite and mandatory operator live confirmation before merge. No other gates waived.; review verdict: SHIP
 
 - Claimed and started on a fresh main-based branch. Start-plan refreshed the private Ariadne substrate and required a rerun with its rebuilt binary; no product source changed.
 - Root-cause probes use a child Neovim with attached headless UI and real nvim_input, not synthetic autocmd dispatch. Body dd acquires, including after agent write/checktime reload. Header ggdd fires TextChanged and BufModifiedSet with modified=true, but M.is_session_sync=false because the edit removed the opening delimiter, so acquisition is skipped. dd then u fires both events with modified=false while the lock remains: callback has acquisition only, no clean-edit release.
