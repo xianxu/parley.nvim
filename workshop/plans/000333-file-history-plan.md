@@ -230,3 +230,17 @@ token cancels stale callbacks on close; Back consumes the token and observes the
 actual target synchronously if invoked before that callback. This supersedes the
 original no-async-callback statement for API initialization only. Cover different
 initial targets, identical-buffer parent ambiguity, and close-before-callback.
+
+### 2026-10-15 — BR-2 synchronous initialization revision
+
+Round 2 disposes BR-1 but rejects suppression until a scheduled seed: legitimate
+immediate file entries are lost. Remove deferred initialization entirely. A
+window with no inherited history ignores WinEnter's creation clone; BufEnter
+starts its own history synchronously and all subsequent entries are recorded.
+Back can also establish its currently displayed file as the root. For an API
+creation that does not enter a different buffer, history remains empty until a
+file-entry event or Back; no promise is made to retain creation-time clones.
+This follows the TL's EMPTY-history rule and supersedes the stronger final-buffer
+seeding promise introduced by the implementation, without suppressing later visits.
+Cover immediate API→edit→edit→Back, immediate Back, native splitting and close;
+keep the eight narrowed API cases and strict focused native inheritance tests.
