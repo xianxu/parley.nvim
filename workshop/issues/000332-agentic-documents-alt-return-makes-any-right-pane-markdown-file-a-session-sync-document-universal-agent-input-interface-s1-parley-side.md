@@ -5,8 +5,8 @@ deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
-estimate_hours:
-card_mirror: '9c4468c4ed58c358c791426f4cbb92cc8524f424' # card fields mirrored from issue-cards; edit via sdlc
+estimate_hours: 5.9075
+card_mirror: 'b189f5b9f50fdc780dec47c23145916f7413ce35' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T13:07:57-07:00
 claimant:
     operator: Xian Xu
@@ -83,6 +83,8 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 
 - Plan-quality round1 raised PQ-1 cross-editor migration ownership, PQ-2 test-strategy inventories, and Minor PQ-3 cleanup coverage. Refined the whole ownership/cleanup class: per-ID POSIX kernel lease spans execution/recovery, exact pending tuples cannot be replaced, process death releases ownership, retired inode acquisition is revalidated, and only lease-owned manifested temps are cleaned. A local runtime probe confirmed LuaJIT FFI exports flock; unsupported platforms refuse unsafe migration while ordinary editing remains available. Test plan is now one strategy per risky function, with real two-editor ordering and native triggers.
 
+- Plan-quality round2 returned CLEAN: PQ-1/PQ-2/PQ-3 all addressed, no new findings. Gate now asks for the estimate, so derive against v3.1/baseline-v3.1 after the design has cleared; no implementation yet.
+
 ## Revisions
 
 - 2026-10-15 — spell out agreed registry boundary and native rename/recovery work in the durable plan without changing the original S1 purpose. Explicit couch-owner is a route override per this issue, superseding #316 refusal only where that new requirement applies. Pending admission-failure policy requires TL review.
@@ -92,3 +94,29 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - 2026-10-15 — freeze callable boundaries and legacy/native-rename preflight from primary source; adopt the explicit temporary singleton setup for future conformance. Full design approved, ready for change-code plan-quality admission; estimate remains unset until it passes.
 
 - 2026-10-15 — PQ-1/PQ-2/PQ-3 refinement adds explicit cross-editor ownership and cleanup, and compresses test case prose into function strategies. Retains the approved purpose and editable offline policy.
+
+## Estimate
+
+Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only. Calibration source is marked stale, so figures remain provisional.
+
+The now-admitted plan decomposes into four focused Lua/Neovim concerns (pure lifecycle/replies, admission/edit-turn integration, filesystem migration, and native lease; the registry transport/fake/conformance is the API-integration primitive), one shared-writer/transport refactor, docs and one close review. Tests belong to each component, not an extra duplicate testing primitive. The real-API discovery item owns active isolated singleton bootstrap/CLI inspection only; the API-integration item owns the actual driver/fake implementation. Idle dependency/operator/machine-gate waits are excluded from the estimate.
+
+Raw table selections and discounts: lifecycle Lua1.5/1; registry API2/1.5; admission Lua3/1.5; migration Lua3/1.5; lease Lua1.5/1; refactor0.6/0.5; docs0.2/0.2; review0.2/0.5; API-discovery0/0.6 (design/implementation hours). Apply design×0.2 for the thorough approved/gate-cleared design. For the bounded native lease, the current kernel flock facility short-circuits hand-built ownership/recovery (library availability design×0.5 before spec discount); its symbol was probed locally. Existing Neovim/libuv helpers and the shared writer cover other concerns without new dependencies. Familiar current stack×1.0; v3.1 implementation×0.4; design buffer+15%.
+
+Design subtotal2.25 + buffer0.3375 + implementation3.32 =5.9075h.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.3 impl=0.4
+item: api-integration design=0.4 impl=0.6
+item: lua-neovim design=0.6 impl=0.6
+item: lua-neovim design=0.6 impl=0.6
+item: lua-neovim design=0.15 impl=0.4
+item: cross-cutting-refactor design=0.12 impl=0.2
+item: atlas-docs design=0.04 impl=0.08
+item: milestone-review design=0.04 impl=0.2
+item: real-api-discovery design=0 impl=0.24
+design-buffer: 0.15
+total: 5.9075
+```
