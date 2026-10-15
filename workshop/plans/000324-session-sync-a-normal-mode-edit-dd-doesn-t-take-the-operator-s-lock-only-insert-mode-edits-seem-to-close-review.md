@@ -91,3 +91,99 @@ findings:
    - Add a `## Revisions` entry requiring foreign overwrite/deletion reconciliation before clean release, with both regression cases.
    - Refresh Done-when with the enumerated revised behaviors.
    - Add kind/path/status columns identifying `M.attach` as modified INTEGRATION code.
+
+---
+
+## Re-review — 2026-10-14T20:04:57-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 324 — session-sync: a normal-mode edit (dd) doesn't take the operator's lock; only insert-mode edits seem to |
+| repo | parley.nvim |
+| issue file | workshop/issues/000324-session-sync-a-normal-mode-edit-dd-doesn-t-take-the-operator-s-lock-only-insert-mode-edits-seem-to.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | dc5ac559cac017645cebce541af8e04625cd7b79..bce3f188c7da771e2a7beac3e499e1ab4dcf7a2c |
+| command | sdlc close --issue 324 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-14T20:04:57-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The production fix passes all 97 mapped tests, and all three prior findings are addressed. Two Important gaps remain: new notification assertions repeat the readiness race, and README.md omits the new undo/redo turn behavior. Full-suite and operator confirmation remain pending as recorded in the plan.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      session_sync.lua:526–531 reconciles foreign changes before release. Removing this guard made all five new overwrite, deletion, preservation-failure, and undecided-check regressions fail; pinned head passes them.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      session_sync_native_spec.lua:15–20 polls for holder: operator. Delaying sidecar contents reproduced nil-holder failures with the old helper; the corrected helper waits for the contents.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The issue's Done when now explicitly covers acquisition before auto-save, reloads, damaged YAML, undo/redo, save retention, and foreign-change preservation. These criteria match the implementation and mapped tests.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: await-complete-observable-state
+    title: |
+      Native violation assertions still race notification-log contents
+    detail: |
+      tests/integration/session_sync_native_spec.lua:201–202 waits for sent_file existence and immediately matches its first line. Creating the fake sender's empty log and delaying its append by 100 ms makes all three violation cases fail with nil at line 202. This is the 2nd finding in family await-complete-observable-state. Earlier rounds fixed instances; state and enforce the rule that cross-process assertions await the complete expected payload. Enumeration: sent_file existence-only waits at lines 160, 197, and 201; line 201 serves overwrite, deletion, and unkeepable-overwrite cases. Use one shared notification-readiness helper throughout. ARCH-PURPOSE: sweep the family rather than only the lock helper.
+  - id: new
+    severity: Important
+    kind: defect
+    family: document-changed-user-interactions
+    title: |
+      README update appears missing for clean-undo and redo turn handling
+    detail: |
+      atlas/modes/session_sync.md:29–32 introduces silent release on clean undo, reacquisition on redo, and save retention, but README.md has no change in the pinned range. The sole affected README entry is its Couch/session-sync paragraph at README.md:48–52. Add a concise explanation of these changed editing interactions, linking to the updated atlas.
+```
+
+1. **Strengths**
+
+   - Acquisition runs before immediate auto-save and retains attached identity through damaged frontmatter.
+   - The release path reuses `disk_changed` and `violation`, including preservation failures and undecided checks.
+   - Real child-Neovim input tests cover all six edit kinds after open, watcher reload, and checktime reload.
+
+2. **Critical findings**
+
+   None.
+
+3. **Important findings**
+
+   The two findings above require complete notification-payload polling and a README update.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - `make -k test-spec SPEC=modes/session_sync`: 31 native, 52 integration, and 14 unit cases passed.
+   - Removing the BR-1 guard produced five expected regression failures.
+   - Delayed notification-log contents reproduced three readiness failures.
+   - Changed Lua files pass luacheck; range whitespace checks pass.
+   - Temporary mutations were restored; the checkout is clean. The full suite and live-editor confirmation were not verified in this review.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** existing locking and violation helpers are reused.
+   - **ARCH-PURE — pass:** changed entities are correctly classified as integration; no new pure entity requires IO.
+   - **ARCH-PURPOSE — flag:** notification waits leave enumerable siblings of the readiness family unresolved.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry establishing complete-payload polling for every cross-process readiness assertion, enumerating the three notification waits above. Include the README interaction update in the documentation completion step.

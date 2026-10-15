@@ -4,7 +4,8 @@
 -- one line `<to>|<first line of the message>` to `log_file`, writes its argv one per line to
 -- `argv_file` (whole, then renamed: specs poll for it) and the message alone
 -- to `log_file .. ".last"`. $FAKE_COUCH_SLEEP delays a send;
--- $FAKE_COUCH_EXIT fails it.
+-- $FAKE_COUCH_EXIT fails it. $FAKE_COUCH_LOG_DELAY exposes an empty log before
+-- appending the notification, to test complete-payload readiness across processes.
 local M = {}
 
 --- Write the fake into `root/bin/couch`; the caller puts `root/bin` on PATH.
@@ -18,6 +19,7 @@ function M.write(root, log_file, argv_file)
         '--session-sync) [ -n "$FAKE_COUCH_STATUS" ] || exit 2; printf "%s" "$FAKE_COUCH_STATUS"; exit 0;;',
         'esac',
         'if [ -n "$FAKE_COUCH_SLEEP" ]; then sleep "$FAKE_COUCH_SLEEP"; fi',
+        'if [ -n "$FAKE_COUCH_LOG_DELAY" ]; then : >> "' .. log_file .. '"; sleep "$FAKE_COUCH_LOG_DELAY"; fi',
         'printf "%s" "$4" > "' .. log_file .. '.last"',
         'printf "%s|%s\\n" "$2" "$(printf "%s\\n" "$4" | head -n 1)" >> "' .. log_file .. '"',
         'for a in "$@"; do printf "%s\\n" "$a"; done > "' .. argv_file .. '.tmp"',

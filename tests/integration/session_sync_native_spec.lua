@@ -12,11 +12,27 @@ describe("session-sync native edits", function()
     local function wait_for(code)
         assert.is_true(vim.wait(2000, function() return exec(code) end), code)
     end
+    -- A visible path may still be empty or partially written by the child.
+    -- Every positive file assertion waits for its complete expected payload.
+    local function payload(path, expected)
+        local observed
+        assert.is_true(vim.wait(2000, function()
+            local ok, lines = pcall(vim.fn.readfile, path, "b")
+            if not ok or lines[#lines] ~= "" then return false end
+            table.remove(lines) -- the terminating newline proves the last line arrived.
+            if not expected(lines) then return false end
+            observed = lines
+            return true
+        end), "expected complete payload missing: " .. path)
+        return observed
+    end
     local function locked()
-        assert.is_true(vim.wait(1000, function()
-            local ok, lines = pcall(vim.fn.readfile, file .. ".lock")
-            return ok and lines[1] == "holder: operator"
-        end), "complete operator lock missing")
+        payload(file .. ".lock", function(lines) return lines[1] == "holder: operator" end)
+    end
+    local function notified(kind)
+        return payload(sent_file, function(lines)
+            return #lines == 1 and lines[1]:find("ops:0|" .. kind .. ":", 1, true) == 1
+        end)
     end
     local function open(autosave, undo, slow_watch)
         exec([[
@@ -82,6 +98,7 @@ describe("session-sync native edits", function()
             vim.env.PATH = root .. "/bin:" .. vim.env.PATH
             vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
             vim.env.FAKE_COUCH_STATUS = nil
+            vim.env.FAKE_COUCH_LOG_DELAY = "0.1"
             vim.env.FAKE_COUCH_ACTORS = '{"Actors":[]}'
         ]], vim.fn.getcwd(), root)
     end)
@@ -157,7 +174,7 @@ describe("session-sync native edits", function()
         keys("dd"); locked()
         exec("require('parley.session_sync').submit(vim.api.nvim_get_current_buf())")
         assert.is_true(vim.wait(2000, function() return not exists() end))
-        assert.is_true(vim.wait(2000, function() return vim.uv.fs_stat(sent_file) ~= nil end))
+        notified("submitted")
         agent_reload()
         keys("dd"); locked()
         wait_for("return _G.pre_save_lock ~= nil")
@@ -185,21 +202,18 @@ describe("session-sync native edits", function()
             ]], change)
             wait_for("return not vim.bo.modified")
             if change == "overwrite" then
-                assert.is_true(vim.wait(1000, function()
-                    return vim.fn.filereadable(file .. ".clobbered") == 1
-                end), "foreign text was not preserved")
-                assert.equals("foreign agent text", vim.fn.readfile(file .. ".clobbered")[8])
-                assert.same(original, vim.fn.readfile(file))
+                local foreign = vim.deepcopy(original)
+                foreign[8] = "foreign agent text"
+                payload(file .. ".clobbered", function(lines) return vim.deep_equal(foreign, lines) end)
+                payload(file, function(lines) return vim.deep_equal(original, lines) end)
             elseif change == "delete" then
-                assert.is_true(vim.wait(1000, function() return vim.fn.filereadable(file) == 1 end), "deleted file was not restored")
-                assert.same(original, vim.fn.readfile(file))
+                payload(file, function(lines) return vim.deep_equal(original, lines) end)
             else
-                assert.is_true(vim.wait(1000, function() return vim.fn.filereadable(sent_file) == 1 end))
+                notified("session-sync violation")
                 assert.equals("foreign agent text", vim.fn.readfile(file)[8])
             end
             locked()
-            assert.is_true(vim.wait(1000, function() return vim.fn.filereadable(sent_file) == 1 end))
-            assert.matches("session-sync violation:", vim.fn.readfile(sent_file)[1], 1, true)
+            notified("session-sync violation")
         end)
     end
 
@@ -231,8 +245,10 @@ describe("session-sync native edits", function()
             assert.is_false(vim.fn.filereadable(file .. ".clobbered") == 1)
             assert.equals("unclassified foreign text", vim.fn.readfile(file)[8])
             exec("vim.cmd=real_cmd; vim.o.eventignore=''; vim.cmd('checktime')")
-            assert.is_true(vim.wait(1000, function() return vim.fn.filereadable(file .. ".clobbered") == 1 end))
-            assert.same(original, vim.fn.readfile(file))
+            local foreign = vim.deepcopy(original)
+            foreign[8] = "unclassified foreign text"
+            payload(file .. ".clobbered", function(lines) return vim.deep_equal(foreign, lines) end)
+            payload(file, function(lines) return vim.deep_equal(original, lines) end)
             locked()
         end)
     end

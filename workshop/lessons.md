@@ -486,4 +486,4 @@ oracle, and the mutation that would make the test fail.
 
 - Test the real event order when a pre-existing auto-save participates: synthetic BufModifiedSet before TextChanged hid the Normal-mode acquisition defect. Install the operator's callback first and drive child-Neovim input.
 - Every new ownership-release path must reconcile pending external effects through the existing preservation handler first, including overwrite, deletion, failed copy and undecided probes. Equality to a per-edit mtime does not establish equality to the loaded baseline.
-- Cross-process file existence is not readiness: await the complete holder bytes. A scheduler sentinel makes deferred-state assertions observe the transition rather than a lucky ordering.
+- Cross-process file existence is not readiness: enumerate every positive wait and await each complete expected payload (lock, notification, preserved/restored file), rather than fixing only the first helper. A scheduler sentinel makes deferred-state assertions observe the transition rather than a lucky ordering.

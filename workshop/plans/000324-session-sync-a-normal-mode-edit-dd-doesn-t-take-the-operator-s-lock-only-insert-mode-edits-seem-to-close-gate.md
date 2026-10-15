@@ -62,6 +62,77 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: bce3f188c7da771e2a7beac3e499e1ab4dcf7a2c
+        tracker_head: 31c6a5c2f1f2a59b17f8eb555f8820c42b9f0a8d
+        branch_point: dc5ac559cac017645cebce541af8e04625cd7b79
+        since: "2026-10-14T16:45:23-07:00"
+        until: "2026-10-14T20:00:23-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-14T16:45:23-07:00"
+              end: "2026-10-14T20:00:23-07:00"
+              began: "2026-10-14T16:45:23-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a13b56-32ec-7310-8650-104071939f2f
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: 7ce43b42ebe01aaec8adf85003ae5f60bd6c2199827a6899e387c0c91b10be7c
+              started: "2026-10-14T16:54:39.906Z"
+              spawned: false
+              bytes: 8273686
+              windows:
+                - start: "2026-10-14T16:45:23-07:00"
+                  end: "2026-10-14T20:00:23-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 0.03128333333333334
+        cuts:
+            - dispatched: "2026-10-14T17:03:03-07:00"
+              finalized: "2026-10-14T17:06:40-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-14T20:04:57-07:00"
+      dispatched: "2026-10-14T20:00:58-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: session_sync.lua:526–531 reconciles foreign changes before release. Removing this guard made all five new overwrite, deletion, preservation-failure, and undecided-check regressions fail; pinned head passes them.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: 'session_sync_native_spec.lua:15–20 polls for holder: operator. Delaying sidecar contents reproduced nil-holder failures with the old helper; the corrected helper waits for the contents.'
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: The issue's Done when now explicitly covers acquisition before auto-save, reloads, damaged YAML, undo/redo, save retention, and foreign-change preservation. These criteria match the implementation and mapped tests.
+          round: 2
+      findings:
+        - kind: defect
+          id: BR-4
+          severity: Important
+          title: Native violation assertions still race notification-log contents
+          detail: 'tests/integration/session_sync_native_spec.lua:201–202 waits for sent_file existence and immediately matches its first line. Creating the fake sender''s empty log and delaying its append by 100 ms makes all three violation cases fail with nil at line 202. This is the 2nd finding in family await-complete-observable-state. Earlier rounds fixed instances; state and enforce the rule that cross-process assertions await the complete expected payload. Enumeration: sent_file existence-only waits at lines 160, 197, and 201; line 201 serves overwrite, deletion, and unkeepable-overwrite cases. Use one shared notification-readiness helper throughout. ARCH-PURPOSE: sweep the family rather than only the lock helper.'
+          family: await-complete-observable-state
+          round: 2
+        - kind: defect
+          id: BR-5
+          severity: Important
+          title: README update appears missing for clean-undo and redo turn handling
+          detail: atlas/modes/session_sync.md:29–32 introduces silent release on clean undo, reacquisition on redo, and save retention, but README.md has no change in the pinned range. The sole affected README entry is its Couch/session-sync paragraph at README.md:48–52. Add a concise explanation of these changed editing interactions, linking to the updated atlas.
+          family: document-changed-user-interactions
+          round: 2
+      recipe: small-diff-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#324 (boundary-review)
@@ -80,8 +151,22 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Important] `acceptance-criteria-track-contract` (kind: defect) Done-when omits the newly introduced turn-release contract
   workshop/issues/000324-session-sync-a-normal-mode-edit-dd-doesn-t-take-the-operator-s-lock-only-insert-mode-edits-seem-to.md:33 retains only first-edit acquisition and Couch exit 3 despite the expanded Revisions and implementation. Family enumeration: missing acceptance criteria cover acquisition before auto-save, attached identity through damaged YAML, silent clean-undo and multi-step release, redo acquisition, explicit/automatic save retention, and preservation of foreign-write/deletion handling. Add these criteria so completion measures the full revised contract.
 
+## Round 2 — 2026-10-14T20:04:57-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — session_sync.lua:526–531 reconciles foreign changes before release. Removing this guard made all five new overwrite, deletion, preservation-failure, and undecided-check regressions fail; pinned head passes them.
+- BR-2 — addressed — session_sync_native_spec.lua:15–20 polls for holder: operator. Delaying sidecar contents reproduced nil-holder failures with the old helper; the corrected helper waits for the contents.
+- BR-3 — addressed — The issue's Done when now explicitly covers acquisition before auto-save, reloads, damaged YAML, undo/redo, save retention, and foreign-change preservation. These criteria match the implementation and mapped tests.
+
+### Raised
+
+- **BR-4** [Important] `await-complete-observable-state` (kind: defect) Native violation assertions still race notification-log contents
+  tests/integration/session_sync_native_spec.lua:201–202 waits for sent_file existence and immediately matches its first line. Creating the fake sender's empty log and delaying its append by 100 ms makes all three violation cases fail with nil at line 202. This is the 2nd finding in family await-complete-observable-state. Earlier rounds fixed instances; state and enforce the rule that cross-process assertions await the complete expected payload. Enumeration: sent_file existence-only waits at lines 160, 197, and 201; line 201 serves overwrite, deletion, and unkeepable-overwrite cases. Use one shared notification-readiness helper throughout. ARCH-PURPOSE: sweep the family rather than only the lock helper.
+- **BR-5** [Important] `document-changed-user-interactions` (kind: defect) README update appears missing for clean-undo and redo turn handling
+  atlas/modes/session_sync.md:29–32 introduces silent release on clean undo, reacquisition on redo, and save retention, but README.md has no change in the pinned range. The sole affected README entry is its Couch/session-sync paragraph at README.md:48–52. Add a concise explanation of these changed editing interactions, linking to the updated atlas.
+
 ## Open findings
 
-- **BR-1** [Critical] `reconcile-foreign-changes-before-release` (kind: defect) Clean undo bypasses outstanding foreign-write violation handling
-- **BR-2** [Important] `await-complete-observable-state` (kind: defect) The new lock assertion races the child process's sidecar write
-- **BR-3** [Important] `acceptance-criteria-track-contract` (kind: defect) Done-when omits the newly introduced turn-release contract
+- **BR-4** [Important] `await-complete-observable-state` (kind: defect) Native violation assertions still race notification-log contents
+- **BR-5** [Important] `document-changed-user-interactions` (kind: defect) README update appears missing for clean-undo and redo turn handling

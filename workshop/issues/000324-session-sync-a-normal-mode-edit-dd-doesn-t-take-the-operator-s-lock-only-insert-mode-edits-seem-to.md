@@ -34,7 +34,7 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 - The same first-edit protection works on open, immediately after watcher or checktime reload, and after submit → agent write → reload; temporary YAML damage does not revoke attached identity.
 - Clean undo and multi-step undo release silently without submit or owner notification; redo away from disk takes the turn again. Explicit and automatic saves retain the turn until submit.
 - Clean release reconciles pending foreign overwrite/deletion through the existing violation protocol: preserve foreign bytes in .clobbered, restore deletion, keep the operator copy/turn, and never overwrite an unkeepable foreign copy.
-- Native input tests await complete sidecar contents; targeted tests, declared full suite, boundary review and operator live-editor confirmation pass before landing.
+- Native input tests await complete cross-process payloads (locks, notifications, preserved/restored files); targeted tests, declared full suite, boundary review and operator live-editor confirmation pass before landing.
 
 ## Core concepts
 
@@ -69,6 +69,10 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 - Revised targeted run: 31 native-input + 52 existing integration + 14 unit cases passed; lint clean. Foreign-violation native tests capture vim.notify so its default long-warning hit-enter UI cannot block the RPC test driver; owner messages/preserved bytes/turn are asserted independently. Added a scheduler sentinel to the undecided-check assertions for final full-suite verification.
 - The earlier full suite ran every file and failed only two existing auto-save submit waits (session_sync_spec.lua:329 and :368). Targeted reruns have passed those cases; no cause claimed. Preserved the original recorded failure log at .git/sdlc/local-checks/5e88129b3b1156fd61063567e308a814b7ae37a9/suite.log and added shared failure diagnostics (sent lines, argv, lock, modified) without increasing the timeout, so any recurrence is inspectable.
 
+- Full suite on bce3f188 passed in 2m23s with clean process census and recorded sdlc-local/suite success. Earlier async-submit failures did not recur; their diagnostics remain in the shared helper. Round 2 verified all BR-1/2/3 fixes and raised only BR-4 payload readiness and BR-5 README interaction coverage.
+- BR-4 red/green: fake sender now can create an empty log, delay 100 ms, then append. With the old notification waits, all three foreign-change notification cases failed; one shared newline-terminated expected-payload helper now serves lock, submit/violation notification, preserved foreign-file and restored-file waits. Absence checks and synchronous fixture reads are the explicit exclusions. Final mapped run passes 31 native + 52 integration + 14 unit cases; changed test Lua lint clean.
+- BR-5: README's existing session-sync paragraph documents first-edit protection, clean undo, redo, and save retention, with the atlas link. No new product command or setting.
+
 ## Revisions
 
 - 2026-10-14 — add (operator): **undo back to the lock releases it.** If the operator undoes back to the point where their edit took the lock, the buffer equals the file on disk again (not modified), so release the operator lock without a submit and without telling the owner. Criterion: on TextChanged/BufModifiedSet, `&modified` is false (content matches disk), not an undo-sequence comparison, so redo, retyping the same text, or an undo through several changes all behave. Same autocmd as the first-edit fix, so it belongs in this issue. Test: dd → u releases; dd → x → u → u releases; dd → u → Ctrl-r takes it again.
@@ -84,3 +88,5 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 - 2026-10-14 — TL requested verification ordering change: run the close review while suite/smoke are pending; retain both as mandatory pre-landing conditions. Scope and Done when unchanged.
 
 - 2026-10-14 — review round 1 (BR-1/2/3): enumerate the single clean-release site against foreign overwrite, deletion, and copy-preservation failure; reconcile through disk_changed/violation before release. Await complete lock bytes in the one shared test helper. Expand Done when for all revised behaviors and describe Core concepts with kind/path/status. Stale :0 stage cleared pending fixes. Full suite failed only session_sync_spec.lua in two auto-save submission assertions; keep the failure evidence and investigate independently.
+
+- 2026-10-14 — review round 2: BR-1/2/3 verified addressed (review mutation-tested all five foreign-change cases). BR-4 repeats the complete-payload readiness family: enumerate every positive filesystem wait in the native spec — lock helper; submit notification; overwrite/deletion/unkeepable violation notification; .clobbered preservation; restored original file; resumed undecided-check preservation. Replace all with one payload helper; absence checks remain absence checks. Add a fake-writer delay after empty log creation to keep the reproduced race covered. BR-5: document changed undo/redo/save interaction in README's existing session-sync paragraph.
