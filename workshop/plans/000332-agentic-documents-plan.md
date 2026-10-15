@@ -30,16 +30,18 @@ This slice includes moving an existing sibling `<stem>.side/` and its parent bac
 
 | Entity | Kind | Location | Status |
 |---|---|---|---|
-| Document lifecycle and registry reply | PURE | lua/parley/document_session.lua | new |
-| Migration/backlink projection | PURE | lua/parley/document_move_plan.lua | new |
-| Couch process transport | INTEGRATION | lua/parley/couch.lua | modified |
-| Registry client | INTEGRATION | lua/parley/document_registry.lua | new |
-| Agentic buffer coordinator and bounded known-path cache | INTEGRATION | lua/parley/agentic_document.lua | new |
-| File/side migration and journal | INTEGRATION | lua/parley/document_move.lua | new |
-| Cross-editor operation lease | INTEGRATION | lua/parley/document_lease.lua | new |
-| Shared edit turn | INTEGRATION | lua/parley/session_sync.lua | modified |
-| Atomic byte writer | INTEGRATION | lua/parley/helper.lua | modified |
-| Stateful registry fake | INTEGRATION | tests/helpers/fake_couch.lua | modified |
+| `classify_reply`, `new` — lifecycle and registry reply model | PURE | `lua/parley/document_session.lua` | new |
+| `project`, `rewrite_parent`, `side_path`, `is_markdown_path` — migration, filenames and backlink projection | PURE | `lua/parley/document_move_plan.lua` | new |
+| `run` — raw Couch process transport | INTEGRATION | `lua/parley/couch.lua` | modified |
+| `request`, `shutdown` — typed registry client and request lifetime | INTEGRATION | `lua/parley/document_registry.lua` | new |
+| `attach`, `identity`, `status`, `recheck`, `submit`, `detach`, `move_membership`, `move_path` — buffer admission and known-path cache | INTEGRATION | `lua/parley/agentic_document.lua` | new |
+| `begin`, `advance`, `pending`, `recover` — file migration and journal recovery | INTEGRATION | `lua/parley/document_move.lua` | new |
+| `acquire` — cross-editor operation lease | INTEGRATION | `lua/parley/document_lease.lua` | new |
+| `attach`, `identity`, `is_session_sync`, `detach`, `acquire_observed` — stable attachment and observed edits | INTEGRATION | `lua/parley/session_sync.lua` | modified |
+| `prepare_submit`, `send_registered`, `release_if_baseline` — shared save, send and turn release | INTEGRATION | `lua/parley/session_sync.lua` | modified |
+| `begin_move`, `install_move_lock`, `finish_move`, `abort_move`, `restore_move` — turn-preserving migration handoff | INTEGRATION | `lua/parley/session_sync.lua` | modified |
+| `write_file_atomic`, `table_to_file_atomic` — atomic byte writer and JSON wrapper | INTEGRATION | `lua/parley/helper.lua` | modified |
+| `write` — stateful executable registry fake | INTEGRATION | `tests/helpers/fake_couch.lua` | modified |
 
 The lifecycle owns one identity per buffer incarnation and one operation token at a time; registry ID is authoritative across paths. The coordinator owns the model and executes returned effects. The edit-turn engine receives a confirmed identity/path/owner and preserves its existing content baseline. Migrations reference that same ID and never re-register NEW as a new document after uncertainty. Pure projections receive path observations and text as values, with no editor/fs mocks. Filesystem and subprocess implementations sit behind explicit adapters; production and tests share them (ARCH-PURE/ARCH-MOCK).
 
@@ -149,10 +151,10 @@ Crash recovery journals live under configured state_dir, partitioned by the sele
 
 Files: new document_session.lua, document_move_plan.lua, document_lease.lua and document_registry.lua; modify couch.lua and tests/helpers/fake_couch.lua. Tests: new unit document_session/document_move_plan specs, integration document_lease/document_registry specs; existing couch_spec.
 
-- [ ] Write the named function-strategy tests and observe expected missing-feature reds; record evidence before implementation.
-- [ ] Implement the pure controllers/projections and the one process seam, lease and typed client; preserve existing send/query characterization.
-- [ ] Extend the process fake with persisted identity/ledger state and controlled outcomes while preserving the current send-only log/env contract. Unknown verbs refuse.
-- [ ] Run focused model/client/lease tests green and commit the coherent change.
+- [x] Write the named function-strategy tests and observe expected missing-feature reds; record evidence before implementation.
+- [x] Implement the pure controllers/projections and the one process seam, lease and typed client; preserve existing send/query characterization.
+- [x] Extend the process fake with persisted identity/ledger state and controlled outcomes while preserving the current send-only log/env contract. Unknown verbs refuse.
+- [x] Run focused model/client/lease tests green and commit the coherent change.
 
 ### 2. Admission and existing turn integration
 
@@ -198,3 +200,11 @@ ARCH-FUNERAL: per-buffer models, barriers, callbacks and handles die on wipeout;
 - 2026-10-15 — verified TL approval f96cd3f0-f712-4ed6-917f-eb348dc75b8c. Bounded read-only peer-source exploration resolves typed legacy adoption and supported isolated singleton setup; do not wait on a queued peer answer to rediscover explicit source behavior. The executable and real integration remain unverified until pair#573 is ready. Freeze callable boundaries and pre-register a typed OLD before native rename; a failed preflight blocks only that unsafe migration, never ordinary editing.
 
 - 2026-10-15 — plan gate PQ-1/PQ-2/PQ-3: define cross-editor execution/recovery ownership with a kernel advisory lease and exact-tuple rejection, replace test inventories with named adversarial function strategies, and correct the false recursive-cleanup assumption using lease-owned temp manifests. Include the native backend/unsupported failure policy and real two-editor tests. Also distinguish journal review exclusion from the any-Markdown pane submit requirement. No implementation yet.
+
+- 2026-10-15 21:08 UTC — architecture guard alignment after the mapped keybindings check found unnamed exported functions: expand the Core-concepts tables from module descriptions to the implemented public symbols and their module paths. This makes both code-to-table and table-to-definition sweeps cover the delivered surface; no feature or scope change.
+
+- 2026-10-15 — keep the exported-function catalog authoritative in this durable plan; the issue table names modules and links here. Duplicating both catalogs made the reverse-definition guard run the same filesystem searches twice and hit its50s deadline; one representative grep took0.82s. The unchanged guard passes with one catalog. Also correct the implementation's accidental lowercase.md admission restriction: reuse Parley's existing Markdown classifier, the assets filename classifier for child files, and one shared side-path helper. Registered parent identity supplies the move's admission proof; .markdown, uppercase extensions and extensionless Markdown buffers retain their actual stems. The original any-Markdown scope is unchanged.
+
+### 2026-10-15 — Public mover ordering
+
+The actual move_chat and move_chat_tree doors accept ordinary Markdown and rename OLD before native buffer-name hooks run, with no subsequent write required. Route registered non-chat documents through the same durable migration executor before filesystem effects. Persist an owned-parent-rename intent, use atomic no-replace rename, and recover by captured inode/hash proof; native saveas retains its separate successful-write witness. Preflight tree membership before moving siblings. Regression tests exercise both real public doors, free and held locks, side/backlink preservation and restart cutpoints (ARCH-DRY, ARCH-MOCK).

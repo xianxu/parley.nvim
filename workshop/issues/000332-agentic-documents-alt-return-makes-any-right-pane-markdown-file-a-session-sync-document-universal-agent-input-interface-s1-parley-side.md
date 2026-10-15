@@ -51,21 +51,23 @@ at its first Alt+Return.
 
 | Entity | Kind | Location | Status |
 |---|---|---|---|
-| Document lifecycle/reply model | PURE | lua/parley/document_session.lua | new |
-| Migration/backlink projection | PURE | lua/parley/document_move_plan.lua | new |
-| Registry transport/client | INTEGRATION | lua/parley/couch.lua, lua/parley/document_registry.lua | modified/new |
-| Buffer admission and file migration | INTEGRATION | lua/parley/agentic_document.lua, lua/parley/document_move.lua | new |
-| Existing turn engine | INTEGRATION | lua/parley/session_sync.lua | modified |
-| Cross-editor operation lease | INTEGRATION | lua/parley/document_lease.lua | new |
-| Atomic byte writer | INTEGRATION | lua/parley/helper.lua | modified |
-| Stateful registry fake | INTEGRATION | tests/helpers/fake_couch.lua | modified |
+| `document_session` — lifecycle and registry reply model | PURE | `lua/parley/document_session.lua` | new |
+| `document_move_plan` — migration and backlink projection | PURE | `lua/parley/document_move_plan.lua` | new |
+| `couch` — shared process transport | INTEGRATION | `lua/parley/couch.lua` | modified |
+| `document_registry` — typed registry client | INTEGRATION | `lua/parley/document_registry.lua` | new |
+| `agentic_document` — buffer admission and known-path cache | INTEGRATION | `lua/parley/agentic_document.lua` | new |
+| `document_move` — leased migration and recovery | INTEGRATION | `lua/parley/document_move.lua` | new |
+| `document_lease` — kernel ownership | INTEGRATION | `lua/parley/document_lease.lua` | new |
+| `session_sync` — shared edit-turn engine | INTEGRATION | `lua/parley/session_sync.lua` | modified |
+| `helper` — checked byte and JSON writers | INTEGRATION | `lua/parley/helper.lua` | modified |
+| `fake_couch` — stateful executable fake | INTEGRATION | `tests/helpers/fake_couch.lua` | modified |
 
 ## Plan
 
 Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-plan.md).
 
-- [ ] Add the pure lifecycle/reply model, shared transport, typed registry client and stateful fake with red/green coverage.
-- [ ] Integrate first-submit/reopen admission with the existing native edit-turn engine and real Alt+Return routing.
+- [x] Add the pure lifecycle/reply model, shared transport, typed registry client and stateful fake with red/green coverage.
+- [x] Integrate first-submit/reopen admission with the existing native edit-turn engine and real Alt+Return routing.
 - [ ] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
 - [ ] Add isolated real/fake conformance, docs/traceability and required checks; close on SHIP, then stage for the combined live check before landing.
 
@@ -86,14 +88,17 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 
 - Plan-quality round2 returned CLEAN: PQ-1/PQ-2/PQ-3 all addressed, no new findings. Gate now asks for the estimate, so derive against v3.1/baseline-v3.1 after the design has cleared; no implementation yet.
 
-## Revisions
-
 ### Implementation evidence (2026-10-15)
 
 - change-code admitted the full design at3859cf1f after CLEAN plan-quality and informational estimate review. Pair's submitted answer a6560099 confirms legacy adoption/pre-register-OLD and isolated public adopt-store bootstrap. Implementing with executing-plans and bounded pure-model, lease, writer and migration tasks.
 - Observed missing-feature REDs before implementation. Focused GREEN: lifecycle11, lease9 (real two-editor/process-death/inode races), registry3, Couch5, move projection8, helper IO57. Native registered plain dd/x/p/u/dot acquire before existing auto-save; observed clean auto-saves retain their pre-edit baseline. Initial admission4 cases pass, including native saveas with side/backlinks; corrupt-cache and reopened-journal recovery regressions are being added.
 - Ran python3 scripts/check-couch-registry-conformance.py --couch /Users/xianxu/workspace/worktree/pair-slot5/pair/bin/couch: real and stateful fake pass the production Lua registry transport's register/lookup/replay/filesystem+metadata rename/conflicts/null checks; malformed/unsupported fake cases pass; deliberately corrupted fake is rejected. Candidate reports revision49c3285c847133f6f10005c12fee584bac30989a with modified build flag. This is isolated candidate evidence, not pair#573 landing or operator acceptance.
 - Migration tests found a foreign backlink edit during replacement preparation and malformed persisted witnesses. Their REDs were observed; fixes now pass those regressions. No suite/close/stage/landing claim yet.
+
+- Editor/runtime verification: admission11, native input/turn/recovery60, migration14, model18 and review-send18 pass. Added real-process restart recovery of lock/baseline proofs, synthetic free-turn protection through metadata publication, safe no-effect return after a refused native target, canonical-alias cancellation, edited in-flight registration confirmation without resend, and owner confirmation after save. Corrupt caches remain editable. Known-null/replaced registry identity goes through turn reconciliation before detachment; existing locks are retained.
+- Broader mapped checks found three architecture guard failures (exported function names missing in Core-concepts rows; reverse-definition selection consequently empty; a local fence regex) and five obsolete assertions against the fake's persisted fallback Owner. Corrected the entire table/parser ownership class and made tests assert effective Owner via the production lookup API. The review mapping passes, the session-sync behavioral spec now passes all58 cases, and the shared writer57/lease9/projection9 focused rerun passes. Keybinding/architecture rerun is in progress; full suite and close remain pending.
+
+## Revisions
 
 - 2026-10-15 — spell out agreed registry boundary and native rename/recovery work in the durable plan without changing the original S1 purpose. Explicit couch-owner is a route override per this issue, superseding #316 refusal only where that new requirement applies. Pending admission-failure policy requires TL review.
 
@@ -128,3 +133,5 @@ item: real-api-discovery design=0 impl=0.24
 design-buffer: 0.15
 total: 5.9075
 ```
+
+- 2026-10-15 — continued implementation verification: model18, registry7, lease9, Couch5, native edit-turn60, existing session-sync58, review-send18 and focused architecture25 checks pass; mapped keybindings exposed a duplicated documentation catalog timeout, corrected by keeping the symbol catalog in the durable plan (unchanged guard passes). Isolated production-client conformance passes against the unlanded pair candidate and the stateful fake, including the deliberately corrupted negative control. Native migration19/projection15 checks passed before extending actual Parley mover coverage. Actual public movers accept ordinary Markdown and rename before native hooks, requiring owned-file journal effects; executor RED observed (21 pass/7 expected failures). Initial public-door fixture itself errored on a private setup helper and is being corrected before claiming behavior evidence. Full suite, mandatory close review, stage and live acceptance remain pending.
