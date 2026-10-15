@@ -30,3 +30,5 @@ A deterministic regression or controlled scheduling reproduces the failure, the 
 ## Log
 
 First-seen head: b6c67239f20e820d85bf4144671f5c7cb8f98152. Command: make -k test-integration, after the required suite stopped at unit failures. Log: /tmp/parley332-full-remainder.log, packaging_vm_spec section, test line167, generated fake-chat.lua line10: guest chat file escaped isolated profile. Observed16pass/1fail, exit1. Unchanged command make -k test-spec SPEC=scratch MAP_FILE=/tmp/parley332-vm-map.yaml passed17/0; log /tmp/parley332-packaging-vm-repro.log. The failed combined remainder has four other named #332 failure classes, independently fixed; this flake had no packaging source changes.
+
+- 2026-10-15 — reproduced in a second complete required suite, now on e9a1622d2102e71e66dc44d3a0dacb70e9921f92. Same packaging_vm_spec.lua:167 / generated fake-chat.lua:10 assertion,16pass/1fail. All other test files passed; lint745files clean. Durable log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/894c995da011381b869a9bd450c9545b.log. This blocks #332 close/staging; no rerun waiver. Cause remains unproven.
