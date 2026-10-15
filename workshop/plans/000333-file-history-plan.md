@@ -106,19 +106,19 @@ Files: create `lua/parley/file_history.lua` and
 `lua/parley/keybinding_registry.lua`, `lua/parley/config.lua`, and
 `tests/unit/keybindings_spec.lua`.
 
-- [ ] Write failing real-editor tests. Seed a session Markdown file with an answer
+- [x] Write failing real-editor tests. Seed a session Markdown file with an answer
   link and an answer with a side-doc link, follow both with remappable Alt+o,
   move inside each file, then press Alt+Shift+O twice and assert file and cursor.
-- [ ] Cover gf, edit, nvim_win_set_buf as picker entry, independent splits, focus
+- [x] Cover gf, edit, nvim_win_set_buf as picker entry, independent splits, focus
   changes, same-file jumps, scratch and floating windows, branch-after-Back,
   deleted targets, unsaved-buffer refusal/retry, clamped cursors, and repeated setup.
-- [ ] Implement setup with departure snapshots (BufLeave/WinLeave), visits
+- [x] Implement setup with departure snapshots (BufLeave/WinLeave), visits
   (BufEnter/WinEnter), WinClosed cleanup, and seed existing editing windows.
-- [ ] Implement back using the pure model and guarded native switching in the
+- [x] Implement back using the pure model and guarded native switching in the
   current window. Use the actual target after the switch as the success oracle.
-- [ ] Add global file_back registry/config entry (<M-O>, n/i), FileBack command,
+- [x] Add global file_back registry/config entry (<M-O>, n/i), FileBack command,
   callback and help. Verify custom prefix/key and disabled/default mapping policy.
-- [ ] Run `make test-spec SPEC=ui/keybindings`; confirm the original absence and
+- [x] Run `make test-spec SPEC=ui/keybindings`; confirm the original absence and
   removal of history recording or back suppression makes the relevant cases fail.
 
 ## Task 3 — documentation, full verification and landing
@@ -127,14 +127,14 @@ Files: README.md, atlas/ui/keybindings.md, atlas/index.md (if adding a new atlas
 page), atlas/traceability.yaml, generated help through its established generator,
 workshop/lessons.md for findings.
 
-- [ ] Document the key, command, scope, bounds, root/no-op and error behavior.
+- [x] Document the key, command, scope, bounds, root/no-op and error behavior.
   Regenerate help with the existing script; do not hand-edit generated output.
-- [ ] Run targeted suite and lint; stage explicit paths and commit.
+- [x] Run targeted suite and lint; stage explicit paths and commit.
 - [ ] Run `make test` in the background; record exit/count/no-survivor evidence.
   Run vocabulary freshness and range whitespace checks required by the repo.
-- [ ] Tick issue/plan rows, checkpoint evidence and run `sdlc close --issue 333`
+After verification, tick issue/plan rows, checkpoint evidence and run `sdlc close --issue 333`
   with measured actuals and concrete verification. Address findings until SHIP.
-- [ ] `sdlc pr`, check the exact head's CI, `sdlc merge --yes`; confirm landing,
+Then run `sdlc pr`, check the exact head's CI, `sdlc merge --yes`; confirm landing,
   clean resting slot, and send the hub the PR and outcome. The close gate owns
   cross-project completion updates; do not edit the ops project concurrently.
 
