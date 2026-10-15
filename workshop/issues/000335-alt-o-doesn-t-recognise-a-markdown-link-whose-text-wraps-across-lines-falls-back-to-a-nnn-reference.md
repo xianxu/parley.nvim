@@ -50,7 +50,7 @@ that. A link with a line break inside its text is valid CommonMark, and agents' 
 
 - [x] Add failing headless tests for wrapped labels under the cursor and in entity/picker scans, including nested references, byte positions, invalid links and scan boundaries.
 - [x] Reuse the existing Markdown pattern through one pure multiline scanner; carry full spans and destination row/column through both consumers (ARCH-DRY, ARCH-ORDER).
-- [ ] Document the corrected navigation behavior; run mapped and full verification before SDLC close and land on SHIP.
+- [x] Document the corrected navigation behavior; run mapped and full verification before SDLC close and land on SHIP.
 
 ## Core concepts
 
@@ -97,3 +97,12 @@ changing the issue branch or any checkout. Isolated reruns pass all 25 architect
 and 17 packaging cases (/tmp/parley-335-architecture-packaging.log); the packaging
 test/implementation were untouched. Clean process censuses. Retrying the full
 suite; /tmp/parley-335-full.log retains the first failure evidence.
+
+### 2026-10-15 — full verification passes
+
+Full retry exits 0: all 433 test files pass, lint reports zero warnings/errors
+in 732 files, and the final process census is clean
+(/tmp/parley-335-full-retry.log). Both architecture and packaging VM cases pass
+in this full run. Mapped reference tests, check-vocabulary and git diff --check
+also pass. Actual-time measurement succeeds; close can adopt measured hours
+without a waiver. Ready for the single quick-flow boundary review.
