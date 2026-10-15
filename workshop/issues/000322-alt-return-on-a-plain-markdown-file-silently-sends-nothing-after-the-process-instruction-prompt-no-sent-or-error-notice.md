@@ -1,12 +1,12 @@
 ---
 id: 000322
-status: open
+status: wontfix
 deps: []
 github_issue:
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-15
 estimate_hours:
-card_mirror: 'e982489459a2f8006b78c461c3ef49cc31d9a866' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd56be9bc35ab53437810cc616f9baee33d34518c' # card fields mirrored from issue-cards; edit via sdlc
 ---
 
 # Alt+Return on a plain markdown file silently sends nothing after the process-instruction prompt (no 'sent' or error notice)
@@ -17,9 +17,13 @@ card_mirror: 'e982489459a2f8006b78c461c3ef49cc31d9a866' # card fields mirrored f
 
 ## Spec
 
+Covered by #332: Couch-pane Alt+Return saves, registers and submits named Markdown without prompting for process instructions; it shows completed submission owner/time or an explicit visible error. No separate implementation remains on this duplicate card.
+
 Every Alt+Return ends with exactly one visible outcome: `review: sent to <slot>`, a named error (cannot resolve this slot; couch unavailable; save failed), or, outside pair, an explicit "no slot: running the review here". Find the actual path on the operator's setup (ops:0's right pane, Couch with several hubs since pair#546) and fix the resolution if it's wrong there.
 
 ## Done when
+
+The parent #332 owns implementation, verification, review, staging/live acceptance and landing. This duplicate is closed as superseded; it does not claim the parent has landed.
 
 - Reproduced with a test of the prompt → placement → resubmit path; each branch of `own_slot` notifies.
 - In ops:0's right pane, Alt+Return on a plain markdown file reaches ops:0 (`review: sent to ops:0`).
@@ -30,4 +34,12 @@ Every Alt+Return ends with exactly one visible outcome: `review: sent to <slot>`
 
 ## Log
 
+- 2026-10-15 — operator requested folding this into #332. Its feedback implementation passes18 production-door admission cases and64 native edit cases, including first-submit success and pre-attachment/attached error visibility. Close this duplicate as superseded by #332; remaining suite, review and operator acceptance stay on the parent.
+
 ### 2026-10-14
+
+## Revisions
+
+### 2026-10-15 — Superseded by #332 at operator request
+
+The requested Couch-pane workflow now uses save→register→submit rather than the original process-instruction prompt→placement→resubmit route. #332 owns visible owner/time success and visible errors, plus the remaining combined live check. Preserve the original report and acceptance text as evidence; close this card as a superseded duplicate, not as a claim that its original prompt route or outside-pane flow was newly implemented.
