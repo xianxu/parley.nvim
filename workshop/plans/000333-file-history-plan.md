@@ -20,6 +20,7 @@ registry owns configurable keys and help; normal file opens remain unchanged.
 | `file_history_model` | PURE | `lua/parley/file_history_model.lua` | new | Immutable history transitions, maximum 200 retained visits. |
 | `transition` | PURE | `lua/parley/file_history_model.lua` | new | State/event to next state and optional Back target. |
 | `file_history` | INTEGRATION | `lua/parley/file_history.lua` | new | Window-scoped state and native editor effects. |
+| `is_restoring` | INTEGRATION | `lua/parley/file_history.lua` | new | Read-only restore scope consumed by buffer preparation. |
 | `setup` | INTEGRATION | `lua/parley/file_history.lua` | new | Idempotent event registration and initial window seeding. |
 | `back` | INTEGRATION | `lua/parley/file_history.lua` | new | Safe current-window navigation through model-selected targets. |
 | `keybinding_registry` | INTEGRATION | `lua/parley/keybinding_registry.lua` | modified | Global file_back action, effective key resolution and help. |
@@ -91,12 +92,12 @@ its autocmd group, and creates no timers, sidecars or durable cache.
 Files: create `lua/parley/file_history_model.lua` and
 `tests/unit/file_history_model_spec.lua`.
 
-- [ ] Write tests for A→B→C, repeated same-file cursor moves, per-visit positions,
+- [x] Write tests for A→B→C, repeated same-file cursor moves, per-visit positions,
   Back→Back→root, Back→new D tail truncation, same-path visits while back,
   nonadjacent repeat visits, input immutability and cap eviction.
-- [ ] Run the focused tests before implementation and confirm missing transition
+- [x] Run the focused tests before implementation and confirm missing transition
   behavior fails. Add both tests to ui/keybindings in atlas/traceability.yaml.
-- [ ] Implement only transition; run tests again, then commit the model and tests.
+- [x] Implement only transition; run tests again, then commit the model and tests.
 
 ## Task 2 — native window adapter and key
 
@@ -166,3 +167,22 @@ entry-specific preserve_insert flag; other entries keep the current behavior.
 Native probes confirm buffer switching itself preserves Insert mode. The help
 surface is generated at runtime from the registry; no static help file or
 help-generator script exists, so assert the generated help lines directly.
+
+### 2026-10-15 — buffer preparation participates in restoration
+
+Real-key tracing found prep_md resets mode and drains typeahead on BufEnter,
+even after the registry preserves Insert mode. Reuse the adapter's synchronous
+restore scope through read-only is_restoring(win), and have prep_md honor it.
+This is required to preserve queued typing and repeated Back keys; all ordinary
+Markdown setup remains unchanged. Model cursor records use named row/col fields.
+
+### 2026-10-15 — inactive splits and test results
+
+Track the focused source on WinEnter (and seed it at setup); WinNew can execute
+in an inactive child without WinLeave in its source. Snapshot the source when
+copying the immutable history. A real API-created inactive-split test failed
+before this correction and passed afterward. The full ui/keybindings mapping
+passed before adding that case. Disabling only the Insert-preservation entry
+makes two typed-key regressions fail; restored before the final full suite.
+The final close/merge/stage steps are post-implementation procedures whose
+completion is recorded by their SDLC evidence, rather than pre-ticked tasks.

@@ -46,9 +46,9 @@ two files; `:bp` follows buffer-list order, not visit order.
 
 ## Plan
 
-- [ ] Implement and unit-test the pure bounded history transition model.
-- [ ] Wire the per-window event adapter, FileBack command, registry/config mapping and real-key integration tests.
-- [ ] Update README, generated help and atlas; run targeted and full tests, close on SHIP, and land.
+- [x] Implement and unit-test the pure bounded history transition model.
+- [x] Wire the per-window event adapter, FileBack command, registry/config mapping and real-key integration tests.
+- [ ] Update README, runtime-generated help and atlas; run targeted and full tests.
 
 ## Log
 
@@ -100,3 +100,27 @@ entry-specific preserve_insert flag; other entries keep the current behavior.
 Native probes confirm buffer switching itself preserves Insert mode. The help
 surface is generated at runtime from the registry; no static help file or
 help-generator script exists, so assert the generated help lines directly.
+
+### 2026-10-15 — initial implementation evidence
+
+- Model delegation: 7 pure cases pass, including independent branches from a
+  shared immutable split snapshot. Integration baseline: 11 expected failures
+  before the adapter/command/key; after wiring, 10 pass and Insert typing fails.
+- Tracing proved prep_md exits Insert and drains typeahead during Back's native
+  BufEnter. It now honors the adapter's synchronous restoration scope. All 11
+  integration cases pass, including linked session/answer/side-doc traversal,
+  split inheritance, source/gf/picker entries, native refusal and deleted targets.
+- Added queued repeated Back, root Insert typing, new-tab inheritance and
+  split-close coverage. Running the complete keybinding mapping next.
+
+### 2026-10-15 — split-source and mode regression evidence
+
+- Full ui/keybindings mapping passed. Added an inactive API split case and saw
+  it inherit the wrong previous window. Native tracing shows WinNew runs in
+  the child even without WinLeave in the source; track the focused source via
+  WinEnter and snapshot it at creation. All 15 integration cases then pass.
+- Reverting only preserve_insert makes both actual typed-key regressions fail
+  (successful Back and root no-op); restored it before final verification.
+- Checklist bookkeeping now ends at test verification; close, merge and staging
+  are subsequent SDLC operations recorded by their actual outcomes, rather than
+  marking them complete before the close gate runs. Approved scope is unchanged.

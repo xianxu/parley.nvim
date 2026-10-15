@@ -497,3 +497,13 @@ oracle, and the mutation that would make the test fail.
 ## 2026-10-14 (#331 — canonical owner compatibility)
 
 - Normalize renamed protocol fields once at the existing parsing boundary so validation, routing and rendering share precedence. Test canonical-only, legacy-only and conflicting values through consumers; give the losing actor different activity/identity so ping and same-slot validation cannot pass by accident.
+
+- A native buffer switch still runs plugin BufEnter hooks. For a cursor/mode
+  restoration, include buffer preparation in the synchronous restore scope:
+  prep_md's stopinsert plus feedkeys drained typeahead during FileBack (#333).
+- WinNew can run in a new, inactive API split without WinLeave in its source.
+  Snapshot the last focused source on creation; test inactive splits alongside
+  ordinary split commands before inferring parentage from departure events (#333).
+- Concurrent focused tests in one checkout still share the orphan census.
+  Schedule all make-driven tests after a delegated direct Plenary run finishes
+  so its live child is not mistaken for an orphan (#333).
