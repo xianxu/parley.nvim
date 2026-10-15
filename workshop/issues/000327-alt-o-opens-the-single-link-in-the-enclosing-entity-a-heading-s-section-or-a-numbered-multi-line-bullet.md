@@ -73,6 +73,8 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 ## Log
 
+
+- 2026-10-15: closed — BR-1 corrected and required full suite passed on 1e028d015f254691cc8ada4d79cec58a5d263475:431 specs, lint728 clean, process census clean, log sha256 prefix4d4885404188. BR-2 now has an opt-in offline real/fake conformance check: all six cases pass through production run_resolve/parse/dispatch; deliberate wrong-kind mutation fails. make -k check-sdlc-conformance passes. No production Lua changes since green suite; full declared suite also rerunning on d09dfa7998a94abd21bc242b56c08a068966289d. PR239; stage only after final suite and SHIP; operator live acceptance mandatory before merge.; review verdict: SHIP
 ### 2026-10-14
 - 2026-10-14: unclaimed: Parked by operator priority for #330; design committed, no implementation. Resume after #330; plan approval remains unconfirmed due uncertain Couch delivery.
 
