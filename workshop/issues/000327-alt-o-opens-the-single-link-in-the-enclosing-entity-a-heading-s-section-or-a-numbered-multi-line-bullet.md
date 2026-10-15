@@ -1,12 +1,20 @@
 ---
 id: 000327
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: '63c491722b5f743d4efd45c8ff3998d0426393ae' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '929685d8a8920098f3b1e5ce9dc228c7b4d77cf7' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-14T20:54:49-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Alt+o opens the single link in the enclosing entity: a heading's section, or a numbered multi-line bullet
@@ -28,14 +36,43 @@ fallback (`sdlc resolve`, then `gf`). A reference directly under the cursor alwa
 
 ## Done when
 
+- Existing direct Markdown/@@/branch/src references and under-cursor artifact refs retain priority over entity candidates.
+- Numbered-item continuation and interior blank rows find the same item, duplicate numbers delimit separate items, trailing blanks lie outside; fenced samples do not contribute boundaries or targets.
+- A heading section uses existing same-or-higher heading bounds and chat/header protection; delete/text-object entity behavior stays pinned by regressions.
+- Ambiguity shows a picker; cancel, duplicate/late callbacks, edited/deleted sources and switched windows never open a stale choice or trigger fallback.
+- Missing-target diagnostics, source-relative resolution and Normal/Insert behavior are preserved; zero candidates keep sdlc resolve then gf. No new URL/fragment policy (#323).
+- README and atlas explain the interaction, mapped tests/full suite/close review pass, and the TL's required live-editor acceptance is recorded before merge.
+
 - On an Operator-instructions bullet whose last line ends in `→ [answer](qa/…)`, Alt+o anywhere in the bullet opens
   the answer (test); on a heading with one link in its section, Alt+o opens it (test); several links → picker;
   cursor-on-link unchanged (regression test).
 
+## Core concepts
+
+| Concept | Kind | Location | Status |
+|---|---|---|---|
+| Navigation entity | PURE | lua/parley/entity_range.lua navigation_range | New entry; existing text-object/delete behavior retained |
+| Reference occurrences and picker completion | PURE | lua/parley/reference_candidates.lua | New canonical enumeration and pending/settled transition |
+| Cursor parser consumers | PURE | lua/parley/issues.lua and lua/parley/init.lua | Derive from canonical scanner; preserve old behavior |
+| Alt+o boundary | INTEGRATION | lua/parley/init.lua OpenFileUnderCursor | Extend after direct reference; reuse open/resolve/picker seams |
+
 ## Plan
 
-- [ ]
+Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-navigation-plan.md).
+
+- [ ] Add pure navigation ranges and shared occurrence parsing with regression coverage for existing consumers.
+- [ ] Integrate sole-target opening and ambiguity picker; cover direct priority, cancellation/stale callback, source-relative paths, mode and zero-result fallback.
+- [ ] Update README/atlas/traceability, run targeted and full checks, close review, obtain required live acceptance through the hub, and land on SHIP.
 
 ## Log
 
 ### 2026-10-14
+
+- Claimed #327 after #324 landed and its :0 stage cleared. start-plan refreshed the private Ariadne substrate, required a rerun, then created this main-based issue branch.
+- Read the issue, existing entity_range/Markdown/cursor/reference code and ops opinstr.py. The latter uses column-zero numbered anchors, includes interior blanks, trims trailing blanks, and allows repeated numbers. Its fixed Operator-instructions section ends at a level-2 heading; #327's general numbered range follows the issue's explicit next-heading boundary.
+- Recommended a navigation-only entity entry over changing all existing text-object/delete semantics. Shared occurrence enumeration avoids duplicated Markdown/@@/branch parsers and reuses artifact_ref's loose shape detector; opening stays in existing trusted seams.
+- Full-flow plan written via superpowers-writing-plans because expected source additions exceed the 100-line quick shell. One atomic close boundary, no artificial Mx. Estimate remains unset until plan-quality admission. No implementation code edited. Plan sent to the hub for product-steward review.
+
+## Revisions
+
+- 2026-10-14 — initial design clarifies navigation-only range ownership, direct artifact priority, fenced-code exclusion, occurrence counting and stale-picker cancellation; existing URL/fragment destination policy is retained rather than broadening #327 into #323.
