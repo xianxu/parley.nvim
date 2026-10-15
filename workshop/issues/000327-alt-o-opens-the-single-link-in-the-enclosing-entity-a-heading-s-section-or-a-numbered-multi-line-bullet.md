@@ -1,12 +1,12 @@
 ---
 id: 000327
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-15
 estimate_hours: 2.424
-card_mirror: '1d647dd999b126756fc501c2fa9dd90b33b6c352' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '8a66e7bca47d491f6cb175d983182685dac6ea82' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-14T20:54:49-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: operator}
+actual_hours: 5.04
 ---
 
 # Alt+o opens the single link in the enclosing entity: a heading's section, or a numbered multi-line bullet
