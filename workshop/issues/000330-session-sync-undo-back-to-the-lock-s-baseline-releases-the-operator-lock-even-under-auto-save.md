@@ -1,12 +1,12 @@
 ---
 id: 000330
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: '4aaf08f19b0c9a1d3ed684ad99bb2a4c881bf4b5' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2c468f1ac581d92e6a213602c410ad080910aa5d' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-14T21:25:39-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "4c474229", done: "eea4b532"}
+actual_hours: 0.95
 ---
 
 # session-sync: undo back to the lock's baseline releases the operator lock, even under auto-save
