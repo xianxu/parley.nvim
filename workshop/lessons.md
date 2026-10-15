@@ -2,6 +2,8 @@
 
 ## 2026-10-15 (#337 — whole-file deadline flakes)
 
+- Close BR-1: native conformance that asserts a specific deadline reason must control the load/CPU inputs; at the supported cap, idle and absolute coincide. Exercise ordinary and capped inputs through the same runner seam, preserving the model’s explicit precedence.
+
 - A startup CPU-load sample cannot establish how much useful work a growing spec file contains. Keep hang detection tied to completed cases (including fixture teardown), with a separately tested absolute ceiling; arbitrary log output must never refresh it. Verify deadline state with a virtual clock and child ownership with actual process exits.
 
 ## 2026-10-14 (#329 — generated skill ignores)

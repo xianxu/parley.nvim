@@ -25,14 +25,16 @@ local DEFAULT_TIMEOUT=50000 -- plenary.test_harness's own default
 M.load_factor = Deadline.load_factor
 
 -- This headless adapter owns one child and its timer through observed exit.
--- Tests can shorten the base budget and collect output; normal run() uses the
+-- Tests can shorten the base, control load/CPUs and collect output; run() uses the
 -- shared defaults and the same child/bootstrap/assertion path.
 function M.execute(path, options)
     options = options or {}
     local uv = vim.uv or vim.loop
     local function now() return uv.hrtime() / 1e6 end
     local base = options.base_ms or (M.options(path) or {}).timeout or DEFAULT_TIMEOUT
-    local state = Deadline.new(base, uv.loadavg(), uv.available_parallelism(), now())
+    local load1 = options.load1 or uv.loadavg()
+    local ncpu = options.ncpu or uv.available_parallelism()
+    local state = Deadline.new(base, load1, ncpu, now())
     local output = options.output or function(stream, text)
         local target = stream == "stderr" and io.stderr or io.stdout
         target:write(text); target:flush()

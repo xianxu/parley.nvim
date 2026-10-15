@@ -51,7 +51,7 @@ A controlled schedule or deterministic regression identifies why these passing f
 - [x] Freeze the diagnosed timeout model and obtain TL review of the progress/absolute-ceiling design.
 - [x] Observe deterministic RED for useful work past50s, stalled bootstrap/case/teardown, cap, load bounds and ignored arbitrary output; verify thin-runner wiring with controlled process events.
 - [x] Implement the smallest shared pure policy and owned child adapter, preserving Plenary assertions/output/exit codes; verify actual success, assertion failure and forced timeout children with cleanup.
-- [x] Run focused harness and affected suites, update atlas/lessons, and pass the required full suite.
+- [ ] Run focused harness and affected suites, update atlas/lessons, and pass the required full suite.
 
 After verification, close through the mandatory fresh review, fix any finding class, land on SHIP and report the merge to the hub.
 
@@ -75,3 +75,7 @@ First seen:2026-10-15. Failing head1eaefd96df59afcb8d0880ec621864b137a596a7, com
 - 2026-10-15 — final focused22 cases pass at /tmp/parley337-final-harness.log, full lint738files zero warnings/errors at /tmp/parley337-lint.log and diff check clean. Preserve the absolute/no-progress distinction in atlas and keep close/landing as post-check actions instead of claiming them in verification checkboxes. No suite rerun started yet on this implementation.
 
 - 2026-10-15 — close preflight requested bullet-form Done-when oracles for the quick flow. Added explicit checks for the already-approved policy, real-child boundary and full suite; no scope change, reviewer not dispatched yet.
+
+- 2026-10-15 — close round1 REWORK BR-1 (Important, control-environment-dependent-test-inputs): the real-child reason assertions sampled uncontrolled load; at4x idle equals absolute, so absolute correctly wins. Sweep all three stalled-reason tests by injecting ordinary load/CPU inputs through execute, and add a controlled capped-load real child. New regression RED6/1/0, expected absolute-expired but got stalled because injected load was ignored, /tmp/parley337-br1-red.log. This refines test determinism without changing default live budgets or policy precedence.
+
+- 2026-10-15 — BR-1 full class fixed: execute accepts injected load/CPU samples, native helper pins ordinary inputs for every reason-specific assertion, and a seventh native case pins capped-load absolute precedence. Focused23 cases GREEN at /tmp/parley337-br1-green.log; additionally all7 native cases pass with the process uv.loadavg forced100000, /tmp/parley337-br1-forced-cap.log (the reviewer previously reproduced3failures there). Default run still samples live load/CPUs. New code requires a fresh full-suite pass before re-close; #336 has landed and will be integrated first.

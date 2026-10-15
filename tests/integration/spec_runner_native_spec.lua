@@ -12,7 +12,7 @@ describe("owned headless spec execution", function()
         local path = root .. "/fixture.lua"
         vim.fn.writefile(lines, path)
         local output = {}
-        options = vim.tbl_extend("force", options or {}, {
+        options = vim.tbl_extend("force", { load1 = 0, ncpu = 12 }, options or {}, {
             output = function(stream, text) output[#output + 1] = stream .. ":" .. text end,
         })
         assert.is_function(Runner.execute)
@@ -93,6 +93,18 @@ describe("owned headless spec execution", function()
         local _, _, gone = vim.uv.kill(result.pid, 0)
         assert.equals("ESRCH", gone)
         assert.matches("arbitrary output", output, 1, true)
+    end)
+
+    it("gives the absolute deadline precedence at controlled capped load", function()
+        local result = run({
+            'vim.wait(15000, function() return false end, 10)',
+        }, { base_ms = 250, load1 = 100000, ncpu = 12 })
+        assert.equals(124, result.code)
+        assert.equals("absolute-expired", result.reason)
+        assert.equals(0, result.completed)
+        assert.is_true(result.reaped)
+        local _, _, gone = vim.uv.kill(result.pid, 0)
+        assert.equals("ESRCH", gone)
     end)
 
     it("includes after_each teardown in a case's progress boundary", function()

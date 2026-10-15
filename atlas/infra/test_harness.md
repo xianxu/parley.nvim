@@ -250,7 +250,9 @@ Deterministic virtual-clock tests exercise the exact policy (including late
 frames, load bounds and terminal states). Native conformance uses isolated real
 Plenary children for successful assertions, failed assertions, stalled bootstrap,
 case/teardown and a progressing child that reaches the absolute cap; it checks
-that timed-out PIDs are gone. No test is retried, skipped or granted a new
+that timed-out PIDs are gone. Reason-specific probes inject ordinary and capped
+load/CPU values through the runner; default invocations still sample the machine.
+No test is retried, skipped or granted a new
 path-specific timeout exception by this policy.
 
 `make test` runs the nvim chosen by `scripts/test-nvim.sh`, put first on
