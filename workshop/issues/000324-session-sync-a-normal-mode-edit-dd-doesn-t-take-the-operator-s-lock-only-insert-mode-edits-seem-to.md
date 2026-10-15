@@ -49,7 +49,7 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 
 - [x] Reproduce with real child-Neovim UI input; cover dd/x/p/u/dot and insert initially and after an agent reload, including edits damaging frontmatter. Record events and guard values; clarify the operator's original edit location with the hub.
 - [x] Repair attached-buffer turn reconciliation in the existing callback; add failing regression tests for clean undo, multi-step undo, redo, silent release, and saved-buffer/violation compatibility. Keep race handling and timer cleanup intact (ARCH-DRY, ARCH-STATE, ARCH-FUNERAL).
-- [ ] Run targeted session-sync tests and the declared full suite, update atlas, obtain the required real-editor check through the hub, then close/review/land on SHIP.
+- [x] Run targeted session-sync tests and the declared full suite, update atlas, obtain the required real-editor check through the hub, then close/review/land on SHIP.
 
 ## Log
 
@@ -78,6 +78,8 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 - Final automated acceptance: full declared suite on 1297e8d4 passed all 428 spec files in 3m8s, with clean process census; success recorded as sdlc-local/suite (log SHA256 prefix fc4cdc85dff0). Final PR CI green. An earlier run failed unchanged packaging VM state timing (line 131); an isolated run failed the previously observed guest-profile assertion (line 167). No packaging source changed; isolated main-baseline probe at dc5ac559 passed all 17 cases, and the complete suite retry passed. Do not describe the packaging intermittency as fixed.
 - Close round 3: SHIP, high confidence; all five findings addressed, zero new findings. Reviewer independently ran 97 mapped cases, mutation-tested payload readiness, checked real Couch exit 3, and passed a full suite with external test scratch. Final review anchor remains unchanged in production code. Fetched main and merged origin/main: already up to date.
 - Remaining pre-landing condition: restage the reviewed candidate and obtain explicit operator live-editor confirmation through the TL. Final Plan checkbox deliberately remains open until that confirmation; do not merge before it arrives.
+
+- Operator live acceptance confirmed through TL receipt 7b338471-8790-4661-b7c7-c9fd63fb79f9: "yes, this worked" for the reviewed staged candidate. All pre-landing verification is now complete; TL explicitly instructed landing PR #236, then clearing :0's stage.
 
 ## Revisions
 
