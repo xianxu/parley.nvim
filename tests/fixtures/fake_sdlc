@@ -1,20 +1,40 @@
 #!/usr/bin/env python3
-"""Filesystem-backed issue creator: records requests and allocates local IDs only."""
+"""Local issue creator/resolver, with seeded results and recorded requests."""
 import json
 import os
 from pathlib import Path
 import sys
+import time
 
 args = sys.argv[1:]
 if args == ['--help']:
-    print('sdlc fake: issue new')
+    print('sdlc fake: issue new; resolve --json REF')
     sys.exit(0)
-if args[:2] != ['issue', 'new'] or '--' not in args:
+is_resolve = len(args) == 3 and args[:2] == ['resolve', '--json']
+is_create = args[:2] == ['issue', 'new'] and '--' in args
+if not is_resolve and not is_create:
     sys.exit(2)
 state = Path(os.environ['PARLEY_FAKE_SDLC_STATE'])
 state.mkdir(parents=True, exist_ok=True)
 with (state / 'requests.jsonl').open('a') as stream:
     stream.write(json.dumps(args) + '\n')
+if is_resolve:
+    if os.environ.get('PARLEY_FAKE_SDLC_MODE') == 'fail':
+        print('fake refused resolution', file=sys.stderr)
+        sys.exit(7)
+    mapping = json.loads((state / 'resolve.json').read_text())
+    result = mapping.get(args[2], {'files': []})
+    release = result.get('release')
+    deadline = time.monotonic() + 3
+    while release and not (state / release).is_file():
+        if time.monotonic() >= deadline:
+            print('fake resolve release timed out', file=sys.stderr)
+            sys.exit(8)
+        time.sleep(0.01)
+    print(json.dumps({'files': result.get('files', [])}), flush=True)
+    with (state / 'completed.jsonl').open('a') as stream:
+        stream.write(json.dumps(args) + '\n')
+    sys.exit(0)
 if os.environ.get('PARLEY_FAKE_SDLC_MODE') == 'fail':
     print('fake refused creation', file=sys.stderr)
     sys.exit(7)

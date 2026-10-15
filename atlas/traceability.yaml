@@ -590,11 +590,24 @@ atlas:
   context/file_references:
     code:
       - lua/parley/init.lua
+      - lua/parley/reference_candidates.lua
+      - lua/parley/entity_range.lua
+      - lua/parley/document/lexical.lua
+      - lua/parley/artifact_ref.lua
+      - lua/parley/issues.lua
       - lua/parley/highlighter.lua
       - lua/parley/file_tracker.lua
       - lua/parley/helper.lua
     tests:
+      - tests/arch/single_resolver_spec.lua
       - tests/integration/open_reference_spec.lua
+      - tests/integration/entity_navigation_native_spec.lua
+      - tests/integration/entity_resolve_spec.lua
+      - tests/unit/reference_candidates_spec.lua
+      - tests/unit/entity_range_spec.lua
+      - tests/unit/document_lexical_spec.lua
+      - tests/unit/artifact_ref_spec.lua
+      - tests/unit/issues_spec.lua
       - tests/integration/untrusted_path_spec.lua
       - tests/arch/untrusted_path_spec.lua
       - tests/unit/parse_at_reference_spec.lua

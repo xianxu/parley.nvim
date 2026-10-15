@@ -623,3 +623,199 @@ describe('ordinary local Markdown navigation links', function()
         assert.equals('', joined(rec.cmds))
     end)
 end)
+
+-- #327: the entity is a navigation convenience; direct references still win.
+describe('enclosing entity navigation', function()
+    local saved, opened, warnings, picker, fallback
+    local function source(lines, row, col)
+        local path = write_markdown('entity-origin.md', lines)
+        vim.cmd('silent! %bwipeout!')
+        vim.cmd('only')
+        vim.cmd('edit ' .. vim.fn.fnameescape(path))
+        vim.api.nvim_win_set_cursor(0, {row or 1, col or 0})
+        return vim.api.nvim_get_current_buf()
+    end
+    local function invoke() parley.cmd.OpenFileUnderCursor() end
+    before_each(function()
+        saved = {open=parley.open_buf, warn=parley.logger.warning, select=vim.ui.select,
+            resolve=parley.cmd.ResolveRefOrGotoFile, branch_prefix=parley.config.chat_branch_prefix}
+        opened, warnings, picker, fallback = {}, {}, nil, 0
+        parley.open_buf = function(path) opened[#opened+1] = path end
+        parley.logger.warning = function(message) warnings[#warnings+1] = message end
+        vim.ui.select = function(items, opts, cb) picker = {items=items, opts=opts, cb=cb} end
+        parley.cmd.ResolveRefOrGotoFile = function() fallback = fallback+1 end
+    end)
+    after_each(function()
+        parley.open_buf, parley.logger.warning = saved.open, saved.warn
+        vim.ui.select, parley.cmd.ResolveRefOrGotoFile = saved.select, saved.resolve
+        parley.config.chat_branch_prefix = saved.branch_prefix
+        vim.cmd('silent! %bwipeout!')
+        vim.cmd('only')
+    end)
+    it('opens the answer from every row of a multi-line numbered question', function()
+        local target = write_markdown('answer.md', {'# Answer'})
+        local lines = {'## Operator instructions', '7. please investigate', '',
+            '   the explanation continues', '   → [answer](answer.md)', '', '7. next question'}
+        for row=2,5 do
+            source(lines,row)
+            invoke()
+            same_path(target, opened[#opened])
+        end
+        assert.equals(4,#opened)
+        assert.equals(0,fallback)
+        assert.is_nil(picker)
+    end)
+    it('keeps every structural-looking continuation in a plain Markdown numbered item', function()
+        local target = write_markdown('structural.md', {'# Answer'})
+        local patterns = require('parley.document.lexical').patterns(parley.config)
+        for _, field in ipairs({'user_prefix','assistant_prefix','summary_prefix','reasoning_prefix',
+            'tool_use_prefix','tool_result_prefix','branch_prefix','local_prefix'}) do
+            source({'1. Follow up',patterns[field]..' lead [answer](structural.md)','2. Next'})
+            invoke()
+            same_path(target,opened[#opened])
+        end
+        assert.equals(8,#opened)
+        assert.equals(0,fallback)
+    end)
+    it('opens a numbered item branch-reference continuation in plain Markdown and chat', function()
+        local target = write_markdown('branch-answer.md', {'# Answer'})
+        local item = '1. Follow the branch'
+        source({item,'🌿: '..target..': Answer','2. Next'})
+        invoke()
+        same_path(target,opened[1])
+        local chat = write_chat('2026-03-24.18-40-00.001_entity-branch.md',
+            {'',item,'🌿: '..target..': Answer','2. Next'})
+        same_path(target,open_at(chat,item,1).opened)
+        assert.equals(0,fallback)
+    end)
+    it('uses the configured branch prefix for a numbered item reference', function()
+        parley.config.chat_branch_prefix = 'BRANCH:'
+        local target = write_markdown('custom-branch.md', {'# Answer'})
+        source({'1. Follow up','BRANCH: '..target..': Answer','2. Next'})
+        invoke()
+        same_path(target,opened[1])
+    end)
+    it('ignores chat-looking lines inside plain Markdown fenced examples', function()
+        local target = write_markdown('outside-fence.md', {'# Answer'})
+        local patterns = require('parley.document.lexical').patterns(parley.config)
+        for _, field in ipairs({'user_prefix','assistant_prefix','summary_prefix','reasoning_prefix',
+            'tool_use_prefix','tool_result_prefix','branch_prefix','local_prefix'}) do
+            source({'1. Follow up','```md',patterns[field]..' sample [ignored](not-a-target.md)',
+                '2. sample item','```','[answer](outside-fence.md)','2. Next'})
+            invoke()
+            same_path(target,opened[#opened])
+        end
+        assert.equals(8,#opened)
+        assert.is_nil(picker)
+        assert.equals(0,fallback)
+    end)
+    it('opens a heading section link across nested headings and ignores fenced samples', function()
+        local target = write_markdown('heading-answer.md', {'# Answer'})
+        source({'## Question','```md','[example](ignored.md)','## fake','```',
+            '### Details','[answer](heading-answer.md)','## Next','[other](missing.md)'})
+        invoke()
+        same_path(target,opened[1])
+        assert.is_nil(picker)
+    end)
+    it('opens the chosen occurrence, including the second @@ on the same line', function()
+        local a = write_markdown('first.md', {'# A'})
+        local b = write_markdown('second.md', {'# B'})
+        source({'## Choices','@@'..a..'@@ and @@'..b..'@@'})
+        invoke()
+        assert.equals(2,#picker.items)
+        assert.matches('second.md',picker.opts.format_item(picker.items[2]))
+        picker.cb(picker.items[2],2)
+        same_path(b,opened[1])
+        picker.cb(picker.items[1],1)
+        assert.equals(1,#opened)
+        assert.equals(0,fallback)
+    end)
+    it('keeps repeated target occurrences as distinct choices', function()
+        write_markdown('same.md', {'# same'})
+        source({'## Choices','[one](same.md) and [two](same.md)'})
+        invoke()
+        assert.equals(2,#picker.items)
+        assert.equals(0,#opened)
+        picker.cb(nil,nil)
+        assert.equals(0,#opened)
+        assert.equals(0,fallback)
+    end)
+    it('does not reinterpret an unsupported Markdown label as an embedded @@ destination', function()
+        local nested = write_markdown('nested-label.md', {'# nested'})
+        source({'## Link','[@@'..nested..'@@](https://example.invalid/target)'})
+        invoke()
+        assert.equals(0,#opened)
+        assert.equals(1,fallback)
+    end)
+    for _, invalidation in ipairs({'edit','delete','buffer','window','supersede'}) do
+        it('rejects a retained choice after '..invalidation, function()
+            write_markdown('first.md', {'# A'})
+            local buf = source({'## Choices','[one](first.md)','[two](first.md)'})
+            invoke()
+            assert.is_not_nil(picker)
+            local old = picker
+            if invalidation == 'edit' then
+                vim.api.nvim_buf_set_lines(buf,1,2,false,{'edited'})
+            elseif invalidation == 'delete' then
+                vim.api.nvim_buf_delete(buf,{force=true})
+            elseif invalidation == 'buffer' then
+                vim.api.nvim_set_current_buf(vim.api.nvim_create_buf(false,true))
+            elseif invalidation == 'window' then
+                vim.cmd('vsplit')
+            else
+                invoke()
+            end
+            old.cb(old.items[1],1)
+            assert.equals(0,#opened)
+            assert.equals(0,fallback)
+        end)
+    end
+    it('restores the source cursor after a missing sole target and does not fall through', function()
+        source({'1. question','   [missing](never-created.md)'},1,3)
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        invoke()
+        assert.equals(1,#warnings)
+        assert.equals(0,#opened)
+        assert.equals(0,fallback)
+        assert.same(cursor,vim.api.nvim_win_get_cursor(0))
+    end)
+    it('restores the source cursor even when selected native gf raises an error', function()
+        source({'1. question','   [missing](never-created.txt)'},1,3)
+        parley.cmd.ResolveRefOrGotoFile = saved.resolve
+        local cursor = vim.api.nvim_win_get_cursor(0)
+        local ok, err = pcall(invoke)
+        assert.is_false(ok)
+        assert.is_truthy(tostring(err):find('E447',1,true))
+        assert.same(cursor,vim.api.nvim_win_get_cursor(0))
+    end)
+    it('keeps direct Markdown priority over other entity choices', function()
+        local target = write_markdown('direct.md', {'# D'})
+        source({'1. [direct](direct.md)','   [other](missing.md)'},1,6)
+        invoke()
+        same_path(target,opened[1])
+        assert.is_nil(picker)
+    end)
+    it('keeps direct artifacts ahead of an enclosing answer', function()
+        source({'1. question #15','   [answer](missing.md)'},1,13)
+        invoke()
+        assert.equals(1,fallback)
+        assert.is_nil(picker)
+    end)
+    it('leaves zero candidates and trailing blank rows to the existing fallback', function()
+        source({'1. plain question','','2. [answer](missing.md)'},2)
+        invoke()
+        assert.equals(1,fallback)
+        assert.equals(0,#warnings)
+    end)
+    it('handles a large section without resolving unselected candidates', function()
+        local lines = {'## Big question'}
+        for _=1,4998 do lines[#lines+1] = 'ordinary prose' end
+        lines[#lines+1] = '[answer](large-answer.md)'
+        local target = write_markdown('large-answer.md', {'# answer'})
+        source(lines)
+        invoke()
+        same_path(target,opened[1])
+        assert.equals(1,#opened)
+        assert.equals(0,fallback)
+    end)
+end)

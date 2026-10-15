@@ -230,12 +230,14 @@ end
 --- @param lines string[]
 --- @param patterns table from M.patterns(config)
 --- @param tildes boolean|nil treat `~~~` as a fence too
+--- @param partitioned boolean|nil reset at chat partitions (default true);
+--- false keeps chat-looking examples inside plain Markdown fences.
 --- @return boolean[] memo
-function M.code_block_memo(lines, patterns, tildes)
+function M.code_block_memo(lines, patterns, tildes, partitioned)
     local memo = {}
     local in_block = false
     for i, line in ipairs(lines or {}) do
-        if M.is_partition(line, patterns) then
+        if partitioned ~= false and M.is_partition(line, patterns) then
             in_block = false
         elseif M.is_fence_delim(line, tildes) then
             in_block = not in_block

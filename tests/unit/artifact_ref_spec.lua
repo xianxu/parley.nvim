@@ -264,6 +264,110 @@ describe("goto_ref_at_cursor on_no_ref fallback", function()
     end)
 end)
 
+describe("goto_ref_at_cursor guarded completion", function()
+    local saved, queued, opened, pickers, notices, complete
+
+    before_each(function()
+        -- Control the process and event-loop boundaries independently; the real
+        -- entry point still builds argv and parses the resolver's JSON.
+        saved = {
+            schedule = vim.schedule,
+            open_buf = parley.open_buf,
+            picker_open = require("parley.float_picker").open,
+            notify = vim.notify,
+        }
+        queued, opened, pickers, notices = {}, {}, {}, {}
+        vim.schedule = function(fn) queued[#queued + 1] = fn end
+        parley.open_buf = function(path) opened[#opened + 1] = path end
+        require("parley.float_picker").open = function(opts) pickers[#pickers + 1] = opts end
+        vim.notify = function(msg) notices[#notices + 1] = msg end
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "see #327" })
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_win_set_cursor(0, { 1, 5 })
+    end)
+
+    after_each(function()
+        vim.schedule = saved.schedule
+        parley.open_buf = saved.open_buf
+        require("parley.float_picker").open = saved.picker_open
+        vim.notify = saved.notify
+    end)
+
+    local function start(is_current)
+        ar.goto_ref_at_cursor({
+            is_current = is_current,
+            runner = function(_, on_complete) complete = on_complete end,
+        })
+    end
+
+    local function resolve(files)
+        complete(vim.json.encode({ files = files }), 0, "")
+    end
+
+    it("drops a result invalidated before scheduled dispatch", function()
+        local current = true
+        start(function() return current end)
+        resolve({ { path = "/a/i.md" }, { path = "/a/p.md" } })
+        current = false
+        queued[1]()
+        assert.are.equal(0, #pickers)
+        assert.are.equal(0, #opened)
+        assert.are.equal(0, #notices)
+    end)
+
+    it("rechecks ownership immediately before opening a single result", function()
+        local checks = 0
+        start(function()
+            checks = checks + 1
+            return checks == 1
+        end)
+        resolve({ { path = "/a/i.md" } })
+        queued[1]()
+        assert.are.equal(0, #opened)
+    end)
+
+    it("schedules and opens only once for duplicate resolver completion", function()
+        start(function() return true end)
+        resolve({ { path = "/a/i.md" } })
+        resolve({ { path = "/a/i.md" } })
+        assert.are.equal(1, #queued)
+        queued[1]()
+        assert.are.same({ "/a/i.md" }, opened)
+        resolve({ { path = "/a/i.md" } })
+        assert.are.equal(1, #queued)
+    end)
+
+    it("rejects a stale family selection and consumes its callback", function()
+        local current = true
+        start(function() return current end)
+        resolve({ { path = "/a/i.md" }, { path = "/a/p.md" } })
+        queued[1]()
+        assert.are.equal(1, #pickers)
+        current = false
+        pickers[1].on_select(pickers[1].items[1])
+        current = true
+        pickers[1].on_select(pickers[1].items[2])
+        assert.are.equal(0, #opened)
+    end)
+
+    it("opens a current family selection only once", function()
+        start(function() return true end)
+        resolve({ { path = "/a/i.md" }, { path = "/a/p.md" } })
+        queued[1]()
+        pickers[1].on_select(pickers[1].items[2])
+        pickers[1].on_select(pickers[1].items[1])
+        assert.are.same({ "/a/p.md" }, opened)
+    end)
+
+    it("still resolves and opens without an ownership predicate", function()
+        start(nil)
+        resolve({ { path = "/a/i.md" } })
+        queued[1]()
+        assert.are.same({ "/a/i.md" }, opened)
+    end)
+end)
+
 describe("family_picker_items", function()
     it("builds display/value with kind + milestone", function()
         local items = ar.family_picker_items({

@@ -497,3 +497,11 @@ oracle, and the mutation that would make the test fail.
 ## 2026-10-14 (#331 — canonical owner compatibility)
 
 - Normalize renamed protocol fields once at the existing parsing boundary so validation, routing and rendering share precedence. Test canonical-only, legacy-only and conflicting values through consumers; give the losing actor different activity/identity so ping and same-slot validation cannot pass by accident.
+
+## 2026-10-15 (#327 — enclosing-entity navigation)
+
+- A selected occurrence is an identity, not a cursor hint. Dispatch its kind and exact span/target; replay through a legacy nearest-reference parser can open a sibling, and even an isolated Markdown span can reinterpret an embedded @@ label when its destination is unsupported (plan PQ-1).
+- A picker-time origin check ends too early when opening resolves asynchronously. Carry source validity through scheduled resolver results and every secondary picker effect, consuming callbacks once; a guardless legacy resolver cannot supply that guarantee by implication (plan PQ-2).
+- Native fallback errors are still completion paths. Restore temporary cursor placement in a protected call before propagating gf errors; test an absent non-Markdown target as well as recognized missing Markdown.
+- Reusing structural parsing does not mean reusing an editing operation's walls. Navigation boundaries must follow their own contract; sweep every default/configured structural prefix as content, a transcript turn, and a fenced sample. Share the resulting fence mask with candidate collection so those decisions cannot diverge (close BR-1).
+- A stateful subprocess fake needs a live contract check for the exact modeled command, not only executable/help discovery. Compare consumed fields and failure outcomes against isolated real fixtures, and document when maintainers rerun it (close BR-2).

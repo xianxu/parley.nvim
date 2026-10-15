@@ -41,9 +41,13 @@ ariadne plus its vocabulary exporter and CUE. The generic CI workflow invokes
 `scripts/ci-setup.sh` to provision those tools before the merge check.
 
 Run `make check-sdlc-conformance` whenever the optional command runner changes
-and before closing such work. It checks real command discovery/help without
-creating issues. Missing sdlc makes this explicit maintainer check fail; normal
-tests use the filesystem-backed `tests/fixtures/fake_sdlc` instead.
+and before closing such work, including changes to the resolver fake. It checks
+real command discovery/help and compares real resolution with the fake for an
+isolated temporary Git repository: sole issue, issue family, milestone, external
+reference and missing-reference failure. It uses the committed vocabulary for
+discovery and removes its fixtures on exit; it creates no real issues and needs
+no network. Missing sdlc makes this explicit maintainer check fail; normal tests
+use the filesystem-backed `tests/fixtures/fake_sdlc` instead.
 
 ## Test Scratch Directories
 

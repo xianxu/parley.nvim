@@ -191,6 +191,9 @@ end
 -- a fake `sdlc` instead of replacing run_resolve wholesale (#225 BR-3). Without
 -- it, production and test flows did not share a boundary — the seam existed but
 -- no caller could reach it, which is the shape ARCH-MOCK asks you to avoid.
+-- opts.is_current (optional): caller-owned live validity check. Stale scheduled
+-- results and family selections are discarded; each resolve and selection is
+-- consumed once so repeated async callbacks cannot dispatch or open twice.
 -- Delegated to by parley init's M.cmd.ResolveRef* commands.
 function M.goto_ref_at_cursor(opts)
     opts = opts or {}
@@ -210,21 +213,39 @@ function M.goto_ref_at_cursor(opts)
     local float_picker = require("parley.float_picker")
     local cwd = neighborhood.for_buf(vim.api.nvim_get_current_buf())
     local sdlc_cmd = (_parley.config and _parley.config.sdlc_cmd) or "sdlc"
+    local completed, selected = false, false
+    local function is_current()
+        return not opts.is_current or opts.is_current()
+    end
+    local function open_once(path)
+        if selected then
+            return
+        end
+        selected = true
+        if is_current() then
+            _parley.open_buf(path, true)
+        end
+    end
     M.run_resolve(hit.ref, { cwd = cwd, sdlc_cmd = sdlc_cmd, kind = opts.kind }, function(files, err)
+        if completed then
+            return
+        end
+        completed = true
         vim.schedule(function()
+            if not is_current() then
+                return
+            end
             M.dispatch_resolve_result(hit.ref, files, err, {
                 notify = function(msg, level)
                     vim.notify(msg, level == "warn" and vim.log.levels.WARN or vim.log.levels.INFO)
                 end,
-                open = function(path)
-                    _parley.open_buf(path, true)
-                end,
+                open = open_once,
                 picker = function(ref, family)
                     float_picker.open({
                         title = "Resolve " .. ref,
                         items = M.family_picker_items(family),
                         on_select = function(item)
-                            _parley.open_buf(item.value, true)
+                            open_once(item.value)
                         end,
                     })
                 end,

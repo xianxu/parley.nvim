@@ -3638,20 +3638,7 @@ M.resolve_chat_path = resolve_chat_path
 
 -- Pure: parse a 🌿: branch reference line into {path, topic} or nil.
 M._parse_branch_ref = function(line)
-	local prefix = get_branch_prefix()
-	if line:sub(1, #prefix) ~= prefix then
-		return nil
-	end
-	local rest = line:sub(#prefix + 1):gsub("^%s*(.-)%s*$", "%1")
-	local path = rest:match("^([^:]+)") or rest
-	path = path:gsub("^%s*(.-)%s*$", "%1")
-	if path == "" then
-		return nil
-	end
-	local topic = rest:match("^[^:]+:%s*(.+)$") or ""
-	topic = topic:gsub("^%s*(.-)%s*$", "%1")
-	topic = topic:gsub("%s*⚠️%s*$", "")
-	return { path = path, topic = topic }
+	return require("parley.reference_candidates").branch_ref(line, get_branch_prefix())
 end
 
 -- Try to open an inline branch link [🌿:text](file) under the cursor.
@@ -4748,19 +4735,7 @@ end
 -- Internal: Parse @@ref@@ references from a line and return the closest one to cursor.
 -- Canonical form: @@<ref>@@ with explicit closing marker. Pure function for testability.
 M._parse_at_reference = function(line, cursor_col)
-	local references = {}
-	local start_idx = 1
-	while true do
-		local open_start, open_end = line:find("@@", start_idx, true)
-		if not open_start then break end
-		local close_start, close_end = line:find("@@", open_end + 1, true)
-		if not close_start then break end
-		local content = line:sub(open_end + 1, close_start - 1):gsub("^%s*(.-)%s*$", "%1")
-		if content ~= "" then
-			table.insert(references, { start = open_start, content = content })
-		end
-		start_idx = close_end + 1
-	end
+	local references = require("parley.reference_candidates").at_references(line)
 
 	if #references == 0 then return nil end
 
@@ -5022,45 +4997,104 @@ M.cmd.CopyLocationContent = copy_mod.copy_location_content
 M.cmd.CopyContext = function() copy_mod.copy_context(2, 2) end
 M.cmd.CopyContextWide = function() copy_mod.copy_context(5, 10) end
 
--- Open the reference under the cursor, falling back to `gf` (#225). One key
--- for "go to the thing I am looking at", in chat and markdown buffers alike.
-M.cmd.OpenFileUnderCursor = function()
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	local cursor_pos = vim.api.nvim_win_get_cursor(0)
-	local current_line = vim.api.nvim_buf_get_lines(buf, cursor_pos[1] - 1, cursor_pos[1], false)[1]
-	local cursor_col = cursor_pos[2]
+-- One invocation generation invalidates older entity pickers and resolutions.
+local reference_generation = 0
 
+M.cmd.OpenFileUnderCursor = function()
+	reference_generation = reference_generation + 1
+	local generation = reference_generation
+	local buf, win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	local cursor = vim.api.nvim_win_get_cursor(win)
+	local current_line = vim.api.nvim_buf_get_lines(buf, cursor[1] - 1, cursor[1], false)[1]
 	local mode = vim.api.nvim_get_mode().mode
 	local in_insert_mode = (mode:match("^i") or mode:match("^R")) ~= nil
-
 	local is_chat = M.not_chat(buf, file_name) == nil
 	if not is_chat and not M.is_markdown(buf, file_name) then
 		M.logger.warning("OpenFileUnderCursor command is only available in chat files and markdown files")
 		return
 	end
 
-	local outcome = open_reference_under_cursor(buf, current_line, cursor_col, is_chat)
-
-	if outcome == "none" then
-		-- Nothing here is a parley reference, so hand it to the general
-		-- "go to what's under the cursor" — an ariadne artifact ref if it
-		-- resolves, otherwise native gf. Its destinations are source you went
-		-- to READ, so unlike a chat reference this one lands in normal mode.
+	local origin = {buf = buf, win = win, tick = vim.api.nvim_buf_get_changedtick(buf), generation = generation}
+	local function current_origin()
+		if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf)
+			or not vim.api.nvim_win_is_valid(win) then return nil end
+		return {buf = vim.api.nvim_get_current_buf(), win = vim.api.nvim_get_current_win(),
+			tick = vim.api.nvim_buf_get_changedtick(buf), generation = reference_generation}
+	end
+	local function is_current()
+		local current = current_origin()
+		return current and current.buf == origin.buf and current.win == origin.win
+			and current.tick == origin.tick and current.generation == origin.generation
+	end
+	local function restore_insert()
 		if in_insert_mode then
-			vim.cmd("stopinsert")
+			local landed_buf, landed_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
+			vim.schedule(function()
+				if reference_generation == generation and vim.api.nvim_get_current_buf() == landed_buf
+					and vim.api.nvim_get_current_win() == landed_win then vim.cmd("startinsert") end
+			end)
 		end
-		M.cmd.ResolveRefOrGotoFile()
-		return
+	end
+	local function restore_cursor()
+		if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+			vim.api.nvim_win_set_cursor(win, cursor)
+		end
+	end
+	-- Both zero-result and selected-destination fallback retain one owner.
+	local function fallback(item)
+		if in_insert_mode then vim.cmd("stopinsert") end
+		if item then vim.api.nvim_win_set_cursor(win, {item.row, item.fallback_col}) end
+		local ok, err = pcall(M.cmd.ResolveRefOrGotoFile, item and {is_current = is_current} or nil)
+		if item then restore_cursor() end
+		if not ok then error(err) end
 	end
 
-	-- A chat reference is somewhere you went to WRITE, so insert is restored.
-	-- Also on "failed", where the cursor has not moved at all.
-	if in_insert_mode then
-		vim.schedule(function()
-			vim.cmd("startinsert")
-		end)
+	local outcome = open_reference_under_cursor(buf, current_line, cursor[2], is_chat)
+	if outcome ~= "none" then restore_insert(); return end
+	local artifact_ref = require("parley.artifact_ref")
+	if artifact_ref.parse_ref_at_cursor(current_line, cursor[2] + 1) then fallback(); return end
+
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local parsed, status = require("parley.entity_textobj").parsed_for(buf, lines)
+	if status == "unparsable" then fallback(); return end
+	local range, in_code = require("parley.entity_range").navigation_range(parsed, lines, cursor[1],
+		{config = M.config})
+	local candidates = require("parley.reference_candidates")
+	local items = candidates.collect(lines, range, {in_code = in_code, branch_prefix = get_branch_prefix()})
+	local function open_item(item)
+		if not is_current() then return end
+		if item.kind == "artifact" then fallback(item); return end
+		-- Isolating the chosen span preserves its identity even on mixed lines
+		-- where the legacy direct parser deliberately selects a nearby @@ form.
+		local span = item.kind == "branch" and lines[item.row]
+			or lines[item.row]:sub(item.col + 1, item.end_col)
+		local result
+		if item.kind == "markdown" then
+			result = try_open_src_link(span, 0, buf) or try_open_inline_branch_link(span, 0, buf)
+				or try_open_markdown_link(span, 0, buf) or "none"
+		elseif item.kind == "branch" then
+			result = open_branch_ref(span, buf)
+		else
+			result = open_reference_under_cursor(buf, span, 0, is_chat)
+		end
+		restore_cursor()
+		if result == "none" then fallback(item) else restore_insert() end
 	end
+	if #items == 0 then fallback(); return end
+	if #items == 1 then open_item(items[1]); return end
+	local selection = candidates.begin_selection(origin, items)
+	if in_insert_mode then vim.cmd("stopinsert") end
+	vim.ui.select(items, {
+		prompt = "Open reference:",
+		format_item = function(item) return ("%d: %s → %s"):format(item.row, item.label, item.target) end,
+	}, function(_, index)
+		if selection.tag ~= "pending" then return end
+		local effect
+		selection, effect = candidates.finish_selection(selection, {index = index, current = current_origin()})
+		if effect.kind == "open" then open_item(effect.item)
+		elseif is_current() then restore_insert() end
+	end)
 end
 
 -- State for chat finder
@@ -5146,10 +5180,10 @@ M.cmd.IssueGoto = function() issues_mod.cmd_issue_goto() end
 -- `sdlc resolve`; family picker when it resolves to many), else fall back to Vim's
 -- native go-to-file (`normal! gf` bypasses this mapping), so `gf` keeps working on
 -- plain paths.
-M.cmd.ResolveRefOrGotoFile = function()
-	require("parley.artifact_ref").goto_ref_at_cursor({
-		on_no_ref = function() vim.cmd("normal! gf") end,
-	})
+M.cmd.ResolveRefOrGotoFile = function(opts)
+	opts = opts or {}
+	opts.on_no_ref = function() vim.cmd("normal! gf") end
+	require("parley.artifact_ref").goto_ref_at_cursor(opts)
 end
 
 -- ariadne#171 M4: project jump — resolve the issue ref under the cursor to the

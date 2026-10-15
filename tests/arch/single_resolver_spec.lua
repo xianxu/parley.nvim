@@ -102,7 +102,11 @@ describe("arch: chat references resolve in one place", function()
         local READS = { "parent_link.path", "branch.path", "link.path" }
         -- annotation.lua matches on the LINE text (is this an annotation?) and
         -- never resolves — it has no business calling a resolver.
-        local NO_RESOLVE = { ["lua/parley/annotation.lua"] = "matches line text; never resolves a path" }
+        local NO_RESOLVE = {
+            ["lua/parley/annotation.lua"] = "matches line text; never resolves a path",
+            ["lua/parley/reference_candidates.lua"] =
+                "pure occurrence values only; init.lua resolves the selected occurrence through resolve_chat_path",
+        }
 
         local offenders = {}
         for _, file in ipairs(repo_lua_files()) do
