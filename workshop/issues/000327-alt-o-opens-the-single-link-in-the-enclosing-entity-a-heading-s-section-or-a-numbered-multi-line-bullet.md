@@ -67,6 +67,7 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 ## Log
 
 ### 2026-10-14
+- 2026-10-14: unclaimed: Parked by operator priority for #330; design committed, no implementation. Resume after #330; plan approval remains unconfirmed due uncertain Couch delivery.
 
 - Claimed #327 after #324 landed and its :0 stage cleared. start-plan refreshed the private Ariadne substrate, required a rerun, then created this main-based issue branch.
 - Read the issue, existing entity_range/Markdown/cursor/reference code and ops opinstr.py. The latter uses column-zero numbered anchors, includes interior blanks, trims trailing blanks, and allows repeated numbers. Its fixed Operator-instructions section ends at a level-2 heading; #327's general numbered range follows the issue's explicit next-heading boundary.
