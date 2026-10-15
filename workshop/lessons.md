@@ -518,6 +518,9 @@ oracle, and the mutation that would make the test fail.
   API callers can enter several real files before yielding. Start empty-window
   histories synchronously at BufEnter/Back, excluding a fresh WinEnter clone;
   test API creation followed immediately by multiple file entries (#333 BR-2).
+- A multiline occurrence needs its full raw span and destination row, not just
+  its opening row and columns. Reserve every row of that span before scanning
+  subordinate references; otherwise wrapped labels leak artifact/@@ choices (#335).
 ## 2026-10-15 (#327 — enclosing-entity navigation)
 
 - A selected occurrence is an identity, not a cursor hint. Dispatch its kind and exact span/target; replay through a legacy nearest-reference parser can open a sibling, and even an isolated Markdown span can reinterpret an embedded @@ label when its destination is unsupported (plan PQ-1).
@@ -525,3 +528,10 @@ oracle, and the mutation that would make the test fail.
 - Native fallback errors are still completion paths. Restore temporary cursor placement in a protected call before propagating gf errors; test an absent non-Markdown target as well as recognized missing Markdown.
 - Reusing structural parsing does not mean reusing an editing operation's walls. Navigation boundaries must follow their own contract; sweep every default/configured structural prefix as content, a transcript turn, and a fenced sample. Share the resulting fence mask with candidate collection so those decisions cannot diverge (close BR-1).
 - A stateful subprocess fake needs a live contract check for the exact modeled command, not only executable/help discovery. Compare consumed fields and failure outcomes against isolated real fixtures, and document when maintainers rerun it (close BR-2).
+
+- A recognized Markdown span owns its destination even when unsupported: use the same Markdown-only opener for direct and selected navigation, then fall back at the destination; never reinterpret @@ text in its label.
+- Multiline scans must receive document context. Reuse the navigation fence memo and lexical structural kinds; test every configured transcript prefix and plain Markdown fenced examples containing chat-like text.
+
+- A multiline inline scanner needs an explicit block-containment rule, not only blank/fence checks. Enumerate heading forms, thematic breaks, quotes, list/chat starts and range edges, with positive supported starts as well as negative joins.
+
+- Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.
