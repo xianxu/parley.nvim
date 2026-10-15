@@ -76,6 +76,10 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - Exploration found legacy couch.query erases explicit-null key presence, and session_sync disk/lock paths change immediately with buffer name while loaded/baseline/callback observations do not. Native temporary probe confirmed saveas emits paired buffer-name events before destination creation; destination exists only after BufWritePost. Plan owns both classes explicitly (ARCH-DRY/ARCH-ORDER).
 - Asked hub to settle safe unknown-lookup editing policy and pair to clarify legacy typed-state adoption plus supported isolated real CLI conformance. These remain plan inputs; no change-code/estimate/implementation yet.
 
+- TL settled availability policy (verified submitted a70bb84a-9070-4d6b-a505-60f22af1a603): never block operator editing on unreachable Couch. Keep full protection for known/cached agentic paths; unknown/unavailable is editable with a one-line band and bounded re-lookup. Couch is the exclusive agent CAS writer, so down means no concurrent agent writes. Plan revised to include bounded local knowledge and preserve unknown-period edit baselines through auto-save. Durable forward-only rename recovery approved.
+
 ## Revisions
 
 - 2026-10-15 — spell out agreed registry boundary and native rename/recovery work in the durable plan without changing the original S1 purpose. Explicit couch-owner is a route override per this issue, superseding #316 refusal only where that new requirement applies. Pending admission-failure policy requires TL review.
+
+- 2026-10-15 — replace the draft read-only admission proposal with the TL-approved editable unknown state, local known-agentic cache and recovery reconciliation. This resolves the failure-policy question; plan review and pair legacy-adoption/isolation details remain pending.

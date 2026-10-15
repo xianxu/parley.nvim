@@ -14,7 +14,7 @@
 - Agreed pair#573 contract: pair `atlas/couch-agentic-documents.md`, initially frozen at 432fab15c7f655d2392d823053e37b575638ee7b. Public implementation/live use still requires that item to land and the TL to rebuild Couch.
 - #327 landed first, PR239 merge bf98edb0f6b86bc846a55f2d26b24d4313374dca; its stage was cleared.
 - Full flow: this crosses registry, editor and filesystem lifecycles and exceeds the quick shell. One atomic close boundary; no artificial milestone tags. Estimate follows plan-quality admission, not this draft.
-- **Pending TL decision:** unavailable lookup on an existing file: propose a bounded admission probe before edits, retaining a read-only unresolved state until retry, without creating a lock for an unproven file. Never-submitted proven-plain files stay plain. Known shared files retain protection through failures. Confirm the UI policy before change-code.
+- **TL policy resolved (a70bb84a-9070-4d6b-a505-60f22af1a603, verified submitted):** never make a file read-only because Couch is unavailable. Bounded lookup on open; known-attached or cached-agentic retains the full edit lock; proven-plain stays plain; unknown/unavailable remains editable with the one-line band "Couch unavailable: agentic state unknown". Re-lookup when Couch returns and take the lock if operator edits are outstanding. Couch is crash-only and agent writes use its CAS surface, so an unreachable Couch cannot concurrently perform those writes. Durable forward-only rename recovery is approved.
 - **Pending pair clarification:** adoption of legacy typed-file ledger state by register/rename and the exact supported temporary namespace/binary invocation for live conformance. Resolve before freezing tests/implementation.
 
 ## Scope and alternatives
@@ -33,7 +33,7 @@ This slice includes moving an existing sibling `<stem>.side/` and its parent bac
 | Migration/backlink projection | PURE | lua/parley/document_move_plan.lua | new |
 | Couch process transport | INTEGRATION | lua/parley/couch.lua | modified |
 | Registry client | INTEGRATION | lua/parley/document_registry.lua | new |
-| Agentic buffer coordinator | INTEGRATION | lua/parley/agentic_document.lua | new |
+| Agentic buffer coordinator and bounded known-path cache | INTEGRATION | lua/parley/agentic_document.lua | new |
 | File/side migration and journal | INTEGRATION | lua/parley/document_move.lua | new |
 | Shared edit turn | INTEGRATION | lua/parley/session_sync.lua | modified |
 | Atomic byte writer | INTEGRATION | lua/parley/helper.lua | modified |
@@ -56,10 +56,10 @@ Authoritative admission/operation state is a tagged value owned by document_sess
 | State/event | Next state and effects |
 |---|---|
 | Outside-pane ordinary Markdown | legacy review dispatch; no registry/lock attachment |
-| Existing eligible file opened | probing with a request witness; admit edits only after policy above resolves |
+| Existing eligible file opened | probing with a request witness; cached/typed identity attaches immediately, otherwise keep editable and observe intervening edits |
 | Lookup explicitly absent | plain; no turn timers, lock, band or registration |
-| Lookup confirms registration | active(identity); attach the shared edit engine before allowing first edit |
-| Lookup unavailable | unresolved; preserve any known shared identity/protection; retry remains read-only |
+| Lookup confirms registration | active(identity); attach the shared edit engine; if edits accumulated while unknown, acquire using the captured first-edit baseline before resuming reconciliation |
+| Lookup unavailable | unresolved/editable with the one-line unknown-state band; preserve known/cached protection; schedule bounded re-lookup |
 | Plain + explicit Alt+Return | submitting/save; validate named Markdown, pane identity and current origin; save successfully before register |
 | Save/owner validation fails | plain or active as before; notify; no register/send/unlock |
 | Register confirmed | active(identity); attach before send; clear only the submitted turn after disk reconciliation/save; send once to returned Owner |
@@ -80,7 +80,10 @@ The runtime may block local input while a submit/move is in progress; still test
 ## Admission, submit and existing turn engine
 
 - Add coordinator attachment from setup_markdown_keymaps. Route the real review_next callback through the coordinator before legacy review prompting. Preserve registry configuration switches and journal-sidecar exclusions; do not install competing Alt+Return mappings.
-- Typed legacy attachment remains immediate. Ordinary files get only read-only lookup, not register on open/edit. New unnamed buffers retain the current save-first diagnostic; a named not-yet-written note can be authored and saved before registry admission, without creating registration as a side effect of editing.
+- Typed legacy and valid cached-agentic attachment remain immediate. Ordinary files get only nonmutating lookup, not register on open/edit. Unknown files remain editable even on failure, with the approved band note; never install an unavailable-state modifiable/readonly barrier. New unnamed buffers retain the current save-first diagnostic; a named not-yet-written note can be authored and saved before registry admission, without creating registration as a side effect of editing.
+- Keep a namespace-scoped known-agentic cache in configured state_dir using the shared atomic writer: schema version, canonical path, stable ID, effective/fallback owner and last-confirmed observation. Bound it to256 entries/1MiB with least-recently-confirmed eviction. Cache eviction/corruption is unknown, never proof of plain; no age expiry changes agentic truth. Confirmed lookup absence removes the cached binding, rename updates it after metadata confirmation. Cache writes are local knowledge, not the registry authority. Validate cache input before offline attachment.
+- Observe edits while admission is unknown without creating a speculative lock. Preserve the pre-edit content hash and outstanding-edit state through auto-save; use that baseline if lookup later confirms registration. Check native modified=true too for preexisting unsaved edits. Reconcile any intervening foreign write/deletion through the existing preservation path before publishing release/reload. A plain result discards observation state and the unknown band without starting turn timers.
+- A single coalesced retry timer (5s initial policy) handles loaded unresolved documents, with the existing bounded request concurrency/queue. Recheck on pane reentry/explicit submit too. Stop the timer when no unresolved loaded documents remain; late callbacks are generation-guarded. Known attached documents never drop protection because a retry fails.
 - First submit saves the file without changing frontmatter or process-instruction. Resolve pane owner from the current actor binding and register with the same captured namespace/path. Explicit couch-owner is authoritative; registered response supplies the effective owner. Resolve the legacy adoption clarification before coding typed upgrade behavior.
 - Attach the known canonical identity/path once. Every owner use (band, ping, violation and submit) derives from this accessor. Body/header edits cannot remove attachment. Owner changes refresh through validated confirmation rather than ad-hoc per-consumer parsing.
 - Refactor file_of/owner_of to use the attached stable identity and explicit migration phase, so a name change cannot silently switch disk operations to a free NEW path. Existing on_lines acquisition still runs before auto-save; saves never advance the acquisition baseline. Pending foreign write/deletion reconciliation still precedes every release or move.
@@ -117,7 +120,7 @@ Files: new document_session.lua, document_move_plan.lua, document_registry.lua; 
 
 Files: new agentic_document.lua; modify session_sync.lua, review_send.lua, init.lua and registry help descriptions. Tests: session_sync integration/native, review_send and keybinding specs; new tests/integration/agentic_document_spec.lua as needed.
 
-- [ ] Drive the actual installed Alt+Return mapping red in a child Neovim with auto-save installed BEFORE opening/attachment. Pin first-submit disk bytes and register-before-send order, explicit owner priority, no-business-owner routing and never-submitted plain behavior.
+- [ ] Drive the actual installed Alt+Return mapping red in a child Neovim with auto-save installed BEFORE opening/attachment. Pin first-submit disk bytes and register-before-send order, explicit owner priority, no-business-owner routing and never-submitted plain behavior. Exercise a known cached document reopened with Couch down, an uncached editable unknown document, and Couch recovery after edits auto-saved modified=false; verify the original edit baseline and resumed lock.
 - [ ] Integrate the pure model/coordinator with the single existing edit engine; exercise real dd/x/p/u/dot/insert after new attachment and after an agent reload, baseline undo/redo under auto-save, pre-existing lock and explicit-save behavior.
 - [ ] Control pending lookup/register completion across edit/rename/unload/repeat submit and actor changes. Assert no stale attachment/send/unlock and no automatic duplicate sends; exercise unsupported-binary and malformed envelopes.
 - [ ] Preserve typed/outside-pane behavior and deliberately update superseded pane review-prompt/same-slot-refusal expectations. Run the mapped session-sync, review and keybinding groups sequentially; commit.
@@ -142,12 +145,14 @@ Files: atlas/modes/session_sync.md, atlas/modes/review.md, atlas/traceability.ya
 
 ## Operating envelope, provenance and residue
 
-ARCH-CONSTRAINTS: one-shot admission on named Markdown open, explicit submit and explicit rename, never IPC per keystroke. Ordinary proven-plain files have no lock/watch/probe timers. One mutation per buffer; bounded pending completion/confirmation and no recursive automatic retry. Initial workload assumption: at most32 loaded agentic documents per editor; at most4 concurrent registry queries, a bounded queue of64, and an explicit unavailable result on overflow. Child requests have a 2.5s client deadline against Couch's documented 2s registry budget. Existing watcher cadence stays unchanged. Registration refuses documents beyond Couch's 4MiB bound rather than silently falling back. Exercise queue/size bounds without timing assertions; confirm material budget changes with TL.
+ARCH-CONSTRAINTS: one-shot admission on named Markdown open, explicit submit and explicit rename, never IPC per keystroke. Ordinary proven-plain files have no lock/watch/probe timers. Unknown/unavailable files remain editable and share one bounded retry timer; a cache hit retains immediate protection. One mutation per buffer; bounded pending completion/confirmation and no recursive automatic retry. Initial workload assumption: at most32 loaded agentic documents per editor; at most4 concurrent registry queries, a bounded queue of64, and an explicit unavailable result on overflow. Child requests have a 2.5s client deadline against Couch's documented 2s registry budget. Existing watcher cadence stays unchanged. Registration refuses documents beyond Couch's 4MiB bound rather than silently falling back. Exercise queue/size bounds without timing assertions; confirm material budget changes with TL.
 
 ARCH-SECURE: CLI output, paths, edited frontmatter, journal files and side-document text are untrusted inputs. Parse at their boundaries; bad version/schema/identity is unavailable/pending, not a fabricated default. No credentials, new services or network needed. Portable fake state and real conformance storage live in per-test temporary directories; ensure fixture environment cannot reach production registry/ledger.
 
-ARCH-FUNERAL: per-buffer models, barriers, callbacks and handles die on wipeout; generation guards prevent late effects. Couch owns bounded persistent registrations until forget. Parley creates only bounded pending migration journals and atomic-writer temporary files; completed journals are deleted, existing startup cleanup owns obsolete atomic temps, and uncertain journals remain explicitly recoverable. Existing `.lock`, `.clobbered` and `.side` lifecycles remain their documented owners; do not prune user side documents.
+ARCH-FUNERAL: per-buffer models, barriers, callbacks and handles die on wipeout; generation guards prevent late effects. Couch owns bounded persistent registrations until forget. Parley owns a bounded cache (confirmed absence removes entries; eviction only loses offline knowledge) plus bounded pending migration journals and atomic-writer temporary files; completed journals are deleted, existing startup cleanup owns obsolete atomic temps, and uncertain journals remain explicitly recoverable. Existing `.lock`, `.clobbered` and `.side` lifecycles remain their documented owners; do not prune user side documents.
 
 ## Revisions
 
 - 2026-10-15 — initial draft after #327 landing; agrees the pair#573 caller contract, separates typed legacy behavior from plain-file admission, and names the lookup/rename ordering hazards discovered in read-only exploration. TL failure-policy decision and pair legacy-adoption/isolation details remain open. No implementation/change-code/estimate yet.
+
+- 2026-10-15 — TL availability decision supersedes the initial read-only proposal: all unknown/unavailable files stay editable because Couch is the exclusive CAS write path and cannot write while unreachable. Add a small bounded persistent known-agentic cache, unknown-state band, coalesced re-lookup and outstanding-edit observations that survive auto-save. A recovered registration acquires against the pre-edit baseline. Forward-only rename recovery is explicitly approved. No implementation yet.
