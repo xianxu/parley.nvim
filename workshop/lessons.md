@@ -507,3 +507,6 @@ oracle, and the mutation that would make the test fail.
 - Concurrent focused tests in one checkout still share the orphan census.
   Schedule all make-driven tests after a delegated direct Plenary run finishes
   so its live child is not mistaken for an orphan (#333).
+- Resolve named buffers with helper.buffer_for(path, loaded_only), including
+  availability checks. The architecture guard rejects pattern-based bufnr(path)
+  lookups; reuse the exact-name helper before the full-suite boundary (#333).

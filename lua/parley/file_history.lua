@@ -67,12 +67,12 @@ function M.back()
     while true do
         proposed, target = model.transition(proposed, { kind = "back" })
         if not target then return false end
-        local loaded = vim.fn.bufloaded(target.path) == 1
+        local loaded = helpers.buffer_for(target.path, true)
         if target.path ~= origin.path and (loaded or vim.fn.filereadable(target.path) == 1) then
             restoring[win] = true
             local ok, problem = pcall(function()
                 if loaded then
-                    vim.cmd("buffer " .. vim.fn.bufnr(target.path))
+                    vim.cmd("buffer " .. loaded)
                 else
                     vim.cmd("edit " .. vim.fn.fnameescape(target.path))
                 end

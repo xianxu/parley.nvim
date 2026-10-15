@@ -124,3 +124,14 @@ help-generator script exists, so assert the generated help lines directly.
 - Checklist bookkeeping now ends at test verification; close, merge and staging
   are subsequent SDLC operations recorded by their actual outcomes, rather than
   marking them complete before the close gate runs. Approved scope is unchanged.
+
+### 2026-10-15 — full-suite architecture finding
+
+The first full suite exited 2 with one failing file: buffer_lookup_spec rejected
+bufnr(path). All file-history integration cases passed; no test processes survived.
+Reused helper.buffer_for(path, true) for both loaded eligibility and switching
+(ARCH-DRY), retaining an added deleted-file/loaded-backup case as coverage.
+That case also passes before the change on this Neovim; the architecture guard
+is the demonstrated red/green regression. The full keybinding mapping and focused
+16-case adapter plus architecture-guard run pass after the correction. Rerunning
+the full suite before close; scope and approved behavior are unchanged.
