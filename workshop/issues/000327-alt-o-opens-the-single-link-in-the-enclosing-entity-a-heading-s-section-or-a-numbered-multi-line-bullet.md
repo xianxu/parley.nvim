@@ -64,7 +64,7 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 - [x] Add pure navigation ranges and shared occurrence parsing with regression coverage for existing consumers.
 - [x] Integrate sole-target opening and ambiguity picker; cover direct priority, cancellation/stale callback, source-relative paths, mode and zero-result fallback.
-- [ ] Update README/atlas/traceability and pass targeted/full checks for close review and staged delivery.
+- [x] Update README/atlas/traceability and pass targeted/full checks for close review and staged delivery.
 
 ## Delivery
 
@@ -100,6 +100,8 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 - Final required suite passed on 20e35d1adf71d1e4b67ca964267c49e4faff776b: all 431 spec files, lint728 files with zero warnings/errors, clean process census; runtime2m7s, log sha256 prefix3491086c673f. The full retry includes the fixed architecture guard, real native input, real fake-process resolution, deletion parity and packaging checks. PR239 server checks are green. Close review is next; operator live acceptance remains pending and mandatory before merge.
 
 - Close round1 returned REWORK for BR-1 (navigation-entity-boundaries): reusing paragraph structural walls excluded branch-reference continuations. Fixed the rule across all eight default/configured prefix families, retaining only real transcript turns as extra item boundaries. The same sweep added plain-Markdown fence coverage and a shared context-specific mask. Red tests observed all affected command/range cases; green navigation map360 cases14 specs, lexical/highlight30 cases and editing parity group109 cases. Lint/diff checks clean. Full suite and boundary review will rerun on the corrected code; live acceptance remains pending.
+
+- BR-1 correction verified by the required full suite on 1e028d015f254691cc8ada4d79cec58a5d263475: all 431 spec files pass, lint728 files clean, no surviving test processes; runtime2m1s, log sha256 prefix4d4885404188. This run includes the complete prefix/fence class and unchanged editing behavior. Rerunning close review before staging; operator live acceptance remains pending.
 
 ## Estimate
 
