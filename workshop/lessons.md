@@ -510,3 +510,7 @@ oracle, and the mutation that would make the test fail.
 - Resolve named buffers with helper.buffer_for(path, loaded_only), including
   availability checks. The architecture guard rejects pattern-based bufnr(path)
   lookups; reuse the exact-name helper before the full-suite boundary (#333).
+- Correction to the split-source rule above: focus does not prove API ancestry.
+  Equalalways can make distinct parents produce identical native creation state.
+  Inherit only from an explicit native WinLeave→WinNew source; start API windows
+  fresh, seeding after their temporary cloned buffer is replaced (#333 BR-1).

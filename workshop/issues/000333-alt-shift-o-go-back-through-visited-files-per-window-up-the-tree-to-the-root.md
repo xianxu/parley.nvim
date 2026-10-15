@@ -170,3 +170,17 @@ before leaving the source and therefore start fresh, even with a focused parent;
 this observable boundary was reported back to the hub. The first displayed file
 is the new root. Keep native focused-source inheritance strict and adjust the
 eight unfocused API regressions to assert no inherited Back target.
+
+### 2026-10-15 — narrowed BR-1 correction evidence
+
+The narrowed contract first produced nine expected failures against the old
+adapter. Replaced focus reuse with a consumed native departure token; API births
+start fresh. Suppress API creation-time observations until one guarded scheduled
+seed sees the final buffer; WinClosed or immediate Back cancels that token.
+The expanded ui/keybindings mapping passes, as do 27 focused adapter cases and
+the exact-name architecture guard. Tests retain strict native split/tab inheritance,
+cover eight unfocused API directions/activation cases, focused API creation,
+identical-file parent ambiguity, temporary clones and close-before-seed.
+Removing only creation suppression makes the final-buffer case fail; restored
+and confirmed 27/27 green. README/atlas describe the narrowed contract. Full
+verification and boundary re-review remain pending on this correction.

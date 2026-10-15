@@ -222,3 +222,11 @@ Update README/atlas, revise all eight unfocused API cases to assert root no-op
 and independent subsequent visits, retain strict native split/tab tests, and
 cover API focused-source empty history. Re-run targeted/full checks and the SDLC
 review; BR-1 must be disposed before landing.
+
+API creation also emits WinEnter before replacing the temporary cloned buffer.
+For these fresh windows only, suppress creation-time observations and seed the
+final displayed file in one scheduled callback after creation returns. A per-window
+token cancels stale callbacks on close; Back consumes the token and observes the
+actual target synchronously if invoked before that callback. This supersedes the
+original no-async-callback statement for API initialization only. Cover different
+initial targets, identical-buffer parent ambiguity, and close-before-callback.

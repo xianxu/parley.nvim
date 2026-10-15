@@ -2,8 +2,8 @@
 local M = {}
 local model = require("parley.file_history_model")
 local helpers = require("parley.helper")
-local histories, restoring = {}, {}
-local source_window
+local histories, restoring, pending_windows = {}, {}, {}
+local departing_window
 
 local function observation(win)
     if not helpers.is_editing_window(win) then return nil end
@@ -16,7 +16,7 @@ local function observation(win)
 end
 
 local function observe(win, kind)
-    local entry = not restoring[win] and observation(win)
+    local entry = not restoring[win] and not pending_windows[win] and observation(win)
     if entry then
         entry.kind = kind
         histories[win] = model.transition(histories[win], entry)
@@ -32,35 +32,48 @@ end
 -- Repeated setup replaces handlers but preserves each live window's history.
 function M.setup()
     local group = vim.api.nvim_create_augroup("ParleyFileHistory", { clear = true })
-    vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, { group = group, callback = function()
-        observe(vim.api.nvim_get_current_win(), "snapshot")
+    vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, { group = group, callback = function(ev)
+        local win = vim.api.nvim_get_current_win()
+        observe(win, "snapshot")
+        if ev.event == "WinLeave" then departing_window = helpers.is_editing_window(win) and win or nil end
     end })
     vim.api.nvim_create_autocmd("WinNew", { group = group, callback = function()
         local win = vim.api.nvim_get_current_win()
+        local parent = departing_window
+        departing_window = nil
         if helpers.is_editing_window(win) then
-            -- An inactive API split fires WinNew in the child without WinLeave.
-            if source_window then observe(source_window, "snapshot") end
-            histories[win] = histories[source_window]
+            -- Native splits leave their focused source first; API creations do not.
+            histories[win] = parent and histories[parent] or nil
+            if not parent then
+                -- API WinEnter can still show the temporary cloned buffer.
+                local pending = {}
+                pending_windows[win] = pending
+                vim.schedule(function()
+                    if pending_windows[win] ~= pending then return end
+                    pending_windows[win] = nil
+                    observe(win, "visit")
+                end)
+            end
         end
     end })
     vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, { group = group, callback = function(ev)
         local win = vim.api.nvim_get_current_win()
         observe(win, "visit")
-        if ev.event == "WinEnter" and helpers.is_editing_window(win) then source_window = win end
+        if ev.event == "WinEnter" then departing_window = nil end
     end })
     vim.api.nvim_create_autocmd("WinClosed", { group = group, callback = function(ev)
         local win = tonumber(ev.match)
-        histories[win], restoring[win] = nil, nil
-        if source_window == win then source_window = nil end
+        histories[win], restoring[win], pending_windows[win] = nil, nil, nil
+        if departing_window == win then departing_window = nil end
     end })
     for _, win in ipairs(vim.api.nvim_list_wins()) do observe(win, "visit") end
-    local current = vim.api.nvim_get_current_win()
-    if helpers.is_editing_window(current) then source_window = current end
+    departing_window = nil
 end
 
 -- Propose index changes first; commit only after a successful native switch.
 function M.back()
     local win = vim.api.nvim_get_current_win()
+    pending_windows[win] = nil
     local origin = observe(win, "visit")
     if not origin then return false end
     local proposed, target = histories[win]

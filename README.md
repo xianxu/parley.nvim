@@ -60,8 +60,10 @@ the baseline, and saving changed text keeps the turn until Alt+Return. See the
 Press **Alt+Shift+O** in Normal or Insert mode to return to the previous file
 in the current window, restoring its cursor position. Follow links with Alt+o,
 then use Alt+Shift+O repeatedly to return through answer and side documents to
-your session file. Each split inherits its parent's history and keeps its own
-later visits. See [file navigation](atlas/ui/keybindings.md#file-history-back)
+your session file. A split or tab opened by a user command or Parley's openers
+inherits the focused window's history and keeps its own later visits. Windows
+created through APIs or RPC start with no inherited history; their first file
+becomes the root. See [file navigation](atlas/ui/keybindings.md#file-history-back)
 for the command and configuration.
 
 ## Learn by chatting

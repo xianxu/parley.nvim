@@ -10,8 +10,17 @@ Alt+o, native `gf`, `:edit`, and picker buffer switches share the same history;
 same-file cursor jumps do not add entries. Opening another file after Back
 replaces the forward tail. At the first retained file, Back quietly stays put.
 
-A split or new tab inherits its source window's history, then keeps independent
-visits and cursors. Scratch, help, terminal, directory and floating buffers are
+A split or new tab opened by a native user command or Parley's command-based
+openers inherits the focused source's history, then keeps independent visits
+and cursors. Inheritance requires the source's WinLeave immediately before
+WinNew; WinEnter clears that departure, and WinNew consumes it once. API/RPC
+window creation has no such source departure and starts with no inherited
+entries, even when its requested parent is focused. Its first observed file
+becomes the root. Neovim does not expose unambiguous API parentage at WinNew;
+the adapter neither guesses from layout nor wraps the core API. A guarded
+scheduled callback seeds fresh API windows after the temporary cloned buffer is
+replaced; close or an immediate Back cancels that initialization token.
+Scratch, help, terminal, directory and floating buffers are
 not visits. Histories retain the most recent 200 visits per window, live only
 for this editor session, and are released when the window closes. Missing
 unloaded targets are skipped; loaded buffers remain reachable after file deletion.
