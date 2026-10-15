@@ -1,12 +1,20 @@
 ---
 id: 000319
-status: open
-deps: []
+status: working
+deps: [ariadne#399, parley.nvim#332, pair#573]
 github_issue:
 created: 2026-10-13
-updated: 2026-10-13
+updated: 2026-10-15
 estimate_hours:
-card_mirror: '62229aab23f46e4e48765251255a23dd22981fc9' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a78c4e811b6661820aaf64793c69ab8bd71cf7fb' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T16:16:41-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Review: one universal review skill in ariadne, so parley's send names it instead of embedding the instructions
@@ -27,11 +35,31 @@ Lift the review protocol into ariadne as one agent skill (working name `xx-unive
 
 ## Plan
 
-- [ ]
+- [ ] Approve the S2a integration choice and land the shared skill (ariadne#399) plus S1 dependencies first.
+- [ ] Generate the canonical protocol bundle and implement pure short/inline message formatting with explicit capability evidence.
+- [ ] Integrate formatting inside S1's registered-send seam, preserving admission, lock, dedup/resend and confirmed-success baseline behavior.
+- [ ] Run targeted/full verification, stage for the hub's live check, close on SHIP and land.
+
+Durable plan: [universal review submissions](../plans/000319-universal-review-send-plan.md).
 
 ## Log
 
 ### 2026-10-13
+
+### 2026-10-15 — S2a plan drafted
+
+Claimed and started after #335 landed. Read the ops design S2 and project S2a;
+loaded the refreshed architecture/worker contracts. Filed ariadne#399 unclaimed
+for hub dispatch. The S1 owner confirmed its registered submission bypasses
+review_send.message even for explicit process-instruction; the proposed plan
+therefore requests one payload adapter inside S1, without bypassing its
+registration, locks or receipt ownership.
+
+The canonical grammar is 8,774 bytes, larger than Couch's 8,192-byte envelope;
+standalone fallback embeds the generated round/mode brief and points to the
+packaged grammar file. The pure builder budgets UTF-8 bytes and real diffs.
+Issue schema and whitespace checks pass. This turn changes only issue/plan
+artifacts; no implementation or runtime tests are claimed. Awaiting hub approval.
 
 ## Revisions
 
@@ -42,3 +70,14 @@ Lift the review protocol into ariadne as one agent skill (working name `xx-unive
   "Review mode" brief, the "How to apply this round" block, the repeated operator instruction, and the
   "Changes since the last send" header when it says "first send" (keep a real diff when there is one, since
   that's new information). The mode semantics live in the skill, not in every message.
+
+- 2026-10-15 — S2a planning proposal after #335 landed. Shared half filed as
+  ariadne#399, unclaimed for hub dispatch, with S1 dependencies parley.nvim#332
+  and pair#573. Mode/protocol fallback will be generated from the shared source;
+  no independent Parley mode definitions. #332's owner confirmed its coordinator
+  consumes named Markdown even with process-instruction, so changing only the
+  old message builder would miss the Couch path. Request hub approval for a
+  payload adapter within S1's existing registered send, preserving its state
+  ownership and submitted-only behavior when no review instruction is present.
+  See the durable plan for alternatives, contracts, tests and handoff. No code
+  changed; awaiting plan approval.
