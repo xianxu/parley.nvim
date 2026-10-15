@@ -56,6 +56,28 @@ describe("reference candidates", function()
         end
     end)
 
+    it("keeps wrapped labels within text paragraphs rather than neighboring Markdown blocks", function()
+        for _, boundary in ipairs({"---", "- - -", "***", "* * *", "___", "_ _ _", "===", "=", "--",
+            "> quoted", "  > quoted", "#### Heading", "###### Heading"}) do
+            local lines = {"[unfinished", boundary, "label](side.md)"}
+            assert.same({}, candidates.markdown_spans(lines, {first = 1, last = 3}), boundary)
+            assert.same({}, candidates.collect(lines, {first = 1, last = 3}), boundary)
+        end
+        for _, continuation in ipairs({"= =", "    > text", "    #### text"}) do
+            local got = candidates.markdown_spans({"[valid", continuation, "label](side.md)"},
+                {first = 1, last = 3}, {transcript = false})
+            assert.equals(1, #got, continuation)
+        end
+        local inline = candidates.collect({"> [inline](side.md)"}, {first = 1, last = 1})
+        assert.equals(1, #inline)
+        assert.equals("side.md", inline[1].target)
+        for _, start in ipairs({"1. [valid", "- [valid", "💬: [valid"}) do
+            local got = candidates.markdown_spans({start, "   label](side.md)"}, {first = 1, last = 2})
+            assert.equals(1, #got)
+            assert.equals("side.md", got[1].target)
+        end
+    end)
+
     it("enumerates only closed nonempty @@ spans and retains legacy starts", function()
         local line = "é @@  a@b.md  @@ and @@two.md@@ then @@unterminated"
         local refs = candidates.at_references(line)

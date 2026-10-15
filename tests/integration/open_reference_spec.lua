@@ -865,6 +865,16 @@ describe('enclosing entity navigation', function()
             end
         end
     end)
+    it('never opens a wrapped label completed across another Markdown block', function()
+        local target = write_markdown('block-target.md', {'# Target'})
+        for _, boundary in ipairs({'---', '- - -', '***', '* * *', '___', '_ _ _', '===', '=', '--',
+            '> quoted', '  > quoted', '#### Heading', '###### Heading'}) do
+            source({'[unfinished', boundary, 'label](' .. target .. ')'}, 3, 2)
+            invoke()
+            assert.equals(0, #opened, boundary)
+            assert.is_nil(picker)
+        end
+    end)
     it('keeps direct Markdown priority over other entity choices', function()
         local target = write_markdown('direct.md', {'# D'})
         source({'1. [direct](direct.md)','   [other](missing.md)'},1,6)

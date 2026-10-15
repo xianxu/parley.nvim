@@ -26,13 +26,18 @@ function M.markdown_spans(lines, range, opts)
     local chunks, starts, size = {}, {}, 0
     for row = first, last do
         local line = lines[row]
-        local heading = require("parley.markdown_heading").level(line)
+        local content = line:match("^ ? ? ?(%S.*)$") or ""
+        local hashes = content:match("^(#+)%s")
+        local heading = require("parley.markdown_heading").level(line) or (hashes and #hashes <= 6)
+        local compact = content:gsub("%s", "")
+        local wall = content:match("^%-+%s*$") or content:match("^=+%s*$") or content:match("^>")
+            or compact:match("^%-%-%-+$") or compact:match("^%*%*%*+$") or compact:match("^___+$")
         local kind = opts.transcript ~= false and lexical.classify(line, patterns).kind
         local structural = lexical.is_structural_kind(kind) or kind == "reasoning" or kind == "reasoning_end"
-        local boundary = structural or heading or line:match("^%s*%d+[.)]%s") or line:match("^%s*[-+*]%s")
+        local boundary = wall or structural or heading or line:match("^%s*%d+[.)]%s") or line:match("^%s*[-+*]%s")
         local barrier = boundary and "\0" or ""
         local chunk = (in_code[row] or lexical.is_fence_delim(line, true) or line:match("^%s*$"))
-            and "\0" or barrier .. line .. (heading and "\0" or "")
+            and "\0" or barrier .. line .. ((heading or wall) and "\0" or "")
         starts[row], size = size + 1 + #barrier, size + #chunk + 1
         chunks[#chunks + 1] = chunk
     end

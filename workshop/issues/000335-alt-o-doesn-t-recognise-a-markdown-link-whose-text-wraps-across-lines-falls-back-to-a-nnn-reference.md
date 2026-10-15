@@ -128,6 +128,19 @@ zero warnings/errors in 732 files, clean process census
 (/tmp/parley-335-review-full.log). Ready for a full close re-review disposing
 BR-1/BR-2; the quick-flow production patch is 83 added lines.
 
+### 2026-10-15 — BR-3 containment correction
+
+Round 2 confirms BR-1/BR-2 addressed and returns BR-3 for remaining Markdown
+block boundaries. New pure/command tests fail before correction
+(/tmp/parley-335-blocks-red.log). Shared walls now cover thematic breaks,
+Setext headings, quotes and all ATX heading levels. Further red/green checks
+preserve complete same-line quote links and avoid classifying spaced equals
+or four-space-indented continuation text as new blocks
+(/tmp/parley-335-{quote,paragraph}-red.log). Final mapped suite passes with
+no errors and clean census (/tmp/parley-335-paragraph-final.log); whitespace
+passes. Positive list/chat-anchor spans remain supported. Atlas and lessons
+updated. Full verification rerun follows; production patch is 88 added lines.
+
 ## Revisions
 
 ### 2026-10-15 15:30 — close review BR-1 and BR-2
@@ -138,3 +151,15 @@ scanner consumers: all eight transcript structural prefixes terminate a previous
 span, and plain Markdown fences never reset at chat-looking text (ARCH-PURPOSE).
 Add failing regressions for existing/missing nested @@ targets, each configured
 structural prefix, and both backtick/tilde fenced examples before correcting.
+
+### 2026-10-15 15:47 — BR-3 paragraph containment
+
+Rule: join ordinary paragraph text only. Blank lines, fenced code, ATX and
+Setext headings, thematic breaks, and blockquote rows are hard walls; list and
+transcript structural anchors may begin a span but cannot continue a previous
+one. Existing scan range edges remain walls. The shared adapter enforces this
+for both direct navigation and entity collection. Enumerate compact/spaced
+thematic forms, Setext variants, indented quote markers and ATX levels 4–6 in
+regressions, plus positive list/chat-anchor wrapping to preserve supported
+paragraph starts. This refines containment without changing the existing
+inline-link syntax or adding container/HTML parsing.

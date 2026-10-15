@@ -74,3 +74,88 @@ findings:
    Add a `## Revisions` entry requiring shared Markdown-only dispatch and document-aware scan boundaries, with regression tests for both findings. The Core concepts classifications can remain unchanged.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"d305fbd0-fcdc-4a05-aa8c-8dba2fbe7efb","repository":"github.com/xianxu/parley.nvim","issue_id":"000335","recipe":"small-diff-review","round":1,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/098c5794f9b9f3e5","reviewed_head":"04c87f5c37be8c0a09e86edb7da518c51cb04f59","slot":"parley.nvim:1","requested_at":"2026-10-15T22:26:40.01448Z"},"phase":"finished","pid":70526,"started_at":"2026-10-15T22:26:40.410096Z","finished_at":"2026-10-15T22:28:33.39378Z","session_id":"01a141ac-b892-7293-94b5-dded29ca0c3e","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T15:45:25-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 335 — Alt+o doesn't recognise a markdown link whose text wraps across lines (falls back to a #NNN reference) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000335-alt-o-doesn-t-recognise-a-markdown-link-whose-text-wraps-across-lines-falls-back-to-a-nnn-reference.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 83f3893a133af1d8f96a677ecc0fa6b5e2c514c0..dcdb95cf023e8c1b2e0b465381608d91fbd07fdf |
+| command | sdlc close --issue 335 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T15:45:25-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Both prior findings are corrected, with verified failing regressions when the fixes are removed. All 75 focused tests pass at the pinned head. However, the shared scanner still constructs links across Markdown block boundaries, violating the paragraph-scoped contract and opening unintended targets.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Direct and selected wrapped links share open_markdown_reference. The existing/missing nested-@@ regression passes at head and fails with the pre-fix production files.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Both consumers receive document context and the navigation fence memo. The transcript-marker and plain-Markdown-fence regressions pass at head; removing the correction produces one unit and two integration failures.
+findings:
+  - id: new
+    severity: Critical
+    kind: defect
+    family: preserve-document-scan-boundaries
+    title: |
+      Wrapped links still cross Markdown block boundaries
+    detail: |
+      lua/parley/reference_candidates.lua:29–35 omits thematic breaks, Setext heading underlines, and blockquote transitions from its paragraph barriers. Headless probes using {"[unfinished", boundary, "label](<absolute README.md path>)"} with each boundary "---", "***", "___", "===", and "> quoted" produced one Markdown candidate and opened README.md through OpenFileUnderCursor from row 3. The affected sites are the shared boundary predicate, direct scanning at lua/parley/init.lua:5071, and collect's shared scan at lua/parley/reference_candidates.lua:100. This is the 2nd finding in family preserve-document-scan-boundaries. Earlier rounds fixed instances. Do NOT fix only these spellings: state the paragraph/block-containment rule, enumerate its boundary classes, and enforce it for both consumers with failing regressions (ARCH-PURPOSE).
+```
+
+Done-when: current — the original navigation and invalid-link outcomes remain applicable; the revisions refine their boundary and dispatch constraints.
+
+1. **Strengths**
+
+   - Shared Markdown-only dispatch preserves recognized destination identity.
+   - Full spans retain byte coordinates and fallback destination rows.
+   - README and atlas explain the corrected behavior.
+   - Prior corrections have independently confirmed red/green evidence.
+
+2. **Critical findings**
+
+   - Markdown block containment remains incomplete; see the finding above. Extend the shared scanner’s boundary policy and test both direct navigation and candidate collection.
+
+3. **Important findings**
+
+   None.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   The unit suite passes 16 cases; integration passes 59. Removing the prior corrections causes four cases to fail without test errors. The five additional block-boundary probes reproduce unintended opening despite the passing suite. Production files were restored; the checkout is clean. Full-suite claims were not independently rerun.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY: pass.** Both consumers reuse scanning and Markdown dispatch.
+   - **ARCH-PURE: pass.** Parsing remains deterministic and directly tested; editor effects stay in the integration layer. Core-concept entities exist at their declared paths.
+   - **ARCH-PURPOSE: flag.** Cross-block joining violates the promised paragraph scope.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry defining paragraph/block containment for both scanner consumers, enumerating the supported boundary classes, and requiring regression coverage for the confirmed thematic-break, Setext-heading, and blockquote cases.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"79884504-d136-4b45-b704-8dd120367d15","repository":"github.com/xianxu/parley.nvim","issue_id":"000335","recipe":"small-diff-review","round":2,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/84c1a2ac5fd10371","reviewed_head":"dcdb95cf023e8c1b2e0b465381608d91fbd07fdf","slot":"parley.nvim:1","requested_at":"2026-10-15T22:43:43.277005Z"},"phase":"finished","pid":98665,"started_at":"2026-10-15T22:43:43.399979Z","finished_at":"2026-10-15T22:45:25.153837Z","session_id":"01a141bc-54ea-77d0-9ff5-44e48912a835","outcome":"returned"}] -->

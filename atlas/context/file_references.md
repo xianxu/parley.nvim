@@ -105,3 +105,7 @@ direct and selected paths share the Markdown-only opener and fall back at the
 URL's row/byte position. Both scans receive the document-aware navigation fence
 memo; transcript structural prefixes stop cross-boundary joins, while chat-like
 text in plain Markdown never resets a fence.
+
+Paragraph walls include thematic breaks (compact or spaced), Setext underlines,
+all six ATX heading levels, and blockquote rows. A list/chat anchor may begin a
+wrapped label but never continue a span opened in an earlier block.
