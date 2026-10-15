@@ -30,7 +30,9 @@ Investigate and eliminate the guest probe timing/focus dependence without weaken
 
 ## Done when
 
-A deterministic regression or controlled scheduling reproduces the failure, the root cause is fixed, and focused plus full parallel integration checks prove isolation without assuming the current buffer is the completed chat.
+- A deterministic regression (a focus change before the guest assertions) reproduces the failure on the old assertion.
+- The root cause is fixed: the probe settles the login flow's reopened picker before chat dispatch, and confinement is asserted on the created chat file, never on the current buffer.
+- Focused and full parallel integration runs pass with profile confinement, first-use login and real chat dispatch assertions intact.
 
 ## Core concepts
 
