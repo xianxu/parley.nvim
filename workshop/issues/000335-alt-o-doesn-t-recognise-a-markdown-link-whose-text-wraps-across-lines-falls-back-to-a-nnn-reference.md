@@ -1,12 +1,12 @@
 ---
 id: 000335
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '568c79004bc3b5309020624871ccb5ed32eca7e4' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '851314268495e6996b8c1f1ee00c60d7209efa80' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T14:41:15-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "ca1ac352", done: "68026ca0"}
+actual_hours: 1.50
 ---
 
 # Alt+o doesn't recognise a markdown link whose text wraps across lines (falls back to a #NNN reference)
