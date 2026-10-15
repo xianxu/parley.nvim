@@ -1,8 +1,8 @@
 ---
 id: 000322
-status: open
+status: wontfix
 created: 2026-10-14
-updated: 2026-10-14
+updated: 2026-10-15
 estimate_hours:
 github_issue:
 ---
