@@ -76,6 +76,78 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 3e3d67fb-4aa1-4947-9408-620cb6dc89c9
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000336"
+            recipe: small-diff-review
+            round: 2
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/1e411a8717f267e7
+            reviewed_head: 01ebf08816a07f290c4382c016fc195792b43c19
+            slot: parley.nvim:3
+            requested_at: "2026-10-15T23:08:18.663769Z"
+          phase: finished
+          pid: 54092
+          started_at: "2026-10-15T23:08:18.767704Z"
+          finished_at: "2026-10-15T23:10:35.918953Z"
+          session_id: 28c82759-0ee7-42c5-965e-f7a19479ab88
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 01ebf08816a07f290c4382c016fc195792b43c19
+        tracker_head: 6f33900280b5db51d9e67071bc320b62987aacec
+        branch_point: 35d876d55d7940f20c3d6087846f4247d2b9b14d
+        since: "2026-10-15T15:41:39-07:00"
+        until: "2026-10-15T16:05:17-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-15T15:41:39-07:00"
+              end: "2026-10-15T16:05:17-07:00"
+              began: "2026-10-15T15:41:39-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 996b651e-5e17-47f4-9815-33d9ff25fe0d
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: bf0caa972dabdf501dd111cf10127e6d8064ac97dbb95d2b12b9dcc567dc80ac
+              started: "2026-10-15T18:27:53.241Z"
+              spawned: false
+              bytes: 1077960
+              windows:
+                - start: "2026-10-15T15:41:39-07:00"
+                  end: "2026-10-15T16:05:17-07:00"
+        cuts:
+            - dispatched: "2026-10-15T15:58:47-07:00"
+              finalized: "2026-10-15T16:02:01-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-15T16:10:43-07:00"
+      dispatched: "2026-10-15T16:08:18-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Reverted settle block in disposable checkout; focused packaging_vm_spec went 16/1 twice (vm_chat.lua:45 "chat dispatch began while account connection was still open"); restored 17/0.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: All three maparg presses (Down, CR, Esc) now go through press() at vm_chat.lua:35-39, which asserts a callback exists; no other unguarded instance in the window.
+          round: 2
+      recipe: small-diff-review
+      isolation: fenced
+      reviewed: 01ebf08816a07f290c4382c016fc195792b43c19
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#336 (boundary-review)
@@ -92,7 +164,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-2** [Minor] `unguarded-keymap-callback` (kind: defect) maparg Esc callback is invoked without checking it exists
   tests/packaging/vm_chat.lua:133 calls maparg('<Esc>','n',false,true).callback() directly. The sibling <CR> lookup at :121-122 checks the type first. The existing <Down> call at :120 has the same gap.
 
+## Round 2 — 2026-10-15T16:10:43-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — Reverted settle block in disposable checkout; focused packaging_vm_spec went 16/1 twice (vm_chat.lua:45 "chat dispatch began while account connection was still open"); restored 17/0.
+- BR-2 — addressed — All three maparg presses (Down, CR, Esc) now go through press() at vm_chat.lua:35-39, which asserts a callback exists; no other unguarded instance in the window.
+
 ## Open findings
 
-- **BR-1** [Important] `fix-without-failing-regression` (kind: defect) Picker-settle half of the fix has no test that fails without it
-- **BR-2** [Minor] `unguarded-keymap-callback` (kind: defect) maparg Esc callback is invoked without checking it exists
+(none — every finding has been disposed)

@@ -88,3 +88,78 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"60238089-c04f-4a99-a6c9-32c929b28ce4","repository":"github.com/xianxu/parley.nvim","issue_id":"000336","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/d38bcd8bd61a81eb","reviewed_head":"00221b88dc4012d833acf04d2d14012e8e19b00e","slot":"parley.nvim:3","requested_at":"2026-10-15T22:58:47.635331Z"},"phase":"finished","pid":94669,"started_at":"2026-10-15T22:58:48.131766Z","finished_at":"2026-10-15T23:01:58.562967Z","session_id":"6df3d759-2d5b-47a8-9d2c-93fbda2d5324","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T16:10:43-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 336 — Flake: packaging VM guest chat confinement follows transient focus |
+| repo | parley.nvim |
+| issue file | workshop/issues/000336-packaging-vm-focus-flake.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 35d876d55d7940f20c3d6087846f4247d2b9b14d..01ebf08816a07f290c4382c016fc195792b43c19 |
+| command | sdlc close --issue 336 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-15T16:10:43-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking the BR-1 fix: I'll run the focused packaging spec at head, then again with the settle block removed.
+
+Green at head. Now removing the settle block (wait for picker, Esc, wait for settle).
+
+Mutation goes red on both runs (16/1, `chat dispatch began while account connection was still open`), and the file is restored. Running the unit spec and lint as a last check.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Both prior findings are fixed, and I checked each fix by running the tests rather than trusting the commit messages. For BR-1, I deleted the settle block in a disposable copy: the lines in `tests/packaging/vm_chat.lua` that wait for the reopened model picker, press `<Esc>` and wait for the connection to close. With that block gone, the focused `packaging_vm_spec` failed 16/1 on both runs with `vm_chat.lua:45: chat dispatch began while account connection was still open`. With the block restored it passed 17/0. The new check is deterministic. The open-connection flag is set when `connect` starts and is cleared only when the picker's `on_select`/`on_cancel` runs, or when the picker fails to open (`lua/parley/starter_onboarding.lua:22-36`). So if the probe never dismisses the picker, `ask()` always sees an open connection. For BR-2, the `<Down>`, `<CR>` and `<Esc>` presses now all go through one guarded `press()` helper (`vm_chat.lua:35-39`). I found nothing new that blocks the close.
+
+1. **Strengths**
+   - `lua/parley/starter_onboarding.lua:43-45`: `is_connecting` reads the state the flow already keeps; nothing new is tracked. Because that state is cleared only when the returned picker resolves, it fits the Spec's point that the credential file appearing does not mean login is done.
+   - `tests/packaging/vm_chat.lua:45-46`: the assertion sits at the start of chat dispatch, so it fires on any path that skips the settle step, not only the one that was deleted.
+   - `tests/unit/starter_onboarding_spec.lua:49-60`: covers both outcomes, select and cancel, plus the state before connecting. It runs with no IO.
+   - `tests/integration/packaging_vm_spec.lua:158-160`: running `enew` before the confinement assertion, and asserting on `result.chat_file`, removes the dependence on focus. The `~= ""` guard blocks the old empty-name failure.
+   - The issue's Revisions entry honestly says the no-float check after `run()` can't see a picker reopen that is still queued, and names `is_connecting` as the real check.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings:** none new. The comment at `packaging_vm_spec.lua:155` reads as if the no-float assertion is what pins the settle step. The Revisions entry already says otherwise, so I'm not raising it.
+
+5. **Test coverage notes** (all run with TMPDIR set outside the checkout)
+   - Focused `packaging_vm_spec` at head: 17/0.
+   - With the settle block deleted: 16/1 on both runs, failing on the expected assertion. The file is restored and the tree is clean.
+   - `starter_onboarding_spec`: 7/0.
+   - `make lint`: 0 warnings, 0 errors in 732 files.
+   - I did not re-run the full parallel suite. That evidence is in the implementer's Log.
+
+6. **Architecture**
+   - ARCH-DRY: pass. The floating-window check is now one `is_float` helper, and the keymap calls go through one `press` helper.
+   - ARCH-PURE: pass. `is_connecting` is a deterministic read of module state, unit-tested without IO. The rest of the change is test glue.
+   - ARCH-PURPOSE: pass. Both halves of Done-when clause 2 now have a test that fails without them, and confinement is asserted on the chat the probe created.
+   - Docs gate: `atlas/infra/starter.md` documents the new `is_connecting` query. No README change is needed because nothing user-facing changed.
+
+7. **Plan revision recommendations:** none. The existing Revisions entry already matches the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Reverted settle block in disposable checkout; focused packaging_vm_spec went 16/1 twice (vm_chat.lua:45 "chat dispatch began while account connection was still open"); restored 17/0.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      All three maparg presses (Down, CR, Esc) now go through press() at vm_chat.lua:35-39, which asserts a callback exists; no other unguarded instance in the window.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"3e3d67fb-4aa1-4947-9408-620cb6dc89c9","repository":"github.com/xianxu/parley.nvim","issue_id":"000336","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/1e411a8717f267e7","reviewed_head":"01ebf08816a07f290c4382c016fc195792b43c19","slot":"parley.nvim:3","requested_at":"2026-10-15T23:08:18.663769Z"},"phase":"finished","pid":54092,"started_at":"2026-10-15T23:08:18.767704Z","finished_at":"2026-10-15T23:10:35.918953Z","session_id":"28c82759-0ee7-42c5-965e-f7a19479ab88","outcome":"returned"}] -->
