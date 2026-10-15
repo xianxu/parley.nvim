@@ -603,7 +603,24 @@ end
 ---@nodiscard
 _H.table_to_file_atomic = function(tbl, file_path, adapter)
 	adapter = adapter or {}
-	local encode = adapter.encode or vim.json.encode
+	local encoded_ok, json = pcall(adapter.encode or vim.json.encode, tbl)
+	if not encoded_ok then
+		return false, ("encode failed: " .. tostring(json or "unknown error")):sub(1, 240)
+	end
+	return _H.write_file_atomic(json, file_path, adapter)
+end
+
+--- Write exact bytes with the same checked atomic replacement used by JSON.
+--- The adapter's temp_path selects this write's temporary file; failure cleanup
+--- removes only that path. Callers own recovery and any stale-temp policy.
+---@param bytes string
+---@param file_path string
+---@param adapter table|nil
+---@return boolean ok
+---@return string|nil err
+---@nodiscard
+_H.write_file_atomic = function(bytes, file_path, adapter)
+	adapter = adapter or {}
 	local open = adapter.open or io.open
 	local rename = adapter.rename or os.rename
 	local remove = adapter.remove or os.remove
@@ -619,11 +636,6 @@ _H.table_to_file_atomic = function(tbl, file_path, adapter)
 	end
 	local function cleanup(path)
 		pcall(remove, path)
-	end
-
-	local encoded_ok, json = pcall(encode, tbl)
-	if not encoded_ok then
-		return failure("encode", json)
 	end
 
 	-- An existing destination is replaced where it really lives, with its mode:
@@ -644,7 +656,7 @@ _H.table_to_file_atomic = function(tbl, file_path, adapter)
 		return failure("open", open_ok and open_err or file)
 	end
 
-	local write_ok, write_result, write_err = pcall(function() return file:write(json) end)
+	local write_ok, write_result, write_err = pcall(function() return file:write(bytes) end)
 	if not write_ok or not write_result then
 		pcall(function() file:close() end)
 		cleanup(tmp)

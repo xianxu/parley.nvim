@@ -189,6 +189,8 @@ ARCH-FUNERAL: per-buffer models, barriers, callbacks and handles die on wipeout;
 
 ## Revisions
 
+- 2026-10-15 — pair:5's submitted answer a6560099-ad36-400f-83b2-1b8a32bf7ffb confirms source-derived adoption and pre-register-OLD ordering. Its candidate binary at pair-slot5/pair/bin/couch reports revision49c3285c847133f6f10005c12fee584bac30989a; pair#573 is not landed, full suite/review pending. The supplied isolated helper explicitly clears inherited namespace/storage identity and bootstraps the public adopt-store preview/apply under COUCH_ISOLATED_ROOT. Alias spelling registration may return Changed true once while preserving ID/time/state; exact replay is false. This refines conformance fixtures without changing the admitted design. change-code passed at3859cf1f; implementation starts with bounded pure-model/projection/lease tasks and the registry process seam.
+
 - 2026-10-15 — initial draft after #327 landing; agrees the pair#573 caller contract, separates typed legacy behavior from plain-file admission, and names the lookup/rename ordering hazards discovered in read-only exploration. TL failure-policy decision and pair legacy-adoption/isolation details remain open. No implementation/change-code/estimate yet.
 
 - 2026-10-15 — TL availability decision supersedes the initial read-only proposal: all unknown/unavailable files stay editable because Couch is the exclusive CAS write path and cannot write while unreachable. Add a small bounded persistent known-agentic cache, unknown-state band, coalesced re-lookup and outstanding-edit observations that survive auto-save. A recovered registration acquires against the pre-edit baseline. Forward-only rename recovery is explicitly approved. No implementation yet.

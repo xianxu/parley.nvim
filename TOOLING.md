@@ -49,6 +49,20 @@ discovery and removes its fixtures on exit; it creates no real issues and needs
 no network. Missing sdlc makes this explicit maintainer check fail; normal tests
 use the filesystem-backed `tests/fixtures/fake_sdlc` instead.
 
+Run `make check-couch-registry-conformance` when the Couch registry client or
+its fake changes. Set `COUCH_CONFORMANCE_BINARY=/absolute/path/to/couch` to
+select a candidate. The check requires advertised `COUCH_ISOLATED_ROOT` support
+and public adopt-store preview/apply; it creates fresh temporary singleton,
+store, Pair-data and identity roots, never uses live actors, and needs no
+network. Real and fake executables both run through production
+`document_registry.request` / `couch.run`: registration, stable-ID retries,
+filesystem plus metadata rename, old/new lookup, replay, owner/target conflicts
+and positive-null absence. Fake malformed, missing and unsupported replies must
+retain uncertainty, and a deliberately corrupted fake must fail the probe.
+Fixtures are removed on exit. `python3 scripts/check-couch-registry-conformance.py
+--fake-only` exercises the probe and negative control without real Couch. This
+maintainer check does not replace the combined editor/operator acceptance check.
+
 ## Test Scratch Directories
 
 The harness gives every run its own `HOME`, `XDG_*`, and `TMPDIR` so tests never

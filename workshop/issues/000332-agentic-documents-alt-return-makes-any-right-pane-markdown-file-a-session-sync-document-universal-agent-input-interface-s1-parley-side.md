@@ -88,6 +88,13 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 
 ## Revisions
 
+### Implementation evidence (2026-10-15)
+
+- change-code admitted the full design at3859cf1f after CLEAN plan-quality and informational estimate review. Pair's submitted answer a6560099 confirms legacy adoption/pre-register-OLD and isolated public adopt-store bootstrap. Implementing with executing-plans and bounded pure-model, lease, writer and migration tasks.
+- Observed missing-feature REDs before implementation. Focused GREEN: lifecycle11, lease9 (real two-editor/process-death/inode races), registry3, Couch5, move projection8, helper IO57. Native registered plain dd/x/p/u/dot acquire before existing auto-save; observed clean auto-saves retain their pre-edit baseline. Initial admission4 cases pass, including native saveas with side/backlinks; corrupt-cache and reopened-journal recovery regressions are being added.
+- Ran python3 scripts/check-couch-registry-conformance.py --couch /Users/xianxu/workspace/worktree/pair-slot5/pair/bin/couch: real and stateful fake pass the production Lua registry transport's register/lookup/replay/filesystem+metadata rename/conflicts/null checks; malformed/unsupported fake cases pass; deliberately corrupted fake is rejected. Candidate reports revision49c3285c847133f6f10005c12fee584bac30989a with modified build flag. This is isolated candidate evidence, not pair#573 landing or operator acceptance.
+- Migration tests found a foreign backlink edit during replacement preparation and malformed persisted witnesses. Their REDs were observed; fixes now pass those regressions. No suite/close/stage/landing claim yet.
+
 - 2026-10-15 — spell out agreed registry boundary and native rename/recovery work in the durable plan without changing the original S1 purpose. Explicit couch-owner is a route override per this issue, superseding #316 refusal only where that new requirement applies. Pending admission-failure policy requires TL review.
 
 - 2026-10-15 — replace the draft read-only admission proposal with the TL-approved editable unknown state, local known-agentic cache and recovery reconciliation. This resolves the failure-policy question; plan review and pair legacy-adoption/isolation details remain pending.

@@ -14,6 +14,9 @@ function M.write(root, log_file, argv_file)
     vim.fn.mkdir(root .. "/bin", "p")
     vim.fn.writefile({
         "#!/bin/sh",
+        'if [ "$1" = "--session-sync" ] && [ -n "$FAKE_COUCH_REGISTRY" ]; then',
+        '  exec python3 "' .. vim.fn.fnamemodify("tests/fixtures/fake_couch_registry.py", ":p") .. '" "$@"',
+        'fi',
         'case "$1" in',
         '--actors) printf "%s" "$FAKE_COUCH_ACTORS"; exit 0;;',
         '--session-sync) [ -n "$FAKE_COUCH_STATUS" ] || exit 2; printf "%s" "$FAKE_COUCH_STATUS"; exit 0;;',

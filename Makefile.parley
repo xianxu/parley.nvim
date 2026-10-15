@@ -14,6 +14,7 @@ help-parley:
 	"  make check-fresh-clone Verify startup and tests in an isolated archive" \
 	"  make check-vocabulary Compare shipped data to upstream (maintainer tools)" \
 	"  make check-sdlc-conformance Compare real/fake sdlc resolver contracts (maintainers)" \
+	"  make check-couch-registry-conformance Compare isolated real/fake registry contracts" \
 	"  make perf             Report real headless chat-typing performance" \
 	"  make lint             Run luacheck on lua/ and tests/" \
 	"  make fixtures         Refresh SSE fixture files from real APIs" \
@@ -259,7 +260,7 @@ test-clean-env:
 	@rm -rf "$(TEST_HOME)" "$(TEST_XDG)" "$(TEST_TMP)" $(LEGACY_TEST_DIRS)
 
 # Public contributors may keep Plenary anywhere; normal tests need no ariadne.
-.PHONY: check-test-deps check-vocabulary check-fresh-clone check-sdlc-conformance
+.PHONY: check-test-deps check-vocabulary check-fresh-clone check-sdlc-conformance check-couch-registry-conformance
 check-test-deps:
 	@test -r "$(PLENARY)/plugin/plenary.vim" || { \
 	  echo "Missing plenary.nvim. Clone nvim-lua/plenary.nvim, then run make test PLENARY=/absolute/path/to/plenary.nvim" >&2; exit 1; }
@@ -277,3 +278,7 @@ check-sdlc-conformance:
 	@sdlc --help >/dev/null
 	@sdlc issue new --help >/dev/null
 	@python3 scripts/check-sdlc-resolve-conformance.py
+
+# Opt-in diagnostic only; requires Couch's explicit singleton-isolation support.
+check-couch-registry-conformance:
+	@python3 scripts/check-couch-registry-conformance.py

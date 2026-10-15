@@ -501,6 +501,80 @@ describe("helper I/O functions", function()
         end)
     end)
 
+    describe("raw atomic writer (#332)", function()
+        local function read_bytes(path)
+            local file = assert(io.open(path, "rb"))
+            local bytes = file:read("*a"); file:close()
+            return bytes
+        end
+
+        it("writes raw bytes including NUL through a symlink and preserves target mode", function()
+            local uv = vim.uv or vim.loop
+            local target, link = tmpdir .. "/parent.md", tmpdir .. "/alias.md"
+            local file = assert(io.open(target, "wb")); file:write("original"); file:close()
+            assert(uv.fs_chmod(target, tonumber("600", 8)))
+            assert(uv.fs_symlink(target, link))
+            local bytes = "---\r\nparent: '../new.md'\r\n---\r\nraw\0bytes\255\n"
+            assert.is_true(helper.write_file_atomic(bytes, link))
+            assert.equals(bytes, read_bytes(target))
+            assert.equals("link", uv.fs_lstat(link).type)
+            assert.equals(tonumber("600", 8), uv.fs_stat(target).mode % 4096)
+        end)
+
+        it("JSON encoding delegates exactly once to the raw byte writer", function()
+            local raw = helper.write_file_atomic
+            local captured
+            helper.write_file_atomic = function(bytes, path, adapter)
+                captured = { bytes, path, adapter }; return false, "injected raw failure"
+            end
+            local adapter = { encode = function() return "encoded bytes" end }
+            local ok, err = helper.table_to_file_atomic({ x = true }, tmpdir .. "/state.json", adapter)
+            helper.write_file_atomic = raw
+            assert.is_false(ok); assert.equals("injected raw failure", err)
+            assert.same({ "encoded bytes", tmpdir .. "/state.json", adapter }, captured)
+        end)
+
+        for _, stage in ipairs({ "open", "write", "close", "chmod", "rename" }) do
+            it("raw " .. stage .. " failure preserves destination and cleans only its declared temp", function()
+                local path, temp = tmpdir .. "/parent.md", tmpdir .. "/owned.tmp-test"
+                local unrelated = tmpdir .. "/other.tmp-123456-abcdef"
+                local f = assert(io.open(path, "wb")); f:write("durable\0bytes"); f:close()
+                vim.fn.writefile({ "unrelated" }, unrelated)
+                local removed = {}
+                local adapter = {
+                    temp_path = function(target)
+                        assert.equals((vim.uv or vim.loop).fs_realpath(path), target)
+                        return temp
+                    end,
+                    remove = function(candidate) removed[#removed + 1] = candidate; return os.remove(candidate) end,
+                }
+                if stage == "open" then adapter.open = function() return nil, "injected" end
+                elseif stage == "write" or stage == "close" then
+                    adapter.open = function(target, mode)
+                        local handle = assert(io.open(target, mode))
+                        return {
+                            write = function(_, bytes)
+                                if stage == "write" then return nil, "injected" end
+                                return handle:write(bytes)
+                            end,
+                            close = function()
+                                handle:close()
+                                if stage == "close" then return nil, "injected" end
+                                return true
+                            end,
+                        }
+                    end
+                else adapter[stage] = function() return nil, "injected" end end
+                local ok, err = helper.write_file_atomic("new\0bytes", path, adapter)
+                assert.is_false(ok); assert.truthy(err:find(stage, 1, true))
+                assert.equals("durable\0bytes", read_bytes(path))
+                assert.same({ temp }, removed)
+                assert.equals(0, vim.fn.filereadable(temp))
+                assert.equals(1, vim.fn.filereadable(unrelated))
+            end)
+        end
+    end)
+
     describe("Group G: prepare_dir", function()
         it("G1: creates directory if it does not exist", function()
             local dir = tmpdir .. "/new_dir"
