@@ -222,3 +222,19 @@ in 728 files, and clean unit/integration process censuses. Evidence:
 /tmp/parley-333-sync-full.log. The file-history adapter including the no-yield
 sequence passes within that run. Vocabulary freshness and committed-range
 whitespace checks pass. Re-entering SDLC review for BR-2 with no deferred state.
+
+### 2026-10-15 — SHIP and main integration checkpoint
+
+Round 3 returns SHIP with BR-1/BR-2 addressed and no new findings. The reviewer
+independently verified the no-yield red/green regression. Merge then encountered
+newly landed #327 at main 6121476a. Resolved the init.lua conflict by keeping
+main's reference_generation/OpenFileUnderCursor implementation and adding the
+independent FileBack command immediately before it. Integration commit 8ecf9864.
+
+Integrated full test run exited 2: 432 files pass, only starter_config_spec fails
+its competing welcome-creator case with the lock-owner repair error. Starter
+production/test files are unchanged in the integration; isolated rerun passes
+all 19 cases (/tmp/parley-333-starter-isolated.log). Clean process census; all
+navigation tests pass. Retrying full suite on the unchanged integrated code
+(/tmp/parley-333-integrated-full-retry.log). After a pass, run the required narrow
+conflict review with --fixed-then-ship and --full-suite evidence, then merge/stage.
