@@ -108,6 +108,8 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 - Close round2 verified BR-1 by reverting the range correction and observing 22 range/four command failures, then passed all473 mapped tests at head. BR-2 requires live resolver conformance. Added an offline temporary-repository check covering six real/fake cases through production run_resolve/parse/dispatch: sole issue, family, milestone, external empty, missing issue and missing milestone. make -k check-sdlc-conformance passes; an alternate fake returning wrong-kind fails the consumed projection assertion (negative log /tmp/parley327-conformance-negative.log). Tooling documents execution after runner/fake changes and before close. Plugin behavior is unchanged; final suite and close review rerun before staging.
 
+- Close round3 returned SHIP: BR-1 and BR-2 addressed, no new findings. Reviewer independently ran the mapped navigation/editing checks, all six live conformance cases and the wrong-kind negative probe. Close adopted measured actual5.04h; attribution reports a dominant196.3-minute segment including long machine-gate waits, so treat that calibration limitation explicitly rather than hand-adjusting hours. Final suite on the conformance-check commit remains queued; no stage or live acceptance is claimed yet.
+
 ## Estimate
 
 Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only; calibration source is marked stale, so figures remain provisional.

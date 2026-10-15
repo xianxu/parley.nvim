@@ -113,7 +113,7 @@ Files: atlas/context/file_references.md and atlas/chat/entity_delete.md, atlas/t
 
 - [x] Document entity lookup, ambiguity picker and priority in the existing navigation atlas and README; map every new test. Run make -k targeted tests plus luacheck/git diff --check.
 - [x] Push PR and run `sdlc local-check run --name suite`; preserve/report every failure, including known packaging intermittency, without ending the remaining test run early.
-- [ ] Obtain boundary review through sdlc close; fix the complete class of any findings. No separate duplicate review.
+- [x] Obtain boundary review through sdlc close; fix the complete class of any findings. No separate duplicate review.
 - [ ] Obtain hub approval to touch :0 unless already granted, then run sdlc stage --build from this worker slot for the required real-editor Alt+o check. Wait for the operator confirmation through the hub before landing. Then integrate main, land on SHIP, clear stage and report the PR/verified merge hash to the hub.
 
 ## Validation commands
