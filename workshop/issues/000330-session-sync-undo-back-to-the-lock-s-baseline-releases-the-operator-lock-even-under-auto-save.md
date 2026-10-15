@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "4c474229", done: "eea4b532"}
 ---
 
 # session-sync: undo back to the lock's baseline releases the operator lock, even under auto-save
