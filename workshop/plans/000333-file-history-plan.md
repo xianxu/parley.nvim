@@ -130,7 +130,7 @@ workshop/lessons.md for findings.
 - [x] Document the key, command, scope, bounds, root/no-op and error behavior.
   Regenerate help with the existing script; do not hand-edit generated output.
 - [x] Run targeted suite and lint; stage explicit paths and commit.
-- [ ] Run `make test` in the background; record exit/count/no-survivor evidence.
+- [x] Run `make test` in the background; record exit/count/no-survivor evidence.
   Run vocabulary freshness and range whitespace checks required by the repo.
 After verification, tick issue/plan rows, checkpoint evidence and run `sdlc close --issue 333`
   with measured actuals and concrete verification. Address findings until SHIP.
@@ -186,3 +186,13 @@ passed before adding that case. Disabling only the Insert-preservation entry
 makes two typed-key regressions fail; restored before the final full suite.
 The final close/merge/stage steps are post-implementation procedures whose
 completion is recorded by their SDLC evidence, rather than pre-ticked tasks.
+
+### 2026-10-15 — final verification checkpoint
+
+The initial full run caught a forbidden pattern-based named-buffer lookup.
+Reused helper.buffer_for(path, true) for eligibility and selection (ARCH-DRY).
+The final full make test run exited 0: 430 passing files, 728 Lua files with
+zero lint warnings/errors, and no surviving test processes. Complete keybinding
+mapping, focused 16-case adapter plus exact-name architecture guard, vocabulary
+freshness and committed-range whitespace checks pass. Close/merge/staging follow
+as authorized by the TL approval; no further scope change.

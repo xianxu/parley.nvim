@@ -48,7 +48,7 @@ two files; `:bp` follows buffer-list order, not visit order.
 
 - [x] Implement and unit-test the pure bounded history transition model.
 - [x] Wire the per-window event adapter, FileBack command, registry/config mapping and real-key integration tests.
-- [ ] Update README, runtime-generated help and atlas; run targeted and full tests.
+- [x] Update README, runtime-generated help and atlas; run targeted and full tests.
 
 ## Log
 
@@ -135,3 +135,13 @@ That case also passes before the change on this Neovim; the architecture guard
 is the demonstrated red/green regression. The full keybinding mapping and focused
 16-case adapter plus architecture-guard run pass after the correction. Rerunning
 the full suite before close; scope and approved behavior are unchanged.
+
+### 2026-10-15 — final verification
+
+make test exited 0 after admission, with 430 passing test files, zero lint
+warnings/errors across 728 files, and clean unit/integration process censuses.
+Both file-history specs and buffer_lookup_spec pass in that full run. Evidence:
+/tmp/parley-333-full-final.log. make check-vocabulary and the committed-range
+git diff --check pass. The complete ui/keybindings mapping also passes after
+the exact-name lookup correction. Implementation checklist is complete;
+entering the mandatory SDLC close review, then merge and stage on SHIP.
