@@ -63,7 +63,7 @@ end
 -- can create NEW between that check and the syscall. Both supported kernels
 -- provide atomic no-replace rename; unavailable symbols/filesystems fail closed.
 local exclusive_rename, exclusive_error
-local function rename_document(fs, old, new)
+local function rename_noreplace(fs, old, new)
     if fs.fs_rename_noreplace then return fs.fs_rename_noreplace(old, new) end
     if not exclusive_rename then
         if exclusive_error then return nil, exclusive_error end
@@ -81,11 +81,11 @@ local function rename_document(fs, old, new)
             else error('unsupported exclusive rename platform') end
             return function(from, to)
                 if call(from, to) == 0 then return true end
-                return nil, 'exclusive document rename failed: errno ' .. ffi.errno()
+                return nil, 'exclusive migration rename failed: errno ' .. ffi.errno()
             end
         end)
         if not ok then
-            exclusive_error = 'exclusive document rename unavailable: ' .. tostring(backend)
+            exclusive_error = 'exclusive migration rename unavailable: ' .. tostring(backend)
             return nil, exclusive_error
         end
         exclusive_rename = backend
@@ -444,7 +444,7 @@ local function advance_document(operation)
             or not same_inode(fs.fs_lstat(journal.old), journal.old_witness) or fs.fs_lstat(journal.new) then
             return nil, 'owned document paths changed before rename'
         end
-        local renamed, rename_err = rename_document(fs, journal.old, journal.new)
+        local renamed, rename_err = rename_noreplace(fs, journal.old, journal.new)
         if not renamed then return nil, rename_err end
     elseif not same_inode(to, journal.old_witness) then
         return nil, 'owned document rename has no matching inode witness'
@@ -516,7 +516,7 @@ function M.advance(operation, callback)
                 if journal.steps.side_moved or to or not same_inode(from, journal.side_witness) then pending('side rename cannot be proven'); return end
                 local unchanged, err = verify_tree(operation, source, false)
                 if not unchanged then pending(err); return end
-                local renamed, rename_err = fs.fs_rename(source, target)
+                local renamed, rename_err = rename_noreplace(fs, source, target)
                 if not renamed then pending(rename_err); return end
             end
         end

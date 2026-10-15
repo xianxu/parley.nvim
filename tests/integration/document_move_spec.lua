@@ -283,11 +283,36 @@ describe('durable leased document migration', function()
             if from == side and ok then return nil, 'interrupted after rename' end
             return ok, err
         end
+        fs.fs_rename_noreplace = fs.fs_rename
         local operation = assert(begin({ fs = fs }))
         write(new, 'parent\n'); assert.equals('pending', advance(operation).kind)
         assert.is_truthy(uv.fs_stat(root .. '/new.side')); operation.release()
         assert.equals('registered', assert(recover()).kind)
         assert.matches('../new.md', read(root .. '/new.side/child.md'), 1, true)
+    end)
+
+    it('atomically preserves an empty foreign side directory created after an absence observation', function()
+        local fs, armed, raced, foreign_inode = setmetatable({}, { __index = uv }), false, false, nil
+        local destination = root .. '/new.side'
+        fs.fs_lstat = function(path)
+            if armed and path == destination then
+                if not raced then
+                    assert(uv.fs_mkdir(destination, 448)); raced = true
+                    foreign_inode = assert(uv.fs_lstat(destination)).ino
+                end
+                return nil, 'ENOENT: stale absence observation', 'ENOENT'
+            end
+            return uv.fs_lstat(path)
+        end
+        local before = read(side .. '/child.md')
+        local operation = assert(begin({ fs = fs }))
+        write(new, 'parent\n'); armed = true
+        assert.equals('pending', advance(operation).kind)
+        assert.is_true(raced)
+        assert.equals(foreign_inode, assert(uv.fs_lstat(destination)).ino)
+        assert.is_nil(uv.fs_scandir_next(assert(uv.fs_scandir(destination))))
+        assert.equals(before, read(side .. '/child.md'))
+        assert.is_truthy(uv.fs_lstat(operation.journal_path))
     end)
 
     it('refuses changed backlink preimages before moving any side data', function()

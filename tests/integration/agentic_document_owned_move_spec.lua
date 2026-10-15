@@ -197,4 +197,47 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals(1,vim.fn.filereadable(file .. ".lock"))
     end)
 
+
+    it("registers the actual legacy buffer path after Neovim canonicalizes an alias", function()
+        document.detach(buf)
+        vim.api.nvim_buf_delete(buf,{force=true})
+        local alias_dir = root .. "/caller-alias"
+        assert(uv.fs_symlink(source,alias_dir))
+        local canonical_old = source .. "/alias-legacy.md"
+        local lexical_old = alias_dir .. "/alias-legacy.md"
+        vim.fn.writefile({"---","type: session-sync","owner: ops:0","---","legacy alias body"},canonical_old)
+        -- Record the production register argv at the executable boundary, then
+        -- transparently delegate all commands to the existing persisted fake.
+        local executable, delegate = root .. "/bin/couch", root .. "/bin/couch-delegate"
+        local registration_argv = root .. "/register-caller"
+        assert(uv.fs_rename(executable,delegate))
+        vim.fn.writefile({
+            "#!/bin/sh",
+            'if [ "$1" = "--session-sync" ] && [ "$2" = "register" ]; then',
+            '  printf "%s\\n" "$3" > ' .. vim.fn.shellescape(registration_argv),
+            'fi',
+            'exec ' .. vim.fn.shellescape(delegate) .. ' "$@"',
+        },executable)
+        assert(uv.fs_chmod(executable,493))
+        vim.cmd("edit " .. vim.fn.fnameescape(lexical_old))
+        buf = vim.api.nvim_get_current_buf()
+        -- Neovim resolves directory aliases both on edit and set_name; the
+        -- adoption contract uses this observable caller path, not the typed
+        -- command's spelling that no longer exists in editor state.
+        vim.api.nvim_buf_set_name(buf,lexical_old)
+        local actual_caller = vim.api.nvim_buf_get_name(buf)
+        assert.equals(canonical_old,actual_caller)
+        p.setup_markdown_keymaps(buf)
+        await(function() return document.status(buf).phase == "plain" end)
+        assert.equals("absent",lookup(canonical_old).kind)
+        local new_path = destination .. "/alias-legacy.md"
+        vim.cmd("saveas " .. vim.fn.fnameescape(new_path))
+        assert.same({actual_caller},vim.fn.readfile(registration_argv), "legacy state adoption must receive the actual pre-move buffer path")
+        await(function() local identity = document.identity(buf); return identity and identity.File == new_path end)
+        local confirmed = lookup(new_path)
+        assert.equals("registered",confirmed.kind)
+        assert.equals(uv.fs_realpath(new_path),confirmed.registration.File)
+        assert.equals(confirmed.registration.ID,document.identity(buf).ID)
+    end)
+
 end)
