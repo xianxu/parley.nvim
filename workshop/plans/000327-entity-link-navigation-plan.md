@@ -69,11 +69,11 @@ Only the transition function changes this model. Test duplicate, cancellation, e
 2. If none, detect a direct artifact reference and retain the current resolver/gf branch for it.
 3. Otherwise capture one buffer snapshot, obtain navigation_range and collect occurrences.
 4. None: unchanged resolver/gf fallback at the original cursor.
-5. One: open that candidate through the same underlying chain; if unhandled, use the existing resolver/gf at its destination span. Do not recursively invoke entity discovery.
+5. One: dispatch the selected kind/span/target, never replay the whole source line through legacy nearest/leading-reference selection. Markdown passes only its selected span through existing link openers; @@ passes only its selected closed span through the existing path opener; branch passes its selected branch line. Artifact goes directly to the artifact opener. Unhandled Markdown falls through at its destination column. Do not recursively invoke entity discovery.
 6. Several: show picker and return pending. Apply the pure completion model before any opening effect.
 7. Restore Insert mode only after a handled candidate completes, not while a picker is open. Cancellation restores the prior mode only if the original active source still matches. Native resolver/gf retains its existing normal-mode landing behavior.
 
-All selected paths still pass through existing expand_path/backtick refusal and argument-safe resolver seams. For failed selection opening, preserve the source cursor when no navigation occurred. No failure on a recognized local link falls through to a second unrelated target.
+All selected paths still pass through existing expand_path/backtick refusal and argument-safe resolver seams. For failed selection opening, preserve the source cursor when no navigation occurred. No failure on a recognized local link falls through to a second unrelated target. The selection snapshot remains authoritative through asynchronous resolution: artifact_ref.goto_ref_at_cursor accepts an optional is_current predicate, checks it before scheduled result dispatch and immediately before family-picker opening effects, and settles the family callback once. Entity-selected resolution supplies the source buffer/window/changedtick/generation predicate; direct legacy commands retain their existing behavior when no predicate is supplied. Controlled delayed resolver/family-picker tests assert no open after origin invalidation.
 
 ## Architecture and operating envelope
 
@@ -83,7 +83,7 @@ All selected paths still pass through existing expand_path/backtick refusal and 
 - ARCH-MOCK: no new external dependency. Resolver integration reuses tests/fixtures/fake_sdlc and temporary files. Picker tests retain a selection callback and controllably deliver choices/cancel/late results; a real headless input smoke and operator stage check cover wiring.
 - ARCH-CONSTRAINTS: explicit command path, not per keystroke. One line snapshot and linear scans in buffer/entity text; memory proportional to snapshot and occurrences. Resolve/open only the chosen occurrence; no subprocess per candidate, network fan-out, caches or synchronous file-tree scan. Exercise a 5,000-line fixture to pin one enumeration/open behavior without wall-time assertions.
 - ARCH-SECURE: Markdown is operator/agent-authored untrusted text. Parse malformed/truncated spans to no candidate; never eval/interpolate destinations as shell code. Existing refusal and argv helpers remain in every opening path; temp tests cannot reach real user files.
-- ARCH-ORDER: pending/settled completion model above handles stale, duplicate and canceled callbacks; no retry of an uncertain open. Existing resolver owns its own asynchronous lifecycle. A canceled/invalid entity picker never triggers fallback.
+- ARCH-ORDER: pending/settled completion model above handles stale, duplicate and canceled callbacks; no retry of an uncertain open. Entity-selected resolver and secondary family-picker effects revalidate the same origin through an optional artifact_ref predicate. A canceled/invalid entity picker never triggers fallback.
 - ARCH-FUNERAL: creates no persistent runtime artifact, timer or watcher. Snapshot/occurrence arrays and callback model die when selection completes/cancels; only the constant-space generation scalar remains. Existing selected-open behavior owns any forward chat creation, as before.
 
 ## Execution steps (one atomic close boundary)
@@ -92,8 +92,8 @@ All selected paths still pass through existing expand_path/backtick refusal and 
 
 Files: modify lua/parley/entity_range.lua and lua/parley/issues.lua; create lua/parley/reference_candidates.lua; modify the two legacy pure parser wrappers in lua/parley/init.lua. Tests: tests/unit/entity_range_spec.lua, new tests/unit/reference_candidates_spec.lua, existing tests/unit/parse_at_reference_spec.lua and Markdown-link parser tests.
 
-- [ ] Add failing range examples for first/continuation/interior blank/trailing blank rows, duplicate numbering, next item/heading, code fences, nested headings, transcript boundaries and plain Markdown.
-- [ ] Add failing occurrence examples for local/src/inline-branch links, @@ forms, branch lines, artifact refs, several targets, repeated targets, overlapping labels, malformed text and fenced samples.
+- [ ] navigation_range: adversarial item/heading/fence/transcript boundaries, asserting containment and existing editing-range parity over every row.
+- [ ] markdown_links/at_references/branch_ref/collect: malformed and overlapping reference spans, asserting canonical byte spans, occurrence identity/order and fence exclusion; legacy parser wrappers retain existing characterization tests.
 - [ ] Run mapped entity/navigation/parser tests red; implement shared pure functions and derive old parser consumers; rerun existing range/text-object/delete parity and cursor-parser tests green.
 - [ ] Commit the pure ownership change with its tests.
 
@@ -101,8 +101,8 @@ Files: modify lua/parley/entity_range.lua and lua/parley/issues.lua; create lua/
 
 Files: modify lua/parley/init.lua; extend tests/integration/open_reference_spec.lua; unit-test picker completion in tests/unit/reference_candidates_spec.lua.
 
-- [ ] Write red tests for the real TL-style numbered question with its answer link at the final continuation line, a heading with one section link, multiple targets/picker choice, no targets/fallback, and direct Markdown/@@/artifact priority.
-- [ ] Add pure transition sequences for cancel, invalid choice, duplicate, stale generation, edited/deleted buffer and switched window; assert zero effects for rejected completions.
+- [ ] OpenFileUnderCursor: drive enclosing-entity versus direct-reference precedence through real editor state and temporary targets; assert exact selected destination and no forbidden fallback.
+- [ ] finish_selection: adversarial completion sequences against a value-based origin, asserting at most one effect and none after invalidation. artifact_ref.goto_ref_at_cursor: delay resolution and family selection across origin changes, asserting no stale or duplicate open.
 - [ ] Integrate the after-direct-reference branch with existing open helpers and resolver; avoid recursion and per-candidate IO. Preserve source-relative paths, missing-target diagnostics and Normal/Insert policy in chat and plain Markdown.
 - [ ] Run integration tests with the filesystem-backed fake_sdlc and temporary targets. Drive Alt+o with real child-Neovim input for heading and multi-line item. Verify picker cancellation leaves cursor/buffer untouched and no hidden fallback occurs.
 - [ ] Commit the integrated feature and tests.
@@ -127,3 +127,5 @@ Expected: red before new helpers/wiring; green after implementation, unchanged o
 - 2026-10-14 — initial plan. Navigation-only entity entry chosen over changing the existing entity-range dispatch for all text-object/delete consumers; both are viable, but the latter broadens the editing UX beyond this navigation request. Full flow expected because shared parsing, pure selection logic and editor integration exceed the 100-added-code-line quick shell; no artificial milestone split.
 
 - 2026-10-14 — resumed after #330 and #331 landed. Clarify worker-owned staging and mandatory real-editor acceptance before merge, following the current tl-worker contract. Navigation design is unchanged; approval remains pending.
+
+- 2026-10-15 — plan-quality PQ-1/PQ-2/PQ-3: preserve selected occurrence identity instead of replaying legacy nearest/leading selection, carry optional origin validation through artifact resolution and family selection, and replace prose test inventories with function-level adversarial strategies. Verified the existing resolver had no lifecycle guard; corrected that claim. Product scope and staging/acceptance boundary remain as approved.
