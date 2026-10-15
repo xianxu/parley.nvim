@@ -274,6 +274,44 @@ rounds:
       isolation: fenced
       reviewed: 8ce10d02789b1a5c8d487220a5c8eeefbcb899e9
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 98e154ab-1117-470c-bfa3-d20e3b918730
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000333"
+            recipe: fix-review
+            round: 4
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/02c1fd5198c37772
+            reviewed_head: 9b6f9a48d4234263b100d03b730b75c73923d34c
+            slot: parley.nvim:1
+            requested_at: "2026-10-15T20:57:57.268565Z"
+          phase: finished
+          pid: 17240
+          started_at: "2026-10-15T20:57:57.585785Z"
+          finished_at: "2026-10-15T20:59:21.521941Z"
+          session_id: 01a1415b-803e-74c2-ae98-03e07090c8ab
+          outcome: returned
+      "n": 4
+      timestamp: "2026-10-15T13:59:22-07:00"
+      dispatched: "2026-10-15T13:57:57-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: The previously accepted narrowed split contract remains intact. All eight unfocused API-parent cases and native split/tab inheritance tests pass.
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: Synchronous visit recording remains intact. The no-yield API creation followed by two edits regression at tests/integration/file_history_spec.lua:193 passes; this interdiff does not alter its previously verified correction.
+          round: 4
+      recipe: fix-review
+      isolation: fenced
+      reviewed: 9b6f9a48d4234263b100d03b730b75c73923d34c
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#333 (boundary-review)
@@ -305,6 +343,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - BR-2 — addressed — The regression at tests/integration/file_history_spec.lua:193 fails at line 201 with the pre-fix adapter restored in a disposable checkout (27 pass, 1 fail). The pinned adapter passes all 28 cases. BufEnter observations now record synchronously without pending-window suppression.
 - BR-1 — addressed — Remains addressed under the revised contract: API windows inherit no parent history. The eight direction/activation cases and native split/tab inheritance cases pass; README and atlas document this distinction.
+
+## Round 4 — 2026-10-15T13:59:22-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — The previously accepted narrowed split contract remains intact. All eight unfocused API-parent cases and native split/tab inheritance tests pass.
+- BR-2 — addressed — Synchronous visit recording remains intact. The no-yield API creation followed by two edits regression at tests/integration/file_history_spec.lua:193 passes; this interdiff does not alter its previously verified correction.
 
 ## Open findings
 

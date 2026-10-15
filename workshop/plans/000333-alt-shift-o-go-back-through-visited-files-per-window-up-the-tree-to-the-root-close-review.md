@@ -250,3 +250,69 @@ The Core concepts table matches the code and file changes. README and atlas upda
 None. Existing BR-1 and BR-2 revisions describe the implemented contract.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"2e3a4d2c-a8f7-40ee-8928-8022a0a920cb","repository":"github.com/xianxu/parley.nvim","issue_id":"000333","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/24ad1d95687239e5","reviewed_head":"8ce10d02789b1a5c8d487220a5c8eeefbcb899e9","slot":"parley.nvim:1","requested_at":"2026-10-15T20:07:02.082609Z"},"phase":"finished","pid":46099,"started_at":"2026-10-15T20:07:02.184639Z","finished_at":"2026-10-15T20:08:37.929112Z","session_id":"01a1412c-e001-7441-bafa-e68f63deed74","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T13:59:22-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 333 — Alt+Shift+O: go back through visited files (per window), up the tree to the root |
+| repo | parley.nvim |
+| issue file | workshop/issues/000333-alt-shift-o-go-back-through-visited-files-per-window-up-the-tree-to-the-root.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 53f1afdc944ba291c63b9158bd3130274e7dc884..9b6f9a48d4234263b100d03b730b75c73923d34c |
+| command | sdlc close --issue 333 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T13:59:22-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The interdiff resolves the `init.lua` conflict while preserving both navigation features. Main’s reference-navigation handler is byte-for-byte intact, and `FileBack` remains independently callable. No new defects or scope changes were found.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The previously accepted narrowed split contract remains intact. All eight unfocused API-parent cases and native split/tab inheritance tests pass.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Synchronous visit recording remains intact. The no-yield API creation followed by two edits regression at tests/integration/file_history_spec.lua:193 passes; this interdiff does not alter its previously verified correction.
+```
+
+1. **Strengths**
+   - `lua/parley/init.lua:5004` preserves the `FileBack` command alongside main’s complete generation-guarded reference handler.
+   - Real-key integration tests confirm Alt+o traversal followed by Alt+Shift+O returns through files and restores cursors.
+   - Tracker changes record review and integration evidence without changing the Spec, Done-when criteria, or implementation Plan.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - `make test-spec SPEC=ui/keybindings` passed, including all 28 file-history integration cases.
+   - `make test-spec SPEC=context/file_references` passed.
+   - Both runs reported no surviving test processes.
+   - Pinned-range `git diff --check` passed.
+   - Read-only compilation of the base confirms its conflict markers cause a syntax error; head loads successfully through both suites. The full repository suite was not rerun.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** removes the conflicting duplicate handler fragment and retains one reference-navigation implementation.
+   - **ARCH-PURE — pass:** command routing stays thin; no business logic or IO coupling is added.
+   - **ARCH-PURPOSE — pass:** preserves both sides’ navigation behavior. No new architectural or user-facing surface requires additional atlas or README changes.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"98e154ab-1117-470c-bfa3-d20e3b918730","repository":"github.com/xianxu/parley.nvim","issue_id":"000333","recipe":"fix-review","round":4,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/02c1fd5198c37772","reviewed_head":"9b6f9a48d4234263b100d03b730b75c73923d34c","slot":"parley.nvim:1","requested_at":"2026-10-15T20:57:57.268565Z"},"phase":"finished","pid":17240,"started_at":"2026-10-15T20:57:57.585785Z","finished_at":"2026-10-15T20:59:21.521941Z","session_id":"01a1415b-803e-74c2-ae98-03e07090c8ab","outcome":"returned"}] -->
