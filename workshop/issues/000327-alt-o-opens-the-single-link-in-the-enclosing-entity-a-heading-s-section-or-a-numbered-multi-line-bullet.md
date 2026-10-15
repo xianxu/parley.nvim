@@ -78,7 +78,10 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 - Resumed #327 after #330 and #331 landed. Reclaimed its released branch, merged current main at integration 47aff671002a51456938f78004d386235b1a64cb, and reran start-plan. No implementation/change-code yet. The previous design approval remains unconfirmed; a new product-review handoff is being sent for this resumed work. Updated delivery instructions to worker-owned staging and mandatory live acceptance.
 
+- TL approved the resumed full-flow design (Couch delivery 9c9ad248-287c-4ac9-9340-c8b4527dc3c0): navigation-only numbered ranges, shared scanner, direct-reference priority, guarded ambiguity picker, and existing zero-candidate fallback. Build, full suite and close review are authorized, followed by staging on parley.nvim:0. Hold landing for the operator's morning live check; :0 is on main at 41899819. Next: change-code plan-quality admission, then estimate and implementation. No implementation has started.
+
 ## Revisions
+
 
 - 2026-10-14 — initial design clarifies navigation-only range ownership, direct artifact priority, fenced-code exclusion, occurrence counting and stale-picker cancellation; existing URL/fragment destination policy is retained rather than broadening #327 into #323.
 
