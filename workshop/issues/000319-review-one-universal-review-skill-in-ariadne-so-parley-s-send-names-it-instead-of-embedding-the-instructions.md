@@ -74,6 +74,16 @@ semantics; do not retain Mode.directives as another authored definition.
 Plan review only; no implementation or live verification claimed. Await the
 revised producer contract and the existing dependency landings.
 
+### 2026-10-15 — producer pin inspected
+
+At ariadne#399 pin 8bead12b81f8380757fc55e6e3e90e80bf4fe2d2, all nine
+export member byte counts/hashes match pinned contents and all six modes match
+Parley byte-for-byte. The proposed export fits local composition. Sent two
+remaining adapter corrections to the owner/hub: legacy tracked type before
+COUCH_TREE-unset classification, and reflected-only folding of captured owed
+IDs. The durable plan records the exact provisional schema/composition.
+Awaiting the landed merge pin and #332; no implementation started.
+
 ## Revisions
 
 - 2026-10-14 — revise (operator): with QA-file follow-ups the review send is now frequent, and the embedded

@@ -106,3 +106,22 @@ Reason: ops:0 chose submitted-only in delivery 9111a425-a6cd-4098-9138-009139f41
 Delta: replace the proposed S1 payload adapter and capability-dependent messages with unchanged submitted: PATH for every Couch submit. Remove editor-side diff/baseline and verbose message construction. #399 reads process-instruction and computes changes since last read through Couch; retain canonical inline review only outside Couch. The prior plan's last-send semantics, byte-budget builder, capability probes and adapter callbacks are cancelled, not deferred.
 
 The complete original proposal is preserved verbatim in [the superseded proposal](000319-universal-review-send-proposal.md). This revision is the executable plan. No implementation has started; dependencies #399/#332 remain unlanded.
+
+### 2026-10-15 16:35 — provisional #399 consumer pin
+
+Producer pin 8bead12b81f8380757fc55e6e3e90e80bf4fe2d2 is not landed. Export
+path: construct/local/universal-review/export.json; schema
+ariadne/universal-review-export, version 1, members with role/path/bytes/sha256.
+Adapter/mode members have name; grammar has canonical source; modes include
+resolved scope/deletions/frontier and optional numeric order. Hashes cover
+resolved contents. Total order: round, grammar, adapter, mode; then mode order
+(unordered last), name, path. Consumer checks confirmed all nine hashes/byte
+counts and six unchanged mode files at this pin.
+
+Local composition is round.md, review-convention.md, selected modes and the
+Parley local adapter; exclude SKILL.md and adapters/*. Drop duplicated
+Mode.directives prose, passing selected mode data to the canonical round.
+Returned two producer-adapter corrections: legacy tracked type must precede
+outside-Couch classification, and fold only captured asks reflected in the
+write. Export shape is accepted for #319; final consumption still waits for
+the landed producer pin and #332. No implementation or live check claimed.
