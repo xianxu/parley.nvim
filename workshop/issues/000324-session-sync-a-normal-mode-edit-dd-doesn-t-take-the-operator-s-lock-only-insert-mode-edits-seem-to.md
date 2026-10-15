@@ -30,15 +30,19 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 
 ## Done when
 
-- `dd` (and `x`, `p`, `u`, `.`) as the first edit creates the lock with holder operator; an agent `couch --session-sync write` then refuses (exit 3).
+- `dd`, `x`, `p`, `u`, `.`, and Insert edits acquire before the operator's pre-existing immediate auto-save; actual Couch writes refuse with exit 3 under that lock.
+- The same first-edit protection works on open, immediately after watcher or checktime reload, and after submit → agent write → reload; temporary YAML damage does not revoke attached identity.
+- Clean undo and multi-step undo release silently without submit or owner notification; redo away from disk takes the turn again. Explicit and automatic saves retain the turn until submit.
+- Clean release reconciles pending foreign overwrite/deletion through the existing violation protocol: preserve foreign bytes in .clobbered, restore deletion, keep the operator copy/turn, and never overwrite an unkeepable foreign copy.
+- Native input tests await complete sidecar contents; targeted tests, declared full suite, boundary review and operator live-editor confirmation pass before landing.
 
 ## Core concepts
 
-| Concept | Owner / invariant |
-|---|---|
-| Attached session file | Recognized at attach; temporarily editing its YAML does not revoke protection. |
-| Operator turn | On-disk sidecar; first dirty edit acquires, undo to unmodified releases silently, submit saves/releases/notifies. |
-| Saved buffer | Explicit save/auto-save preserves the existing submit/violation protocol; it is not an undo. |
+| Concept | Kind | Location | Status / invariant |
+|---|---|---|---|
+| Attached session file / edit callback | INTEGRATION | lua/parley/session_sync.lua M.attach | Modified; YAML edits retain identity, callbacks reacquire before auto-save. |
+| Operator turn / native sidecar | INTEGRATION | lua/parley/session_sync.lua write_lock/read_turn | Existing helpers reused; acquire on edit, clean undo releases, submit saves/releases/notifies. |
+| Disk reconciliation / violation | INTEGRATION | lua/parley/session_sync.lua disk_changed/violation | Existing helpers reused before every new release; save alone keeps the turn. |
 
 ## Plan
 
@@ -74,3 +78,5 @@ Find which condition fails on a first normal-mode change (`dd`, `x`, `p`, `u`) a
 - 2026-10-14 — revised design: attach on_lines to acquire synchronously before TextChanged/auto-save; defer clean-edit reconciliation until modified settles, guarded by the edit's disk-mtime snapshot so saves do not release. Ignore reload notifications as operator edits; retain/reinstall the attachment across reloads and wipeout with the existing lifecycle. Real UI tests install the operator-style global InsertLeave/TextChanged auto-save before attachment. First edit still schedules the existing foreign-write race check.
 
 - 2026-10-14 — TL requested verification ordering change: run the close review while suite/smoke are pending; retain both as mandatory pre-landing conditions. Scope and Done when unchanged.
+
+- 2026-10-14 — review round 1 (BR-1/2/3): enumerate the single clean-release site against foreign overwrite, deletion, and copy-preservation failure; reconcile through disk_changed/violation before release. Await complete lock bytes in the one shared test helper. Expand Done when for all revised behaviors and describe Core concepts with kind/path/status. Stale :0 stage cleared pending fixes. Full suite failed only session_sync_spec.lua in two auto-save submission assertions; keep the failure evidence and investigate independently.
