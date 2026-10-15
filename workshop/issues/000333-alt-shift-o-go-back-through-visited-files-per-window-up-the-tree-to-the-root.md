@@ -192,3 +192,22 @@ warnings/errors in 728 files, and both process censuses are clean. Evidence:
 /tmp/parley-333-narrow-full.log. The expanded adapter's 27 cases and buffer lookup
 guard pass in that run. make check-vocabulary and range whitespace checks pass.
 Re-entering the SDLC boundary review for BR-1 against the TL-approved narrowing.
+
+### 2026-10-15 — BR-2 initialization ordering correction
+
+Round 2 disposes BR-1 but finds deferred suppression drops legitimate visits
+before the scheduled callback. Removed pending state and scheduling entirely.
+Fresh API WinEnter clones do not seed history; BufEnter records synchronously,
+and Back can establish the current file as root. An API creation reusing its
+buffer remains EMPTY until BufEnter or Back; README/atlas now state this precise
+boundary instead of the implementation's stronger creation-root promise.
+Native focused-source inheritance remains unchanged. No real file-entry event
+after creation is suppressed (ARCH-ORDER).
+
+Expanded sequence coverage includes API creation then two Lua edits and Back
+without yielding, immediate Back, native splitting, and closure. The old adapter
+fails exactly the no-yield sequence; restoring the synchronous adapter yields
+28 passing cases plus the lookup guard. ui/keybindings passes. One initial red
+attempt was invalidated by overlapping test runs and is excluded as evidence;
+the serial red/green rerun is /tmp/parley-333-order-{red-valid,restored}.log.
+Full verification and boundary re-review are pending on this correction.

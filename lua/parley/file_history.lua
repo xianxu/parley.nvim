@@ -2,7 +2,7 @@
 local M = {}
 local model = require("parley.file_history_model")
 local helpers = require("parley.helper")
-local histories, restoring, pending_windows = {}, {}, {}
+local histories, restoring = {}, {}
 local departing_window
 
 local function observation(win)
@@ -16,7 +16,7 @@ local function observation(win)
 end
 
 local function observe(win, kind)
-    local entry = not restoring[win] and not pending_windows[win] and observation(win)
+    local entry = not restoring[win] and observation(win)
     if entry then
         entry.kind = kind
         histories[win] = model.transition(histories[win], entry)
@@ -44,26 +44,17 @@ function M.setup()
         if helpers.is_editing_window(win) then
             -- Native splits leave their focused source first; API creations do not.
             histories[win] = parent and histories[parent] or nil
-            if not parent then
-                -- API WinEnter can still show the temporary cloned buffer.
-                local pending = {}
-                pending_windows[win] = pending
-                vim.schedule(function()
-                    if pending_windows[win] ~= pending then return end
-                    pending_windows[win] = nil
-                    observe(win, "visit")
-                end)
-            end
         end
     end })
     vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, { group = group, callback = function(ev)
         local win = vim.api.nvim_get_current_win()
-        observe(win, "visit")
+        -- A fresh API window's WinEnter can still show a temporary clone.
+        if ev.event == "BufEnter" or histories[win] then observe(win, "visit") end
         if ev.event == "WinEnter" then departing_window = nil end
     end })
     vim.api.nvim_create_autocmd("WinClosed", { group = group, callback = function(ev)
         local win = tonumber(ev.match)
-        histories[win], restoring[win], pending_windows[win] = nil, nil, nil
+        histories[win], restoring[win] = nil, nil
         if departing_window == win then departing_window = nil end
     end })
     for _, win in ipairs(vim.api.nvim_list_wins()) do observe(win, "visit") end
@@ -73,7 +64,6 @@ end
 -- Propose index changes first; commit only after a successful native switch.
 function M.back()
     local win = vim.api.nvim_get_current_win()
-    pending_windows[win] = nil
     local origin = observe(win, "visit")
     if not origin then return false end
     local proposed, target = histories[win]

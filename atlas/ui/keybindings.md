@@ -15,11 +15,13 @@ openers inherits the focused source's history, then keeps independent visits
 and cursors. Inheritance requires the source's WinLeave immediately before
 WinNew; WinEnter clears that departure, and WinNew consumes it once. API/RPC
 window creation has no such source departure and starts with no inherited
-entries, even when its requested parent is focused. Its first observed file
-becomes the root. Neovim does not expose unambiguous API parentage at WinNew;
-the adapter neither guesses from layout nor wraps the core API. A guarded
-scheduled callback seeds fresh API windows after the temporary cloned buffer is
-replaced; close or an immediate Back cancels that initialization token.
+entries, even when its requested parent is focused. BufEnter begins its history
+synchronously; Back can also establish its displayed file as the root. A fresh
+window's WinEnter alone does not count the creation-time clone as a visit. Thus
+an API creation reusing the same buffer starts empty until a file-entry event or
+Back. Neovim does not expose unambiguous API parentage at WinNew; the adapter
+neither guesses from layout nor wraps the core API. There are no deferred
+initialization callbacks, so later file entries are never suppressed.
 Scratch, help, terminal, directory and floating buffers are
 not visits. Histories retain the most recent 200 visits per window, live only
 for this editor session, and are released when the window closes. Missing

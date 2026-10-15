@@ -514,3 +514,7 @@ oracle, and the mutation that would make the test fail.
   Equalalways can make distinct parents produce identical native creation state.
   Inherit only from an explicit native WinLeave→WinNew source; start API windows
   fresh, seeding after their temporary cloned buffer is replaced (#333 BR-1).
+- Do not suppress all editor observations until a scheduled initialization:
+  API callers can enter several real files before yielding. Start empty-window
+  histories synchronously at BufEnter/Back, excluding a fresh WinEnter clone;
+  test API creation followed immediately by multiple file entries (#333 BR-2).
