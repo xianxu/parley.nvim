@@ -68,6 +68,7 @@ ARCH-DRY/PURE: reuse native edit attachment and existing disk_changed/violation;
 ## Log
 
 ### 2026-10-14
+- 2026-10-14: closed — All 109 mapped cases and the declared full suite (428 files, lint 724 files clean, no survivors, log fe3545a713a2) pass. Round 1 corrections are prose only: both README undo/redo clauses, both concept classifications, and the three-hash maximum; no runtime change. Final Plan row stays open for TL-directed staging/live acceptance and landing; --no-plan-check acknowledges that sequencing. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 - #324 landed in PR #236 at 2cf363f1421ce27ab3230099380f999a0a4bdaf6 and its stage was cleared. #327 design is parked via unclaim per the operator priority. Root cause for #330: release tests disk/modified state, which immediate auto-save advances; retain the lock acquisition content instead.
 

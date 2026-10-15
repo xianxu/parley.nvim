@@ -59,6 +59,61 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: cfc3c24fd466b77eb110f974f77ae501073997bd
+        tracker_head: 827f490ea047e2b673c9e3be050d6450a9d5a590
+        branch_point: 874ccbaa9c1693ee56477ec39052765b043ba18b
+        since: "2026-10-14T21:25:39-07:00"
+        until: "2026-10-14T22:23:08-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-14T21:25:39-07:00"
+              end: "2026-10-14T22:23:08-07:00"
+              began: "2026-10-14T21:25:39-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a13b56-32ec-7310-8650-104071939f2f
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: ace16161d511add5b32076b52e3e406efd484e44ad072f1adf826dbd916794e8
+              started: "2026-10-14T16:54:39.906Z"
+              spawned: false
+              bytes: 12588868
+              windows:
+                - start: "2026-10-14T21:25:39-07:00"
+                  end: "2026-10-14T22:23:08-07:00"
+        cuts:
+            - dispatched: "2026-10-14T22:20:45-07:00"
+              finalized: "2026-10-14T22:22:29-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-14T22:24:57-07:00"
+      dispatched: "2026-10-14T22:23:27-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: README.md:54-56 replaces both saved-text clauses with acquisition-baseline behavior, matching session_sync.lua:507-549 and atlas/modes/session_sync.md:29-34. The pinned correction changes documentation only; native tests confirm the documented behavior.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: The issue's Core concepts table at lines 59-62 now names implementing entities, INTEGRATION classifications and new/modified statuses for both rows. The source diff confirms the new baseline machinery and modified reconciliation in session_sync.lua.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: The issue's Design notes at line 66 now specify three hashes, matching observation at session_sync.lua:508, deferred comparison at :531 and successful post-write verification at :547. This is a documentation-only correction.
+          round: 2
+      recipe: small-diff-review
+      isolation: fenced
+      reviewed: cfc3c24fd466b77eb110f974f77ae501073997bd
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#330 (boundary-review)
@@ -77,8 +132,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Minor] `documented-work-bounds` The plan understates the maximum hashes per edit
   The issue's Design notes at line 66 promise at most two SHA-256 hashes per edit. A successful baseline restoration requiring a write hashes at session_sync.lua:508, :531 and :547. This is the sole inaccurate work-bound claim found in the window. Document the three-hash path or reduce it while retaining the post-write content check.
 
+## Round 2 — 2026-10-14T22:24:57-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — README.md:54-56 replaces both saved-text clauses with acquisition-baseline behavior, matching session_sync.lua:507-549 and atlas/modes/session_sync.md:29-34. The pinned correction changes documentation only; native tests confirm the documented behavior.
+- BR-2 — addressed — The issue's Core concepts table at lines 59-62 now names implementing entities, INTEGRATION classifications and new/modified statuses for both rows. The source diff confirms the new baseline machinery and modified reconciliation in session_sync.lua.
+- BR-3 — addressed — The issue's Design notes at line 66 now specify three hashes, matching observation at session_sync.lua:508, deferred comparison at :531 and successful post-write verification at :547. This is a documentation-only correction.
+
 ## Open findings
 
-- **BR-1** [Important] `user-docs-match-behavior` README still documents the replaced saved-text release rule
-- **BR-2** [Minor] `core-concept-classification` Both Core concepts rows omit kind and change status
-- **BR-3** [Minor] `documented-work-bounds` The plan understates the maximum hashes per edit
+(none — every finding has been disposed)
