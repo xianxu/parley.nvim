@@ -41,6 +41,7 @@ two files; `:bp` follows buffer-list order, not visit order.
 - Headless tests: session file → answer (Alt+o) → side doc (Alt+o), moving around inside each; two Alt+Shift+O presses
   land back on the session file at its previous cursor; same-file jumps don't count; history is per window.
 - README documents the key.
+- A new split inherits its parent history independently; Back reaches the session file from the split.
 
 ## Plan
 
@@ -80,3 +81,21 @@ window cleanup, repeated setup, configured keys, help and disabled mappings.
   started the issue branch through SDLC after its dependency catch-up.
 - Read the owning ops project and design. This navigation slice has no
   dependency on the agentic-document registry or side-document protocol.
+
+## Revisions
+
+### 2026-10-15 — TL approval and split inheritance
+
+Approved by ops:0 delivery 499f2cb2-4d7a-42df-80e9-06b6c25d9175,
+including the 200-visit limit. Supersedes fresh split histories: a new split
+inherits a copy of its parent window's history, then evolves independently,
+so Back can still reach the session file. Capture the source on WinLeave and
+copy its immutable model state when WinNew creates the child; cover a split
+showing the same file and a split opening a new file. A tab opened from a
+window follows the same inheritance when Neovim creates its window.
+
+Insert-mode Back bypasses the global registry's stopinsert wrapper using an
+entry-specific preserve_insert flag; other entries keep the current behavior.
+Native probes confirm buffer switching itself preserves Insert mode. The help
+surface is generated at runtime from the registry; no static help file or
+help-generator script exists, so assert the generated help lines directly.
