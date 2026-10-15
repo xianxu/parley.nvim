@@ -1,6 +1,6 @@
 ---
 id: 000336
-status: codecomplete
+status: done
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 01ebf08816a07f290c4382c016fc195792b43c19
         evidence_commit: db85e81c583c2e6280c307fe511320c879ee735b
+        landed_commit: 42899731dc07c17968df53a8d1af9c70be2b9810
 ---
 
 # Flake: packaging VM guest chat confinement follows transient focus
