@@ -166,3 +166,87 @@ findings:
    Add a `## Revisions` entry defining initialization transitions and the invariant: temporary creation clones are excluded, but real visits after API creation returns must survive regardless of whether the scheduled callback has run. Record deterministic sequence coverage for that invariant.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"6841a1ac-b886-4bbf-ac3d-84de2197bed4","repository":"github.com/xianxu/parley.nvim","issue_id":"000333","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/acf40c2f32160616","reviewed_head":"55b784e5a4a3c8f09b000b40b453feb943207e8a","slot":"parley.nvim:1","requested_at":"2026-10-15T19:49:22.733163Z"},"phase":"finished","pid":82767,"started_at":"2026-10-15T19:49:22.983163Z","finished_at":"2026-10-15T19:51:20.599604Z","session_id":"01a1411c-b70a-7b32-99f5-5724e6ccb8ce","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T13:08:38-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 333 — Alt+Shift+O: go back through visited files (per window), up the tree to the root |
+| repo | parley.nvim |
+| issue file | workshop/issues/000333-alt-shift-o-go-back-through-visited-files-per-window-up-the-tree-to-the-root.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 538372be03b75c9350e346f923b85366ceff809e..8ce10d02789b1a5c8d487220a5c8eeefbcb899e9 |
+| command | sdlc close --issue 333 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T13:08:38-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The implementation matches the revised Spec and Plan, including synchronous visit recording and the narrowed native split inheritance contract. BR-2 has reproducible regression evidence, and no new blocking findings were identified.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The regression at tests/integration/file_history_spec.lua:193 fails at line 201 with the pre-fix adapter restored in a disposable checkout (27 pass, 1 fail). The pinned adapter passes all 28 cases. BufEnter observations now record synchronously without pending-window suppression.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Remains addressed under the revised contract: API windows inherit no parent history. The eight direction/activation cases and native split/tab inheritance cases pass; README and atlas document this distinction.
+```
+
+### 1. Strengths
+
+- Immutable history transitions preserve independent split histories and enforce the 200-entry bound.
+- Back verifies the displayed target before committing its proposed history position and preserves native modified-buffer refusal.
+- Real-key tests cover linked-file traversal, restored cursors, Insert typing and repeated Back keys.
+- README, atlas and registry-generated help cover the new navigation surface.
+
+### 2. Critical findings
+
+None.
+
+### 3. Important findings
+
+None.
+
+### 4. Minor findings
+
+None.
+
+### 5. Test coverage notes
+
+- `make test-spec SPEC=ui/keybindings` passed, with a clean process census.
+- Independently verified BR-2 red/green in a disposable checkout; the checkout was removed afterward.
+- `git diff --check` passed for the pinned range.
+- The complete repository suite was not rerun during this review.
+
+### 6. Architectural notes
+
+- **ARCH-DRY — pass:** reuses the keybinding registry, editing-window predicate and exact-name buffer lookup.
+- **ARCH-PURE — pass:** ordering lives in a pure model, tested directly without IO or mocks; editor effects remain in the adapter.
+- **ARCH-PURPOSE — pass:** delivers file-level traversal, per-window positions and the revised split contract.
+- **ARCH-MOCK — pass:** introduces no external binary or service dependency; integration tests exercise real Neovim behavior.
+- **ARCH-CONSTRAINTS — pass:** retained histories are capped at 200 entries; no deferred initialization or background work remains.
+- **ARCH-SECURE — pass:** paths use native escaped commands, and Back respects unsaved-buffer refusal.
+- **ARCH-ORDER — pass:** model transitions govern visit ordering; synchronous event recording eliminates BR-2’s scheduling gap.
+- **ARCH-FUNERAL — pass:** window closure removes history and restoration state; no durable artifacts are introduced.
+
+The Core concepts table matches the code and file changes. README and atlas update gates are satisfied.
+
+### 7. Plan revision recommendations
+
+None. Existing BR-1 and BR-2 revisions describe the implemented contract.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"2e3a4d2c-a8f7-40ee-8928-8022a0a920cb","repository":"github.com/xianxu/parley.nvim","issue_id":"000333","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/24ad1d95687239e5","reviewed_head":"8ce10d02789b1a5c8d487220a5c8eeefbcb899e9","slot":"parley.nvim:1","requested_at":"2026-10-15T20:07:02.082609Z"},"phase":"finished","pid":46099,"started_at":"2026-10-15T20:07:02.184639Z","finished_at":"2026-10-15T20:08:37.929112Z","session_id":"01a1412c-e001-7441-bafa-e68f63deed74","outcome":"returned"}] -->

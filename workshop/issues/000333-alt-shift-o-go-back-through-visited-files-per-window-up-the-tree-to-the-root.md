@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "5f416a11", done: "747d985a"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Alt+Shift+O: go back through visited files (per window), up the tree to the root
@@ -53,6 +53,8 @@ two files; `:bp` follows buffer-list order, not visit order.
 ## Log
 
 ### 2026-10-15
+- 2026-10-15: closed — BR-2 correction: make test exit 0, 430 passing files, lint 0 warnings/errors in 728 files, clean unit/integration censuses (/tmp/parley-333-sync-full.log). ui/keybindings and focused 28-case adapter plus lookup guard pass. Serial old-adapter run fails no-yield API-to-two-Lua-edits traversal; restored synchronous adapter passes (/tmp/parley-333-order-red-valid.log, /tmp/parley-333-order-restored.log). Removed all deferred initialization and suppression. API creation starts EMPTY; synchronous BufEnter or Back begins history, documented in README/atlas. Native focused splits/tabs remain strict. Vocabulary and range whitespace pass.; review verdict: SHIP
+- 2026-10-15: flow upgraded quick → full — 201 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 ## Revisions
 
