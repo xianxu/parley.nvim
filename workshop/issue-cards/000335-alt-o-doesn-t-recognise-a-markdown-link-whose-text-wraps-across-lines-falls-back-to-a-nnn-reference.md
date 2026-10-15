@@ -1,0 +1,23 @@
+---
+id: 000335
+status: open
+created: 2026-10-15
+updated: 2026-10-15
+estimate_hours:
+github_issue:
+---
+
+# Alt+o doesn't recognise a markdown link whose text wraps across lines (falls back to a #NNN reference)
+
+## Problem
+
+2026-10-15: the operator pressed Alt+o on the second line of a markdown link whose **link text wraps across two lines**:
+
+```
+… stateful fakes. → [discussion: is this a new
+"landing" workflow?](000390-test-economy-pattern-plan.side/01-landing-admission.md)
+```
+
+Instead of opening the side doc, parley showed "Resolve #370" (an issue picker): the reference scanner didn't recognise
+the wrapped link at all, so #327's enclosing-entity fallback found only the paragraph's `#370` reference and resolved
+that. A link with a line break inside its text is valid CommonMark, and agents' hard-wrapped prose produces them.
