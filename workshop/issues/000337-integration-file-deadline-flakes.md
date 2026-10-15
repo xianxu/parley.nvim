@@ -34,7 +34,7 @@ The runner takes one startup load sample and applies Plenary's50s default to a w
 
 Proposed: keep the existing50s base and bounded1–4x load factor as a no-completed-case watchdog (including bootstrap, before/body/after and teardown), plus an independent absolute ceiling of base×4, the existing maximum envelope (ordinary files200s; existing large-corpus base180s retains720s maximum). Only structured completed-case frames from a thin child wrapper around actual Plenary execution refresh progress; arbitrary stdout never does. The pure deadline state decides running/stalled/absolute-expired from monotonic time and validated progress. The thin parent owns the child process, streams original output, retains exit codes, kills/reaps on either expiry, and closes its timer/handles. No retries, sleeps, skipped assertions, new longer-timeout path exceptions or workload-derived unbounded budgets.
 
-Alternative: reduce repeated fixture cost separately. That can improve throughput, but cannot correct the whole-file/one-case mismatch across all five deadline failures; avoid changing unrelated behavioral fixtures to hide the harness defect. A blanket timeout increase is rejected. Test-runner changes remain headless harness surface, not product editor behavior.
+Alternative: reduce repeated fixture cost separately. That can improve throughput, but cannot correct the whole-file/one-case mismatch across the deadline failure class; avoid changing unrelated behavioral fixtures to hide the harness defect. A blanket timeout increase is rejected. Test-runner changes remain headless harness surface, not product editor behavior.
 
 ARCH-PURE/ARCH-ORDER: one deterministic state transition with clock/progress/exit inputs, no wall-clock sleeps in policy tests. ARCH-DRY: keep Plenary as the assertion/fixture executor; share one policy across ordinary and existing corpus budgets. ARCH-CONSTRAINTS/ARCH-FUNERAL: absolute runtime ceiling and one owned child/timer, terminated and reaped on failure; no durable state. ARCH-SECURE: harness-owned framed progress, not arbitrary log activity; tests stay in existing temporary profiles. The IO dependency is the same installed Neovim/Plenary exercised by isolated real-child conformance.
 
@@ -44,10 +44,12 @@ A controlled schedule or deterministic regression identifies why these passing f
 
 ## Plan
 
-- [ ] Freeze the diagnosed timeout model and obtain TL review of the progress/absolute-ceiling design.
-- [ ] Observe deterministic RED for useful work past50s, stalled bootstrap/case/teardown, cap, load bounds and ignored arbitrary output; verify thin-runner wiring with controlled process events.
-- [ ] Implement the smallest shared pure policy and owned child adapter, preserving Plenary assertions/output/exit codes; verify actual success, assertion failure and forced timeout children with cleanup.
-- [ ] Run focused harness and affected suites, update atlas/lessons, run the required full suite, close through mandatory fresh review and land on SHIP.
+- [x] Freeze the diagnosed timeout model and obtain TL review of the progress/absolute-ceiling design.
+- [x] Observe deterministic RED for useful work past50s, stalled bootstrap/case/teardown, cap, load bounds and ignored arbitrary output; verify thin-runner wiring with controlled process events.
+- [x] Implement the smallest shared pure policy and owned child adapter, preserving Plenary assertions/output/exit codes; verify actual success, assertion failure and forced timeout children with cleanup.
+- [ ] Run focused harness and affected suites, update atlas/lessons, and pass the required full suite.
+
+After verification, close through the mandatory fresh review, fix any finding class, land on SHIP and report the merge to the hub.
 
 ## Log
 
@@ -57,3 +59,11 @@ First seen:2026-10-15. Failing head1eaefd96df59afcb8d0880ec621864b137a596a7, com
 ## Revisions
 
 - 2026-10-15 — TL assigns #337 to this slot from main; #332 remains parked atce50b56d165838c309067433d220078b9a1f9b03. Expand the enumerated deadline class to branch_child, packaging_release and starter_bootstrap from the complete exact1eaefd96 run, failed/6f81bbfaed0b35a39900598fdc471e11.log. Read-only source/history establishes startup-sample and whole-file granularity as the shared model defect; fixture-cost improvements are a separate alternative, not presumed root cause. Design above awaits TL approval; no code/tests changed and no change-code yet.
+
+- 2026-10-15 — TL approved7482a903 in submitted receiptd63d1e4f-e434-4116-a323-25acab8627a5; change-code admitted quick flow. Pure deadline policy RED0/11/0 then GREEN11/0/0; adapter/framing RED0/8/0 at /tmp/parley337-runner-red.log. Implementing only the headless test harness; Plenary assertion/fixture behavior is retained.
+
+- Deferred steering for parked #332, received582dad22-e6ad-4a0c-a8e1-1779601af020: on resume append a Revision and tests for content-hash equality since last successful submit: unchanged Alt+Return skips send and shows last-submit time; changed content sends; a second Alt+Return within about2s explicitly resends with a resent receipt. This belongs only on #332, not this harness branch.
+
+- 2026-10-15 — focused harness GREEN22/0/0 (policy11, framing3, existing options2, real-child6), /tmp/parley337-all-harness-green.log. Actual child checks prove pass/fail propagation, completed-case count, arbitrary-output rejection, teardown coverage, progressing absolute cap and ESRCH after reap. No behavioral fixtures or timeout exceptions changed. Lint7files zero warnings/errors before docs update; final checks pending.
+
+- 2026-10-15 — final focused22 cases pass at /tmp/parley337-final-harness.log, full lint738files zero warnings/errors at /tmp/parley337-lint.log and diff check clean. Preserve the absolute/no-progress distinction in atlas and keep close/landing as post-check actions instead of claiming them in verification checkboxes. No suite rerun started yet on this implementation.

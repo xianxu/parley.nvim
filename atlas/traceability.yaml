@@ -692,6 +692,9 @@ atlas:
       - tests/helpers/ready_port.lua
       - tests/helpers/await.lua
       - tests/helpers/spec_runner.lua
+      - tests/helpers/spec_deadline.lua
+      - tests/helpers/spec_progress.lua
+      - tests/helpers/spec_child.lua
       - tests/helpers/jit_watch.lua
       - tests/helpers/jit_tuning.lua
       - tests/helpers/reachability.lua
@@ -717,6 +720,9 @@ atlas:
       - tests/unit/ready_port_spec.lua
       - tests/unit/await_helper_spec.lua
       - tests/unit/spec_runner_spec.lua
+      - tests/unit/spec_deadline_spec.lua
+      - tests/unit/spec_progress_spec.lua
+      - tests/integration/spec_runner_native_spec.lua
       - tests/unit/jit_tuning_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/fixture_reaping_spec.lua

@@ -41,7 +41,7 @@ spec has to defend itself and no lint has to police traversal roots. `nvim`'s
 (`tests/minimal_init.vim`).
 
 **Every spec child loads `tests/minimal_init.vim`.** `tests/helpers/spec_runner.lua`
-passes it to plenary, so what the init sets — `g:` variables included — reaches
+passes it to its owned Plenary child, so what the init sets — `g:` variables included — reaches
 the spec, and the harness-only guards it installs (a per-process
 `$PARLEY_QUERY_DIR`, the watch for a refusal with no words) cover the whole
 suite rather than the specs that remember to ask (#261 M5). Before that, children
@@ -215,9 +215,8 @@ remains independent of those maintainer tools.
 
 ### Large native fold conformance
 
-`tests/helpers/spec_runner.lua` keeps Plenary’s normal 50-second per-file deadline,
-with a 180-second deadline for `document_fold_batches_spec.lua` and
-`document_semantic_spec.lua`. The fold spec builds
+`tests/helpers/spec_runner.lua` keeps a 50-second no-completed-case budget,
+with a 180-second base for the existing large native fold/semantic corpora. The fold spec builds
 a real 50,010-row document to exercise bounded native fold cleanup and window
 preference restoration. The semantic corpus checks Enter/join scaling through 50,000 rows. These index
 bootstraps can exceed 50 seconds under parallel load. The override applies to the
@@ -226,12 +225,33 @@ full-suite, and direct `PlenaryBustedFile` invocations.
 
 ### Deadlines, load, and the Neovim under test (#294)
 
-Every deadline above is a hang check sized for a quiet machine.
-`spec_runner.load_factor` stretches it by the 1-minute load average over the
-CPU count when the spec starts, from 1x up to a 4x cap, because other
-sessions' suites share the machine. A deadline kill prints
-`DEADLINE: <spec> … (<base>s x<factor> for load <n> on <cpus> CPUs); killed`;
-plenary itself kills silently. `PASS`/`===FAIL` lines carry wall time.
+The runner distinguishes useful work from a stall (#337). A single startup
+load sample formerly set a whole-file deadline; growing files were killed after
+successful cases at 50–64s although identical code passed in 56–83s elsewhere.
+`spec_deadline` now holds the pure transition policy. Its no-completed-case
+budget is the base multiplied by the startup 1-minute load/CPU ratio, bounded
+from 1x to 4x. An independent absolute ceiling is always base×4: 200s normally,
+720s for the existing large corpora. Useful case completions can therefore pass
+50s overall; no amount of progress can evade the absolute ceiling.
+
+`spec_child` runs the real Plenary assertions and fixtures. Only after a full
+case returns, including before_each/body/after_each, does it emit a monotonically
+numbered frame for that invocation. `spec_progress` strips those frames while
+preserving ordinary output; arbitrary stdout, foreign/duplicate/invalid frames
+and an unfinished line cannot renew the watchdog. Incomplete line storage is
+bounded at 64KiB. Bootstrap, a stuck case and final teardown remain covered by
+the same idle budget. `spec_runner` owns the child and timer until observed
+exit, sends TERM on expiry and escalates to KILL if needed, then reaps and
+closes the timer. Normal assertion/exit results stay failures. A timeout names
+`stalled` or `absolute-expired`, completed cases and both budgets. Existing
+`PASS`/`===FAIL` lines still report whole-file wall time.
+
+Deterministic virtual-clock tests exercise the exact policy (including late
+frames, load bounds and terminal states). Native conformance uses isolated real
+Plenary children for successful assertions, failed assertions, stalled bootstrap,
+case/teardown and a progressing child that reaches the absolute cap; it checks
+that timed-out PIDs are gone. No test is retried, skipped or granted a new
+path-specific timeout exception by this policy.
 
 `make test` runs the nvim chosen by `scripts/test-nvim.sh`, put first on
 `PATH` through `TEST_ENV` so spec children and `vim.fn.system` grandchildren
@@ -249,8 +269,8 @@ and trace flushes (`tests/helpers/jit_watch.lua`), grandchildren included.
 `tests/helpers/await.lua` `until_progress(predicate, progress, stall_ms, ceiling_ms)`
 waits while a progress signal keeps changing and fails as `stalled` when it stops,
 or at a per-wait ceiling (default 40s). The ceiling bounds one wait, not the
-file: it lets a single stuck wait report before the 50-second file deadline,
-but several slow waits in one file can still reach it. Choose `stall_ms` no
+file: it lets a single stuck wait report before the runner’s no-completed-case
+budget. The runner separately bounds total file runtime. Choose `stall_ms` no
 tighter than the fixed budget being replaced. Use it where the wait is gated on bounded
 repair work (e.g. a tool round's continuation waits for the document to repair
 the written block): a fixed `vim.wait` budget cannot tell slow from stuck.
