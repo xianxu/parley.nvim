@@ -1,12 +1,12 @@
 ---
 id: 000337
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: 'f249409884bcb34df7338cecd04eefc84af8f890' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '7e331f729397d94f1f5288b46505aa0bd3818e96' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T16:04:16-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "a662a669", done: "6525e798"}
+actual_hours: 0.90
 ---
 
 # Flake: integration files exceed a load-dependent whole-file deadline
