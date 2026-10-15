@@ -1,12 +1,12 @@
 ---
 id: 000336
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '94320e03ec09f3bda61c2db9522bbf4d5afeefde' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '480b1fe99e661010f21f5fd54c433f984fea4c5d' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T15:41:39-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "d26adc12", done: "2979c40b"}
+actual_hours: 0.39
 ---
 
 # Flake: packaging VM guest chat confinement follows transient focus
