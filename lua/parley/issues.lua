@@ -299,17 +299,12 @@ M.parse_md_link_at_cursor = function(line, col)
     if not line or not col then
         return nil
     end
-    local init = 1
-    while true do
-        local s, e, text, url = line:find("%[([^%]]*)%]%(([^)]+)%)", init)
-        if not s then
-            return nil
+    for _, link in ipairs(require("parley.reference_candidates").markdown_links(line)) do
+        if col >= link.start_col and col <= link.end_col then
+            return link
         end
-        if col >= s and col <= e then
-            return { text = text, url = url, start_col = s, end_col = e }
-        end
-        init = e + 1
     end
+    return nil
 end
 
 -- Resolve a markdown link (as returned by parse_md_link_at_cursor) to an

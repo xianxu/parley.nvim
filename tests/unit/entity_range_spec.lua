@@ -7,6 +7,101 @@ local function parse(lines)
 	return chat_parser.parse_chat(lines, chat_parser.find_header_end(lines), cfg)
 end
 
+describe("entity_range navigation", function()
+	it("contains every numbered-item row including interior blanks and indented items", function()
+		local lines = {
+			"1. question", "", "continued", "  2. nested", "[answer](qa/a.md)", "", "1. next",
+		}
+		for row = 1, 5 do
+			assert.same({ kind = "numbered", first = 1, last = 5 },
+				entity_range.navigation_range(nil, lines, row))
+		end
+		assert.is_nil(entity_range.navigation_range(nil, lines, 6))
+		assert.same({ kind = "numbered", first = 7, last = 7 },
+			entity_range.navigation_range(nil, lines, 7))
+	end)
+
+	it("ends an item at any real heading and preserves heading section ownership", function()
+		local lines = { "1. question", "answer", "### Nested", "body", "## Next", "tail" }
+		assert.same({ kind = "numbered", first = 1, last = 2 },
+			entity_range.navigation_range(nil, lines, 2))
+		assert.same(entity_range.range(nil, lines, 3), entity_range.navigation_range(nil, lines, 3))
+		assert.same(entity_range.range(nil, lines, 4), entity_range.navigation_range(nil, lines, 4))
+		local section = { "# Parent", "body", "## Child", "[answer](a.md)", "# Next" }
+		assert.same({ kind = "section", first = 1, last = 4 },
+			entity_range.navigation_range(nil, section, 1))
+	end)
+
+	it("ignores fenced anchors and headings for every supported fence flavor", function()
+		for _, fence in ipairs({ "```", "~~~", "  ```", "   ~~~~" }) do
+			local lines = { "1. question", fence, "2. example", "# example", fence, "answer", "2. next" }
+			for row = 1, 6 do
+				assert.same({ kind = "numbered", first = 1, last = 6 },
+					entity_range.navigation_range(nil, lines, row))
+			end
+			local sample = { fence, "1. example", "continued", fence, "after" }
+			assert.same(entity_range.range(nil, sample, 2), entity_range.navigation_range(nil, sample, 2))
+			assert.same(entity_range.range(nil, sample, 5), entity_range.navigation_range(nil, sample, 5))
+		end
+	end)
+
+	it("clamps numbered items to transcript headers, exchanges and structural markers", function()
+		local lines = {
+			"# topic: t", "- file: t.md", "---", "", "💬: question", "1. ask", "continued",
+			"🤖: [A]", "answer", "1. response", "[answer](a.md)", "📝: summary", "tail",
+			"💬: next", "body",
+		}
+		local parsed = parse(lines)
+		for row = 1, 3 do
+			assert.is_nil(entity_range.navigation_range(parsed, lines, row))
+			assert.is_nil(entity_range.navigation_range(nil, lines, row))
+		end
+		assert.same({ kind = "numbered", first = 6, last = 7 },
+			entity_range.navigation_range(parsed, lines, 7))
+		assert.same(entity_range.range(parsed, lines, 9), entity_range.navigation_range(parsed, lines, 9))
+		assert.same({ kind = "numbered", first = 10, last = 11 },
+			entity_range.navigation_range(parsed, lines, 11))
+		assert.same(entity_range.range(parsed, lines, 13), entity_range.navigation_range(parsed, lines, 13))
+		assert.same(entity_range.range(parsed, lines, 15), entity_range.navigation_range(parsed, lines, 15))
+	end)
+
+	it("uses configured structural prefixes as item boundaries", function()
+		local lines = { "1. question", "answer", "USER: next", "tail" }
+		local opts = { config = vim.tbl_extend("force", cfg, { chat_user_prefix = "USER:" }) }
+		assert.same({ kind = "numbered", first = 1, last = 2 },
+			entity_range.navigation_range(nil, lines, 1, opts))
+		assert.same(entity_range.range(nil, lines, 4, opts),
+			entity_range.navigation_range(nil, lines, 4, opts))
+	end)
+
+	it("shares a supplied fence memo between navigation and the existing range", function()
+		local lines = { "1. example", "# example", "body" }
+		local opts = { in_code = { true, true, true } }
+		assert.same(entity_range.range(nil, lines, 2, opts),
+			entity_range.navigation_range(nil, lines, 2, opts))
+		assert.is_nil(entity_range.range(nil, lines, 2, opts))
+	end)
+
+	it("retains paragraph, header and invalid-row behavior outside numbered items", function()
+		local samples = {
+			{}, { "" }, { "alpha", "", "beta" }, { "1.no space", "continued" },
+			{ " 1. indented", "continued" }, { "# topic: t", "- file: t.md", "---", "body" },
+		}
+		for _, lines in ipairs(samples) do
+			for row = 0, #lines + 1 do
+				assert.same(entity_range.range(nil, lines, row), entity_range.navigation_range(nil, lines, row))
+			end
+		end
+	end)
+
+	it("leaves the existing editing range unchanged for numbered text", function()
+		local lines = { "1. question", "", "continued", "", "1. next" }
+		assert.same({ kind = "paragraph", first = 3, last = 4 }, entity_range.range(nil, lines, 3))
+		assert.same({ kind = "numbered", first = 1, last = 3 },
+			entity_range.navigation_range(nil, lines, 3))
+	end)
+end)
+
 describe("entity_range paragraph", function()
 	it("takes the blank-delimited run plus its trailing blanks", function()
 		local lines = { "alpha one", "alpha two", "", "beta one", "" }

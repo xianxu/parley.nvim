@@ -48,6 +48,15 @@ local function is_blank(line)
 	return line == nil or line:match("^%s*$") ~= nil
 end
 
+local function is_structural(line, prefixes)
+	for _, prefix in ipairs(prefixes) do
+		if prefix and #prefix > 0 and line:sub(1, #prefix) == prefix then
+			return true
+		end
+	end
+	return false
+end
+
 --- A line the paragraph walk must not cross: blank, heading, structural, or a
 --- CODE FENCE. The fence is the same class of wall as a heading and for the
 --- same reason the issue gave for rejecting strict `dap` parity: without it,
@@ -65,12 +74,7 @@ local function is_wall(line, prefixes)
 	if require("parley.document.lexical").is_fence_delim(line, true) then
 		return true
 	end
-	for _, prefix in ipairs(prefixes) do
-		if prefix and #prefix > 0 and line:sub(1, #prefix) == prefix then
-			return true
-		end
-	end
-	return false
+	return is_structural(line, prefixes)
 end
 
 --- Blank/heading/marker-delimited paragraph containing `row`.
@@ -274,17 +278,7 @@ local function summary_trim(range, parsed, idx, lines)
 	return range
 end
 
---- The structural unit under the cursor.
---- @param parsed table|nil  parsed chat, or nil for a plain markdown buffer
---- @param lines table       1-based array of buffer lines
---- @param row number        1-based cursor row
---- @param opts table|nil    { scope = "entity"|"to_end", inner = boolean,
----                             config = merged parley config (defaults used
----                             when absent, so a caller with a configured
----                             chat_user_prefix must pass it) }
---- @return table|nil        { kind, first, last }, or nil for "no entity here"
-function M.range(parsed, lines, row, opts)
-	opts = opts or {}
+local function range_context(parsed, lines, row, opts)
 	if type(lines) ~= "table" or #lines == 0 then
 		return nil
 	end
@@ -311,9 +305,16 @@ function M.range(parsed, lines, row, opts)
 	-- walk). Reuses highlight_structure's memo rather than re-scanning fences.
 	local patterns = require("parley.document.lexical").patterns(
 		opts.config or require("parley.config"))
-	local in_code = require("parley.highlight_structure").code_block_memo(lines, patterns, true)
+	local in_code = opts.in_code
+		or require("parley.highlight_structure").code_block_memo(lines, patterns, true)
 
 	local idx, bounds = exchange_at(parsed, lines, row)
+	return { floor = floor, patterns = patterns, in_code = in_code, idx = idx, bounds = bounds }
+end
+
+local function range_from_context(parsed, lines, row, opts, context)
+	local floor, patterns, in_code = context.floor, context.patterns, context.in_code
+	local idx, bounds = context.idx, context.bounds
 	local found
 
 	if idx and on_question_line(parsed, idx, row) then
@@ -377,6 +378,51 @@ function M.range(parsed, lines, row, opts)
 		return nil
 	end
 	return found
+end
+
+--- The structural unit under the cursor, for editing operations.
+--- @param parsed table|nil parsed chat, or nil for a plain markdown buffer
+--- @param lines table 1-based array of buffer lines
+--- @param row number 1-based cursor row
+--- @param opts table|nil {scope="entity"|"to_end", inner=boolean, config=table,
+---                       in_code=table} (optional precomputed fence memo)
+--- @return table|nil {kind, first, last}, or nil for "no entity here"
+function M.range(parsed, lines, row, opts)
+	opts = opts or {}
+	local context = range_context(parsed, lines, row, opts)
+	if not context then return nil end
+	return range_from_context(parsed, lines, row, opts, context)
+end
+
+--- Navigation additionally owns complete top-level numbered items. Blank rows
+--- inside an item belong to it; its trailing blanks do not. Editing consumers
+--- retain M.range's existing paragraph/question dispatch (ARCH-PURPOSE).
+--- Accepts the same arguments and optional shared fence memo as M.range.
+function M.navigation_range(parsed, lines, row, opts)
+	opts = opts or {}
+	local context = range_context(parsed, lines, row, opts)
+	if not context then return nil end
+	local lo = context.bounds and context.bounds.first or context.floor
+	local hi = context.bounds and context.bounds.last or #lines
+	local prefixes = structural_prefixes(opts.config)
+	local item
+	for i = lo, hi + 1 do
+		local outside = not context.in_code[i]
+		local anchor = i <= hi and outside and lines[i]:match("^%d+%.%s")
+		local boundary = i > hi or (outside and (anchor
+			or heading_level_at(lines, i, context.in_code) or is_structural(lines[i], prefixes)))
+		if boundary then
+			if item then
+				item.last = i - 1
+				trim_trailing_blanks(item, lines)
+				if row >= item.first and row <= item.last then
+					return item
+				end
+			end
+			item = anchor and { kind = "numbered", first = i, last = hi } or nil
+		end
+	end
+	return range_from_context(parsed, lines, row, opts, context)
 end
 
 return M
