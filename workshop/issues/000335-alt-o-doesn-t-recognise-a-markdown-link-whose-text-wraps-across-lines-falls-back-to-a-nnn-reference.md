@@ -121,6 +121,13 @@ wrapped unsupported URL. Mapped suite passes with clean census
 (/tmp/parley-335-review-green.log); vocabulary/whitespace pass. Full rerun
 started at /tmp/parley-335-review-full.log. Lessons and atlas updated.
 
+### 2026-10-15 — review correction full verification
+
+The corrected branch passes full make test: exit 0, all 433 files pass, lint
+zero warnings/errors in 732 files, clean process census
+(/tmp/parley-335-review-full.log). Ready for a full close re-review disposing
+BR-1/BR-2; the quick-flow production patch is 83 added lines.
+
 ## Revisions
 
 ### 2026-10-15 15:30 — close review BR-1 and BR-2
