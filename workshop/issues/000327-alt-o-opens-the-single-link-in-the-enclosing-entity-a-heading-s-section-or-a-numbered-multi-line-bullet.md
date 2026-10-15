@@ -61,9 +61,14 @@ fallback (`sdlc resolve`, then `gf`). A reference directly under the cursor alwa
 
 Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-navigation-plan.md).
 
-- [ ] Add pure navigation ranges and shared occurrence parsing with regression coverage for existing consumers.
-- [ ] Integrate sole-target opening and ambiguity picker; cover direct priority, cancellation/stale callback, source-relative paths, mode and zero-result fallback.
-- [ ] Update README/atlas/traceability, run targeted and full checks, close review, obtain required live acceptance through the hub, and land on SHIP.
+- [x] Add pure navigation ranges and shared occurrence parsing with regression coverage for existing consumers.
+- [x] Integrate sole-target opening and ambiguity picker; cover direct priority, cancellation/stale callback, source-relative paths, mode and zero-result fallback.
+- [ ] Update README/atlas/traceability and pass targeted/full checks for close review and staged delivery.
+
+## Delivery
+
+- [ ] Close review on SHIP, then stage on parley.nvim:0 and report exact commit and pickup steps to the hub.
+- [ ] Obtain operator live acceptance through the hub before landing, then clear the stage and report the verified merge.
 
 ## Log
 
@@ -80,6 +85,10 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 - Resumed #327 after #330 and #331 landed. Reclaimed its released branch, merged current main at integration 47aff671002a51456938f78004d386235b1a64cb, and reran start-plan. No implementation/change-code yet. The previous design approval remains unconfirmed; a new product-review handoff is being sent for this resumed work. Updated delivery instructions to worker-owned staging and mandatory live acceptance.
 
 - TL approved the resumed full-flow design (Couch delivery 9c9ad248-287c-4ac9-9340-c8b4527dc3c0): navigation-only numbered ranges, shared scanner, direct-reference priority, guarded ambiguity picker, and existing zero-candidate fallback. Build, full suite and close review are authorized, followed by staging on parley.nvim:0. Hold landing for the operator's morning live check; :0 is on main at 41899819. Next: change-code plan-quality admission, then estimate and implementation. No implementation has started.
+
+- 2026-10-15: plan-quality found selected-occurrence identity and asynchronous final-effect validation gaps plus test-strategy prose. Verified against the legacy nearest/leading @@ parser and unguarded resolver, refined the design, and cleared all three findings. Full change-code admitted; estimate-quality INFO asks allocation clarity: the first Lua primitive owns new pure logic; refactor owns wrapper migration/regressions; the second Lua primitive includes delayed resolver/family effects and native editor smoke; review/docs allocations include active suite/stage/landing work, excluding idle operator waiting.
+- Implemented navigation-only numbered ranges with shared fence/header/exchange context, shared occurrence parsers and exact selected-kind dispatch; existing edit ranges remain unchanged. Added one-shot picker and resolver completion guards through secondary family selection. A nested @@ label inside unsupported Markdown also must not be reinterpreted; a red regression led to dispatching Markdown only through Markdown/src/inline-branch handlers.
+- Targeted navigation map: 329 cases across 13 specs pass, including six real child-Neovim Alt+o Normal/Insert/cancel checks and six real filesystem-backed sdlc resolver cases. Pure stage: 99 cases (55 range, 13 scanner/transition, 31 artifact) pass. Lua lint and diff checks pass. Initial expected-red runs recorded missing feature/guard effects. A prematurely overlapped harness run reaped the first parity sweep; the isolated rerun then reached a separate 67-second deadline, with all other mapped editing tests green. Baseline timing is being checked in a separate temporary checkout; no deadline/configuration is changed. Full suite and close review remain pending.
 
 ## Estimate
 
@@ -105,3 +114,5 @@ total: 2.424
 - 2026-10-14 — initial design clarifies navigation-only range ownership, direct artifact priority, fenced-code exclusion, occurrence counting and stale-picker cancellation; existing URL/fragment destination policy is retained rather than broadening #327 into #323.
 
 - 2026-10-14 — resumption incorporates landed session-sync fixes; correct staging ownership/acceptance sequencing in the durable plan. No navigation scope change.
+
+- 2026-10-15 — separate implementation verification from post-close live delivery checkboxes so a close does not falsely claim operator acceptance or landing. Done-when still requires live acceptance before merge.

@@ -74,6 +74,14 @@ An outer range absorbs the blank run that follows it; an inner range trims it.
 Keeping that in the *range* rather than cleaning up after the cut is what lets
 the native operator and the commands produce identical buffers.
 
+## Navigation ranges
+
+Alt+o uses `entity_range.navigation_range`, which additionally contains complete
+top-level numbered items. It shares header, exchange, heading and fence rules
+with editing ranges. Numbered-item containment applies only to navigation;
+text objects and deletion continue using `entity_range.range` and the paragraph
+rules above. See [opening references](../context/file_references.md).
+
 ## Structural markers in a deleted range
 
 - **📝 summary** — preserved when it sits at the range's edge *and* the question
