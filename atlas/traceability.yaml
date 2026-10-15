@@ -598,6 +598,7 @@ atlas:
       - lua/parley/file_tracker.lua
       - lua/parley/helper.lua
     tests:
+      - tests/arch/single_resolver_spec.lua
       - tests/integration/open_reference_spec.lua
       - tests/integration/entity_navigation_native_spec.lua
       - tests/integration/entity_resolve_spec.lua

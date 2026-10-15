@@ -94,6 +94,8 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 - Final failure-path audit found native gf errors skipped temporary cursor restoration for a selected non-Markdown target. A red test observed row2/col13 instead of original row1/col3; protected fallback execution now restores before propagating the same E447. All 49 open-reference tests plus six native cases pass. Canceled the obsolete queued suite (our own cwd-verified sdlc process, SIGINT exit130) before it executed; the corrected pushed head must receive the required full run.
 
+- Full suite on a8e7e972f552b07faa656300cb3b1eb0e1c03d3c completed in 2m14s after the long FIFO wait: lint728 files clean, 430 spec files passed and only tests/arch/single_resolver_spec.lua failed. Its broad path-reader heuristic treated pure candidate enumeration as a resolver consumer. Added the explicit pure-parser exemption with the existing annotation exemption, naming init.lua as the resolution owner; mapped the guard alongside navigation. All 17 focused architecture/scanner cases then passed. Full suite rerun is required on the updated test/mapping head; no remaining test phase was skipped.
+
 ## Estimate
 
 Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only; calibration source is marked stale, so figures remain provisional.
