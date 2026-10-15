@@ -240,4 +240,50 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals(confirmed.registration.ID,document.identity(buf).ID)
     end)
 
+
+    it("preserves registration for a dated ordinary note without chat metadata", function()
+        document.detach(buf)
+        vim.api.nvim_buf_delete(buf,{force=true})
+        file = source .. "/2026-10-15-question.md"
+        vim.fn.writefile({"---","title: ordinary dated question","---","# Question","ordinary body"},file)
+        local admitted
+        require("parley.document_registry").request("register",{file,"ops:0"},{},function(value) admitted=value end)
+        await(function() return admitted ~= nil end)
+        assert.equals("registered",admitted.kind)
+        vim.cmd("edit " .. vim.fn.fnameescape(file))
+        buf = vim.api.nvim_get_current_buf()
+        p.setup_markdown_keymaps(buf)
+        await(function() return document.identity(buf) ~= nil and document.status(buf).phase == "registered" end)
+        assert.is_true(require("parley.chat_parser").is_chat_filename(vim.fs.basename(file)))
+        assert.is_not_nil(p.not_chat(buf,file),"dated fixture must remain ordinary Markdown")
+        local moved, err = p.move_chat(file,destination)
+        local new_path = destination .. "/2026-10-15-question.md"
+        assert.equals(new_path,moved,tostring(err))
+        await(function() local identity=document.identity(buf); return identity and identity.File == new_path end)
+        local confirmed=lookup(new_path)
+        assert.equals("registered",confirmed.kind)
+        assert.equals(admitted.registration.ID,confirmed.registration.ID)
+        assert.equals(admitted.registration.ID,document.identity(buf).ID)
+        assert.equals(0,vim.fn.filereadable(file))
+    end)
+
+    it("keeps a valid timestamp chat on its existing mover when the registry is unavailable", function()
+        document.detach(buf)
+        vim.api.nvim_buf_delete(buf,{force=true})
+        file=source .. "/2026-10-15-chat.md"
+        vim.fn.writefile({"---","topic: Chat move","file: 2026-10-15-chat.md","model: test-model", "provider: openai", "---", "", "💬: chat content"},file)
+        vim.cmd("edit " .. vim.fn.fnameescape(file))
+        buf=vim.api.nvim_get_current_buf()
+        assert.is_nil(p.not_chat(buf,file),"fixture must pass the actual shared chat classifier")
+        vim.env.FAKE_COUCH_REGISTRY_MODE="unsupported"
+        local moved,err=p.move_chat(file,destination)
+        local new_path=destination .. "/2026-10-15-chat.md"
+        assert.equals(new_path,moved,tostring(err))
+        assert.equals(0,vim.fn.filereadable(file))
+        assert.equals(1,vim.fn.filereadable(new_path))
+        assert.equals(new_path,vim.api.nvim_buf_get_name(buf))
+        assert.is_nil(document.identity(buf))
+        assert.is_nil(p.not_chat(buf,new_path))
+    end)
+
 end)

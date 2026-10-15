@@ -1837,10 +1837,11 @@ end
 
 --- Checks if a file should be considered a chat transcript, it enforces that a file needs to be in one configured chat root
 --- and have a valid header portion.
----@param buf number # buffer number
+---@param buf number|nil # buffer number, optional when supplied_lines is provided
 ---@param file_name string # file name
+---@param supplied_lines string[]|nil # classify a file without loading a buffer
 ---@return string | nil # reason for not being a chat or nil if it is a chat
-M.not_chat = function(buf, file_name)
+M.not_chat = function(buf, file_name, supplied_lines)
 	local chat_dir, resolved_file = find_chat_root(file_name)
 	if not chat_dir then
 		return "resolved file (" .. resolved_file .. ") not in configured chat roots (" .. table.concat(M.get_chat_dirs(), ", ") .. ")"
@@ -1852,7 +1853,7 @@ M.not_chat = function(buf, file_name)
 		return "file does not have timestamp format"
 	end
 
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local lines = supplied_lines or vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	if #lines < 5 then
 		return "file too short"
 	end

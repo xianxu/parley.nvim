@@ -307,7 +307,10 @@ end
 -- move, leaving ordinary editing available.
 function M.move_membership(path)
     if not namespace() then return false end
-    if require("parley.chat_parser").is_chat_filename(vim.fs.basename(path)) then return false end
+    if require("parley.chat_parser").is_chat_filename(vim.fs.basename(path)) then
+        local lines = require("parley.helper").chat_lines(path)
+        if lines and not require("parley").not_chat(nil, path, lines) then return false end
+    end
     local result = bounded_request("lookup", { canonical(path) })
     if result.kind == "registered" then return true, result.registration end
     if result.kind == "absent" then
