@@ -1,6 +1,6 @@
 ---
 id: 000335
-status: codecomplete
+status: done
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: bedfe98eba1d827d1aad6ac2fac7db796a5198f6
         evidence_commit: 64eb0414c257c5b21760c542f074260911507309
+        landed_commit: 28c26519b544c659e0692cf37f9dd0fc2ef4429a
 ---
 
 # Alt+o doesn't recognise a markdown link whose text wraps across lines (falls back to a #NNN reference)
