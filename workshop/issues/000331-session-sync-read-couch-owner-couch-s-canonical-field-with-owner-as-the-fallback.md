@@ -1,12 +1,12 @@
 ---
 id: 000331
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: 'a3b41a7dc1de81340fcc072283cacd897e4fdf5a' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd5639854e6f11cf9c077eb4230db3831cfddf657' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-14T22:30:57-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "8e0d221a", done: "4e0f18a1"}
+actual_hours: 0.81
 ---
 
 # session-sync: read couch-owner: (Couch's canonical field) with owner: as the fallback
