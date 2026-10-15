@@ -184,3 +184,11 @@ identical-file parent ambiguity, temporary clones and close-before-seed.
 Removing only creation suppression makes the final-buffer case fail; restored
 and confirmed 27/27 green. README/atlas describe the narrowed contract. Full
 verification and boundary re-review remain pending on this correction.
+
+### 2026-10-15 — narrowed implementation full verification
+
+make test exited 0 on d2ad0a00: all 430 test files pass, lint has zero
+warnings/errors in 728 files, and both process censuses are clean. Evidence:
+/tmp/parley-333-narrow-full.log. The expanded adapter's 27 cases and buffer lookup
+guard pass in that run. make check-vocabulary and range whitespace checks pass.
+Re-entering the SDLC boundary review for BR-1 against the TL-approved narrowing.
