@@ -61,6 +61,19 @@ packaged grammar file. The pure builder budgets UTF-8 bytes and real diffs.
 Issue schema and whitespace checks pass. This turn changes only issue/plan
 artifacts; no implementation or runtime tests are claimed. Awaiting hub approval.
 
+### 2026-10-15 — shared export consumer review
+
+Reviewed ariadne#399's plan at 6c3845509146386a234410367012d2df77ac3b33
+with a fresh read-only reviewer. Export roles/mode semantics fit the approved
+submitted-only contract. Returned three required clarifications: confirmed
+absence versus unavailable lookup (including legacy session-sync CAS), review
+snapshot/hash and reflected-only owed folding, and standalone composition that
+excludes the Couch file-edit adapter. Requested resolved-byte hashes and a
+total manifest sort. On this consumer, the canonical round must own flag
+semantics; do not retain Mode.directives as another authored definition.
+Plan review only; no implementation or live verification claimed. Await the
+revised producer contract and the existing dependency landings.
+
 ## Revisions
 
 - 2026-10-14 — revise (operator): with QA-file follow-ups the review send is now frequent, and the embedded
