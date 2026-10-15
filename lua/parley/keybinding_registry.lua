@@ -107,6 +107,7 @@ end
 --   buffer_local - true if registered per-buffer, false if global
 --   preserve_existing - skip effective user/plugin mappings (buffer-local entries)
 --   help_only    - true if registration is handled elsewhere (finders, review)
+--   preserve_insert - keep Insert mode for a global callback that supports it
 
 M.entries = {
 	-- ── Global ──────────────────────────────────────────────────────────
@@ -118,6 +119,16 @@ M.entries = {
 		scope = "global",
 		desc = "Show Parley key bindings",
 		help_desc = "Show key bindings",
+	},
+	{
+		id = "file_back",
+		config_key = "global_shortcut_file_back",
+		default_key = "<M-O>",
+		default_modes = { "n", "i" },
+		scope = "global",
+		desc = "Parley previous file in this window",
+		help_desc = "Previous file in this window",
+		preserve_insert = true,
 	},
 	{
 		id = "chat_new",
@@ -1384,7 +1395,7 @@ function M.register_global(scopes, config, callbacks)
 					for _, key in ipairs(keys) do
 						for _, mode in ipairs(modes) do
 							local wrapped
-							if mode == "i" then
+							if mode == "i" and not entry.preserve_insert then
 								wrapped = function()
 									vim.cmd("stopinsert")
 									cb()

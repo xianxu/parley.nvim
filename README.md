@@ -60,6 +60,16 @@ protection. Supported moves retain identity and migrate existing `.side/`
 backlinks through a forward-only recovery journal. Outside a Couch pane, the
 existing [document review](atlas/modes/review.md) flow remains.
 
+Press **Alt+Shift+O** in Normal or Insert mode to return to the previous file
+in the current window, restoring its cursor position. Follow links with Alt+o,
+then use Alt+Shift+O repeatedly to return through answer and side documents to
+your session file. A split or tab opened by a user command or Parley's openers
+inherits the focused window's history and keeps its own later visits. Windows
+created through APIs or RPC start with empty history. File-entry events begin
+their history; Back can also establish the displayed file as their root.
+See [file navigation](atlas/ui/keybindings.md#file-history-back)
+for the command and configuration.
+
 ## Learn by chatting
 
 These tutorials open as editable chats in the app. You can also read their

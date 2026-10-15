@@ -43,6 +43,11 @@ forward again. This also works across files.
 Think of `Ctrl+o` / `Ctrl+i` as Back / Forward for **jump locations**, including
 searches and large jumps, rather than every arrow-key movement.
 
+To go back **file by file**, press `Alt+Shift+O` in NORMAL or INSERT. It skips
+same-file jumps and restores the cursor you left in each file. Follow links
+with `Alt+o`, then press `Alt+Shift+O` to return through that chain. A new split
+inherits the source window's history and keeps later visits separate.
+
 ## Find something, then go back
 
 In NORMAL, type `/` followed by text and press `Return`. `n` goes to the next

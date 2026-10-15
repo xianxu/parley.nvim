@@ -498,6 +498,26 @@ oracle, and the mutation that would make the test fail.
 
 - Normalize renamed protocol fields once at the existing parsing boundary so validation, routing and rendering share precedence. Test canonical-only, legacy-only and conflicting values through consumers; give the losing actor different activity/identity so ping and same-slot validation cannot pass by accident.
 
+- A native buffer switch still runs plugin BufEnter hooks. For a cursor/mode
+  restoration, include buffer preparation in the synchronous restore scope:
+  prep_md's stopinsert plus feedkeys drained typeahead during FileBack (#333).
+- WinNew can run in a new, inactive API split without WinLeave in its source.
+  Snapshot the last focused source on creation; test inactive splits alongside
+  ordinary split commands before inferring parentage from departure events (#333).
+- Concurrent focused tests in one checkout still share the orphan census.
+  Schedule all make-driven tests after a delegated direct Plenary run finishes
+  so its live child is not mistaken for an orphan (#333).
+- Resolve named buffers with helper.buffer_for(path, loaded_only), including
+  availability checks. The architecture guard rejects pattern-based bufnr(path)
+  lookups; reuse the exact-name helper before the full-suite boundary (#333).
+- Correction to the split-source rule above: focus does not prove API ancestry.
+  Equalalways can make distinct parents produce identical native creation state.
+  Inherit only from an explicit native WinLeave→WinNew source; start API windows
+  fresh, seeding after their temporary cloned buffer is replaced (#333 BR-1).
+- Do not suppress all editor observations until a scheduled initialization:
+  API callers can enter several real files before yielding. Start empty-window
+  histories synchronously at BufEnter/Back, excluding a fresh WinEnter clone;
+  test API creation followed immediately by multiple file entries (#333 BR-2).
 ## 2026-10-15 (#327 — enclosing-entity navigation)
 
 - A selected occurrence is an identity, not a cursor hint. Dispatch its kind and exact span/target; replay through a legacy nearest-reference parser can open a sibling, and even an isolated Markdown span can reinterpret an embedded @@ label when its destination is unsupported (plan PQ-1).

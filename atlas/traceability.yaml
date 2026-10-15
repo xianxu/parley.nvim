@@ -1271,6 +1271,8 @@ atlas:
 
   ui/keybindings:
     code:
+      - lua/parley/file_history_model.lua
+      - lua/parley/file_history.lua
       - lua/parley/at_pair.lua
       - lua/parley/new_question.lua
       - lua/parley/chat_context.lua
@@ -1284,6 +1286,8 @@ atlas:
       - lua/parley/float_picker.lua
       - lua/parley/skills/review/init.lua
     tests:
+      - tests/unit/file_history_model_spec.lua
+      - tests/integration/file_history_spec.lua
       - tests/unit/new_question_spec.lua
       - tests/integration/new_question_spec.lua
       - tests/integration/private_note_prefix_spec.lua

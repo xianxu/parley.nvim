@@ -989,6 +989,7 @@ M.setup = function(opts)
 		M.config,
 		{
 			help = function() M.cmd.KeyBindings() end,
+			file_back = function() M.cmd.FileBack() end,
 			chat_new = function() M.cmd.ChatNew({}) end,
 			chat_finder = function() M.cmd.ChatFinder() end,
 			chat_review = function() M.cmd.ChatReview({}) end,
@@ -1353,6 +1354,7 @@ M.setup = function(opts)
 
 	-- set up buffer update handler
 	M.setup_buf_handler()
+	require("parley.file_history").setup()
 	-- Restore a previously committed packaged theme after Parley has loaded its
 	-- configuration and semantic highlight definitions. Missing state preserves
 	-- the caller's existing colorscheme (the packaged starter applies Nordfox).
@@ -1826,9 +1828,11 @@ M.prep_md = function(buf)
 	-- register shortcuts local to this buffer
 	buf = buf or vim.api.nvim_get_current_buf()
 
-	-- ensure normal mode
-	vim.api.nvim_command("stopinsert")
-	M.helpers.feedkeys("<esc>", "xn")
+	-- History restores the user's cursor and mode as one navigation action.
+	if not require("parley.file_history").is_restoring(vim.api.nvim_get_current_win()) then
+		vim.api.nvim_command("stopinsert")
+		M.helpers.feedkeys("<esc>", "xn")
+	end
 end
 
 --- Checks if a file should be considered a chat transcript, it enforces that a file needs to be in one configured chat root
@@ -5010,6 +5014,8 @@ M.cmd.CopyLocation = copy_mod.copy_location
 M.cmd.CopyLocationContent = copy_mod.copy_location_content
 M.cmd.CopyContext = function() copy_mod.copy_context(2, 2) end
 M.cmd.CopyContextWide = function() copy_mod.copy_context(5, 10) end
+
+M.cmd.FileBack = function() return require("parley.file_history").back() end
 
 -- One invocation generation invalidates older entity pickers and resolutions.
 local reference_generation = 0

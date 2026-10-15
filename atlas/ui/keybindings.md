@@ -1,5 +1,46 @@
 # Spec: Key Bindings Help
 
+## File history Back
+
+`<M-O>` (Alt+Shift+O) in Normal or Insert mode, or `:ParleyFileBack`, returns
+to the previous distinct file visit in the current editing window and restores
+that visit's departure cursor. Insert mode and queued typing are preserved.
+This works from source files as well as chat and Markdown. Visits through
+Alt+o, native `gf`, `:edit`, and picker buffer switches share the same history;
+same-file cursor jumps do not add entries. Opening another file after Back
+replaces the forward tail. At the first retained file, Back quietly stays put.
+
+A split or new tab opened by a native user command or Parley's command-based
+openers inherits the focused source's history, then keeps independent visits
+and cursors. Inheritance requires the source's WinLeave immediately before
+WinNew; WinEnter clears that departure, and WinNew consumes it once. API/RPC
+window creation has no such source departure and starts with no inherited
+entries, even when its requested parent is focused. BufEnter begins its history
+synchronously; Back can also establish its displayed file as the root. A fresh
+window's WinEnter alone does not count the creation-time clone as a visit. Thus
+an API creation reusing the same buffer starts empty until a file-entry event or
+Back. Neovim does not expose unambiguous API parentage at WinNew; the adapter
+neither guesses from layout nor wraps the core API. There are no deferred
+initialization callbacks, so later file entries are never suppressed.
+Scratch, help, terminal, directory and floating buffers are
+not visits. Histories retain the most recent 200 visits per window, live only
+for this editor session, and are released when the window closes. Missing
+unloaded targets are skipped; loaded buffers remain reachable after file deletion.
+If a native switch refuses (for example unsaved text with `hidden` off), Back
+reports it and keeps the target available for a retry. It never saves or forces
+the current buffer. Saved cursor positions are clamped if the file gets shorter.
+
+Configure `global_shortcut_file_back = { modes = { "n", "i" }, shortcut = "<M-O>" }`
+in setup, or use `shortcut = {}` to disable it. It follows `default_keymaps` and
+the command prefix like other registry actions; the app inherits the Alt key.
+The help float generates its key/description from the same `file_back` entry.
+There is no file-history Forward key.
+
+Code: `lua/parley/file_history_model.lua` owns pure ordering and positions;
+`lua/parley/file_history.lua` owns editor observations and safe switches.
+Markdown buffer preparation consults the read-only restoration scope so it does
+not reset mode or consume typeahead during Back.
+
 ## Command
 `:ParleyKeyBindings` (`<C-g>?`, alias `<M-h>`, #292): centered floating window showing context-scoped
 shortcuts. Press Ctrl+g, then `?`. Help is built when opened from the current
