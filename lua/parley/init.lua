@@ -5045,8 +5045,9 @@ M.cmd.OpenFileUnderCursor = function()
 	local function fallback(item)
 		if in_insert_mode then vim.cmd("stopinsert") end
 		if item then vim.api.nvim_win_set_cursor(win, {item.row, item.fallback_col}) end
-		M.cmd.ResolveRefOrGotoFile(item and {is_current = is_current} or nil)
+		local ok, err = pcall(M.cmd.ResolveRefOrGotoFile, item and {is_current = is_current} or nil)
 		if item then restore_cursor() end
+		if not ok then error(err) end
 	end
 
 	local outcome = open_reference_under_cursor(buf, current_line, cursor[2], is_chat)

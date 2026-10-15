@@ -92,6 +92,8 @@ Durable plan: [Enclosing-Entity Link Navigation](../plans/000327-entity-link-nav
 
 - Isolated parity comparison passed all 11 cases on both untouched main 41899819358e94ad39ffaaa0f4cb94963792708c and implementation a332b9f39d51c7108b5867b5e502ef16acd95874, with unchanged specs/deadlines. Baseline wall/user CPU 34.38s/14.10s; branch 44.30s/14.42s. Machine load rose to roughly 102 on 12 CPUs, supporting scheduling pressure as the timeout cause; no assertion regression reproduced. Separate fake issue-creation compatibility map passed all 4 routes. PR239 opened; full suite queued through the mandatory machine gate.
 
+- Final failure-path audit found native gf errors skipped temporary cursor restoration for a selected non-Markdown target. A red test observed row2/col13 instead of original row1/col3; protected fallback execution now restores before propagating the same E447. All 49 open-reference tests plus six native cases pass. Canceled the obsolete queued suite (our own cwd-verified sdlc process, SIGINT exit130) before it executed; the corrected pushed head must receive the required full run.
+
 ## Estimate
 
 Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only; calibration source is marked stale, so figures remain provisional.

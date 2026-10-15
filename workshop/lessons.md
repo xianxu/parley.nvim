@@ -502,3 +502,4 @@ oracle, and the mutation that would make the test fail.
 
 - A selected occurrence is an identity, not a cursor hint. Dispatch its kind and exact span/target; replay through a legacy nearest-reference parser can open a sibling, and even an isolated Markdown span can reinterpret an embedded @@ label when its destination is unsupported (plan PQ-1).
 - A picker-time origin check ends too early when opening resolves asynchronously. Carry source validity through scheduled resolver results and every secondary picker effect, consuming callbacks once; a guardless legacy resolver cannot supply that guarantee by implication (plan PQ-2).
+- Native fallback errors are still completion paths. Restore temporary cursor placement in a protected call before propagating gf errors; test an absent non-Markdown target as well as recognized missing Markdown.
