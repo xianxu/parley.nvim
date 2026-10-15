@@ -46,6 +46,7 @@ at its first Alt+Return.
 - A never-submitted file shows no lock or band.
 - Headless tests with the real auto-save setup (as in #324) cover first submit, lock, rename, and an explicit
   `couch-owner:` override. Depends on the pair (Couch) S1 issue for the registry verbs.
+- A successful explicit submit keeps a winbar receipt with effective owner and local time through own saves and status refresh, until the next operator edit or agent write. Save, owner, lookup, register and send failures remain visible, including before attachment; feedback is bounded and rendered literally.
 
 ## Core concepts
 
@@ -69,7 +70,10 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - [x] Add the pure lifecycle/reply model, shared transport, typed registry client and stateful fake with red/green coverage.
 - [x] Integrate first-submit/reopen admission with the existing native edit-turn engine and real Alt+Return routing.
 - [x] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
-- [ ] Add isolated real/fake conformance, docs/traceability and required checks; close on SHIP, then stage for the combined live check before landing.
+- [x] Add isolated real/fake conformance and docs/traceability; verify production-door submission feedback and native edit-turn regressions.
+- [ ] Complete the required full suite on the final implementation before close.
+
+Post-close acceptance remains pending: obtain SHIP, then after pair#573 lands and conformance passes, obtain hub staging authorization for the combined operator check. Land only after operator acceptance; clear the stage and report the merge.
 
 ## Log
 
@@ -103,6 +107,8 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - 2026-10-15 — feedback RED/green:18 admission cases and64 native edit cases pass after observing13/5 and60/4 RED. Success is set after the actual send succeeds, stays through own writes/owed probes and clears before auto-save on the next edit or on foreign write. Registration/owner resolution/lookup/send errors show a bounded literal winbar error, including before attachment. #322 is superseded by this implementation; duplicate triage does not claim parent landing. Full suite and close remain pending on the final code head.
 
 ## Revisions
+
+- 2026-10-15 — record the already-approved persistent-feedback acceptance explicitly in Done when. Separate implementation verification from post-close staging/live/landing so the checklist records observed work without claiming future acceptance. The required suite is still pending; no close waiver or live acceptance is implied.
 
 - 2026-10-15 — spell out agreed registry boundary and native rename/recovery work in the durable plan without changing the original S1 purpose. Explicit couch-owner is a route override per this issue, superseding #316 refusal only where that new requirement applies. Pending admission-failure policy requires TL review.
 
