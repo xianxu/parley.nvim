@@ -91,4 +91,5 @@ literals. Operator-configured paths have a separate audited allowlist.
 - `tests/unit/reference_candidates_spec.lua` — occurrence identity and completion transitions.
 - `tests/integration/entity_navigation_native_spec.lua` — real Normal/Insert Alt+o input.
 - `tests/integration/entity_resolve_spec.lua` — filesystem-backed resolver and stale-result suppression.
+- `scripts/check-sdlc-resolve-conformance.py` — opt-in real/fake resolver contract check with isolated temporary repositories; run `make -k check-sdlc-conformance` whenever the runner/fake changes and before closing that work.
 - `tests/arch/untrusted_path_spec.lua`, `tests/integration/untrusted_path_spec.lua` — expansion sinks and end-to-end inert path handling.

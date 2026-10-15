@@ -131,3 +131,5 @@ total: 2.424
 - 2026-10-15 — separate implementation verification from post-close live delivery checkboxes so a close does not falsely claim operator acceptance or landing. Done-when still requires live acceptance before merge.
 
 - 2026-10-15 — BR-1: narrow numbered-item boundaries to next numbered anchor/heading plus actual transcript user/assistant turns; annotation prefixes remain content. The full prefix sweep also corrects plain-Markdown fenced samples through an optional shared memo policy, preserving existing transcript/editing defaults. Required full suite and review must rerun on this correction.
+
+- 2026-10-15 — BR-2 external-dependency-conformance: extend the opt-in maintainer check beyond help discovery to real versus fake resolve argv and consumed files/path/kind/milestone responses, plus missing-reference failure. Use temporary Git repositories and committed vocabulary with no real tracker writes or network. Run after runner/fake changes and before closing such work (ARCH-MOCK). Product behavior and live acceptance sequencing stay unchanged.
