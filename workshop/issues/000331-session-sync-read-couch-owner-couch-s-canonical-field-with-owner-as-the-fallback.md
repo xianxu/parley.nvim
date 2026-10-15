@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "8e0d221a", done: "4e0f18a1"}
 ---
 
 # session-sync: read couch-owner: (Couch's canonical field) with owner: as the fallback
