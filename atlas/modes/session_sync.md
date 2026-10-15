@@ -7,7 +7,7 @@ shared file between the operator and one agent (#313). The ops TL's status file
 
 ```yaml
 type: session-sync
-owner: ops:0        # couch address of the agent that keeps the file
+couch-owner: ops:0  # couch address of the agent that keeps the file
 operator: xian-xu   # who the operator is
 ```
 
@@ -15,12 +15,14 @@ operator: xian-xu   # who the operator is
 |---|---|
 | `<M-CR>` | Submit: save, delete the lock, run `couch --send-to <owner> --message "submitted: <absolute path>"`. The buffer stays editable. In any other markdown file it is the [review send](review.md#altreturn-process-instruction-and-the-slot-send-316). |
 
-**`owner:` is a check, not a route (#316).** Inside a pair slot, submit first
+**`couch-owner:` is a check, not a route (#316).** Inside a pair slot, submit first
 resolves this editor's own agent (`couch --actors`, matched on
 `COUCH_THREAD_SCOPE`/`TAG`) and the owner's; when they differ it warns and
 changes nothing (no save, the lock stays, no message). Outside pair there is no
-slot to compare, and the owner is sent to as before. pair also reads
-`couch-owner:` (pair#443); parley does not.
+slot to compare, and the owner is sent to as before. `couch-owner:` is canonical;
+`owner:` remains a legacy fallback. When both are present, `couch-owner:` wins.
+One parser normalizes this owner for submit validation/sending, band labels,
+quiet detection, owed-response pings and foreign-write notifications.
 
 **The lock (#315: pessimistic for the human, optimistic for the agent).**
 The operator's lock is the only lock. The sidecar `<file>.lock` is absent

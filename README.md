@@ -45,7 +45,8 @@ paths and settings. Existing Neovim users can use the
 `require('parley').setup({})` works as is; see
 [minimal config](atlas/infra/config.md#minimal-config) for typical overrides.
 
-For Couch users, [session-sync files](atlas/modes/session_sync.md) ping a quiet
+For Couch users, [session-sync files](atlas/modes/session_sync.md) name their
+agent with `couch-owner:` (`owner:` is the legacy fallback). They ping a quiet
 owner once when deliveries remain owed and its last write is at least 15 minutes
 old. Set `session_sync_ping_minutes` in `require('parley').setup({...})` to
 override that delay. A write postpones the ping; operator locks suppress it.

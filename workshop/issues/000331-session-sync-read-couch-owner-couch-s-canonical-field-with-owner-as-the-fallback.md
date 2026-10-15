@@ -43,8 +43,8 @@ consistent to be couch-owner".
 
 ## Plan
 
-- [ ] Normalize the owner once in the existing pure parse_header accessor: couch-owner first, owner fallback, exposed as the existing normalized owner field. Reuse header/owner_of and the captured submit header; no second parser or new public API. Update missing-owner diagnostics and module comments to canonical naming.
-- [ ] TDD: parser cases for canonical-only, legacy-only and conflicting-both. Headless integration matrix checks actual submit recipient, owed band, quiet-owner ping and violation recipient for all three; preserve the existing same-slot refusal tests. Use the filesystem-backed fake_couch seam and real Neovim/file events.
+- [x] Normalize the owner once in the existing pure parse_header accessor: couch-owner first, owner fallback, exposed as the existing normalized owner field. Reuse header/owner_of and the captured submit header; no second parser or new public API. Update missing-owner diagnostics and module comments to canonical naming.
+- [x] TDD: parser cases for canonical-only, legacy-only and conflicting-both. Headless integration matrix checks actual submit recipient, owed band, quiet-owner ping and violation recipient for all three; preserve the existing same-slot refusal tests. Use the filesystem-backed fake_couch seam and real Neovim/file events.
 - [ ] Update README and atlas examples/contract, including removing atlas's obsolete claim that parley does not read couch-owner. Run make -k test-spec SPEC=modes/session_sync, lint, declared local suite, and sdlc close review.
 - [ ] Land on SHIP after required gates; report to TL so the TL can switch the real status file. The TL owns that file migration.
 
@@ -63,3 +63,5 @@ ARCH-DRY/PURE: add precedence at the existing pure parsing boundary, not in subm
 ### 2026-10-14
 
 - Root cause: parse_header currently reads only fm.fields.owner. Every owner consumer already derives from its normalized result (directly or through owner_of), so canonical precedence belongs there. Expected quick flow, well below 100 source lines. Claimed from main after #330 landed; refreshed Ariadne substrate to 5c321f59ed35b83bda4f1fc698c83c836ebc22bb before planning.
+
+- Approved by TL (receipt 441e74e5-65d4-424e-8679-defcce8bbba7). Red: canonical-only and conflicting fields failed four integration and two parser cases; legacy-only stayed green. Green after centralized normalization: 43 native + 58 integration + 17 unit = 118 mapped cases; luacheck and diff whitespace clean. All owner reads still derive from parse_header; no duplicate precedence in consumers. Hardened shared wait_sent to require newline-terminated complete payloads for every positive message wait, following the #324/#330 readiness lesson.
