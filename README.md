@@ -50,6 +50,10 @@ owner once when deliveries remain owed and its last write is at least 15 minutes
 old. Set `session_sync_ping_minutes` in `require('parley').setup({...})` to
 override that delay. A write postpones the ping; operator locks suppress it.
 The separate `session_sync_stale_minutes` reminder for unsent edits remains 5.
+The first edit in Normal or Insert mode takes your turn before auto-save runs.
+Undoing back to unmodified silently releases it; redo away from saved text takes
+it again. Saving alone keeps the turn until Alt+Return submits it. See the
+[session-sync guide](atlas/modes/session_sync.md) for the full interaction.
 
 ## Learn by chatting
 

@@ -18,7 +18,7 @@
 -- after `session_sync_ping_minutes` without a write and with its turn ended,
 -- the owner is pinged once per write generation (outside the operator lock).
 --
--- Lifecycles: the lock is removed by submit; an operator lock left
+-- Lifecycles: submit or a clean undo removes the lock; an operator lock left
 -- idle turns stale and is shown in the reminder colour until submitted. The
 -- watch timer lives while the buffer is loaded (closed on unload and
 -- BufWipeout, restarted by BufWinEnter); the idle
@@ -40,7 +40,8 @@ local ns_group = "ParleySessionSync"
 
 -- Per-buffer state: { turn, stale, loaded (disk mtime last read/written),
 -- foreign (the disk mtime of the last write Neovim saw as someone else's),
--- checking (inside disk_changed's :checktime),
+-- checking (inside disk_changed's :checktime), edit (latest pending clean-edit
+-- reconciliation token), edits_attached (native edit callback installed),
 -- watch = timer|nil, idle = timer|nil, owed (epoch of the oldest owed event
 -- couch last reported, or nil), minutes (rendered owed minutes), violated /
 -- complained (this operator turn), unkept (the disk mtime of an agent copy
@@ -485,34 +486,67 @@ M.attach = function(buf)
 	-- auto-save would replace the operator's text (#317).
 	vim.bo[buf].autoread = false
 	local group = vim.api.nvim_create_augroup(ns_group .. buf, { clear = true })
-	-- The first edit takes the turn; every edit restarts the idle timer.
-	-- BufModifiedSet catches the first keystroke in either mode (it fires from
-	-- the main loop, not from API edits); TextChanged[I] the later ones.
-	vim.api.nvim_create_autocmd({ "BufModifiedSet", "TextChanged", "TextChangedI" }, {
-		group = group,
-		buffer = buf,
-		callback = function()
-			if s.turn == "free" and vim.bo[buf].modified
-				and read_turn(buf) == "free" and M.is_session_sync(buf) then
-				-- Take the lock first; an agent write that landed since the
-				-- buffer last read the disk lost the race: the operator's
-				-- text is kept and the agent's set aside (#315).
-				-- The mtime moved before this edit; whose write it was is
-				-- asked outside the autocmd (disk_changed may :checktime).
-				local moved = mtime_moved(buf)
-				if write_lock(buf, "operator") then
-					refresh(buf)
-					vim.schedule(function()
-						if moved and state[buf] == s and vim.api.nvim_buf_is_loaded(buf)
-							and read_turn(buf) == "operator" and disk_changed(buf) then
-							violation(buf, true)
-						end
-					end)
+	-- Acquire in the edit notification, before TextChanged/InsertLeave auto-save
+	-- callbacks can clear 'modified' (#324). This buffer was identified at
+	-- attach: an edit to its YAML must not remove its protection.
+	local function attach_edits()
+		if s.edits_attached then return end
+		s.edits_attached = vim.api.nvim_buf_attach(buf, false, {
+			on_lines = function()
+				if state[buf] ~= s then
+					return true
 				end
-			end
-			restart_idle(buf)
-		end,
-	})
+				local before = disk_mtime(buf)
+				if vim.bo[buf].modified and read_turn(buf) == "free" then
+					local moved = mtime_moved(buf)
+					if write_lock(buf, "operator") then
+						refresh(buf)
+						vim.schedule(function()
+							if moved and state[buf] == s and vim.api.nvim_buf_is_loaded(buf)
+								and read_turn(buf) == "operator" and disk_changed(buf) then
+								violation(buf, true)
+							end
+						end)
+					end
+				end
+				restart_idle(buf)
+				-- Undo updates 'modified' after on_lines. Reconcile when it settles,
+				-- but a save (including a non-nested auto-save with no BufWritePost)
+				-- keeps the turn until submit. Only the latest edit may release it.
+				local edit = {}
+				s.edit = edit
+				vim.schedule(function()
+					if state[buf] ~= s or s.edit ~= edit or not vim.api.nvim_buf_is_loaded(buf) then
+						return
+					end
+					if not vim.bo[buf].modified and disk_mtime(buf) == before
+						and read_turn(buf) == "operator" then
+						-- A foreign write/deletion may predate this edit. Keep the
+						-- turn and preserve it before clean undo can release it.
+						if disk_changed(buf) then
+							violation(buf)
+							return
+						end
+						-- A failed/ignored checktime is still undecided, not free.
+						if mtime_moved(buf) then return end
+						if vim.fn.delete(M.lock_path(buf)) == 0 then
+							refresh(buf)
+							restart_idle(buf)
+						end
+					end
+				end)
+			end,
+			-- An external reload is not an operator edit; keep the attachment for
+			-- the next keystroke and invalidate any pending clean-edit check.
+			on_reload = function()
+				s.edit = nil
+			end,
+			on_detach = function()
+				s.edits_attached, s.edit = false, nil
+			end,
+		})
+	end
+	attach_edits()
 	-- No prompt about a file changed on disk: someone else wrote it. During
 	-- disk_changed's own check, only record that; else under the operator's
 	-- lock it is a violation (handled outside the autocmd, which may not
@@ -544,6 +578,7 @@ M.attach = function(buf)
 		buffer = buf,
 		callback = function()
 			s.loaded = disk_mtime(buf)
+			attach_edits() -- :edit! detaches buffer callbacks before BufReadPost.
 		end,
 	})
 	vim.api.nvim_create_autocmd("BufWinEnter", {

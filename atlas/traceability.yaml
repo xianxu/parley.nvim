@@ -753,6 +753,7 @@ atlas:
     tests:
       - tests/unit/session_sync_spec.lua
       - tests/integration/session_sync_spec.lua
+      - tests/integration/session_sync_native_spec.lua
 
   modes/interview:
     code:
