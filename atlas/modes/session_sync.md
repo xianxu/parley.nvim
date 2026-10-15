@@ -26,10 +26,11 @@ slot to compare, and the owner is sent to as before. pair also reads
 The operator's lock is the only lock. The sidecar `<file>.lock` is absent
 (free: the agent may write) or `holder: operator` (the agent never writes the
 file). The operator's first edit writes it; `<M-CR>` deletes it; the next
-edit takes it again. An edit that returns the buffer to unmodified (for example,
-undoing back to the saved text) silently releases the turn without submitting or
-notifying the owner; redo away from that text takes it again. A save alone keeps
-the turn until submit. A legacy `holder: agent` lock reads as no lock and is
+edit takes it again. Undoing back to the content before that first edit silently
+releases the turn without submitting or notifying the owner; redo away takes it
+again. This acquisition baseline is an in-memory content hash: explicit saves
+and immediate auto-save never advance it. A save of changed text keeps the turn.
+A pre-existing lock after a restart has no known baseline and stays held until submit. A legacy `holder: agent` lock reads as no lock and is
 overwritten by the first edit. A failed send leaves the file free; `<M-CR>`
 resends. The lock is read from disk, so a reopened buffer shows it too. While
 the buffer is loaded, parley watches the file once a second: during a free
@@ -43,8 +44,9 @@ overwrite a file rewritten under a modified buffer.
 **Edit ordering (#324).** Buffer edit notifications acquire the lock before
 `TextChanged` / `InsertLeave` auto-save can clear `modified`, for Normal and
 Insert edits alike. Recognition at attachment survives temporary edits to the
-frontmatter. Clean-edit release waits until Neovim settles `modified`; a write
-during that edit preserves the turn. Pending foreign writes/deletions are
+frontmatter. Baseline-equality release is deferred until the edit settles and
+ensures baseline text is saved before deleting the lock. A failed save retains
+the turn. Pending foreign writes/deletions are
 reconciled through the violation handler before release; an undecided disk check
 keeps the lock until the change can be classified. The watcher’s `:edit!` detaches native
 buffer callbacks, so `BufReadPost` reinstalls them before the next keystroke.

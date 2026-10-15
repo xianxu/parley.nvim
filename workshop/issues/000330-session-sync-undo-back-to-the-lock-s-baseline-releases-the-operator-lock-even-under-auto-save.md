@@ -1,12 +1,22 @@
 ---
 id: 000330
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
-card_mirror: 'c2a5626519b5ac343ecba94d6f66fd2a9a20f5cd' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2c468f1ac581d92e6a213602c410ad080910aa5d' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-14T21:25:39-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "4c474229", done: "eea4b532"}
+actual_hours: 0.95
 ---
 
 # session-sync: undo back to the lock's baseline releases the operator lock, even under auto-save
@@ -40,8 +50,46 @@ should release the lock if that `u` moves the file to a state of no change."
 
 ## Plan
 
-- [ ]
+- [x] Retain a rolling hash of attached buffer lines. At successful first-edit lock acquisition, freeze the previous (pre-edit) hash as this turn's baseline; saves never move it. Reload refreshes the rolling hash; submit/free clears the turn baseline. A pre-existing lock has no known baseline and cannot auto-release.
+- [x] Replace modified/mtime equality as the release predicate with baseline content equality. Keep the latest-edit token, reconcile foreign overwrite/deletion and undecided probes first; any violation retains the lock. If equality leaves unsaved baseline text, write it successfully before deleting the lock so an agent never observes a free turn with stale disk text.
+- [x] Native child-editor regressions: auto-save before attachment; dd/undo/redo after initial open and both reload paths; multi-step partial/full undo; explicit-save retention away from baseline and undo-to-baseline release; pending foreign overwrite/deletion/failed preservation and undecided checks. Assert baseline on disk and successful following agent reload after release.
+- [x] Run make -k targeted session-sync tests and declared suite; close review, stage for operator acceptance, then land only after the live check.
+
+## Core concepts
+
+| Concept | Implementing entities | Kind | Status | Change |
+| --- | --- | --- | --- | --- |
+| Lock baseline | lua/parley/session_sync.lua: content_hash and M.attach | INTEGRATION | new | In-memory pre-edit content hash scoped to the lock this attachment acquired; rolling content hash supplies the pre-edit value because on_lines observes the completed edit. |
+| Release reconciliation | lua/parley/session_sync.lua: M.attach | INTEGRATION | modified | Existing deferred token and foreign-write preservation remain authoritative; baseline equality replaces disk equality. |
+
+## Design notes
+
+ARCH-DRY/PURE: reuse native edit attachment and existing disk_changed/violation; hashing deterministic line content adds no alternate writer or lock format. ARCH-PURPOSE: auto-save must never advance the acquisition baseline. ARCH-MOCK: retain fake Couch seam and real child-Neovim/file effects, then operator live check. ARCH-CONSTRAINTS: session markdown keystroke path, at most three SHA-256 hashes over buffer lines per edit (observation, deferred comparison, and post-write verification on successful baseline restoration; linear buffer size), constant retained hashes, no extra subprocesses. ARCH-SECURE: no new persisted input or secrets; unknown existing locks retain protection rather than invent a baseline. ARCH-ORDER: free+edit captures previous hash only on confirmed lock write; held+edit retains baseline; latest deferred equality reconciles disk then saves baseline before confirmed lock deletion; reload replaces rolling hash and invalidates deferred token; submit/free clears baseline. Failed probes/writes retain lock. ARCH-FUNERAL: no new durable artifact; hashes die with attachment/turn; existing lock deletion lifecycle unchanged.
 
 ## Log
 
 ### 2026-10-14
+- 2026-10-14: closed — All 109 mapped cases and the declared full suite (428 files, lint 724 files clean, no survivors, log fe3545a713a2) pass. Round 1 corrections are prose only: both README undo/redo clauses, both concept classifications, and the three-hash maximum; no runtime change. Final Plan row stays open for TL-directed staging/live acceptance and landing; --no-plan-check acknowledges that sequencing. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+
+- #324 landed in PR #236 at 2cf363f1421ce27ab3230099380f999a0a4bdaf6 and its stage was cleared. #327 design is parked via unclaim per the operator priority. Root cause for #330: release tests disk/modified state, which immediate auto-save advances; retain the lock acquisition content instead.
+
+- TL approved the quick-flow design (Couch receipt 6d69262e-b0eb-41ce-b72d-457ec178e6eb). TDD: five new native cases failed on the prior release predicate (three auto-save/reload variants, multi-step undo, explicit-save then baseline undo). With the fix, all initial 102 mapped cases passed; expanded safety matrix is being verified before the full suite.
+- Native safety expansion: pending overwrite/deletion/failed preservation now runs with auto-save both enabled and disabled; unknown pre-existing locks and failed baseline saves retain protection. In the ignored/errored classification + auto-save sequence, restoring checks does not necessarily repeat Neovim's disk-change event; tests assert that the lock and exact foreign content remain intact. They do not fabricate another external write to declare recovery.
+
+- Expanded targeted verification passed: make -k test-spec SPEC=modes/session_sync (43 native + 52 integration + 14 unit = 109 cases, 0 failures); luacheck clean and git diff --check clean. Only 26 source lines added.
+
+- Declared full suite passed via sdlc local-check run --name suite on 8f14544a8f2476e9a865236044fcd0d11aaccae0: 428 spec files, lint 724 files with 0 warnings/errors, no surviving processes; run time 2m13s after 43m41s capacity wait; log sha256 prefix fe3545a713a2. TL explicitly directed close review before staging/operator check; final Plan row remains open until live acceptance and landing.
+
+## Revisions
+
+### 2026-10-14 22:23 PDT — close review documentation corrections
+
+- BR-1 (user-docs-match-behavior): README's two stale clauses (unmodified release and saved-text redo) now use the acquisition baseline. Swept README, docs, atlas and module comments; remaining unmodified references describe reload/overwrite handling or the historical Problem, not release.
+- BR-2 (core-concept-classification): both Core concepts rows now name implementing entities, INTEGRATION kind and new/modified status.
+- BR-3 (documented-work-bounds): correct the maximum from two to three hashes per edit; the third is post-write verification when restored baseline text needs saving. No implementation or Done-when change. Final acceptance/landing Plan row remains open.
+
+## Review log
+
+- Round 1: FIX-THEN-SHIP, but the ledger kept close unfinalized for one Important README finding; also two Minor plan corrections. Verified all three against source and corrected their full instance families. No runtime change; full-suite result remains applicable. Reviewer independently passed all 109 mapped tests.
+
+- Operator live acceptance relayed by TL (receipt 3d32dfc5-f05c-4832-a614-125bc0f5e9b8): "works as intended". All verification and staging complete; landing PR #237 is now explicitly authorized, then clear :0 stage.

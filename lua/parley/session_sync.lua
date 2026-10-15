@@ -18,7 +18,7 @@
 -- after `session_sync_ping_minutes` without a write and with its turn ended,
 -- the owner is pinged once per write generation (outside the operator lock).
 --
--- Lifecycles: submit or a clean undo removes the lock; an operator lock left
+-- Lifecycles: submit or an undo to the acquisition baseline removes the lock; an operator lock left
 -- idle turns stale and is shown in the reminder colour until submitted. The
 -- watch timer lives while the buffer is loaded (closed on unload and
 -- BufWipeout, restarted by BufWinEnter); the idle
@@ -41,7 +41,8 @@ local ns_group = "ParleySessionSync"
 -- Per-buffer state: { turn, stale, loaded (disk mtime last read/written),
 -- foreign (the disk mtime of the last write Neovim saw as someone else's),
 -- checking (inside disk_changed's :checktime), edit (latest pending clean-edit
--- reconciliation token), edits_attached (native edit callback installed),
+-- reconciliation token), content (last observed buffer hash), baseline (hash
+-- before our first edit, retained through saves), edits_attached (native edit callback installed),
 -- watch = timer|nil, idle = timer|nil, owed (epoch of the oldest owed event
 -- couch last reported, or nil), minutes (rendered owed minutes), violated /
 -- complained (this operator turn), unkept (the disk mtime of an agent copy
@@ -261,6 +262,12 @@ local function disk_changed(buf)
 	return false
 end
 
+-- on_lines sees the completed edit; the preceding hash is the acquisition
+-- baseline, independent of saves. JSON keeps embedded NULs and lines distinct.
+local function content_hash(buf)
+	return vim.fn.sha256(vim.json.encode(vim.api.nvim_buf_get_lines(buf, 0, -1, false)))
+end
+
 local refresh, probe
 
 -- A clean buffer follows the file on disk silently; the owed state is
@@ -428,7 +435,7 @@ refresh = function(buf)
 	local turn = read_turn(buf)
 	s.turn = turn
 	if turn ~= "operator" then
-		s.stale, s.violated, s.complained = false, false, false
+		s.stale, s.violated, s.complained, s.baseline = false, false, false, nil
 	end
 	s.minutes = owed_minutes(buf)
 	start_watch(buf)
@@ -491,15 +498,18 @@ M.attach = function(buf)
 	-- attach: an edit to its YAML must not remove its protection.
 	local function attach_edits()
 		if s.edits_attached then return end
+		s.content = content_hash(buf)
 		s.edits_attached = vim.api.nvim_buf_attach(buf, false, {
 			on_lines = function()
 				if state[buf] ~= s then
 					return true
 				end
-				local before = disk_mtime(buf)
+				local previous = s.content
+				s.content = content_hash(buf)
 				if vim.bo[buf].modified and read_turn(buf) == "free" then
 					local moved = mtime_moved(buf)
 					if write_lock(buf, "operator") then
+						s.baseline = previous
 						refresh(buf)
 						vim.schedule(function()
 							if moved and state[buf] == s and vim.api.nvim_buf_is_loaded(buf)
@@ -510,16 +520,15 @@ M.attach = function(buf)
 					end
 				end
 				restart_idle(buf)
-				-- Undo updates 'modified' after on_lines. Reconcile when it settles,
-				-- but a save (including a non-nested auto-save with no BufWritePost)
-				-- keeps the turn until submit. Only the latest edit may release it.
+				-- Reconcile only the latest edit, after native undo and auto-save
+				-- settle. Saves never advance the acquisition baseline (#330).
 				local edit = {}
 				s.edit = edit
 				vim.schedule(function()
 					if state[buf] ~= s or s.edit ~= edit or not vim.api.nvim_buf_is_loaded(buf) then
 						return
 					end
-					if not vim.bo[buf].modified and disk_mtime(buf) == before
+					if s.baseline and content_hash(buf) == s.baseline
 						and read_turn(buf) == "operator" then
 						-- A foreign write/deletion may predate this edit. Keep the
 						-- turn and preserve it before clean undo can release it.
@@ -529,6 +538,14 @@ M.attach = function(buf)
 						end
 						-- A failed/ignored checktime is still undecided, not free.
 						if mtime_moved(buf) then return end
+						-- Publish baseline text before the agent can see a free turn,
+						-- even when auto-save has not run (or is disabled).
+						if vim.bo[buf].modified then
+							local ok = pcall(vim.api.nvim_buf_call, buf, function()
+								vim.cmd("silent write")
+							end)
+							if not ok or vim.bo[buf].modified or content_hash(buf) ~= s.baseline then return end
+						end
 						if vim.fn.delete(M.lock_path(buf)) == 0 then
 							refresh(buf)
 							restart_idle(buf)
@@ -539,6 +556,7 @@ M.attach = function(buf)
 			-- An external reload is not an operator edit; keep the attachment for
 			-- the next keystroke and invalidate any pending clean-edit check.
 			on_reload = function()
+				s.content = content_hash(buf)
 				s.edit = nil
 			end,
 			on_detach = function()
