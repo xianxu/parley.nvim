@@ -518,6 +518,9 @@ oracle, and the mutation that would make the test fail.
   API callers can enter several real files before yielding. Start empty-window
   histories synchronously at BufEnter/Back, excluding a fresh WinEnter clone;
   test API creation followed immediately by multiple file entries (#333 BR-2).
+- A multiline occurrence needs its full raw span and destination row, not just
+  its opening row and columns. Reserve every row of that span before scanning
+  subordinate references; otherwise wrapped labels leak artifact/@@ choices (#335).
 ## 2026-10-15 (#327 — enclosing-entity navigation)
 
 - A selected occurrence is an identity, not a cursor hint. Dispatch its kind and exact span/target; replay through a legacy nearest-reference parser can open a sibling, and even an isolated Markdown span can reinterpret an embedded @@ label when its destination is unsupported (plan PQ-1).
@@ -529,3 +532,9 @@ oracle, and the mutation that would make the test fail.
 ## 2026-10-15 (#336 — packaging VM guest confinement flake)
 
 - An interactive flow's completion is its last UI effect, not the side file it writes. A probe that drives a login must wait for the flow's own settle signal (here, the reopened model picker) and dismiss it, or the scheduled UI lands over later steps. Assert properties of the object a step created (the captured chat buffer's file), never of current focus. Prove that with a deliberate focus change before the assertion.
+- A recognized Markdown span owns its destination even when unsupported: use the same Markdown-only opener for direct and selected navigation, then fall back at the destination; never reinterpret @@ text in its label.
+- Multiline scans must receive document context. Reuse the navigation fence memo and lexical structural kinds; test every configured transcript prefix and plain Markdown fenced examples containing chat-like text.
+
+- A multiline inline scanner needs an explicit block-containment rule, not only blank/fence checks. Enumerate heading forms, thematic breaks, quotes, list/chat starts and range edges, with positive supported starts as well as negative joins.
+
+- Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.
