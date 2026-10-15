@@ -1,6 +1,6 @@
 ---
 id: 000331
-status: codecomplete
+status: done
 created: 2026-10-14
 updated: 2026-10-14
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: e69e7fb37862b277fcafd53eea3492193a59e106
         evidence_commit: bb82cd781623c12dbbc14e29944611a2baa6b49b
+        landed_commit: 3ee5229929680d013c16c81bf98eece62edb0a1c
 ---
 
 # session-sync: read couch-owner: (Couch's canonical field) with owner: as the fallback
