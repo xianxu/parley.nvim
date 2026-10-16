@@ -18,7 +18,7 @@ describe('starter profile options', function()
     end)
     it('retains product search terms for the app providers', function()
         local opts = starter.options({ data = '/profile/data', state = '/profile/state' })
-        assert.same({'claude:opus,sonnet,fable', 'codex:gpt-6,gpt-5', 'gemini'},
+        assert.same({'claude:opus,sonnet,fable', 'codex:gpt-6,gpt-5!3', 'gemini!3'}, -- #230: caps written
             require('parley.config').cliproxy.live_models.providers)
     end)
     -- #262: the app filter keeps only <C-g>/<M-> families, because the app

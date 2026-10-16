@@ -190,7 +190,7 @@ Measurement (2026-10-15, :3):
 - [x] `diagnose(models, providers)` (pure): malformed specs and terms matching nothing. agent_picker logs it when a catalog fetch resolves (once per refresh, not per repaint or toggle). An empty catalog reports nothing (that is the logged-out case, already shown).
 - [x] Remove `per_provider` from config defaults, the atlas and specs. The default `live_models.providers` writes explicit `!N` where the old hidden 3 mattered (`codex:gpt-6,gpt-5!3`, `gemini!3`), so the default view keeps its size. An operator config still setting `per_provider` gets one notice at setup: removed, write `!N`. Without it the option would be silently ignored, the same silence class.
 - [x] Atlas providers/cliproxy-managed: the `!N` grammar and the logging.
-- [ ] Verify: catalog, picker and options specs, then the full suite.
+- [x] Verify: catalog, picker and options specs, then the full suite.
 
 ## Log
 
@@ -213,6 +213,7 @@ confidently at discovery, and the cause was two layers downstream of it.
 - Setup notice: `live_models_config_spec` 2/0, and red with the notice disabled (1/1).
 - Defaults: `codex:gpt-6,gpt-5!3` and `gemini!3`, per the TL decision, keep the default view its prior size. `per_provider` is gone from config, code, atlas and specs, except the notice that names it.
 - Lint clean (737 files).
+- Full suite on e0c389cc: one failure, starter_config_spec "retains product search terms". It pinned the old default strings; this issue deliberately replaced them with the written caps. Updated the expectation; 7/0, lint clean. Every other file passed.
 
 ## Revisions
 
