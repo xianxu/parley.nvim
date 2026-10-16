@@ -298,3 +298,103 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"677f09f1-15bc-4ff9-83a4-c8f5edd516c6","repository":"github.com/xianxu/parley.nvim","issue_id":"000242","recipe":"milestone-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/f0854e826beaffeb","reviewed_head":"19bd7c773bd92def62ad64f28922cb001f54bb41","slot":"parley.nvim:4","requested_at":"2026-10-16T15:00:02.413673Z"},"phase":"finished","pid":1801,"started_at":"2026-10-16T15:00:02.5775Z","finished_at":"2026-10-16T15:02:55.221242Z","session_id":"4d04a54f-448d-4144-bd6c-9e2756031514","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T09:53:47-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 242 — Retrofit ARCH-MOCK to the chat providers: one stateful fake per provider at the curl seam, integration tests through it, and a live conformance check that re-records the fixtures |
+| repo | parley.nvim |
+| issue file | workshop/issues/000242-arch-mock-stateful-fake-per-chat-provider.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 76f1d090df46997ef8df56041640248d86383872..54aad52d508e15795c80c98dd1087af24049a056 |
+| command | sdlc milestone-close --issue 242 --milestone M1 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T09:53:47-07:00 |
+| verdict | SHIP |
+
+## Review
+
+I'm running the new specs and reverting the reader fix to check that A6–A8 go red.
+
+Both halves of the reader fix are pinned. Now checking what the "threw" state does to the EOF path (finish_stdout).
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Both open findings are fixed, and the fixes are backed by tests I ran. BR-8: `tests/helpers/provider_scenario_table.lua` now holds the scenario rows, the per-provider profiles and a pure judge (`mismatches`). The integration spec loops over profiles × rows. The plan's Core concepts table now lists `provider_scenarios` as the IO driver under Integration points. BR-9: the reader's two booleans are now one `reader_state` value (`reading` / `threw` / `finished`). Three new tests, A6–A8, pin the fix with no timing involved. I reverted the fix in the disposable checkout three ways, and each time a test failed:
+- **Full revert to the base `dispatcher.lua`:** A6 and A8 fail.
+- **Remove only the `threw` guard:** A7 and A8 fail.
+- **Restore only the old order (decode the line before removing it from the buffer):** A6 and A8 fail.
+
+All the specs this range adds or changes pass at head: dispatcher_query 74, provider_scenario_table 3, fake_provider 10, sse_dialects 4, provider_scenarios integration 15, fixture_lifecycle 4. The dispatcher spec prints "Error detected while processing command line" on the base tree as well, so this range didn't cause it. Nothing blocks SHIP. Two Minor notes follow.
+
+1. **Strengths**
+   - `provider_scenario_table.lua:105` `mismatches` is a real pure judge. Its unit spec checks that a matching outcome passes and also that each expectation rejects the outcome that breaks it, so the oracle itself is tested.
+   - `provider_scenarios.run` is the only IO driver, and it never branches on a provider name. M2 adds profiles, not new spec files (plan Task 8 now says so).
+   - `dispatcher.lua:655-662`: each line comes off the buffer before it is decoded, and the `threw` mark is set around the decode. One small, readable change fixes the duplicate delta, and A6–A8 cover each half separately.
+   - Clean-up is handled: the request log uses a per-test temp file deleted in `after_each`, the fake is reaped with `fixture_process.reap`, and only dummy secrets are used.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - `dispatcher.lua:645-648`: once the reader is in `threw`, EOF never calls `finish_stdout`. On the base tree it did, so after a throw `qt.usage`, `qt.stop_reason`, `tasker.set_cache_metrics` and `empty_response` are no longer recorded. The attempt has already failed with `stdout reader failed`, and the terminal closure only reads those fields on the success path, so I see no visible effect. But it is a behaviour change nobody wrote down, and no test pins it either way. Either add one sentence to the atlas paragraph or call `finish_stdout(qt)` from the `threw` branch when EOF arrives (`chunk == nil`).
+   - Plan Task 3, `plan.md:142-143`: the Files list still says `provider_scenarios.lua` holds "the scenario table and a `drive(provider, mode)`" and still creates `provider_anthropic_spec.lua`. The round-2 Revisions entry supersedes this, but Task 8's list got an inline strike-through and Task 3's did not.
+
+5. **Test coverage notes**
+   - A6–A8 are deterministic and each fails without its half of the fix.
+   - The integration row `S7b/frames` still uses a 20 ms write delay. It is now extra coverage on top of A6–A8, not the only test of the fix, so that's fine.
+   - S6's 1 ms pacing is a test-side fix for flakiness, and the plan records it.
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass.** There is one driver, one judge and one vocabulary list.
+   - **ARCH-PURE: pass.** The table and judge are tested without IO. Profile functions only transform data.
+   - **ARCH-PURPOSE: pass for M1.** Anthropic runs end to end through the real `dispatcher → curl → out_reader` path. The other providers are planned M2 profiles, not deferred purpose.
+   - **ARCH-MOCK: pass.** Production and tests share the same seam: the configured endpoint plus the real transport. Live conformance is M3 Task 9.
+   - **ARCH-CONSTRAINTS: pass.** S6 checks the PQ-7 limit (`within_ms = 5000`).
+   - **ARCH-SECURE: pass.** Only dummy secrets are used, the tests run with an isolated HOME and TMPDIR, and the fake rejects unknown modes (BR-6, already disposed).
+   - **ARCH-ORDER: pass.** The reader's state is one tagged value, and ordering is controlled by calling `captured_out_reader` directly. The `finish_stdout` skip above is the one transition left unwritten.
+   - **ARCH-FUNERAL: pass.** The request log and fake process are cleaned up per test, and `run_proofs.sh` worktrees are scratch.
+   - For M2, keep profiles as data plus pure transforms. Copilot's token route should go in its profile, not become a branch in `run`.
+
+7. **Plan revision recommendations**
+   - Strike through Task 3's stale Files bullets (`plan.md:142-143`) and point them to the round-2 revision, the same way Task 8 does.
+
+```findings
+dispose:
+  - id: BR-8
+    disposition: addressed
+    note: |
+      provider_scenario_table.lua holds ROWS/PROFILES/rows_for/mismatches (pure, unit-tested in provider_scenario_table_spec); provider_scenarios_spec iterates profiles x rows; plan Core concepts moves provider_scenarios to Integration points and Task 8 adds profiles. 15/15 integration cases pass.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      dispatcher.lua uses a single tagged reader_state; A6-A8 are timing-free. Reverted in checkout: full revert fails A6+A8, dropping threw guard fails A7+A8, old ordering fails A6+A8.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: undocumented-behavior-change
+    title: |
+      After a reader throws, EOF no longer runs finish_stdout, so usage/stop_reason/cache metrics go unrecorded
+    detail: |
+      dispatcher.lua:645-648: the threw branch consumes EOF (nil,nil) and skips finish_stdout, which the base tree ran. The failure path does not read these fields today, but no test or atlas text states it. Either document it or call finish_stdout from the threw branch when chunk is nil.
+  - id: new
+    severity: Minor
+    kind: defect
+    family: plan-text-stale-after-revision
+    title: |
+      Plan Task 3 Files list still names provider_anthropic_spec.lua and a drive() in provider_scenarios.lua
+    detail: |
+      plan.md:142-143 contradicts the round-2 Revisions entry. Strike through those bullets the way Task 8's list was struck, pointing to the revision.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"0c105810-ed61-4eb9-846b-00134cb14708","repository":"github.com/xianxu/parley.nvim","issue_id":"000242","recipe":"milestone-review","round":4,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/1d34eb75364e6675","reviewed_head":"54aad52d508e15795c80c98dd1087af24049a056","slot":"parley.nvim:4","requested_at":"2026-10-16T16:50:49.525292Z"},"phase":"finished","pid":44316,"started_at":"2026-10-16T16:50:49.949954Z","finished_at":"2026-10-16T16:53:46.064219Z","session_id":"cf903fdd-11ca-40b7-91a2-85c9a62ad556","outcome":"returned"}] -->

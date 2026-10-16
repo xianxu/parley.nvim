@@ -177,7 +177,7 @@ Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-p
 4. A shared `sse_dialects.py` that both fakes import, instead of folding fake_cliproxy.
 5. The live run and the second-call recording are operator steps.
 
-- [ ] M1 — Anthropic dialect: shared dialect module + fake_provider (request-keyed behaviour, failure counters, frame splitter) + S1–S7 through the real dispatcher→curl path + #228/#229 regression proofs on their pre-fix parents
+- [x] M1 — Anthropic dialect: shared dialect module + fake_provider (request-keyed behaviour, failure counters, frame splitter) + S1–S7 through the real dispatcher→curl path + #228/#229 regression proofs on their pre-fix parents
 - [ ] M2 — OpenAI family (openai, azure, ollama, copilot via a token-URL seam) and googleai; fake_cliproxy's chat surface on the shared module (its anthropic route answers in the anthropic dialect)
 - [ ] M3 — gated live conformance spec (`PARLEY_LIVE_PROVIDERS=1`), the second-call fixture capture, atlas + TOOLING release-checklist line
 
@@ -196,6 +196,7 @@ Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-p
   per-provider `endpoint` makes the seam testable without transport changes.
 
 ### 2026-10-16 (parley.nvim:4)
+- 2026-10-16: closed M1 — M1 found and fixed a production bug: the dispatcher out_reader EOF flush re-decoded the line a throwing output handler had left in its buffer, handing the same delta twice (duplicate chat text, #229 class). Fix: the line comes off the buffer before process_line, and a tagged reader_state skips the EOF flush after a throw. Stress, S7b 40-run loop: 3/40 and 4/30 duplicated before the fix; 0/40 twice after (80/80 failed the attempt correctly); frame-aligned S7b reproduced 3/3 before. Deterministic regressions dispatcher_query_spec A6-A8: on main A6 and A8 fail; with the EOF skip removed A7 and A8 fail; with the fix all pass. Review round 2 (REWORK) answered: BR-8 the scenario table is pure data (provider_scenario_table.lua: ROWS, PROFILES, mismatches; 3 unit cases), provider_scenarios_spec iterates profiles x rows, 15/15 green in 8/8 runs; BR-9 one tagged reader_state. fake_provider_spec 10/10, sse_dialects_spec 4/4, run_proofs.sh 6/6 (#228 on dc548920^, #229 on 634e33a9^ reproduced; fixed on the branch). Full suite green on 19bd7c77; rerun on 54aad52d in flight.; review verdict: SHIP
 
 - Plan approved by the TL, all five decisions as proposed:
   1. HTTP errors are tested as surfaced failures carrying the API message; "retry transient provider errors" is filed as #351 (unclaimed).

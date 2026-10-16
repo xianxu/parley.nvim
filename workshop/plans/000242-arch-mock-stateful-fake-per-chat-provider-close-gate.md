@@ -227,6 +227,99 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 0c105810-ed61-4eb9-846b-00134cb14708
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000242"
+            recipe: milestone-review
+            round: 4
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/1d34eb75364e6675
+            reviewed_head: 54aad52d508e15795c80c98dd1087af24049a056
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T16:50:49.525292Z"
+          phase: finished
+          pid: 44316
+          started_at: "2026-10-16T16:50:49.949954Z"
+          finished_at: "2026-10-16T16:53:46.064219Z"
+          session_id: cf903fdd-11ca-40b7-91a2-85c9a62ad556
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 54aad52d508e15795c80c98dd1087af24049a056
+        tracker_head: 42373d34413f9e3f3c5cb5bf922c919303c7c969
+        branch_point: 76f1d090df46997ef8df56041640248d86383872
+        since: "2026-10-16T07:13:14-07:00"
+        until: "2026-10-16T09:49:08-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T07:13:14-07:00"
+              end: "2026-10-16T09:49:08-07:00"
+              began: "2026-10-16T07:13:14-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: 202f437be48178d8c8dfd8067835d17229ded43331aff7aebc62f9d2b61190b0
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 15074164
+              windows:
+                - start: "2026-10-16T07:13:14-07:00"
+                  end: "2026-10-16T09:49:08-07:00"
+        cuts:
+            - boundary: M1
+              dispatched: "2026-10-16T07:40:48-07:00"
+              finalized: "2026-10-16T07:43:38-07:00"
+              finalizing: false
+            - boundary: M1
+              dispatched: "2026-10-16T08:00:02-07:00"
+              finalized: "2026-10-16T08:02:56-07:00"
+              finalizing: false
+      "n": 4
+      timestamp: "2026-10-16T09:53:47-07:00"
+      dispatched: "2026-10-16T09:50:49-07:00"
+      agent: claude
+      dispose:
+        - id: BR-8
+          disposition: addressed
+          note: provider_scenario_table.lua holds ROWS/PROFILES/rows_for/mismatches (pure, unit-tested in provider_scenario_table_spec); provider_scenarios_spec iterates profiles x rows; plan Core concepts moves provider_scenarios to Integration points and Task 8 adds profiles. 15/15 integration cases pass.
+          round: 4
+        - id: BR-9
+          disposition: addressed
+          note: 'dispatcher.lua uses a single tagged reader_state; A6-A8 are timing-free. Reverted in checkout: full revert fails A6+A8, dropping threw guard fails A7+A8, old ordering fails A6+A8.'
+          round: 4
+      findings:
+        - kind: defect
+          id: BR-10
+          severity: Minor
+          title: After a reader throws, EOF no longer runs finish_stdout, so usage/stop_reason/cache metrics go unrecorded
+          detail: 'dispatcher.lua:645-648: the threw branch consumes EOF (nil,nil) and skips finish_stdout, which the base tree ran. The failure path does not read these fields today, but no test or atlas text states it. Either document it or call finish_stdout from the threw branch when chunk is nil.'
+          family: undocumented-behavior-change
+          round: 4
+        - kind: defect
+          id: BR-11
+          severity: Minor
+          title: Plan Task 3 Files list still names provider_anthropic_spec.lua and a drive() in provider_scenarios.lua
+          detail: plan.md:142-143 contradicts the round-2 Revisions entry. Strike through those bullets the way Task 8's list was struck, pointing to the revision.
+          family: plan-text-stale-after-revision
+          round: 4
+      boundary: M1
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 54aad52d508e15795c80c98dd1087af24049a056
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#242 (boundary-review)
@@ -277,7 +370,21 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-9** [Minor] `reader-state-flags` (kind: defect) out_reader's reader state is two independent booleans, and the only test of the fix depends on write timing
   dispatcher.lua:531-532 tracks stdout_finished and threw separately (a tagged reading/threw/finished state would do). The regression test needs frames plus a 20 ms write delay to line up reads; a deterministic dispatcher_query_spec case (a line with a throwing handler, then EOF (nil,nil), expecting one handler call) would pin it without timing (ARCH-ORDER).
 
+## Round 4 — 2026-10-16T09:53:47-07:00 (claude) — passed
+
+### Disposed
+
+- BR-8 — addressed — provider_scenario_table.lua holds ROWS/PROFILES/rows_for/mismatches (pure, unit-tested in provider_scenario_table_spec); provider_scenarios_spec iterates profiles x rows; plan Core concepts moves provider_scenarios to Integration points and Task 8 adds profiles. 15/15 integration cases pass.
+- BR-9 — addressed — dispatcher.lua uses a single tagged reader_state; A6-A8 are timing-free. Reverted in checkout: full revert fails A6+A8, dropping threw guard fails A7+A8, old ordering fails A6+A8.
+
+### Raised
+
+- **BR-10** [Minor] `undocumented-behavior-change` (kind: defect) After a reader throws, EOF no longer runs finish_stdout, so usage/stop_reason/cache metrics go unrecorded
+  dispatcher.lua:645-648: the threw branch consumes EOF (nil,nil) and skips finish_stdout, which the base tree ran. The failure path does not read these fields today, but no test or atlas text states it. Either document it or call finish_stdout from the threw branch when chunk is nil.
+- **BR-11** [Minor] `plan-text-stale-after-revision` (kind: defect) Plan Task 3 Files list still names provider_anthropic_spec.lua and a drive() in provider_scenarios.lua
+  plan.md:142-143 contradicts the round-2 Revisions entry. Strike through those bullets the way Task 8's list was struck, pointing to the revision.
+
 ## Open findings
 
-- **BR-8** [Critical] `core-concepts-table-drift` (kind: defect) Core concepts lists provider_scenarios as a PURE scenario table; the code is an IO driver and no scenario table exists
-- **BR-9** [Minor] `reader-state-flags` (kind: defect) out_reader's reader state is two independent booleans, and the only test of the fix depends on write timing
+- **BR-10** [Minor] `undocumented-behavior-change` (kind: defect) After a reader throws, EOF no longer runs finish_stdout, so usage/stop_reason/cache metrics go unrecorded
+- **BR-11** [Minor] `plan-text-stale-after-revision` (kind: defect) Plan Task 3 Files list still names provider_anthropic_spec.lua and a drive() in provider_scenarios.lua
