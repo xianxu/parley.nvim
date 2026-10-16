@@ -135,23 +135,23 @@ local config = {
 		-- moves on its own — an antigravity login registered 13 new models with
 		-- no restart — so parley reads it instead of carrying model names here.
 		--
-		-- Entry syntax: "<provider>[:<term>,…]". The provider is the thing you log
+		-- Entry syntax: "<provider>[!N]" or "<provider>:<term>[!N],…". The provider is the thing you log
 		-- into; the optional terms are case-insensitive substrings matched against
 		-- the model id AND its display name. Matching the display name is
 		-- required, not a nicety: antigravity's ids are opaque handles
 		-- (`gemini-pro-agent` displays as "Gemini 3.1 Pro (High)"), so an id-only
 		-- match would leave that provider unfilterable.
 		--
-		-- Terms narrow; the picker then keeps the newest of each model line and
-		-- caps each search term at per_provider (legacy option name).
+		-- Terms narrow; the picker then keeps the newest of each model line. A
+		-- search shows every matching line unless it carries `!N`, which caps that
+		-- term, or a bare provider (`gemini!3`). There is no hidden limit (#230).
 		-- Term order is display order. <C-a> in the picker
 		-- bypasses filter AND curation, so narrowing this never puts a model out
 		-- of reach. Nothing here names a model version, so nothing here goes
 		-- stale. A configured provider you are not logged into shows as
 		-- "(logged out)" and selecting it starts its login.
 		live_models = {
-			providers = { "claude:opus,sonnet,fable", "codex:gpt-6,gpt-5", "gemini" },
-			per_provider = 3,
+			providers = { "claude:opus,sonnet,fable", "codex:gpt-6,gpt-5!3", "gemini!3" },
 			-- Local tool policy for live picks, including restored selections.
 			-- Set {} to disable local tools, or list tools/groups.
 			tools = vim.deepcopy(learner_tools),

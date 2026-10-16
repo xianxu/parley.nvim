@@ -455,6 +455,12 @@ describe("agent_picker._providers_without_models", function()
         assert.same({ { provider = "antigravity" } },
             agent_picker._providers_without_models(models, { "antigravity:pro,flash" }))
     end)
+
+    -- #230: the shared parser strips `!N`, and a malformed spec is diagnose's to report.
+    it("reads the provider out of a capped bare spec and skips a malformed one", function()
+        assert.same({ { provider = "antigravity" } },
+            agent_picker._providers_without_models(models, { "antigravity!2", "codex:gpt-5!x" }))
+    end)
 end)
 
 describe("agent_picker._view_for", function()
@@ -470,7 +476,7 @@ describe("agent_picker._view_for", function()
         { id = "gpt-5.6-sol", display = "GPT 5.6 Sol", owner = "openai",
           series = "gpt-sol", created = 1 },
     }
-    local CFG = { providers = { "claude", "codex" }, per_provider = 3 }
+    local CFG = { providers = { "claude", "codex" } }
 
     local function ids(view)
         local out = {}
@@ -492,10 +498,10 @@ describe("agent_picker._view_for", function()
     end)
 
     it("expanding bypasses curation only, never the logged-out rows", function()
-        local cfg = { providers = { "claude", "antigravity" }, per_provider = 1 }
+        local cfg = { providers = { "claude!1", "antigravity" } }
         local curated = agent_picker._view_for(CATALOG, cfg, {})
         local all = agent_picker._view_for(CATALOG, cfg, { all = true })
-        assert.equals(1, #curated.live)          -- per_provider caps it
+        assert.equals(1, #curated.live)          -- claude!1 caps it
         assert.equals(#CATALOG, #all.live)       -- expansion lifts the cap
         assert.same(curated.logged_out, all.logged_out)
         assert.same({ { provider = "antigravity" } }, all.logged_out)
@@ -518,7 +524,7 @@ describe("agent_picker live/agent overlap", function()
             alpha = { provider = "openai", model = "gpt-4" },
             ["claude-opus-5*"] = { provider = "cliproxyapi", model = "claude-opus-5" },
         }
-        plugin.config = { cliproxy = { live_models = { providers = { "claude" }, per_provider = 3 } } }
+        plugin.config = { cliproxy = { live_models = { providers = { "claude" } } } }
         local catalog = { { id = "claude-opus-5", display = "Claude Opus 5",
                             owner = "anthropic", series = "claude-opus", created = 1 } }
         -- production path end to end: view built by _view_for, rows by _build_items
@@ -546,7 +552,7 @@ describe("agent_picker._view_for provider defaults", function()
             { id = "gpt-5.6-sol", display = "GPT 5.6 Sol", owner = "openai",
               series = "gpt-sol", created = 1 },
         }
-        local view = agent_picker._view_for(catalog, { per_provider = 3 }, {})
+        local view = agent_picker._view_for(catalog, {}, {})
         local ids = {}
         for _, m in ipairs(view.live) do ids[#ids + 1] = m.id end
         table.sort(ids)
@@ -567,7 +573,7 @@ describe("agent_picker._view_for overlap and unknown providers", function()
         -- `claude:opus` both yield claude-opus-5 — identical display, both
         -- marked current, one shared recall key. BR-30's symptom by another route.
         local view = agent_picker._view_for(CATALOG,
-            { providers = { "claude", "claude:opus" }, per_provider = 3 }, {})
+            { providers = { "claude", "claude:opus" } }, {})
         local ids = {}
         for _, m in ipairs(view.live) do ids[#ids + 1] = m.id end
         assert.same({ "claude-opus-5", "claude-sonnet-5" }, ids)
@@ -578,7 +584,7 @@ describe("agent_picker._view_for overlap and unknown providers", function()
         -- a channel, so `:ParleyProxy login <it>` is an actionable-looking dead
         -- end.
         local view = agent_picker._view_for(CATALOG,
-            { providers = { "claud", "anthropic", "antigravity" }, per_provider = 3 }, {})
+            { providers = { "claud", "anthropic", "antigravity" } }, {})
         assert.same({ { provider = "antigravity" } }, view.logged_out)
     end)
 
@@ -607,7 +613,7 @@ describe("agent_picker refresh gating", function()
 
         local plugin = make_plugin("mango")
         plugin.config = { cliproxy = { manage = false,
-            live_models = { providers = { "claude" }, per_provider = 3 } } }
+            live_models = { providers = { "claude" } } } }
         plugin.register_live_agent = function() end
         plugin.logger = { info = function() end }
         plugin.refresh_state = function() end
@@ -618,6 +624,35 @@ describe("agent_picker refresh gating", function()
             saved_is_managed, saved_stale, saved_fetch
         assert.is_true(ok, tostring(err))
         assert.is_true(fetched, "a bring-your-own proxy never got its catalog refreshed")
+    end)
+
+    -- #230: a term matching nothing would read as "the provider lacks it". The
+    -- picker reports it when a fetch resolves, once, and curate stays pure.
+    it("logs each diagnosis once when a catalog refresh resolves", function()
+        local cliproxy = require("parley.cliproxy")
+        local saved_is_managed, saved_stale, saved_fetch, saved_cached =
+            cliproxy.is_managed, cliproxy.catalog_stale, cliproxy.fetch_catalog, cliproxy.catalog_cached
+        local catalog = { { id = "gpt-5.6-sol", display = "GPT 5.6 Sol", owner = "openai", series = "gpt-sol" } }
+        cliproxy.is_managed = function() return false end
+        cliproxy.catalog_stale = function() return true end
+        cliproxy.catalog_cached = function() return catalog end
+        cliproxy.fetch_catalog = function(cb) cb(catalog) end
+        local warnings = {}
+        local plugin = make_plugin("mango")
+        plugin.config = { cliproxy = { live_models = { providers = { "codex:gtp-6,gpt-5", "codex:gpt-5!x" } } } }
+        plugin.register_live_agent = function() end
+        plugin.logger = { info = function() end, warning = function(m) warnings[#warnings + 1] = m end }
+        plugin.refresh_state = function() end
+        plugin.cmd = { KeyBindings = function() end }
+        local ok, handle = pcall(require("parley.agent_picker").agent_picker, plugin)
+        cliproxy.is_managed, cliproxy.catalog_stale, cliproxy.fetch_catalog, cliproxy.catalog_cached =
+            saved_is_managed, saved_stale, saved_fetch, saved_cached
+        if ok and handle and not handle.is_closed() then handle.close() end
+        assert.is_true(ok, tostring(handle))
+        assert.same({
+            'live_models.providers "codex:gtp-6,gpt-5": "gtp-6" matches no codex model',
+            'live_models.providers "codex:gpt-5!x": "gpt-5!x" needs a positive count after !',
+        }, warnings)
     end)
 end)
 

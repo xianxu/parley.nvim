@@ -112,22 +112,43 @@ function M.rank_key(m)
     return -1e9 + version
 end
 
---- Parse one `live_models.providers` entry: "<provider>[:<term>[,<term>…]]".
+--- Parse one `live_models.providers` entry:
+--- "<provider>[!N]" or "<provider>:<term>[!N][,<term>[!N]…]".
+--- `!N` caps the search it is attached to: a term, or a bare provider (which
+--- is the search with the empty term). No `!` means no limit (#230). A count
+--- that is not a positive integer is an error, never read as "no limit".
 ---@param spec string
----@return table # { provider = string, terms = string[] }
+---@return table|nil # { provider = string, cap = integer|nil, terms = { {text=string, cap=integer|nil} } }
+---@return string|nil # why the spec is malformed, naming it
 function M.parse_provider_spec(spec)
+    spec = tostring(spec or "")
+    local function bad(why) return nil, ("live_models.providers %q: %s"):format(spec, why) end
+    local function capped(text)
+        local base, count = text:match("^(.-)!(.*)$")
+        if not base then return text, nil end
+        if not count:match("^%d+$") or tonumber(count) < 1 then
+            return nil, nil, ("%q needs a positive count after !"):format(text)
+        end
+        return base, tonumber(count)
+    end
     -- Greedy up to the FIRST colon. A lazy `[^:]-` here matches the empty
     -- string and hands the whole spec to the filter half.
-    local provider, filter = tostring(spec or ""):match("^([^:]*):?(.*)$")
-    provider = provider:match("^%s*(.-)%s*$")
+    local provider_part, filter = spec:match("^([^:]*):?(.*)$")
+    local provider, cap, err = capped(vim.trim(provider_part))
+    if err then return bad(err) end
     local terms = {}
-    for term in tostring(filter or ""):gmatch("[^,]+") do
-        term = term:match("^%s*(.-)%s*$")
+    for term in filter:gmatch("[^,]+") do
+        term = vim.trim(term)
         if term ~= "" then
-            terms[#terms + 1] = term:lower()
+            local text, term_cap, term_err = capped(term)
+            if term_err then return bad(term_err) end
+            text = vim.trim(text)
+            if text == "" then return bad(("%q has no search term"):format(term)) end
+            terms[#terms + 1] = { text = text:lower(), cap = term_cap }
         end
     end
-    return { provider = provider, terms = terms }
+    if cap and #terms > 0 then return bad("!N on the provider applies only to a bare provider; cap each term") end
+    return { provider = vim.trim(provider), cap = cap, terms = terms }
 end
 
 -- Terms match the id AND the display name. Matching displayName is required,
@@ -156,60 +177,106 @@ local function tied_id_less(a, b)
 end
 
 --- The picker's default view: for each configured provider, the models matching
---- its terms, one per series (the newest), with an independent cap per term.
---- `per_provider` is the legacy option name for that per-search cap; a bare
---- provider is one search. Series remain deduplicated across its terms.
+--- each of its searches, one per series (the newest). A search shows every
+--- matching series unless it carries `!N` (#230): a hidden cap is how a later
+--- term once vanished. Series are deduplicated across a provider's searches,
+--- so an earlier search can claim a shared series but never another's budget.
+--- A malformed spec contributes nothing; `diagnose` names it.
 ---
 --- Term order is display order, so the config expresses preference.
 ---@param models table[] # from parse()
----@param opts table # { providers = {"claude:opus,sonnet", …}, per_provider = 3, owned_by = fn }
+---@param opts table # { providers = {"claude:opus,sonnet", "codex:gpt-5!3"}, owned_by = fn }
 ---@return table[]
 function M.curate(models, opts)
     opts = opts or {}
-    local per = opts.per_provider or 3
     local owned_by = opts.owned_by or require("parley.cliproxy_config").provider_owned_by
     local out = {}
     for _, spec in ipairs(opts.providers or {}) do
         local parsed = M.parse_provider_spec(spec)
-        local owner = owned_by(parsed.provider)
-        local pool = {}
-        -- A provider name we don't know (a typo like "claud") yields owner=nil,
-        -- and `m.owner == owner` would then match every row whose owned_by is
-        -- ABSENT — silently offering unrelated models under that heading. An
-        -- unknown provider contributes nothing instead.
-        for _, m in ipairs(owner and models or {}) do
-            if m.owner == owner then
-                pool[#pool + 1] = m
-            end
-        end
-        table.sort(pool, function(a, b)
-            local ra, rb = M.rank_key(a), M.rank_key(b)
-            if ra ~= rb then
-                return ra > rb
-            end
-            return tied_id_less(tostring(a.id), tostring(b.id))
-        end)
-        local taken, seen = {}, {}
-        for _, term in ipairs(#parsed.terms > 0 and parsed.terms or { "" }) do
-            local term_count = 0
-            for _, m in ipairs(pool) do
-                if term_count >= per then
-                    break
-                end
-                if not seen[m.series] and (term == "" or matches(m, term)) then
-                    seen[m.series] = true
-                    taken[#taken + 1] = m
-                    term_count = term_count + 1
-                end
-            end
-        end
-        for _, m in ipairs(taken) do
+        for _, m in ipairs(parsed and M._select(models, parsed, owned_by) or {}) do
             -- Copy before tagging: these rows are the disk cache's own tables,
             -- re-curated on every <C-a> toggle and background repaint, and this
             -- module promises to be side-effect-free (ARCH-PURE).
             local row = vim.tbl_extend("force", {}, m)
             row.provider = parsed.provider
             out[#out + 1] = row
+        end
+    end
+    return out
+end
+
+-- The provider's rows, newest first. A provider name we don't know (a typo
+-- like "claud") yields owner=nil, and `m.owner == owner` would then match every
+-- row whose owned_by is ABSENT — silently offering unrelated models under that
+-- heading. An unknown provider contributes nothing instead.
+local function pool_for(models, provider, owned_by)
+    local owner = owned_by(provider)
+    local pool = {}
+    for _, m in ipairs(owner and models or {}) do
+        if m.owner == owner then
+            pool[#pool + 1] = m
+        end
+    end
+    table.sort(pool, function(a, b)
+        local ra, rb = M.rank_key(a), M.rank_key(b)
+        if ra ~= rb then
+            return ra > rb
+        end
+        return tied_id_less(tostring(a.id), tostring(b.id))
+    end)
+    return pool
+end
+
+local function searches(parsed)
+    return #parsed.terms > 0 and parsed.terms or { { text = "", cap = parsed.cap } }
+end
+
+--- One parsed spec's rows in display order (exposed for diagnose and tests).
+function M._select(models, parsed, owned_by)
+    local pool = pool_for(models, parsed.provider, owned_by)
+    local taken, seen = {}, {}
+    for _, search in ipairs(searches(parsed)) do
+        local count = 0
+        for _, m in ipairs(pool) do
+            if search.cap and count >= search.cap then
+                break
+            end
+            if not seen[m.series] and (search.text == "" or matches(m, search.text)) then
+                seen[m.series] = true
+                taken[#taken + 1] = m
+                count = count + 1
+            end
+        end
+    end
+    return taken
+end
+
+--- What a caller should tell the operator about its provider specs: each
+--- malformed spec, and each search that matches no model of a provider that
+--- has models (a provider with none is the logged-out case, reported apart).
+--- Pure: the caller logs it once per catalog refresh, never per repaint.
+---@return string[]
+function M.diagnose(models, providers, owned_by)
+    owned_by = owned_by or require("parley.cliproxy_config").provider_owned_by
+    local out = {}
+    for _, spec in ipairs(providers or {}) do
+        local parsed, err = M.parse_provider_spec(spec)
+        if not parsed then
+            out[#out + 1] = err
+        else
+            local pool = pool_for(models, parsed.provider, owned_by)
+            if #pool > 0 then
+                for _, search in ipairs(parsed.terms) do
+                    local hit = false
+                    for _, m in ipairs(pool) do
+                        if matches(m, search.text) then hit = true; break end
+                    end
+                    if not hit then
+                        out[#out + 1] = ("live_models.providers %q: %q matches no %s model"):format(
+                            spec, search.text, parsed.provider)
+                    end
+                end
+            end
         end
     end
     return out

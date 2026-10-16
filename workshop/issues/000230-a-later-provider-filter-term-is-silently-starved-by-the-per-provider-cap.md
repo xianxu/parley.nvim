@@ -174,6 +174,7 @@ provider. Specific terms rarely need it: the operator's first draft
 | `curate` | PURE | modified | `lua/parley/cliproxy_catalog.lua` | Per-search budgets, no limit without `!N`, global series de-dup, term order kept; no `per_provider`. |
 | `diagnose` | PURE | new | `lua/parley/cliproxy_catalog.lua` | The specs that are malformed and the terms that match nothing, for a caller to report. |
 | `agent_picker` | INTEGRATION | modified | `lua/parley/agent_picker.lua` | Logs `diagnose` once per catalog refresh; stops passing `per_provider`. |
+| `live_models_config_spec` | INTEGRATION | new | `tests/integration/live_models_config_spec.lua` | The one setup notice for a leftover `per_provider`. |
 | `cliproxy_catalog_230.json` | INTEGRATION | new | `tests/fixtures/cliproxy_catalog_230.json` | The v1 fixture plus `gpt-6-astra` (owner openai): the shape #230 was measured on. |
 
 ## Plan
@@ -183,12 +184,12 @@ Measurement (2026-10-15, :3):
 - The approved Spec is otherwise unmet. A hidden default of 3 per term remains: `gpt-5` matches 6 series in the v1 fixture and 3 are hidden silently. There is no `!N`, `antigravity!2` still parses as a provider named `antigravity!2` (contributes nothing), no malformed-count rejection, no log for a term matching nothing, and `per_provider` remains in config.lua, cliproxy_catalog.lua, agent_picker.lua, the atlas and 6 specs.
 - The catalog the 17-row count came from was overwritten (see #342). On the v1 fixture plus `gpt-6-astra`, the uncapped searches yield opus 1, sonnet 1, fable 1, gpt-5 6, gpt-6 1 and bare antigravity 12 = **22**. The recommended config (`claude:opus,sonnet,fable`, `codex:gpt-5!3,gpt-6`, `antigravity!2`) still yields exactly **9**.
 
-- [ ] Fixture `cliproxy_catalog_230.json`; guard test for the measured case; red tests per Done-when (uncapped search returns every series, 22; `!N` on a term and on a bare provider; the 9-row recommended config in term order; a model matched by two terms renders once).
-- [ ] `parse_provider_spec`: strip and validate `!N` on terms and on the provider half (`antigravity!2` gives provider `antigravity`, cap 2). `gpt-5!`, `gpt-5!x` and `gpt-5!0` return an error naming the spec. In `curate` a malformed spec contributes nothing, never "no limit".
-- [ ] `curate`: per-search budget from `!N`, no limit without it, no provider ceiling, global series de-dup, term order. `per_provider` removed.
-- [ ] `diagnose(models, providers)` (pure): malformed specs and terms matching nothing. agent_picker logs it when a catalog fetch resolves (once per refresh, not per repaint or toggle). An empty catalog reports nothing (that is the logged-out case, already shown).
-- [ ] Remove `per_provider` from config defaults, the atlas and specs. The default `live_models.providers` writes explicit `!N` where the old hidden 3 mattered (`codex:gpt-6,gpt-5!3`, `gemini!3`), so the default view keeps its size. An operator config still setting `per_provider` gets one notice at setup: removed, write `!N`. Without it the option would be silently ignored, the same silence class.
-- [ ] Atlas providers/cliproxy-managed: the `!N` grammar and the logging.
+- [x] Fixture `cliproxy_catalog_230.json`; guard test for the measured case; red tests per Done-when (uncapped search returns every series, 22; `!N` on a term and on a bare provider; the 9-row recommended config in term order; a model matched by two terms renders once).
+- [x] `parse_provider_spec`: strip and validate `!N` on terms and on the provider half (`antigravity!2` gives provider `antigravity`, cap 2). `gpt-5!`, `gpt-5!x` and `gpt-5!0` return an error naming the spec. In `curate` a malformed spec contributes nothing, never "no limit".
+- [x] `curate`: per-search budget from `!N`, no limit without it, no provider ceiling, global series de-dup, term order. `per_provider` removed.
+- [x] `diagnose(models, providers)` (pure): malformed specs and terms matching nothing. agent_picker logs it when a catalog fetch resolves (once per refresh, not per repaint or toggle). An empty catalog reports nothing (that is the logged-out case, already shown).
+- [x] Remove `per_provider` from config defaults, the atlas and specs. The default `live_models.providers` writes explicit `!N` where the old hidden 3 mattered (`codex:gpt-6,gpt-5!3`, `gemini!3`), so the default view keeps its size. An operator config still setting `per_provider` gets one notice at setup: removed, write `!N`. Without it the option would be silently ignored, the same silence class.
+- [x] Atlas providers/cliproxy-managed: the `!N` grammar and the logging.
 - [ ] Verify: catalog, picker and options specs, then the full suite.
 
 ## Log
@@ -203,6 +204,15 @@ whether its `owner` differed from the gpt-5 family — it does not, which ruled 
 provider mapping. Then running `curate` itself on the real catalog in both term
 orders, which located the cap. The symptom (a model "not showing up") pointed
 confidently at discovery, and the cause was two layers downstream of it.
+
+### 2026-10-15 (:3)
+
+- Red against main's `cliproxy_catalog.lua` (temporary copy, restored): 19 of the 77 catalog unit cases fail. These cover the `!N` parse, the malformed rejection naming the spec, the uncapped renders (22 total; `codex:gpt-5` 6), the recommended config as exactly its 9 rows in term order, single rendering under two terms, and `diagnose`. The reported case (`codex:gpt-5,gpt-6` includes `gpt-6-astra`) passes on main, being #247's fix, and is kept as a guard. Green: 77/0.
+- Rows that pinned the hidden cap now write it (`claude!3`, `antigravity!3`, `antigravity:pro!3,flash!3`, `codex!3`), keeping their renders. The uncapped forms are pinned beside them (`claude` now 4 with haiku; `antigravity:pro,flash` 9).
+- Picker: login rows read `antigravity!2` as antigravity and skip a malformed spec. The refresh logs each diagnosis once (a typo'd term and a malformed count, against a non-empty catalog). picker_items 56/0, agent_picker_options 6/0, integration cliproxy_catalog 22/0. Only one picker case relied on the hidden cap ("expanding bypasses curation"); it now writes `claude!1`.
+- Setup notice: `live_models_config_spec` 2/0, and red with the notice disabled (1/1).
+- Defaults: `codex:gpt-6,gpt-5!3` and `gemini!3`, per the TL decision, keep the default view its prior size. `per_provider` is gone from config, code, atlas and specs, except the notice that names it.
+- Lint clean (737 files).
 
 ## Revisions
 

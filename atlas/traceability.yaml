@@ -906,6 +906,7 @@ atlas:
       - lua/parley/memory_prefs.lua
       - lua/parley/init.lua
     tests:
+      - tests/integration/live_models_config_spec.lua
       - tests/unit/cliproxy_config_spec.lua
       - tests/unit/cliproxy_release_spec.lua
       - tests/unit/cliproxy_auth_spec.lua

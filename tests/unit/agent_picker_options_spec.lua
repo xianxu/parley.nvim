@@ -20,7 +20,7 @@ describe('agent picker continuation options', function()
             ['Configured Claude'] = {provider = 'cliproxyapi', model = 'claude-sonnet-4-6'},
             ['Direct GPT'] = {provider = 'openai', model = 'gpt-5-codex'},
         }, _state = {}, logger = {info = function() end}, cmd = {KeyBindings = function() end},
-            config = {cliproxy = {live_models = {providers = {'claude', 'codex'}, per_provider = 1}}}}
+            config = {cliproxy = {live_models = {providers = {'claude', 'codex'}}}}}
         plugin.refresh_state = function(state) plugin._state = state end
         plugin.register_live_agent = function(model)
             local agent = require('parley.cliproxy_catalog').build_agent(model)
