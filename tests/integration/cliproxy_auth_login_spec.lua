@@ -377,15 +377,16 @@ describe("cliproxy.recover", function()
         -- One assertion on stop() would have failed the day that landed.
         serve()
         local stops = 0
-        -- A restart stops through stop_async (#345).
-        local saved_stop = cliproxy.stop_async
-        cliproxy.stop_async = function(...)
+        -- The recovery rung is a budgeted path: it stops through the sync stop
+        -- (#345 option B).
+        local saved_stop = cliproxy.stop
+        cliproxy.stop = function(...)
             stops = stops + 1
             return saved_stop(...)
         end
         local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
             streamed = false, attempt = 0 })
-        cliproxy.stop_async = saved_stop
+        cliproxy.stop = saved_stop
 
         assert.equals("retry", out.settled)
         assert.equals(0, stops, "the healthy path SIGTERMed the proxy — restart rung, not retry")
@@ -404,9 +405,10 @@ describe("cliproxy.recover", function()
         vim.wait(6000, function() return seeded end, 20)
         assert.is_true(seeded, "could not seed the proxy's load time")
         local stops = 0
-        -- A restart stops through stop_async (#345).
-        local saved_stop = cliproxy.stop_async
-        cliproxy.stop_async = function(...)
+        -- The recovery rung is a budgeted path: it stops through the sync stop
+        -- (#345 option B).
+        local saved_stop = cliproxy.stop
+        cliproxy.stop = function(...)
             stops = stops + 1
             return saved_stop(...)
         end
@@ -415,7 +417,7 @@ describe("cliproxy.recover", function()
 
         local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
             streamed = false, attempt = 0 })
-        cliproxy.stop_async = saved_stop
+        cliproxy.stop = saved_stop
 
         assert.equals("retry", out.settled) -- the restart rung still ends in a retry
         assert.equals(1, stops, "a missed watcher reload did not trigger the restart rung")

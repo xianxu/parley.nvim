@@ -405,7 +405,7 @@ M.register_proxy_command = function(prefix)
 					.. "restart nvim to pick up config edits)"):format(loaded), vim.log.levels.INFO)
 			end, function(msg)
 				vim.notify(msg, vim.log.levels.ERROR)
-			end)
+			end, { interactive = true }) -- never blocks the editor on lsof (#345)
 		elseif sub == "providers" then
 			vim.notify(
 				"cliproxy providers: " .. table.concat(require("parley.cliproxy_config").providers(), ", "),

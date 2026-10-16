@@ -59,10 +59,11 @@ the restart path, with the sync command kept, is one option.
 | Entity | Status | Where | What |
 |---|---|---|---|
 | `stop` | changed | lua/parley/cliproxy.lua | The sync stop: kills `_spawned`, then reaps a cliproxy on the managed port. Kept for spec teardown; its kill steps are shared with `stop_async`. |
-| `stop_async` | added | lua/parley/cliproxy.lua | The same stop with the identity probe and the listener read async; `cb(count, pids)`. Used by `restart_managed` and `:ParleyProxy stop`. |
-| `_wait_port_released` | added | lua/parley/cliproxy.lua | Test seam for the release wait, so a spec can drive a process that exits near the deadline (#345 close BR-1). |
-| `_restart_budget_keys` | added | lua/parley/cliproxy.lua | The repair-budget terms a plain restart spends, by name; cliproxy_budget_spec sums these instead of a hand-written list. |
-| `_pids_on_port_async` | added | lua/parley/cliproxy.lua | Test seam for the async listener read: lsof through a `vim.system` callback, limited to `LSOF_MAX_MS`; a timeout reports `lsof timed out`, never "no listener". |
+| `stop_async` | added | lua/parley/cliproxy.lua | The stop with the identity probe and the listener read async; `cb(count, pids, read_err)`. Used by `:ParleyProxy stop` and the interactive restart (`restart_managed(…, { interactive = true })`, option B). |
+| `restart_managed` | changed | lua/parley/cliproxy.lua | Takes a third options argument: `{ interactive = true }` reads the process table async (the user commands); the default keeps the sync reads for the budgeted paths (in-dispatch repair, recovery rung, update). |
+| `_restart_budget_keys` | added | lua/parley/cliproxy.lua | The repair-budget terms a plain (sync) restart spends, by name; cliproxy_budget_spec sums these instead of a hand-written list. |
+| `_pids_on_port_async` | added | lua/parley/cliproxy.lua | Test seam for the async listener read: lsof through a `vim.system` callback behind a hang guard (`LSOF_GUARD_MS`, 10 s); a timeout reports `lsof timed out`, never "no listener". |
+| `_set_lsof_guard_ms` | added | lua/parley/cliproxy.lua | Test seam: shorten the interactive lsof guard for a case (nil restores it). |
 
 ## Plan
 
@@ -123,4 +124,19 @@ blocked on its identity curl (up to 2 s) is the same user-visible freeze.
 - 2026-10-16, merge run failed, then re-planning. The merge's suite failed `stop_async() reaps a leftover`: the real lsof passed its 2 s limit ("lsof timed out after 2020 ms"; others 1.1–1.6 s under 8-way load; 0.11 s idle). Fixed so far, uncommitted until now: stop_async reports `read_err`, and the restart then says the proxy "was not stopped" rather than claiming it was told to stop (test plus mutation). The async reap test lists the leftover through fake_lsof.
 - An 8-parallel run of the whole lifecycle spec: main 8 of 8 green; this branch fails credential_health in 6 of 8 runs (await timeout). Mechanism: the BR-1 cap gives the post-exit read only the time left, and under load lsof needs more, so it is cut off. The restart then falls back to the port probe, the stalling path #340 removed (here the 5 s stall emulation). Main's sync lsof is unbounded, completes in 2–3 s, and never reaches the probe.
 - Stopped to re-plan with the TL: responsiveness (async), a bound on lsof that the repair budget must count, and lsof latency under load cannot all hold with a 2 s cap inside a 30 s backstop with 5 s headroom.
+
+## Revisions
+
+- 2026-10-16, design revised to option B (TL decision, after the merge run went red under load).
+  - **Measured:** lsof is 0.11 s idle, and 0.2 s to over 2 s under 8-way load (one read timed out at 2020 ms). An 8-parallel run of the whole lifecycle spec: main 8 of 8 green, the option-A-shaped branch (2 s cap plus the BR-1 remaining-time cap) failed credential_health in 6 of 8.
+  - **Decision (B):** async reads only for the user-initiated `:ParleyProxy restart` and `:ParleyProxy stop`. Those have no backstop, so they take a generous hang guard (`LSOF_GUARD_MS`, 10 s). The budgeted paths keep main's #340 sync reads, so the budget is unchanged: the in-dispatch repair (credential_health), the recovery rung, and `:ParleyProxy update`, which restarts behind its own 20 s deadline. That removes the freeze people see on the commands, and the rare in-dispatch repair stays as robust under load as #340 made it.
+  - **Why not A** (async everywhere, a ~5 s guard per read, an honest budget): it needs the dispatcher backstop raised from 30 to ~36 s (or a smaller headroom rule) for a rare path.
+  - **Why not C** (shelve): it keeps the visible freeze on the commands.
+  - **Removed with A:** `LSOF_MAX_MS`, the `stop_listener_read` budget term, the post-exit remaining-time cap (the close BR-1 fix: the sync path never caps, as on main, and the interactive path has no budget), and its `_wait_port_released` seam and test. Kept: `_restart_budget_keys`, and the honest message when the listener read fails. The sync `stop()` now also returns `read_err`, so that message holds on both paths.
+  - **Verified:** the 8-parallel lifecycle run is now 8 of 8 green, like main.
+  - **Mutations:**
+    - Giving the interactive restart sync reads stalls the loop 1600 ms, failing 2 cases.
+    - Dropping the sync stop's `read_err` fails the peer-left case.
+    - A probe-only release fails 4 cases.
+    - A limit the read ignores fails the guard case.
 

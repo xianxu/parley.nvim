@@ -404,7 +404,7 @@ describe("cliproxy IO lifecycle", function()
             end
             vim.defer_fn(tick, 50)
             cliproxy.restart_managed(function() outcome = { ok = true } end,
-                function(msg) outcome = { ok = false, msg = msg } end)
+                function(msg) outcome = { ok = false, msg = msg } end, { interactive = true })
             vim.wait(15000, function() return outcome ~= nil end, 10)
             running = false
             cliproxy._set_process_tools(nil)
@@ -421,27 +421,9 @@ describe("cliproxy IO lifecycle", function()
                 ("the main loop stalled %d ms while lsof ran"):format(max_gap))
         end)
 
-        it("an lsof past its time limit is reported as unread, never as no listener", function()
-            vim.env.PARLEY_FAKE_LSOF_DELAY_MS = "4000" -- past the 2 s limit
-            vim.env.PARLEY_FAKE_LSOF_PIDS = "4242"
-            cliproxy._set_process_tools({ lsof = vim.fn.getcwd() .. "/tests/fixtures/fake_lsof" })
-            local started = uv.now()
-            local got = await(function(done)
-                cliproxy._pids_on_port_async(ready_port.free_port(), function(pids, err)
-                    done({ pids = pids, err = err })
-                end)
-            end)
-            cliproxy._set_process_tools(nil)
-            vim.env.PARLEY_FAKE_LSOF_DELAY_MS, vim.env.PARLEY_FAKE_LSOF_PIDS = nil, nil
-            assert.equals("lsof timed out", got.err)
-            assert.same({}, got.pids)
-            assert.is_true(uv.now() - started < 3500, "the read was not cut off at its limit")
-        end)
-
-        -- #345 close BR-1: the post-exit read gets only the time left before the
-        -- release deadline, so it and the fallback probe never stack. The
-        -- read must honour a limit shorter than LSOF_MAX_MS.
-        it("an lsof given less time than its limit is cut off at that time", function()
+        -- #345: the interactive read has a hang guard; past it the read reports
+        -- "lsof timed out" — unread, never "no listener".
+        it("an lsof past its guard is cut off and reported as unread", function()
             vim.env.PARLEY_FAKE_LSOF_DELAY_MS = "4000"
             cliproxy._set_process_tools({ lsof = vim.fn.getcwd() .. "/tests/fixtures/fake_lsof" })
             local started = uv.now()
@@ -453,49 +435,28 @@ describe("cliproxy IO lifecycle", function()
             cliproxy._set_process_tools(nil)
             vim.env.PARLEY_FAKE_LSOF_DELAY_MS = nil
             assert.equals("lsof timed out", got.err)
+            assert.same({}, got.pids)
             assert.is_true(got.at < 1500, ("a 300 ms read took %d ms"):format(got.at))
         end)
 
-        -- #345 close BR-1, end to end: an old process that exits just before the
-        -- release deadline leaves the post-exit read only the time that is left.
-        -- lsof takes 4 s here; passed the remaining ~0.3 s, the wait decides at
-        -- about the deadline, and passed its full 2 s limit it would decide ~1.7 s
-        -- late (the read and the fallback probe stacked).
-        it("the release wait never runs its listener read past the deadline", function()
-            local handle, _, err, pid = fixture_process.spawn("python3", { "-c", "import time; time.sleep(1.7)" })
-            assert(handle, tostring(err))
-            vim.env.PARLEY_FAKE_LSOF_DELAY_MS = "4000"
-            cliproxy._set_process_tools({ lsof = vim.fn.getcwd() .. "/tests/fixtures/fake_lsof" })
-            local started = uv.now()
-            local got = await(function(done)
-                cliproxy._wait_port_released("127.0.0.1", ready_port.free_port(), "testkey", { pid },
-                    function(released, state, exited)
-                        done({ released = released, state = state, exited = exited, at = uv.now() - started })
-                    end)
-            end)
-            cliproxy._set_process_tools(nil)
-            vim.env.PARLEY_FAKE_LSOF_DELAY_MS = nil
-            assert.is_true(got.released) -- the probe on the empty port decided
-            assert.is_false(got.exited) -- the cut-off read is "unread", not "no listener"
-            assert.is_true(got.at < 3000, ("the wait decided at %d ms, past its 2 s deadline + a probe"):format(got.at))
-        end)
-
-        -- #345 merge run: under the 8-way suite the real lsof passed its 2 s
-        -- limit, so stop_async listed nobody and signalled nobody. The restart
-        -- must say that, not claim the proxy "was told to stop".
+        -- #345 merge run: under the 8-way suite the real lsof passed a 2 s limit,
+        -- so stop_async listed nobody and signalled nobody. The restart must
+        -- say that, not claim the proxy "was told to stop".
         it("a restart whose listener read times out says the proxy was not stopped", function()
             local port = ready_port.free_port()
             set_endpoint(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             local leftover = start_fake(port, "healthy")
             ready_port.wait_listening(port)
-            vim.env.PARLEY_FAKE_LSOF_DELAY_MS = "4000" -- past the 2 s limit
+            vim.env.PARLEY_FAKE_LSOF_DELAY_MS = "4000"
             vim.env.PARLEY_FAKE_LSOF_PIDS = tostring(leftover)
             cliproxy._set_process_tools({ lsof = vim.fn.getcwd() .. "/tests/fixtures/fake_lsof" })
+            cliproxy._set_lsof_guard_ms(500) -- the guard, shortened for the case
             local outcome
             cliproxy.restart_managed(function() outcome = { ok = true } end,
-                function(msg) outcome = { ok = false, msg = msg } end)
+                function(msg) outcome = { ok = false, msg = msg } end, { interactive = true })
             vim.wait(15000, function() return outcome ~= nil end, 20)
+            cliproxy._set_lsof_guard_ms(nil)
             cliproxy._set_process_tools(nil)
             vim.env.PARLEY_FAKE_LSOF_DELAY_MS, vim.env.PARLEY_FAKE_LSOF_PIDS = nil, nil
             assert(outcome, "restart_managed never resolved")
@@ -631,10 +592,9 @@ describe("cliproxy IO lifecycle", function()
 
         -- One contract, two drivers: the sync stop() for teardown, and the
         -- stop_async() a restart and :ParleyProxy stop use (#345).
-        -- The async read has a 2 s limit that the real lsof can pass under the
-        -- 8-way suite (measured; #345 merge run), so the async driver lists the
-        -- port through fake_lsof, which reports exactly the live listeners
-        -- given. The sync driver keeps the real lsof.
+        -- The real lsof measured past 2 s under the 8-way suite (#345 merge run),
+        -- so the async driver lists the port through fake_lsof, which reports
+        -- exactly the live listeners given. The sync driver keeps the real lsof.
         local FAKE_LSOF = vim.fn.getcwd() .. "/tests/fixtures/fake_lsof"
         for name, stop in pairs({
             ["stop()"] = function() return cliproxy.stop() end,
@@ -970,13 +930,13 @@ describe("cliproxy IO lifecycle", function()
         before_each(function()
             cliproxy._reset_management_restart()
             in_window, window_probes = false, 0
-            orig.stop, orig.spawn, orig.probe = cliproxy.stop_async, cliproxy.spawn, cliproxy.health_probe
-            -- The window opens when stop has signalled the old proxy (#345: async).
-            cliproxy.stop_async = function(cb)
-                return orig.stop(function(n, pids)
-                    in_window = true
-                    cb(n, pids)
-                end)
+            orig.stop, orig.spawn, orig.probe = cliproxy.stop, cliproxy.spawn, cliproxy.health_probe
+            -- The window opens when stop has signalled the old proxy. The repair
+            -- is a budgeted path, so it stops through the sync stop (#345 B).
+            cliproxy.stop = function(...)
+                local n, pids, read_err = orig.stop(...)
+                in_window = true
+                return n, pids, read_err
             end
             cliproxy.spawn = function(...)
                 in_window = false
@@ -991,7 +951,7 @@ describe("cliproxy IO lifecycle", function()
             end
         end)
         after_each(function()
-            cliproxy.stop_async, cliproxy.spawn, cliproxy.health_probe = orig.stop, orig.spawn, orig.probe
+            cliproxy.stop, cliproxy.spawn, cliproxy.health_probe = orig.stop, orig.spawn, orig.probe
         end)
 
         it("restarts a keyless proxy once, then reads health from the new one", function()

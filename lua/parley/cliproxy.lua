@@ -29,7 +29,11 @@ local M = {}
 local CURL_MAX_TIME = 2      -- seconds, --max-time on every probe
 local PORT_RELEASE_MS = 2000 -- wait_port_released deadline
 local POLL_BUDGET_MS = 5000  -- poll_until_healthy deadline
-local LSOF_MAX_MS = 2000     -- the async listener read's time limit (#345)
+-- The interactive listener read's hang guard (#345): generous, because those
+-- commands have no backstop. lsof measured 0.11 s idle and past 2 s under the
+-- 8-way suite.
+local LSOF_GUARD_MS = 10000
+local _lsof_guard_ms = LSOF_GUARD_MS
 -- How many candidates the RECOVERY path reads, and the multiplier on the
 -- credential-read term of the repair budget (the reads are sequential).
 --
@@ -458,10 +462,6 @@ M._repair_budget_sec = {
     liveness_probe = CURL_MAX_TIME,
     auth_files = CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS,
     stop_identity_probe = CURL_MAX_TIME,
-    stop_listener_read = LSOF_MAX_MS / 1000,
-    -- The post-exit listener read (#340) gets only the time left before the
-    -- release deadline (#345 close BR-1), so the wait still overruns by one
-    -- probe at most — the read and the fallback probe never stack.
     port_release = PORT_RELEASE_MS / 1000 + CURL_MAX_TIME,
     ensure_probe = CURL_MAX_TIME,
     poll_healthy = POLL_BUDGET_MS / 1000 + CURL_MAX_TIME,
@@ -470,8 +470,7 @@ M._repair_budget_sec = {
 
 -- The terms a plain restart (restart_managed) spends, by name, so a spec sums
 -- the same set the code runs instead of hand-listing it (#345 close BR-1).
-M._restart_budget_keys = { "stop_identity_probe", "stop_listener_read", "port_release", "ensure_probe",
-    "poll_healthy" }
+M._restart_budget_keys = { "stop_identity_probe", "port_release", "ensure_probe", "poll_healthy" }
 
 function M._reset_management_restart() -- test seam
     _management_restart_done = false
@@ -500,7 +499,7 @@ local pids_on_port, pids_on_port_async -- the lsof listener reads, defined with 
 -- failed, falls back to the probe (#340 close review). At the deadline one probe
 -- decides, so a proxy still answering is reported exactly as before. `exited`
 -- tells the caller the port was seen free without a probe.
-local function wait_port_released(host, port, secret, pids, cb)
+local function wait_port_released(host, port, secret, pids, read_listeners, cb)
     -- WALL-CLOCK deadline, not a count of sleeps: each health_probe is a curl
     -- with --max-time 2, so counting only the defer interval would let this run
     -- ~43s — past the dispatcher's 15s recovery backstop, which would have
@@ -525,18 +524,15 @@ local function wait_port_released(host, port, secret, pids, cb)
             local ok, _, name = uv.kill(pid, 0)
             return ok ~= nil or name ~= "ESRCH" -- EPERM: it exists, just not ours
         end, pids)
-        local remaining = deadline - uv.now()
-        if #alive == 0 and remaining > 0 then
-            -- Within the deadline: the read must not push the fallback probe
-            -- past it, or the read and the probe would stack (#345 close BR-1).
-            return pids_on_port_async(port, function(listeners, lerr)
+        if #alive == 0 then
+            return read_listeners(port, function(listeners, lerr)
                 if not lerr and #listeners == 0 then
                     return cb(true, "down", true)
                 end
                 probe_poll()
-            end, remaining)
+            end)
         end
-        if remaining <= 0 then
+        if uv.now() >= deadline then
             return probe_poll() -- the probe at the deadline decides, as before
         end
         vim.defer_fn(exit_poll, 50)
@@ -544,7 +540,22 @@ local function wait_port_released(host, port, secret, pids, cb)
     exit_poll()
 end
 
-M._wait_port_released = wait_port_released -- test seam (#345)
+-- How a restart reads the process table (#345, option B). SYNC is the default
+-- and is main's #340 path: the in-dispatch repair, the recovery rung and
+-- update run inside a budgeted backstop, so they keep the unbounded sync lsof
+-- that load cannot cut short. INTERACTIVE (:ParleyProxy restart/stop, no
+-- backstop) never blocks the editor; its reads are async behind
+-- LSOF_GUARD_MS. Looked up at call time, so a spec's wrapper is honoured.
+local READS = {
+    sync = {
+        stop = function(cb) cb(M.stop()) end,
+        listeners = function(port, cb) cb(pids_on_port(port)) end,
+    },
+    interactive = {
+        stop = function(cb) M.stop_async(cb) end,
+        listeners = function(port, cb) pids_on_port_async(port, cb) end,
+    },
+}
 
 local start_managed -- ensure_running's spawn branch, defined with it below
 
@@ -557,10 +568,12 @@ local start_managed -- ensure_running's spawn branch, defined with it below
 --- never reused: ensure_running would take it for the replacement (#237 BR-8).
 ---@param on_ready fun()
 ---@param on_error fun(msg: string)
-function M.restart_managed(on_ready, on_error)
+---@param restart_opts table|nil # { interactive = true } for a user command (#345)
+function M.restart_managed(on_ready, on_error, restart_opts)
+    local reads = READS[(restart_opts or {}).interactive and "interactive" or "sync"]
     local opts = render_opts()
-    M.stop_async(function(_, pids, read_err)
-        wait_port_released(opts.host, opts.port, opts.secret, pids, function(released, state, exited)
+    reads.stop(function(_, pids, read_err)
+        wait_port_released(opts.host, opts.port, opts.secret, pids, reads.listeners, function(released, state, exited)
             if not released and is_cliproxy_state(state) and read_err then
                 -- Say what happened: it was never told to stop (#345).
                 return on_error(("cliproxy: could not list the process on port %s (%s), so the proxy "
@@ -967,13 +980,14 @@ pids_on_port = function(port)
     return parse_listener_pids(res.stdout)
 end
 
--- The same read without blocking the main loop: lsof measured ~1 s under load
--- (#345). cb(pids, err) runs on the main loop, once, on every path.
+-- The same read without blocking the main loop, for the interactive commands
+-- (#345). cb(pids, err) runs on the main loop, once, on every path; past its
+-- guard it reports "lsof timed out", never "no listener".
 pids_on_port_async = function(port, cb, timeout_ms)
     if vim.fn.executable(_lsof_cmd) ~= 1 then
         return cb({}, "lsof unavailable")
     end
-    local limit = math.min(timeout_ms or LSOF_MAX_MS, LSOF_MAX_MS)
+    local limit = timeout_ms or _lsof_guard_ms
     local ok = pcall(vim.system, lsof_argv(port), { text = true, timeout = limit }, function(res)
         vim.schedule(function()
             if res.code == 124 then -- vim.system's timeout: no answer is not "no listener"
@@ -988,6 +1002,12 @@ pids_on_port_async = function(port, cb, timeout_ms)
 end
 
 M._pids_on_port_async = function(port, cb, timeout_ms) return pids_on_port_async(port, cb, timeout_ms) end -- test seam
+
+--- Test seam: the interactive lsof guard (nil restores LSOF_GUARD_MS).
+---@param ms number|nil
+function M._set_lsof_guard_ms(ms)
+    _lsof_guard_ms = ms or LSOF_GUARD_MS
+end
 
 -- Synchronously decide whether host:port is held by a cliproxy — same
 -- /v1/models identity as health_probe (reusing classify) — so stop() never
@@ -1026,20 +1046,24 @@ end
 --- is left untouched.
 ---@return number killed
 ---@return integer[] pids # what was signalled, so a restart can wait for their exit (#340)
+---@return string|nil read_err # why a cliproxy on the port could not be listed, so was NOT signalled (#345)
 function M.stop()
     local killed = kill_spawned()
     local opts = render_opts()
+    local read_err
     if opts.host and opts.port and port_holds_cliproxy(opts.host, opts.port, opts.secret) then
-        sigterm_all(killed, pids_on_port(opts.port))
+        local pids
+        pids, read_err = pids_on_port(opts.port)
+        sigterm_all(killed, pids)
     end
-    return vim.tbl_count(killed), vim.tbl_keys(killed)
+    return vim.tbl_count(killed), vim.tbl_keys(killed), read_err
 end
 
 --- stop() without blocking the main loop (#345): the identity probe and the
 --- listener read are async, so a restart never freezes the editor on them.
---- The sync stop() stays for spec teardown. `read_err` says why a cliproxy the
---- probe found on the port could not be listed — so it was NOT signalled. lsof
---- measured 0.11 s idle and past its 2 s limit under the 8-way suite.
+--- The interactive commands use it; the budgeted paths use the sync stop()
+--- (READS). `read_err` says why a cliproxy the probe found on the port could
+--- not be listed — so it was NOT signalled.
 ---@param cb fun(killed: number, pids: integer[], read_err: string|nil)
 function M.stop_async(cb)
     local killed = kill_spawned()

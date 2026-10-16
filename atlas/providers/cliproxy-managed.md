@@ -114,11 +114,14 @@ signalled (`kill(pid, 0)`), not the port (#340). Under the parallel suite, a
 probe of a just-closed port went unanswered until curl's `--max-time`. Once they
 have exited and `lsof` finds no listener left, the replacement spawns without a
 reuse probe. A port probe decides instead when no process was identified, a
-listener remains or cannot be read, or a process outlives the wait. The
-restart and `:ParleyProxy stop` use `stop_async` (#345). Its identity probe
-and both listener reads are async, so the editor never blocks on them, and
-`lsof` is limited to 2 s (a timeout counts as unread). The sync `stop` remains
-for spec teardown.
+listener remains or cannot be read, or a process outlives the wait.
+`:ParleyProxy restart` (`restart_managed(…, { interactive = true })`) and
+`:ParleyProxy stop` (`stop_async`) read the process table async, so the editor
+never blocks on `lsof` (#345). They take a 10 s hang guard, because those
+commands have no backstop, and a timeout counts as unread. The budgeted paths
+(the in-dispatch repair, the recovery rung, `:ParleyProxy update`) keep the sync
+reads: `lsof` measured over 2 s under load, and a cap would push them onto the
+stalling probe. A cliproxy that could not be listed is reported as not stopped.
 
 ## Model catalog
 
