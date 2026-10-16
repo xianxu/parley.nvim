@@ -1,12 +1,20 @@
 ---
 id: 000354
-status: open
+status: working
 deps: [parley.nvim#332]
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '89fecb1a7d4752f84ea4ba02feb4517deef85c14' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '25a30c5c03e9fc997840666fd251a1b66e81cfbe' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T11:20:37-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Attention finder: a floating list of Alt+Return submissions (waiting / answered / seen), restoring each one's breadcrumb
@@ -35,7 +43,10 @@ back when the agent answers a submitted file. Operator design, 2026-10-16 (ops Q
 
 ## Plan
 
-- [ ]
+The durable plan is `workshop/plans/000354-attention-finder-plan.md` (milestones M1 and M2). Operator addition (TL, 2026-10-16), folded into the plan's model: a seen entry leaves after `attention.seen_grace_minutes` (default 60, pending the operator's 1 h vs 15 min); a new submit resets it to waiting; answered entries never opened don't expire.
+
+- [ ] M1 — the model, store and submit recording
+- [ ] M2 — the finder (rows, refresh, open, chord, docs)
 
 ## Log
 
