@@ -1,12 +1,20 @@
 ---
 id: 000235
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-10-16
 estimate_hours:
-card_mirror: '85f309cafa6784e2b641c6765968e36dad444aef' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'e131e9dbe8aec016f75acfff232a9cb3547c4ab2' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T05:22:52-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # One reader for the test-harness signal: file_tracker off g:parley_test_mode
@@ -54,10 +62,15 @@ re-open the leak.
 
 ## Plan
 
-- [ ] Extract the harness-signal helper; route `file_tracker` and `new_default_deferral` through it.
-- [ ] Arch guard: no other reader of the signal in `lua/`; watch it go red.
-- [ ] Remove the `g:` flag and the `chat_move_spec` workaround; fix any spec that depended on the leak.
-- [ ] Spec: no `file_access.json` written under the harness; full `make test`.
+Re-checked 2026-10-16:
+- **Since #261 M5 every spec child loads `tests/minimal_init.vim`**, so `g:parley_test_mode` now reaches specs. The leak this issue describes is likely already closed. It is verified below by the Done-when spec rather than assumed.
+- The highlighter's `new_default_deferral` no longer exists.
+- The signal has FOUR production readers: `file_tracker` (`g:`), `cliproxy.lua` ×2 and `issue_tracker.lua` (`$PARLEY_TEST_MODE`). The goal stands: one reader.
+
+- [ ] `lua/parley/harness.lua`: `active()` returns `vim.env.PARLEY_TEST_MODE == "1"`, the one reader. `file_tracker`, `cliproxy` (×2) and `issue_tracker` call it.
+- [ ] Arch guard in `tests/arch/single_source_sweeps_spec.lua`: no other `lua/` module reads `parley_test_mode` or `PARLEY_TEST_MODE`; seen red with a planted reader.
+- [ ] `g:parley_test_mode` removed from `tests/minimal_init.vim`, `chat_move_spec.lua` and `tests/packaging/spell_compatibility.lua`. `file_tracker_spec` and `tests/helpers/sidecars.lua` toggle `$PARLEY_TEST_MODE` instead.
+- [ ] Spec: under the harness `file_tracker` writes no `file_access.json`; full suite.
 
 ## Log
 
