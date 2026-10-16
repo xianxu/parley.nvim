@@ -77,7 +77,7 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - [x] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
 - [x] Add isolated real/fake conformance and docs/traceability; verify production-door submission feedback and native edit-turn regressions.
 - [x] Add unchanged-submit suppression and explicit rapid resend with lifecycle and production-door regressions.
-- [ ] Complete the required full suite on the final implementation before close.
+- [x] Complete the required full suite on the final implementation before close.
 
 - [x] Unify window rendering/restoration and verify session-versus-agentic equality across every lock, owed, admission and feedback state.
 
@@ -179,6 +179,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 - 2026-10-15 — close round3 is not finalized: FIX-THEN-SHIP verdict is blocked by Important BR-5 window-option-ownership. Reviewer independently passes14 mapped files, lint754, real/fake conformance; distinct-original A→B→A probe exposes baseline transfer after the window changes buffers. Fix the whole ownership class at the pre-leave boundary, with native/current/noncurrent and hidden-owner regressions, then a new full suite and ordinary close. Stage2a73063d remains installed; no landing.
 
 - 2026-10-15 — BR-5 distinct-original roundtrip RED reproduces2 failures (native :buffer and noncurrent nvim_win_set_buf). Pre-leave restoration alone exposed that Neovim had already cached the rendered options. The corrected shared renderer retains original/installed proofs per live window/buffer pair, consumes before entry/new baseline capture, never writes another buffer's options, and removes proofs on entry/wipe/window close. All15 matrix cases and14 mapped files400 cases pass, lint754 clean and no survivors. Logs /tmp/parley332-band-roundtrip-red.log, /tmp/parley332-band-roundtrip-green2.log and /tmp/parley332-band-roundtrip-mapped.log. New full suite and ordinary close remain pending, old stage held.
+
+- 2026-10-15 — corrected BR-5 candidate e5ba732c2cbb8c77b490a1a168930936515bc640 passes required suite445/445 in1m50s; lint754 files0 warnings/errors, no survivors. Retained /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/e5ba732c2cbb8c77b490a1a168930936515bc640/suite.log, SHA256158b04ad55af8df7a005db77eb2350f24103d0fdea7512732202987fbed9851c. Includes15 renderer cases, distinct-baseline native/noncurrent round trips, other-window/hidden-owner safety and all prior session-sync/native cases. No waiver or skip. Ordinary close must dispose BR-5 before restage; old stage remains installed.
 
 ## Revisions
 
