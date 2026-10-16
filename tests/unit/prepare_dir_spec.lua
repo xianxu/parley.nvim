@@ -22,6 +22,23 @@ describe("directory preparation", function()
         assert.equals(1, vim.fn.isdirectory(path))
     end)
 
+    it("accepts another creator winning an intermediate directory (#347)", function()
+        -- Vim's mkdir -p raises E739 when a competitor creates an intermediate
+        -- between its check and its create, leaving the leaf uncreated.
+        local mid, leaf = root .. "/shared/nested", root .. "/shared/nested/leaf"
+        local raced = false
+        vim.fn.mkdir = function(dir, ...)
+            if not raced then
+                raced = true
+                mkdir(mid, "p") -- the competitor
+                error("Vim:E739: Cannot create directory " .. mid .. ": file already exists")
+            end
+            return mkdir(dir, ...)
+        end
+        require("parley.fs").ensure_dir(leaf)
+        assert.equals(1, vim.fn.isdirectory(leaf))
+    end)
+
     it("checks the directory postcondition when mkdir silently fails", function()
         vim.fn.mkdir = function() return 0 end
         local path = root .. "/missing"

@@ -1,13 +1,23 @@
 ---
 id: 000347
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: '0737e219b25277d6f8ac9f85dcec665729b2fe77' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '3534d496c85d2d676646d6696901e168fca9e163' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T02:04:31-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6c031e1c", done: "f2b20930"}
+actual_hours: 0.04
 ---
 
 # fs.ensure_dir fails when another process creates an intermediate directory concurrently
@@ -25,15 +35,35 @@ Likely cause, read from the code: `fs.ensure_dir` tolerates a concurrent creator
 
 ## Spec
 
+`ensure_dir` walks the path itself. Each missing level is created by a
+single-level `vim.fn.mkdir` (no `p`) with the caller's mode. A failure at any
+level is success when the level is a directory afterwards; otherwise the
+original error is raised. `vim.fn.mkdir` stays the one production seam.
+
+## Core concepts
+
+| Concept | Meaning |
+|---|---|
+| `mkdir_level` | creates one directory level and accepts a competitor's directory |
+
 ## Done when
 
-- `ensure_dir` succeeds when any ancestor is created concurrently: it keeps going until the leaf exists, and still raises a real failure such as a file at the path or EACCES.
-- A test reproduces the intermediate-directory race and fails on the old code.
+- [x] `ensure_dir` succeeds when any ancestor is created concurrently: it keeps going until the leaf exists, and still raises a real failure such as a file at the path or EACCES.
+- [x] A test reproduces the intermediate-directory race and fails on the old code.
 
 ## Plan
 
-- [ ]
+- [x] `fs.ensure_dir` recurses to the parent, then calls `mkdir_level`.
+- [x] Red first: a seam case where a competitor wins an intermediate, and the real multi-process race spec.
+- [x] Atlas: test_harness.md and traceability.
 
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Measured old: 8 of 180 racing creators failed (E739 on intermediates). Red: ensure_dir_race_spec and the new prepare_dir_spec seam case fail on old code. Green: race spec 4 runs in a row 0 failures, prepare_dir_spec 10/10, luacheck clean.; review verdict: SHIP
+
+- Taken by parley.nvim:3. Measured on the old code: 6 concurrent nvim creators
+  x 30 rounds on a shared 8-deep path failed 8 of 180, all E739 on an
+  intermediate. Red: `ensure_dir_race_spec` failed 12+ creators in 20 rounds,
+  and the new `prepare_dir_spec` seam case failed. Green: both pass, the race
+  spec 4 runs in a row, prepare_dir_spec 10/10, luacheck clean.
