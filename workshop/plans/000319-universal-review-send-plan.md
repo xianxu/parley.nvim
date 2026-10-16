@@ -93,8 +93,8 @@ Files: README.md, atlas/modes/review.md, atlas/traceability.yaml, issue/plan Log
 - [x] Update docs to say Couch receives submitted: PATH and the shared skill reads frontmatter and Couch diff; document the outside-Couch inline review separately. Remove old last-send-diff descriptions.
 - [x] Run `make test-spec SPEC=modes/review`, `make check-vocabulary`, any landed export freshness check, and `git diff --check`.
 - [x] Publish with `sdlc pr`, then record the full suite once with `sdlc local-check run --name suite`; keep the pinned-head status/log.
-- [ ] Stage through `sdlc stage --build` under hub coordination. The live check submits a process-instruction file, verifies the exact submitted-only delivery and skill-driven response, edits/resubmits to verify changes-since-last-read handling, and exercises outside-Couch inline review in an isolated fixture.
-- [ ] Close with concrete evidence, address the binary-owned mandatory review, land on SHIP using `sdlc merge --yes`, clear any leftover stage, and report the PR/outcome to the hub.
+- [x] Stage through `sdlc stage --build` under hub coordination. The live check submits a process-instruction file, verifies the exact submitted-only delivery and skill-driven response, edits/resubmits to verify changes-since-last-read handling, and exercises outside-Couch inline review in an isolated fixture.
+- [x] Close with concrete evidence, address the binary-owned mandatory review, land on SHIP using `sdlc merge --yes`, clear any leftover stage, and report the PR/outcome to the hub.
 
 ## Revisions
 

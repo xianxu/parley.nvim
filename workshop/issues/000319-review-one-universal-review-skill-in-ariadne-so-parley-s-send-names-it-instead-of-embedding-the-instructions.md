@@ -39,7 +39,7 @@ Lift the review protocol into ariadne as one agent skill (working name `xx-unive
 - [x] Record the hub-approved submitted-only revision and notify the shared-skill/S1 owners.
 - [x] Wait for ariadne#399 and parley.nvim#332 (S1 depends on pair#573), then inspect their landed interfaces and run change-code.
 - [x] Delete the verbose Couch builder, editor diff/baseline and alternate send branch; preserve S1's exact submitted-only payload and the canonical inline review outside Couch.
-- [ ] Run targeted/full verification, coordinate the staged live check, close on SHIP and land.
+- [x] Run targeted/full verification, coordinate the staged live check, close on SHIP and land.
 
 Durable plan: [universal review submissions](../plans/000319-universal-review-send-plan.md).
 
@@ -235,3 +235,10 @@ Hub delivery 20a83170-e3d1-4580-8564-3f796f4818b2 reports the operator accepted
 Authorized to land #319 from this branch through the landing line, then #334.
 Merged current origin/main cleanly before close; repeating recorded suite
 because main's code changed since the prior green run. No #319 code changed.
+
+Final verification after clean main integration: recorded sdlc-local/suite on
+60d0a78522985863726f697538d8b51821aad308 passed exit 0 in 3m2s, log sha256
+prefix a07a85a6b4fa, orphan census clean. Operator smoke accepted as above.
+Implementation/verification tasks are complete; invoking the required close
+review and publish gates now. Landing and its outcome report are gate-owned
+remaining actions, not a claim of an already merged PR.
