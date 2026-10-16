@@ -96,6 +96,7 @@ reap drops `sigterm`: its only reason was the old window.
 ## Log
 
 ### 2026-10-15
+- 2026-10-15: closed — Red: shipped case with exit delay shrunk to 1000/2500 ms fails at :490 both times (race margin under 1.5 s idle). Green: PARLEY_FAKE_IGNORE_SIGTERM; 12 concurrent runs 40/40; BR-1: the case SIGKILLs its held proxy and waits for the port down; mutation without the kill fails at :508; 6 concurrent runs 40/40; fixture_reaping_spec 12/12; BR-3 docs swept. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 - Red: the shipped case with the exit delay shrunk to 1000 ms and to 2500 ms
   failed both times at :490 (mode 2). So the race is real, and the margin at

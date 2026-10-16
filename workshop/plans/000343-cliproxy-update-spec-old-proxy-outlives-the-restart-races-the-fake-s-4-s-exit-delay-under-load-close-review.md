@@ -181,3 +181,82 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"f0ddc047-1aa4-4083-b5ae-7fdaf2603bee","repository":"github.com/xianxu/parley.nvim","issue_id":"000343","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/8affff9517abc49e","reviewed_head":"eec0403b71acd1f29ee4207627c34023e7852f7c","slot":"parley.nvim:3","requested_at":"2026-10-16T06:55:34.771121Z"},"phase":"finished","pid":45773,"started_at":"2026-10-16T06:55:35.205246Z","finished_at":"2026-10-16T06:58:03.379206Z","session_id":"5a6efc96-4f51-4504-8c95-ea8f84086daf","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T00:05:28-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 343 — cliproxy_update_spec: 'old proxy outlives the restart' races the fake's 4 s exit delay under load |
+| repo | parley.nvim |
+| issue file | workshop/issues/000343-cliproxy-update-spec-old-proxy-outlives-the-restart-races-the-fake-s-4-s-exit-delay-under-load.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 30a94402e6a3978a2ce58fbf795dc3eee9389d2d..10db2bcdc144b82f823a01f020d0e2e0e2fbcff0 |
+| command | sdlc close --issue 343 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T00:05:28-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking how to run the spec so I can verify the fix directly.
+
+Locating the harness mapping for the update spec, then running it.
+
+The plenary path didn't resolve; retrying with the real one.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This change is ready to ship. The fix swaps the old 4 s wall-clock exit delay for a state the case controls: `PARLEY_FAKE_IGNORE_SIGTERM=1`. That one change removes both failure modes in the issue. The port wait now always ends with the old proxy still answering, and the final probe always sees 9.9.4. The case keeps the pids parley spawned, SIGKILLs them itself, and then checks that the port goes down. The one open finding, BR-3, is fixed at all six places it named, and a Revisions entry was added. I ran `cliproxy_update_spec` twice at head in an isolated harness environment. Both runs passed 40/40 with 0 failed and 0 errors, and no `fake_cliproxy` from this checkout was left running afterwards. The only thing left is a Minor wording leftover in `## Done when`.
+
+Done-when: current. Clause 1 is met: the wall-clock window is gone, and `grep EXIT_DELAY` outside `workshop/` finds nothing. Clause 2 is backed by the Log's 12 concurrent runs at 40/40. The one wording leftover ("then is reaped") is noted below as Minor and does not change what the clause requires.
+
+1. **Strengths**
+   - `tests/fixtures/fake_cliproxy:542-548`: the fake no longer runs a timer. It just sets `SIG_IGN`, which makes the race deterministic, and the `threading` import was removed with it.
+   - `tests/integration/cliproxy_update_spec.lua:243-251, 267`: `held`/`kill_held` covers both paths. The case kills the proxy itself when it passes, and `after_each` kills it if the case failed before getting that far. `pcall` keeps an already-dead pid harmless.
+   - `cliproxy_update_spec.lua:509-512`: after the kill, the case checks that the port actually goes down. Without that check, a leaked proxy would go unnoticed.
+   - The shared reap is back on default SIGKILL (`:48-50`). Its doc comment now says correctly that the reap never sees parley's own spawn.
+   - The fake's env var was renamed everywhere it appears: `cliproxy.lua:468,493`, the atlas, `fixture_process.lua:58` and `fixture_reaping_spec.lua:192`. No stale references to the old name remain.
+
+2. **Critical findings**: none.
+
+3. **Important findings**: none.
+
+4. **Minor findings**
+   - Issue `## Done when` clause 1 still says the old proxy "then is reaped". This is the 3rd finding in family `teardown-claim-unbacked-by-kill-path` (detail below).
+
+5. **Test coverage notes**
+   - The race the issue describes is now impossible by construction, so no new timing test is needed. The red evidence in the Log (shrinking the delay to 1000 or 2500 ms fails at :490) shows the old case really did race.
+   - The `kill_held` regression is caught by `:509-512`. The Log's mutation (dropping the in-case kill makes the case fail at :508) is consistent with the code.
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass.** `kill_held` is a 5-line local helper with a single owner. Nothing in the tree already kills arbitrary pids for specs: `fixture_process.reap` only signals processes started through `fixture_process.spawn`.
+   - **ARCH-PURE: pass.** The change only touches test fixtures and comments. No production logic changed.
+   - **ARCH-PURPOSE: pass.** The wall-clock window was removed outright, not widened. Every consumer was swept, and no reference to the old env var remains outside the workshop files.
+
+7. **Plan revision recommendations**: none beyond the Done-when wording below. The existing Revisions entry covers BR-1 and BR-3.
+
+```findings
+dispose:
+  - id: BR-3
+    disposition: addressed
+    note: |
+      All six instances fixed at head - spec reap comment (cliproxy_update_spec.lua:45-47), fake_cliproxy:542-546, atlas cliproxy-managed.md:487-489, issue Spec, Core concepts row, Plan item - plus a Revisions entry; prose-only, and the kill path itself is pinned by cliproxy_update_spec.lua:509-512.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: teardown-claim-unbacked-by-kill-path
+    title: |
+      Issue Done-when clause 1 still says the held proxy "then is reaped"
+    detail: |
+      3rd in family. Rule: any text saying what ends the SIGTERM-ignoring proxy must name the case's own pid SIGKILL (kill_held), never "reap", because fixture_process.reap only signals fixture_process.spawn children. Enumeration in this window: the only remaining instance is the "e.g." in Done-when clause 1. All code, atlas and Spec/Plan/Core-concepts text is now correct. Fix: reword to "...until the case SIGKILLs the pids it held", if the flow allows editing Done-when.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"9ff1c12f-5bc5-4d65-b495-e838cd044d64","repository":"github.com/xianxu/parley.nvim","issue_id":"000343","recipe":"small-diff-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/11b5b4ff912a9b05","reviewed_head":"10db2bcdc144b82f823a01f020d0e2e0e2fbcff0","slot":"parley.nvim:3","requested_at":"2026-10-16T06:59:34.964307Z"},"phase":"finished","pid":69666,"started_at":"2026-10-16T06:59:35.205788Z","finished_at":"2026-10-16T07:05:26.623427Z","session_id":"dd15fe84-658e-4096-bf46-63613088ae0f","outcome":"returned"}] -->
