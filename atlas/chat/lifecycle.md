@@ -301,11 +301,23 @@ exchanges are all after it.
 
 `chat_tree.path_up` follows `parent_link` upward while each parent lists the
 child among its branches. A parent that does not link back ends the path, and
-so do a cycle or the depth cap of 20. `chat_tree.linearize` emits the path's
+so does a cycle; there is no depth cap (#349: a whole-tree command must see the whole tree). `chat_tree.linearize` emits the path's
 files with their left subtrees, under a visited set. Every file is read as the
 user sees it (`helper.chat_lines`): from its loaded buffer when one is open, else
 from the file. An exchange still being regenerated contributes its previous
 answer, as above.
+
+One walker for the tree (#349). The root is `chat_tree.root`, the first file
+of `path_up`, and the whole tree is `chat_tree.files`, depth-first from the
+root. Delete-tree, move, export and the `<M-t>` outline derive from them, over
+`chat_tree.disk_deps()` (the saved files they act on). The request context uses
+`io_deps()`. A parent that no longer lists the child ends the walk here too: from an
+orphaned child, delete-tree, move, export and the outline act on the child's own
+tree. The old root finders climbed to the parent, whose tree does not contain the
+child, so delete-tree removed the parent and kept the operator's file. A sweep in
+`tests/arch/single_source_sweeps_spec.lua` refuses another module that resolves
+a parent link or a branch path. The outline's branch rows are exempt: they resolve
+a child for display.
 
 Each aside off the current file carries its anchor (the exchange it hangs
 after, and the row of its branch reference). A batch leg that leaves the

@@ -142,13 +142,73 @@ describe("chat_tree.path_up (#233)", function()
         assert.equals(2, path[1].stop_branch)
     end)
 
-    it("stops at the depth cap", function()
+    -- #349 BR-1: no depth cap; a whole-tree command needs the real root.
+    it("walks every ancestor of a chain deeper than 20", function()
         local files = {}
         for i = 0, 30 do
             files["f" .. i .. ".md"] = file({ "Q" .. i, { branch = "f" .. (i + 1) .. ".md" } },
                 i > 0 and ("f" .. (i - 1) .. ".md") or nil)
         end
         local path = Tree.path_up("/c/f30.md", files["f30.md"], deps(files))
-        assert.equals(21, #path) -- the current file and 20 ancestors
+        assert.equals(31, #path) -- the current file and all 30 ancestors
+    end)
+end)
+
+describe("chat_tree.root and files (#349)", function()
+    local function names(list)
+        local out = {}
+        for _, item in ipairs(list) do out[#out + 1] = item.file:gsub("^/c/", "") end
+        return out
+    end
+
+    it("finds the root through every linked ancestor", function()
+        local files = {
+            ["root.md"] = file({ "R1", { branch = "a.md" } }),
+            ["a.md"] = file({ "A1", { branch = "aa.md" } }, "root.md"),
+            ["aa.md"] = file({ "AA1" }, "a.md"),
+        }
+        assert.equals("/c/root.md", Tree.root("/c/aa.md", deps(files)))
+    end)
+
+    it("makes an orphaned child its own root: the parent no longer lists it", function()
+        local files = {
+            ["root.md"] = file({ "R1" }),
+            ["a.md"] = file({ "A1" }, "root.md"),
+        }
+        assert.equals("/c/a.md", Tree.root("/c/a.md", deps(files)))
+    end)
+
+    it("makes an unloadable file its own root", function()
+        assert.equals("/c/gone.md", Tree.root("/c/gone.md", deps({})))
+    end)
+
+    it("lists the tree depth-first, each file once, skipping unloadable ones", function()
+        local files = {
+            ["root.md"] = file({ "R1", { branch = "a.md" }, "R2", { branch = "b.md" }, { branch = "gone.md" } }),
+            ["a.md"] = file({ "A1", { branch = "aa.md" }, { branch = "root.md" } }, "root.md"),
+            ["aa.md"] = file({ "AA1" }, "a.md"),
+            ["b.md"] = file({ "B1" }, "root.md"),
+        }
+        local list = Tree.files("/c/root.md", deps(files))
+        assert.same({ "root.md", "a.md", "aa.md", "b.md" }, names(list))
+        assert.equals(files["a.md"], list[2].parsed)
+    end)
+
+    -- BR-1: a whole-tree command must see the whole tree; the seen set ends a cycle.
+    it("lists a chain deeper than any depth cap in full", function()
+        local files = {}
+        for i = 0, 30 do files["f" .. i .. ".md"] = file({ "Q" .. i, { branch = "f" .. (i + 1) .. ".md" } }) end
+        files["f30.md"] = file({ "Q30", { branch = "f0.md" } })
+        assert.equals(31, #Tree.files("/c/f0.md", deps(files)))
+    end)
+
+    it("skips an unloadable file's subtree with it", function()
+        local files = {
+            ["root.md"] = file({ "R1", { branch = "gone.md" }, { branch = "b.md" } }),
+            ["b.md"] = file({ "B1" }, "root.md"),
+        }
+        -- gone.md cannot be read, so its own branches are never seen; b.md, a
+        -- sibling, still is.
+        assert.same({ "root.md", "b.md" }, names(Tree.files("/c/root.md", deps(files))))
     end)
 end)

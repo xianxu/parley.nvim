@@ -633,3 +633,7 @@ oracle, and the mutation that would make the test fail.
 ## #352: a new rendering form for an existing message kind reuses its builder
 
 - The close review found the off-path summary form restating the summarized branch's summary message and missing its blank-question guard. When a new path emits a message an existing branch already emits, call one shared helper, and carry over that branch's guards with it.
+
+## #349: deleting a local removes its readers too
+
+- Replacing `find_tree_root_file` deleted the local `root` that delete-tree's prompt still read, and the tests stubbed `confirm` without checking its text. Lint caught it in the suite. After deleting a local, run `make lint`, or grep the function for the name, before the suite; and a test that stubs a prompt asserts what the prompt says.

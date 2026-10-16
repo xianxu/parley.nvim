@@ -32,7 +32,7 @@
 - Document order (ascending line number)
 
 ## Tree-Aware Outline (Chat Files)
-- Walks parent chain to root; builds unified outline across linked files
+- Takes the root from `chat_tree.root` over the saved files (#349); builds unified outline across linked files
 - Root topic shown as `📋 topic` at top
 - Multiple inline branches on one source line appear left to right, each followed by its expanded child subtree. Standalone and inline branch rows retain their existing indentation and child-file destinations.
 - All branches expanded by default; 2-space indentation per depth level
