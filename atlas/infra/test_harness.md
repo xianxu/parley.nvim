@@ -46,15 +46,16 @@ the spec, and the harness-only guards it installs (a per-process
 `$PARLEY_QUERY_DIR`, the watch for a refusal with no words) cover the whole
 suite rather than the specs that remember to ask (#261 M5). Before that, children
 started with no `-u` at all and only the environment carried over, which is why
-the init also exports `$PARLEY_TEST_MODE=1`; production code that must know it is
-under the harness reads that, and works either way. A spec that needs
-`g:parley_test_mode` to differ sets it itself: `file_tracker_spec` clears it to
-exercise real persistence, `tests/helpers/sidecars.lua` clears it for one tracked
-open, and `chat_move_spec` sets it. The highlight
-structure's scheduled repair (#227) keys on it: under the harness no repair
-timer fires on its own, and a spec opts into the real clock with
-`highlighter._set_repair_deferral(nil, ms)` or fires one by hand
-(`tests/helpers/decoration.lua`).
+the harness signal is an environment variable, `$PARLEY_TEST_MODE=1`, which every
+child inherits however it starts. It has ONE reader, `test_isolation.active()`
+(#235). `file_tracker` asks it, so the suite never writes the shared
+`file_access.json`; so do `cliproxy`, which refuses data roots outside the
+isolated env and honors a releases-URL override only in tests, and
+`issue_tracker`, which never fetches a remote. `single_source_sweeps_spec`
+refuses any other `lua/` reader, including the retired `g:parley_test_mode`. A
+spec that needs the real behavior clears the variable for its case:
+`file_tracker_spec` exercises real persistence, and `tests/helpers/sidecars.lua`
+does one tracked open.
 
 `tests/arch/scratch_placement_spec.lua` is the guard: it asserts
 `vim.fn.tempname()`, `'directory'`, `$HOME`, and the `$XDG_*` dirs all resolve

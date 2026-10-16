@@ -3,7 +3,8 @@ local runtime = assert(vim.env.PARLEY_RUNTIME)
 local profile = vim.env.PARLEY_SPELL_PROFILE or 'plugin'
 vim.opt.rtp:prepend(runtime)
 vim.opt.rtp:append(assert(vim.env.PARLEY_BLINK_RUNTIME))
-vim.g.parley_test_mode = true
+-- The harness signal is $PARLEY_TEST_MODE (#235), which
+-- scripts/check-spell-compatibility.sh exports for this probe.
 local cmp = require('blink.cmp')
 if profile == 'app' then
     local lazy = vim.fn.stdpath('data') .. '/lazy/lazy.nvim/lua/lazy'
