@@ -1,6 +1,6 @@
 ---
 id: 000357
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 1.45
+tracker:
+    version: 1
+    completion:
+        token: close-1f7791ee5100
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 71341518fbb6feb4c69136b4c72d295f86e0a492
+        evidence_commit: 6b21c9bdbe669ef1ee6c6200f3afd1338edf1db5
 ---
 
 # Alt+Return times out under load: asynchronous submit, generous deadline, unconfirmed instead of failed
