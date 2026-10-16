@@ -5,8 +5,8 @@ deps: []
 github_issue:
 created: 2026-09-12
 updated: 2026-10-16
-estimate_hours:
-card_mirror: '2d726f14e3dea5c66c6c35ec5950a6977806129c' # card fields mirrored from issue-cards; edit via sdlc
+estimate_hours: 8.37
+card_mirror: '5b62ff3db97fe8ee4628c2772b00d30d62030af3' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T07:13:14-07:00
 claimant:
     operator: Xian Xu
@@ -133,6 +133,39 @@ is not a chat provider); making the fake answer sensibly.
 - `PARLEY_LIVE_PROVIDERS=1 make test` runs the conformance spec against the
   real APIs and passes; without the variable it is skipped, not failed.
 - A full run leaves no `fake_provider` process behind (#220's check).
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec              design=0.60 impl=0.04
+item: api-integration         design=0.40 impl=0.60
+item: api-integration         design=0.40 impl=0.60
+item: api-integration         design=0.40 impl=0.60
+item: cross-cutting-refactor  design=0.10 impl=0.20
+item: lua-neovim              design=0.30 impl=0.60
+item: lua-neovim              design=0.30 impl=0.60
+item: lua-neovim              design=0.30 impl=0.60
+item: real-api-discovery      design=0.00 impl=0.24
+item: atlas-docs              design=0.04 impl=0.08
+item: milestone-review        design=0.10 impl=0.20
+item: milestone-review        design=0.10 impl=0.20
+item: milestone-review        design=0.10 impl=0.20
+design-buffer: 0.15
+total: 8.37
+```
+
+The items:
+- **api-integration ×3:** one per wire dialect (anthropic; the openai family; googleai): the shared dialect module, fake_provider's request-keyed behaviour and failure modes, and their fixture-backed tests.
+- **cross-cutting-refactor:** moves fake_cliproxy's chat surface onto the shared module across its 12 specs.
+- **lua-neovim ×3:** the scenario-table integration specs with the copilot token-URL seam; the standalone #228/#229 proofs on their pre-fix parents; and the gated live conformance spec with the second-call capture script.
+- **real-api-discovery ×1, not 3:** the dialect shapes come from recorded fixtures, and the live runs are operator steps.
+- **milestone-review ×3:** one per M1–M3 boundary.
+
+The approved, thorough plan earns v2's ×0.2 design discount on the implementation primitives (design 0.4 from 1–3 ×0.2 for api-integration). Each `impl=` is 40% of the v2 table's high value (1.5 → 0.6), per v3.1. The design buffer is +15% (thorough plan doc). Library check: no existing library provides SSE fakes for these wires; the repo's own fake_cliproxy is reused, which is what the cross-cutting-refactor item prices.
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only. `sdlc estimate-source` reported the calibration source stale on 2026-10-16, so the per-primitive values are provisional.*
 
 ## Plan
 
