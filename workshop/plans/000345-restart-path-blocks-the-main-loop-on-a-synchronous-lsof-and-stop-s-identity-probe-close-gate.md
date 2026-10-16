@@ -434,6 +434,98 @@ rounds:
       isolation: checkout
       reviewed: 383e8a4aab82ca42ece2df4cd98c3aa9e365aebd
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: f7065571-2c6f-45a1-a8d3-dd6473023b3e
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000345"
+            recipe: fix-review
+            round: 6
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/1c8eae2451e91753
+            reviewed_head: fa84a1b5b90b93131730740e12cf2da92c7ca882
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T10:54:56.559673Z"
+          phase: finished
+          pid: 37708
+          started_at: "2026-10-16T10:54:56.729754Z"
+          finished_at: "2026-10-16T10:55:34.792459Z"
+          session_id: 9d6223f7-5eab-47dc-93fe-5ca40d3040c5
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: fa84a1b5b90b93131730740e12cf2da92c7ca882
+        tracker_head: f77f0575d4a4015824d9a169f4ae2631bb9f772c
+        branch_point: 0a616029f43d1a239f5a46bb3fc0b42a129dcd9a
+        since: "2026-10-16T01:01:31-07:00"
+        until: "2026-10-16T03:54:31-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T01:01:31-07:00"
+              end: "2026-10-16T03:54:31-07:00"
+              began: "2026-10-16T01:01:31-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: 6a01981c4f8f0430d2a832112e8a722549fa0ce34b656f5ca8700e3444057e42
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 5574646
+              windows:
+                - start: "2026-10-16T01:01:31-07:00"
+                  end: "2026-10-16T03:54:31-07:00"
+        cuts:
+            - dispatched: "2026-10-16T01:43:07-07:00"
+              finalized: "2026-10-16T01:46:51-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T02:03:42-07:00"
+              finalized: "2026-10-16T02:07:26-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T02:17:17-07:00"
+              finalized: "2026-10-16T02:20:57-07:00"
+              finalizing: true
+            - dispatched: "2026-10-16T03:34:31-07:00"
+              finalized: "2026-10-16T03:37:10-07:00"
+              finalizing: true
+            - dispatched: "2026-10-16T03:52:47-07:00"
+              finalized: "2026-10-16T03:54:05-07:00"
+              finalizing: true
+      "n": 6
+      timestamp: "2026-10-16T03:55:35-07:00"
+      dispatched: "2026-10-16T03:54:56-07:00"
+      agent: claude
+      dispose:
+        - id: BR-4
+          disposition: not-addressed
+          note: No code change in this window; the race is still accepted in the Log (line 122) and unmodelled. Stays Minor and non-blocking.
+          round: 6
+        - id: BR-6
+          disposition: addressed
+          note: At fa84a1b5 the Log headline (issue line 106), the cb(count, pids) Plan item (80) and the round-3 Log claim (101) carry Superseded notes. A sweep finds no other unannotated option-A claim, and the current sync-read list is in Revisions 144-148.
+          round: 6
+      findings:
+        - kind: defect
+          id: BR-8
+          severity: Minor
+          title: Spec superseded note is attached to the BR-8 reporting bullet instead of the async-read sentence it overrides
+          detail: 'This is the 3rd finding in family doc-annotation-placement. Rule: an annotation or doc block sits directly on the text it qualifies, and on nothing else. That covers code doc blocks and prose notes alike. Here, issue line 45 marks the "proxy still answering at the deadline is reported" bullet as superseded, yet that contract still holds on both paths. Option B only overrides line 41''s "make the restart path''s listener read asynchronous". Fix: move the note to line 41, and extend the lessons.md rule to prose notes as well as code doc blocks.'
+          family: doc-annotation-placement
+          round: 6
+      recipe: fix-review
+      isolation: checkout
+      reviewed: fa84a1b5b90b93131730740e12cf2da92c7ca882
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#345 (boundary-review)
@@ -498,7 +590,19 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-6 — not-addressed — Partly fixed: the stop row, the Plan items, two Log bullets and the Done-when list are corrected. But Log line 105, "The restart path now has no main-loop lsof or curl", which round 4 quoted, is still unmarked and false for the budgeted paths. The Revisions claim that every stale claim was swept is therefore inaccurate. Fix: one Superseded note.
 - BR-7 — addressed — init.lua:384-391 WARNs and names read_err. The new spec case fails when the branch is disabled (if read_err changed to if false), verified in the harness and then restored.
 
+## Round 6 — 2026-10-16T03:55:35-07:00 (claude) — passed
+
+### Disposed
+
+- BR-4 — not-addressed — No code change in this window; the race is still accepted in the Log (line 122) and unmodelled. Stays Minor and non-blocking.
+- BR-6 — addressed — At fa84a1b5 the Log headline (issue line 106), the cb(count, pids) Plan item (80) and the round-3 Log claim (101) carry Superseded notes. A sweep finds no other unannotated option-A claim, and the current sync-read list is in Revisions 144-148.
+
+### Raised
+
+- **BR-8** [Minor] `doc-annotation-placement` (kind: defect) Spec superseded note is attached to the BR-8 reporting bullet instead of the async-read sentence it overrides
+  This is the 3rd finding in family doc-annotation-placement. Rule: an annotation or doc block sits directly on the text it qualifies, and on nothing else. That covers code doc blocks and prose notes alike. Here, issue line 45 marks the "proxy still answering at the deadline is reported" bullet as superseded, yet that contract still holds on both paths. Option B only overrides line 41's "make the restart path's listener read asynchronous". Fix: move the note to line 41, and extend the lessons.md rule to prose notes as well as code doc blocks.
+
 ## Open findings
 
 - **BR-4** [Minor] `unmodeled-async-interleaving` (kind: defect) stop_async's async probe and lsof window lets a concurrent ensure_running's fresh proxy be found and SIGTERMed
-- **BR-6** [Important] `plan-stale-after-revision` (kind: defect) The issue's Plan, Core-concepts stop row and Log still describe option A after the option-B revision
+- **BR-8** [Minor] `doc-annotation-placement` (kind: defect) Spec superseded note is attached to the BR-8 reporting bullet instead of the async-read sentence it overrides

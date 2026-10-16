@@ -503,3 +503,79 @@ dispose:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"d5bcbd80-11c9-4530-9ed4-42def1e16b8f","repository":"github.com/xianxu/parley.nvim","issue_id":"000345","recipe":"fix-review","round":5,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/0eb114a3d86121d2","reviewed_head":"383e8a4aab82ca42ece2df4cd98c3aa9e365aebd","slot":"parley.nvim:4","requested_at":"2026-10-16T10:52:47.259756Z"},"phase":"finished","pid":32088,"started_at":"2026-10-16T10:52:47.419756Z","finished_at":"2026-10-16T10:54:03.623907Z","session_id":"1639a0fa-2252-43dd-bf4f-09d3db300f44","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T03:55:35-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 345 — Restart path blocks the main loop on a synchronous lsof (and stop's identity probe) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000345-restart-path-blocks-the-main-loop-on-a-synchronous-lsof-and-stop-s-identity-probe.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 017be76a589fee4d2a6d29caa3040fd9fd4f8470..fa84a1b5b90b93131730740e12cf2da92c7ca882 |
+| command | sdlc close --issue 345 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T03:55:35-07:00 |
+| verdict | SHIP |
+
+## Review
+
+I'm checking the remaining window file (the close-gate ledger), then I'll write the verdict.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This round fixes the one remaining blocking finding, BR-6, and changes no code. The window touches only workshop files: the issue file, the close-review log and the close-gate ledger. The fix adds "Superseded by option B" notes to the claims round 5 named. The Log headline "The restart path now has no main-loop lsof or curl" now carries one (issue line 106). The `cb(count, pids)` Plan item now says the callback gets `read_err` too (line 80). The round-3 Log entry now says its "no main-loop lsof or curl" claim holds only for the interactive commands (line 101). I swept every Plan, Core-concepts and Log claim that names option A's mechanism, and each one is now either rewritten (the `stop`, `stop_async` and `restart_managed` rows, lines 61–63) or annotated (lines 45, 80, 82, 84, 87, 93, 101, 106, 109, 111, 112). The current list of sync reads that still run on the main loop is in ## Revisions (lines 144–148), with each read justified, so Done-when #1 is covered.
+
+The `## Spec` edit (line 45) only points to a decision earlier rounds already accepted (option B, ## Revisions line 132). It does not change scope. One small problem with it: the note sits on the wrong bullet, raised as a Minor below. The close-gate ledger diff is bookkeeping only (reviewer runs and actual inputs).
+
+1. **Strengths**
+   - The notes are added next to the old text rather than replacing it, so the reasons behind option A stay readable (lines 82, 84, 106, 109).
+   - The Core-concepts rows were rewritten to describe option B rather than just annotated, so the table can be trusted as-is (lines 61–63).
+   - The current list of main-loop sync reads is in one place (## Revisions, lines 144–148), and each read has its reason, which closes the Done-when #1 gap from round 4.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - The Spec's superseded note is attached to the third bullet ("a proxy still answering at the deadline is reported (#237 BR-8)", line 45). But what option B overrides is the opening sentence, "Make the restart path's listener read asynchronous", not the BR-8 reporting, which both paths still do. Someone reading line 45 could think the deadline report was dropped. Raised below.
+   - BR-4 has not changed: the race is still accepted in the Log (line 122) and not modelled.
+
+5. **Test coverage:** this window changes no code, so nothing new needs testing. The tests the earlier rounds checked still stand.
+
+6. **Architecture (interdiff only)**
+   - **ARCH-DRY:** pass. The notes all point to ## Revisions rather than repeating the decision.
+   - **ARCH-PURE:** not applicable (no code in the window).
+   - **ARCH-PURPOSE:** pass. The BR-6 sweep now covers every stale claim, not just the line round 5 named.
+
+7. **Plan revisions:** optionally move the line-45 note onto the Spec's opening sentence. Nothing else is needed.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      No code change in this window; the race is still accepted in the Log (line 122) and unmodelled. Stays Minor and non-blocking.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      At fa84a1b5 the Log headline (issue line 106), the cb(count, pids) Plan item (80) and the round-3 Log claim (101) carry Superseded notes. A sweep finds no other unannotated option-A claim, and the current sync-read list is in Revisions 144-148.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: doc-annotation-placement
+    title: |
+      Spec superseded note is attached to the BR-8 reporting bullet instead of the async-read sentence it overrides
+    detail: |
+      This is the 3rd finding in family doc-annotation-placement. Rule: an annotation or doc block sits directly on the text it qualifies, and on nothing else. That covers code doc blocks and prose notes alike. Here, issue line 45 marks the "proxy still answering at the deadline is reported" bullet as superseded, yet that contract still holds on both paths. Option B only overrides line 41's "make the restart path's listener read asynchronous". Fix: move the note to line 41, and extend the lessons.md rule to prose notes as well as code doc blocks.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"f7065571-2c6f-45a1-a8d3-dd6473023b3e","repository":"github.com/xianxu/parley.nvim","issue_id":"000345","recipe":"fix-review","round":6,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/1c8eae2451e91753","reviewed_head":"fa84a1b5b90b93131730740e12cf2da92c7ca882","slot":"parley.nvim:4","requested_at":"2026-10-16T10:54:56.559673Z"},"phase":"finished","pid":37708,"started_at":"2026-10-16T10:54:56.729754Z","finished_at":"2026-10-16T10:55:34.792459Z","session_id":"9d6223f7-5eab-47dc-93fe-5ca40d3040c5","outcome":"returned"}] -->
