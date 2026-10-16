@@ -17,7 +17,141 @@
 -- writes every body, runs the reader, and submits a chat.
 local FakeProcess = require("tests.helpers.fake_process")
 
+local uv = vim.uv or vim.loop
+local CACHE_SCOPE = "sidecar-cache-fixture"
+local JOURNAL_NAMESPACE, JOURNAL_ID = "sidecar-journal-fixture", "sidecar-journal-id"
+local LEASE_NAMESPACE, LEASE_ID = "sidecar-lease-fixture", "sidecar-lease-id"
+local function digest(value) return vim.fn.sha256(value) end
+local function bytes(path)
+    local file = assert(io.open(path, "rb"))
+    local value = file:read("*a"); assert(file:close())
+    return value
+end
+local function cache_namespace(parley)
+    return table.concat({ "", parley.config.state_dir .. "/sidecar-cache-store", CACHE_SCOPE }, "\n")
+end
+local function cache_path(parley)
+    return parley.config.state_dir .. "/document-cache/" .. digest(cache_namespace(parley)) .. "/known.json"
+end
+local journal_file = "document-moves/" .. digest(JOURNAL_NAMESPACE) .. "/" .. digest(JOURNAL_ID) .. ".json"
+local lease_file = "document-leases/" .. digest(LEASE_NAMESPACE) .. "/" .. digest(LEASE_ID) .. ".lock"
+
+local function exercise_cache(parley)
+    local registry = require("parley.document_registry")
+    local documents = require("parley.agentic_document")
+    local request, saved_env = registry.request, {}
+    for _, name in ipairs({ "COUCH_THREAD_SCOPE", "COUCH_THREAD_TAG", "COUCH_STORE_DIR", "COUCH_ISOLATED_ROOT" }) do
+        saved_env[name] = vim.env[name]
+    end
+    local path = parley.config.state_dir .. "/sidecar-cache-input.md"
+    local buf, calls, reply = nil, 0, { kind = "unavailable", error = "fixture offline" }
+    registry.request = function(operation, _, _, callback)
+        assert(operation == "lookup", "cache corruption attempted a registry mutation")
+        calls = calls + 1
+        callback(vim.deepcopy(reply))
+        return { cancel = function() end }
+    end
+    vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = CACHE_SCOPE, "sidecar-cache-slot"
+    vim.env.COUCH_STORE_DIR, vim.env.COUCH_ISOLATED_ROOT = parley.config.state_dir .. "/sidecar-cache-store", nil
+    local ok, err = pcall(function()
+        vim.fn.writefile({ "plain document" }, path)
+        buf = vim.api.nvim_create_buf(false, false)
+        vim.api.nvim_buf_set_name(buf, path)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "plain document" })
+        assert(documents.attach(buf), "cache reader did not attach")
+        assert(documents.status(buf).phase == "unknown", "corrupt cache fabricated admission")
+        assert(documents.identity(buf) == nil, "corrupt cache fabricated a registration")
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "editable while offline" })
+        assert(uv.fs_lstat(path .. ".lock") == nil, "unknown cache created an edit-turn lock")
+        reply = { kind = "absent" }
+        documents.recheck(buf)
+        assert(calls == 2 and documents.status(buf).phase == "plain", "confirmed absence did not settle admission")
+        local rewritten = vim.json.decode(bytes(cache_path(parley)))
+        assert(rewritten.version == 1 and type(rewritten.entries) == "table" and next(rewritten.entries) == nil,
+            "confirmed absence did not rewrite the corrupt cache as typed empty knowledge")
+    end)
+    if buf then
+        documents.detach(buf)
+        if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
+    end
+    registry.request = request
+    for _, name in ipairs({ "COUCH_THREAD_SCOPE", "COUCH_THREAD_TAG", "COUCH_STORE_DIR", "COUCH_ISOLATED_ROOT" }) do
+        vim.env[name] = saved_env[name]
+    end
+    vim.fn.delete(path)
+    assert(ok, err)
+end
+
+local function exercise_journal(parley, path)
+    path = path or parley.config.state_dir .. "/" .. journal_file
+    local before = bytes(path)
+    local moves = require("parley.document_move")
+    local summaries, scan_err = moves.pending(JOURNAL_NAMESPACE, { root = parley.config.state_dir })
+    assert(summaries == nil and scan_err.kind == "pending", "corrupt intent was admitted as recoverable")
+    local called = false
+    local operation, recover_err = moves.recover(JOURNAL_NAMESPACE, JOURNAL_ID, { root = parley.config.state_dir },
+        function() called = true end)
+    if operation then operation.release() end
+    assert(operation == nil and recover_err.kind == "pending" and not called, "corrupt intent authorized recovery effects")
+    assert(bytes(path) == before, "corrupt journal was discarded or rewritten")
+    local lease = assert(require("parley.document_lease").acquire(JOURNAL_NAMESPACE, JOURNAL_ID, { root = parley.config.state_dir }))
+    assert(lease.release(), "failed recovery leaked its kernel lease")
+end
+
+local function exercise_lease(parley, path)
+    path = path or parley.config.state_dir .. "/" .. lease_file
+    local before, inode = bytes(path), assert(uv.fs_lstat(path)).ino
+    local leases = require("parley.document_lease")
+    local held = assert(leases.acquire(LEASE_NAMESPACE, LEASE_ID, { root = parley.config.state_dir }))
+    local denied, err = leases.acquire(LEASE_NAMESPACE, LEASE_ID, { root = parley.config.state_dir })
+    assert(denied == nil and err.kind == "busy", "opaque lease contents bypassed kernel ownership")
+    assert(held.release()); assert(held.release())
+    local again = assert(leases.acquire(LEASE_NAMESPACE, LEASE_ID, { root = parley.config.state_dir }))
+    local unchanged = uv.fs_fstat(again.fd).ino == inode and bytes(path) == before
+    assert(again.release())
+    assert(unchanged and assert(uv.fs_lstat(path)).ino == inode, "lease lifecycle replaced the inode or interpreted corrupt bytes")
+end
+
 return {
+    {
+        reader = "lua/parley/agentic_document.lua",
+        file = "known.json",
+        path = cache_path,
+        writes = "rewrite", why = "bounded app-owned knowledge; confirmed registry absence rewrites corrupt cache as typed empty knowledge",
+        wrong_shapes = {
+            { version = "1", entries = {} },
+            { version = 1, entries = 3 },
+            { version = 1, entries = { 3, { registration = 3, at = "x" },
+                { registration = { ID = 3, File = 3, Owner = 3, RegisteredOwner = 3, RegisteredAt = 3 }, at = 3 } } },
+            { version = 1, entries = { { registration = { ID = "fixture", File = "/fixture.md", Owner = "ops:0",
+                RegisteredOwner = "ops:0", RegisteredAt = "now" }, at = "x" } } },
+        },
+        exercise = exercise_cache,
+    },
+    {
+        reader = "lua/parley/document_move.lua",
+        file = journal_file,
+        -- An uncertain app-owned intent must remain available for manual
+        -- recovery. Corruption disables migration, never ordinary submission.
+        writes = "preserve",
+        wrong_shapes = {
+            { version = "1", namespace = 3, id = 3 },
+            { version = 1, namespace = JOURNAL_NAMESPACE, id = JOURNAL_ID, registration = 3, entries = 3 },
+            { version = 1, steps = { rewritten = 3, document_moved = "x" }, temps = { 3 }, protection = 3 },
+        },
+        exercise = exercise_journal,
+        preserve = exercise_journal,
+    },
+    {
+        reader = "lua/parley/document_lease.lua",
+        file = lease_file,
+        writes = "preserve",
+        -- Kernel ownership uses only the inode/descriptor. There are no JSON
+        -- fields to mistype; even invalid JSON stays opaque and untouched.
+        wrong_shapes = {},
+        exercise = exercise_lease,
+        preserve = exercise_lease,
+    },
     {
         reader = "lua/parley/theme.lua",
         file = "theme.json",
