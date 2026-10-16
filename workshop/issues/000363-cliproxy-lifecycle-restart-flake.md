@@ -117,3 +117,13 @@ file passed all 66 cases with clean process census; log
 checks pass. No production restart code or existing timeout/assertion changed.
 Atlas documents the fixture distinction; lessons capture effect-based windows
 and owned delayed callbacks. Next: pushed-head recorded full suite, then close.
+
+### 2026-10-16 — original regression sensitivity retained
+
+A disposable mutant replaces restart_managed with stop -> confirmed PID exit
+-> ensure_running's reuse probe. Both ORIGINAL assertions still fail with
+window_probes=1 (keyless repair and persistent 404), proving the fixture repair
+did not weaken the closed-port regression. The new still-live refusal also
+fails under that mutant; five other cases pass, census clean.
+Log /tmp/parley-363-mutant.log. Tracked production code never changed.
+Recorded suite is queued on pushed code head 09f235c1b9e98e6234518f14e7dfb9ce82c0d894.
