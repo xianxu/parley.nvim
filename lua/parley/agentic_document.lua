@@ -101,17 +101,8 @@ local function completed(s, callback)
 end
 
 local function band(s, message, highlight)
-    for _, win in ipairs(vim.fn.win_findbuf(s.buf)) do
-        local old = s.bands[win]
-        if message ~= "" then
-            if not old then old = { before = vim.wo[win].winbar }; s.bands[win] = old end
-            old.installed = "%#" .. (highlight or "WarningMsg") .. "# " .. message:gsub("%%", "%%%%") .. "%="
-            vim.wo[win].winbar = old.installed
-        elseif old then
-            if vim.wo[win].winbar == old.installed then vim.wo[win].winbar = old.before end
-            s.bands[win] = nil
-        end
-    end
+    if message == "" then s.renderer.clear()
+    else s.renderer.render({ label = message, hl = highlight or "WarningMsg" }) end
 end
 
 local function show_feedback(s, message, is_error)
@@ -302,7 +293,7 @@ function M.attach(buf)
     if not ns or path == "" or not require("parley").is_markdown(buf, vim.api.nvim_buf_get_name(buf)) then return false end
     serial = serial + 1
     local s = { buf = buf, path = path, namespace = ns, thread = couch.thread(), incarnation = serial,
-        bands = {}, content = hash(buf), loaded = mtime(path) }
+        renderer = require("parley.document_band").new(buf), content = hash(buf), loaded = mtime(path) }
     local known = cache(s)
     s.model = lifecycle.new({ path = path, namespace = ns, incarnation = serial, registration = known })
     states[buf] = s

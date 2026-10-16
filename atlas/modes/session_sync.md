@@ -195,3 +195,10 @@ Controlled session-sync rereads and owned rename acknowledgements mark their
 native read epoch explicitly, retaining attachment and the successful receipt.
 Raw completions during that epoch wait until read observers have reconciled;
 they cannot authorize an old captured submit against newly loaded content.
+
+Window rendering is shared by legacy session files and registered ordinary
+Markdown in `document_band.lua`. It installs both winbar and StatusLine mapping,
+including unknown/pending admission and pre-attachment feedback. The state
+owners still choose their views. Temporary views restore a live underlying
+view on release; buffer handoff retires old window ownership. Final detach
+restores original options only when they still contain our installed values.

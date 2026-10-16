@@ -103,11 +103,7 @@ end
 
 -- Submission receipts and errors share one literal, bounded label with the
 -- pre-attachment coordinator. Escape percent signs only at each UI boundary.
-M.feedback_view = function(message, is_error)
-    local label = type(message) == "string" and message or tostring(message or "")
-    label = label:gsub("[\r\n]+", " "):gsub("%c", " ")
-    return { label = vim.fn.strcharpart(label, 0, 160), hl = is_error and "DiagnosticError" or "DiagnosticOk" }
-end
+M.feedback_view = require("parley.document_band").feedback_view
 
 -- Days since 1970-01-01 for a proleptic Gregorian date (no timezone involved).
 local function days_from_civil(y, m, d)
@@ -254,20 +250,9 @@ local function close_timer(timer)
 end
 
 local function render(buf, view)
-	for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-		local opts = { win = win, scope = "local" }
-        local s = state[buf]
-        s.windows = s.windows or {}
-        s.windows[win] = s.windows[win] or {
-            winhighlight = vim.api.nvim_get_option_value("winhighlight", opts),
-            winbar = vim.api.nvim_get_option_value("winbar", opts),
-        }
-        local owned = s.windows[win]
-        owned.installed_highlight = "StatusLine:" .. view.hl
-        owned.installed_bar = "%#" .. view.hl .. "# " .. view.label:gsub("%%", "%%%%") .. "%="
-        vim.api.nvim_set_option_value("winhighlight", owned.installed_highlight, opts)
-        vim.api.nvim_set_option_value("winbar", owned.installed_bar, opts)
-	end
+    local s = state[buf]
+    s.renderer = s.renderer or require("parley.document_band").new(buf)
+    s.renderer.render(view)
 end
 
 -- The file's mtime on disk, comparable by equality ("" when missing).
@@ -713,17 +698,7 @@ M.detach = function(buf)
     if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].autoread == false then
         vim.bo[buf].autoread = s.previous_autoread
     end
-    for win, owned in pairs(s.windows or {}) do
-        if vim.api.nvim_win_is_valid(win) then
-            local opts = { win = win, scope = "local" }
-            for _, option in ipairs({ "winbar", "winhighlight" }) do
-                local installed = option == "winbar" and owned.installed_bar or owned.installed_highlight
-                if vim.api.nvim_get_option_value(option, opts) == installed then
-                    vim.api.nvim_set_option_value(option, owned[option], opts)
-                end
-            end
-        end
-    end
+    if s.renderer then s.renderer.clear() end
     pcall(vim.api.nvim_del_augroup_by_id, s.group)
 end
 

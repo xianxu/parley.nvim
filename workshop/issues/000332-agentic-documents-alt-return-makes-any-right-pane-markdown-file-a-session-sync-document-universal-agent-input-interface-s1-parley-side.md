@@ -77,7 +77,7 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - [x] Add unchanged-submit suppression and explicit rapid resend with lifecycle and production-door regressions.
 - [ ] Complete the required full suite on the final implementation before close.
 
-- [ ] Unify window rendering/restoration and verify session-versus-agentic equality across every lock, owed, admission and feedback state.
+- [x] Unify window rendering/restoration and verify session-versus-agentic equality across every lock, owed, admission and feedback state.
 
 Post-close acceptance remains pending: after SHIP and the green suite/conformance, stage under the existing hub authorization for the combined operator check. Pair#573 has landed; the TL coordinates the Couch and Neovim restart. Land only after operator acceptance; clear the stage and report the merge.
 
@@ -168,6 +168,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 
 - 2026-10-15 — sdlc stage --build succeeded on parley.nvim:0 (/Users/xianxu/workspace/parley.nvim), verified matching staged Git HEAD; Parley has no Go binary build. Worker keeps its issue branch. The staged source contains reviewed code935205a3 and post-close documentation corrections only. Waiting for the TL-coordinated combined Couch/Neovim restart and operator check using the durable plan's acceptance steps. No landing or live acceptance claimed; stage stays installed until operator feedback.
 
+- 2026-10-15 — shared-renderer live-check fix: the actual attached FREE bars are identical; real UNKNOWN/pre-attachment ERROR paths reproduce missing StatusLine mapping. Six FIRST regressions fail against the old formatter/module; document_band now owns formatting and conditional winbar/winhighlight restoration for both state owners. All14 mapped session-sync files397 cases pass, including the12-case actual-file state equality/restoration matrix; lint754 files0 warnings/errors, architecture catalog/nodiscard guards and diff check pass, no test survivors. Logs /tmp/parley332-band-mapped.log (all cases pass; initial test clock lint warning subsequently fixed), /tmp/parley332-band-final-targeted.log and /tmp/parley332-band-final-matrix.log. Corrected one pending-move fixture assumption: known-cache adoption is valid on OLD reopen; retained exact warning assertions. The receipt matrix snapshots each real file state and presses resend before another document's subprocess can consume its2s window. New full suite and ordinary re-close pending; stage remains2a73063d until both pass.
+
 ## Revisions
 
 - 2026-10-15 — record the already-approved persistent-feedback acceptance explicitly in Done when. Separate implementation verification from post-close staging/live/landing so the checklist records observed work without claiming future acceptance. The required suite is still pending; no close waiver or live acceptance is implied.
@@ -195,6 +197,11 @@ Add deterministic clock/event tests for unchanged/changed/window boundaries, eff
 
 - 2026-10-15 — clarify the original no-band Done-when sentence as proven-plain membership, matching the already-approved unknown/unavailable band policy. Record the existing stage authorization and landed Couch dependency so acceptance does not ask for them again. No behavior change.
 
+### 2026-10-15 — Operator live-check Revision: one shared renderer
+
+TL reports a free/no-lock visual mismatch on2a73063d and explicitly approves a shared renderer plus end-to-end state equality matrix (receipt d088aedd-eb9b-4750-a8ba-e226ac5f358c). Both current paths build the same winbar string; the concrete source difference is that coordinator fallback omits StatusLine winhighlight installation/restoration. Fully attached free documents already use the session renderer; pin actual comparisons before attributing a separate text difference. Add one renderer for both window options and ownership restoration, preserving state selection in session_sync/agentic_document. Cover every state and detach/handoff via real file doors, RED first; suite, ordinary re-close and restage before operator recheck. Stage remains installed and landing held.
+
+
 ## Estimate
 
 Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md. Method A only. Calibration source is marked stale, so figures remain provisional.
@@ -220,7 +227,3 @@ item: real-api-discovery design=0 impl=0.24
 design-buffer: 0.15
 total: 5.9075
 ```
-
-### 2026-10-15 — Operator live-check Revision: one shared renderer
-
-TL reports a free/no-lock visual mismatch on2a73063d and explicitly approves a shared renderer plus end-to-end state equality matrix (receipt d088aedd-eb9b-4750-a8ba-e226ac5f358c). Both current paths build the same winbar string; the concrete source difference is that coordinator fallback omits StatusLine winhighlight installation/restoration. Fully attached free documents already use the session renderer; pin actual comparisons before attributing a separate text difference. Add one renderer for both window options and ownership restoration, preserving state selection in session_sync/agentic_document. Cover every state and detach/handoff via real file doors, RED first; suite, ordinary re-close and restage before operator recheck. Stage remains installed and landing held.

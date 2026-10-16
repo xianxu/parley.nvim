@@ -768,6 +768,7 @@ atlas:
     code:
       - lua/parley/session_sync.lua
       - lua/parley/agentic_document.lua
+      - lua/parley/document_band.lua
       - lua/parley/document_session.lua
       - lua/parley/document_registry.lua
       - lua/parley/document_move_plan.lua
@@ -789,6 +790,7 @@ atlas:
       - tests/integration/agentic_document_spec.lua
       - tests/integration/agentic_document_owned_move_spec.lua
       - tests/integration/agentic_document_lifetime_spec.lua
+      - tests/integration/document_band_spec.lua
       - tests/integration/document_registry_spec.lua
       - tests/integration/document_lease_spec.lua
       - tests/integration/document_move_spec.lua
