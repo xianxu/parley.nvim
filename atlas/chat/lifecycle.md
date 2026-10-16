@@ -317,9 +317,13 @@ the cut (about 0.25 ms per KB measured). Remote `@@url@@` resolution walks the
 same sequence, using each file's own cache.
 
 One renderer: `build_messages` renders the linearized sequence like a single
-chat. The `chat_memory` window (`max_full_exchanges` plus `📝:` summaries) spans
-the whole sequence, so with memory disabled, ancestors and asides are sent in
-full. `@@` references in them are inlined as in their own file. Images resolve
+chat. The walk marks every item from a subtree `off_path` (an aside, or a chat
+nested under one). Under `chat_memory.side_chats = "summary"` (the default,
+#352), those are sent as their `📝:` summaries (`side_chat_messages`), outside
+the window, and remote resolution skips their references. The `chat_memory`
+window (`max_full_exchanges` plus `📝:` summaries) spans the path's exchanges,
+so with memory disabled, ancestors are sent in full. `@@` references in them
+are inlined as in their own file. Images resolve
 against their own file. The visual range applies to the current file's rows.
 Context follows the complete system prefix, including both messages of a
 synthetic prefix. Automatic topic requests use only the current file's

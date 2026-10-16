@@ -92,6 +92,21 @@ describe("chat_tree.linearize (#233)", function()
             vim.tbl_map(function(i) return { i.file, i.current } end, items))
     end)
 
+    -- #352: off the path = from a subtree, an aside or a chat nested under one.
+    it("marks subtree items off the path, and the path's files on it", function()
+        local files = {
+            ["root.md"] = file({ "R1", { branch = "a.md" }, "R2", { branch = "b.md" }, "R3" }),
+            ["a.md"] = file({ "A1", { branch = "aa.md" } }, "root.md"),
+            ["aa.md"] = file({ "AA1" }, "a.md"),
+            ["b.md"] = file({ "B1", { branch = "bb.md" }, "B2" }, "root.md"),
+            ["bb.md"] = file({ "BB1" }, "b.md"),
+        }
+        local _, items = walk(files, "b.md", 2)
+        local off = {}
+        for _, item in ipairs(items) do off[item.exchange.question.content] = item.off_path == true end
+        assert.same({ R1 = false, A1 = true, AA1 = true, R2 = false, B1 = false, BB1 = true, B2 = false }, off)
+    end)
+
     it("emits a file reached twice once, and survives a cycle", function()
         local files = {
             ["root.md"] = file({ "R1", { branch = "a.md" }, { branch = "a.md" }, "R2" }),

@@ -55,13 +55,13 @@ Design (quick flow, about 40 code lines):
 
 Steps:
 
-- [ ] `linearize` marks `off_path`; chat_tree_spec case
-- [ ] config `chat_memory.side_chats = "summary"`, with a comment in config.lua
-- [ ] build_messages: off-path summary rendering, skip when there is no summary, on-path-only window count
-- [ ] resolve_remote_references skips off-path under `"summary"`
-- [ ] tests (chat_tree_context_spec): an aside off the root seen from a later root question; a nested aside; an on-path ancestor unchanged; `"full"` keeps #233 behaviour; an off-path exchange without a summary sends its truncated, marked question; an off-path `@@` reference is neither fetched nor inlined; the window ignores off-path items
-- [ ] atlas (chat/memory.md, chat/lifecycle.md) and the README config docs
-- [ ] re-measure #233's tree under both values, with memory off and on
+- [x] `linearize` marks `off_path`; chat_tree_spec case
+- [x] config `chat_memory.side_chats = "summary"`, with a comment in config.lua
+- [x] build_messages: off-path summary rendering, skip when there is no summary, on-path-only window count
+- [x] resolve_remote_references skips off-path under `"summary"`
+- [x] tests (chat_tree_context_spec): an aside off the root seen from a later root question; a nested aside; an on-path ancestor unchanged; `"full"` keeps #233 behaviour; an off-path exchange without a summary sends its truncated, marked question; an off-path `@@` reference is neither fetched nor inlined; the window ignores off-path items
+- [x] atlas (chat/memory.md, chat/lifecycle.md) and the README config docs
+- [x] re-measure #233's tree under both values, with memory off and on
 
 ## Revisions
 
@@ -70,3 +70,15 @@ Steps:
 ## Log
 
 ### 2026-10-16
+- Built. An unanswered side-chat question has no summary, so it is sent as its marked question; the first integration case pins it (A3).
+- Mutation checks (each reverted and cmp-restored): counting off-path items in the window fails the window case; fetching off-path references fails the remote case; disabling the off-path rendering fails 5 cases.
+- Request size on #233's measured tree (27.7 KB root, 26.3 KB aside, 4.4 KB nested aside; tokens = JSON bytes / 4). "Pre-#233" is the old builder; "full" is #233 as shipped; "summary" is the new default.
+
+  | Submission | Memory off: pre-#233 → full → summary | Memory on, 4 full: pre-#233 → full → summary |
+  |---|---|---|
+  | Root, question right after the aside | 3.6k → 11.4k → 4.2k | 1.6k → 2.2k → 2.2k |
+  | Root, last question | 8.3k → 16.1k → 8.9k | 5.2k → 5.8k → 5.8k |
+  | Aside, last question | 8.2k → 11.3k → 10.4k | 8.2k → 5.7k → 8.4k |
+  | Nested aside, last question | 3.3k → 7.3k → 7.3k | 3.3k → 6.2k → 6.2k |
+
+  The nested aside is unchanged: everything before it is on its path. The aside, with memory off, saves only the nested aside's 3.6k; the rest is its on-path root, in full. With memory on, the aside grows because the window now counts only on-path exchanges, so the nested aside's exchanges no longer push root exchanges out of full retention (plan point 4).
