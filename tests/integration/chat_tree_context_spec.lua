@@ -189,7 +189,7 @@ describe("chat context over a real chat tree (#233)", function()
         local child = write_chat("2026-10-16.13-01-00.041.md", {
             "🌿: 2026-10-16.13-00-00.040.md: Parent", "", "💬: and then?", "",
         })
-        local drive = require("parley.google_drive")
+        local drive = require("parley.oauth")
         local saved, calls = drive.fetch_content, 0
         drive.fetch_content = function(_, _, callback) calls = calls + 1; callback("fetched body") end
         local function resolve()
