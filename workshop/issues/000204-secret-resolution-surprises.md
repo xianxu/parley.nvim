@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "561e12cc", done: "565fefdd"}
 ---
 
 # a config change to api_keys silently does not take effect: the defaults table is replaced, and the vault pins the first secret it saw
@@ -141,10 +142,10 @@ Decisions (2026-10-15):
   api-keys must include `api_keys.cliproxyapi` (or stop it). If parley cannot
   tell, the message names both (ARCH-PURE).
 
-- [ ] Regression test: `setup{api_keys={openai=…}}` still resolves `cliproxyapi` to the default.
-- [ ] Regression test: a second `setup{}` with a changed `cliproxyapi` is what `get_secret`/the render sees; vault_spec A3 is unchanged and gets a new reset case.
-- [ ] `vault.setup` resets the store and records `loaded_at`; the restart notice names it.
-- [ ] `mismatch_message` pure + unit-tested on all three identities; wired into the 401 branch.
+- [x] Regression test: `setup{api_keys={openai=…}}` still resolves `cliproxyapi` to the default.
+- [x] Regression test: a second `setup{}` with a changed `cliproxyapi` is what `get_secret`/the render sees; vault_spec A3 is unchanged and gets a new reset case.
+- [x] `vault.setup` resets the store and records `loaded_at`; the restart notice names it.
+- [x] `mismatch_message` pure + unit-tested on all three identities; wired into the 401 branch.
 
 ## Log
 
@@ -162,3 +163,10 @@ INBOUND allowlist — the proxy authenticates its callers and returns 401 withou
 a match. The subscription credentials are separate, in the auth-dir. So the
 client secret is a local handshake token, which is why a fixed default is
 reasonable in the first place.
+
+### 2026-10-15
+
+- D1 needed no code: #307 already merges `api_keys`. `tests/unit/setup_api_keys_spec.lua` now pins it (a partial table, `false`, a re-run setup).
+- D2 mutation check: with the `secrets = {}` reset removed, 3 cases fail (setup_api_keys ×2, vault F1). With it restored, everything passes.
+- `port_identity` is now forward-declared, because `ensure_running` precedes it. It runs only on the 401 branch (ARCH-PURE: the message choice is `rel.mismatch_message`, unit-tested on all three identities).
+- start-plan's `weave refresh` could not rewrite `.claude/settings.json` (sandbox: operation not permitted). A re-run succeeded. I reported this to the hub.
