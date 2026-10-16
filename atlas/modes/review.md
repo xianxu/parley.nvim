@@ -181,7 +181,7 @@ Review runs in a selectable **mode** (a stage of document construction). A mode 
 a sub-markdown file `lua/parley/skills/review/modes/<name>.md` = YAML frontmatter
 (behavior flags) + a prompt body. One skill owns all modes; there is no parallel
 engine. The review skill's `source(ctx)` composes the canonical round and
-grammar in `SKILL.md`, selected mode bodies/flag values and operator instruction,
+grammar and optional collaboration modes in `SKILL.md`, selected mode bodies/flag values and operator instruction,
 then `local-adapter.md`. The adapter requires `propose_edits` for all responses.
 With no mode selected, explicit parser defaults retain marker-only review.
 A local invocation uses its supplied full snapshot; it introduces no editor
@@ -211,7 +211,10 @@ member's byte count and SHA256 before updating the fixed package snapshot.
 Add `--check` for a read-only freshness check. The plugin runs from its packaged
 files, with no sibling Ariadne checkout or runtime peer lookup required.
 `export.json` records the source manifest; generated `SKILL.md` combines the
-round and grammar. `local-adapter.md` stays Parley-owned and is appended last.
+round, grammar and the optional `collaboration-modes.md` member in that order.
+That role is a singleton in version 1; older exports without it remain valid.
+It receives the same digest, output-preflight and freshness checks; examples
+are not exported. `local-adapter.md` stays Parley-owned and is appended last.
 The Couch file-edit adapter is excluded from local composition. The mapped
 bundle fixture tests exercise deterministic output and validation failures.
 

@@ -37,10 +37,10 @@ S2 M1 (ops `universal-agent-input-interface/design.side/01-s2-section-modes.md`,
 
 ## Plan
 
-- [ ] Extend pure validation/rendering for an optional singleton at the fixed
+- [x] Extend pure validation/rendering for an optional singleton at the fixed
   collaboration-modes.md path; compose round, grammar, collaboration modes.
   Keep old version-1 exports and strict rejection of unknown roles.
-- [ ] Extend owned-output preflight and add Python pure/real-CLI regressions
+- [x] Extend owned-output preflight and add Python pure/real-CLI regressions
   for ordering, corruption, duplicate/unknown roles, stale/unsafe output and
   examples exclusion. Verify the existing local source orders its adapter last.
 - [ ] Coordinate with ariadne:2 and snapshot the landed S2 M1 export; verify
@@ -71,3 +71,21 @@ One fixed package file is replaced by each sync, not an accumulating artifact
 (ARCH-ORDER); input sizes remain the finite manifest/package (ARCH-CONSTRAINTS).
 Real scratch source/output trees exercise IO without external services or mocks
 (ARCH-MOCK). Do not snapshot an unlanded producer branch.
+
+### 2026-10-16 — consumer implementation verified
+
+The new acceptance tests failed against the old validator (invalid member role);
+the minimal validator/renderer/preflight change makes all fifteen Python
+contract tests pass. The real CLI cases cover new-member digest corruption,
+--check drift without writes, repairs, preserved local adapters, explicit stale
+member refusal when syncing an older export, output symlink safety and excluded
+examples. Pure composition reverses manifest order and still checks exactly
+once after round and grammar. Duplicate, unknown role and wrong path refuse.
+The mapped modes/review suite passed with clean process census.
+
+Producer coordination 175d76ec-d041-4afe-ac38-aedffddd563a is submitted to
+ariadne:2. Own refreshed Ariadne main still exports the old version-1 shape;
+its --check passes unchanged, proving backward compatibility. Await the landed
+S2 M1 pin before refreshing the snapshot and final recorded full suite/close.
+Couch discovery in a login shell temporarily failed; the same bare command in
+a non-login shell resolves the installed binary normally. No resend needed.

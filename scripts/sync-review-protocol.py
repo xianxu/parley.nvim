@@ -15,7 +15,7 @@ import sys
 SCHEMA = 'ariadne/universal-review-export'
 GRAMMAR_SOURCE = 'construct/local/fix/review-convention.md'
 SAFE_NAME = re.compile(r'[a-z0-9]+(?:-[a-z0-9]+)*')
-FIXED_OUTPUTS = ('round.md', 'review-convention.md', 'export.json', 'SKILL.md')
+FIXED_OUTPUTS = ('round.md', 'review-convention.md', 'collaboration-modes.md', 'export.json', 'SKILL.md')
 
 
 def require(condition, message):
@@ -34,7 +34,7 @@ def validate_manifest(manifest):
     for member in members:
         require(type(member) is dict, 'member must be an object')
         role, path = member.get('role'), member.get('path')
-        require(type(role) is str and role in {'round', 'grammar', 'adapter', 'mode'}, 'invalid member role')
+        require(type(role) is str and role in {'round', 'grammar', 'collaboration-modes', 'adapter', 'mode'}, 'invalid member role')
         require(type(path) is str and path and '\\' not in path and '\x00' not in path,
                 'invalid member path')
         parsed = PurePosixPath(path)
@@ -51,6 +51,8 @@ def validate_manifest(manifest):
         elif role == 'grammar':
             require(path == 'review-convention.md' and member.get('source') == GRAMMAR_SOURCE,
                     'grammar must name the canonical source')
+        elif role == 'collaboration-modes':
+            require(path == 'collaboration-modes.md', 'collaboration-modes path must be collaboration-modes.md')
         elif role == 'adapter':
             name = member.get('name')
             require(type(name) is str and SAFE_NAME.fullmatch(name) and name not in adapters,
@@ -69,6 +71,7 @@ def validate_manifest(manifest):
             names.add(name)
     require(roles.count('round') == 1 and roles.count('grammar') == 1 and roles.count('adapter') >= 1
             and roles.count('mode') >= 1, 'incomplete export roles')
+    require(roles.count('collaboration-modes') <= 1, 'duplicate collaboration-modes role')
 
 
 def render_snapshot(manifest, member_bytes):
@@ -91,8 +94,11 @@ def render_snapshot(manifest, member_bytes):
                   '     ' + SCHEMA + ' version 1; export.json sha256: '
                   + hashlib.sha256(exported).hexdigest() + '\n'
                   '     Source members retain the digests in export.json. Do not edit. -->\n\n')
-    snapshot['SKILL.md'] = (provenance.encode('utf-8') + member_bytes['round.md'].rstrip()
-                            + b'\n\n' + member_bytes['review-convention.md'].rstrip() + b'\n')
+    prompt_paths = ['round.md', 'review-convention.md']
+    if 'collaboration-modes.md' in snapshot:
+        prompt_paths.append('collaboration-modes.md')
+    snapshot['SKILL.md'] = (provenance.encode('utf-8')
+                            + b'\n\n'.join(member_bytes[path].rstrip() for path in prompt_paths) + b'\n')
     return snapshot
 
 
@@ -154,7 +160,7 @@ def main():
                 for path in paths:
                     print(kind + ': ' + path, file=sys.stderr)
             if differences['extra'] and not args.check:
-                print('Remove stale generated modes explicitly before syncing.', file=sys.stderr)
+                print('Remove stale generated files explicitly before syncing.', file=sys.stderr)
             return int(any(differences.values()))
         # All source digests and all existing output paths passed preflight.
         for name, data in sorted(expected.items()):
