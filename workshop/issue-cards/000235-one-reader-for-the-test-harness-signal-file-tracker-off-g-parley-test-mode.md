@@ -1,6 +1,6 @@
 ---
 id: 000235
-status: codecomplete
+status: done
 created: 2026-09-10
 updated: 2026-10-16
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 3128170e1f784d1e067f5c67ab5d7f07f6bc28a5
         evidence_commit: f44af9aabb7094fb0145aad36bd79e73124d0163
+        landed_commit: 6d7221716b881dc22c3384c991dbe0cfd1567cac
 ---
 
 # One reader for the test-harness signal: file_tracker off g:parley_test_mode
