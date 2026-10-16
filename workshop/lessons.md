@@ -1,5 +1,16 @@
 # Lessons
 
+## 2026-10-15 (#332 — document admission and lifetime)
+
+- Window-local options have per-buffer cached values. Test A→B→A with distinct originals: restoring at BufWinLeave alone can be too late for Neovim’s cache. Keep the original/installed proof per live pair until entry/wipe/close, consume before recapturing a baseline, and never restore into a different buffer.
+
+- Sharing labels does not share rendering. Winbar and StatusLine mapping must be installed and restored together, and equal strings cannot establish which owner may clear them. Compare real state snapshots across both file kinds and exercise older identical owners, live overlays and window-buffer handoff.
+
+- Keep a resource’s plan, runtime and atlas lifetime identical: closing a descriptor does not delete its lease pathname. If permanent bounded allocation replaces planned GC, append the Revision and correct the active design claim.
+
+- An unresolved read-only membership probe is not proof that a document is plain. Before migration, confirm OLD with a fresh bounded lookup; pending registration and owner resolution must block migration before filesystem effects.
+- BufUnload includes both true buffer retirement and synchronous native rereads. Retire async operations and execution leases on true unload; explicitly mark managed reads, defer their raw completions until loaded, and preserve the attached identity and receipt. Exercise callbacks inside the native unload event, not only after reopening.
+- Classify configured-root/live-buffer wrappers as INTEGRATION even when one branch takes supplied values. Keep the pure filename classifier separate rather than mislabeling the wrapper.
 ## 2026-10-16 (#234 — render walk on the shared row step)
 
 - A parity property test earns its keep on the first run: #234's found a footer `🧠:` row whose lookahead verdict the render walk only computed inside a paint branch. When moving transitions onto a shared step, compute every transition INPUT before (and outside) the painting branches.
@@ -572,6 +583,12 @@ oracle, and the mutation that would make the test fail.
 - Reusing structural parsing does not mean reusing an editing operation's walls. Navigation boundaries must follow their own contract; sweep every default/configured structural prefix as content, a transcript turn, and a fenced sample. Share the resulting fence mask with candidate collection so those decisions cannot diverge (close BR-1).
 - A stateful subprocess fake needs a live contract check for the exact modeled command, not only executable/help discovery. Compare consumed fields and failure outcomes against isolated real fixtures, and document when maintainers rerun it (close BR-2).
 
+## 2026-10-15 (#332 — verification)
+
+- A filesystem preflight cannot establish no-clobber ownership: use an atomic no-replace operation for both the document and its side directory. Exercise a foreign destination appearing after the absence observation.
+- Match the complete shared document classifier when selecting a filesystem route; timestamp spelling alone also matches ordinary dated notes.
+- A subprocess output pathname can exist before its payload is written. Wait for exact bytes and lifecycle completion, and distinguish a per-request deadline from the budget for a multi-command editor interaction.
+- Register new state-directory readers in the corruption registry as they are introduced; reuse the shared directory and checked-write seams before the full-suite boundary.
 ## 2026-10-15 (#336 — packaging VM guest confinement flake)
 
 - An interactive flow's completion is its last UI effect, not the side file it writes. A probe that drives a login must wait for the flow's own settle signal (here, the reopened model picker) and dismiss it, or the scheduled UI lands over later steps. Assert properties of the object a step created (the captured chat buffer's file), never of current focus. Prove that with a deliberate focus change before the assertion.
@@ -582,6 +599,7 @@ oracle, and the mutation that would make the test fail.
 
 - Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.
 
+- A successful filesystem move plus nvim_buf_set_name does not make Neovim consider NEW read: its not-edited flag blocks ordinary writes and checktime skips it. Test the next submit/auto-save, acknowledge proven unchanged NEW with a non-bang native read, and reattach native edit observers detached by that read. Never bypass the guard with an unconditional forced write.
 ## 2026-10-15 (#338 — starter tutorials under project mode)
 
 - When a finding names one spec that breaks under an environment, run the whole suite in that environment before fixing that spec: here it was 14 files, and the cause was a harness invariant (scratch outside any marked project), not each spec. Guard the invariant once at the writer (scratch_placement_spec), and keep per-spec opt-outs out of specs that test the opted-out behavior.

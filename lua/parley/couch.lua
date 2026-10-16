@@ -9,6 +9,20 @@
 
 local M = {}
 
+--- The one scheduled process seam. Returns the child for bounded cancellation.
+M.run = function(argv, cb, options)
+	local delivered = false
+	local function finish(result)
+		if delivered then return end
+		delivered = true
+		vim.schedule(function() cb(result) end)
+	end
+	local opts = vim.tbl_extend("force", { text = true }, options or {})
+	local ok, child = pcall(vim.system, argv, opts, finish)
+	if not ok then finish({ code = -1, stderr = tostring(child) }); return nil end
+	return child
+end
+
 -- A decoded JSON value as a list: anything but a table is empty.
 M.list = function(value)
 	return type(value) == "table" and value or {}
@@ -17,22 +31,16 @@ end
 --- One message; on_exit(obj) gets the result, in the main loop.
 M.send = function(to, message, on_exit)
 	local argv = { "couch", "--send-to", to, "--message", message }
-	local ok, err = pcall(vim.system, argv, { text = true }, vim.schedule_wrap(on_exit or function() end))
-	if not ok and on_exit then
-		on_exit({ code = -1, stderr = tostring(err) })
-	end
+	return M.run(argv, on_exit or function() end)
 end
 
 --- Run a couch query; cb(decoded) with nil unless it exited 0 with Code "ok".
 --- JSON null decodes to nil (never vim.NIL), so a missing field reads as absent.
 M.query = function(argv, cb)
-	local ok = pcall(vim.system, argv, { text = true }, vim.schedule_wrap(function(obj)
+	return M.run(argv, function(obj)
 		local decoded, data = pcall(vim.json.decode, obj.stdout or "", { luanil = { object = true, array = true } })
 		cb(obj.code == 0 and decoded and type(data) == "table" and data.Code == "ok" and data or nil)
-	end))
-	if not ok then
-		cb(nil)
-	end
+	end)
 end
 
 local function binding(actor)

@@ -1,6 +1,5 @@
--- #316: <M-CR> in markdown sends the document to this editor's own Couch
--- slot, steered by `process-instruction:`; outside pair it runs the review
--- round here with the same instruction. Driven against the fake couch.
+-- #332: pane Alt+Return saves, registers and submits unchanged Markdown.
+-- Outside a pane the existing instruction-driven review stays local.
 local rs = require("parley.review_send")
 local review = require("parley.skills.review")
 local uv = vim.uv or vim.loop
@@ -50,11 +49,18 @@ describe("review_send", function()
         saved = {
             path = vim.env.PATH, scope = vim.env.COUCH_THREAD_SCOPE, tag = vim.env.COUCH_THREAD_TAG,
             input = vim.ui.input, invoke = review.run_via_invoke, notify = vim.notify,
+            registry = vim.env.FAKE_COUCH_REGISTRY, registry_mode = vim.env.FAKE_COUCH_REGISTRY_MODE,
+            actors = vim.env.FAKE_COUCH_ACTORS, exit = vim.env.FAKE_COUCH_EXIT,
+            isolated = vim.env.COUCH_ISOLATED_ROOT, state_dir = p.config.state_dir,
         }
         vim.env.PATH = root .. "/bin:" .. vim.env.PATH
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "s2", "t2"
         vim.env.FAKE_COUCH_ACTORS = slots()
         vim.env.FAKE_COUCH_EXIT = "0"
+        vim.env.FAKE_COUCH_REGISTRY = root .. "/registry.json"
+        vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+        vim.env.COUCH_ISOLATED_ROOT = root
+        p.config.state_dir = root .. "/state"
         p.config.review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" }
         invoked = nil
         review.run_via_invoke = function(b, args) invoked = { buf = b, args = args } end
@@ -64,6 +70,10 @@ describe("review_send", function()
         if buf and vim.api.nvim_buf_is_valid(buf) then
             vim.api.nvim_buf_delete(buf, { force = true })
         end
+        require("parley.agentic_document").detach(buf)
+        vim.env.FAKE_COUCH_REGISTRY, vim.env.FAKE_COUCH_REGISTRY_MODE = saved.registry, saved.registry_mode
+        vim.env.FAKE_COUCH_ACTORS, vim.env.FAKE_COUCH_EXIT = saved.actors, saved.exit
+        vim.env.COUCH_ISOLATED_ROOT, p.config.state_dir = saved.isolated, saved.state_dir
         vim.env.PATH = saved.path
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = saved.scope, saved.tag
         vim.ui.input, review.run_via_invoke, vim.notify = saved.input, saved.invoke, saved.notify
@@ -72,43 +82,78 @@ describe("review_send", function()
 
     local doc = { "---", 'process-instruction: "[copy-edit] keep the voice"', "---", "", "- a" }
 
-    it("sends to this slot's agent: path, instruction, the mode's brief, first send; saved first", function()
+    local function delivered(count)
+        assert.is_true(vim.wait(5000, function()
+            local status = require("parley.agentic_document").status(buf)
+            return #sent() == count and status and status.phase == "registered" and not status.operation
+        end))
+    end
+
+    it("saves then registers before one submitted notification without injecting instructions", function()
         open(doc)
         set_line(5, "- a, edited")
         alt_return()
-        assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
-        assert.equals("ariadne:2|review request: " .. file, sent()[1])
-        local msg = last()
-        assert.is_true(has(msg, "process-instruction: [copy-edit] keep the voice"))
-        assert.is_true(has(msg, "## Review mode: copy-editing\nCopy edit."))
-        assert.is_true(has(msg, "Scope: edit the whole document"))
-        assert.is_true(has(msg, "## Operator instruction\nkeep the voice"))
-        assert.is_true(has(msg, "First send this session"))
+        delivered(1)
+        assert.equals("ariadne:2|submitted: " .. file, sent()[1])
+        assert.equals("submitted: " .. file, last())
+        assert.same(lines(), vim.fn.readfile(file))
         assert.equals("- a, edited", vim.fn.readfile(file)[5])
         assert.is_false(vim.bo[buf].modified)
+        local registered = vim.json.decode(table.concat(vim.fn.readfile(root .. "/registry.json"), "\n"))
+        assert.equals("ariadne:2", registered.paths[file].Owner)
         assert.is_nil(invoked)
     end)
 
-    it("the next send carries the change since the last delivered one", function()
+    it("failed delivery retains registration and requires explicit resubmit", function()
         open(doc)
         alt_return()
-        assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
+        delivered(1)
+        local original = require("parley.agentic_document").identity(buf).ID
         set_line(5, "- b")
         vim.env.FAKE_COUCH_EXIT = "1"
         alt_return()
-        assert.is_true(vim.wait(2000, function() return #sent() == 2 end))
-        vim.wait(50)
+        delivered(2)
+        assert.equals(original, require("parley.agentic_document").identity(buf).ID)
         vim.env.FAKE_COUCH_EXIT = "0"
         set_line(5, "- c")
         alt_return()
-        assert.is_true(vim.wait(2000, function() return #sent() == 3 end))
-        local msg = last()
-        -- Against the last DELIVERED copy ("- a"); the failed send moved nothing.
-        assert.is_true(has(msg, "your own edits to the file included"))
-        assert.is_true(has(msg, "```diff\n"))
-        assert.is_true(has(msg, "\n-- a\n"))
-        assert.is_true(has(msg, "\n+- c\n"))
-        assert.is_false(has(msg, "- b"))
+        delivered(3)
+        assert.equals("submitted: " .. file, last())
+        assert.equals(original, require("parley.agentic_document").identity(buf).ID)
+    end)
+
+    it("an explicit couch-owner overrides the pane while business owner does not route", function()
+        open({ "---", "owner: accounting", "couch-owner: ops:0", "---", "body" })
+        alt_return()
+        delivered(1)
+        assert.equals("ops:0|submitted: " .. file, sent()[1])
+        assert.equals("ops:0", require("parley.agentic_document").identity(buf).Owner)
+    end)
+
+    it("ordinary owner metadata leaves routing to the current pane", function()
+        open({ "---", "owner: accounting", "---", "body" })
+        alt_return()
+        delivered(1)
+        assert.equals("ariadne:2|submitted: " .. file, sent()[1])
+    end)
+
+    it("first Alt+Return during pending lookup submits once after admission", function()
+        vim.env.FAKE_COUCH_REGISTRY_MODE = "delay"
+        open({ "# notes" })
+        alt_return()
+        alt_return()
+        delivered(1)
+        assert.equals("ariadne:2|submitted: " .. file, sent()[1])
+        assert.same({ "# notes" }, lines())
+    end)
+
+    it("journal Markdown uses the pane mapping without inserting review instructions", function()
+        file = root .. "/journal.md"
+        open({ "---", "type: journal", "---", "# private notes" })
+        alt_return()
+        delivered(1)
+        assert.equals("ariadne:2|submitted: " .. file, sent()[1])
+        assert.same({ "---", "type: journal", "---", "# private notes" }, lines())
     end)
 
     it("outside pair: no couch call; the review round runs here with the instruction", function()
@@ -129,7 +174,7 @@ describe("review_send", function()
         alt_return()
         local function told()
             for _, e in ipairs(errors) do
-                if has(e, "cannot resolve this slot's agent") then return true end
+                if has(e, "cannot resolve this pane's agent") then return true end
             end
             return false
         end
@@ -138,7 +183,8 @@ describe("review_send", function()
         assert.is_nil(invoked)
     end)
 
-    it("an unknown stock prompt is refused, naming the known ones", function()
+    it("an unknown stock prompt is refused outside a pane, naming the known ones", function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         local errors = {}
         vim.notify = function(msg) errors[#errors + 1] = msg end
         open({ "---", "process-instruction: [nope] x", "---" })
@@ -148,25 +194,25 @@ describe("review_send", function()
         assert.same({}, sent())
     end)
 
-    it("no process-instruction: asks once, writes it quoted into a new frontmatter, sends", function()
-        vim.ui.input = function(_, cb) cb("[fact-check] dates") end
+    it("no process-instruction submits unchanged Markdown without prompting", function()
+        vim.ui.input = function() error("pane submission must not prompt") end
         open({ "# notes", "- a" })
         alt_return()
-        assert.same({ "---", 'process-instruction: "[fact-check] dates"', "---", "# notes", "- a" }, lines())
-        assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
-        assert.is_true(has(last(), "## Review mode: fact-check"))
+        delivered(1)
+        assert.same({ "# notes", "- a" }, lines())
+        assert.equals("submitted: " .. file, last())
     end)
 
-    it("no process-instruction in an existing frontmatter: the line goes before the fence", function()
-        vim.ui.input = function(_, cb) cb("what do you think?") end
+    it("existing frontmatter remains unchanged on pane submission", function()
+        vim.ui.input = function() error("pane submission must not prompt") end
         open({ "---", "title: t", "---", "body" })
         alt_return()
-        assert.same({ "---", "title: t", "process-instruction: what do you think?", "---", "body" }, lines())
-        assert.is_true(vim.wait(2000, function() return #sent() == 1 end))
-        assert.is_true(has(last(), "## Review mode: free-form"))
+        delivered(1)
+        assert.same({ "---", "title: t", "---", "body" }, lines())
     end)
 
-    it("a cancelled prompt changes nothing and sends nothing", function()
+    it("a cancelled outside-pane prompt changes nothing and sends nothing", function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         vim.ui.input = function(_, cb) cb(nil) end
         open({ "# notes" })
         alt_return()
@@ -176,6 +222,7 @@ describe("review_send", function()
     end)
 
     it("[ in the value completes the stock prompt names; the value ends up quoted", function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         open({ "---", "process-instruction: ", "---", "body" })
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
         -- Typed keys fire TextChangedI from the main loop once typeahead is
