@@ -48,6 +48,8 @@ at its first Alt+Return.
   `couch-owner:` override. Depends on the pair (Couch) S1 issue for the registry verbs.
 - A successful explicit submit keeps a winbar receipt with effective owner and local time through own saves and status refresh, until the next operator edit or agent write. Save, owner, lookup, register and send failures remain visible, including before attachment; feedback is bounded and rendered literally.
 
+- Unchanged content since the last confirmed successful submit is skipped with a visible timestamped notice; a second explicit idle press within two seconds resends with visible confirmation. Changed content sends normally, failures never create success receipts, and busy presses never cause a delayed duplicate.
+
 ## Core concepts
 
 | Entity | Kind | Location | Status |
@@ -71,6 +73,7 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - [x] Integrate first-submit/reopen admission with the existing native edit-turn engine and real Alt+Return routing.
 - [x] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
 - [x] Add isolated real/fake conformance and docs/traceability; verify production-door submission feedback and native edit-turn regressions.
+- [ ] Add unchanged-submit suppression and explicit rapid resend with lifecycle and production-door regressions.
 - [ ] Complete the required full suite on the final implementation before close.
 
 Post-close acceptance remains pending: obtain SHIP, then after pair#573 lands and conformance passes, obtain hub staging authorization for the combined operator check. Land only after operator acceptance; clear the stage and report the merge.
@@ -168,3 +171,12 @@ total: 5.9075
 ### 2026-10-15 — Operator-requested persistent submission feedback
 
 Extend the existing S1 first-submit behavior: successful save→register→submit shows submitted to OWNER · HH:MM in the winbar until the next operator edit or agent write; explicit failures show an error there, never a silent return. Preserve feedback through own saves and status refresh. Reuse the single turn renderer with a coordinator fallback before attachment, keeping lock/baseline semantics unchanged. Add production-door and native regression coverage, and close #322 as covered after verification. The TL also permits close review alongside a queued suite only when the binary admits it without a waiver; staging/finalization still waits for a suite pass and pair#573 landing.
+
+
+### 2026-10-15 — Suppress unchanged submits; explicit rapid resend
+
+Operator request after the #337 diversion: compare against the content at the last confirmed successful submit, never the latest auto-save. Save/reconcile and confirm the effective registration owner before deciding whether to send. An unchanged explicit idle press shows `nothing to submit: no changes since HH:MM` and arms a two-second monotonic confirmation window; a second explicit idle press inside that window sends the same `submitted: PATH` payload and shows `resent to OWNER · HH:MM`. Changed content/identity/owner sends normally. Busy or pending presses cannot arm or authorize a resend; only the initial admission lookup may queue one first-submit intent.
+
+The pure document_session controller owns one bounded in-memory receipt (namespace, stable ID, effective owner, captured post-save hash and success time), confirmation and captured send identity (ARCH-PURE/ARCH-ORDER). Failed or unconfirmed delivery never advances it. A completed issued send records its captured hash even if the operator edited meanwhile, but must not install stale success feedback or release a newer turn. Identity/namespace changes invalidate receipt use; edits invalidate only the confirmation. Preserve receipt through confirmed same-ID native and owned moves; controller detach/editor restart discards it, with no new durable storage (ARCH-FUNERAL). Confirming rename must not itself arm resend.
+
+Add deterministic clock/event tests for unchanged/changed/window boundaries, effective-owner replacement, stale/failed completion and busy presses; production-door tests count complete fake deliveries, verify literal feedback and minimal payload, and cover both move routes and explicit detach/reopen behavior. Keep existing turn reconciliation, baseline and outside-Couch routes shared (ARCH-DRY); no protocol change or additional Couch verb.
