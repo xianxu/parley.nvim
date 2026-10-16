@@ -1,12 +1,12 @@
 ---
 id: 000332
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours: 5.9075
-card_mirror: 'b189f5b9f50fdc780dec47c23145916f7413ce35' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '67277f9f8d0cced743a8c4ae1d37ae72e5a8c481' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T13:07:57-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: operator}
+actual_hours: 12.89
 ---
 
 # Agentic documents: Alt+Return makes any right-pane markdown file a session-sync document (universal-agent-input-interface S1, parley side)
