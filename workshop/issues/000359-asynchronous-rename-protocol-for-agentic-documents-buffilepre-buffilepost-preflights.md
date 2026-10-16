@@ -1,13 +1,21 @@
 ---
 id: 000359
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: '413f4e171cc1b60513455ec8e1a225212c0d621b' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '79500d940f4625450ce5167c0a3b94a65af54dda' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T12:52:47-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Asynchronous rename protocol for agentic documents (BufFilePre/BufFilePost preflights)
@@ -32,7 +40,13 @@ Let the rename proceed without waiting, and reconcile the registry afterwards. T
 
 ## Plan
 
-- [ ]
+The durable plan, with the state projection table: [000359 plan](../plans/000359-asynchronous-rename-protocol-for-agentic-documents-buffilepre-buffilepost-preflights-plan.md). It is waiting for the TL's review, and its code waits for #357 to land.
+
+- [ ] Task 1: `move_preflight` and `move_outcome` (pure)
+- [ ] Task 2: the movers stop waiting
+- [ ] Task 3: `BufFilePre` and `BufFilePost` stop waiting, except for an overwrite
+- [ ] Task 4: `document_move.begin` and `project` accept a destination left to Couch
+- [ ] Task 5: atlas, README, close
 
 ## Log
 
