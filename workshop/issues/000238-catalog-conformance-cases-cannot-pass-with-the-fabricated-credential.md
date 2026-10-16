@@ -81,6 +81,7 @@ time (M2 Task 13). The failures reproduce on 7.1.71 as well, so they predate the
 upgrade. Details are in #237's Log and plan Revisions.
 
 ### 2026-10-16 (parley.nvim:4)
+- 2026-10-16: closed — Full suite green on c0854305 (sdlc-local/suite; the catalog cases are pending there, with no binary on PATH, as before); the commit after it is atlas only. Live: PARLEY_LIVE_GITHUB=1 against the latest release, cliproxy_conformance_spec 12 of 12 pass (before: 10, the two catalog cases fail). The catalog cases boot with a FABRICATED claude-api-key entry; measured on 8.0.4: the built-in Claude catalog on both routes (models/<id> plus displayName), the auth-dir stays empty, an API key never refreshes (no #197 rotation), and it works offline. The atlas cliproxy-managed.md conformance paragraph is updated.; review verdict: FIX-THEN-SHIP
 
 - Built as planned. `PARLEY_LIVE_GITHUB=1` against the latest release: 12 of 12 pass (before: 10 pass, the two catalog cases fail).
 - Credential safety, measured on the 8.0.4 binary with the API-key entry:
@@ -89,4 +90,5 @@ upgrade. Details are in #237's Log and plan Revisions.
   - the only network activity is the binary's own model-catalog refresh from raw.githubusercontent.com, no credential involved.
 - No network dependency: with every proxy variable pointed at a dead port, the startup catalog refresh fails ("keeping current data"), and the proxy still serves its built-in catalog with `models/<id>` names and `displayName`. So the cases pass offline too.
 - Without `PARLEY_LIVE_GITHUB` and no binary on PATH (the default harness), these cases stay `pending` with their reason, unchanged.
+- Correction (close round 1): "the throwaway auth-dir stays EMPTY" above was measured on a scratch setup that had no OAuth file. The spec's `boot()` always writes the fabricated, expired OAuth credential into it. The accurate claim, now in the atlas: the proxy writes nothing to the auth-dir, and nothing real is ever in it.
 

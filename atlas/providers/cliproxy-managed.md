@@ -413,7 +413,8 @@ cliproxy refreshes at startup and every 15m, and Claude's refresh tokens rotate
 on use — the race that caused this issue. The expired OAuth credential registers no
 models, so the catalog cases (#238) add a fabricated `claude-api-key` entry. The
 proxy serves its built-in Claude catalog for an API key, offline included, and
-never refreshes it, so the throwaway auth-dir stays empty and nothing can rotate.
+never refreshes it: the proxy writes nothing to the throwaway auth-dir, nothing
+real is ever in it, and nothing can rotate.
 
 ## Models & providers
 
