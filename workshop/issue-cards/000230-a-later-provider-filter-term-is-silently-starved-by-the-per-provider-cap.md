@@ -1,6 +1,6 @@
 ---
 id: 000230
-status: codecomplete
+status: done
 created: 2026-09-10
 updated: 2026-10-15
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 3646bebb2a5bfe06aed4447122e08f41e137c92b
         evidence_commit: 6e242b5d41d7199898c784b1f627d59d9284c27f
+        landed_commit: be15d18c15ae12029bdc135ed1e9d2180a75d8cf
 ---
 
 # a later provider filter term is silently starved by the per-provider cap
