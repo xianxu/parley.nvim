@@ -664,3 +664,11 @@ oracle, and the mutation that would make the test fail.
 ## #349: deleting a local removes its readers too
 
 - Replacing `find_tree_root_file` deleted the local `root` that delete-tree's prompt still read, and the tests stubbed `confirm` without checking its text. Lint caught it in the suite. After deleting a local, run `make lint`, or grep the function for the name, before the suite; and a test that stubs a prompt asserts what the prompt says.
+
+## #334: transient window values can be cloned
+
+- Test native split creation during a temporary highlight, not only before it.
+  Neovim copies window-local options; the shared renderer must restore newly
+  copied transient frames using its exact installed-value proof.
+- Put the basename in a bounded winbar label and the full path in its one-line
+  notification; truncating a path prefix can erase the filename entirely.

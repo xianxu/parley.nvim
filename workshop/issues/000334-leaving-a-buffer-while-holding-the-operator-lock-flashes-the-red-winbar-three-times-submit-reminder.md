@@ -45,16 +45,16 @@ e.g. flash the winbar three times.
 
 ## Plan
 
-- [ ] Add a pure unsubmitted-turn predicate in session_sync.lua; reuse the
+- [x] Add a pure unsubmitted-turn predicate in session_sync.lua; reuse the
   existing lock reader and acquisition baseline, including the undo-to-baseline
   exclusion and auto-saved edits. Connect BufLeave/WinLeave in its shared
   attachment so registered and legacy documents use the same path.
-- [ ] Extend document_band.lua with a bounded per-window temporary pulse through
+- [x] Extend document_band.lua with a bounded per-window temporary pulse through
   its existing owner/layer renderer; no second winbar writer. Coalesce duplicate
   leave events, emit three red pulses, preserve live underlying views, and retire
   on completion, superseding leave, window close, buffer replacement, source
   detach/submit/undo or user option override. Own one pulse timer per window.
-- [ ] Add headless regressions for exact pulse count/message, free/submitted/
+- [x] Add headless regressions for exact pulse count/message, free/submitted/
   undone turns, saved-but-unsubmitted turns, duplicate events, split isolation,
   navigation during a pulse and safe restoration. Map through modes/session_sync.
 - [ ] Document, run targeted and recorded full tests, coordinate a staged live
@@ -104,3 +104,27 @@ Hub approved the window interpretation and one cancellable document_band pulse
 per window in delivery a60ed2ea-1a52-48e5-b74e-2f0bcc33c58d. Keep the quick
 shell; report green without staging, since the hub sequences live acceptance.
 No navigation blocking or confirm setting.
+
+### 2026-10-16 — implementation and targeted verification
+
+Implemented the shared pulse lease and session-sync event/predicate integration.
+There is one timer per departing window, six alternating frames and no second
+winbar writer. The source hash comes from existing on_lines state (no repeated
+whole-document hashing on leave). A queued leave whose focus already returned
+is dropped. An options override, retired source turn, detach, replaced buffer
+or closed window stops the timer and late ticks cannot repaint.
+
+TDD: initial integration run failed seven missing-pulse cases (two exclusions
+already passed). Long-path diagnostic reproduced the renderer's bounded-label
+truncation hiding the filename: the winbar now uses the basename and the one-line
+notification retains the full path. A native split during red reproduced a
+copied transient frame; WinNew restores only new copies with the renderer's
+installed-value proof. A returned-focus regression failed before the queued
+leave guard, then passed.
+
+Fourteen focused regressions pass with deterministic pulse ticks behind the
+real timer seam (idle/watch timers remain real); lint on changed Lua/tests and
+whitespace checks pass. The mapped session-sync suite also passed before the
+last queued-leave guard; the recorded full suite will verify the final candidate.
+Production delta is 87 added lines, within the approved quick shell. README and
+atlas updated. Hub sequences live check; no stage performed.
