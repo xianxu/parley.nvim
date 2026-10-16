@@ -173,6 +173,8 @@ provider. Specific terms rarely need it: the operator's first draft
 | --- | --- | --- | --- | --- |
 | `parse_provider_spec` | PURE | modified | `lua/parley/cliproxy_catalog.lua` | Parses `!N` on each term and on a bare provider; rejects a malformed count with an error naming the spec. |
 | `curate` | PURE | modified | `lua/parley/cliproxy_catalog.lua` | Per-search budgets, no limit without `!N`, global series de-dup, term order kept; no `per_provider`. |
+| `_select` | PURE | new | `lua/parley/cliproxy_catalog.lua` | One parsed spec's rows in display order; the selection both `curate` and `diagnose` use. |
+| `_operator_specs` | PURE | new | `lua/parley/agent_picker.lua` | The configured specs that are not verbatim shipped defaults; what the picker diagnoses (BR-1). |
 | `diagnose` | PURE | new | `lua/parley/cliproxy_catalog.lua` | The specs that are malformed and the terms that match nothing, for a caller to report. |
 | `agent_picker` | INTEGRATION | modified | `lua/parley/agent_picker.lua` | Logs `diagnose` once per catalog refresh; stops passing `per_provider`. |
 | `live_models_config_spec` | INTEGRATION | new | `tests/integration/live_models_config_spec.lua` | The one setup notice for a leftover `per_provider`. |
@@ -221,6 +223,7 @@ confidently at discovery, and the cause was two layers downstream of it.
 - Minors, same round: diagnose reuses `_select` (one search, cap 1) instead of its own match loop; the parser docstring, config comment and atlas state that a provider cap beside terms is rejected. Catalog 77/0, lint clean.
 - Lesson: a pure diagnostic over config needs the provenance of each entry. A shipped default and an operator's typo look the same to it.
 - Merge local suite on 4011859e failed tests/arch/superseded_comment_spec: the round-2 Minor (an annotation block separated from `_providers_without_models` by the inserted `_operator_specs`) is enforced by an existing guard. My last full suite predated the BR-1 commit. Moved the annotations back to their function: superseded_comment 9/0, picker_items 57/0, lint clean.
+- Full suite on 296d98f8: one failure, single_source_sweeps "Core-concepts tables name every entity THIS issue added" (`_operator_specs`, `_select` missing). Added both rows; the guard passes 25/0. Every other file passed, lint clean.
 
 ## Revisions
 
