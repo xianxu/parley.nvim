@@ -56,7 +56,7 @@ Measurement (2026-10-15, :3), red tests on the production machine and runner:
 - [x] Machine: a `write_result` naming the inflight write but inconsistent (status, byte counts) clears inflight, accounts committed bytes and stops `uncertain`. A receipt for any other write is still rejected without effect. Red: machine test above.
 - [x] Runner: a write whose blob is gone dispatches an `uncertain` receipt (attempted = the effect's bytes, committed 0) rather than returning silently.
 - [x] Atlas (chat/document stream accounting): the two outcomes and the ignorable rejects.
-- [ ] Verify: generation unit + sequences + stream_integrity, then the full suite.
+- [x] Verify: generation unit + sequences + stream_integrity, then the full suite.
 
 
 ## Log
@@ -70,6 +70,7 @@ Measurement (2026-10-15, :3), red tests on the production machine and runner:
 - Missing blob: unreachable by construction. The inflight item's blob is released only on its receipt, and stop releases queued items, never the inflight one. The runner exposes no seam into its blobs. The branch now reports an `uncertain` receipt instead of returning silently, so a future broken invariant ends with an outcome.
 - Output after completion: unreachable from the adapter (it emits only while alive); the machine's reject stays ignorable.
 - Focused: generation unit 70/0, sequences 33/0, provider 11/0, and 17 generation/response/chat spec files all pass; lint clean.
+- Full suite on b8a98818: exit 0, lint clean (736 files).
 
 ## Revisions
 
