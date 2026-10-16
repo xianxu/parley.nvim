@@ -49,16 +49,34 @@ describe("arch: harness scratch stays out of the repo tree", function()
         end)
     end
 
+    -- Each scratch root with a project-marked ancestor, or itself marked.
+    -- tempname() names a file, so its directory is the root; $HOME is one (#338).
+    local function marked_scratch(tempname, home)
+        local marker = require("parley.config").repo_marker
+        local found = {}
+        for label, dir in pairs({ ["vim.fn.tempname()"] = vim.fn.fnamemodify(tempname, ":h"),
+                ["$HOME"] = home }) do
+            local root = require("parley.repo_mode").detect_root(dir, marker)
+            if root then found[#found + 1] = ("%s (%s) sits under %s, which carries %s"):format(label, dir, root, marker) end
+        end
+        return found
+    end
+
     it("scratch has no project-marked ancestor", function()
         -- Specs build profiles and "no project" scenarios under tempname(). A
         -- marked ancestor anywhere above it, this repo or any other, puts every
         -- such spec into project mode; the sweep under a TMPDIR in a marked
         -- tree failed 14 files (#338). Fail here, once, with the reason.
-        local marker = require("parley.config").repo_marker
-        for label, path in pairs({ ["vim.fn.tempname()"] = vim.fn.tempname(), ["$HOME"] = vim.env.HOME }) do
-            local root = require("parley.repo_mode").detect_root(vim.fn.fnamemodify(path, ":h"), marker)
-            assert.is_nil(root, ("%s (%s) sits under %s, which carries %s; specs would enter project mode")
-                :format(label, path, tostring(root), marker))
-        end
+        assert.same({}, marked_scratch(vim.fn.tempname(), vim.env.HOME), "specs would enter project mode")
+    end)
+
+    it("the ancestor guard sees a marker in $HOME itself", function()
+        local home = vim.fn.tempname()
+        vim.fn.mkdir(home, "p")
+        vim.fn.writefile({}, home .. "/" .. require("parley.config").repo_marker)
+        local found = marked_scratch(vim.fn.tempname(), home)
+        vim.fn.delete(home, "rf")
+        assert.equals(1, #found)
+        assert.matches("^%$HOME", found[1])
     end)
 end)
