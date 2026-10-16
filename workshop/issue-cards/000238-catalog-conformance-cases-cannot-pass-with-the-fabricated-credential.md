@@ -1,6 +1,6 @@
 ---
 id: 000238
-status: working
+status: codecomplete
 created: 2026-09-12
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.12
+tracker:
+    version: 1
+    completion:
+        token: close-ea21339661ad
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 2be663329e6f2984be613a815bf7b860a705022e
+        evidence_commit: aa2628badb07cc8578d46b687771eea15a9553c4
 ---
 
 # Catalog conformance cases cannot pass with the fabricated credential
