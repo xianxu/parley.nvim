@@ -1,13 +1,13 @@
 ---
 id: 000347
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: '9eb24205454fca288904eb700711db8e83e23a80' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '3534d496c85d2d676646d6696901e168fca9e163' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T02:04:31-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "6c031e1c", done: "f2b20930"}
+actual_hours: 0.04
 ---
 
 # fs.ensure_dir fails when another process creates an intermediate directory concurrently
