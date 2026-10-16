@@ -114,6 +114,7 @@ Measurement (2026-10-15, :3). The path the issue names is dead code: `D.create_h
 ## Log
 
 ### 2026-10-15 (:3)
+- 2026-10-15: closed — Prior evidence stands (reader red 29/1 to 30/0; stream_integrity exact equality 3/3, mutation fails; full suite exit 0 on f606daff). Advisory (a): read-error path is one (err,nil) notice then one EOF, not a doubled EOF; comment corrected, tasker_run case pins the sequence (43/0); lint clean.; review verdict: SHIP
 - 2026-10-15: closed — Measured: issue path was dead code (create_handler, no production caller); live path stops the generation on every refusal except a throwing reader. Red: tasker_supervision reader case 29/1 before, 30/0 after (data after a throw skipped, attempt stops with stdout reader failed, EOF still delivered per #182, tasker_run 42/0). Oracle stream_integrity_spec: real transport, 300 deltas, >=10 edits above the answer and busy slices; answer equals qt.response exactly 3/3; dropping one delta fails it. Dead writer and orphans removed. Full make -k test exit 0 on f606daff, lint clean. Stalls filed as #341.; review verdict: SHIP
 
 - Measured (an Explore digest, each finding checked at file:line): the issue's path was dead code. See the Plan's measurement paragraph. Remedy chosen from that evidence: no reconcile pass. The live path already ends the generation on every refusal. The two silent-continue risks were the dead writer, removed, and a throwing reader, now terminal.

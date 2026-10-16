@@ -105,3 +105,83 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"5c9dfbef-489b-43b1-94fd-2f2ada1c4f31","repository":"github.com/xianxu/parley.nvim","issue_id":"000229","recipe":"milestone-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/b596d96584e6aad6","reviewed_head":"af12fe1db4fdeaea47cb9eefee7acd8058c82208","slot":"parley.nvim:3","requested_at":"2026-10-16T02:03:00.323684Z"},"phase":"finished","pid":60996,"started_at":"2026-10-16T02:03:00.423781Z","finished_at":"2026-10-16T02:04:47.445939Z","session_id":"65ca19ee-0f47-484f-ab09-7ded2e13d806","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T19:07:58-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 229 — Stream display chunks are discarded silently when the pending session invalidates |
+| repo | parley.nvim |
+| issue file | workshop/issues/000229-stream-display-chunks-are-discarded-silently-when-the-pending-session-invalidates.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | bc2df5b3a8b69b6ea0dccc2be6f462e4150099de..9d987af401a5af70aa599b5d5d3a76f7916c8d57 |
+| command | sdlc close --issue 229 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-15T19:07:58-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Prior findings checked: #341 exists, and the tasker comment now matches the code. Next I'm running the focused specs.
+
+Focused specs all pass. Now I'm undoing the reader-failure fix to confirm its test fails without it.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This issue is ready to ship. The path the issue named, `create_handler` with four silent early returns, had no production caller. It was removed along with the things only it used: `stream_replace_at_line`, `helper.undojoin`, `stream_position` and their specs. A search of `lua/`, `tests/` and `atlas/` finds nothing left that refers to them, apart from an arch spec that now forbids `create_handler`. The one place on the live path where text could drop while streaming went on was a stream reader that throws. That case now ends the attempt with `<stream> reader failed`. I reverted that guard in this disposable checkout: the new `tasker_supervision` case failed, and it passed again once restored. The Done-when oracle (`stream_integrity_spec`) runs the real transport against `fake_cliproxy`'s `stream` mode and asserts the answer equals `qt.response` exactly. Focused specs all pass at head: tasker_run 43/0, tasker_supervision 30/0, stream_integrity 1/0, stream_view 7/0, buffer_mutation 10/0, document_ownership 8/0. Of the three prior findings, two are resolved. BR-2 is a Minor design suggestion the team chose not to take.
+
+**Strengths**
+1. The issue was measured before it was fixed. The Plan traces the live path (tasker stdout → `process_line` → generation machine → `document.append`), finds the named writer is dead code, and removes it instead of adding counters to it. That meets Done-when 2 by removal, which is cleaner.
+2. The oracle in `tests/integration/stream_integrity_spec.lua` is independent of the client. `expected_text` rebuilds the fake's text from the delta count, so the test checks the transport (`response == expected`) and the buffer (`answer == response`) separately. Edits above the answer and busy slices hit every write.
+3. All reader calls go through one guard, `read`, in `lua/parley/tasker.lua:613-620`. It skips only later data for a failed reader and still delivers the terminal calls, which keeps #182's promise that a reader can release what it holds.
+4. The new `tasker_run_spec.lua:617` case pins the exact terminal sequence: data, then `(err, nil)`, then one `(nil, nil)`, with a late EOF ignored.
+
+**Critical findings:** none.
+
+**Important findings:** none.
+
+**Minor findings**
+- BR-2 is still open (disposition below). Nothing new.
+
+**Test coverage notes**
+- Reverting the reader guard turns the new supervision case red. Because my revert skipped the reader call entirely, three other cases in that file also went red (26/4 in total).
+- I did not re-run the full suite. The Log records `make -k test` exit 0 on f606daff. The only code change since then is the comment in 9d987af4, plus a test that passes.
+
+**Architecture**
+- **ARCH-DRY: pass.** Only one reader guard; duplicate dead code was deleted.
+- **ARCH-PURE: pass.** The change sits in an existing IO shell (`tasker`). The removed `stream_position` was pure but had no other consumer.
+- **ARCH-PURPOSE: pass.** Both Done-when rows are delivered: the oracle is asserted, and the silent returns are gone with their writer. The two stall paths are a different symptom, filed as #341.
+- **ARCH-MOCK: pass.** The oracle uses the stateful process-level fake `fake_cliproxy` behind the real curl transport.
+- **ARCH-CONSTRAINTS: pass.** The reader guard adds O(1) work per chunk. The oracle's 300 deltas at 2 ms pace run in reasonable time.
+- **ARCH-SECURE: pass.** The only secret is the test key `testkey`, used only in tests. No new untrusted input is parsed.
+- **ARCH-ORDER: flagged as Minor; carried as BR-2 rather than raised again.** `failed_readers` and `io_error` are closure flags kept outside the record's event model.
+- **ARCH-FUNERAL: pass.** Nothing durable is created: `failed_readers` lives only for the attempt's closure, and the change deletes more than it adds.
+
+**Docs:** `atlas/chat/document.md` gains a paragraph on how every streamed byte is accounted for, and `traceability.yaml` is updated. No new user-facing surface, so README is unaffected.
+
+**Plan revision recommendations:** none. The Core concepts table matches the code: deletions are confirmed, and `tasker`, `fake_cliproxy` and `stream_integrity_spec` are present as stated.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      tasker.lua:609-612 now describes the real sequence, one (err, nil) notice then exactly one (nil, nil) EOF; tasker_run_spec.lua:617 pins it and passes 43/0.
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      Still closure flags (failed_readers, io_error) outside the attempt event model; deliberately kept, same shape as the retention limit; atlas line covers reader-failure stops; Minor, non-blocking.
+  - id: BR-3
+    disposition: withdrawn
+    note: |
+      workshop/issues/000341-generation-machine-rejects-some-output-and-receipt-events-without-an-outcome-possibly-hanging-the-generation.md exists in the checkout, filed in commit bc2df5b3 (the base).
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"9ca0c38d-9502-49cf-ae98-63b4ed971485","repository":"github.com/xianxu/parley.nvim","issue_id":"000229","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/d3ec4e7c712e7bcb","reviewed_head":"9d987af401a5af70aa599b5d5d3a76f7916c8d57","slot":"parley.nvim:3","requested_at":"2026-10-16T02:06:41.175938Z"},"phase":"finished","pid":79464,"started_at":"2026-10-16T02:06:41.273871Z","finished_at":"2026-10-16T02:07:56.665286Z","session_id":"80d13250-be50-4a21-bf9e-0ca9b8b64946","outcome":"returned"}] -->
