@@ -87,3 +87,9 @@ Quick flow. One pure mapper, plus capture and restore around the two external-wr
   - With both restores removed, the above, at-cursor and `:checktime` cases fail. The below case passes either way, since it guards the no-change baseline.
   - With only the native-path restore removed, just the `:checktime` case fails, so each reload path is pinned by its own test.
 - The quick-flow plan needed a Core-concepts table: `single_source_sweeps_spec` reads the current issue's tables, and it failed with none.
+- Close review: SHIP, with 4 Minor advisories, answered:
+  - `curswant` was overwritten with the byte column, which lost `$`-stickiness and miscounted tabs and multibyte text. It is now kept while the column is unchanged, and re-derived from `virtcol` when the text moved it. New case "a $-sticky cursor stays $-sticky…"; it fails on the old line.
+  - The diff ran twice per window; `view_map.hunks` now computes it once per reload.
+  - The test comment is fixed.
+  - Other agent-rewrite paths (`file_refresh`, the review round's `edit!`): filed as #358, unclaimed.
+- Landing waits for the operator's live check on the session file, which the TL sequences after #319's stage. No stage from this slot.

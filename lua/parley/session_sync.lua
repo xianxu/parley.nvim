@@ -323,12 +323,20 @@ end
 local function restore_views(buf, snap)
     local view_map = require("parley.view_map")
     local new = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local hs = view_map.hunks(snap.lines, new)
     for win, view in pairs(snap.wins) do
         if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
-            local pos = view_map.map(snap.lines, new, { view.lnum, view.col })
-            view.lnum, view.col, view.curswant = pos[1], pos[2], pos[2]
-            view.topline = view_map.map_line(snap.lines, new, view.topline)
-            vim.api.nvim_win_call(win, function() vim.fn.winrestview(view) end)
+            local pos = view_map.map(snap.lines, new, { view.lnum, view.col }, hs)
+            -- curswant is a virtual column ($-sticky as MAXCOL): kept while the
+            -- column is, re-derived from the screen when the text moved it.
+            local moved = pos[2] ~= view.col
+            view.lnum, view.col = pos[1], pos[2]
+            if moved then view.curswant = nil end
+            view.topline = view_map.map_line(snap.lines, new, view.topline, hs)
+            vim.api.nvim_win_call(win, function()
+                vim.fn.winrestview(view)
+                if moved then vim.fn.winrestview({ curswant = vim.fn.virtcol(".") - 1 }) end
+            end)
         end
     end
 end

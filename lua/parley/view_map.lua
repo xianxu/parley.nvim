@@ -9,7 +9,9 @@ local M = {}
 local NEEDLE = 25   -- characters each side of the column: about 50 to search for
 local MIN_PART = 3  -- a fallback shorter than this matches anywhere, so it isn't tried
 
-local function hunks(old, new)
+--- The line diff of `old` to `new` as index hunks. Compute it once and pass it
+--- to `map` and `map_line` when mapping several positions over one change.
+function M.hunks(old, new)
     local function text(t) return table.concat(t, "\n") .. "\n" end
     return vim.diff(text(old), text(new), { result_type = "indices" })
 end
@@ -52,16 +54,16 @@ local function find(h, new, part)
 end
 
 --- The line `lnum` of `old` becomes in `new`, by position alone (a top line).
-function M.map_line(old, new, lnum)
-    local h, delta = locate(hunks(old, new), lnum)
+function M.map_line(old, new, lnum, hs)
+    local h, delta = locate(hs or M.hunks(old, new), lnum)
     if h then return hunk_start(h, new) end
     return clamp(lnum + delta, new)
 end
 
 --- Map `pos` ({lnum, col}: 1-based line, 0-based byte column) from `old` to `new`.
-function M.map(old, new, pos)
+function M.map(old, new, pos, hs)
     local lnum, col = pos[1], pos[2]
-    local h, delta = locate(hunks(old, new), lnum)
+    local h, delta = locate(hs or M.hunks(old, new), lnum)
     if not h then return { clamp(lnum + delta, new), col } end
     local line = old[lnum] or ""
     local first = math.max(0, col - NEEDLE)
