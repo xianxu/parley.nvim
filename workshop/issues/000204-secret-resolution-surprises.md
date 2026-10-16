@@ -1,12 +1,12 @@
 ---
 id: 000204
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-08-30
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '8c3196180b86103664cb6aea108e00c4595db0ff' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'c6e4cb7aa0a181f22750f88c2e647338c4900efb' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T17:50:06-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "561e12cc", done: "565fefdd"}
+actual_hours: 0.60
 ---
 
 # a config change to api_keys silently does not take effect: the defaults table is replaced, and the vault pins the first secret it saw
