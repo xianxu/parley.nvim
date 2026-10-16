@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "bedd66df"}
 ---
 
 # packaging_launcher_spec: await_ready can read the barrier's pid file before it is written
