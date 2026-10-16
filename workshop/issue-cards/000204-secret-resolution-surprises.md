@@ -1,6 +1,6 @@
 ---
 id: 000204
-status: codecomplete
+status: done
 created: 2026-08-30
 updated: 2026-10-15
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: a8add1b4526fd3cd95f4ec4972c034ca8cba4638
         evidence_commit: 134d5e37fc50607c7793e8599c610ca5e280e4f1
+        landed_commit: 667210963be63b40d32ad1923bb3016660201b06
 ---
 
 # a config change to api_keys silently does not take effect: the defaults table is replaced, and the vault pins the first secret it saw
