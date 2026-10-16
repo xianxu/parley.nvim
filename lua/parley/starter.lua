@@ -88,17 +88,47 @@ end
 
 -- Tutorials belong to the profile's chat directory, which project mode demotes
 -- to the global root; seeding the primary root wrote them into a project (#338).
+--
+-- The welcome lock is a directory holding its owner's pid, and a waiter sees it
+-- only complete or absent (#348). Taking it renames a staging directory that
+-- already holds the owner record into place (a loser's rename fails: the lock is
+-- not empty). Retiring it renames it away before deleting. A mkdir followed by
+-- the owner write, or an rf delete, showed waiters a bare directory in between,
+-- which they took for a dead owner. So a lock without a valid owner is garbage.
+-- (POSIX rename may replace an EMPTY directory, so an empty lock left by an
+-- older version's crash is taken over rather than reported.)
+local function take_lock(lock)
+    local staging = assert(uv.fs_mkdtemp(lock .. '.new-XXXXXX'))
+    assert(vim.fn.writefile({ tostring(uv.os_getpid()) }, staging .. '/owner') == 0,
+        'Cannot write welcome initializer owner: ' .. staging)
+    if uv.fs_rename(staging, lock) then
+        return true
+    end
+    assert(vim.fn.delete(staging, 'rf') == 0, 'Cannot remove welcome initializer staging: ' .. staging)
+    return false
+end
+
+local function retire_lock(lock)
+    local retired = ('%s.retired-%d-%d'):format(lock, uv.os_getpid(), uv.hrtime())
+    assert(uv.fs_rename(lock, retired), 'Cannot retire welcome initializer: ' .. lock)
+    assert(vim.fn.delete(retired, 'rf') == 0, 'Cannot remove welcome initializer: ' .. retired)
+end
+
 local function welcome(parley, roots, chat_dir)
     local lock = roots.state .. '/welcome-initializer'
     local deadline = uv.hrtime() + 300 * 1e9
-    while not uv.fs_mkdir(lock, 448) do
+    while not take_lock(lock) do
         local stat = uv.fs_lstat(lock)
         local owner_stat = uv.fs_lstat(lock .. '/owner')
         local fd = owner_stat and owner_stat.type == 'file' and io.open(lock .. '/owner', 'r')
         local owner = fd and fd:read(32)
         if fd then fd:close() end
         local pid = owner and tonumber(owner:match('^(%d+)%s*$'))
-        if not stat or stat.type ~= 'directory' or not pid or pid < 1 or not uv.kill(pid, 0) then
+        -- A read that misses is garbage only if the same lock is still there:
+        -- an owner retiring it in between leaves no lock, or another one.
+        local still = uv.fs_lstat(lock)
+        local same = stat and still and still.ino == stat.ino and still.dev == stat.dev
+        if same and (stat.type ~= 'directory' or not pid or pid < 1 or not uv.kill(pid, 0)) then
             error('Welcome initialization requires repair. Close all Parley instances, remove ' .. lock .. ', and retry.')
         end
         if uv.hrtime() >= deadline then
@@ -114,15 +144,13 @@ local function welcome(parley, roots, chat_dir)
             staging_dir = nil
         end
         if owned then
-            local removed = vim.fn.delete(lock, 'rf')
-            assert(removed == 0, 'Cannot remove welcome initializer: ' .. lock)
             owned = false
+            retire_lock(lock)
         end
     end
     local leave = vim.api.nvim_create_autocmd('VimLeavePre', { once = true, callback = cleanup })
     local primary = parley.config.chat_dir
     local ok, result = xpcall(function()
-        vim.fn.writefile({ tostring(uv.os_getpid()) }, lock .. '/owner')
         migrate_welcome(parley, chat_dir)
         local source = debug.getinfo(1, 'S').source:sub(2)
         local runtime = assert(source:match('^(.*)/lua/parley/starter%.lua$'), 'Cannot locate bundled tutorials')

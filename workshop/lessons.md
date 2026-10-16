@@ -597,3 +597,9 @@ oracle, and the mutation that would make the test fail.
 ## #347: `mkdir -p` is not race-safe at intermediate levels
 
 - Vim's `mkdir(path, "p")` raises E739 when another process creates an intermediate directory between its check and its create, and it leaves the leaf uncreated. Tolerating EEXIST only for the leaf is not enough. Create one level at a time and accept any level that is a directory afterwards.
+
+## #348: a lock that waiters inspect must be published and retired atomically
+
+- A lock directory made by mkdir and then an owner write, or removed by an rf delete, is visible half-made in both directions. Publish it by renaming a staging directory that already holds the record, and retire it by renaming it away before deleting it.
+- A waiter that misses a read counts it as garbage only after re-checking that the same lock (inode and device) is still there.
+- Each such re-check needs its own gate test that fails without it.
