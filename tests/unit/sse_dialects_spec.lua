@@ -57,6 +57,18 @@ describe("sse_dialects: anthropic (#242)", function()
         assert.same({}, present(raw, vocabulary.anthropic.tool_use))
     end)
 
+    it("thinking decodes to one reasoning event, and only the text is content", function()
+        local raw = emit("anthropic", "thinking")
+        assert.equals("Hello, world! 👋", decode_text(anthropic, raw))
+        local reasoning = {}
+        for line in raw:gmatch("[^\n]+") do
+            local e = anthropic.parse_sse_progress_event(line)
+            if e and e.kind == "reasoning" then reasoning[#reasoning + 1] = e.text end
+        end
+        assert.same({ "Let me plan the answer." }, reasoning)
+        assert.same({}, present(raw, vocabulary.anthropic.thinking))
+    end)
+
     it("inband_error, cap and no_stop carry what the ending classifier reads", function()
         local D = require("parley.dispatcher")
         local inband = emit("anthropic", "inband_error")

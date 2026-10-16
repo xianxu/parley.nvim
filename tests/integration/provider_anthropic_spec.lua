@@ -58,23 +58,26 @@ describe("anthropic through dispatcher -> curl -> fake_provider (#242)", functio
         assert.equals(calls[1].id, block.tool_use_id)
     end)
 
-    it("S3 in-band error mid-stream: classified as an error, not a clean answer (#228)", function()
+    it("S3 in-band error mid-stream: the truncation notice names the error, not a clean answer (#228)", function()
         local port = scenarios.start("anthropic", "inband_error")
         local out = scenarios.query("anthropic", port, payload(messages()))
-        -- Text arrived first, so the dispatcher logs nothing itself; what the
-        -- caller reads is its ending classification of the finished stream.
-        local ending = dispatcher._classify_ending(out.qt)
-        assert.equals("error", ending.class, vim.inspect(ending))
-        assert.is_truthy(tostring(ending.detail):find("Overloaded", 1, true), vim.inspect(ending))
+        assert.equals("Starting the answer and then ", out.response)
+        -- Text arrived first, so the dispatcher logs the ending at warning
+        -- level: the answer is truncated by the provider's in-band error.
+        assert.is_true(any(out.warnings, "in-band — Overloaded"), "no in-band notice: " .. vim.inspect(out.warnings))
     end)
 
-    it("S4 HTTP 429: a failure carrying the API's message, and no retry", function()
-        local port = scenarios.start("anthropic", "http_429", nil, { PARLEY_FAKE_REQUEST_LOG = log })
-        local out = scenarios.query("anthropic", port, payload(messages()))
-        assert.is_table(out.failure, "a 429 completed as success")
-        assert.is_truthy(vim.inspect(out.failure):find("rate limit", 1, true), vim.inspect(out.failure))
-        assert.equals(1, #scenarios.requests(log), "the request was retried")
-    end)
+    for _, case in ipairs({ { 429, "rate limit" }, { 529, "Overloaded" }, { 500, "Internal server error" } }) do
+        local status, message = case[1], case[2]
+        it("S4 HTTP " .. status .. ": a failure carrying the API's message, and no retry", function()
+            local port = scenarios.start("anthropic", "http_" .. status, nil, { PARLEY_FAKE_REQUEST_LOG = log })
+            local out = scenarios.query("anthropic", port, payload(messages()))
+            assert.is_table(out.failure, "an HTTP " .. status .. " completed as success")
+            assert.equals(status, out.failure.http_status)
+            assert.is_truthy(tostring(out.failure.body):find(message, 1, true), vim.inspect(out.failure))
+            assert.equals(1, #scenarios.requests(log), "the request was retried")
+        end)
+    end
 
     it("S5 output cap: the cap notice, and the partial answer kept (#228)", function()
         local port = scenarios.start("anthropic", "cap")
@@ -87,18 +90,53 @@ describe("anthropic through dispatcher -> curl -> fake_provider (#242)", functio
 
     it("S6 split frames: every SSE frame split at every byte boundary, same answer", function()
         local port = scenarios.start("anthropic", "ok", "every_byte")
-        local started = vim.uv.now()
-        local out = scenarios.query("anthropic", port, payload(messages()))
+        local started, raw_at_first_chunk = vim.uv.now(), nil
+        local out = scenarios.query("anthropic", port, payload(messages()), {
+            on_chunk = function(n, _, qt) if n == 1 then raw_at_first_chunk = #qt.raw_response end end,
+        })
         assert.is_nil(out.failure)
         assert.equals(FIXTURE_TEXT, out.response)
+        -- The split reached the reader: the first answer piece was decoded
+        -- before the body had fully arrived. One coalesced read would not.
+        assert.is_true(raw_at_first_chunk < #out.qt.raw_response,
+            ("the stream arrived in one read (%s of %d bytes)"):format(tostring(raw_at_first_chunk), #out.qt.raw_response))
         assert.is_true(vim.uv.now() - started < 5000, "the split case exceeded its 5 s envelope (PQ-7)")
+    end)
+
+    for _, split in ipairs({ "frames", "random:7" }) do
+        it("S6 split " .. split .. ": same answer", function()
+            local out = scenarios.query("anthropic", scenarios.start("anthropic", "ok", split), payload(messages()))
+            assert.is_nil(out.failure)
+            assert.equals(FIXTURE_TEXT, out.response)
+        end)
+    end
+
+    it("thinking: the reasoning reaches on_progress and only the text is the answer", function()
+        local out = scenarios.query("anthropic", scenarios.start("anthropic", "thinking"), payload(messages()))
+        assert.is_nil(out.failure)
+        assert.equals(FIXTURE_TEXT, out.response)
+        local reasoning = {}
+        for _, e in ipairs(out.progress) do
+            if e.kind == "reasoning" then reasoning[#reasoning + 1] = e.text end
+        end
+        assert.same({ "Let me plan the answer." }, reasoning, vim.inspect(out.progress))
+    end)
+
+    it("no stop reason: the answer is kept, and the ending is not reported as a clean finish", function()
+        local out = scenarios.query("anthropic", scenarios.start("anthropic", "no_stop"), payload(messages()))
+        assert.is_nil(out.failure)
+        assert.equals(FIXTURE_TEXT, out.response)
+        assert.equals("unknown", dispatcher._classify_ending(out.qt).class)
     end)
 
     it("S7a disconnect after N bytes: a failure, and the partial answer kept", function()
         local port = scenarios.start("anthropic", "disconnect_after:600")
         local out = scenarios.query("anthropic", port, payload(messages()))
         assert.is_table(out.failure, "a truncated transfer completed as success")
-        assert.is_truthy(out.qt and out.qt.response ~= nil)
+        assert.is_truthy(out.failure.exit, "the failure does not say how the transfer ended")
+        -- The 600-byte cut ends after the first text delta.
+        assert.equals("Hello,", out.qt.response)
+        assert.is_true(out.failure.streamed)
     end)
 
     it("S7b a throwing output handler stops the attempt; no later chunk is consumed (#229)", function()
@@ -107,6 +145,7 @@ describe("anthropic through dispatcher -> curl -> fake_provider (#242)", functio
             on_chunk = function(n) if n == 1 then error("consumer invalidated mid-stream") end end,
         })
         assert.is_table(out.failure, "the attempt went on after its reader threw")
+        assert.is_truthy(tostring(out.failure.exit):find("reader", 1, true), vim.inspect(out.failure.exit))
         assert.equals(1, #out.chunks, "chunks were consumed after the throw")
     end)
 end)

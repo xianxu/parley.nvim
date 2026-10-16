@@ -212,7 +212,18 @@ Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-p
   - `tests/regression/run_proofs.sh`: #228 and #229 reproduced on `dc548920^` and `634e33a9^`, and fixed on the branch, 6/6 passing.
   - No production change. Two harness facts the helper absorbs:
     - An unowned query needs `deadline_ms`, so the helper passes `tasker.deadline.stream`.
-    - A non-empty in-band error is read via `_classify_ending`, because the dispatcher logs only empty-response error notices.
+    - ~~A non-empty in-band error is read via `_classify_ending`, because the dispatcher logs only empty-response error notices.~~ That was wrong (BR-3). The dispatcher logs a warning-level "answer is TRUNCATED … in-band — Overloaded". S3 now asserts that warning.
+- 2026-10-16 M1 review round 1, FIX-THEN-SHIP. All six findings fixed:
+  - BR-2: `tests/unit/fake_provider_spec.lua`, 10 cases. It covers the behaviour table, the split invariant, check_mode, a curl per mode, and the request-log gating.
+  - BR-3: S3 asserts the in-band warning.
+  - BR-4: S7a asserts `"Hello,"` and `streamed`.
+  - S6 now asserts the split reached the reader. Mutating it to `none` fails it, with 1015 of 1015 bytes arriving in one read.
+  - `--mode` and `--split` are validated at startup.
+  - Added the `frames` split, S4 for 429/529/500, and the thinking and no_stop rows.
+- **FINDING: a production defect, so STOP per plan Task 3.** S7b is intermittent: 3/40 and 4/30 under stress. After the handler throws, the handler gets the SAME delta again (`{"Hello,","Hello,"}`).
+  - Cause: `dispatcher.lua` out_reader's chunk loop calls `process_line` BEFORE dropping the line from `buffer`. A throw leaves the line in place. tasker still delivers the terminal EOF `(nil,nil)` (#182), and the EOF branch flushes the leftover buffer through `process_line`, so the thrown line is decoded again.
+  - This is #229's class: tasker gates data after a failure, but the reader's own EOF flush re-reads it.
+  - Reported to the TL; the fix is pending its decision.
 
 ## Revisions
 

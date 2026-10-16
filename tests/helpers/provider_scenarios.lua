@@ -21,8 +21,9 @@ function M.start(dialect, mode, split, env)
     return port
 end
 
---- One query; blocks until it settles. Returns { response, failure, errors,
---- warnings, chunks, qt }.
+--- One query; blocks until it settles. Returns { response, failure, aborted,
+--- errors, warnings, chunks, progress, qt }. opts.on_chunk(n, chunk, qt) sees
+--- each handler call while the query is live.
 function M.query(provider, port, payload, opts)
     opts = opts or {}
     dispatcher.providers[provider] = dispatcher.providers[provider] or {}
@@ -31,21 +32,23 @@ function M.query(provider, port, payload, opts)
     require("parley.vault").add_secret(provider, "sk-fake-" .. provider) -- dummy only (PQ-5)
     local logger = require("parley.logger")
     local saved_error, saved_warning = logger.error, logger.warning
-    local out = { errors = {}, warnings = {}, chunks = {} }
+    local out = { errors = {}, warnings = {}, chunks = {}, progress = {} }
     logger.error = function(m) out.errors[#out.errors + 1] = tostring(m) end
     logger.warning = function(m) out.warnings[#out.warnings + 1] = tostring(m) end
-    local done, qid = false, nil
+    local done = false
     local ok, err = pcall(function()
-        qid = dispatcher.query(nil, provider, payload, function(_, chunk)
+        dispatcher.query(nil, provider, payload, function(query_id, chunk)
             out.chunks[#out.chunks + 1] = chunk
-            if opts.on_chunk then opts.on_chunk(#out.chunks, chunk) end
+            if opts.on_chunk then opts.on_chunk(#out.chunks, chunk, require("parley.tasker").get_query(query_id)) end
         end, function(query_id)
             -- The query record is dropped once the query settles; keep it here.
             out.qt = require("parley.tasker").get_query(query_id)
         end, function(response)
             out.response = response
             done = true
-        end, nil, function(msg)
+        end, function(_, event)
+            out.progress[#out.progress + 1] = event
+        end, function(msg)
             out.aborted = msg -- a pre-start abort (no query ever ran)
             done = true
         end, nil, function(query_id, failure)

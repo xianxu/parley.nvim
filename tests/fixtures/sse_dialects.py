@@ -9,6 +9,7 @@ structurally faithful and consistent across one interaction's calls.
 
 Abstract reply kinds:
   {"kind": "text", "text": str}
+  {"kind": "thinking", "thinking": str, "text": str}   # a thinking block, then text
   {"kind": "tool_use", "id": str, "name": str, "input": dict}
   {"kind": "inband_error", "text": str, "error_type": str, "message": str}
   {"kind": "cap", "text": str}             # the output-token cap
@@ -42,6 +43,17 @@ def anthropic(reply):
         "model": "claude-fake", "id": "msg_fake", "type": "message", "role": "assistant", "content": [],
         "stop_reason": None, "stop_sequence": None, "usage": {"input_tokens": 11, "output_tokens": 2}}})]
     kind = reply["kind"]
+    index = 0
+    if kind == "thinking":
+        # anthropic_thinking_only_max_tokens.txt: thinking deltas, then a signature.
+        out.append(_event("content_block_start", {"type": "content_block_start", "index": 0,
+                                                  "content_block": {"type": "thinking", "thinking": "", "signature": ""}}))
+        out.append(_event("content_block_delta", {"type": "content_block_delta", "index": 0,
+                                                  "delta": {"type": "thinking_delta", "thinking": reply["thinking"]}}))
+        out.append(_event("content_block_delta", {"type": "content_block_delta", "index": 0,
+                                                  "delta": {"type": "signature_delta", "signature": "AAAAfake"}}))
+        out.append(_event("content_block_stop", {"type": "content_block_stop", "index": 0}))
+        index = 1
     if kind == "tool_use":
         out.append(_event("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {
             "type": "tool_use", "id": reply["id"], "name": reply["name"], "input": {}}}))
@@ -52,18 +64,18 @@ def anthropic(reply):
         out.append(_event("content_block_stop", {"type": "content_block_stop", "index": 0}))
         stop = "tool_use"
     else:
-        out.append(_event("content_block_start", {"type": "content_block_start", "index": 0,
+        out.append(_event("content_block_start", {"type": "content_block_start", "index": index,
                                                   "content_block": {"type": "text", "text": ""}}))
         out.append(_event("ping", {"type": "ping"}))
         for d in _deltas(reply.get("text", "")):
-            out.append(_event("content_block_delta", {"type": "content_block_delta", "index": 0,
+            out.append(_event("content_block_delta", {"type": "content_block_delta", "index": index,
                                                       "delta": {"type": "text_delta", "text": d}}))
         if kind == "inband_error":
             # anthropic_inband_error.txt: the error event ends the stream mid-answer.
             out.append(_event("error", {"type": "error", "error": {"type": reply["error_type"],
                                                                    "message": reply["message"]}}))
             return b"".join(out)
-        out.append(_event("content_block_stop", {"type": "content_block_stop", "index": 0}))
+        out.append(_event("content_block_stop", {"type": "content_block_stop", "index": index}))
         if kind == "no_stop":
             return b"".join(out)
         stop = "max_tokens" if kind == "cap" else "end_turn"
@@ -100,6 +112,31 @@ def _has_tool_result(request):
         isinstance(b, dict) and b.get("type") == "tool_result" for b in content)
 
 
+# Every --mode the fake accepts; anything else is refused at startup.
+MODES = ("ok", "inband_error", "inband_error_empty", "cap", "cap_empty", "no_stop", "thinking")
+SPLITS = ("none", "every_byte", "frames")
+
+
+def check_mode(mode):
+    """The mode, or ValueError: http_<status>[_once] and disconnect_after:<bytes>
+    take a number; the rest are MODES."""
+    if mode in MODES:
+        return mode
+    if mode.startswith("http_"):
+        status = mode[5:][:-5] if mode.endswith("_once") else mode[5:]
+        if status.isdigit() and 400 <= int(status) <= 599:
+            return mode
+    if mode.startswith("disconnect_after:") and mode.split(":", 1)[1].isdigit():
+        return mode
+    raise ValueError("unknown mode: " + mode)
+
+
+def check_split(mode):
+    if mode in SPLITS or (mode.startswith("random:") and mode.split(":", 1)[1].isdigit()):
+        return mode
+    raise ValueError("unknown split: " + mode)
+
+
 def behaviour(request, mode):
     """Request -> abstract reply. Keyed on the REQUEST, never a counter, so it
     stays right under retries and concurrent buffers (as fake_cliproxy's tool
@@ -117,6 +154,8 @@ def behaviour(request, mode):
         return {"kind": "inband_error", "text": "", "error_type": "overloaded_error", "message": "Overloaded"}
     if mode == "no_stop":
         return {"kind": "no_stop", "text": FIXTURE_TEXT}
+    if mode == "thinking":
+        return {"kind": "thinking", "thinking": "Let me plan the answer.", "text": FIXTURE_TEXT}
     if _has_tool_result(request):
         return {"kind": "text", "text": "Done: the tool result was received."}
     if request.get("tools"):
@@ -131,6 +170,11 @@ def split(body, mode):
         return [body]
     if mode == "every_byte":
         return [body[i:i + 1] for i in range(len(body))]
+    if mode == "frames":
+        # One write per SSE frame (each ends at its blank line).
+        frames = [f + b"\n\n" for f in body.split(b"\n\n")]
+        frames[-1] = frames[-1][:-2]
+        return [f for f in frames if f]
     if mode.startswith("random:"):
         rng = random.Random(int(mode.split(":", 1)[1]))
         out, i = [], 0
@@ -148,7 +192,7 @@ if __name__ == "__main__":
         reply = {"text": {"kind": "text", "text": FIXTURE_TEXT},
                  "tool_use": {"kind": "tool_use", "id": TOOL_ID, "name": "read_file", "input": TOOL_INPUT},
                  "inband_error": behaviour({}, "inband_error"), "cap": behaviour({}, "cap"),
-                 "no_stop": behaviour({}, "no_stop")}[kind]
+                 "no_stop": behaviour({}, "no_stop"), "thinking": behaviour({}, "thinking")}[kind]
         sys.stdout.buffer.write(DIALECTS[dialect](reply))
     else:
         sys.stderr.write("usage: sse_dialects.py emit <dialect> <kind>\n")

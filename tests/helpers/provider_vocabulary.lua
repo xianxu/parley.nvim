@@ -8,8 +8,9 @@ local M = {}
 -- tools/wire_anthropic.lua decode_tool_calls_from_stream.
 M.anthropic = {
     text = { '"type":"message_start"', '"type":"content_block_start"', '"type":"content_block_delta"',
-        '"type":"text_delta"', '"type":"content_block_stop"', '"type":"message_delta"', '"stop_reason"',
-        '"type":"message_stop"' },
+        '"type":"text_delta"', '"type":"content_block_stop"', '"type":"message_delta"',
+        '"stop_reason":"end_turn"', '"type":"message_stop"' },
+    thinking = { '"type":"thinking"', '"type":"thinking_delta"', '"type":"signature_delta"' },
     tool_use = { '"type":"tool_use"', '"type":"input_json_delta"', '"partial_json"', '"stop_reason":"tool_use"' },
 }
 
