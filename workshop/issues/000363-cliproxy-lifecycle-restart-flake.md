@@ -72,3 +72,21 @@ contamination must be distinguished, not assumed. A read-only subagent
 confirmed those fixture boundaries. Use actual fake processes and existing
 process-tool seams (ARCH-MOCK), with deterministic delay rather than load.
 No production fix selected before reproducing the cause.
+
+### 2026-10-16 — deterministic experiments
+
+Unchanged production: a disposable lifecycle spec delays the main loop 2200ms
+after the real stop returns, preserving real PID results. All 63 cases pass;
+no post-stop synthetic stall fires. Log /tmp/parley-363-delay-probe.log.
+
+A disposable process fake instead delays only /v1/models by 2200ms (management
+404 stays prompt). Real stop-time curl times out and stop returns n=0,pids={}
+(no process signalled); the fixture nevertheless opens its killed window.
+wait_port_released legitimately probes an unidentified listener, but the wrapper
+fabricates down after 5s, then stalls ensure_running another 5s. The 8s await
+expires, with continuations still running. Trace names cliproxy.lua:512 and
+:905; log /tmp/parley-363-identity-delay.log. This demonstrates a fixture
+false positive, not proof that production probed a port it killed. Tighten
+the model to an actually exited signalled process; preserve legitimate
+unidentified/still-alive probes. Final regression will delay only the first
+identity response so the fallback can answer within the unchanged budget.
