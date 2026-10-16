@@ -645,6 +645,9 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			elseif reader_state == "threw" then
 				-- tasker still delivers EOF after a reader failure (#182), but the
 				-- bytes after the failure point are not this reader's to decode.
+				-- finish_stdout is skipped too: its usage and stop_reason are
+				-- success-path data the failure path never reads, and its
+				-- non-streaming fallback would hand content to the handler again.
 				buffer = ""
 			elseif chunk then
 				qt.raw_response = qt.raw_response .. chunk

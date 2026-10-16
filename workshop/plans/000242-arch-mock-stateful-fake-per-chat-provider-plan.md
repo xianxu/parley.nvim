@@ -139,8 +139,9 @@ Regression proofs: #228 (S3, S5) must fail on `dc548920^`, and #229 (S7b) on `63
 ### Task 3: the Anthropic integration specs, S1–S7, through the real path
 
 **Files:**
-- Create: `tests/helpers/provider_scenarios.lua` (the scenario table and a `drive(provider, mode)` that starts the fake, points `D.providers[p].endpoint` at it, and runs `dispatcher.query` as `stream_integrity_spec` does)
-- Create: `tests/integration/provider_anthropic_spec.lua`
+- ~~Create: `tests/helpers/provider_scenarios.lua` (the scenario table and a `drive(provider, mode)` …)~~
+- ~~Create: `tests/integration/provider_anthropic_spec.lua`~~
+- Superseded by the round-2 revision (BR-8): the table is `tests/helpers/provider_scenario_table.lua`, the IO driver `provider_scenarios.run`, the spec `tests/integration/provider_scenarios_spec.lua`.
 
 - [ ] One failing case per scenario row, each asserting: the written answer, or the failure/cap notice (`_ending_notice` text), and for S2 the request log's second body carrying `tool_result` with the first call's id.
 - [ ] Implement `provider_scenarios.drive`, making each case pass. No production change is expected; if one is needed, STOP and report it to the TL as a finding.
