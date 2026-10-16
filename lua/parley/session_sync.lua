@@ -103,6 +103,11 @@ end
 
 -- Submission receipts and errors share one literal, bounded label with the
 -- pre-attachment coordinator. Escape percent signs only at each UI boundary.
+-- An existing lock with no local baseline remains an outstanding turn.
+M.has_unsubmitted = function(turn, baseline, current)
+    return turn == "operator" and (not baseline or baseline ~= current)
+end
+
 M.feedback_view = require("parley.document_band").feedback_view
 
 -- Days since 1970-01-01 for a proleptic Gregorian date (no timezone involved).
@@ -559,6 +564,7 @@ end
 local function define_highlights()
 	local groups = {
 		ParleySessionSyncFree = { link = "StatusLine" },
+		ParleySessionSyncLeave = { bg = "#ff0000", fg = "#ffffff", ctermbg = 196, ctermfg = 231, bold = true },
 		ParleySessionSyncOperator = { bg = "#870000", fg = "#ffffff", ctermbg = 88, ctermfg = 231, bold = true },
 		ParleySessionSyncStale = { bg = "#ff8700", fg = "#000000", ctermbg = 208, ctermfg = 16, bold = true },
 		ParleySessionSyncOwed = { link = "DiffChange" },
@@ -593,6 +599,16 @@ M.attach = function(buf, identity, observed)
 	vim.bo[buf].autoread = false
 	local group = vim.api.nvim_create_augroup(ns_group .. buf, { clear = true })
     s.group = group
+    local function outstanding()
+        return state[buf] == s and not s.moving and vim.api.nvim_buf_is_valid(buf)
+            and M.has_unsubmitted(read_turn(buf), s.baseline, s.content)
+    end
+    vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, { group = group, buffer = buf, callback = function()
+        if outstanding() then
+            require("parley.document_band").flash(vim.api.nvim_get_current_win(), buf, outstanding)
+        end
+    end })
+
 	-- Acquire in the edit notification, before TextChanged/InsertLeave auto-save
 	-- callbacks can clear 'modified' (#324). This buffer was identified at
 	-- attach: an edit to its YAML must not remove its protection.
