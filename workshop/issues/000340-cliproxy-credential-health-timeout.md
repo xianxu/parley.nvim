@@ -57,6 +57,8 @@ Fix: wait on actual state, the exit of the processes `stop()` signalled, never a
 
 ## Log
 
+
+- 2026-10-16: closed — Full suite green on 0e240eea (sdlc-local/suite, main merged). Measured cause: under 8-parallel load, probes of the just-killed proxy port reached down only by curl max-time, about 2 s each, twice per repair, while kill(pid,0) already reported the process gone. Fix: wait on the signalled pids exiting, then spawn without a reuse probe; the deadline probe fallback is unchanged. 8-parallel harness after the fix: 72 awaits, median 338 ms, max 917 ms (before: max 4470 ms). Regression: a probe in the stop-to-spawn window answers down after 5 s; the repair must make 0 window probes. Mutation: probe-only release fails 3 cases; with the direct spawn removed, 2 fail. update, command, dispatch, conformance, auth_login and budget specs are green.; review verdict: SHIP
 - First seen 2026-10-15 in #332 PR241. Code b5de7d2b4c3d336679135d016baeb58654f262aa; this file and production cliproxy code are unchanged by #332. The previous #337 full suite passed this file. Current suite: 442 passed spec files, one failed; this file 53 successful cases/1 failure/0 errors in 64 s. Full run took 3m11s after a 2043 s machine-cap queue; all recipes finished, no surviving test processes. Earlier #336/#337 failures passed in this run.
 - Full retained log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/acebcf70a6676a7e2e96ef8c6624e95a.log; SHA256 e330d2ee07a369850bc8d6bb9233559fa4b86a510c95acd6cef89e06672a5548. Local status sdlc-local/suite is failure on the exact code head. A single focused same-code reproduction is pending; no clean full-suite or live acceptance is claimed.
 - 2026-10-16 (parley.nvim:4): measurement and fix, as in ## Plan.
