@@ -459,9 +459,10 @@ M._repair_budget_sec = {
     auth_files = CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS,
     stop_identity_probe = CURL_MAX_TIME,
     stop_listener_read = LSOF_MAX_MS / 1000,
-    -- The post-exit listener read (#340) runs inside the release wait, whose
-    -- overrun is one probe — or this read, whichever is longer.
-    port_release = PORT_RELEASE_MS / 1000 + math.max(CURL_MAX_TIME, LSOF_MAX_MS / 1000),
+    -- The post-exit listener read (#340) gets only the time left before the
+    -- release deadline (#345 close BR-1), so the wait still overruns by one
+    -- probe at most — the read and the fallback probe never stack.
+    port_release = PORT_RELEASE_MS / 1000 + CURL_MAX_TIME,
     ensure_probe = CURL_MAX_TIME,
     poll_healthy = POLL_BUDGET_MS / 1000 + CURL_MAX_TIME,
     second_read = CURL_MAX_TIME,
@@ -519,15 +520,18 @@ local function wait_port_released(host, port, secret, pids, cb)
             local ok, _, name = uv.kill(pid, 0)
             return ok ~= nil or name ~= "ESRCH" -- EPERM: it exists, just not ours
         end, pids)
-        if #alive == 0 then
+        local remaining = deadline - uv.now()
+        if #alive == 0 and remaining > 0 then
+            -- Within the deadline: the read must not push the fallback probe
+            -- past it, or the read and the probe would stack (#345 close BR-1).
             return pids_on_port_async(port, function(listeners, lerr)
                 if not lerr and #listeners == 0 then
                     return cb(true, "down", true)
                 end
                 probe_poll()
-            end)
+            end, remaining)
         end
-        if uv.now() >= deadline then
+        if remaining <= 0 then
             return probe_poll() -- the probe at the deadline decides, as before
         end
         vim.defer_fn(exit_poll, 50)
@@ -952,11 +956,12 @@ end
 
 -- The same read without blocking the main loop: lsof measured ~1 s under load
 -- (#345). cb(pids, err) runs on the main loop, once, on every path.
-pids_on_port_async = function(port, cb)
+pids_on_port_async = function(port, cb, timeout_ms)
     if vim.fn.executable(_lsof_cmd) ~= 1 then
         return cb({}, "lsof unavailable")
     end
-    local ok = pcall(vim.system, lsof_argv(port), { text = true, timeout = LSOF_MAX_MS }, function(res)
+    local limit = math.min(timeout_ms or LSOF_MAX_MS, LSOF_MAX_MS)
+    local ok = pcall(vim.system, lsof_argv(port), { text = true, timeout = limit }, function(res)
         vim.schedule(function()
             if res.code == 124 then -- vim.system's timeout: no answer is not "no listener"
                 return cb({}, "lsof timed out")
@@ -969,7 +974,7 @@ pids_on_port_async = function(port, cb)
     end
 end
 
-M._pids_on_port_async = function(port, cb) return pids_on_port_async(port, cb) end -- test seam
+M._pids_on_port_async = function(port, cb, timeout_ms) return pids_on_port_async(port, cb, timeout_ms) end -- test seam
 
 -- Synchronously decide whether host:port is held by a cliproxy — same
 -- /v1/models identity as health_probe (reusing classify) — so stop() never
@@ -980,13 +985,6 @@ local function port_holds_cliproxy(host, port, secret)
     return is_cliproxy_state(classify(res.code, res.stdout))
 end
 
---- Stop the managed proxy. Kills proxies this session spawned AND reaps a
---- leftover cliproxy on the managed port from ANY session (the detached-proxy
---- rough edge: a proxy spawned in an earlier nvim that `_spawned` can't reach).
---- It identity-probes the port first, so a **foreign** process holding the port
---- is left untouched.
----@return number killed
----@return integer[] pids # what was signalled, so a restart can wait for their exit (#340)
 -- SIGTERM each pid not yet in `killed`, recording it. Shared by stop() and
 -- stop_async() (ARCH-DRY).
 local function sigterm_all(killed, pids)
@@ -1008,6 +1006,13 @@ local function kill_spawned()
     return killed
 end
 
+--- Stop the managed proxy. Kills proxies this session spawned AND reaps a
+--- leftover cliproxy on the managed port from ANY session (the detached-proxy
+--- rough edge: a proxy spawned in an earlier nvim that `_spawned` can't reach).
+--- It identity-probes the port first, so a **foreign** process holding the port
+--- is left untouched.
+---@return number killed
+---@return integer[] pids # what was signalled, so a restart can wait for their exit (#340)
 function M.stop()
     local killed = kill_spawned()
     local opts = render_opts()

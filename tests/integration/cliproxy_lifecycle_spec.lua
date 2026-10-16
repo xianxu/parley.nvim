@@ -413,7 +413,9 @@ describe("cliproxy IO lifecycle", function()
 
             assert(outcome, "restart_managed never resolved")
             assert.is_true(outcome.ok, outcome.msg)
-            assert.equals(2, #vim.fn.readfile(lsof_log), "expected the stop and post-exit listener reads")
+            -- Read 1 found the leftover; read 2, after it exited, found none — so
+            -- the restart took the exit-confirmed path, not the probe fallback.
+            assert.same({ "listed: " .. leftover, "listed: " }, vim.fn.readfile(lsof_log))
             assert.equals("ESRCH", select(3, uv.kill(leftover, 0)), "the leftover was not reaped")
             assert.is_true(max_gap < LSOF_DELAY_MS / 2,
                 ("the main loop stalled %d ms while lsof ran"):format(max_gap))
@@ -434,6 +436,24 @@ describe("cliproxy IO lifecycle", function()
             assert.equals("lsof timed out", got.err)
             assert.same({}, got.pids)
             assert.is_true(uv.now() - started < 3500, "the read was not cut off at its limit")
+        end)
+
+        -- #345 close BR-1: the post-exit read gets only the time left before the
+        -- release deadline, so it and the fallback probe never stack. The
+        -- read must honour a limit shorter than LSOF_MAX_MS.
+        it("an lsof given less time than its limit is cut off at that time", function()
+            vim.env.PARLEY_FAKE_LSOF_DELAY_MS = "4000"
+            cliproxy._set_process_tools({ lsof = vim.fn.getcwd() .. "/tests/fixtures/fake_lsof" })
+            local started = uv.now()
+            local got = await(function(done)
+                cliproxy._pids_on_port_async(ready_port.free_port(), function(pids, err)
+                    done({ pids = pids, err = err, at = uv.now() - started })
+                end, 300)
+            end)
+            cliproxy._set_process_tools(nil)
+            vim.env.PARLEY_FAKE_LSOF_DELAY_MS = nil
+            assert.equals("lsof timed out", got.err)
+            assert.is_true(got.at < 1500, ("a 300 ms read took %d ms"):format(got.at))
         end)
 
         -- #340 close review: the signalled pids exiting frees the port only if

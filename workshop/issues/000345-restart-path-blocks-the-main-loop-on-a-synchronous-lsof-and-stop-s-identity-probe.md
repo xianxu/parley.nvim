@@ -107,4 +107,9 @@ blocked on its identity curl (up to 2 s) is the same user-visible freeze.
   - A probe-only release fails 4 cases.
   - Dropping the lsof timeout fails 1 case.
 - New fixture `tests/fixtures/fake_lsof` is listed in the fixture-lifecycle CANNOT_BLOCK, and the corpus count is 14.
+- Close round 1 (FIX-THEN-SHIP):
+  - BR-1: the budget modelled the post-exit read and the fallback probe as a `max`, but they run in sequence. Summing them would have taken the repair below the budget spec's 5 s headroom. So the release wait now owns its deadline: the post-exit read gets only the time left (`remaining`, at most `LSOF_MAX_MS`) and is skipped once the deadline passes. The overrun stays one probe, `port_release` = deadline + one probe again, and the stack cannot happen. Test: a read given 300 ms is cut off at that time. Mutation: ignoring the given limit fails it. The `remaining` pass-through in `exit_poll` is covered by the seam test plus inspection; a restart-level timing case would need a proxy that exits near the deadline (the exit-delay variable #343 is retiring).
+  - The doc block: `M.stop`'s doc and annotations are back on `M.stop`; the helpers moved above it.
+  - The stateless fake: `fake_lsof` now lists only live pids and logs what it printed. The responsiveness test asserts read 1 listed the leftover and read 2 listed none, so it covers the exit-confirmed path.
+  - Concurrent spawn reaped during `stop_async`'s async window: accepted, not fixed. The window already existed during the release wait (#340), and a dispatch's `ensure_running` racing an explicit restart is outside this issue. Recorded here.
 
