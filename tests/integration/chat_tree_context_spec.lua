@@ -1,0 +1,225 @@
+-- #233 over real files: the request context is the chat tree in depth-first
+-- order, cut at the exchange being submitted. Files are read from their loaded
+-- buffer when there is one, so an unsaved child is seen as the operator sees it.
+local tmp_dir = vim.fn.tempname() .. "-parley-chat-tree"
+local chat_dir = tmp_dir .. "/chats"
+vim.fn.mkdir(chat_dir, "p")
+
+local parley = require("parley")
+parley.setup({ chat_dir = chat_dir, state_dir = tmp_dir .. "/state", providers = {}, api_keys = {} })
+local chat_respond = require("parley.chat_respond")
+
+local function write_chat(basename, body)
+    local path = chat_dir .. "/" .. basename
+    local lines = { "---", "topic: T", "file: " .. basename, "model: m", "provider: openai", "---", "" }
+    vim.list_extend(lines, body)
+    vim.fn.writefile(lines, path)
+    return vim.fn.resolve(path)
+end
+
+local function parse(path)
+    local lines = parley.helpers.chat_lines(path)
+    return parley.chat_parser.parse_chat(lines, parley.chat_parser.find_header_end(lines), parley.config)
+end
+
+-- The questions of the context for submitting exchange `cut` of `path`.
+local function questions(path, cut)
+    local parsed = parse(path)
+    local sequence = chat_respond._tree_sequence(path, parsed, cut, parsed)
+    local out = {}
+    for _, item in ipairs(sequence) do out[#out + 1] = vim.trim(item.exchange.question.content) end
+    return out, sequence
+end
+
+describe("chat context over a real chat tree (#233)", function()
+    local root, aside, nested, later
+    before_each(function()
+        -- root: R1, an inline <M-i> aside in R1's answer, then R2 with a 🌿: branch.
+        root = write_chat("2026-10-16.09-00-00.001.md", {
+            "💬: R1", "", "🤖:[A]", "answer one, see [🌿:aside](2026-10-16.09-01-00.002.md)", "",
+            "💬: R2", "", "🤖:[A]", "answer two", "",
+            "🌿: 2026-10-16.09-03-00.004.md: Later", "",
+            "💬: R3", "",
+        })
+        aside = write_chat("2026-10-16.09-01-00.002.md", {
+            "🌿: 2026-10-16.09-00-00.001.md: Root", "",
+            "💬: A1", "", "🤖:[A]", "aside answer", "",
+            "🌿: 2026-10-16.09-02-00.003.md: Nested", "",
+        })
+        nested = write_chat("2026-10-16.09-02-00.003.md", {
+            "🌿: 2026-10-16.09-01-00.002.md: Aside", "",
+            "💬: AA1", "", "🤖:[A]", "nested answer", "",
+        })
+        later = write_chat("2026-10-16.09-03-00.004.md", {
+            "🌿: 2026-10-16.09-00-00.001.md: Root", "",
+            "💬: L1", "",
+        })
+    end)
+    after_each(function()
+        for _, b in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.api.nvim_buf_get_name(b):find(chat_dir, 1, true) then
+                vim.api.nvim_buf_delete(b, { force = true })
+            end
+        end
+    end)
+
+    it("sends the aside, and its nested aside, to the next question in the root", function()
+        assert.same({ "R1", "A1", "AA1", "R2" }, questions(root, 2))
+    end)
+
+    it("gives a later branch every subtree to its left", function()
+        assert.same({ "R1", "A1", "AA1", "R2", "L1" }, questions(later, 1))
+    end)
+
+    it("sends nothing to the right of the cut", function()
+        assert.same({ "R1", "A1" }, questions(aside, 1)) -- not AA1, R2 or the later branch
+    end)
+
+    local function messages_for(path, cut, opts)
+        opts = opts or {}
+        local parsed = parse(path)
+        local input = opts.input or parsed
+        local input_index = opts.input_index or cut
+        local sequence, at = chat_respond._tree_sequence(path, parsed, cut, input, input_index)
+        local config = vim.tbl_deep_extend("force", parley.config,
+            { chat_memory = opts.memory or { enable = false } })
+        local messages = chat_respond.build_messages({ parsed_chat = input, sequence = sequence,
+            start_index = opts.start_index or 1, end_index = 100000, exchange_idx = at,
+            agent = { name = "t", provider = "openai", model = "m", system_prompt = "S" },
+            config = config, helpers = parley.helpers, logger = parley.logger, chat_path = path,
+            resolved_remote_content = opts.remote })
+        local out = {}
+        for i = 2, #messages do out[#out + 1] = vim.trim(tostring(messages[i].content)) end
+        return out, sequence, at
+    end
+
+    -- BR-2: a request that leaves an exchange out leaves out the asides off it.
+    it("drops an aside with the batch leg's exchange it hangs off", function()
+        local parsed = parse(root)
+        local input = vim.deepcopy(parsed)
+        table.remove(input.exchanges, 1) -- the leg keeps R2 and R3, not R1
+        local _, sequence = messages_for(root, 2, { input = input, input_index = 1 })
+        local qs = {}
+        for i = 1, #sequence - 1 do qs[#qs + 1] = vim.trim(sequence[i].exchange.question.content) end
+        assert.same({ "R2" }, qs) -- no A1/AA1: R1, the exchange they are about, is not sent
+    end)
+
+    it("drops an aside whose branch reference is outside the visual range", function()
+        local r2_row = parse(root).exchanges[2].question.line_start
+        local out = messages_for(root, 2, { start_index = r2_row })
+        assert.same({ "R2" }, out)
+    end)
+
+    -- BR-3: the window counts back from the end of the current file, as it
+    -- did for a single file, not from the cut.
+    it("keeps the single-file window when resubmitting mid-chat", function()
+        local body = {}
+        for i = 1, 10 do vim.list_extend(body, { "💬: Q" .. i, "", "🤖:[A]", "a" .. i, "", "📝: s" .. i, "" }) end
+        local single = write_chat("2026-10-16.10-00-00.010.md", body)
+        local out = messages_for(single, 3, { memory = { enable = true, max_full_exchanges = 4 } })
+        local omitted = parley.config.chat_memory.omit_user_text or "[Previous messages omitted]"
+        assert.same({ omitted, "s1", omitted, "s2", "Q3" }, out)
+    end)
+
+    -- BR-1: a remote reference in another file of the tree reads that file's
+    -- cache, so its content is sent instead of a "not cached" stub.
+    it("resolves a remote reference in an ancestor from the ancestor's cache", function()
+        local url = "https://example.com/tree-" .. math.random(1000000)
+        local parent = write_chat("2026-10-16.11-00-00.020.md", {
+            "💬: read @@" .. url .. "@@", "", "🤖:[A]", "read it", "",
+            "🌿: 2026-10-16.11-01-00.021.md: Child", "",
+        })
+        local child = write_chat("2026-10-16.11-01-00.021.md", {
+            "🌿: 2026-10-16.11-00-00.020.md: Parent", "", "💬: and then?", "",
+        })
+        chat_respond.get_chat_remote_reference_cache(parent)[url] = "the cached page"
+        local parsed = parse(child)
+        local sequence, at = chat_respond._tree_sequence(child, parsed, 1, parsed, 1)
+        local resolved
+        chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
+            chat_file = child, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
+        assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10), "remote resolution never finished")
+        assert.equals("the cached page", resolved[url])
+        local out = messages_for(child, 1, { remote = resolved })
+        assert.is_truthy(table.concat(out, "\n"):find("the cached page", 1, true), table.concat(out, "\n"))
+    end)
+
+    -- Round 2: one file, however it is named. Under a symlinked chat dir the
+    -- buffer name and the walk's resolved path name the same cache.
+    it("reads the current file's cache through a symlinked chat dir", function()
+        local real = tmp_dir .. "/real-" .. math.random(1000000)
+        local link = tmp_dir .. "/link-" .. math.random(1000000)
+        vim.fn.mkdir(real, "p")
+        assert(vim.uv.fs_symlink(real, link))
+        local url = "https://example.com/linked-" .. math.random(1000000)
+        local named = link .. "/2026-10-16.12-00-00.030.md" -- the buffer's name
+        vim.fn.writefile({ "---", "topic: T", "file: x.md", "model: m", "provider: openai", "---", "",
+            "💬: read @@" .. url .. "@@", "", "🤖:[A]", "read it", "", "💬: and?", "" }, named)
+        chat_respond.get_chat_remote_reference_cache(named)[url] = "CACHED"
+        local parsed = parse(named)
+        local sequence, at = chat_respond._tree_sequence(named, parsed, 2, parsed, 2)
+        local resolved
+        chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
+            chat_file = named, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
+        assert.is_true(vim.wait(5000, function() return resolved ~= nil end, 10), "remote resolution never finished")
+        assert.equals("CACHED", resolved[url])
+    end)
+
+    it("looks up another file's cache without creating an entry for it", function()
+        local parsed = parse(root)
+        local sequence, at = chat_respond._tree_sequence(later, parse(later), 1, parse(later), 1)
+        local resolved
+        chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
+            chat_file = later, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
+        assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10))
+        local chats = chat_respond.load_remote_reference_cache().chats
+        for _, file in ipairs({ root, aside, nested }) do
+            assert.is_nil(chats[file], "a lookup created a cache entry for " .. file)
+        end
+    end)
+
+    -- Round 3: a fetch for another file's reference is saved under that file,
+    -- where the next lookup reads it, so it is fetched once.
+    it("caches an ancestor's fetched reference under the ancestor, once", function()
+        local url = "https://example.com/once-" .. math.random(1000000)
+        local parent = write_chat("2026-10-16.13-00-00.040.md", {
+            "💬: read @@" .. url .. "@@", "", "🤖:[A]", "read it", "",
+            "🌿: 2026-10-16.13-01-00.041.md: Child", "",
+        })
+        local child = write_chat("2026-10-16.13-01-00.041.md", {
+            "🌿: 2026-10-16.13-00-00.040.md: Parent", "", "💬: and then?", "",
+        })
+        local drive = require("parley.oauth")
+        local saved, calls = drive.fetch_content, 0
+        drive.fetch_content = function(_, _, callback) calls = calls + 1; callback("fetched body") end
+        local function resolve()
+            local parsed = parse(child)
+            local sequence, at = chat_respond._tree_sequence(child, parsed, 1, parsed, 1)
+            local resolved
+            chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
+                chat_file = child, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
+            assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10))
+            return resolved
+        end
+        local ok, err = pcall(function()
+            assert.is_truthy(resolve()[url]:find("fetched body", 1, true))
+            assert.is_truthy(resolve()[url]:find("fetched body", 1, true))
+        end)
+        drive.fetch_content = saved
+        assert(ok, err)
+        assert.equals(1, calls, "the ancestor's reference was fetched again")
+        assert.is_nil(chat_respond.peek_chat_remote_reference_cache(child)[url], "saved under the child")
+    end)
+
+    it("reads an unsaved child from its buffer", function()
+        vim.cmd("edit " .. vim.fn.fnameescape(aside))
+        local buf = vim.api.nvim_get_current_buf()
+        local row = vim.fn.search("aside answer")
+        vim.api.nvim_buf_set_lines(buf, row - 1, row, false, { "edited, not saved" })
+        vim.cmd("buffer #")
+        local _, sequence = questions(root, 2)
+        local answer = vim.trim(sequence[2].exchange.answer.content)
+        assert.equals("edited, not saved", answer)
+        assert.equals(nested, sequence[3].file)
+    end)
+end)

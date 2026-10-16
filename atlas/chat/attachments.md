@@ -67,8 +67,8 @@ for both send-budget stat and bounded reads.
   (`read_bounded`: stat first, then at most the cap).
 - Memory: attachments do NOT pin an exchange; a summarized question's
   placeholder gains "[An image was attached to this question; it is no longer included.]".
-  An ancestor chat's attachment (tree-of-chat context) reaches the model as
-  its link text only.
+  An attachment in another file of the chat tree (tree-of-chat context, #233)
+  is sent like one in the current file, resolved against its own chat file.
 - Logs: every logger call that serializes a request value goes through
   `elide_image_data` — `<image/png, N bytes>` in place of the base64
   (`tests/arch/log_sinks_spec.lua` enumerates the class). Transport files:

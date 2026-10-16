@@ -1,12 +1,22 @@
 ---
 id: 000233
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-10-16
 estimate_hours:
-card_mirror: 'c01661e7ab6970b7df64d40b9680648b5d44354a' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '7f00a0286e54b6426e10c5b257138dce5dcb4aea' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T03:36:06-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: inferred}
+actual_hours: 1.21
 ---
 
 # A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree
@@ -89,17 +99,21 @@ real case shows up.
   children of the current exchange when regenerating.
 - `chat_memory` summarization applies across the linearized sequence, with no separate
   ancestor renderer.
-- One root-finder and one downward walker; exporter/delete/tree-files derive from them.
+- One root-finder and one downward walker; exporter/delete/tree-files derive from them. (Split out as #349.)
 - An unsaved child buffer's latest exchange is included.
 - Unit tests on the pure linearizer (hand-built parsed trees) plus an integration test over
   real files with nested and inline branches.
 
 ## Plan
 
-- [ ] Pure `linearize(tree, cut)` → ordered exchange list, with tests for the cases above
-- [ ] Single tree walker (root-find + DFS, buffer-first, visited set) and migrate exporter/init callers
-- [ ] Feed the linearized sequence through the existing current-file message loop and delete `build_ancestor_messages` / `collect_ancestor_chain`
-- [ ] Integration test over real chat files; manual check of the R1 → A → R2 case with `<M-i>`
+Durable plan: `workshop/plans/000233-chat-context-depth-first-walk-of-the-tree-plan.md`.
+M2 (one tree walker) is split out as #349.
+
+- [x] Pure `chat_tree.linearize` and `path_up`, with tests for the cases above
+- [x] Feed the linearized sequence through `build_messages`, and delete `build_ancestor_messages` / `collect_ancestor_chain`
+- [x] Integration test over real chat files with nested and inline branches and an unsaved child buffer
+
+Before merge (a gate held by the TL, not a build step): the operator decides on full ancestors inside the memory window, with the request sizes in the Log.
 
 ## Log
 
@@ -112,3 +126,83 @@ real case shows up.
   directly after the answer it is about.
 - Related: #224 (ancestor walk uses the shared resolver), #232 (outline tree builder has its
   own item rule, the same drift from duplicated tree code).
+
+### 2026-10-16
+- 2026-10-16: closed — Post-merge fix only: #236 deleted the parley.google_drive shim, so the fetch-once test now stubs parley.oauth.fetch_content (the module chat_respond calls). chat_tree_context_spec 11/11; full suite green on 4012c9d5 (sdlc-local/suite). (fixed-then-ship); review verdict: SHIP
+- 2026-10-16: closed — Red: without linearize subtree descent (old behaviour) 3/4 tree-context and 4/11 chat_tree cases fail. Every review finding (BR-1/2/3, cache identity, non-writing lookup, BR-8 holder key) has a chat_tree_context_spec case that a mutation removing the fix fails. Green: chat_tree 11, chat_tree_context 11, build_messages 104, chat_respond 53, ancestor_chain_rename 6, topic_gen 11, remote_references 50, helper_io 11, arch 20 specs, luacheck clean.; review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 274 added lines in code files (limit 100); an earlier round of this close already ran the full review
+
+- Taken by parley.nvim:3. The plan was approved for M1, with M2 split out as #349.
+- Red: with `linearize`'s subtree descent removed (the old behaviour: no
+  asides), 3 of 4 `chat_tree_context_spec` cases and 4 of 11 `chat_tree_spec`
+  cases fail. Green: chat_tree 11, chat_tree_context 4, build_messages 104,
+  chat_respond 53, ancestor_chain_rename 6, topic_gen 11, all 20 arch specs.
+  luacheck clean.
+- Found while building: topic requests excluded ancestors by message count.
+  `build_messages` now returns the current file's messages, and the topic
+  input keeps only those (`build_messages_spec`).
+- Request size, before (origin/main) vs after (this branch). Bytes are the JSON
+  of the messages array; tokens are estimated as bytes / 4. The tree is built
+  from real repo chats: root = the graphviz chat (27.7 KB, 7 questions); an aside
+  after root exchange 2 = the 2026-04-03.22-21 chat (26.3 KB, 4 questions); a
+  nested aside after the aside's exchange 1 = the refractive-index chat
+  (4.4 KB, 2 questions). The answers carry `📝:` summaries, as real ones do.
+
+  | submission | memory off (default) | memory on, 4 full exchanges |
+  |---|---|---|
+  | root, question right after the aside (R3) | 3.6k to 11.4k tokens | 1.6k to 2.2k (re-measured on the final code: the window counts back from the end of the file, BR-3) |
+  | root, last question (R7) | 8.3k to 16.1k | 5.2k to 5.8k |
+  | aside, last question | 8.2k to 11.3k | 8.2k to 5.7k |
+  | nested aside, last question | 3.3k to 7.3k | 3.3k to 6.2k |
+  | real repo pair basics.md to refractive-index (aside after the cut / the child) | unchanged (1.3k / 2.4k) | n/a |
+
+  There are two effects. (1) The asides are now visible, which is the point: R3
+  and R7 gain the aside's 7.8k tokens. (2) Ancestors were always sent as their
+  `📝:` summaries; now they render like any exchange, so with memory off they
+  are sent in full, `🧠:` lines included as in the current file. That is the
+  nested case's growth with the same 9 messages. With `chat_memory` enabled,
+  the window spans the whole linearized tree, so the long cases come out
+  smaller than before.
+- Close review round 1. Three Important findings, all fixed:
+  - BR-1: remote `@@url@@` references in other files went unresolved.
+    `resolve_remote_references` now walks the same sequence (the call site
+    computes it once, before the fetches), reading each item's own file's cache.
+  - BR-2: an aside outlived its anchor. `linearize` tags each aside off the
+    current file with its anchor (the exchange and the branch row). A batch
+    leg's input that drops the exchange drops the aside, and the visual range
+    applies to the branch row.
+  - BR-3: the memory window counted back from the cut. The current file's
+    exchanges after the cut now follow it in the sequence, counted by the
+    window but never rendered, as the single-file input always was.
+
+  Each fix has a test in `chat_tree_context_spec`, and a mutation removing the
+  fix fails it. Minors: the duplicated sequence-to-text loop is now
+  `tests/helpers/tree_context.lua`. The walk's latency is measured: a median of
+  11 to 16 ms (max 20 ms) over the 58 KB, three-file tree above, about 0.25 ms per
+  KB read. It runs synchronously in the build, linear in the bytes to the left
+  of the cut.
+- Close review round 2 returned REWORK, with one Critical and one Minor.
+  - Critical, file identity: picking the cache by `item.file ~= chat_file`
+    compared a resolved path with the unresolved buffer name. Under a
+    symlinked chat dir, the current file's cached URLs were refetched, and a
+    failed fetch could overwrite good content. The class: one key per file.
+    Cache keys are now the resolved absolute path (`chat_cache_key`), and an
+    entry saved under the raw name moves on first use. The current file
+    always uses its own cache, chosen by `item.current`, not by a path compare.
+  - Minor: a lookup created an empty cache entry for every tree file. Other
+    files are now read through `peek_chat_remote_reference_cache`, which
+    never writes.
+
+  Tests: a symlinked-dir case and a no-entry case. The old identity mutation
+  fails both; the writing-lookup mutation fails the second. remote_references 50,
+  helper_io 11, chat_tree_context 10, green.
+- Close review round 3, BR-8 (Important), in the file-identity family: a
+  fetch for another file's reference was saved in the current file's cache,
+  where no lookup reads it, so it was fetched on every submit. The rule now
+  applies at every read and write site: a reference's cache entry lives under
+  the key of the file that holds it, and `queue_fetch` records that file.
+  Minor: `peek` loses its raw-name fallback, which could never match a
+  resolved path. A test case shows the ancestor's reference fetched once and
+  saved under the ancestor, not the child; the old write-site mutation fails
+  it. chat_tree_context 11, and the other 8 specs above, green.
+

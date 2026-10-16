@@ -289,25 +289,42 @@ take precedence over the saved toggle and configuration default.
 Resubmits all questions from start to cursor, replacing existing answers. Stop with `<C-g>x`.
 
 ## Context Assembly (Tree of Chat)
-Child chats inject ancestor context in root-to-parent order. At each ancestor,
-only exchanges up to that ancestor's branch reference to the next child are
-included (`branch.after_exchange`); exchanges after that branch point are not.
-If no matching forward reference is found, that ancestor contributes no
-exchanges. The question of each included exchange is retained; its answer uses
-the `📝:` summary when present, otherwise the full answer.
+A request's context is the chat tree in depth-first pre-order, cut at the
+exchange being submitted (#233, `lua/parley/chat_tree.lua`). Every file emits
+its exchanges in order. After exchange k, every branch whose `after_exchange` is
+k (a `🌿:` line or an inline `[🌿:text](file)` link in that answer) is emitted as
+a whole subtree, in line order, before exchange k+1. So an `<M-i>` aside is part
+of every later question's context, in the order the operator read it. The cut
+is the submitted question alone: its answer, branches hanging off it (the
+children of an exchange being regenerated), later siblings and later ancestor
+exchanges are all after it.
 
-A parent is read as the user sees it (`helper.chat_lines`): from its loaded
-buffer when one is open, which is ahead of the disk while an answer streams in
-or while edits are unsaved, else from the file. A parent exchange still being
-regenerated contributes its previous answer, as above.
+`chat_tree.path_up` follows `parent_link` upward while each parent lists the
+child among its branches. A parent that does not link back ends the path, and
+so do a cycle or the depth cap of 20. `chat_tree.linearize` emits the path's
+files with their left subtrees, under a visited set. Every file is read as the
+user sees it (`helper.chat_lines`): from its loaded buffer when one is open, else
+from the file. An exchange still being regenerated contributes its previous
+answer, as above.
 
-This ancestor-summary rule applies even when `chat_memory.enable=false`.
-Disabling memory preserves the current chat's ordinary message window; it does
-not turn ancestor summaries into full ancestor answers. The implementation is
-`chat_respond.collect_ancestor_chain` / `build_ancestor_messages`. Ancestors follow
-the complete system prefix, including both messages of a synthetic prefix.
-Automatic topic requests use only the current-file conversation, excluding that
-prefix and ancestor context.
+Each aside off the current file carries its anchor (the exchange it hangs
+after, and the row of its branch reference). A batch leg that leaves the
+exchange out leaves the aside out too, and a visual range keeps an aside when it
+keeps its branch row. The current file's exchanges after the cut follow it in
+the sequence, so the memory window counts back from the end of the file, as for
+a single file. The walk reads synchronously, linear in the bytes to the left of
+the cut (about 0.25 ms per KB measured). Remote `@@url@@` resolution walks the
+same sequence, using each file's own cache.
+
+One renderer: `build_messages` renders the linearized sequence like a single
+chat. The `chat_memory` window (`max_full_exchanges` plus `📝:` summaries) spans
+the whole sequence, so with memory disabled, ancestors and asides are sent in
+full. `@@` references in them are inlined as in their own file. Images resolve
+against their own file. The visual range applies to the current file's rows.
+Context follows the complete system prefix, including both messages of a
+synthetic prefix. Automatic topic requests use only the current file's
+conversation: `build_messages` returns the messages its current-file exchanges
+produced, and the topic input keeps just those.
 
 ## Review (`:ParleyChatReview`)
 Creates a new chat pre-filled with a proof-read prompt for the current file. Inserts a `🌿:` back-link into the source file's front matter pointing to the review chat.

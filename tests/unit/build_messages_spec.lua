@@ -2387,8 +2387,16 @@ describe("question-owned prefaces", function()
                 { system_prompt = "Test", provider = "openai", model = "gpt-4o" })
             assert.same(lines, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
             vim.api.nvim_buf_delete(buf, { force = true })
-            local ancestors = require("parley.chat_respond").build_ancestor_messages({
-                { exchanges = pc.exchanges, branch_after = 2 } })
+            -- #233: the same exchanges reached from another file of the tree.
+            local sequence = {}
+            for _, ex in ipairs(pc.exchanges) do
+                sequence[#sequence + 1] = { exchange = ex, file = "/parent.md", current = false }
+            end
+            sequence[#sequence + 1] = { exchange = exchange("now"), current = true }
+            local ancestors = parley._build_messages({ parsed_chat = pc, sequence = sequence,
+                start_index = 1, end_index = 100, exchange_idx = #sequence, agent = agent(),
+                config = vim.tbl_deep_extend("force", parley.config, { chat_memory = { enable = false } }),
+                helpers = stub_helpers, logger = stub_logger })
             for _, messages in ipairs({ initial(pc), live, ancestors }) do
                 local text = vim.inspect(messages)
                 for _, tag in ipairs({ "@@preface@@", "@@question local@@", "@@answer local@@", "@@last@@" }) do
@@ -2446,9 +2454,15 @@ describe("question-owned prefaces", function()
     it("preserves a summary's prefix-inline tag as literal context", function()
         local pc = parley.parse_chat({ "# topic: Summary", "---", "💬: First", "🤖:",
             "answer", "📝: @@inline summary@@", "💬: Next" }, 2)
-        local messages = require("parley.chat_respond").build_ancestor_messages({
-            { exchanges = pc.exchanges, branch_after = 1 } })
-        assert.equals("@@inline summary@@", messages[2].content)
+        -- #233: an exchange from another file of the tree, outside the window.
+        local messages = parley._build_messages({ parsed_chat = pc, sequence = {
+                { exchange = pc.exchanges[1], file = "/parent.md", current = false },
+                { exchange = exchange("now"), current = true } },
+            start_index = 1, end_index = 100, exchange_idx = 2, agent = agent(),
+            config = vim.tbl_deep_extend("force", parley.config,
+                { chat_memory = { enable = true, max_full_exchanges = 1 } }),
+            helpers = stub_helpers, logger = stub_logger })
+        assert.equals("@@inline summary@@", messages[3].content)
     end)
 
     it("drops tag-only questions, answers and text sections around tools", function()
@@ -2572,3 +2586,62 @@ describe("_build_messages: previous answer substitution (#255)", function()
         assert.equals("hi", messages[4].content[1].content)
     end)
 end)
+
+-- #233: a request over a chat tree passes the linearized tree as `sequence`.
+describe("_build_messages over a tree sequence (#233)", function()
+    local function build(sequence, exchange_idx, overrides)
+        return parley._build_messages(vim.tbl_extend("force", { parsed_chat = parsed_chat({}),
+            sequence = sequence, start_index = 1, end_index = 100, exchange_idx = exchange_idx,
+            agent = agent(), config = parley.config, helpers = stub_helpers, logger = stub_logger },
+            overrides or {}))
+    end
+    local function contents(messages)
+        local out = {}
+        for i = 2, #messages do out[#out + 1] = messages[i].content end
+        return out
+    end
+
+    it("renders other files' exchanges in order, then the cut question alone", function()
+        local messages = build({
+            { exchange = exchange("R1", "R1a"), current = true },
+            { exchange = exchange("A1", "A1a"), file = "/a.md", current = false },
+            { exchange = exchange("R2", "stale"), current = true },
+        }, 3, { config = vim.tbl_deep_extend("force", parley.config, { chat_memory = { enable = false } }) })
+        assert.same({ "R1", "R1a", "A1", "A1a", "R2" }, contents(messages))
+    end)
+
+    it("applies the memory window across the whole sequence", function()
+        local config = vim.tbl_deep_extend("force", parley.config,
+            { chat_memory = { enable = true, max_full_exchanges = 2 } })
+        local messages = build({
+            { exchange = exchange("R1", "R1a", "R1s"), current = true },
+            { exchange = exchange("A1", "A1a", "A1s"), file = "/a.md", current = false },
+            { exchange = exchange("R2", "R2a", "R2s"), current = true },
+            { exchange = exchange("R3"), current = true },
+        }, 4, { config = config })
+        local omitted = config.chat_memory.omit_user_text or "[Previous messages omitted]"
+        assert.same({ omitted, "R1s", omitted, "A1s", "R2", "R2a", "R3" }, contents(messages))
+    end)
+
+    it("lets the topic request read only the current file's conversation", function()
+        local messages, lead, current = build({
+            { exchange = exchange("R1", "R1a"), current = true },
+            { exchange = exchange("A1", "A1a"), file = "/a.md", current = false },
+            { exchange = exchange("R2"), current = true },
+        }, 3, { config = vim.tbl_deep_extend("force", parley.config, { chat_memory = { enable = false } }) })
+        local conversation = require("parley.chat_respond")._conversation_after_lead(messages, lead, current)
+        assert.same({ "R1", "R1a", "R2" }, vim.tbl_map(function(m) return m.content end, conversation))
+    end)
+
+    it("applies the visual range to the current file's rows only", function()
+        local foreign = exchange("A1", "A1a")
+        foreign.question.line_start, foreign.answer.line_start = 1, 2 -- rows of a.md
+        local messages = build({
+            { exchange = foreign, file = "/a.md", current = false },
+            { exchange = exchange("R1"), current = true },
+        }, 2, { start_index = 5, end_index = 50,
+            config = vim.tbl_deep_extend("force", parley.config, { chat_memory = { enable = false } }) })
+        assert.same({ "A1", "A1a", "R1" }, contents(messages))
+    end)
+end)
+
