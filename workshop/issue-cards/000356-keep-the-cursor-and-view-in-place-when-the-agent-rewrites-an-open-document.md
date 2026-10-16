@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.48
+actual_hours: 0.51
 tracker:
     version: 1
     completion:
-        token: close-e26fbbef2e2b
+        token: close-0676b32a870f
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 58023dd807a67782915211579177363542b767df
-        evidence_commit: 474a267db41900760f435eca8a4c98a3bf49d18a
+        reviewed_head: 63020146bab5a5db78e91856fec4382d75cc5546
+        evidence_commit: 14d1440634388b4616b1c15bfae07bd293ecf45a
 ---
 
 # Keep the cursor and view in place when the agent rewrites an open document
