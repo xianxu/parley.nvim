@@ -142,6 +142,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 
 - 2026-10-15 — one focused unchanged-code cliproxy reproduction passes54/0/0, no survivors, log /var/folders/07/b9wcwwld4_v2w9r3hk525bm80000gn/T/parley-332-cliproxy-triage.keheOK/target.log. HEAD differs from pushed b5de7d2b only in this issue and its plan. Static repair terms can exceed the spec's8s wait (up to10s configured probes/polls plus synchronous process discovery); the exact delayed stage is unmeasured, so this supports a budget-sensitive flake, not a proven missing callback. Asked hub whether the known-open-flake rule permits one full rerun on the exact same pushed code head while another slot fixes #340 from main (receipt4dde4dcc-7995-4612-b254-0aa46af8f34f). No waiver or blind full rerun; close/stage remain pending. Fresh real/fake conformance passes at /tmp/parley332-conformance-final.log against clean Couch revision6d65c4c4ef29bcdea3ea5b45f3dfdeed41ce1154 containing the landed pair#573 merge.
 
+- 2026-10-15 — hub explicitly approves the issue-backed flake rule for #340 and one unchanged required-suite rerun on b5de7d2b (submitted receipt bd46ab72-2c41-4074-abf5-a9ebb5640096). No waiver or source change. Close and stage only after that run passes; the TL schedules combined operator acceptance.
+
 ## Revisions
 
 - 2026-10-15 — record the already-approved persistent-feedback acceptance explicitly in Done when. Separate implementation verification from post-close staging/live/landing so the checklist records observed work without claiming future acceptance. The required suite is still pending; no close waiver or live acceptance is implied.
