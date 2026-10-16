@@ -45,6 +45,8 @@ Durable plan: [universal review submissions](../plans/000319-universal-review-se
 
 ## Log
 
+
+- 2026-10-16: closed — Registered Couch keymap sends exactly submitted: ABS_PATH for explicit, missing and long unknown instructions; failure/retry retains S1 ownership. Canonical standalone mode/context/adapter tests and 11 export tests pass. Recorded full suite on 60d0a785 exit 0 in 3m2s, log sha256 a07a85a6b4fa; lint754 and orphan census clean. Operator accepted combined #319/#356/#357 smoke per hub delivery 20a83170-e3d1-4580-8564-3f796f4818b2. Main integrated cleanly; no code changes after the suite.; review verdict: SHIP
 ### 2026-10-13
 
 ### 2026-10-15 — S2a plan drafted
