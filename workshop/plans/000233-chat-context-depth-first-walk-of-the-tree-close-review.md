@@ -352,3 +352,80 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"b95b1f8a-32be-4070-a097-46653a7f6c90","repository":"github.com/xianxu/parley.nvim","issue_id":"000233","recipe":"milestone-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/89f8b93c6b22efba","reviewed_head":"a6f6a26ec797089da0e3196b11ecffa113474839","slot":"parley.nvim:3","requested_at":"2026-10-16T11:06:38.046538Z"},"phase":"finished","pid":57070,"started_at":"2026-10-16T11:06:38.247333Z","finished_at":"2026-10-16T11:09:06.615845Z","session_id":"aac05daf-6913-4597-b797-7a06e3b5cb5c","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T04:16:45-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 233 — A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree |
+| repo | parley.nvim |
+| issue file | workshop/issues/000233-chat-context-depth-first-walk-of-the-tree.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 111893e128e74350964044dbe9b8007a38099149..73d62dcd0172cadfa810791c9cffb937ad75db57 |
+| command | sdlc close --issue 233 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T04:16:45-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking the BR-8 fix; next I'll run the regression test with and without the fix.
+
+Lifecycle tests pass. Now running the tree-context spec directly, then reverting the fix to confirm the test catches it.
+
+Green. Now reverting the write-site fix to confirm the new test goes red.
+
+BR-8 confirmed: the test fails without the fix. Running lint as a last check.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This round fixes BR-8 and BR-9 correctly, and the fix is tested. `resolve_remote_references` now records which file holds each queued URL (`holder[url]`, `lua/parley/chat_respond.lua:1244-1251`). Each fetch result is written under that file's key (`:1342-1343`). Lookups for other files still go through the read-only `peek_chat_remote_reference_cache`. The new two-submit test (`tests/integration/chat_tree_context_spec.lua:181-212`) replaces `fetch_content` with a fake and checks that the fetch runs exactly once and that nothing is saved under the child's key. I reverted only the write-site line back to `local into = chat_cache`, and that test went red: "caches an ancestor's fetched reference under the ancestor, once" failed. With the fix restored, every spec mapped to `chat/memory` and `chat/lifecycle` passes, and luacheck reports 0 warnings and 0 errors. No new blocking issues.
+
+1. **Strengths**
+   - The rule from BR-8 is applied at all three sites: the lookup (`:1267-1268`), the queue (`:1276`, `:1282`) and the write (`:1342`). That covers the whole class, not just the instance the finding named (ARCH-PURPOSE).
+   - The test checks both halves of the rule: the fetch count (the read side) and the child's cache staying empty (the write side). It drives the production function with an injected fake fetch.
+   - `peek_chat_remote_reference_cache` is now a single line that creates no entry (`:274-276`). It drops the legacy fallback that BR-9 showed could never match.
+   - `workshop/lessons.md` records the general rule (a cache shared across files has one key per file, and a reference is read and written under its holder's key), not just the incident.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - `queue_fetch` removes duplicates by URL, and the first holder wins. If an ancestor misses its cache for URL `u` and the submitted exchange also references `u`, the fresh fetch is saved only under the ancestor. If that link later breaks, the current file fetches `u` once more. This is benign and not worth a new finding.
+   - Old cache entries saved under an ancestor's symlinked raw name are no longer reachable for lookups of other files. They are only moved to the canonical key when that file itself is submitted. It is a cache, so the cost is at most one refetch.
+
+5. **Test coverage notes:** The BR-8 regression test is reachable and fails without the fix. BR-9's write-side behaviour is pinned by the same test's assertion that the child's cache stays empty. Removing the peek fallback simplifies the lookup and changes no other behaviour, so it needs no test of its own.
+
+6. **Architecture**
+   - **ARCH-DRY: pass.** The cache keying is one helper, `chat_cache_key`, shared by `get` and `peek`.
+   - **ARCH-PURE: pass.** `chat_tree.linearize` is pure; the walk's file reads stay in `io_deps`/`load`.
+   - **ARCH-PURPOSE: pass.** Every read and write site of the remote cache follows the holder-key rule.
+   - **ARCH-MOCK: pass.** OAuth is replaced at the `fetch_content` seam, which production calls through as well.
+   - **ARCH-CONSTRAINTS: pass.** Settled in earlier rounds (BR-5); unchanged this round.
+   - **ARCH-SECURE: pass.** The cache file is still parsed with the #261 typed schema.
+   - **ARCH-ORDER: pass.** No new state crosses events; the fetch completion path is unchanged apart from where it writes.
+   - **ARCH-FUNERAL: pass.** Entries are created only on a real write, and ancestor URLs no longer pile up under the current file. The cache file's lack of pruning is older than this issue.
+
+7. **Plan revision recommendations:** none. The Core concepts rows for `resolve_remote_references` ("reading each file's own cache") and `peek_chat_remote_reference_cache` match the code.
+
+```findings
+dispose:
+  - id: BR-8
+    disposition: addressed
+    note: |
+      holder[url] routes each fetch to its holder's key (chat_respond.lua:1342); reverting that line makes the new two-submit test in chat_tree_context_spec fail, and restoring it makes it pass.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Ancestor URLs (content or error stubs) now save under the ancestor's key, and the test asserts the child's cache stays empty; the dead peek fallback is removed (chat_respond.lua:274-276).
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"842e104a-bc79-4d78-b86b-3b835b8171a8","repository":"github.com/xianxu/parley.nvim","issue_id":"000233","recipe":"milestone-review","round":4,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/e4d339d87510afbd","reviewed_head":"73d62dcd0172cadfa810791c9cffb937ad75db57","slot":"parley.nvim:3","requested_at":"2026-10-16T11:11:19.749458Z"},"phase":"finished","pid":88766,"started_at":"2026-10-16T11:11:19.885818Z","finished_at":"2026-10-16T11:16:45.222782Z","session_id":"5594be4e-ab01-4efe-a4c4-166784bb2c2a","outcome":"returned"}] -->

@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "278e155a", done: "cc8b3c0a"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree
@@ -127,6 +127,8 @@ Before merge (a gate held by the TL, not a build step): the operator decides on 
   own item rule, the same drift from duplicated tree code).
 
 ### 2026-10-16
+- 2026-10-16: closed — Red: without linearize subtree descent (old behaviour) 3/4 tree-context and 4/11 chat_tree cases fail. Every review finding (BR-1/2/3, cache identity, non-writing lookup, BR-8 holder key) has a chat_tree_context_spec case that a mutation removing the fix fails. Green: chat_tree 11, chat_tree_context 11, build_messages 104, chat_respond 53, ancestor_chain_rename 6, topic_gen 11, remote_references 50, helper_io 11, arch 20 specs, luacheck clean.; review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 274 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Taken by parley.nvim:3. The plan was approved for M1, with M2 split out as #349.
 - Red: with `linearize`'s subtree descent removed (the old behaviour: no

@@ -284,6 +284,84 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 842e104a-bc79-4d78-b86b-3b835b8171a8
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000233"
+            recipe: milestone-review
+            round: 4
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/e4d339d87510afbd
+            reviewed_head: 73d62dcd0172cadfa810791c9cffb937ad75db57
+            slot: parley.nvim:3
+            requested_at: "2026-10-16T11:11:19.749458Z"
+          phase: finished
+          pid: 88766
+          started_at: "2026-10-16T11:11:19.885818Z"
+          finished_at: "2026-10-16T11:16:45.222782Z"
+          session_id: 5594be4e-ab01-4efe-a4c4-166784bb2c2a
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 73d62dcd0172cadfa810791c9cffb937ad75db57
+        tracker_head: 2afa847cfdb56244ed1eb5741b9769511ec451e8
+        branch_point: 111893e128e74350964044dbe9b8007a38099149
+        since: "2026-10-16T03:36:06-07:00"
+        until: "2026-10-16T04:10:56-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T03:36:06-07:00"
+              end: "2026-10-16T04:10:56-07:00"
+              began: "2026-10-16T03:36:06-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 996b651e-5e17-47f4-9815-33d9ff25fe0d
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: a8f2648a9527bbd9cc229af4e0dc64b96d135eeae554828d6468223bf437038c
+              started: "2026-10-15T18:27:53.241Z"
+              spawned: false
+              bytes: 10909395
+              windows:
+                - start: "2026-10-16T03:36:06-07:00"
+                  end: "2026-10-16T04:10:56-07:00"
+        cuts:
+            - dispatched: "2026-10-16T03:51:43-07:00"
+              finalized: "2026-10-16T03:55:11-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T04:00:39-07:00"
+              finalized: "2026-10-16T04:03:54-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T04:06:38-07:00"
+              finalized: "2026-10-16T04:09:14-07:00"
+              finalizing: false
+      "n": 4
+      timestamp: "2026-10-16T04:16:46-07:00"
+      dispatched: "2026-10-16T04:11:19-07:00"
+      agent: claude
+      dispose:
+        - id: BR-8
+          disposition: addressed
+          note: holder[url] routes each fetch to its holder's key (chat_respond.lua:1342); reverting that line makes the new two-submit test in chat_tree_context_spec fail, and restoring it makes it pass.
+          round: 4
+        - id: BR-9
+          disposition: addressed
+          note: Ancestor URLs (content or error stubs) now save under the ancestor's key, and the test asserts the child's cache stays empty; the dead peek fallback is removed (chat_respond.lua:274-276).
+          round: 4
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 73d62dcd0172cadfa810791c9cffb937ad75db57
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#233 (boundary-review)
@@ -337,7 +415,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-9** [Minor] `operating-envelope-undeclared` (kind: defect) Failed or fetched ancestor URLs pile up in the current file's cache, and the peek legacy fallback never matches
   Error stubs and content for URLs the current file never references are saved under its key. The peek fallback looks up the already-resolved item.file again, so old entries saved under a symlinked name for an ancestor are never found.
 
+## Round 4 — 2026-10-16T04:16:46-07:00 (claude) — passed
+
+### Disposed
+
+- BR-8 — addressed — holder[url] routes each fetch to its holder's key (chat_respond.lua:1342); reverting that line makes the new two-submit test in chat_tree_context_spec fail, and restoring it makes it pass.
+- BR-9 — addressed — Ancestor URLs (content or error stubs) now save under the ancestor's key, and the test asserts the child's cache stays empty; the dead peek fallback is removed (chat_respond.lua:274-276).
+
 ## Open findings
 
-- **BR-8** [Important] `canonical-file-identity` (kind: defect) A fetched remote reference from another tree file is written to the current file's cache, which no lookup reads, so it is fetched on every submit
-- **BR-9** [Minor] `operating-envelope-undeclared` (kind: defect) Failed or fetched ancestor URLs pile up in the current file's cache, and the peek legacy fallback never matches
+(none — every finding has been disposed)
