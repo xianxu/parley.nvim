@@ -224,7 +224,7 @@ remains independent of those maintainer tools.
 
 ### Concurrent directory creation
 
-`tests/unit/prepare_dir_spec.lua` reproduces a competing directory creator at the mkdir boundary using real temporary directories. `lua/parley/fs.lua` owns the literal-path directory postcondition; helper path expansion remains in `helper.prepare_dir`. A source guard keeps all production directory creators on that seam.
+`tests/unit/prepare_dir_spec.lua` reproduces a competing directory creator at the mkdir boundary using real temporary directories. `lua/parley/fs.lua` owns the literal-path directory postcondition; helper path expansion remains in `helper.prepare_dir`. A source guard keeps all production directory creators on that seam. `fs.ensure_dir` creates one level at a time and accepts any level a competitor created first. `mkdir -p` raised E739 on a concurrently created intermediate (#347). `tests/integration/ensure_dir_race_spec.lua` races real nvim processes on shared intermediates.
 
 ### Large native fold conformance
 
