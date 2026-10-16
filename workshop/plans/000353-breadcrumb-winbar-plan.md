@@ -114,7 +114,7 @@ Files: atlas/ui/keybindings.md, atlas/modes/session_sync.md, atlas/traceability.
 
 ## Approval
 
-Pending TL design approval. No code changes before approval and sdlc change-code's full-flow plan-quality gate.
+TL approved the design and #353/#354 revision on 2026-10-16 (receipt 5d93a58a-2467-42dd-bac4-6b468bbf15d1 verified submitted). Proceed through the full-flow change-code gate. Report green to TL; do not stage because :0 holds a combined operator check.
 
 ## Revisions
 
