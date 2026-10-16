@@ -212,3 +212,11 @@ All verified in the code on 2026-10-16.
 
 - [ ] Add `atlas/ui/attention_finder.md` and link it from `atlas/index.md`. Add the chord to `atlas/ui/keybindings.md` and the specs to `atlas/traceability.yaml`.
 - [ ] **M2 close:** run `sdlc milestone-close`, then `sdlc close`, then the operator's live check in Couch's nvim (staged only with the hub's go).
+
+## Revisions
+
+- **2026-10-16, the TL's approval.** The four decisions are settled:
+  1. answered means folded by the agent (the protocol);
+  2. the chord is `<M-u>`: the TL checked pair's zellij binds and Couch's key catalog, and it is free there. Adding it to Couch's key help (`pair/cmd/internal/keyhelp/catalog.go`) is pair work, handed to the TL to file rather than edited from this slot;
+  3. `attention.seen_grace_minutes` defaults to 60 and stays a config value; the operator has not picked between 60 and 15;
+  4. the winbar count and submits outside Couch stay out of scope.
