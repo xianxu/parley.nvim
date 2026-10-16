@@ -102,9 +102,10 @@
 | S4 | HTTP 429/529/500 → failure with the API's message; no retry (Decision 1) | ✓ | ✓ | ✓ | – |
 | S5 | output cap (`max_tokens`/`length`/`MAX_TOKENS`) → cap notice (#228 regression) | ✓ | ✓ | ✓ | – |
 | S6 | split frames: every SSE frame split at every byte boundary → S1's answer unchanged | ✓ | ✓ | ✓ | – |
-| S7 | disconnect after N bytes → failure, partial kept (#229 regression path) | ✓ | – | – | – |
+| S7a | disconnect after N bytes → failure surfaced, the partial answer kept | ✓ | – | – | – |
+| S7b | the caller's output handler throws mid-stream → the attempt stops with `io_error`, no later chunk is consumed (#229) | ✓ | – | – | – |
 
-Regression proofs: #228 (S3, S5) must fail on `dc548920^`, and #229 (S7, with the throwing reader) on `634e33a9^`. Each is checked out into a scratch worktree, never stash (lessons, #294), with the result recorded in the Log.
+Regression proofs: #228 (S3, S5) must fail on `dc548920^`, and #229 (S7b) on `634e33a9^`. See "Regression proof procedure" in the Revisions.
 
 ## Chunk 1: M1, the Anthropic dialect end to end
 
@@ -129,13 +130,7 @@ Regression proofs: #228 (S3, S5) must fail on `dc548920^`, and #229 (S7, with th
 - Modify: `tests/arch/fixture_lifecycle_spec.lua` (the executable-fixture corpus count, +1; the fake inherits the watchdog via `LoopbackHTTPServer`)
 - Test: `tests/unit/fake_provider_spec.lua` (spawn through `fixture_process`, curl it, assert bytes)
 
-- [ ] Failing spec, asserting:
-  - text, and tool_use when tools are offered;
-  - final text when the last message holds a `tool_result`;
-  - `http_429_once` (first 429 with the anthropic error body, then 200);
-  - `inband_error`, `cap`, `disconnect_after`;
-  - `--split every_byte` (the reassembled bytes equal the unsplit body);
-  - the request log.
+- [ ] Failing spec. `BehaviorModel`: one table of request shapes → expected reply kind. `FrameSplitter`: the concatenation of the slices equals the input for every mode. The shell: one curl per failure mode, asserting status and body. The request log appears only when its variable is set.
 - [ ] Implement it, with `BehaviorModel` and `FrameSplitter` as pure functions in `sse_dialects.py` and the server as a thin shell.
 - [ ] Spec passes; the fixture arch spec passes.
 - [ ] Commit.
@@ -212,3 +207,16 @@ Regression proofs: #228 (S3, S5) must fail on `dc548920^`, and #229 (S7, with th
 - The fakes' SSE templates drift from the real APIs between conformance runs. That is mitigated by the shared vocabulary list and the live spec.
 - curl's buffering on loopback may merge the fake's small writes. If so, S6 is asserted at the reader through `tasker._uv`'s 64 KiB re-slicing plus the fake's flushes; that is measured in Task 2 before relying on it.
 - A copilot `pre_query` that reaches the real network in a spec. The seam's default stays the real URL, so the copilot spec sets it, and a test asserts that a spec run never contacts `api.github.com` (the request log).
+
+## Revisions
+
+### 2026-10-16, plan-quality round 1
+
+- **PQ-1, the regression proof procedure.** The new spec cannot run on the old trees: `loopback_http.py`, `_classify_ending` and `_ending_notice` do not exist at `dc548920^`. Each proof is therefore a small standalone script, `tests/regression/proof_228.lua` / `proof_229.lua`. It is run with `nvim --headless -l` from a scratch worktree of the pre-fix parent (`git worktree add`, never stash). It requires only APIs present on BOTH trees: `dispatcher.query` with a provider endpoint and its completion and error callbacks. The FAKE is run from the branch checkout by absolute path, so nothing is copied onto the old tree. The assertion is about behaviour, not the new notice text. #228: an in-band-error stream and a `max_tokens` stream complete WITHOUT a failure on the old tree, and WITH one on the branch. #229: on the old tree a throwing handler does not stop the attempt (later chunks are still consumed). Each script prints `PROOF-REACHED <case>` immediately before its assertion, and a run without that marker counts as inconclusive, not as a pass. The old/new outcomes go in the issue Log.
+- **PQ-2, S7 split.** S7a is the disconnect (curl ends early, a failure is surfaced, the partial is kept). S7b is #229's real trigger: the caller's output handler, the callback `dispatcher.query` already takes and `out_reader` calls per chunk, throws on the Nth chunk. The assertion: the attempt stops with an `io_error` failure and the fake's later bytes are never handed to the handler. That is a real seam (the consumer callback), not a transport stub.
+- **PQ-3.** The issue gets a Revisions entry (the scenario set as revised by Decisions 1 and 2, and Done-when updated).
+- **PQ-4, the request log.** `$PARLEY_FAKE_REQUEST_LOG` is a per-case `vim.fn.tempname()` under the harness's isolated TMPDIR. The spec that sets it deletes it in `after_each`, and the fake writes nothing when the variable is unset.
+- **PQ-5, credentials.** Specs use dummy secrets only (`sk-ant-fake`, `ghu_fake`). The copilot seam is reset to `nil` (the real URL) in `after_each`, and a case asserts that no spec request reaches `api.github.com` (the fake's request log holds every request). The live spec never puts a key in an assertion message, and its failures name the provider and the missing vocabulary entry only.
+- **PQ-6.** Task 2's test plan is compressed to one strategy line per risky function (done above).
+- **PQ-7, operating envelope.** `--split every_byte` runs only on the small text fixture (≤ 4 KiB, so ≤ 4096 flushes). Measured in Task 2, the case must finish under 5 s on a loaded suite, or the cap is lowered to fit. The other cases use `--split random:<seed>` (8–64-byte slices).
+

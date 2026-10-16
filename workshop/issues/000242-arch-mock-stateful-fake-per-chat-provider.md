@@ -171,3 +171,15 @@ Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-p
   5. The live halves are built with offline proofs; the operator runs the live runs, which the TL schedules.
 - TL guidance: keep it lean (the scenario table is the product; keep the fake shell thin). M1 first, and report at its milestone close before M2.
 
+## Revisions
+
+- 2026-10-16, the TL-approved decisions revise the Spec (recorded at the plan-quality gate's request, PQ-3):
+  - Spec 3's "HTTP error with retry" is now "HTTP error surfaced as a failure carrying the API message, no retry"; retry is #351.
+  - #228's regression targets the ending classification that landed (in-band error, cap, missing stop reason), proven on `dc548920^`.
+  - The disconnect scenario splits into S7a (disconnect: failure surfaced, partial kept) and S7b (#229: a throwing output handler stops the attempt), proven on `634e33a9^`.
+  - googleai has no tool wire, so its tool-loop scenario does not apply.
+  - The copilot token URL gets a test seam.
+  - Both fakes share `tests/fixtures/sse_dialects.py`.
+  - The live runs are operator steps.
+  - Done-when reads accordingly: "the scenarios in the plan's table" replaces "the six scenarios"; "#228 and #229 fail on their pre-fix code" means the standalone proofs on the pre-fix parents.
+
