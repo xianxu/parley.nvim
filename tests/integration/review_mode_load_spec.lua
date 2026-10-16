@@ -52,45 +52,72 @@ describe("review.mode IO seam", function()
 end)
 
 describe("review skill source composition", function()
-    it("composes SKILL.md ⊕ mode body ⊕ directives ⊕ instruction", function()
-        local review = require("parley.skills.review")
-        local review_dir = (vim.api.nvim_get_runtime_file("lua/parley/skills/review", false) or {})[1]
-        assert.is_truthy(review_dir)
-        local body = review.skill.source({
-            skill_md = "BASE-SKILL-MD",
-            skill_dir = review_dir,
-            args = { mode = "developmental", instruction = "tighten the intro" },
-        })
-        assert.is_truthy(body:find("BASE-SKILL-MD", 1, true), "includes base SKILL.md")
-        assert.is_truthy(body:find("Review mode: developmental", 1, true), "names the mode")
-        assert.is_truthy(body:lower():find("whole document", 1, true), "includes scope directive")
-        assert.is_truthy(body:find("tighten the intro", 1, true), "includes operator instruction")
+    local function source(args)
+        local dir = vim.api.nvim_get_runtime_file("lua/parley/skills/review", false)[1]
+        local base = table.concat(vim.fn.readfile(dir .. "/SKILL.md"), "\n")
+        return require("parley.skills.review").skill.source({ skill_md = base, skill_dir = dir, args = args })
+    end
+
+    it("orders canonical round and grammar, selected mode data, then the local tool adapter", function()
+        local body = source({ mode = "developmental", instruction = "tighten the intro" })
+        local round = assert(body:find("# Review round", 1, true))
+        local grammar = assert(body:find("# Target: Review convention", 1, true))
+        local selected = assert(body:find("## Review mode: developmental", 1, true))
+        local adapter = assert(body:find("# Parley local review adapter", 1, true))
+        assert.is_true(round < grammar and grammar < selected and selected < adapter)
+        assert.truthy(body:find("scope: whole-doc\ndeletions: apply-with-gutter-why\nfrontier: off", 1, true))
+        assert.truthy(body:find("tighten the intro", 1, true))
+        assert.truthy(body:find("propose_edits", adapter, true))
+        assert.falsy(body:find("couch --session-sync", 1, true))
     end)
 
-    -- #316 BR-1: the `process-instruction` path (args.modes, several names)
-    -- through the real source(), not a stub.
-    it("composes several modes from args.modes: every brief, the first mode's directives", function()
-        local review = require("parley.skills.review")
-        local mode = require("parley.skills.review.mode")
-        local review_dir = (vim.api.nvim_get_runtime_file("lua/parley/skills/review", false) or {})[1]
-        local body = review.skill.source({
-            skill_md = "BASE",
-            skill_dir = review_dir,
-            args = { modes = { "proofreading", "copy-editing" }, instruction = "keep the voice" },
-        })
-        assert.is_truthy(body:find("## Review mode: proofreading", 1, true))
-        assert.is_truthy(body:find("## Review mode: copy-editing", 1, true))
-        local _, applies = body:gsub("## How to apply this round", "")
-        assert.equals(1, applies)
-        local first = assert(mode.load(review_dir .. "/modes", "proofreading"))
-        assert.is_truthy(body:find(mode.directives(first), 1, true))
-        assert.is_truthy(body:find("## Operator instruction\nkeep the voice", 1, true))
+    it("includes every selected body and only the first mode flags", function()
+        local body = source({ modes = { "proofreading", "copy-editing" }, instruction = "keep the voice" })
+        local first = assert(body:find("## Review mode: proofreading", 1, true))
+        local second = assert(body:find("## Review mode: copy-editing", 1, true))
+        assert.is_true(first < second)
+        assert.truthy(body:find("scope: whole-doc\ndeletions: apply\nfrontier: on", second, true))
+        assert.falsy(body:find("## How to apply this round", 1, true))
+        assert.truthy(body:find("## Operator instruction\nkeep the voice", 1, true))
     end)
 
-    it("returns base SKILL.md alone when no mode is given (legacy marker-only review)", function()
-        local review = require("parley.skills.review")
-        local body = review.skill.source({ skill_md = "ONLY-BASE", args = {} })
-        assert.are.equal("ONLY-BASE", body)
+    it("keeps legacy no-mode invocation marker-only with the local tool adapter", function()
+        local body = source({})
+        assert.truthy(body:find("scope: markers-only\ndeletions: propose-strike\nfrontier: on", 1, true))
+        assert.truthy(body:find("# Parley local review adapter", 1, true))
+    end)
+
+    it("composes from a copied package without a source checkout", function()
+        local shipped = vim.api.nvim_get_runtime_file("lua/parley/skills/review", false)[1]
+        local root = vim.fn.tempname()
+        local package_dir = root .. "/standalone-review"
+        vim.fn.mkdir(package_dir .. "/modes", "p")
+        for _, name in ipairs({ "SKILL.md", "local-adapter.md", "modes/copy-editing.md" }) do
+            vim.fn.writefile(vim.fn.readfile(shipped .. "/" .. name), package_dir .. "/" .. name)
+        end
+        local ok, body = pcall(require("parley.skills.review").skill.source, {
+            skill_md = table.concat(vim.fn.readfile(package_dir .. "/SKILL.md"), "\n"),
+            skill_dir = package_dir, args = { mode = "copy-editing", instruction = "keep the voice" },
+        })
+        vim.fn.delete(root, "rf")
+        assert.is_true(ok, body)
+        assert.truthy(body:find("# Review round", 1, true))
+        assert.truthy(body:find("# Target: Review convention", 1, true))
+        assert.truthy(body:find("## Review mode: copy-editing", 1, true))
+        assert.truthy(body:find("# Parley local review adapter", 1, true))
+    end)
+
+    it("refuses missing selected mode data rather than silently widening scope", function()
+        assert.has_error(function() source({ mode = "missing-mode" }) end)
+    end)
+
+    it("refuses an incomplete local package", function()
+        local dir = vim.fn.tempname()
+        vim.fn.mkdir(dir, "p")
+        local ok = pcall(require("parley.skills.review").skill.source,
+            { skill_md = "BASE", skill_dir = dir, args = {} })
+        vim.fn.delete(dir, "rf")
+        assert.is_false(ok)
     end)
 end)
 
