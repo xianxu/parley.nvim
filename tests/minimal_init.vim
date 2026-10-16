@@ -7,6 +7,19 @@ set nocompatible
 " Add parley.nvim root to runtimepath so require("parley") resolves
 set rtp+=.
 
+" #342: refuse to run any spec outside the harness's isolated HOME/XDG roots. A
+" direct `nvim -u tests/minimal_init.vim` with the operator's environment once
+" wrote their real cliproxy cache. This runs before plenary loads a spec and
+" before any -c command, so nothing can touch the operator's real state.
+lua << ISOLATION
+local reasons = require("parley.test_isolation").check()
+if #reasons > 0 then
+  io.stderr:write("parley tests: environment not isolated (#342):\n  " .. table.concat(reasons, "\n  ")
+    .. "\nRun specs through the harness: make test-spec SPEC=<feature> (or make test).\n")
+  vim.cmd("cquit 3")
+end
+ISOLATION
+
 " Add plenary (installed via lazy.nvim)
 if exists('$NVIM_TEST_PLENARY') && !empty($NVIM_TEST_PLENARY)
   execute 'set rtp+=' . fnameescape($NVIM_TEST_PLENARY)

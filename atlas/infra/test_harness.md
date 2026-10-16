@@ -65,6 +65,19 @@ cwd, so an unwritable `$TMPDIR` would silently put scratch back in-tree.
 (`PREP_TEST_ENV`'s `mkdir -p` aborts a `make` run before that, but the guard
 does not depend on that failure being loud.)
 
+**Specs never run against the operator's real state (#342).** `TEST_ENV`
+exports `PARLEY_TEST_ENV_ROOT`, and `tests/minimal_init.vim` (loaded by the
+parent and every spec child) first runs `parley.test_isolation.check()`. When
+the marker is missing, or HOME or an XDG root resolves outside it, the init quits
+with the reasons and the `make test-spec` to use, before plenary loads a spec or
+any `-c` command runs. A direct `nvim -u tests/minimal_init.vim` with the real
+environment once rewrote the operator's cliproxy catalog. Behind it, in test mode
+(`PARLEY_TEST_MODE=1`), cliproxy's `data_root()` refuses a root outside the marked
+one, so a spec that forgets `_set_data_dir` fails instead of writing elsewhere.
+Scripts that run in test mode with their own roots declare them the same way
+(`check-spell-compatibility.sh`). `make goldens` replaces the direct golden
+refresh. Pinned by `test_isolation_spec` (unit and integration).
+
 Corollary worth keeping: a full `make test` mutates nothing inside the repo
 working tree. That is checkable — snapshot `find . -path ./.git -prune -o -print`
 with mtimes before and after, and diff.

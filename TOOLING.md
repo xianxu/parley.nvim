@@ -5,6 +5,7 @@
 - Run tests: `make test` (runs all unit + integration tests via plenary.nvim in headless Neovim)
 - Lint: `make lint` (requires `luacheck`; see install note below)
 - Run tests for one spec: `make test-spec SPEC=chat/lifecycle` (uses `atlas/traceability.yaml` mapping)
+- Specs run only through make (`make test`, `make test-spec`, `make goldens`): `tests/minimal_init.vim` refuses an environment whose HOME/XDG roots are not inside the harness's `PARLEY_TEST_ENV_ROOT` (#342), so a direct `nvim -u tests/minimal_init.vim` run cannot touch your real state.
 - Run tests for changed specs: `make test-changed` (runs mapped tests for changed `atlas/*/*.md` files), this is faster than full test run
 - Run the report-only real chat-typing benchmark: `make perf` (details below).
 - Refresh SSE fixtures: `ANTHROPIC_API_KEY=... OPENAI_API_KEY=... make fixtures`

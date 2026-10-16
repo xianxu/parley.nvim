@@ -225,7 +225,17 @@ end
 local _data_dir_override = nil
 
 local function data_root()
-    return _data_dir_override or (vim.fn.stdpath("data") .. "/parley/cliproxy")
+    local root = _data_dir_override or (vim.fn.stdpath("data") .. "/parley/cliproxy")
+    -- #342: under test mode every cache, config and binary write derives from
+    -- here, so a root outside the isolated test env is refused rather than
+    -- written: a spec that forgot _set_data_dir once rewrote the operator's
+    -- real catalog. Production never sets PARLEY_TEST_MODE.
+    if vim.env.PARLEY_TEST_MODE == "1"
+        and not require("parley.test_isolation").inside(vim.env.PARLEY_TEST_ENV_ROOT, root) then
+        error(("cliproxy: refusing data root %s outside the isolated test env (PARLEY_TEST_ENV_ROOT=%s)")
+            :format(root, tostring(vim.env.PARLEY_TEST_ENV_ROOT)))
+    end
+    return root
 end
 
 --- Test seam: redirect the derived-artifact root (config + bin) to `path`.

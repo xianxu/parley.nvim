@@ -1,7 +1,7 @@
 # Parley-specific targets (Lua/Neovim plugin) — include from your project Makefile:
 #   include Makefile.parley
 
-.PHONY: help-parley test test-unit test-integration test-spec test-changed perf lint fixtures model-check model-checker test-clean-env
+.PHONY: help-parley test test-unit test-integration test-spec test-changed perf lint fixtures goldens model-check model-checker test-clean-env
 
 help-parley:
 	@printf '%s\n' \
@@ -51,7 +51,7 @@ LEGACY_TEST_DIRS = "$(CURDIR)/.test-home" "$(CURDIR)/.test-xdg" "$(CURDIR)/.test
 # (#294). Probed on first use, once per make invocation, and only by targets
 # that expand TEST_ENV.
 TEST_NVIM_DIR = $(eval TEST_NVIM_DIR := $$(shell scripts/test-nvim.sh))$(TEST_NVIM_DIR)
-TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)" $(if $(TEST_NVIM_DIR),PATH="$(TEST_NVIM_DIR):$$PATH")
+TEST_ENV = PARLEY_TEST_ENV_ROOT="$(TEST_ENV_ROOT)" HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)" $(if $(TEST_NVIM_DIR),PATH="$(TEST_NVIM_DIR):$$PATH")
 
 # The orphan gate (#220). `before` reaps what an earlier interrupted run left;
 # `after` reports this run's survivors and fails. One owner, so a new test target
@@ -229,6 +229,17 @@ lint:
 		exit 1; \
 	}
 	@luacheck lua tests packaging
+
+# Regenerate tests/fixtures/golden_payloads/*.json. Under TEST_ENV like every
+# harness run: tests/minimal_init.vim refuses a non-isolated environment (#342).
+goldens:
+	@$(PREP_TEST_ENV) || exit $$?; \
+	rc=0; \
+	$(TEST_ENV) nvim --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+	  -c "luafile scripts/refresh_goldens.lua" \
+	  -c "qa!" || rc=1; \
+	$(ORPHANS) --phase after || rc=1; \
+	exit $$rc
 
 # Refresh SSE fixture files from real APIs.
 # Requires ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLEAI_API_KEY in environment.

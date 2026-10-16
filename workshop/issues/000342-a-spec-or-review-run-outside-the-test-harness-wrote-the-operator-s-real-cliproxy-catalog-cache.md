@@ -57,14 +57,21 @@ Make the write impossible rather than finding this one writer:
 
 Measurement (2026-10-15, :3): every `make` target that loads `tests/minimal_init.vim` (test, test-spec, perf, fixtures) exports `TEST_ENV` (an isolated HOME and XDG roots under `TEST_ENV_ROOT`). The init itself checks nothing, so a direct `nvim -u tests/minimal_init.vim -c PlenaryBustedFile …` runs every spec against the operator's real roots. That is the route behind the 19:26 write. `scripts/refresh_goldens.lua` is documented as exactly such a direct run. No spec spawns a `minimal_init` child with a cleared env (the children inherit the marker).
 
-- [ ] `parley.test_isolation` (pure): `inside(root, path)` with symlinks resolved, and `check(env)` listing HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME (and XDG_CONFIG_HOME when set) that fall outside `PARLEY_TEST_ENV_ROOT`, or the marker itself missing. Unit-tested.
-- [ ] Harness: `TEST_ENV` exports `PARLEY_TEST_ENV_ROOT`. `minimal_init.vim` runs the check first and `cquit`s with the reasons and "run it through make test-spec" when it fails, before any spec loads.
-- [ ] Writer side: in test mode (`PARLEY_TEST_MODE=1`, which only the harness init sets), cliproxy's `data_root()` errors when the root (override or stdpath) is outside the isolated env. A spec forgetting `_set_data_dir` then fails loudly instead of writing elsewhere. Production (no test mode) is unchanged.
-- [ ] `make goldens` runs `refresh_goldens.lua` under `TEST_ENV`; its usage comment points there. TOOLING.md documents that specs only run through make.
-- [ ] Regression (red first): a child nvim on `minimal_init.vim` with a non-isolated env (a scratch HOME, no marker) and a spec that would write a sentinel under its data dir. Assert a nonzero exit, the refusal message, and no sentinel file. Also the writer guard: in test mode, `data_root()` with an outside root errors.
-- [ ] Atlas test_harness: the isolation guard. Verify: the full suite.
+- [x] `parley.test_isolation` (pure): `inside(root, path)` with symlinks resolved, and `check(env)` listing HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME (and XDG_CONFIG_HOME when set) that fall outside `PARLEY_TEST_ENV_ROOT`, or the marker itself missing. Unit-tested.
+- [x] Harness: `TEST_ENV` exports `PARLEY_TEST_ENV_ROOT`. `minimal_init.vim` runs the check first and `cquit`s with the reasons and "run it through make test-spec" when it fails, before any spec loads.
+- [x] Writer side: in test mode (`PARLEY_TEST_MODE=1`, which only the harness init sets), cliproxy's `data_root()` errors when the root (override or stdpath) is outside the isolated env. A spec forgetting `_set_data_dir` then fails loudly instead of writing elsewhere. Production (no test mode) is unchanged.
+- [x] `make goldens` runs `refresh_goldens.lua` under `TEST_ENV`; its usage comment points there. TOOLING.md documents that specs only run through make.
+- [x] Regression (red first): a child nvim on `minimal_init.vim` with a non-isolated env (a scratch HOME, no marker) and a spec that would write a sentinel under its data dir. Assert a nonzero exit, the refusal message, and no sentinel file. Also the writer guard: in test mode, `data_root()` with an outside root errors.
+- [x] Atlas test_harness: the isolation guard. Verify: the full suite.
 
 
 ## Log
 
 ### 2026-10-15
+
+### 2026-10-15 (:3)
+
+- Red first: `tests/integration/test_isolation_spec` launches a child nvim on `minimal_init.vim` that writes a sentinel under its data dir. Before the guard, the unmarked child and the one with XDG_DATA_HOME outside the root both ran and wrote it (2 fail, 1 pass). After: 3/0 (refusal before any `-c`, reasons plus the `make test-spec` hint, no sentinel; an isolated child runs normally).
+- Writer guard: `tests/unit/test_isolation_spec` 8/0, including cliproxy refusing an outside root; red with the guard disabled (7/1).
+- `check-spell-compatibility.sh` runs in test mode with its own mktemp roots, so it now declares them as `PARLEY_TEST_ENV_ROOT`; one definition of isolation everywhere. `check-fresh-clone.sh` needs nothing (its probe is not in test mode; its inner `make test` sets the marker). `test_local_app.py` inherits the harness env.
+- Out of reach here: the close-review dispatcher lives in ariadne. With the guard, a reviewer's direct run fails loudly with the make command to use instead.
