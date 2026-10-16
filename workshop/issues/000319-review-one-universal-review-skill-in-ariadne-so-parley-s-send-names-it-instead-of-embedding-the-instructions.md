@@ -37,8 +37,8 @@ Lift the review protocol into ariadne as one agent skill (working name `xx-unive
 ## Plan
 
 - [x] Record the hub-approved submitted-only revision and notify the shared-skill/S1 owners.
-- [ ] Wait for ariadne#399 and parley.nvim#332 (S1 depends on pair#573), then inspect their landed interfaces and run change-code.
-- [ ] Delete the verbose Couch builder, editor diff/baseline and alternate send branch; preserve S1's exact submitted-only payload and the canonical inline review outside Couch.
+- [x] Wait for ariadne#399 and parley.nvim#332 (S1 depends on pair#573), then inspect their landed interfaces and run change-code.
+- [x] Delete the verbose Couch builder, editor diff/baseline and alternate send branch; preserve S1's exact submitted-only payload and the canonical inline review outside Couch.
 - [ ] Run targeted/full verification, coordinate the staged live check, close on SHIP and land.
 
 Durable plan: [universal review submissions](../plans/000319-universal-review-send-plan.md).
@@ -205,3 +205,10 @@ brief/directives. Outside-Couch local invocation now runs directly after
 instruction expansion. Regression first failed on the old actor lookup before
 removal; Couch long unknown instructions and failure/retry stay submitted-only.
 Direct pre-#342 test invocation refused isolation; used make test-spec instead.
+
+Verification checkpoint: mapped modes/review passes 301 tests in 14 files.
+make lint passes all 746 files with zero warnings/errors; vocabulary and
+whitespace checks pass. PR #270 checks pass. Recorded full suite is queued
+for dec9c3f08c6d3a9a71b088fd116018e8ee5057ae. Requested coordinated staging
+from the hub (59e0942b-ca6d-4cfd-b76a-bbf4b6a92363, submitted); live acceptance
+and landing remain open. Active-time preview succeeded (2.03h, not a waiver).
