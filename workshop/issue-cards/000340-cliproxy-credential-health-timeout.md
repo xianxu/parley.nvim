@@ -1,6 +1,6 @@
 ---
 id: 000340
-status: codecomplete
+status: done
 created: 2026-10-15
 updated: 2026-10-16
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 426c2054ab1cf82030d0e9fceb8f910afa3e2b2a
         evidence_commit: 9f143862186c847af19b9081f8bdba945c3d463a
+        landed_commit: bbaea2146fb6d8f0ff85d88351c252e09c4dc2b8
 ---
 
 # Credential-health persistent-404 test times out in the required suite
