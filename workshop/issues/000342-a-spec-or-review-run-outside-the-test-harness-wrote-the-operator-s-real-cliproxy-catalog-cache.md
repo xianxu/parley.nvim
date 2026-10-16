@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "a27b20a1", done: "58f88fed"}
 ---
 
 # A spec or review run outside the test harness wrote the operator's real cliproxy catalog cache
