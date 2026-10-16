@@ -61,3 +61,9 @@ Full-flow, single close boundary. Detailed design: [breadcrumb winbar plan](../p
 - Existing `file_history` records every native file visit, not only Alt+o, and restores cursors/skips missing paths on Back. Breadcrumb is a value carried by those visits, not a replacement for this history (ARCH-DRY). `M.open_buf` may focus another editing window, so follow must commit against the actual destination window; async artifact/family resolution must carry the same explicit origin rather than leave a global pending flag.
 - Staging lesson from #332: a later worker had replaced :0's stage with #257 at `d3909bd93e7cc6a0194fe255a1778099f489c5b7`; unconditional stage --clear removed that newer stage. Hub informed in the submitted landing report. Inspect the current stage identity before clearing; if another item's stage replaced ours, leave it to its owner.
 - Design pending TL approval; no implementation started.
+
+## Revisions
+
+### 2026-10-16 — #354 persisted-trail coordination
+
+Agreed with parley.nvim:3: retain snapshot(win)/restore(win,value), with an opaque JSON-safe value. Finder owns opening the selected file; restore owns removing missing ancestors and installing the surviving trail/Back stack without opening files. It returns false plus a reason for invalid values, uncertain ancestor checks or final-file mismatch; finder keeps the opened file as a root on refusal. Detailed contract and regression cases are appended to the durable plan. Awaiting TL approval before implementation.

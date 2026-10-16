@@ -115,3 +115,16 @@ Files: atlas/ui/keybindings.md, atlas/modes/session_sync.md, atlas/traceability.
 ## Approval
 
 Pending TL design approval. No code changes before approval and sdlc change-code's full-flow plan-quality gate.
+
+## Revisions
+
+### 2026-10-16 — Agreed #354 snapshot/restore contract
+
+Reason: coordinate one interpretation of persisted trails with parley.nvim:3; peer receipt e9975f85-36ba-47cf-918c-429727b1d8a6 verified submitted. This refines the restore paragraph above; TL approval remains pending.
+
+- Keep exactly `require("parley.file_history").snapshot(win)` and `.restore(win, value)`. Snapshot returns a detached opaque JSON-safe versioned value; #354 stores it verbatim and reads no internal fields. An unobservable window returns nil plus a reason rather than manufacturing a trail.
+- #354 owns opening the selected submission file. A missing selected file produces its notice and no open. #353 restore never navigates or opens any file, so a missing ancestor cannot redirect the selected item to another file.
+- Restore returns `true` on confirmed installation, or `false, reason` on rejection. Validate the whole value and final canonical path against the actual opened file BEFORE any mutation. Malformed/unsupported/over-limit values or target mismatch refuse with a reason and preserve the ordinary new-root state the successful open established.
+- Restore owns ancestor existence policy. Remove genuinely missing ancestor files while preserving order, retain the matching final file, and install the surviving trail. An unreadable/unknown filesystem result is an error, not proof of absence: refuse with a reason. This bounded filesystem validation occurs only on explicit restore, never on snapshot or paint. If only the current file survives, it becomes the root and no breadcrumb is shown.
+- Installation must rebuild the corresponding Back entries as well as the visual trail, so subsequent Alt+Shift+O traverses the surviving ancestors rather than a decorative trail that Back ignores. Keep the opened file's current cursor; previously unknown restored ancestors start at row1/column0. Pure history reconstruction produces the complete proposed value before its single controller commit; restoration opens nothing. Existing unrelated earlier native history can remain before the reconstructed chain, within the established history cap.
+- Add direct and real-window tests: JSON round-trip; caller mutation isolation; deleted root/middle ancestors; only-leaf survivor; invalid value, mismatched target and uncertain stat refusal without mutation; successful restore followed by actual Back through surviving ancestors; no navigation during restore. #354 uses its own stub until #353 lands, then checks this seam through production integration.
