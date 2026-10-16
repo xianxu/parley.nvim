@@ -189,9 +189,8 @@ describe("#220 the fixture seam owns every process it starts", function()
     end)
 
     it("reaps with the signal the caller asks for", function()
-        -- cliproxy_update_spec's restart-race cases need SIGTERM: fake_cliproxy
-        -- models graceful shutdown under PARLEY_FAKE_EXIT_DELAY_MS, and SIGKILL
-        -- would make that window unobservable.
+        -- cliproxy_conformance_spec reaps the real binary with SIGTERM, which
+        -- shuts down gracefully.
         local pid = start()
         fixture_process.reap({ signal = "sigterm" })
         assert.is_true(vim.wait(5000, function() return gone(pid) end, 50),
