@@ -42,6 +42,17 @@ On a reload caused by an external write, map each window's cursor and top line f
 
 Quick flow. One pure mapper, plus capture and restore around the two external-write reload paths that every agentic document shares. Each such document attaches `session_sync`.
 
+**Core concepts**
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `map` | `lua/parley/view_map.lua` | new |
+| `map_line` | `lua/parley/view_map.lua` | new |
+| `capture_views` | `lua/parley/session_sync.lua` | new |
+| `restore_views` | `lua/parley/session_sync.lua` | new |
+
+`map` and `map_line` are pure, with no IO, tested in `tests/unit/view_map_spec.lua`. `capture_views` and `restore_views` are the integration point: they wrap the editor's window views around the two reload paths.
+
 **The pure mapper, `lua/parley/view_map.lua`:** `map(old_lines, new_lines, pos) -> pos`, where pos is `{lnum, col}`.
 - **Hunks:** from `vim.diff(old, new, {result_type = "indices"})`, as `{a_start, a_count, b_start, b_count}`. A hunk with `a_count == 0` inserts after `a_start`; one with `b_count == 0` deletes, and its `b_start` is the line before.
 - **Outside every hunk:** `lnum + Σ(b_count - a_count)` over the hunks above. An insertion counts as above when `a_start < lnum`. The column is kept.
@@ -68,3 +79,8 @@ Quick flow. One pure mapper, plus capture and restore around the two external-wr
 ## Log
 
 ### 2026-10-16
+- Built. `view_map_spec` passes 10/10. The 4 new `session_sync_spec` cases pass, and so do the agentic_document and session_sync specs.
+- Mutation checks:
+  - With both restores removed, the above, at-cursor and `:checktime` cases fail. The below case passes either way, since it guards the no-change baseline.
+  - With only the native-path restore removed, just the `:checktime` case fails, so each reload path is pinned by its own test.
+- The quick-flow plan needed a Core-concepts table: `single_source_sweeps_spec` reads the current issue's tables, and it failed with none.
