@@ -1,12 +1,20 @@
 ---
 id: 000242
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-12
-updated: 2026-09-12
+updated: 2026-10-16
 estimate_hours:
-card_mirror: 'b0e1569ebd29ea3348c3419bff1d85f31f7a2d59' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2d726f14e3dea5c66c6c35ec5950a6977806129c' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T07:13:14-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Retrofit ARCH-MOCK to the chat providers: one stateful fake per provider at the curl seam, integration tests through it, and a live conformance check that re-records the fixtures
@@ -128,9 +136,16 @@ is not a chat provider); making the fake answer sensibly.
 
 ## Plan
 
-- [ ] M1 — Anthropic dialect: fake + request-keyed behavior + split-frame mode; the six integration scenarios; the second-call fixture; #228/#229 regressions
-- [ ] M2 — OpenAI-family dialect (fold `fake_cliproxy`'s chat surface into it) and Google; the same six scenarios each
-- [ ] M3 — live conformance spec, gated; `make fixtures` documented as the re-record; release-checklist line
+Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-plan.md`. It opens with the 2026-10-16 inventory and five decisions for the TL, which revise this issue's Spec:
+1. No retry exists, so HTTP errors are tested as surfaced failures and retry is filed separately.
+2. #228's regression targets the ending classification that landed.
+3. A copilot token-URL test seam.
+4. A shared `sse_dialects.py` that both fakes import, instead of folding fake_cliproxy.
+5. The live run and the second-call recording are operator steps.
+
+- [ ] M1 — Anthropic dialect: shared dialect module + fake_provider (request-keyed behaviour, failure counters, frame splitter) + S1–S7 through the real dispatcher→curl path + #228/#229 regression proofs on their pre-fix parents
+- [ ] M2 — OpenAI family (openai, azure, ollama, copilot via a token-URL seam) and googleai; fake_cliproxy's chat surface on the shared module (its anthropic route answers in the anthropic dialect)
+- [ ] M3 — gated live conformance spec (`PARLEY_LIVE_PROVIDERS=1`), the second-call fixture capture, atlas + TOOLING release-checklist line
 
 ## Log
 
