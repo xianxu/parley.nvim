@@ -1,12 +1,12 @@
 ---
 id: 000234
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-10
 updated: 2026-10-16
 estimate_hours:
-card_mirror: 'b41dca02e8322b6e60b93823a2b18b778b1707d6' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '5b4f6ff00a2a0ba31f4802a2c5bc636046004a86' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T06:21:11-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "11cbd01d", done: "4dd4399e"}
+actual_hours: 0.48
 ---
 
 # Route the render walk's reasoning transitions through leave_row
