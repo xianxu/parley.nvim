@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "e23da354", done: "5c9fcb31"}
 ---
 
 # Catalog conformance cases cannot pass with the fabricated credential
@@ -65,9 +66,9 @@ Measured 2026-10-16. Real binary 8.0.4 (the operator's installed copy, run read-
 
 This is the Spec's first option. The catalog cases observe a catalog the real binary actually serves, with nothing real in the auth-dir.
 
-- [ ] `boot()` takes a `catalog` option that adds a fabricated `claude-api-key` entry; only the two catalog cases use it, so the other cases keep the config they pin.
-- [ ] The SAFETY note says why the API-key entry is safe, and that the key is fabricated.
-- [ ] Both catalog cases pass under `PARLEY_LIVE_GITHUB=1`; the whole spec is green.
+- [x] `boot()` takes a `catalog` option that adds a fabricated `claude-api-key` entry; only the two catalog cases use it, so the other cases keep the config they pin.
+- [x] The SAFETY note says why the API-key entry is safe, and that the key is fabricated.
+- [x] Both catalog cases pass under `PARLEY_LIVE_GITHUB=1`; the whole spec is green.
 
 ## Log
 
@@ -78,3 +79,14 @@ This is the Spec's first option. The catalog cases observe a catalog the real bi
 Found when #237 put a real binary in front of the conformance spec for the first
 time (M2 Task 13). The failures reproduce on 7.1.71 as well, so they predate the
 upgrade. Details are in #237's Log and plan Revisions.
+
+### 2026-10-16 (parley.nvim:4)
+
+- Built as planned. `PARLEY_LIVE_GITHUB=1` against the latest release: 12 of 12 pass (before: 10 pass, the two catalog cases fail).
+- Credential safety, measured on the 8.0.4 binary with the API-key entry:
+  - the throwaway auth-dir stays EMPTY (the proxy writes nothing there);
+  - its auth auto-refresh has nothing to refresh, because an API key does not rotate;
+  - the only network activity is the binary's own model-catalog refresh from raw.githubusercontent.com, no credential involved.
+- No network dependency: with every proxy variable pointed at a dead port, the startup catalog refresh fails ("keeping current data"), and the proxy still serves its built-in catalog with `models/<id>` names and `displayName`. So the cases pass offline too.
+- Without `PARLEY_LIVE_GITHUB` and no binary on PATH (the default harness), these cases stay `pending` with their reason, unchanged.
+
