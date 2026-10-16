@@ -1495,6 +1495,10 @@ function M.stop_at_cursor(buf, row)
         end
     end
     if #choices == 0 then return 0 end
+    -- #257: one running response and the cursor on none stops it; a picker
+    -- with one choice is a needless step (the cursor advances past the answer
+    -- on submit). Two or more still ask.
+    if #choices == 1 then return cancel_entry(choices[1].entry) end
     table.sort(choices, function(a,b) return a.entry.order < b.entry.order end)
     local admitted = {}; for _, choice in ipairs(choices) do admitted[choice] = true end
     vim.ui.select(choices, {prompt = 'Stop response generation:', format_item = function(choice)

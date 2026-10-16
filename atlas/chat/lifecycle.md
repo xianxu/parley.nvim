@@ -368,7 +368,10 @@ Recovery of a deleted chat requires your own backup or version-control copy.
 
 ## Stopping and correcting a response
 
-`:ParleyStop` (`<C-g>x`) stops a selected response generation. Normal/Insert `<M-CR>` on a
+`:ParleyStop` (`<C-g>x`) stops a selected response generation: the one under
+the cursor; otherwise, when exactly one is running in the chat, that one
+(#257, since the cursor advances past it on submit); with two or more, a picker
+asks which. Normal/Insert `<M-CR>` on a
 previous answered exchange replaces that answer; visual `<M-CR>` instead defines
 the selected term. Ready drill-in comments can turn resubmission into a follow-up
 that preserves the original answer; see [Drill-In Markers](drill_in.md).

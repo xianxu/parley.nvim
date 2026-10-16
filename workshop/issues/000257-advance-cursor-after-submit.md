@@ -94,6 +94,10 @@ Steps:
   - a unit case for `next_question_cursor`.
 - [x] Atlas (chat lifecycle: respond, follow-cursor) and the README's follow-cursor line, if it has one
 
+## Revisions
+
+- 2026-10-16, suite on d3909bd9; TL decision (a): after the advance, submit-then-stop (`<C-g>x`) opened a picker with one choice, since the cursor is no longer on the answer. Two specs hung on that picker. The stop rule changes: with the cursor on no running response and exactly one running in the chat, stop it directly; two or more still open the picker. It has its own test. The under-cursor case puts the cursor back on its question, and the stale-picker case runs two responses so the picker still opens. Atlas: chat/lifecycle, "Stopping and correcting a response".
+
 ## Log
 
 ### 2026-09-15
