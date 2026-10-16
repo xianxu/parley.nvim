@@ -126,3 +126,4 @@ Split from #228 rather than folded in: #228's cause is settled (a token cap)
 and its fix shipped, while this path is real code but unobserved. Keeping them
 together would have meant either holding a fixed issue open for a speculative
 one, or closing a Done-when row that was never met.
+- Full suite on fe577185: one failure, tasker_run_spec "contains throwing readers and still drains both streams once" (#182). It pins that a reader which threw still receives its EOF. That contract holds: EOF lets a reader release what it holds. The guard now skips only later DATA for a failed reader and still delivers EOF once. tasker_run 42/0, tasker_supervision 30/0, stream_integrity 1/0.
