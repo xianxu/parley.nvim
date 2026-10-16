@@ -36,8 +36,8 @@ The starter's chat root and tutorial seeding must stay inside the editor profile
 
 ## Done when
 
-- A regression starts the starter with cwd and TMPDIR inside a temporary git repository. It asserts the chat root stays under stdpath("data") and that nothing is written into that repository.
-- The packaging_vm_spec guest case passes with TMPDIR inside a git checkout.
+- A regression starts the starter with cwd and TMPDIR inside a `.parley`-marked project. It asserts that the documented project mode engages, that welcome.md opens from the profile chat directory as a recognized chat, and that every tutorial is in the profile and none is in the project (revised 2026-10-15, see Revisions).
+- The packaging_vm_spec guest case passes with TMPDIR inside a marked checkout, keeping its chat root under stdpath("data").
 
 ## Core concepts
 
@@ -55,7 +55,7 @@ Root cause (traced): the trigger is a `.parley` marker above cwd, not git. `repo
 - [x] Regression in starter_project_spec: a marked project with cwd and TMPDIR inside it. Assert repo mode engages as documented, no tutorial `.md` exists under `<project>/workshop/parley`, the tutorials exist under the profile chats, and the opened buffer is the profile's welcome.md. Show it fails before the fix.
 - [x] packaging_vm_spec guest: set `PARLEY_REPO_MODE=0` in the guest env, as the `parley_app` launcher does. The probe models a fresh VM profile with no project, so a marked host ancestor is outside its scenario. Then run that spec with TMPDIR inside this checkout and show it passes.
 - [x] Atlas starter entry: tutorials live in the profile even in project mode.
-- [ ] Verify: focused starter_project and packaging_vm (TMPDIR in- and outside a checkout), then the full suite.
+- [x] Verify: focused starter_project and packaging_vm (TMPDIR in- and outside a checkout), then the full suite.
 
 Not in scope: whether the installed app should enter project mode at all. That is documented behavior; changing it is a product decision for the TL.
 
@@ -64,6 +64,7 @@ Not in scope: whether the installed app should enter project mode at all. That i
 - 2026-10-15 (:3): red: the regression (profile welcome opened, every tutorial in the profile, none under the project's workshop/parley, plus a new case with cwd and TMPDIR inside the marked project) failed all 3 marked-project cases 3/3 with welcome.md opened from `<project>/workshop/parley`. Green after `welcome(parley, roots, options.chat_dir)` (the primary chat_dir is still restored after seeding): starter_project 6/0, including the profile welcome being a recognized chat. packaging_vm_spec with TMPDIR inside this checkout (which has `.parley`): without `PARLEY_REPO_MODE=0` it fails 16/1 at `fake-chat.lua:4` "guest chat root escaped isolated profile" (the reviewer's finding reproduced), and no tutorial lands in the checkout's workshop now. With it: 17/0.
 
 ### 2026-10-15
+- Full suite (make -k test) on 544ef394: exit 0, lint clean (738 files); starter_project, starter_* and packaging_vm_spec PASS.
 
 ## Revisions
 
