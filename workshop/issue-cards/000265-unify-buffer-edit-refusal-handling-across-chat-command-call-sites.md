@@ -1,6 +1,6 @@
 ---
 id: 000265
-status: working
+status: codecomplete
 created: 2026-09-16
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.72
+tracker:
+    version: 1
+    completion:
+        token: close-db284dcf6daf
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 517b3bb2b254a4c0eaf9ae600aad24b14f37bc04
+        evidence_commit: 2cb81bc38d0bff4c2d6069a4347c65cc7abaf472
 ---
 
 # Unify buffer_edit refusal handling across chat command call sites
