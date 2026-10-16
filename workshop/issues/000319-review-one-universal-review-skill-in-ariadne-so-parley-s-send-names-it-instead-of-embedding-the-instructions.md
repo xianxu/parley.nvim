@@ -1,12 +1,12 @@
 ---
 id: 000319
-status: working
+status: codecomplete
 deps: [ariadne#399, parley.nvim#332, pair#573]
 github_issue:
 created: 2026-10-13
-updated: 2026-10-15
+updated: 2026-10-16
 estimate_hours: 2.25
-card_mirror: '548b361743a9dbb90afe23c354d748f7c5f209cd' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '8a5a16bfc03dc556e7e83bf2dc81613201fc4d86' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T16:16:41-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: operator}
+actual_hours: 3.15
 ---
 
 # Review: one universal review skill in ariadne, so parley's send names it instead of embedding the instructions
