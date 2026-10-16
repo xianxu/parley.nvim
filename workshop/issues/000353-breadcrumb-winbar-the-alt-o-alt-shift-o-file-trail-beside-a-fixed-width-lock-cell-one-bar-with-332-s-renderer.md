@@ -75,6 +75,11 @@ Full-flow, single close boundary. Detailed design: [breadcrumb winbar plan](../p
 
 - Final API contract adversary: a named file containing an unsupported control character returned nil without the promised reason. /tmp/parley353-snapshot-reason-red.log has44 passes/1 expected failure; the corrected cached projection preserves nil,reason and /tmp/parley353-snapshot-reason-green.log passes45 real-history cases. This is a production change after the first suite head, so final required-suite evidence will use the new head.
 
+- First required suite passed448/448 spec files, lint749 clean, no survivors on `ed5af56cef2c8b6b917f0bd932eb18c1a36c0591`; retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/ed5af56cef2c8b6b917f0bd932eb18c1a36c0591/suite.log`, SHA256 `c5e72d52cd1a7d8a00a83c7b97d870b02ba3ca5487d318be7b83832bc1a11bea`.
+- Final source-head suite on `f4239bccc3af35cd6fd0cbe65fafb1f128b45bb1` completed all tests:446 spec files passed, two independent cliproxy specs failed, lint749 clean, no survivors. Failures: catalog joins-routes case returned empty at cliproxy_catalog_spec.lua:75; expired-token recovery chose retry instead of give_up at cliproxy_auth_login_spec.lua:128. Immutable retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/bd9f02e9a941c6a23073857764765ecb.log`, SHA256 `3c666a396002ea5ad421f2d8042d2bb452182ddea7f675de21a3b2607d7a470a`.
+- Same-head focused replay of those two specs passes43 cases in `/tmp/parley353-cliproxy-repro.log`; no cliproxy source or fixture was edited. Filed separate unclaimed flake issues #360 (catalog) and #361 (auth), each with head, assertion, first-seen date, logs and deterministic-investigation Done when. Applying the approved issue-backed flake rule: one unchanged full-suite retry on f4239bcc, no waiver; if that fails, report the remaining blocker rather than blind retries.
+- Real/fake sdlc resolver conformance passes all6 cases through production run_resolve/parse/dispatch using an isolated temporary Git repository (`/tmp/parley353-sdlc-conformance.log`).
+
 ## Revisions
 
 ### 2026-10-16 — #354 persisted-trail coordination
