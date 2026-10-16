@@ -42,10 +42,11 @@ local function spawn_fake(args, env)
     return handle
 end
 
--- SIGTERM: fake_cliproxy models a graceful shutdown under
--- PARLEY_FAKE_EXIT_DELAY_MS, and the restart-race cases need that window.
+-- Teardown uses the default SIGKILL: no case here observes a graceful stop of
+-- a fixture. The restart-race case's SIGTERM-ignoring proxy is parley's own
+-- spawn, which this reap never sees; that case kills it itself (#343).
 local function reap()
-    fixture_process.reap({ since = mark, signal = "sigterm" })
+    fixture_process.reap({ since = mark })
 end
 
 describe("harness", function()
@@ -239,6 +240,15 @@ end
 describe(":ParleyProxy update", function()
     local uv = vim.uv or vim.loop
     local saved_config, saved_path
+    -- Pids of a proxy that ignores SIGTERM (PARLEY_FAKE_IGNORE_SIGTERM). parley
+    -- spawned it, so neither the reap nor cliproxy.stop() can end it: SIGKILL.
+    local held = {}
+    local function kill_held()
+        for _, pid in ipairs(held) do
+            pcall(uv.kill, pid, "sigkill")
+        end
+        held = {}
+    end
 
     before_each(function()
         mark = fixture_process.mark()
@@ -254,12 +264,13 @@ describe(":ParleyProxy update", function()
     -- Owns every process a case starts (Process ownership, PQ-1).
     after_each(function()
         reap()
+        kill_held() -- a case that failed before releasing its held proxy
         cliproxy.stop()
         cliproxy._reset_spawned()
         cliproxy._set_update_restart_deadline_ms(nil)
         cliproxy._set_process_tools(nil)
         vim.env.PARLEY_FAKE_PS_ROWS = nil
-        vim.env.PARLEY_FAKE_EXIT_DELAY_MS = nil
+        vim.env.PARLEY_FAKE_IGNORE_SIGTERM = nil
         parley.config, vim.env.PATH = saved_config, saved_path
     end)
 
@@ -479,11 +490,14 @@ describe(":ParleyProxy update", function()
     end)
 
     it("does not reuse an old proxy that outlives the restart, and says so", function()
-        -- The real binary shuts down gracefully; this fake keeps serving 4 s
-        -- after SIGTERM, past restart_managed's 2 s wait for the port.
-        vim.env.PARLEY_FAKE_EXIT_DELAY_MS = "4000"
+        -- The real binary shuts down gracefully; this fake ignores SIGTERM and
+        -- serves until the case SIGKILLs it, so it still answers when
+        -- restart_managed's 2 s port wait ends and at the final probe however
+        -- slow the machine is (#343: a 4 s exit delay raced both).
+        vim.env.PARLEY_FAKE_IGNORE_SIGTERM = "1"
         start_managed("9.9.4")
-        vim.env.PARLEY_FAKE_EXIT_DELAY_MS = nil
+        vim.env.PARLEY_FAKE_IGNORE_SIGTERM = nil
+        held = cliproxy.spawned_pids()
         ps_sees({ ours_row() })
         fake_releases.publish(server, "9.9.11")
         local r = update()
@@ -492,6 +506,10 @@ describe(":ParleyProxy update", function()
             .. " still answers 2 s after it was told to stop", 1, true), r.msg)
         assert.equals("9.9.11", cliproxy.installed_version()) -- installed; the next restart serves it
         assert.same({ "9.9.4" }, { cliproxy.version_probe("127.0.0.1", proxy_port) }) -- never taken for new
+        kill_held()
+        assert.is_true(vim.wait(5000, function()
+            return cliproxy.version_probe("127.0.0.1", proxy_port) == nil
+        end, 50), "the held old proxy still answers after SIGKILL")
     end)
 
     it("no longer offers the restart that skips the port wait", function()

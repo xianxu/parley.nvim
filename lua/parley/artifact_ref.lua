@@ -108,7 +108,8 @@ end
 -- flow resolves fleet-wide project records instead of the issue family. The
 -- `runner(argv, on_complete)` seam defaults to vim.system; tests inject a fake so
 -- no real spawn happens. Reuses issues.build_spawn_argv (handles the "sdlc is a
--- shell function, not a binary" case).
+-- shell function, not a binary" case). Returns the runner's handle (vim.system's
+-- SystemObj by default) so a superseding press can kill it (#226).
 function M.run_resolve(ref, opts, on_done, runner)
     opts = opts or {}
     local issues = require("parley.issues")
@@ -126,11 +127,11 @@ function M.run_resolve(ref, opts, on_done, runner)
     local argv = issues.build_spawn_argv(cmd, is_exec, shell)
     local run = runner
         or function(a, on_complete)
-            vim.system(a, { text = true, cwd = opts.cwd }, function(res)
+            return vim.system(a, { text = true, cwd = opts.cwd }, function(res)
                 on_complete(res.stdout or "", res.code or 1, res.stderr or "")
             end)
         end
-    run(argv, function(stdout, code, stderr)
+    return run(argv, function(stdout, code, stderr)
         if code ~= 0 then
             local msg = (stderr ~= "" and stderr or stdout) or ""
             on_done(nil, (msg:gsub("%s+$", "")))
@@ -178,6 +179,12 @@ function M.family_picker_items(files)
     return items
 end
 
+local inflight -- the one outstanding resolve: { key, handle, done } (#226)
+
+function M._reset_inflight() -- test seam
+    inflight = nil
+end
+
 -- goto_ref_at_cursor: the editor entry (thin IO shell). Reads the ref under the
 -- cursor, resolves it against the buffer's repo, and opens/pickers the result.
 -- opts.on_no_ref (optional): called when the cursor is NOT on an artifact ref —
@@ -194,6 +201,16 @@ end
 -- opts.is_current (optional): caller-owned live validity check. Stale scheduled
 -- results and family selections are discarded; each resolve and selection is
 -- consumed once so repeated async callbacks cannot dispatch or open twice.
+-- In flight (#226): at most one resolve is outstanding, keyed on the question it
+-- asks `sdlc` (ref, kind, repo cwd) AND the place its answer may land (origin
+-- buffer and window). A press with the same key is a no-op that says so; any
+-- other press is a change of mind that kills the outstanding one and supersedes
+-- it, never queues. The result dispatches only while the user is still in the
+-- origin buffer and window, and the caller's opts.is_current can narrow that,
+-- never widen it. The key holds the origin because a no-op is only right when
+-- the outstanding result would land for this press. No timeout: `sdlc` can be
+-- legitimately slow (it may rebuild itself), and the record clears when the
+-- process exits.
 -- Delegated to by parley init's M.cmd.ResolveRef* commands.
 function M.goto_ref_at_cursor(opts)
     opts = opts or {}
@@ -213,9 +230,26 @@ function M.goto_ref_at_cursor(opts)
     local float_picker = require("parley.float_picker")
     local cwd = neighborhood.for_buf(vim.api.nvim_get_current_buf())
     local sdlc_cmd = (_parley.config and _parley.config.sdlc_cmd) or "sdlc"
+    local origin_buf, origin_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
+    local key = table.concat({ hit.ref, opts.kind or "", cwd or "", origin_buf, origin_win }, "\0")
+    if inflight and not inflight.done then
+        if inflight.key == key then
+            vim.notify("parley: still resolving " .. hit.ref, vim.log.levels.INFO)
+            return
+        end
+        inflight.done = true -- superseded: its completion is dropped
+        if inflight.handle then
+            pcall(inflight.handle.kill, inflight.handle, 15)
+        end
+    end
+    local mine = { key = key, done = false }
+    inflight = mine
     local completed, selected = false, false
     local function is_current()
-        return not opts.is_current or opts.is_current()
+        return inflight == mine
+            and vim.api.nvim_get_current_buf() == origin_buf
+            and vim.api.nvim_get_current_win() == origin_win
+            and (not opts.is_current or opts.is_current())
     end
     local function open_once(path)
         if selected then
@@ -226,11 +260,11 @@ function M.goto_ref_at_cursor(opts)
             _parley.open_buf(path, true)
         end
     end
-    M.run_resolve(hit.ref, { cwd = cwd, sdlc_cmd = sdlc_cmd, kind = opts.kind }, function(files, err)
-        if completed then
+    local ok, handle = pcall(M.run_resolve, hit.ref, { cwd = cwd, sdlc_cmd = sdlc_cmd, kind = opts.kind }, function(files, err)
+        if completed or inflight ~= mine then -- a repeat, or superseded
             return
         end
-        completed = true
+        completed, mine.done = true, true
         vim.schedule(function()
             if not is_current() then
                 return
@@ -252,6 +286,11 @@ function M.goto_ref_at_cursor(opts)
             })
         end)
     end, opts.runner)
+    if not ok then
+        mine.done = true -- a spawn that raised must not hold the key forever
+        error(handle, 0)
+    end
+    mine.handle = handle
 end
 
 return M

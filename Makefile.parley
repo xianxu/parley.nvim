@@ -15,8 +15,10 @@ help-parley:
 	"  make check-vocabulary Compare shipped data to upstream (maintainer tools)" \
 	"  make check-sdlc-conformance Compare real/fake sdlc resolver contracts (maintainers)" \
 	"  make perf             Report real headless chat-typing performance" \
+	"  make perf-finder      Report ChatFinder materializer performance" \
 	"  make lint             Run luacheck on lua/ and tests/" \
 	"  make fixtures         Refresh SSE fixture files from real APIs" \
+	"  make goldens          Regenerate the golden payload fixtures" \
 	"  make model-check      Check latest model offerings from providers" \
 	"  make test-clean-env   Remove the scratch root (and legacy in-repo dirs)" \
 	""
