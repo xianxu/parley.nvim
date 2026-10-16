@@ -410,7 +410,11 @@ notice rather than hand-building failure tables.
 `classify_auth_files` reads still exist — including the 404-without-key
 behavior the entire repair branches on. Never point that at the real auth-dir:
 cliproxy refreshes at startup and every 15m, and Claude's refresh tokens rotate
-on use — the race that caused this issue.
+on use — the race that caused this issue. The expired OAuth credential registers no
+models, so the catalog cases (#238) add a fabricated `claude-api-key` entry. The
+proxy serves its built-in Claude catalog for an API key, offline included, and
+never refreshes it: the proxy writes nothing to the throwaway auth-dir, nothing
+real is ever in it, and nothing can rotate.
 
 ## Models & providers
 

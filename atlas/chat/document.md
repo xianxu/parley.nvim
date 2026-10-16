@@ -118,6 +118,25 @@ another generation's writes move it without staling it (#261, see
 move a grant without cancelling its writer, but retire plans with old revisions.
 Reload replaces the epoch and invalidates every old grant and callback.
 
+A chat command edits the user's text through `buffer_edit.edit_user_lines(command, …)`
+(#265), the one refusal policy. A refused edit leaves the buffer unchanged and logs
+one warning naming the command, in `parley.refusal`'s words ("<command> — Edit not
+made: …"). It never raises, and it returns `false, reason` so the command stops
+before anything that depends on the edit. Commands that also write files or
+publish a clipboard edit first and act only once the edit applied:
+- **ChatPrune:** the parent edit, then the child file.
+- **Slug rename:** the `file:` header, then the rename.
+- **ExchangeCut:** the cut, then the clipboard.
+- **Inline branch:** the anchor, then the child.
+
+ChatReview, whose back-reference needs the new chat's name, reports "back-reference
+not added". Two cosmetic edits are quiet (debug log only) because a later event
+retries them: the CursorHold reference repair, and the CompleteDone requote. A live
+generation does not refuse user edits (measured). What a user can meet is
+`capacity` (the 64 user-guard slots held), a stale capture or a closed chat.
+`tests/arch/user_edit_policy_spec.lua` refuses a direct call to the private
+replace.
+
 A write plan names its epoch, generation, entity, grant, and revision. The editor
 checks exact expected text and authority before each patch, then compares the
 observed native event with the intended patch. Unexpected nested edits stop the

@@ -122,9 +122,10 @@ rules above. See [opening references](../context/file_references.md).
   the standing target), so they go stale silently if `parse_chat` changes —
   re-derive by timing `parse_chat` + `entity_range.range` over
   `tests.perf.chat_typing.build_fixture(n)`.
-- **During generation**, the command path inherits
-  `buffer_edit.replace_user_lines`' refusal; the native operator does not, and
-  is handled as an ordinary user edit.
+- **On a refused user edit**, the command path reports it through
+  `buffer_edit.edit_user_lines` and leaves the buffer unchanged; the native
+  operator is an ordinary user edit. A live generation does not refuse user
+  edits (#265, measured); a full guard registry does.
 
 ## Code and tests
 

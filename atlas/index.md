@@ -93,8 +93,5 @@ its feature pages, and the three tutorials without reading personal files.
 - [Export Formats](export/formats.md): Export HTML/Markdown and keep linked assets available.
 - [Tree Export](export/tree_export.md): Export linked conversations as a browsable tree.
 
-## 10. Discovery Registry
-- [Discovery Registry](discovery/registry.md): Repository vocabulary library and its current integration limits.
-
-## 11. Traceability
+## 10. Traceability
 - [Traceability Map](traceability.yaml)

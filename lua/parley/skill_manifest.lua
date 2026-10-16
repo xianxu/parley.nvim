@@ -1,7 +1,7 @@
 -- parley.skill_manifest — the declarative SkillManifest shape + validation.
 --
 -- A skill is data, not a pipeline: one manifest shape that every provider
--- (disk / user / repo / virtual) emits, and that the per-turn assembly +
+-- (the plugin and user disk providers) emits, and that the per-turn assembly +
 -- read_skill tool consume without branching on origin.
 --
 --   { name, description, scope, activation, source, tools?, elevated?,
@@ -11,7 +11,7 @@
 --     scope       global | repo | super_repo
 --     activation  table of independent boolean flags (always | auto | manual);
 --                 non-empty — a skill no one can activate is a config bug
---     source      function(ctx) → string  (the body; unified disk/virtual)
+--     source      function(ctx) → string  (the body, however the provider built it)
 --     tools       list of tool names granted whenever active        (#129)
 --     elevated    list of tool names granted only on MANUAL invoke   (#129)
 --     force_tool  optional tool name to compel this turn

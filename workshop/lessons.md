@@ -1,5 +1,25 @@
 # Lessons
 
+## 2026-10-16 (#234 — render walk on the shared row step)
+
+- A parity property test earns its keep on the first run: #234's found a footer `🧠:` row whose lookahead verdict the render walk only computed inside a paint branch. When moving transitions onto a shared step, compute every transition INPUT before (and outside) the painting branches.
+- "Sweep for other copies" means grep the RULE, not check the copy the issue names. #234 checked chat_parser and missed `document/grammar.lua`'s render_before copy, which is the production path (close BR-1). Grep every writer of the state the rule changes (`in_reasoning =`), and justify each survivor.
+- Paste commit hashes from the `git rev-parse` output; never retype one. #234's plan message to the hub carried a typed, wrong hash, and needed a correction.
+
+## 2026-10-16 (#236 — dead-code sweep)
+
+- When deleting code, sweep the docs for the CONCEPTS it carried, not just its file paths. #236 grepped atlas/ for deleted module paths and missed a page describing the "virtual provider" and "generator seams" in prose (close BR-1). List each deleted entity's names and nouns, grep those, and delete or rewrite every hit. Include CODE COMMENTS in that sweep: round 2 found three lua/ comments still naming the removed seams, after atlas was clean.
+
+## 2026-10-16 (#350 — a "dead" branch that was live)
+
+- One trace never proves a branch unreachable. In #265 I traced a single move with a TIMESTAMPED child, saw the rewrite skipped, and filed it dead; it fires for non-timestamp children behind an explicit or sub/ path. To call code dead, enumerate what its condition depends on (here, resolve_chat_path's three return cases) and show each one fails, or write the reaching test.
+
+## 2026-10-16 (#265 — one user-edit refusal policy)
+
+- A fake must fail the way the real dependency fails. #265's ChatPrune test faked `writefile` returning -1, but the real one RAISES (E482), so the test passed while the production rollback never ran (close BR-5). Probe the real failure first, and treat a raise and an error return from fallible IO as one failure.
+- Pin a passthrough with a real oracle, not a stub at the seam you are testing. A stubbed `_replace_user_lines` let the error-detail passthrough be deleted with every spec green (close BR-1); a non-modifiable buffer produces the real `error` status.
+- An enforcement spec named after one function enforces only that function. The refusal policy banned the raw replace, but hand-capturing commands kept their own wording (close BR-2). Name the class (every direct caller, with reasons), not the one symbol.
+
 ## 2026-10-16 (#345 — async stop on the restart path)
 
 - A new helper or forward declaration goes ABOVE an existing doc block, never between the block and its definition. #204 and #340/#345 hit this four times (ensure_running, restart_managed, M.stop, pids_on_port). After inserting near a `---` block, read the three lines above the definition you meant to document.

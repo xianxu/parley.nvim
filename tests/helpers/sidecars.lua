@@ -133,11 +133,12 @@ return {
         -- no-ops, so the exercise turns it off for one tracked open.
         exercise = function()
             local tracker = require("parley.file_tracker")
-            local test_mode = vim.g.parley_test_mode
-            vim.g.parley_test_mode = false
+            -- Clear the harness signal (#235) so the real load path runs.
+            local test_mode = vim.env.PARLEY_TEST_MODE
+            vim.env.PARLEY_TEST_MODE = nil
             tracker._file_access = {}
             local ok, err = pcall(tracker.track_file_access, "/fixture.md")
-            vim.g.parley_test_mode = test_mode
+            vim.env.PARLEY_TEST_MODE = test_mode
             tracker._file_access = {}
             assert(ok, err)
         end,

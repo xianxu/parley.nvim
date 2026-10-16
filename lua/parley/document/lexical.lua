@@ -172,6 +172,36 @@ function M.advance(state, token, fence_len)
     end
 end
 
+--- The ONE per-row step every state walk shares (#234): the document grammar
+--- (render_before), highlight_structure's build/replace, and the highlighter's
+--- redraw walk. PRE-snapshot half: what the row resets on entry. A footer row
+--- ends exchange colouring; a partition clears code state (#218), before the
+--- row is recorded, since a partition line is not itself inside a code block.
+function M.enter_row(state, token, in_footer)
+    if in_footer then
+        state.in_question = false
+        state.in_reasoning = false
+    end
+    M.reset_partition(state, token)
+end
+
+--- POST-snapshot half: the row's own transition. `explicit` is the 🧠: row's
+--- lookahead verdict (does its 🧠:[END] arrive before the next marker); the
+--- blank-line terminator depends on it, so it lives here rather than in
+--- `advance`. `fence_len` is passed through to `advance`.
+function M.leave_row(state, token, explicit, fence_len)
+    M.advance(state, token, fence_len)
+    if token == TOKENS.reasoning_end then
+        state.in_reasoning = false
+        state.reasoning_explicit_end = false
+    elseif token == TOKENS.reasoning then
+        state.in_reasoning = true
+        state.reasoning_explicit_end = explicit or false
+    elseif state.in_reasoning and token == TOKENS.blank and not state.reasoning_explicit_end then
+        state.in_reasoning = false
+    end
+end
+
 --- Is this line a 💬:/🤖: turn partition? Exported so consumers that keep their
 --- own lightweight fence walks (outline, the review skill) can apply the same
 --- containment rule without a fourth and fifth definition of "partition" (#218).

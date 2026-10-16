@@ -374,6 +374,10 @@ local fence = require("parley.fence")
 	local current_component = nil
 	local first_question_seen = false
 	-- Multi-line reasoning state: opened by a 🧠: line inside an answer.
+	-- Deliberately NOT highlight_structure's enter_row/leave_row (#234): the
+	-- parser reads reasoning only inside an ANSWER and accumulates it as content,
+	-- while the highlight walk dims a 🧠: line wherever it sits. The difference is
+	-- pinned in chat_parser_tools_spec.
 	-- Two termination modes, decided per-block at open time:
 	--   - explicit-end mode (in_reasoning_explicit_end = true): a
 	--     🧠:[END] line was found before the next structural marker.

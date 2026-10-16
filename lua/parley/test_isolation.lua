@@ -4,6 +4,16 @@
 -- a spec when this fails; cliproxy refuses to write outside it in test mode.
 local M = {}
 
+--- Is this process running under the test harness? THE one reader of the
+--- harness signal (#235): tests/minimal_init.vim exports PARLEY_TEST_MODE=1,
+--- which every spec child inherits, and production never sets it. Code that
+--- must behave differently under the harness asks here;
+--- tests/arch/single_source_sweeps_spec.lua refuses any other reader in lua/.
+---@return boolean
+function M.active()
+    return vim.env.PARLEY_TEST_MODE == "1"
+end
+
 --- Every root the harness must pin inside PARLEY_TEST_ENV_ROOT (Makefile.parley
 --- TEST_ENV), in check order. A root left unpinned would let an operator's own
 --- export of it refuse every harness run.

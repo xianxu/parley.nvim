@@ -105,7 +105,9 @@ function M.paste(buf, deps)
         { first = { row = row - 1, col = #source }, last = { row = row - 1, col = #source } },
     })
     if not capture then
-        deps.notify("Parley: nothing pasted — " .. tostring(capture_error), "warn")
+        -- The paste's own lead-in, then the refusal in refusal.lua's words (#265).
+        deps.notify("Parley: nothing pasted — " .. (require("parley.refusal").edit("PasteImage", capture_error)
+            or tostring(capture_error)), "warn")
         return
     end
     local tmp = vim.fn.tempname() .. ".png"
@@ -145,15 +147,16 @@ function M.paste(buf, deps)
             if not rel then
                 return finish("Parley: nothing pasted — " .. save_err, "error")
             end
-            local iok, ierr = pcall(function()
-                local result = buffer_edit.apply_user(capture, {
-                    { region = 1, text = "\n" .. assets.markdown_link(rel) },
-                })
-                if result.status ~= "applied" then error(result.reason or result.error or result.status) end
-            end)
-            if not iok then
+            local iok, result = pcall(buffer_edit.apply_user, capture, {
+                { region = 1, text = "\n" .. assets.markdown_link(rel) },
+            })
+            if not iok or result.status ~= "applied" then
                 rollback(abs, created)
-                return finish("Parley: nothing pasted — could not insert the link: " .. tostring(ierr), "error")
+                -- A refusal in refusal.lua's words, its editor error as the detail (#265);
+                -- a raised exception (not a refusal) keeps its own text.
+                local why = iok and (require("parley.refusal").edit("PasteImage", result.reason or result.status,
+                    result.error) or tostring(result.status)) or tostring(result)
+                return finish("Parley: nothing pasted — could not insert the link: " .. why, "error")
             end
             local suffix = require("parley.image_shrink").outcome_suffix(outcome)
             finish("Parley: pasted " .. rel .. suffix, (outcome and outcome.note) and "warn" or "info")

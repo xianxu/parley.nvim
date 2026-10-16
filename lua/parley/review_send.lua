@@ -153,7 +153,9 @@ M.submit = function(buf)
 				return
 			end
 			local p = M.placement(vim.api.nvim_buf_get_lines(buf, 0, -1, false), vim.trim(answer))
-			require("parley.buffer_edit").replace_user_lines(buf, p.first, p.last, false, p.lines)
+			if not require("parley.buffer_edit").edit_user_lines("ReviewSend", buf, p.first, p.last, p.lines) then
+				return -- not written, so not sent (#265)
+			end
 			M.submit(buf)
 		end)
 		return
@@ -255,8 +257,11 @@ M.on_complete_done = function(buf)
 		local row, col = unpack(vim.api.nvim_win_get_cursor(0))
 		local line, new_col = M.requote(vim.api.nvim_get_current_line(), col)
 		if line then
-			require("parley.buffer_edit").replace_user_lines(buf, row - 1, row, false, { line })
-			vim.api.nvim_win_set_cursor(0, { row, new_col })
+			-- Cosmetic requoting; a refusal is quiet and leaves the line as typed (#265).
+			if require("parley.buffer_edit").edit_user_lines("ReviewSend", buf, row - 1, row, { line },
+				{ quiet = true }) then
+				vim.api.nvim_win_set_cursor(0, { row, new_col })
+			end
 		end
 	end)
 end
