@@ -1,6 +1,6 @@
 ---
 id: 000236
-status: codecomplete
+status: done
 created: 2026-09-11
 updated: 2026-10-16
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 430a6f913e1d4677bc330c907808a81c5274aaa8
         evidence_commit: 7c3220878699fa4fe5be08197d482aac3e92bf19
+        landed_commit: db7d85c12481755ab53f6f4cef1b8bbc31b23320
 ---
 
 # delete unreachable modules and dead config
