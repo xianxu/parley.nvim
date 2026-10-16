@@ -767,6 +767,7 @@ describe("cliproxy IO lifecycle", function()
             return dir
         end
 
+        local in_window, window_probes -- the #340 stall window, below
         local function start_keyless(port, store)
             local cfg_file = vim.fn.tempname() .. ".json"
             vim.fn.writefile({ vim.json.encode({
@@ -775,11 +776,41 @@ describe("cliproxy IO lifecycle", function()
             local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file })
             assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
             ready_port.wait_listening(port)
+            in_window = false -- a listener is back on the port (see #340 below)
             return pid
         end
 
+        -- #340: under the parallel suite a probe of the port whose proxy was just
+        -- killed went unanswered until curl's --max-time (measured ~2 s, twice per
+        -- repair), so "down" arrived by timeout and the case ran out its budget.
+        -- Emulate exactly that window: a probe issued after stop() and before the
+        -- next spawn() answers "down" only after STALL_MS. The repair must not
+        -- probe in that window at all — it waits for the killed process to exit.
+        local STALL_MS = 5000
+        local orig = {}
         before_each(function()
             cliproxy._reset_management_restart()
+            in_window, window_probes = false, 0
+            orig.stop, orig.spawn, orig.probe = cliproxy.stop, cliproxy.spawn, cliproxy.health_probe
+            cliproxy.stop = function(...)
+                local n, pids = orig.stop(...)
+                in_window = true
+                return n, pids
+            end
+            cliproxy.spawn = function(...)
+                in_window = false
+                return orig.spawn(...)
+            end
+            cliproxy.health_probe = function(host, port, secret, cb)
+                if not in_window then
+                    return orig.probe(host, port, secret, cb)
+                end
+                window_probes = window_probes + 1
+                vim.defer_fn(function() cb("down") end, STALL_MS)
+            end
+        end)
+        after_each(function()
+            cliproxy.stop, cliproxy.spawn, cliproxy.health_probe = orig.stop, orig.spawn, orig.probe
         end)
 
         it("restarts a keyless proxy once, then reads health from the new one", function()
@@ -798,6 +829,7 @@ describe("cliproxy IO lifecycle", function()
 
             assert.equals("healthy", h.state)
             assert.is_false(vim.tbl_contains(cliproxy.spawned_pids(), old_pid))
+            assert.equals(0, window_probes, "the repair probed the just-killed proxy's port")
         end)
 
         it("does not restart twice — a persistent 404 is reported, not looped", function()
@@ -810,6 +842,7 @@ describe("cliproxy IO lifecycle", function()
 
             local first = await(function(done) cliproxy.credential_health(done, "claude") end)
             assert.equals("unknown", first.state)
+            assert.equals(0, window_probes, "the repair probed the just-killed proxy's port")
 
             -- The repair stopped the old proxy and could not start a new one.
             -- Put another keyless proxy back on the port: if the guard did NOT
