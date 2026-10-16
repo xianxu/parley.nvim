@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "d86ae097", done: "4b4abcd2"}
 ---
 
 # One reader for the test-harness signal: file_tracker off g:parley_test_mode
@@ -60,6 +61,13 @@ re-open the leak.
   harness.
 - `make test` is green.
 
+## Core concepts
+
+| Entity | Status | Where | What |
+|---|---|---|---|
+| `active` | added | lua/parley/test_isolation.lua | `test_isolation.active()`: the one reader of the harness signal, `$PARLEY_TEST_MODE == "1"`. `file_tracker`, `cliproxy` (×2) and `issue_tracker` ask it; an arch guard refuses any other `lua/` reader. |
+| `fetch_enabled` | changed | lua/parley/issue_tracker.lua | Now `not test_isolation.active()`, the one reader, instead of reading the variable itself. |
+
 ## Plan
 
 Re-checked 2026-10-16:
@@ -67,10 +75,10 @@ Re-checked 2026-10-16:
 - The highlighter's `new_default_deferral` no longer exists.
 - The signal has FOUR production readers: `file_tracker` (`g:`), `cliproxy.lua` ×2 and `issue_tracker.lua` (`$PARLEY_TEST_MODE`). The goal stands: one reader.
 
-- [ ] `lua/parley/harness.lua`: `active()` returns `vim.env.PARLEY_TEST_MODE == "1"`, the one reader. `file_tracker`, `cliproxy` (×2) and `issue_tracker` call it.
-- [ ] Arch guard in `tests/arch/single_source_sweeps_spec.lua`: no other `lua/` module reads `parley_test_mode` or `PARLEY_TEST_MODE`; seen red with a planted reader.
-- [ ] `g:parley_test_mode` removed from `tests/minimal_init.vim`, `chat_move_spec.lua` and `tests/packaging/spell_compatibility.lua`. `file_tracker_spec` and `tests/helpers/sidecars.lua` toggle `$PARLEY_TEST_MODE` instead.
-- [ ] Spec: under the harness `file_tracker` writes no `file_access.json`; full suite.
+- [x] `lua/parley/harness.lua`: `active()` returns `vim.env.PARLEY_TEST_MODE == "1"`, the one reader. `file_tracker`, `cliproxy` (×2) and `issue_tracker` call it.
+- [x] Arch guard in `tests/arch/single_source_sweeps_spec.lua`: no other `lua/` module reads `parley_test_mode` or `PARLEY_TEST_MODE`; seen red with a planted reader.
+- [x] `g:parley_test_mode` removed from `tests/minimal_init.vim`, `chat_move_spec.lua` and `tests/packaging/spell_compatibility.lua`. `file_tracker_spec` and `tests/helpers/sidecars.lua` toggle `$PARLEY_TEST_MODE` instead.
+- [x] Spec: under the harness `file_tracker` writes no `file_access.json`; full suite.
 
 ## Log
 
@@ -79,3 +87,10 @@ Re-checked 2026-10-16:
 Filed from the #227 close review (round 2, Minor). Split out rather than landed
 after that review: it turns `file_tracker`'s test-mode guards on across the
 whole suite, which deserves its own reviewed change.
+
+### 2026-10-16 (parley.nvim:4)
+
+- Built with one change to the plan: the reader is `test_isolation.active()` in the existing harness-rules module (`lua/parley/test_isolation.lua`, already home to `inside`/`check`) rather than a new `harness.lua` (ARCH-DRY).
+- Seen red: a planted `vim.env.PARLEY_TEST_MODE` reader in issue_tracker.lua fails the new arch guard. With file_tracker reverted to its old `g:` reader (no longer set anywhere), the new "never writes file_access.json under the harness" spec fails.
+- The atlas `test_harness.md` paragraph is rewritten: one variable, one reader, its callers. It no longer says the highlighter's scheduled repair keys on the signal; that deferral no longer exists.
+
