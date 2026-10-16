@@ -84,3 +84,9 @@ The lock is now complete or absent to a waiter:
   (1, 4, 20, 6, 7, 7). luacheck clean. Added in self-review: the waiter re-checks
   the lock's identity, because an owner retiring it between the waiter's reads
   is not garbage.
+- Close review round 1, BR-1 (Important): the waiter's identity re-check had no
+  test. Added `STARTER_READ_GATE`: the waiter pauses between finding the lock
+  and reading its owner while the owner retires it. A mutation with the re-check
+  removed fails that case. Minor: the gate case names now say the second
+  starter is not stopped (under rename it takes its own turn), and the atlas
+  notes the empty-lock takeover and the mixed-version case. 22/22.

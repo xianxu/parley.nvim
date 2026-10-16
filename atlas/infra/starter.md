@@ -165,8 +165,11 @@ For startup problems:
    `~/.local/state/parley/welcome-initializer`. With XDG overrides use the reported
    path, not these defaults. Do not remove the entire profile to clear a lock.
    The welcome initializer is published and retired by rename, so a waiter
-   sees it complete (with its owner's pid) or absent. A lock with no valid
-   owner is therefore garbage, never a live owner in mid-write (#348). A crash
+   sees it complete (with its owner's pid) or absent. A non-empty lock with no
+   valid owner is therefore garbage, never a live owner in mid-write (#348).
+   Rename can replace an EMPTY directory, so an empty lock is taken over, not
+   reported. Only an older Parley paused between its mkdir and owner write
+   leaves one, and two such launches then proceed together. A crash
    can leave `welcome-initializer.new-*` or `.retired-*` beside it. Those are
    not the lock, and they are safe to remove once Parley is closed.
 3. A standalone source profile validates `theme.lua`, `editor_dependencies.lua`,

@@ -54,6 +54,18 @@ if vim.env.STARTER_RETIRE_GATE then
         return delete(path, flags, ...)
     end
 end
+if vim.env.STARTER_READ_GATE then
+    -- A waiter pauses between finding the lock and reading its owner record.
+    local uv = vim.uv or vim.loop
+    local lstat = uv.fs_lstat
+    uv.fs_lstat = function(path, ...)
+        if type(path) == 'string' and path:match('/welcome%-initializer/owner$') then
+            uv.fs_lstat = lstat
+            gate(vim.env.STARTER_READ_GATE)
+        end
+        return lstat(path, ...)
+    end
+end
 local ok, why = pcall(function() require('parley.starter').start() end)
 if vim.env.STARTER_EXPECT_ERROR then
     if ok or not tostring(why):find(vim.env.STARTER_EXPECT_ERROR, 1, true) then
