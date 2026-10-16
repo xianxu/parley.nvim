@@ -74,7 +74,7 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - [x] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
 - [x] Add isolated real/fake conformance and docs/traceability; verify production-door submission feedback and native edit-turn regressions.
 - [x] Add unchanged-submit suppression and explicit rapid resend with lifecycle and production-door regressions.
-- [x] Complete the required full suite on the final implementation before close.
+- [ ] Complete the required full suite on the final implementation before close.
 
 Post-close acceptance remains pending: after SHIP and the green suite/conformance, stage under the existing hub authorization for the combined operator check. Pair#573 has landed; the TL coordinates the Couch and Neovim restart. Land only after operator acceptance; clear the stage and report the merge.
 
@@ -145,6 +145,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 - 2026-10-15 — hub explicitly approves the issue-backed flake rule for #340 and one unchanged required-suite rerun on b5de7d2b (submitted receipt bd46ab72-2c41-4074-abf5-a9ebb5640096). No waiver or source change. Close and stage only after that run passes; the TL schedules combined operator acceptance.
 
 - 2026-10-15 — approved unchanged required-suite rerun PASSES on b5de7d2b4c3d336679135d016baeb58654f262aa:443/443 spec files, lint751 files0 warnings/errors, no survivors,2m39s execution after609s queue. The cliproxy lifecycle file passes32s; #340 remains open for the first-run budget-sensitive failure and its focused54-case pass. No waiver, source change, skip or blind rerun. Full log /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/b5de7d2b4c3d336679135d016baeb58654f262aa/suite.log; SHA256 49baa43d549508b7eca5f5849ba351435e46c330f3183eb92f058fcb6d6da7bc. Later commits change only this issue/plan. All pre-close verification is now complete; mandatory review, stage and operator acceptance remain pending.
+
+- 2026-10-15 — close round1 REWORK, not finalized: BR-1 unresolved native-rename membership; BR-2 unload/completion lifetime; BR-3 not_chat IO classification. Reviewer reproduced both runtime defects with controlled completions; all mapped session-sync specs and fake conformance otherwise passed. Rework must fix the complete membership-before-migration and async-buffer-lifetime classes, then verify the new final code head. Stage remains pending.
 
 ## Revisions
 

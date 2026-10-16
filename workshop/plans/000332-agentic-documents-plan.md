@@ -35,7 +35,7 @@ This slice includes moving an existing sibling `<stem>.side/` and its parent bac
 | `run` — raw Couch process transport | INTEGRATION | `lua/parley/couch.lua` | modified |
 | `request`, `shutdown` — typed registry client and request lifetime | INTEGRATION | `lua/parley/document_registry.lua` | new |
 | `attach`, `identity`, `status`, `recheck`, `submit`, `detach`, `move_membership`, `move_path` — buffer admission and known-path cache | INTEGRATION | `lua/parley/agentic_document.lua` | new |
-| `not_chat` — shared transcript classification with optional supplied lines | PURE | `lua/parley/init.lua` | modified |
+| `not_chat` — shared transcript classification wrapper with optional supplied lines | INTEGRATION | `lua/parley/init.lua` | modified |
 | `begin`, `advance`, `pending`, `recover` — file migration and journal recovery | INTEGRATION | `lua/parley/document_move.lua` | new |
 | `acquire` — cross-editor operation lease | INTEGRATION | `lua/parley/document_lease.lua` | new |
 | `attach`, `identity`, `is_session_sync`, `detach`, `acquire_observed` — stable attachment and observed edits | INTEGRATION | `lua/parley/session_sync.lua` | modified |
@@ -246,3 +246,11 @@ named plain Markdown question in that Couch pane:
 The headless/fake checks establish deterministic failure and recovery paths;
 these steps establish acceptance in the actual editor. No live acceptance is
 claimed until the operator confirms it through the hub.
+
+### 2026-10-15 — Close round1 rework
+
+BR-3 corrects the Core-concept purity contract: not_chat is an INTEGRATION wrapper because it resolves configured roots and can read live buffer/file contents. Its existing tests/integration/not_chat_spec.lua remains the appropriate test boundary; no new pure classifier or parallel parser is needed. The value-only filename parser remains separate (ARCH-PURE/ARCH-DRY). BR-1/BR-2 require fresh membership before native migration and an explicit buffer unload/reload lifetime; controlled callback regressions precede their implementation.
+
+The rework blocks native rename while owner resolution or a mutating/submit operation is outstanding. A read-only initial lookup can be cancelled and replaced by a bounded fresh OLD lookup: only explicit absence permits the plain rename; a confirmed identity uses the protected migration; unavailable membership refuses only migration. Late cancelled callbacks cannot revive old operations.
+
+True BufUnload retires the coordinator incarnation, cancels requests and releases migration execution leases, leaving durable uncertain registration and rename state for fresh confirmation on reopen. A buffer-local read hook outside the retired group restores attachment on reopen. Session-sync controlled reads and owned rename acknowledgement explicitly mark transient reads; their unload retains the attached identity and receipt, queues raw async completions until the read finishes, and reattaches edit observers before replay. Native FileChangedShell reload uses the same marker. Test lookup/register/rename/send completions across true unload, transient reload with completion inside BufUnload, and the owned acknowledgement path. Re-run the required suite on the resulting code; the earlier443/443 pass is ancestor evidence only (ARCH-ORDER/ARCH-FUNERAL/ARCH-MOCK).

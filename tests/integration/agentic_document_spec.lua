@@ -543,4 +543,172 @@ describe("agentic markdown admission", function()
         assert.equals(2, #deliveries())
     end)
 
+
+    local function registry_result(operation,args)
+        local result
+        require("parley.document_registry").request(operation,args,{},function(value) result=value end)
+        await(function() return result ~= nil end)
+        return result
+    end
+    local function hold_next_process_reply(predicate)
+        local couch=require("parley.couch")
+        local production_run=couch.run
+        local control={count=0}
+        couch.run=function(argv,callback,options)
+            if predicate(argv) then
+                control.count=control.count+1
+                if not control.intercepted then
+                    control.intercepted=true
+                    return production_run(argv,function(result)
+                        control.release=function()
+                            control.release=nil
+                            callback(result)
+                        end
+                    end,options)
+                end
+            end
+            return production_run(argv,callback,options)
+        end
+        return control
+    end
+    local function side_fixture()
+        local path=root .. "/ordinary.side/child.md"
+        vim.fn.mkdir(root .. "/ordinary.side","p")
+        local lines={"---","parent: ../ordinary.md","---","[up](../ordinary.md#question)","untouched"}
+        vim.fn.writefile(lines,path)
+        return path,lines
+    end
+    local function assert_refused_before_move(target,old_lines,side_lines)
+        assert.equals(file,vim.api.nvim_buf_get_name(buf))
+        assert.same(old_lines,vim.fn.readfile(file))
+        assert.equals(0,vim.fn.filereadable(target))
+        assert.same(side_lines,vim.fn.readfile(root .. "/ordinary.side/child.md"))
+        assert.equals(0,vim.fn.isdirectory(root .. "/membership-target.side"))
+        assert.is_true(vim.bo[buf].modifiable)
+    end
+
+    it("confirms registry membership before native saveas when the initial open reply is held", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        document.detach(buf)
+        local registered=registry_result("register",{file,"ops:0"})
+        assert.equals("registered",registered.kind)
+        local _,side_lines=side_fixture()
+        local old_lines=vim.fn.readfile(file)
+        local lock_lines={"holder: operator","time: 2026-10-15T00:00:00Z"}
+        vim.fn.writefile(lock_lines,file .. ".lock")
+        local held=hold_next_process_reply(function(argv)
+            return argv[2] == "--session-sync" and argv[3] == "lookup" and argv[4] == file
+        end)
+        document.attach(buf)
+        await(function() return held.release ~= nil end)
+        assert.is_nil(document.identity(buf))
+        local target=root .. "/membership-target.md"
+        local ok=pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target))
+        if not ok then
+            assert_refused_before_move(target,old_lines,side_lines)
+            assert.same(lock_lines,vim.fn.readfile(file .. ".lock"))
+            assert.equals(registered.registration.ID,registry_result("lookup",{file}).registration.ID)
+        else
+            assert.is_true(held.count >= 2,"successful rename requires fresh OLD membership confirmation")
+            await(function() local identity=document.identity(buf); return identity and identity.File == target end)
+            assert.equals(registered.registration.ID,document.identity(buf).ID)
+            local confirmed=registry_result("lookup",{target})
+            assert.equals("registered",confirmed.kind)
+            assert.equals(registered.registration.ID,confirmed.registration.ID)
+            assert.equals("absent",registry_result("lookup",{file}).kind)
+            assert.equals(0,vim.fn.filereadable(file .. ".lock"))
+            assert.same(lock_lines,vim.fn.readfile(target .. ".lock"))
+            assert.equals(0,vim.fn.isdirectory(root .. "/ordinary.side"))
+            assert.same({"---","parent: ../membership-target.md","---","[up](../membership-target.md#question)","untouched"},
+                vim.fn.readfile(root .. "/membership-target.side/child.md"))
+        end
+        held.release()
+    end)
+
+    it("refuses native migration on unavailable initial membership while leaving the document editable", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        document.detach(buf)
+        local _,side_lines=side_fixture()
+        local old_lines=vim.fn.readfile(file)
+        vim.env.FAKE_COUCH_REGISTRY_MODE="unsupported"
+        local held=hold_next_process_reply(function(argv)
+            return argv[2] == "--session-sync" and argv[3] == "lookup" and argv[4] == file
+        end)
+        document.attach(buf)
+        await(function() return held.release ~= nil end)
+        local target=root .. "/membership-target.md"
+        assert.is_false(pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target)))
+        assert_refused_before_move(target,old_lines,side_lines)
+        vim.api.nvim_buf_set_lines(buf,4,5,false,{"editing remains available"})
+        assert.is_true(vim.bo[buf].modified)
+        held.release()
+    end)
+
+    it("permits an explicitly confirmed absent plain native rename without registering either path", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        document.detach(buf)
+        local held=hold_next_process_reply(function(argv)
+            return argv[2] == "--session-sync" and argv[3] == "lookup" and argv[4] == file
+        end)
+        document.attach(buf)
+        await(function() return held.release ~= nil end)
+        local target=root .. "/membership-target.md"
+        vim.cmd("saveas " .. vim.fn.fnameescape(target))
+        assert.is_true(held.count >= 2,"plain rename must have fresh positive absence before effects")
+        assert.equals(1,vim.fn.filereadable(file))
+        assert.equals(1,vim.fn.filereadable(target))
+        assert.equals("absent",registry_result("lookup",{file}).kind)
+        assert.equals("absent",registry_result("lookup",{target}).kind)
+        assert.equals(0,vim.fn.filereadable(file .. ".lock"))
+        assert.equals(0,vim.fn.filereadable(target .. ".lock"))
+        held.release()
+    end)
+
+    it("cannot bypass an issued registration by native renaming before its completion", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        local _,side_lines=side_fixture()
+        local old_lines=vim.fn.readfile(file)
+        local held=hold_next_process_reply(function(argv)
+            return argv[2] == "--session-sync" and argv[3] == "register" and argv[4] == file
+        end)
+        submit()
+        await(function() return held.release ~= nil end)
+        assert.is_nil(document.identity(buf))
+        assert.equals("register",document.status(buf).operation.witness.operation)
+        local target=root .. "/membership-target.md"
+        assert.is_false(pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target)))
+        assert_refused_before_move(target,old_lines,side_lines)
+        held.release()
+        await_submitted()
+    end)
+
+    it("cannot bypass an uncertain pending registration through native rename", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        local _,side_lines=side_fixture()
+        local old_lines=vim.fn.readfile(file)
+        vim.env.FAKE_COUCH_REGISTRY_MODE="uncertain"
+        submit()
+        await(function() return document.status(buf).phase == "pending" end)
+        assert.is_nil(document.identity(buf))
+        local target=root .. "/membership-target.md"
+        assert.is_false(pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target)))
+        assert_refused_before_move(target,old_lines,side_lines)
+    end)
+
+    it("cannot rename past unresolved own-slot selection before registration starts", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        local _,side_lines=side_fixture()
+        local old_lines=vim.fn.readfile(file)
+        local held=hold_next_process_reply(function(argv) return argv[2] == "--actors" end)
+        submit()
+        await(function() return held.release ~= nil end)
+        assert.is_nil(document.identity(buf))
+        assert.is_nil(document.status(buf).operation)
+        local target=root .. "/membership-target.md"
+        assert.is_false(pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target)))
+        assert_refused_before_move(target,old_lines,side_lines)
+        held.release()
+        await_submitted()
+    end)
+
 end)
