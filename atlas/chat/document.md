@@ -138,6 +138,18 @@ the question unanswered and the second restores the old answer. `answer_undo_spe
 mid-stream reload, saves, tool rounds, cancel,
 provider failure, reload, separate answers and mid-stream user edits.
 
+Streamed text never vanishes while the stream goes on (#229). The dispatcher's
+`qt.response` is what the model sent; every byte of it either reaches the answer
+or ends the generation with a stated outcome. Writer not alive: `revoked` or
+`cancelled`. Staging over budget: `overflow`. A stale, refused or interrupted
+write: `revoked` or `uncertain`. A queue dropped on stop: counted in
+`discarded_bytes`. A stream reader that throws: the attempt stops with
+`<stream> reader failed` rather than reading on past the lost bytes. The only
+uncounted change is the deliberate strip of a response's leading newlines.
+`stream_integrity_spec` drives the real transport against `fake_cliproxy`'s
+`stream` mode while edits above the answer and a busy loop race each write,
+and asserts the answer equals `qt.response` exactly.
+
 ## Live consumers
 
 Highlighters query at most 256 rows and 64 KiB per viewport page. Tall windows

@@ -94,20 +94,31 @@ touched — which is why it needs evidence rather than preference.
 | `create_handler` | INTEGRATION | deleted | `lua/parley/dispatcher.lua` | The scheduled writer with the four silent early returns; no production caller since the generation runner. |
 | `stream_replace_at_line` | INTEGRATION | deleted | `lua/parley/buffer_edit.lua` | Only consumer was `create_handler`. |
 | `tasker` | INTEGRATION | modified | `lua/parley/tasker.lua` | A throwing stdout reader ends the attempt with a recorded I/O error instead of continuing past the line. |
+| `stream_position` | PURE | deleted | `lua/parley/stream_position.lua` | Tip computation for `create_handler`'s cursor follow; no other consumer. |
+| `undojoin` | INTEGRATION | deleted | `lua/parley/helper.lua` | `helper.undojoin`, used only by `create_handler`; the document editor joins undo itself. |
+| `stream_integrity_spec` | INTEGRATION | new | `tests/integration/stream_integrity_spec.lua` | The Done-when oracle: buffer answer equals `qt.response` under interference. |
 | `fake_cliproxy` | INTEGRATION | modified | `tests/fixtures/fake_cliproxy` | A `stream` response mode: many separate content deltas. |
 
 ## Plan
 
 Measurement (2026-10-15, :3). The path the issue names is dead code: `D.create_handler` (the scheduled writer with the four early returns) has no production caller, and chat_pending's `before_write` is gone. Chat streaming is now tasker stdout → `dispatcher` `process_line` (`qt.response ..= content`, then handler) → `response_provider` → `generation_runner.cb.output` → the generation machine → `document.append` → `nvim_buf_set_text`. Every refusal on that path STOPS the generation with an outcome the user sees: not alive → revoked/cancelled; overflow; write stale/refused/interrupted; queue discarded with `discarded_bytes`. The one point where a drop can coexist with continued streaming is a Lua error inside the stdout reader. `tasker.call_safely` only logs it; the dispatcher's line loop keeps the unconsumed line, so the next chunk re-processes it, risking a repeated or skipped line, not counted, stream continues. Two silent STALLS (no drop, a possibly hung generation: a machine-rejected output, and a short `applied` receipt) are a different symptom and get their own issue.
 
-- [ ] Delete `D.create_handler`, `buffer_edit.stream_replace_at_line` and `create_handler_spec`. The silent early returns go with their only writer (the issue's Done-when 2, by removal).
-- [ ] tasker: a failed stdout/stderr reader callback ends the attempt with an `io_error` naming the reader, the same terminal path as the retention limit, so the generation fails visibly instead of streaming past the line. Red-first regression: a reader that throws once → the attempt stops with that error; before the fix it keeps running.
-- [ ] Oracle (Done-when 1): an integration spec drives a real chat response (real dispatcher, tasker, curl, runner, document) against `fake_cliproxy` in a new `stream` response mode (N separate content deltas). A buffer-attach hook makes the main loop busy and inserts a line above the answer on every streamed write. After completion, assert the buffer's answer text equals `qt.response` (less the deliberately stripped leading newlines) and that the inserted lines survived.
-- [ ] File the two silent-stall paths as a separate issue with the measured file:line evidence.
-- [ ] Atlas: where streamed bytes can stop and how each is accounted.
+- [x] Delete `D.create_handler`, `buffer_edit.stream_replace_at_line` and `create_handler_spec`. The silent early returns go with their only writer (the issue's Done-when 2, by removal).
+- [x] tasker: a failed stdout/stderr reader callback ends the attempt with an `io_error` naming the reader, the same terminal path as the retention limit, so the generation fails visibly instead of streaming past the line. Red-first regression: a reader that throws once → the attempt stops with that error; before the fix it keeps running.
+- [x] Oracle (Done-when 1): an integration spec drives a real chat response (real dispatcher, tasker, curl, runner, document) against `fake_cliproxy` in a new `stream` response mode (N separate content deltas). A buffer-attach hook makes the main loop busy and inserts a line above the answer on every streamed write. After completion, assert the buffer's answer text equals `qt.response` (less the deliberately stripped leading newlines) and that the inserted lines survived.
+- [x] File the two silent-stall paths as a separate issue with the measured file:line evidence.
+- [x] Atlas: where streamed bytes can stop and how each is accounted.
 - [ ] Verify: focused specs, then the full suite.
 
 ## Log
+
+### 2026-10-15 (:3)
+
+- Measured (an Explore digest, each finding checked at file:line): the issue's path was dead code. See the Plan's measurement paragraph. Remedy chosen from that evidence: no reconcile pass. The live path already ends the generation on every refusal. The two silent-continue risks were the dead writer, removed, and a throwing reader, now terminal.
+- Reader failure, red first: `tasker_supervision_spec` "ends the attempt visibly when a stream reader throws" failed 29/1 before the fix (the second piece was delivered after the throw) and passes 30/0 after. All reader calls, including EOF, go through one guard.
+- Dead writer removed with its orphans: `create_handler`, `stream_replace_at_line`, `helper.undojoin`, `stream_position` (+ unit spec) and `create_handler_spec`. stream_view_spec's legacy-writer cursor-follow block was replaced by a direct `helper.cursor_to_line` test, since that helper is still used in `init.lua`. stream_view, buffer_edit, dispatcher_query and every arch spec pass; lint is clean.
+- Oracle: `stream_integrity_spec` (300 deltas from `fake_cliproxy` `stream` mode, at least 10 interleaved edits above the answer, plus a 3 ms busy slice per write). The answer equals `qt.response` exactly, 3/3 runs. Mutation (temporary file copy): skipping the handler for the 50th delta while `qt.response` still accumulates fails it at the equality assertion.
+- Filed #341 (unclaimed) for the two silent-stall paths, with file:line evidence.
 
 ### 2026-09-10
 
