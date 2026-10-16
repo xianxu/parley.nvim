@@ -1,5 +1,9 @@
 # Lessons
 
+## 2026-10-16 (#332 — shared stage ownership)
+
+- A stage can be replaced by another worker before the original item lands. Inspect the current staged commit before clearing it; clear only the stage owned by the completed item. A newer stage belongs to its worker even when the earlier task authorized cleanup.
+
 ## 2026-10-15 (#332 — document admission and lifetime)
 
 - Window-local options have per-buffer cached values. Test A→B→A with distinct originals: restoring at BufWinLeave alone can be too late for Neovim’s cache. Keep the original/installed proof per live pair until entry/wipe/close, consume before recapturing a baseline, and never restore into a different buffer.

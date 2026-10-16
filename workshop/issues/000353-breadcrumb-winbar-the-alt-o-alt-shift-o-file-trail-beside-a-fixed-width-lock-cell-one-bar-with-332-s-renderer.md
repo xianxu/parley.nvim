@@ -1,12 +1,20 @@
 ---
 id: 000353
-status: open
+status: working
 deps: [parley.nvim#332]
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: 'ac1e3075007217de632fc4f806e9b291dede9d95' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'c329791d83c041854feeb0ae3577ba9a6a1d6ed3' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T09:59:46-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Breadcrumb winbar: the Alt+o / Alt+Shift+O file trail beside a fixed-width lock cell (one bar with #332's renderer)
@@ -37,8 +45,19 @@ universal-agent-input-interface.
 
 ## Plan
 
-- [ ]
+Full-flow, single close boundary. Detailed design: [breadcrumb winbar plan](../plans/000353-breadcrumb-winbar-plan.md).
+
+- [ ] Add pure breadcrumb transitions and display projection, with direct sequence/width tests.
+- [ ] Record successful Alt+o destinations through the existing file history; expose snapshot/restore values and preserve native Back behavior.
+- [ ] Compose a nine-cell lock state, breadcrumb and feedback in document_band; keep its restoration ownership and both file kinds identical.
+- [ ] Exercise native keys, async resolution, split/window lifecycle and every lock/feedback state; update atlas/README/traceability.
+- [ ] Run the required suite, close on SHIP, stage with the hub's coordination and perform the operator's live check before landing.
 
 ## Log
 
 ### 2026-10-16
+
+- Planning follows landed #332 PR241, merge `3219cc0c705bd1a7c097bcf920135155892645b9` verified with git rev-parse; exact integrated-head suite passed, four CI checks green. Hub received the outcome (receipt 7d3db9df-927c-40ab-af86-588a7891a6e5 submitted).
+- Existing `file_history` records every native file visit, not only Alt+o, and restores cursors/skips missing paths on Back. Breadcrumb is a value carried by those visits, not a replacement for this history (ARCH-DRY). `M.open_buf` may focus another editing window, so follow must commit against the actual destination window; async artifact/family resolution must carry the same explicit origin rather than leave a global pending flag.
+- Staging lesson from #332: a later worker had replaced :0's stage with #257 at `d3909bd93e7cc6a0194fe255a1778099f489c5b7`; unconditional stage --clear removed that newer stage. Hub informed in the submitted landing report. Inspect the current stage identity before clearing; if another item's stage replaced ours, leave it to its owner.
+- Design pending TL approval; no implementation started.
