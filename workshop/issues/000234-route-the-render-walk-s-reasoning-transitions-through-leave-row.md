@@ -67,6 +67,7 @@ route it through the same helpers or record why its semantics must differ.
 |---|---|---|---|
 | `enter_row` | changed | lua/parley/highlight_structure.lua | Now exported: the PRE-snapshot half of a row's step (footer and partition resets). The redraw walk calls it per row. |
 | `leave_row` | changed | lua/parley/highlight_structure.lua | Now exported: the row's own transition (`advance` plus reasoning: `🧠:[END]`, `🧠:` with its lookahead verdict, the blank terminator). The redraw walk calls it per row. |
+| `lexical.enter_row` / `lexical.leave_row` | added | lua/parley/document/lexical.lua | The ONE per-row step (close round 1): moved to the lowest shared module so the document grammar's `render_before` (the production redraw path) uses it too; `highlight_structure` delegates (its `enter_row` only adapts a row index to the footer boolean). |
 
 ## Plan
 
@@ -100,4 +101,9 @@ separable render-path refactor.
 - `chat_parser`: documented as intentionally different (answer-scoped reasoning, accumulated as content). Pinned in `chat_parser_tools_spec`: a `🧠:` in a question is question text to the parser but dims in the highlight walk; in an answer both agree.
 - The 30 highlight/render/parser-related specs are unchanged and green.
 - Process slip: my plan message to the hub carried a commit hash I typed instead of reading it from `git rev-parse`; I sent a correction with the real one (69f44a95…).
+- Close round 1 (BR-1): `document/grammar.lua` held a THIRD hand-written copy of the row step, feeding `render_before`, the production `document_rows` render path. My sweep had checked only `chat_parser`.
+  - The step moved into `parley.document.lexical` (`enter_row(state, token, in_footer)`, `leave_row(state, token, explicit, fence_len)`), the lowest module all three walkers already depend on; `grammar.lua` now calls it.
+  - Equivalence of its inputs: `t.blank` is exactly the `_` token, since an all-whitespace line can classify as nothing else. `kind == 'reasoning'/'reasoning_end'` is exactly the token, and the grammar keeps its `render_fence_width`.
+  - Whole-class sweep of `lua/` reasoning-state writers: only state constructors, the streaming overlay, `chat_parser` (documented) and the grammar's SEMANTIC sections (answer-scoped, like chat_parser's; the comment now says so) remain.
+  - New random-document case in `document_grammar_spec`: grammar `render_before` equals `build` `state_before` (300 documents, over 2000 rows). Mutation: dropping the verdict fails it and both fixed render cases. 75 document, highlight and parser specs green.
 

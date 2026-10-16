@@ -19,15 +19,18 @@ every later exchange as code — the boundary was already tracked for
   be clean); `advance` runs after, matching the convention that
   `state_before[row]` is the state *entering* the row. Collapsing the two
   inverts the fence delimiter's own render.
-- **One row step, shared by the render walk (#234).** `highlight_structure`
-  exports its per-row halves, `enter_row` (entry resets) and `leave_row` (the
-  row's transition, reasoning included). `compute_chat_highlights` keeps one
+- **One row step, shared by every state walk (#234).** `parley.document.lexical`
+  owns the per-row halves, `enter_row` (entry resets) and `leave_row` (the row's
+  transition, reasoning included). The document grammar (`render_before`), the
+  structure build and replace, and the redraw walk all step through them;
+  `highlight_structure` re-exports them. `compute_chat_highlights` keeps one
   state table stepped by them, and only its painting decisions are local: it
   reads code/tool/reasoning after the shared `advance`, and question state from
   before the row. The `🧠:` lookahead verdict (from the structure, or
   `streaming`) is an input to `leave_row`, taken for every `🧠:` row, footer
   included. `render_walk_parity_spec` asserts that the state each row paints
-  from equals `build`'s `state_before`. `chat_parser` deliberately differs: it
+  from equals `build`'s `state_before`, and `document_grammar_spec` asserts the same for the
+  grammar's `render_before`. `chat_parser` deliberately differs: it
   reads reasoning only inside an answer, where `🧠:` dims anywhere. That is
   pinned in `chat_parser_tools_spec`.
 - **`code_block_memo(lines, patterns, tildes)`** is the shared buffer scan; it
