@@ -1,12 +1,12 @@
 ---
 id: 000256
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-15
 updated: 2026-10-16
 estimate_hours:
-card_mirror: 'bdec6d009979dcf1694cb6f7fd5b996a3c2962b4' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '6bc75c3290e6e7ab2e0c1aceb8ce1cd3cd2f7edc' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T02:21:24-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "1a47ce32", done: "2f4161c2"}
+actual_hours: 0.02
 ---
 
 # Remove conflicting branch shortcut alias
