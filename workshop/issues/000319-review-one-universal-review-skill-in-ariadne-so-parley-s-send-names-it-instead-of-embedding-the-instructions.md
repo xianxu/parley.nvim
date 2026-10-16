@@ -1,12 +1,22 @@
 ---
 id: 000319
-status: open
-deps: []
+status: codecomplete
+deps: [ariadne#399, parley.nvim#332, pair#573]
 github_issue:
 created: 2026-10-13
-updated: 2026-10-13
-estimate_hours:
-card_mirror: '62229aab23f46e4e48765251255a23dd22981fc9' # card fields mirrored from issue-cards; edit via sdlc
+updated: 2026-10-16
+estimate_hours: 2.25
+card_mirror: '8a5a16bfc03dc556e7e83bf2dc81613201fc4d86' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T16:16:41-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: operator}
+actual_hours: 3.15
 ---
 
 # Review: one universal review skill in ariadne, so parley's send names it instead of embedding the instructions
@@ -27,11 +37,77 @@ Lift the review protocol into ariadne as one agent skill (working name `xx-unive
 
 ## Plan
 
-- [ ]
+- [x] Record the hub-approved submitted-only revision and notify the shared-skill/S1 owners.
+- [x] Wait for ariadne#399 and parley.nvim#332 (S1 depends on pair#573), then inspect their landed interfaces and run change-code.
+- [x] Delete the verbose Couch builder, editor diff/baseline and alternate send branch; preserve S1's exact submitted-only payload and the canonical inline review outside Couch.
+- [x] Run targeted/full verification, coordinate the staged live check, close on SHIP and land.
+
+Durable plan: [universal review submissions](../plans/000319-universal-review-send-plan.md).
 
 ## Log
 
+
+- 2026-10-16: closed — Registered Couch keymap sends exactly submitted: ABS_PATH for explicit, missing and long unknown instructions; failure/retry retains S1 ownership. Canonical standalone mode/context/adapter tests and 11 export tests pass. Recorded full suite on 60d0a785 exit 0 in 3m2s, log sha256 a07a85a6b4fa; lint754 and orphan census clean. Operator accepted combined #319/#356/#357 smoke per hub delivery 20a83170-e3d1-4580-8564-3f796f4818b2. Main integrated cleanly; no code changes after the suite.; review verdict: SHIP
 ### 2026-10-13
+
+### 2026-10-15 — S2a plan drafted
+
+Claimed and started after #335 landed. Read the ops design S2 and project S2a;
+loaded the refreshed architecture/worker contracts. Filed ariadne#399 unclaimed
+for hub dispatch. The S1 owner confirmed its registered submission bypasses
+review_send.message even for explicit process-instruction; the proposed plan
+therefore requests one payload adapter inside S1, without bypassing its
+registration, locks or receipt ownership.
+
+The canonical grammar is 8,774 bytes, larger than Couch's 8,192-byte envelope;
+standalone fallback embeds the generated round/mode brief and points to the
+packaged grammar file. The pure builder budgets UTF-8 bytes and real diffs.
+Issue schema and whitespace checks pass. This turn changes only issue/plan
+artifacts; no implementation or runtime tests are claimed. Awaiting hub approval.
+
+### 2026-10-15 — shared export consumer review
+
+Reviewed ariadne#399's plan at 6c3845509146386a234410367012d2df77ac3b33
+with a fresh read-only reviewer. Export roles/mode semantics fit the approved
+submitted-only contract. Returned three required clarifications: confirmed
+absence versus unavailable lookup (including legacy session-sync CAS), review
+snapshot/hash and reflected-only owed folding, and standalone composition that
+excludes the Couch file-edit adapter. Requested resolved-byte hashes and a
+total manifest sort. On this consumer, the canonical round must own flag
+semantics; do not retain Mode.directives as another authored definition.
+Plan review only; no implementation or live verification claimed. Await the
+revised producer contract and the existing dependency landings.
+
+### 2026-10-15 — producer pin inspected
+
+At ariadne#399 pin 8bead12b81f8380757fc55e6e3e90e80bf4fe2d2, all nine
+export member byte counts/hashes match pinned contents and all six modes match
+Parley byte-for-byte. The proposed export fits local composition. Sent two
+remaining adapter corrections to the owner/hub: legacy tracked type before
+COUCH_TREE-unset classification, and reflected-only folding of captured owed
+IDs. The durable plan records the exact provisional schema/composition.
+Awaiting the landed merge pin and #332; no implementation started.
+
+- 2026-10-15 18:08: Plan gate clean (PQ-1 addressed); estimate-quality INFO,
+  change-code accepted full flow at 52c0bb17. Lua primitive includes mode/source
+  tests and S1 integration regressions, final review includes recorded suite
+  and acceptance coordination; sender refactor covers deletion itself. The
+  remaining Lua design allowance covers canonical round versus legacy no-mode
+  semantics and tool adapter precedence. Export source refreshed in this
+  slot's own Ariadne checkout; no unlanded dependency branch used.
+- TDD: context tests failed twice for missing context, then all 8 passed.
+  Composition tests failed on canonical source/flags/adapter absence and silent
+  missing-mode/package handling before implementation (5 expected failures).
+
+- Independent portion verified: make test-spec SPEC=modes/review green;
+  skill_invoke_review_spec 20/20; source/mode IO 10/10; context/instruction
+  8/8; final Python export fixture suite 11/11 through the mapped wrapper.
+  Export --check against the landed source, make check-vocabulary, focused
+  luacheck (five files, zero warnings) and git diff --check all pass. The
+  export consumer accepts producer optional/defaulted metadata and tied orders.
+  Snapshot source matches ariadne f19623c4; the local adapter remains authored
+  separately. Legacy sender and its tests are deliberately untouched pending
+  #332; full recorded suite/close/landing remain pending.
 
 ## Revisions
 
@@ -42,3 +118,130 @@ Lift the review protocol into ariadne as one agent skill (working name `xx-unive
   "Review mode" brief, the "How to apply this round" block, the repeated operator instruction, and the
   "Changes since the last send" header when it says "first send" (keep a real diff when there is one, since
   that's new information). The mode semantics live in the skill, not in every message.
+
+- 2026-10-15 — S2a planning proposal after #335 landed. Shared half filed as
+  ariadne#399, unclaimed for hub dispatch, with S1 dependencies parley.nvim#332
+  and pair#573. Mode/protocol fallback will be generated from the shared source;
+  no independent Parley mode definitions. #332's owner confirmed its coordinator
+  consumes named Markdown even with process-instruction, so changing only the
+  old message builder would miss the Couch path. Request hub approval for a
+  payload adapter within S1's existing registered send, preserving its state
+  ownership and submitted-only behavior when no review instruction is present.
+  See the durable plan for alternatives, contracts, tests and handoff. No code
+  changed; awaiting plan approval.
+
+### 2026-10-15 16:25 — submitted-only revision (approved)
+
+Authority: ops:0 delivery 9111a425-a6cd-4098-9138-009139f4155c, submitted and
+verified. The hub selected the operator's simple-submission direction and
+approved the plan with this change.
+
+**Current payload contract:** every Couch Alt+Return sends only
+`submitted: ABS_PATH` through S1's existing send_registered flow, including
+files with process-instruction. No payload adapter, capability-dependent
+format, embedded mode/instruction, editor-computed diff or send baseline.
+Ariadne#399 reads the file's frontmatter process-instruction and computes
+changes since its last read with couch --session-sync diff; section modes come
+later. Outside Couch the existing in-editor review keeps a complete inline
+round derived from the canonical source. #319 waits for #399 and #332.
+
+**Revised acceptance:** the actual keymap uses the same exact submitted-only
+payload with/without process-instruction and on repeated sends; the old verbose
+builder/diff/baseline and alternate sender are removed; outside-Couch inline
+review still works without shared skill discovery. S1 continues to own
+registration, locks, dedup/resend and receipts. These clauses supersede the
+old Spec/Done-when wording about an editor-built diff and skill-dependent send.
+
+The original implementation proposal is retained verbatim as
+workshop/plans/000319-universal-review-send-proposal.md; the durable plan now
+records the approved execution tasks. No code changed in this revision.
+
+### 2026-10-15 18:01 — independent-first execution order (approved)
+
+ops:0 delivery e11ea5e9-3fe5-48c2-b152-6f0364faa234 authorizes building the
+independent canonical-export/local-inline work from main now. #399 is confirmed
+landed at f19623c46566c209a1b90c6d95a4714ce61212a9; its final export hashes
+were rechecked. #332 remains unlanded, so old sender deletion and S1 integration
+still wait for it, followed by merging main. Never base on #332's branch.
+The durable plan records exact source/composition/test details. Enter full
+change-code for the generated prompt/data surface; no code edited yet.
+
+### 2026-10-15 18:05 — plan-quality refinement PQ-1
+
+The first full-flow plan review accepted the design and requested function-level
+test strategies. Named pure validate_manifest/render_snapshot/compare_snapshot
+and instruction.context with adversarial/mechanical guards; compressed scenario
+inventories to integration invariants. No production code changed.
+
+## Estimate
+
+Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against
+baseline-v3.1.md. Method A only; calibration is marked stale, so provisional.
+The settled plan earns the 0.2 design multiplier and 15% design buffer.
+Generator tooling maps to one greenfield single-concern module (Python stdlib
+json/hashlib/pathlib supply the implementation; no novel library needed).
+Local prompt integration is one focused Lua feature; sender deletion is one
+cross-cutting refactor. Docs and the final review are separate primitives.
+Base design selections 1.0, 2.0, 0.6, 0.1 become 0.20, 0.40, 0.12, 0.02;
+base implementation selections 0.8, 1.5, 0.5, 0.2, 0.5 are scaled once by 0.40.
+Existing mode/source and S1 patterns justify familiarity 1.0. No new API discovery.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: greenfield-go-module design=0.20 impl=0.32
+item: lua-neovim design=0.40 impl=0.60
+item: cross-cutting-refactor design=0.12 impl=0.20
+item: atlas-docs design=0.02 impl=0.08
+item: milestone-review design=0.00 impl=0.20
+design-buffer: 0.15
+total: 2.25
+```
+
+## Integration checkpoint
+
+2026-10-16: ops:0 delivery 6e7309b9-ac9f-4f11-ba1a-0e3166310839 authorized
+finishing after #332 landed. Merged origin/main (57f50cba) at 15f2cbd3; no
+unlanded branch used. S1 admission and registered send remain unchanged.
+Removed the verbose message/diff/baseline/actor-send branch and duplicate
+brief/directives. Outside-Couch local invocation now runs directly after
+instruction expansion. Regression first failed on the old actor lookup before
+removal; Couch long unknown instructions and failure/retry stay submitted-only.
+Direct pre-#342 test invocation refused isolation; used make test-spec instead.
+
+Verification checkpoint: mapped modes/review passes 301 tests in 14 files.
+make lint passes all 746 files with zero warnings/errors; vocabulary and
+whitespace checks pass. PR #270 checks pass. Recorded full suite is queued
+for dec9c3f08c6d3a9a71b088fd116018e8ee5057ae. Requested coordinated staging
+from the hub (59e0942b-ca6d-4cfd-b76a-bbf4b6a92363, submitted); live acceptance
+and landing remain open. Active-time preview succeeded (2.03h, not a waiver).
+
+2026-10-16 live-check staging: sdlc stage --build put exact
+ dec9c3f08c6d3a9a71b088fd116018e8ee5057ae on parley.nvim:0, verified by
+ git rev-parse. This Lua plugin has no cmd/*/main.go or Go binaries to verify.
+Own slot restored to issue branch. Instructions saved in
+/tmp/parley-319-stage-report.md. Two stage reports timed out; receipts
+c04bb08c-d957-4096-b7ac-743ff67a7b13 and
+67dca700-df8a-463a-9930-9ad1d0474ae0 became unavailable, so no blind resend.
+
+Recorded full suite PASSED on dec9c3f08c6d3a9a71b088fd116018e8ee5057ae:
+sdlc-local/suite exit 0 in 2m55s; log SHA256 prefix 5a601766ae5b.
+Log: .git/sdlc/local-checks/dec9c3f08c6d3a9a71b088fd116018e8ee5057ae/suite.log
+(in the common Git dir). Queue wait 810s; all test phases finished and orphan
+census clean. No code changes since this suite head, only issue bookkeeping.
+Awaiting operator live acceptance before landing; no acceptance claimed.
+
+### 2026-10-16 — operator accepted combined smoke
+
+Hub delivery 20a83170-e3d1-4580-8564-3f796f4818b2 reports the operator accepted
+#319 + #356 + #357: "tested, seems to be working, treat this as smoke tested".
+Authorized to land #319 from this branch through the landing line, then #334.
+Merged current origin/main cleanly before close; repeating recorded suite
+because main's code changed since the prior green run. No #319 code changed.
+
+Final verification after clean main integration: recorded sdlc-local/suite on
+60d0a78522985863726f697538d8b51821aad308 passed exit 0 in 3m2s, log sha256
+prefix a07a85a6b4fa, orphan census clean. Operator smoke accepted as above.
+Implementation/verification tasks are complete; invoking the required close
+review and publish gates now. Landing and its outcome report are gate-owned
+remaining actions, not a claim of an already merged PR.

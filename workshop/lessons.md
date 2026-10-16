@@ -599,6 +599,9 @@ oracle, and the mutation that would make the test fail.
 
 - Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.
 
+## 2026-10-15 (#319 — canonical review export consumer)
+
+- A versioned export consumer must accept the producer's valid optional and defaulted fields. Test producer examples with unordered modes, tied ordering and omitted mode flags; never turn the current six stock records into schema constraints.
 - A successful filesystem move plus nvim_buf_set_name does not make Neovim consider NEW read: its not-edited flag blocks ordinary writes and checktime skips it. Test the next submit/auto-save, acknowledge proven unchanged NEW with a non-bang native read, and reattach native edit observers detached by that read. Never bypass the guard with an unconditional forced write.
 ## 2026-10-15 (#338 — starter tutorials under project mode)
 
