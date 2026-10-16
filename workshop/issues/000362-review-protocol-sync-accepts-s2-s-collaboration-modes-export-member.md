@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "b8e85993", done: "dec7e7ee"}
 ---
 
 # Review-protocol sync accepts S2's collaboration-modes export member
