@@ -140,3 +140,10 @@ were rechecked. #332 remains unlanded, so old sender deletion and S1 integration
 still wait for it, followed by merging main. Never base on #332's branch.
 The durable plan records exact source/composition/test details. Enter full
 change-code for the generated prompt/data surface; no code edited yet.
+
+### 2026-10-15 18:05 — plan-quality refinement PQ-1
+
+The first full-flow plan review accepted the design and requested function-level
+test strategies. Named pure validate_manifest/render_snapshot/compare_snapshot
+and instruction.context with adversarial/mechanical guards; compressed scenario
+inventories to integration invariants. No production code changed.

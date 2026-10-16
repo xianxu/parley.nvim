@@ -72,10 +72,9 @@ A packaged plugin without a sibling ariadne checkout must retain a working local
 
 Files: tests/integration/review_send_spec.lua, #332's landed agentic-document submission tests and existing stateful fake; retain tests/unit/review_instruction_spec.lua.
 
-- [ ] Add keymap regressions for a named Markdown file with an explicit process-instruction and without one. Both must reach S1 and send exactly submitted: ABS_PATH, with one attempt and no protocol, mode hint or diff appended.
-- [ ] Test edit/resubmit, failed/uncertain receipt then explicit retry, and unavailable registration through S1's existing fake/control seam. Assert no fallback to a legacy sender or inline prompt while Couch admission owns the request.
-- [ ] Add outside-Couch regressions for explicit instruction, prompt-on-missing instruction, cancelled prompt and existing mode aliases. They must invoke the local review with its inline source, with no Couch send and no dependency on skill discovery.
-- [ ] Remove obsolete assertions that expect verbose Couch message bodies or an editor-side successful-send diff; retain unrelated pure instruction/frontmatter tests. Run mapped tests red and record the failures before deleting code.
+- [ ] Registered-submission invariant: the real keymap always delegates a Couch-owned request to S1 and emits only submitted: ABS_PATH. Reuse the stateful registry/receipt fake to control failure and retry order; no alternate sender or inline prompt may run while S1 owns admission.
+- [ ] Outside-Couch invariant: local instruction selection and cancellation invoke only the existing in-editor review with canonical inline source, without Couch or installed shared-skill discovery.
+- [ ] Retire assertions for deleted payload/diff helpers; preserve instruction/frontmatter regression coverage. Run mapped tests red before implementation, then green.
 
 ### 3. Delete the retired producer and preserve inline review
 
@@ -161,9 +160,8 @@ Independent implementation detail:
   independent part keep instruction.brief/Mode.directives for the old Couch
   sender only; delete those duplicate producers with that sender after #332.
 - Tests: new tests/integration/review_protocol_bundle_spec.lua exercises the
-  generator against portable fixture directories (valid, drifted, malformed,
-  unsafe, stale and standalone); tests/unit/review_instruction_spec.lua tests
-  context values/order without IO; tests/integration/review_mode_load_spec.lua
+  real generator against portable fixture directories and runs its pure Python
+  tests; tests/unit/review_instruction_spec.lua tests context without IO; tests/integration/review_mode_load_spec.lua
   tests real packaged round/grammar -> modes -> local adapter composition and
   unchanged local invocation selection. Extend atlas/traceability.yaml to map
   the new generator fixture test to modes/review.
@@ -177,3 +175,23 @@ Independent implementation detail:
 The generated prompt/data additions exceed the quick shell: enter full flow
 for plan-quality and derive an estimate only after it passes. Targeted TDD
 precedes implementation; full recorded suite and close wait for final S1 work.
+
+### 2026-10-15 18:05 — PQ-1 function-level verification strategy
+
+Compress scenario inventories into integration invariants above; the following
+named functions own the risky validation/transformation work. Pure Python tests
+live in tests/unit/review_protocol_export_test.py, invoked by the mapped Lua
+fixture test so the normal suite runs them. No new dependency is required.
+
+| Function | Kind | Location | Test strategy and mechanical guard |
+| --- | --- | --- | --- |
+| validate_manifest | PURE | scripts/sync-review-protocol.py | Seeded recursive JSON/path mutations; accept only versioned typed records with unique normalized permitted member paths and canonical grammar source. |
+| render_snapshot | PURE | scripts/sync-review-protocol.py | Mutate member byte maps/digests; verify every member before producing the round/grammar/mode/provenance output map, with no filesystem access. |
+| compare_snapshot | PURE | scripts/sync-review-protocol.py | Mutate generated inventories/bytes; deterministic differences detect stale/missing/extra generated modes while ignoring unowned local adapter/code files. |
+| instruction.context | PURE | lua/parley/skills/review/instruction.lua | Generated mode sequences/text; preserve input order/raw values, first-mode selection and operator text without rendering directive semantics or mutating inputs. |
+| skill.source | INTEGRATION | lua/parley/skills/review/init.lua | Portable package fixtures; assert canonical base -> selected data -> local tool adapter ordering and existing invocation semantics without an ariadne checkout. |
+
+The generator's main/load/write shell is integration: real fixture directories
+and the actual command prove --check/refusal leave output unchanged, and a
+valid snapshot runs the standalone source path. Retain property mutations in
+the executable tests rather than a prose case inventory.
