@@ -1,13 +1,20 @@
 ---
 id: 000343
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '79e7493fb093f70eb74b3d71e69b0534a2195ac0' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'da5e98e496f2d8ff1e13995a66839d7b388d5323' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T20:29:03-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # cliproxy_update_spec: 'old proxy outlives the restart' races the fake's 4 s exit delay under load
@@ -52,6 +59,23 @@ Sibling: the lifecycle restart-timing flake is #340.
 
 ## Spec
 
+Measured (idle machine, slot 3): lowering the case's exit delay to 1000 ms or
+2500 ms fails it deterministically in mode 2 (`r.ok` true at :490), so the
+shipped 4000 ms window has under 1.5 s of margin before any load.
+
+Fix: replace the wall-clock window with a state the case controls. The fake's
+`PARLEY_FAKE_EXIT_DELAY_MS` is retired for `PARLEY_FAKE_IGNORE_SIGTERM=1`: the
+old proxy ignores SIGTERM and keeps serving until it is SIGKILLed. The port wait
+then always ends with the old proxy answering, the final probe always sees
+9.9.4, and the spec's reap SIGKILLs it (the shared reap drops `sigterm`: its
+only reason was this window).
+
+## Core concepts
+
+| Concept | Meaning |
+|---|---|
+| `PARLEY_FAKE_IGNORE_SIGTERM` | fake_cliproxy ignores SIGTERM; only SIGKILL (the spec's reap) ends it |
+
 ## Done when
 
 - [ ] The case no longer depends on the old fake outliving a wall-clock window
@@ -60,7 +84,11 @@ Sibling: the lifecycle restart-timing flake is #340.
 
 ## Plan
 
-- [ ]
+- [ ] fake_cliproxy: `PARLEY_FAKE_IGNORE_SIGTERM` replaces `PARLEY_FAKE_EXIT_DELAY_MS`.
+- [ ] cliproxy_update_spec: the case uses it; reap uses SIGKILL; comments in
+      cliproxy.lua, fixture_process.lua and fixture_reaping_spec follow.
+- [ ] Red: the old case fails at a compressed window; the new case has no window.
+- [ ] Evidence: the case passes in repeated runs under a loaded machine (parallel runs).
 
 ## Log
 
