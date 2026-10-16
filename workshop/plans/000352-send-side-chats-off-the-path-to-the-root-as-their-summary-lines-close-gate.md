@@ -91,6 +91,86 @@ rounds:
       isolation: fenced
       reviewed: 026091672266024816e0fbdd7c03fdb8b055f891
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 17692e27-a75d-4f71-a279-d9f522cfbc14
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000352"
+            recipe: fix-review
+            round: 2
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/c0d8388e3bd09008
+            reviewed_head: 9bff6ff762f7c2424347c92143e2e1dc0e174258
+            slot: parley.nvim:3
+            requested_at: "2026-10-16T15:26:59.562129Z"
+          phase: finished
+          pid: 26513
+          started_at: "2026-10-16T15:26:59.68764Z"
+          finished_at: "2026-10-16T15:27:54.248867Z"
+          session_id: 860e4c25-73f0-400b-9c26-180230f44275
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 9bff6ff762f7c2424347c92143e2e1dc0e174258
+        tracker_head: dad5ca040dc4128dd9af55c6d60d1493610da7b9
+        branch_point: add53f6fde4e02f8238851509683e7e35a5831fd
+        since: "2026-10-16T08:11:54-07:00"
+        until: "2026-10-16T08:24:05-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T08:11:54-07:00"
+              end: "2026-10-16T08:24:05-07:00"
+              began: "2026-10-16T08:11:54-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 996b651e-5e17-47f4-9815-33d9ff25fe0d
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: ce77cd071dcde743faab713782a10ced41f7c72ca6b9cc93cc83f5e0990fe98d
+              started: "2026-10-15T18:27:53.241Z"
+              spawned: false
+              bytes: 12165229
+              windows:
+                - start: "2026-10-16T08:11:54-07:00"
+                  end: "2026-10-16T08:24:05-07:00"
+        cuts:
+            - dispatched: "2026-10-16T08:20:16-07:00"
+              finalized: "2026-10-16T08:23:17-07:00"
+              finalizing: true
+      "n": 2
+      timestamp: "2026-10-16T08:27:55-07:00"
+      dispatched: "2026-10-16T08:26:59-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: M.summary_message (chat_respond.lua:354) is now the single source, used at :372 (off-path) and :1031 (summarized branch).
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: Revisions records the docs step (atlas plus the config.lua comment, no README config section) and that the omitted-answer note is sent only when there is an answer, as at chat_respond.lua:378-381.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: Revisions records that any value other than "full" means "summary", the default, consistent with the rest of chat_memory, where no value is validated. Unchanged by design.
+          round: 2
+        - id: BR-4
+          disposition: addressed
+          note: chat_respond.lua:369-371 sends the placeholder only for non-blank questions, matching :903. The test at chat_tree_context_spec.lua:290-295 fails on the old code, and it passes.
+          round: 2
+      recipe: fix-review
+      isolation: fenced
+      reviewed: 9bff6ff762f7c2424347c92143e2e1dc0e174258
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#352 (boundary-review)
@@ -111,9 +191,15 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Minor] `blank-question-guard` (kind: defect) Off-path summary path sends the placeholder even when the question text is blank
   The on-path summarized branch sends the placeholder only when question_content has non-whitespace text; side_chat_messages with a summary sends it unconditionally (chat_respond.lua:363). Only that one site has the difference.
 
+## Round 2 — 2026-10-16T08:27:55-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — M.summary_message (chat_respond.lua:354) is now the single source, used at :372 (off-path) and :1031 (summarized branch).
+- BR-2 — addressed — Revisions records the docs step (atlas plus the config.lua comment, no README config section) and that the omitted-answer note is sent only when there is an answer, as at chat_respond.lua:378-381.
+- BR-3 — addressed — Revisions records that any value other than "full" means "summary", the default, consistent with the rest of chat_memory, where no value is validated. Unchanged by design.
+- BR-4 — addressed — chat_respond.lua:369-371 sends the placeholder only for non-blank questions, matching :903. The test at chat_tree_context_spec.lua:290-295 fails on the old code, and it passes.
+
 ## Open findings
 
-- **BR-1** [Minor] `duplicated-render-path` (kind: defect) side_chat_messages restates the summarized branch's placeholder+summary pair
-- **BR-2** [Minor] `plan-claim-unbacked` (kind: defect) Plan claims a README config-docs update and role alternation that the code does not deliver
-- **BR-3** [Minor] `config-value-unvalidated` (kind: defect) chat_memory.side_chats silently treats any value other than "full" as "summary"
-- **BR-4** [Minor] `blank-question-guard` (kind: defect) Off-path summary path sends the placeholder even when the question text is blank
+(none — every finding has been disposed)

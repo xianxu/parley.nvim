@@ -91,3 +91,78 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"d5839a4e-4c6b-4f22-8153-508b7fc8d963","repository":"github.com/xianxu/parley.nvim","issue_id":"000352","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/3a8b037172fa4dd1","reviewed_head":"026091672266024816e0fbdd7c03fdb8b055f891","slot":"parley.nvim:3","requested_at":"2026-10-16T15:20:16.215553Z"},"phase":"finished","pid":67740,"started_at":"2026-10-16T15:20:16.342231Z","finished_at":"2026-10-16T15:23:16.65554Z","session_id":"86614bd4-3900-4b90-b552-e914a60d406e","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T08:27:55-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 352 — Send side chats off the path to the root as their summary lines |
+| repo | parley.nvim |
+| issue file | workshop/issues/000352-send-side-chats-off-the-path-to-the-root-as-their-summary-lines.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 0b1403eabff5196a1012fd010f2cbbfd4bf1d3a4..9bff6ff762f7c2424347c92143e2e1dc0e174258 |
+| command | sdlc close --issue 352 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T08:27:55-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Tests are passing so far. Next I'm checking the whole run for failures, especially `chat_tree_context_spec`.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This window contains only the round-1 fixes and the files the close step generated, so it is narrow. All four prior Minor findings are addressed. The interdiff introduces no new defect. `make test-spec SPEC=chat/memory` passed with 0 failed and 0 errors across all 9 spec files. That run includes the new `chat_tree_context_spec` case "sends no placeholder for a blank side-chat question".
+
+**Disposition of the prior findings:**
+
+- **BR-1 (duplicated summary rendering): addressed.** A new `M.summary_message` (`lua/parley/chat_respond.lua:354`) now builds the summary message. Both former sites use it: the off-path path at `:372` and the on-path summarized branch at `:1031`. The placeholder text already comes from the shared `assets.omitted_text` (`:894` and `:987`).
+- **BR-2 (plan claims the code doesn't back): addressed.** `## Revisions` now records both points. The docs step is the atlas plus the `config.lua` comment, because the README has no config section. The omitted-answer note is sent only when the exchange has an answer. These are prose-only corrections and they match the code at `:378-381`.
+- **BR-3 (unknown config values treated as `"summary"`): addressed.** The behaviour is unchanged on purpose and is now recorded in Revisions: any value other than `"full"` means `"summary"`, the default. It matches the existing `chat_memory` convention, where no config value is validated.
+- **BR-4 (placeholder sent for a blank question): addressed.** `:369-371` sends the placeholder only when the question has non-whitespace text. This is the same check the on-path branch makes at `:903`. The new test at `tests/integration/chat_tree_context_spec.lua:290-295` would fail on the old code, which sent the placeholder unconditionally.
+
+**Scope:** the new Revisions entry only records how the four fixes were handled. Nothing in `## Spec` changed, and no new behaviour was added beyond what BR-4 asked for.
+
+Done-when: current — the only behaviour change is the blank-question fix BR-4 asked for, and it now has a test. Nothing else the diff builds changed.
+
+1. **Strengths**
+   - BR-1 was fixed for the whole class: both sites now use the one helper.
+   - The BR-4 test checks both the blank and the non-blank question, so it pins the condition itself and not only one result.
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor:** none.
+5. **Test coverage notes:** the new case is a direct, IO-free check of `side_chat_messages`. I did not revert the fix to watch the test go red. The first assertion would fail on the old unconditional placeholder: it expects only the summary message, and the old code also sent the placeholder.
+6. **Architectural notes**
+   - ARCH-DRY: pass. The shared `summary_message` helper removes the duplication.
+   - ARCH-PURE: pass. Both helpers are pure table builders.
+   - ARCH-PURPOSE: pass. Every summary-rendering site is swept, and the blank-question check is the same at both sites.
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      M.summary_message (chat_respond.lua:354) is now the single source, used at :372 (off-path) and :1031 (summarized branch).
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Revisions records the docs step (atlas plus the config.lua comment, no README config section) and that the omitted-answer note is sent only when there is an answer, as at chat_respond.lua:378-381.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Revisions records that any value other than "full" means "summary", the default, consistent with the rest of chat_memory, where no value is validated. Unchanged by design.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      chat_respond.lua:369-371 sends the placeholder only for non-blank questions, matching :903. The test at chat_tree_context_spec.lua:290-295 fails on the old code, and it passes.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"17692e27-a75d-4f71-a279-d9f522cfbc14","repository":"github.com/xianxu/parley.nvim","issue_id":"000352","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/c0d8388e3bd09008","reviewed_head":"9bff6ff762f7c2424347c92143e2e1dc0e174258","slot":"parley.nvim:3","requested_at":"2026-10-16T15:26:59.562129Z"},"phase":"finished","pid":26513,"started_at":"2026-10-16T15:26:59.68764Z","finished_at":"2026-10-16T15:27:54.248867Z","session_id":"860e4c25-73f0-400b-9c26-180230f44275","outcome":"returned"}] -->

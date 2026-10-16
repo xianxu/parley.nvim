@@ -77,6 +77,7 @@ Steps:
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Round 1 advisories: summary_message shared by the off-path and summarized branches; no placeholder for a blank off-path question (new case); README/alternation/value notes in Revisions. chat/memory group green; full suite green on 9bff6ff7 (sdlc-local/suite). (fixed-then-ship) (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 - 2026-10-16: closed — Off-path side chats sent as summaries under chat_memory.side_chats = "summary" (default): chat_tree_spec 12/12 (off_path marking), chat_tree_context_spec 18/18 (later root question, nested aside, on-path ancestor in full, "full" keeps #233, no-summary question truncated and marked, off-path @@ neither fetched nor inlined, window counts on-path only); mutation checks on window, remote skip and rendering each fail their cases; full suite green on 02609167 (sdlc-local/suite); before/after request sizes in Log.; review verdict: SHIP
 - Built. An unanswered side-chat question has no summary, so it is sent as its marked question; the first integration case pins it (A3).
 - Mutation checks (each reverted and cmp-restored): counting off-path items in the window fails the window case; fetching off-path references fails the remote case; disabling the off-path rendering fails 5 cases.
