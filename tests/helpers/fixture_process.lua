@@ -55,8 +55,7 @@ end
 ---
 --- SIGKILL by default, because this is teardown: nothing downstream observes the
 --- shutdown. A spec that needs a graceful stop to be observable passes
---- `signal = "sigterm"` (the real cliproxyapi in cliproxy_conformance_spec
---- shuts down gracefully).
+--- `signal = "sigterm"`.
 ---@param opts { since: integer|nil, signal: string|nil }|nil
 function M.reap(opts)
     opts = opts or {}

@@ -102,3 +102,11 @@ only reason was this window).
   cliproxy_update_spec, 40/40 each. fixture_reaping_spec 12/12. No fake_cliproxy
   left running after them, because the watchdog exits via `os._exit` and does
   not depend on SIGTERM.
+- Close review round 1, BR-1 (Important): parley spawned the SIGTERM-ignoring
+  proxy, so neither the reap nor `cliproxy.stop()` ended it, and it served until
+  nvim exited (my leak check ran after exit, so it missed this). Fix: the case
+  holds its pids (`cliproxy.spawned_pids()`) and SIGKILLs them, then waits for
+  the port to go down; `after_each` kills them too when a case fails first.
+  Mutation: dropping the in-case kill fails at :508 ("still answers after
+  SIGKILL"). Green 40/40 in 6 concurrent runs. The Minor doc nit (reap's sigterm
+  example) is fixed: the doc no longer names one caller.
