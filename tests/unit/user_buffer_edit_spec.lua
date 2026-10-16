@@ -71,18 +71,18 @@ describe('edit_user_lines',function()
         assert.equals(1,#debugs)
         assert.is_truthy(debugs[1]:find('ReadRepair — Edit not made',1,true))
     end)
-    -- #265 close BR-1: an apply that ERRORED (status 'error', the editor's
-    -- own failure) reaches the user with the editor's text as the detail,
-    -- not as "unexpected (error)" with nothing in the log.
+    -- #265 close BR-1: an apply that ERRORED (the editor's own failure)
+    -- reaches the user with the editor's text as the detail. REAL oracle: a
+    -- buffer that is not modifiable makes the apply return status 'error'.
     it('keeps the editor error as the warning detail',function()
-        local real=Edit._replace_user_lines
-        Edit._replace_user_lines=function()return nil,'error','nvim_buf_set_text: buffer is not modifiable'end
+        vim.bo[buf].modifiable=false
         local ok,why=Edit.edit_user_lines('ExchangePaste',buf,1,2,{'TWO'})
-        Edit._replace_user_lines=real
+        vim.bo[buf].modifiable=true
         assert.is_false(ok);assert.equals('error',why)
+        assert.same({'one','two','three'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
         assert.equals(1,#warnings)
-        assert.equals('ExchangePaste — Edit not made: the edit failed while it was being applied; edit the chat back if it changed, then try again'
-            ..' — nvim_buf_set_text: buffer is not modifiable',warnings[1])
+        assert.is_truthy(warnings[1]:find('ExchangePaste — Edit not made: the edit failed while it was being applied',1,true),warnings[1])
+        assert.is_truthy(warnings[1]:find("modifiable",1,true),"the editor's own text is missing: "..warnings[1])
     end)
     it('applies again once the hold is released',function()
         local held=Capacity.hold(buf);held.release()

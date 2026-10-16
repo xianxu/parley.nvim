@@ -110,8 +110,12 @@ describe("chat commands under a refused user edit (#265)", function()
         local buf = open_chat()
         local before = body(buf)
         local saved = vim.fn.writefile
+        -- Fail the child write the way Neovim does: writefile RAISES E482 for a
+        -- missing directory or a denied write (probed; #265 close BR-5).
         vim.fn.writefile = function(lines, path, ...)
-            if path:match("%.md$") and path ~= vim.api.nvim_buf_get_name(buf) then return -1 end
+            if path:match("%.md$") and path ~= vim.api.nvim_buf_get_name(buf) then
+                error("Vim:E482: Can't create file " .. path)
+            end
             return saved(lines, path, ...)
         end
         vim.api.nvim_win_set_cursor(0, { 11, 0 })

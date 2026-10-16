@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-10-16 (#265 — one user-edit refusal policy)
+
+- A fake must fail the way the real dependency fails. #265's ChatPrune test faked `writefile` returning -1, but the real one RAISES (E482), so the test passed while the production rollback never ran (close BR-5). Probe the real failure first, and treat a raise and an error return from fallible IO as one failure.
+- Pin a passthrough with a real oracle, not a stub at the seam you are testing. A stubbed `_replace_user_lines` let the error-detail passthrough be deleted with every spec green (close BR-1); a non-modifiable buffer produces the real `error` status.
+- An enforcement spec named after one function enforces only that function. The refusal policy banned the raw replace, but hand-capturing commands kept their own wording (close BR-2). Name the class (every direct caller, with reasons), not the one symbol.
+
 ## 2026-10-16 (#345 — async stop on the restart path)
 
 - A new helper or forward declaration goes ABOVE an existing doc block, never between the block and its definition. #204 and #340/#345 hit this four times (ensure_running, restart_managed, M.stop, pids_on_port). After inserting near a `---` block, read the three lines above the definition you meant to document.

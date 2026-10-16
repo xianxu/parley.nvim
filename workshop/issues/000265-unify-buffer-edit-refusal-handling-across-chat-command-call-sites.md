@@ -68,12 +68,21 @@ pcall.
 
 ## Done when
 
-- Every chat command that can be invoked by a keystroke reports a
-  `replace_user_lines` refusal as an unchanged buffer plus one readable
-  warning; the call sites that deliberately raise are enumerated with reasons.
-- An arch spec fails when a new call site bypasses the policy.
-- A shared test helper can place a chat buffer under a live generation, and at
-  least one command's refusal is proven against it rather than against a double.
+- Every chat command that can be invoked by a keystroke reports a refused user
+  edit as an unchanged buffer plus one readable warning, worded by
+  `buffer_edit.report_refusal`, never raised. That covers the `edit_user_lines`
+  sites and the commands that capture and apply by hand (Define, Marker, Branch,
+  PruneTopic, InsertChatReference, InterviewTimestamp, SpellCorrection,
+  PasteImage). The list of call sites that deliberately raise is **empty**: the
+  audit found none that should.
+- An arch spec fails when a new call site bypasses the policy: a direct raw
+  replace, a pcall around the edit API, an unnamed direct capture/apply caller,
+  or a hand-worded refusal in a keystroke file.
+- A shared test helper (`tests/helpers/user_edit_capacity.lua`) puts a chat
+  buffer under a REAL refusal (the document's user-guard slots held full), and
+  command refusals are proven against it rather than against a double. A live
+  generation was measured not to refuse user edits, so it is not the oracle (see
+  ## Revisions).
 - `#263`'s `tests/integration/new_question_spec.lua` refusal case is converted
   to that helper, and its "this is a double" comment removed.
 
@@ -162,4 +171,9 @@ guard.
     - A refused header restore after a failed rename is reported.
     - ChatPrune restores the parent if the child file cannot be written (test).
   - Measurement slip on my side: a zsh `for f in $LIST` loop ran once over the whole list (no word splitting) and printed every spec as failing; re-run with a read loop. This is the same zsh trap as in #340.
+- 2026-10-16, close round 2 (BR-6): Done-when bullets 1 and 3 were rewritten in place to describe what was built: the hand-capture commands under the policy, the empty list of raising sites, and the capacity helper instead of the measured-impossible live generation. The earlier revision note above records why.
+- Close round 2 fixes:
+  - BR-1: the editor-error passthrough is pinned by a REAL oracle. A buffer that is not modifiable makes the apply return `error`, with Neovim's "not 'modifiable'" text in the warning. This replaces the earlier stub at the private seam. Mutation: dropping `result.error` fails it.
+  - BR-5: ChatPrune `pcall`s the child write, because `vim.fn.writefile` RAISES E482 on a missing directory or a denied write and returns -1 otherwise; both roll the parent back. The test raises E482 as Neovim does. Mutation: an unprotected write fails it. The reviewer's sweep found it was the only edit-first site in the diff with IO that can raise.
+  - BR-6: the Done-when rewrite, as above.
 

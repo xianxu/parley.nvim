@@ -4545,7 +4545,10 @@ M.cmd.ChatPrune = function()
 	-- Write child file. If it cannot be written, put the pruned exchanges back:
 	-- the parent must never point at a child that does not exist (#265).
 	M.helpers.prepare_dir(vim.fn.fnamemodify(new_file, ":h"))
-	if vim.fn.writefile(child_lines, new_file) ~= 0 then
+	-- writefile RAISES (E482) on a missing directory or a denied write, and
+	-- returns -1 on other failures: both are the same failure (#265 close BR-5).
+	local wrote, wresult = pcall(vim.fn.writefile, child_lines, new_file)
+	if not wrote or wresult ~= 0 then
 		local restored = require("parley.buffer_edit").edit_user_lines("ChatPrune", buf, prune_start - 1,
 			prune_start + 5, vim.list_slice(lines, prune_start, prune_end))
 		M.logger.warning("ChatPrune: could not write " .. rel_child .. (restored and "; the chat is unchanged"
