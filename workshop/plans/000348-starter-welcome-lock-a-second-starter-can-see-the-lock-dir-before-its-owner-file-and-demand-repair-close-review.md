@@ -89,3 +89,82 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e1083162-f294-401e-8801-4f59d7f79821","repository":"github.com/xianxu/parley.nvim","issue_id":"000348","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/805e2331b8f9fa23","reviewed_head":"030ca6380c1a92b867f409496792a6169d73032b","slot":"parley.nvim:3","requested_at":"2026-10-16T10:07:00.431694Z"},"phase":"finished","pid":47367,"started_at":"2026-10-16T10:07:00.661537Z","finished_at":"2026-10-16T10:13:34.027571Z","session_id":"1d73f8dd-7324-47c5-8ead-a8cece219e8e","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T03:17:26-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 348 — starter welcome lock: a second starter can see the lock dir before its owner file and demand repair |
+| repo | parley.nvim |
+| issue file | workshop/issues/000348-starter-welcome-lock-a-second-starter-can-see-the-lock-dir-before-its-owner-file-and-demand-repair.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 0a616029f43d1a239f5a46bb3fc0b42a129dcd9a..11e5bce23fd4ae2a7fc25b759177864e518f4db2 |
+| command | sdlc close --issue 348 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T03:17:26-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Running the starter spec at the pinned head, then with the re-check mutated, to confirm the new test goes red.
+
+Head passes 22/22. Now mutating the identity re-check to confirm the new test goes red.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Both findings from round 1 are fixed, and BR-1 now has red-test evidence. The new `STARTER_READ_GATE` hook at `tests/packaging/starter_launch.lua:57-68` pauses the waiter after it finds the lock and before it reads the owner record. During that pause the owner retires the lock. I ran it at the pinned head with `make test-spec SPEC=infra/starter`: `starter_config_spec` passes 22/22. I then changed `same and (` to `stat and (` at `lua/parley/starter.lua:131`, and exactly one case went red: "retries, not repairs, when the owner retires the lock between the waiter reads", failing at `starter.lua:132` with "requires repair". After that I restored the file, and the checkout is clean. `starter_bootstrap_spec` errors here because the sandbox blocks `git init` (sdlc #339). This window doesn't touch that file, so the error is environmental. One Minor wording problem is left in the atlas. It doesn't block shipping.
+
+1. **Strengths**
+   - `starter_launch.lua:61-66`: the read gate hooks `uv.fs_lstat` on the exact path `/welcome-initializer/owner`. Only the waiter calls that path, at `starter.lua:122`, so the gate is deterministic and can't fire in the owner. The hook also removes itself after its first call.
+   - `starter_config_spec.lua:210-225`: the test waits on each gate before releasing it. It waits for `hold.ready`, then `gate.ready`, then confirms the owner exited before releasing the waiter. It also asserts there is exactly one `welcome.md`, so a waiter that went on to recreate the chat would be caught too.
+   - Renaming the race cases fixed BR-2. The gate case names (`:202`, `:206`) and the comment above them (`:184-187`) now match the rename model. Under the new code, the OWNER gate fires on `welcome-initializer.new-*/owner` before the rename. The RETIRE gate fires on `.retired-*` after the lock is renamed away. Either way no lock is visible, so the second starter takes the lock itself.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - `atlas/infra/starter.md:170-172` says "Only an older Parley paused between its mkdir and owner write leaves one". The code comment in the same window, at `starter.lua:98-99`, names a different source: "an empty lock left by an older version's crash". So the "Only" claim is wrong. This is the 2nd finding in family `doc-claim-drift` (see below).
+
+5. **Test coverage notes:** every lock-race behavior in the window now has a test that fails without it:
+   - **Identity re-check:** confirmed red in this round.
+   - **Take and retire gates, and the original flake case:** confirmed red in round 1 by reverting to base.
+   - **Repair paths:** the dead-owner and malformed-owner cases still raise.
+   - **Not tested:** taking over an empty lock. It is documented, and it only matters when an older Parley is running alongside.
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass.** The new gate reuses the shared `gate()` helper (`starter_launch.lua:30`) instead of adding a fourth wait loop.
+   - **ARCH-PURE: pass.** The new code is a test-harness hook only. The lock code is IO by nature and didn't change this round.
+   - **ARCH-PURPOSE: pass.** The fix covers the whole family: both windows (take and retire) and the waiter-side race between its two reads all have tests that go red without the fix.
+
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      STARTER_READ_GATE case at starter_config_spec.lua:210; mutating starter.lua:131 to `stat and (` turns that one case red (requires repair at starter.lua:132); head is 22/22.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Gate case names at starter_config_spec.lua:202/206 and the race_through comment now describe the rename model; the atlas scopes the garbage claim to non-empty locks and notes the empty-lock takeover.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: doc-claim-drift
+    title: |
+      Atlas says only a paused older Parley leaves an empty lock; the code comment names a crash
+    detail: |
+      This is the 2nd finding in family doc-claim-drift. Rule: the empty-lock sources should be listed once, in the starter.lua:92-99 comment, and the atlas should either restate that full list or not use "only". Sources in this window: an older Parley that crashed between mkdir and owner write (the code comment names this one), an older Parley paused there (the atlas names this one), and an older Parley partway through its rf-delete retire. Only the paused case leads to two launches proceeding together. After a crash the takeover is harmless. Instances: atlas/infra/starter.md:170-172 is the only one. Prevalence: 2 findings across 2 rounds.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"49b2d8ca-94c7-42c6-aed2-163793dcc4a9","repository":"github.com/xianxu/parley.nvim","issue_id":"000348","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/1c60448ca94d2c79","reviewed_head":"11e5bce23fd4ae2a7fc25b759177864e518f4db2","slot":"parley.nvim:3","requested_at":"2026-10-16T10:15:12.582606Z"},"phase":"finished","pid":94751,"started_at":"2026-10-16T10:15:12.725782Z","finished_at":"2026-10-16T10:17:24.832261Z","session_id":"d4c86b67-597c-4c19-adb0-0dc1ba427266","outcome":"returned"}] -->

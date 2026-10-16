@@ -77,6 +77,7 @@ The lock is now complete or absent to a waiter:
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Red: owner/retire gate cases fail on old code with requires repair. BR-1: STARTER_READ_GATE case; a mutation removing the identity re-check fails it. starter_config_spec 22/22, earlier 21/21 in 6 concurrent runs; other starter specs pass; luacheck clean.; review verdict: SHIP
 
 - Taken by parley.nvim:3. Red: both gate cases failed on the old code with
   "requires repair" at :196, deterministically. Green: starter_config_spec
