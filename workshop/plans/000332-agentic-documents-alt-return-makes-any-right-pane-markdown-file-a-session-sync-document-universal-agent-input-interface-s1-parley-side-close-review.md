@@ -262,3 +262,95 @@ findings:
 7. **Plan revision:** Amend the shared-renderer `## Revisions` entry to define ownership by window/buffer pair and require A→B→A restoration with distinct original options.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e5631d20-6320-4ebe-bb3c-a743d96a875b","repository":"github.com/xianxu/parley.nvim","issue_id":"000332","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/46f447859467b623","reviewed_head":"67638184a0c31d67c6673edd3884c19fe45bb75f","slot":"parley.nvim:2","requested_at":"2026-10-16T05:01:31.061459Z"},"phase":"finished","pid":86660,"started_at":"2026-10-16T05:01:31.144503Z","finished_at":"2026-10-16T05:04:04.622349Z","session_id":"01a14316-3564-7483-be1b-d4d6f20dbd9a","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T22:18:13-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 332 — Agentic documents: Alt+Return makes any right-pane markdown file a session-sync document (universal-agent-input-interface S1, parley side) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000332-agentic-documents-alt-return-makes-any-right-pane-markdown-file-a-session-sync-document-universal-agent-input-interface-s1-parley-side.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | e23163d1bb9f42765fdd899f18951b6f32c6208e..0c4552064aa5a005038317f90d5f87c3a2a45613 |
+| command | sdlc close --issue 332 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T22:18:13-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies the issue’s revised Spec and Plan. BR-5 is addressed with regression tests that fail against the previous renderer. No new Critical, Important, or Minor findings emerged. Staging and combined operator acceptance remain separate post-review steps.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Native and public move preflight confirms OLD membership and rechecks busy state after yielding; admission and owned-move regressions pass.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      True unload retires the incarnation and lease; managed reads defer completions until reconciliation. All 10 buffer-lifetime regressions pass.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The plan Core concepts table correctly classifies not_chat as INTEGRATION; init.lua retains the editor/filesystem-dependent wrapper.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      The plan explicitly states that lease files remain permanently allocated, automatic GC is absent, and allocation is capped at 4096 IDs per namespace; document_lease.lua implements that contract.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      document_band.lua preserves restoration proofs per window/buffer pair and checks buffer ownership before restoring. Both distinct-baseline round-trip tests pass at HEAD and fail when only the renderer is replaced with its pre-fix version, reproducing B's originals being restored into A.
+```
+
+1. **Strengths**
+
+   - Window restoration now verifies both buffer ownership and installed option values, preserving user overrides (`lua/parley/document_band.lua:25`).
+   - Distinct-original tests cover native and noncurrent-window switching, plus hidden-owner and other-window safety (`tests/integration/document_band_spec.lua:320`).
+   - Registry absence requires explicit successful null evidence; malformed responses retain uncertainty.
+   - README, atlas, traceability, and maintainer conformance documentation cover the new surface.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   Independently verified:
+
+   - All 14 mapped session-sync spec files: **400 passing cases**.
+   - Mapped review and keybinding suites pass.
+   - Lint: **754 files, zero warnings/errors**.
+   - Isolated real/fake Couch conformance passes; deliberately corrupted fake is rejected.
+   - BR-5 mutation check produces exactly the two expected round-trip failures.
+   - Diff whitespace check passes; test process censuses are clean.
+
+   The disposable mutation checkout was removed. I did not rerun the entire repository suite.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared renderer, byte writer, process seam, and edit-turn engine.
+   - **ARCH-PURE — pass:** lifecycle and migration projections have direct tests without IO mocks.
+   - **ARCH-PURPOSE — pass:** first submit, continued protection, reopen, and supported move routes are delivered.
+   - **ARCH-MOCK — pass:** persisted executable fake shares production transport; real conformance passes.
+   - **ARCH-CONSTRAINTS — pass:** request deadlines, queue limits, scan limits, and storage bounds are explicit.
+   - **ARCH-SECURE — pass:** external replies and recovery artifacts receive boundary validation; subprocess arguments use arrays.
+   - **ARCH-ORDER — pass:** operation witnesses, unload/read distinctions, migration checkpoints, and window ownership have adversarial sequence coverage.
+   - **ARCH-FUNERAL — pass:** handles and window proofs have cleanup paths; journals, caches, and retained lease files have documented bounds.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"2e8f23c6-e615-4439-973e-7b09c462e527","repository":"github.com/xianxu/parley.nvim","issue_id":"000332","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/45fb772892ccf261","reviewed_head":"0c4552064aa5a005038317f90d5f87c3a2a45613","slot":"parley.nvim:2","requested_at":"2026-10-16T05:15:15.155018Z"},"phase":"finished","pid":80081,"started_at":"2026-10-16T05:15:15.246213Z","finished_at":"2026-10-16T05:18:11.955377Z","session_id":"01a14322-c897-7783-a97a-0affd43fd853","outcome":"returned"}] -->
