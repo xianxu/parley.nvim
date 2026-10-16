@@ -69,17 +69,17 @@ Decision: the second press supersedes; it is never queued.
 
 ## Done when
 
-- [ ] Two rapid presses on the same ref produce one spawn and one open.
-- [ ] A press on a different ref kills the outstanding resolve, and only the second result dispatches.
-- [ ] A resolve that lands after the user moved to another buffer or window does not navigate, with no `is_current` from the caller.
-- [ ] Asserted through the `runner` seam (`goto_ref_at_cursor(opts.runner)`), never by spawning `sdlc`.
+- [x] Two rapid presses on the same ref produce one spawn and one open.
+- [x] A press on a different ref kills the outstanding resolve, and only the second result dispatches.
+- [x] A resolve that lands after the user moved to another buffer or window does not navigate, with no `is_current` from the caller.
+- [x] Asserted through the `runner` seam (`goto_ref_at_cursor(opts.runner)`), never by spawning `sdlc`.
 
 ## Plan
 
-- [ ] `run_resolve` returns the runner's handle (vim.system's), so a superseding press can kill it.
-- [ ] `goto_ref_at_cursor`: an in-flight record keyed on the ref, kind and cwd; a same-key no-op with a notice; a different key supersedes; the default origin check is combined with `opts.is_current`.
-- [ ] Red-first tests through the runner seam: same ref twice gives one spawn and one open; a different ref kills the first, and the first's late completion is dropped; leaving the buffer drops the result; the record clears on completion, so a later press spawns again.
-- [ ] Atlas: `context/artifact_refs.md` gains the in-flight rule.
+- [x] `run_resolve` returns the runner's handle (vim.system's), so a superseding press can kill it.
+- [x] `goto_ref_at_cursor`: an in-flight record keyed on the ref, kind and cwd; a same-key no-op with a notice; a different key supersedes; the default origin check is combined with `opts.is_current`.
+- [x] Red-first tests through the runner seam: same ref twice gives one spawn and one open; a different ref kills the first, and the first's late completion is dropped; leaving the buffer drops the result; the record clears on completion, so a later press spawns again.
+- [x] Atlas: `context/artifact_refs.md` gains the in-flight rule.
 
 ## Log
 
@@ -94,6 +94,13 @@ needs the supersede-vs-queue decision above.
 - Taken by parley.nvim:3. The Spec's open questions are now decided (see Revisions). #327's `opts.is_current` already covers the
   caller-owned half, so this issue adds the in-flight record and the default
   origin check that `gf` and the project jump lack.
+
+- Red first: 4 of the 6 new runner-seam cases failed on main's code (same ref twice, supersede, left the buffer, left the window). The
+  other two (forget on finish, key on kind) guard the new record. Green: 38/38,
+  luacheck clean.
+- Added in review of my own diff: a spawn that raises releases the key, or
+  every later press on that ref would say "still resolving". A mutation
+  dropping the release fails the new case.
 
 ## Revisions
 

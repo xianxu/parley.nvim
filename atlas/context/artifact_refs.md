@@ -47,6 +47,13 @@ open/pick the result, highlight refs.
   reached only on the `"none"` outcome — a parley reference that was recognised
   and could not be opened stops with its own diagnostic rather than degrading
   into a `gf` failure. See [file references](file_references.md).
+- **In flight** (#226): one resolve is outstanding at a time, keyed on the
+  ref, the resolve kind and the repo. A second press with the same key spawns
+  nothing and says `still resolving`. A press on a different ref kills the
+  outstanding process and supersedes it, so a double-pressed `<M-o>` opens once.
+  The result, and any family selection, lands only while the user is still in
+  the origin buffer and window; a caller's `opts.is_current` (#327) narrows that
+  further. There is no timeout: the record clears when `sdlc` exits.
 - **Picker:** a family ref (issue + plan + reviews) opens the house `float_picker`;
   a single result opens directly.
 - **Cross-repo:** `sdlc resolve` resolves `pair#84` etc. itself; parley only sets

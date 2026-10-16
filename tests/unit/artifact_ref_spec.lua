@@ -268,6 +268,7 @@ describe("goto_ref_at_cursor guarded completion", function()
     local saved, queued, opened, pickers, notices, complete
 
     before_each(function()
+        ar._reset_inflight()
         -- Control the process and event-loop boundaries independently; the real
         -- entry point still builds argv and parses the resolver's JSON.
         saved = {
@@ -365,6 +366,133 @@ describe("goto_ref_at_cursor guarded completion", function()
         resolve({ { path = "/a/i.md" } })
         queued[1]()
         assert.are.same({ "/a/i.md" }, opened)
+    end)
+end)
+
+describe("goto_ref_at_cursor in-flight resolve (#226)", function()
+    local saved, queued, opened, notices, spawns
+
+    -- The runner seam records each spawn: its argv, its completion, and a fake
+    -- vim.system handle whose kill() is observable.
+    local function runner(argv, on_complete)
+        local spawn = { argv = table.concat(argv, " "), complete = on_complete, killed = false }
+        spawn.handle = { kill = function() spawn.killed = true end }
+        spawns[#spawns + 1] = spawn
+        return spawn.handle
+    end
+
+    local function on_line(line, col)
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { line })
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_win_set_cursor(0, { 1, col })
+        return buf
+    end
+
+    local function press(opts)
+        opts = opts or {}
+        opts.runner = runner
+        ar.goto_ref_at_cursor(opts)
+    end
+
+    local function resolve(spawn, path)
+        spawn.complete(vim.json.encode({ files = { { path = path } } }), 0, "")
+    end
+
+    local function drain()
+        local q = queued
+        queued = {}
+        for _, fn in ipairs(q) do
+            fn()
+        end
+    end
+
+    before_each(function()
+        ar._reset_inflight()
+        saved = { schedule = vim.schedule, open_buf = parley.open_buf, notify = vim.notify }
+        queued, opened, notices, spawns = {}, {}, {}, {}
+        vim.schedule = function(fn) queued[#queued + 1] = fn end
+        parley.open_buf = function(path) opened[#opened + 1] = path end
+        vim.notify = function(msg) notices[#notices + 1] = msg end
+    end)
+
+    after_each(function()
+        vim.schedule = saved.schedule
+        parley.open_buf = saved.open_buf
+        vim.notify = saved.notify
+        ar._reset_inflight()
+    end)
+
+    it("spawns once and opens once for two presses on the same ref", function()
+        on_line("see #327", 5)
+        press()
+        press()
+        assert.are.equal(1, #spawns)
+        assert.are.same({ "parley: still resolving #327" }, notices)
+        resolve(spawns[1], "/a/327.md")
+        drain()
+        assert.are.same({ "/a/327.md" }, opened)
+    end)
+
+    it("lets a press on a different ref supersede the outstanding one", function()
+        on_line("see #327 and #328", 5)
+        press()
+        vim.api.nvim_win_set_cursor(0, { 1, 14 })
+        press()
+        assert.are.equal(2, #spawns)
+        assert.is_true(spawns[1].killed, "the superseded resolve was not killed")
+        assert.is_false(spawns[2].killed)
+        resolve(spawns[1], "/a/327.md") -- exited before the kill landed
+        resolve(spawns[2], "/a/328.md")
+        drain()
+        assert.are.same({ "/a/328.md" }, opened)
+    end)
+
+    it("drops a result that lands after the user left the buffer", function()
+        on_line("see #327", 5)
+        press() -- no is_current from the caller: the default origin check
+        on_line("somewhere else", 0)
+        resolve(spawns[1], "/a/327.md")
+        drain()
+        assert.are.same({}, opened)
+    end)
+
+    it("drops a result that lands after the user left the window", function()
+        on_line("see #327", 5)
+        press()
+        vim.cmd("split")
+        resolve(spawns[1], "/a/327.md")
+        drain()
+        vim.cmd("close")
+        assert.are.same({}, opened)
+    end)
+
+    it("forgets a finished resolve, so a later press on the same ref spawns again", function()
+        on_line("see #327", 5)
+        press()
+        resolve(spawns[1], "/a/327.md")
+        drain()
+        press()
+        assert.are.equal(2, #spawns)
+        assert.are.same({}, notices)
+    end)
+
+    it("releases the key when the spawn raises", function()
+        on_line("see #327", 5)
+        assert.has_error(function()
+            ar.goto_ref_at_cursor({ runner = function() error("ENOENT: sdlc") end })
+        end)
+        press()
+        assert.are.equal(1, #spawns)
+        assert.are.same({}, notices)
+    end)
+
+    it("keys on the resolve kind, so a project jump is not the same question", function()
+        on_line("see #327", 5)
+        press()
+        press({ kind = "project" })
+        assert.are.equal(2, #spawns)
+        assert.is_truthy(spawns[2].argv:find("--kind project", 1, true), spawns[2].argv)
     end)
 end)
 
