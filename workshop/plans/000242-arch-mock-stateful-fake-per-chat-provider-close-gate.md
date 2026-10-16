@@ -119,6 +119,114 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 677f09f1-15bc-4ff9-83a4-c8f5edd516c6
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000242"
+            recipe: milestone-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/f0854e826beaffeb
+            reviewed_head: 19bd7c773bd92def62ad64f28922cb001f54bb41
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T15:00:02.413673Z"
+          phase: finished
+          pid: 1801
+          started_at: "2026-10-16T15:00:02.5775Z"
+          finished_at: "2026-10-16T15:02:55.221242Z"
+          session_id: 4d04a54f-448d-4144-bd6c-9e2756031514
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 19bd7c773bd92def62ad64f28922cb001f54bb41
+        tracker_head: 4e3d162a34567b637305abe15dc733009f18d9c0
+        branch_point: a53472921f064c68ee2992246396794b593d01b9
+        since: "2026-10-16T07:13:14-07:00"
+        until: "2026-10-16T07:53:14-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T07:13:14-07:00"
+              end: "2026-10-16T07:53:14-07:00"
+              began: "2026-10-16T07:13:14-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: d54c479543ecb92cbc32e636b3d3db64f6dfef0a99bce18d7e9860967c8a8c54
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 14203743
+              windows:
+                - start: "2026-10-16T07:13:14-07:00"
+                  end: "2026-10-16T07:53:14-07:00"
+        cuts:
+            - boundary: M1
+              dispatched: "2026-10-16T07:40:48-07:00"
+              finalized: "2026-10-16T07:43:38-07:00"
+              finalizing: false
+      "n": 3
+      timestamp: "2026-10-16T08:02:56-07:00"
+      dispatched: "2026-10-16T08:00:02-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: run_proofs.sh:764-767 uses cap_empty/inband_error_empty and checks the notice text on each tree; ran it, 6/6 ok.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: tests/unit/fake_provider_spec.lua delivers the behaviour table, split invariant, check_mode, a curl per mode and request-log gating; 10/10 pass.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: S3 now asserts the warning containing "in-band — Overloaded" (provider_anthropic_spec.lua:578); the issue Log is struck through, but plan.md:226 still carries the retracted claim (see plan revisions).
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: provider_anthropic_spec.lua:649 asserts equals("Hello,", out.qt.response); passes.
+          round: 3
+        - id: BR-5
+          disposition: addressed
+          note: S6 asserts raw_at_first_chunk < the total raw bytes (:612); the vocabulary needle is now '"stop_reason":"end_turn"'.
+          round: 3
+        - id: BR-6
+          disposition: addressed
+          note: check_mode/check_split are argparse types (fake_provider:121-122); fake_provider_spec.lua:890 asserts exit 2 for a typo.
+          round: 3
+        - id: BR-7
+          disposition: addressed
+          note: The frames split (sse_dialects.py:368), S4 for 429/529/500 (:581) and the no_stop integration case (:636) are delivered and pass.
+          round: 3
+      findings:
+        - kind: defect
+          id: BR-8
+          severity: Critical
+          title: Core concepts lists provider_scenarios as a PURE scenario table; the code is an IO driver and no scenario table exists
+          detail: 'plan.md:66 and :79 describe a pure ProviderScenario table that the specs iterate, so adding a provider is one row. tests/helpers/provider_scenarios.lua spawns the fake, waits on uv, and mutates dispatcher.providers, logger and vault; it holds no table, and the scenarios are hand-written cases in provider_anthropic_spec.lua. Fix: a Revisions entry moving it to Integration points, and either build the data table before M2 or record per-dialect spec cases and align M2 Task 8 (ARCH-PURE, ARCH-DRY).'
+          family: core-concepts-table-drift
+          round: 3
+        - kind: defect
+          id: BR-9
+          severity: Minor
+          title: out_reader's reader state is two independent booleans, and the only test of the fix depends on write timing
+          detail: dispatcher.lua:531-532 tracks stdout_finished and threw separately (a tagged reading/threw/finished state would do). The regression test needs frames plus a 20 ms write delay to line up reads; a deterministic dispatcher_query_spec case (a line with a throwing handler, then EOF (nil,nil), expecting one handler call) would pin it without timing (ARCH-ORDER).
+          family: reader-state-flags
+          round: 3
+      boundary: M1
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#242 (boundary-review)
@@ -150,12 +258,26 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   Validate --mode and --split at argparse time, so a typo fails loudly at startup instead of producing a passing ok stream or an empty reply.
 - **BR-7** [Minor] `plan-item-undelivered` (kind: defect) The plan's --split frames mode, S4's 529/500 variants and an integration no_stop case are not delivered or recorded as deferred
 
+## Round 3 — 2026-10-16T08:02:56-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — run_proofs.sh:764-767 uses cap_empty/inband_error_empty and checks the notice text on each tree; ran it, 6/6 ok.
+- BR-2 — addressed — tests/unit/fake_provider_spec.lua delivers the behaviour table, split invariant, check_mode, a curl per mode and request-log gating; 10/10 pass.
+- BR-3 — addressed — S3 now asserts the warning containing "in-band — Overloaded" (provider_anthropic_spec.lua:578); the issue Log is struck through, but plan.md:226 still carries the retracted claim (see plan revisions).
+- BR-4 — addressed — provider_anthropic_spec.lua:649 asserts equals("Hello,", out.qt.response); passes.
+- BR-5 — addressed — S6 asserts raw_at_first_chunk < the total raw bytes (:612); the vocabulary needle is now '"stop_reason":"end_turn"'.
+- BR-6 — addressed — check_mode/check_split are argparse types (fake_provider:121-122); fake_provider_spec.lua:890 asserts exit 2 for a typo.
+- BR-7 — addressed — The frames split (sse_dialects.py:368), S4 for 429/529/500 (:581) and the no_stop integration case (:636) are delivered and pass.
+
+### Raised
+
+- **BR-8** [Critical] `core-concepts-table-drift` (kind: defect) Core concepts lists provider_scenarios as a PURE scenario table; the code is an IO driver and no scenario table exists
+  plan.md:66 and :79 describe a pure ProviderScenario table that the specs iterate, so adding a provider is one row. tests/helpers/provider_scenarios.lua spawns the fake, waits on uv, and mutates dispatcher.providers, logger and vault; it holds no table, and the scenarios are hand-written cases in provider_anthropic_spec.lua. Fix: a Revisions entry moving it to Integration points, and either build the data table before M2 or record per-dialect spec cases and align M2 Task 8 (ARCH-PURE, ARCH-DRY).
+- **BR-9** [Minor] `reader-state-flags` (kind: defect) out_reader's reader state is two independent booleans, and the only test of the fix depends on write timing
+  dispatcher.lua:531-532 tracks stdout_finished and threw separately (a tagged reading/threw/finished state would do). The regression test needs frames plus a 20 ms write delay to line up reads; a deterministic dispatcher_query_spec case (a line with a throwing handler, then EOF (nil,nil), expecting one handler call) would pin it without timing (ARCH-ORDER).
+
 ## Open findings
 
-- **BR-1** [Minor] `regression-proof-runs-on-old-tree` The 228 proof expects a max_tokens stream to fail on the branch, but the branch classifies a cap as a notice, which may not reach the failure callback
-- **BR-2** [Important] `plan-item-undelivered` (kind: defect) Task 2's tests/unit/fake_provider_spec.lua (behaviour table, split invariant, per-mode shell, request-log gating) is not delivered
-- **BR-3** [Important] `test-oracle-bypasses-path` (kind: defect) S3 asserts dispatcher._classify_ending directly instead of the user-visible in-band notice the dispatch path emits
-- **BR-4** [Important] `vacuous-assertion` (kind: defect) S7a's 'partial answer kept' assertion cannot fail: qt.response starts as an empty string, never nil
-- **BR-5** [Minor] `vacuous-assertion` (kind: defect) S6 does not assert that the byte split reached the reader; the vocabulary entry '"stop_reason"' also matches message_start's null field
-- **BR-6** [Minor] `unvalidated-fake-config` (kind: defect) fake_provider accepts any --mode: unknown modes silently serve text, and a malformed http_ mode raises inside the handler
-- **BR-7** [Minor] `plan-item-undelivered` (kind: defect) The plan's --split frames mode, S4's 529/500 variants and an integration no_stop case are not delivered or recorded as deferred
+- **BR-8** [Critical] `core-concepts-table-drift` (kind: defect) Core concepts lists provider_scenarios as a PURE scenario table; the code is an IO driver and no scenario table exists
+- **BR-9** [Minor] `reader-state-flags` (kind: defect) out_reader's reader state is two independent booleans, and the only test of the fix depends on write timing

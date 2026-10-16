@@ -207,7 +207,7 @@ Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-p
 - 2026-10-16 M1 built:
   - `tests/fixtures/sse_dialects.py`: the anthropic dialect, behaviour and split.
   - `tests/fixtures/fake_provider`: a thin shell with the mode and split flags and a request log.
-  - `tests/helpers/provider_scenarios.lua` and `tests/integration/provider_anthropic_spec.lua`: S1–S7b through the real dispatcher→curl path, 8/8 passing.
+  - `tests/helpers/provider_scenarios.lua` and `tests/integration/provider_scenarios_spec.lua (was provider_anthropic_spec.lua)`: S1–S7b through the real dispatcher→curl path, 8/8 passing.
   - `tests/unit/sse_dialects_spec.lua`: decodes through the real parsers and matches `anthropic_stream.txt` event for event.
   - `tests/regression/run_proofs.sh`: #228 and #229 reproduced on `dc548920^` and `634e33a9^`, and fixed on the branch, 6/6 passing.
   - No production change. Two harness facts the helper absorbs:
@@ -228,6 +228,13 @@ Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-p
   - Regression test: the new S7b frame-aligned case. The fake writes one frame per read (`--split frames --write-delay-ms 20`). Before the fix it duplicated `"Hello,"` 3/3; after the fix it passes.
   - Stress, the every_byte S7b loop: before the fix, 3/40 and 4/30 duplicated; after it, 0/40 twice, and all 80 runs failed the attempt.
   - The dispatcher, dispatcher_query, tasker and stream_integrity specs are green.
+
+- 2026-10-16 M1 review round 2 was REWORK. Both findings are fixed:
+  - BR-8: the scenario table is now data. `provider_scenario_table.lua` holds ROWS, PROFILES and a pure `mismatches` judge, with 3 unit cases. `provider_scenarios_spec.lua` loops over profiles × rows, 15 cases, green 8/8 runs.
+  - BR-9: one `reader_state` replaces the two booleans, and timing-free regression tests cover the out_reader fix:
+    - `dispatcher_query_spec` A6–A8.
+    - On main, A6 and A8 fail. With the EOF skip removed, A7 and A8 fail. With the fix, all pass.
+  - S6 is paced at 1 ms per write. Unpaced, it was flaky at 1 run in 5 because the socket coalesced the body.
 
 ## Revisions
 

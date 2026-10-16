@@ -160,3 +160,141 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"6061256b-84ce-4528-8579-08bde2bd6fb2","repository":"github.com/xianxu/parley.nvim","issue_id":"000242","recipe":"milestone-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/634d322e8b7cda1d","reviewed_head":"ba0d3021074610bd8de5ad44097bc53c15bd8884","slot":"parley.nvim:4","requested_at":"2026-10-16T14:40:48.035655Z"},"phase":"finished","pid":9302,"started_at":"2026-10-16T14:40:48.188207Z","finished_at":"2026-10-16T14:43:35.481583Z","session_id":"0a2f26f5-caa1-4d9c-910a-7b14cd4c16cb","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T08:02:56-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 242 — Retrofit ARCH-MOCK to the chat providers: one stateful fake per provider at the curl seam, integration tests through it, and a live conformance check that re-records the fixtures |
+| repo | parley.nvim |
+| issue file | workshop/issues/000242-arch-mock-stateful-fake-per-chat-provider.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | a53472921f064c68ee2992246396794b593d01b9..19bd7c773bd92def62ad64f28922cb001f54bb41 |
+| command | sdlc milestone-close --issue 242 --milestone M1 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T08:02:56-07:00 |
+| verdict | REWORK |
+
+## Review
+
+Reviewing the M1 diff now; next I'll check the dispatcher fix in context and run the specs.
+
+Running the new specs through the harness now.
+
+All green (15 integration, 10 fake_provider, 4 sse_dialects). Now reverting the dispatcher fix to confirm the regression test goes red.
+
+The dispatcher fix has a real regression test: reverting it turns the S7b frame-aligned case red. Next I'm running the #228/#229 regression proofs on their pre-fix trees.
+
+Proofs pass 6/6 (pre-fix trees reproduce, branch fixed). Checking a few remaining items: vault secret handling and the Core-concepts classification.
+
+```verdict
+verdict: REWORK
+confidence: medium
+```
+
+M1 delivers what it set out to do, and I checked each claim myself. The Anthropic dialect, `fake_provider` and the integration specs all run through the real `dispatcher → curl → out_reader` path. The specs pass under the harness: provider_anthropic 15/15, fake_provider 10/10, sse_dialects 4/4, and the rest of `providers/architecture` is green. `tests/regression/run_proofs.sh` passes 6/6: #228 and #229 reproduce on `dc548920^` and `634e33a9^` and are fixed on the branch. The production fix in `dispatcher.lua:646-662` has a real regression test. With the base `dispatcher.lua` restored, "S7b frame-aligned reads" goes red; with the fix back in, it is green. All seven prior findings are resolved. One thing blocks the boundary. The plan's Core-concepts table lists `provider_scenarios` as a PURE entity holding the scenario × provider table. In the code it is an IO driver: it spawns processes, mutates the dispatcher and logger, and waits on the event loop. The table itself doesn't exist. The review contract calls any table/code contradiction Critical, and M2 will be designed against this table. The fix is cheap: a plan revision, plus deciding where the scenario table lives before M2.
+
+### 1. Strengths
+- **The production fix is minimal and pinned.** `dispatcher.lua:651-661` takes each line off the buffer before processing it, and a reader that threw decodes nothing at EOF. With the fix reverted, `provider_anthropic_spec.lua:663` fails, which is the evidence a fix needs. The atlas entry (`atlas/chat/document.md:166-168`) and the lesson (`workshop/lessons.md:627-630`) record the class, not just the instance.
+- **The regression proofs are honest.** `run_proofs.sh` runs each case on the pre-fix tree and on the branch. It needs a `PROOF-REACHED` marker before it reads any result, cleans up its worktrees with `trap`, and uses only APIs both trees have. I ran it: 6/6.
+- **The fake's pure parts are kept apart from the server.** `behaviour`, `split` and `check_mode` are pure functions in `sse_dialects.py:315-381`. `fake_provider` is a thin shell over them. Bad modes and splits are refused at argparse time (`fake_provider:121-122`), and there's a test for it (`fake_provider_spec.lua:890`).
+- **The oracles are exact.** S3 checks the warning the dispatcher actually logs (`:578`). S7a checks for `"Hello,"` exactly (`:649`). S6 shows the split reached the reader (`:612`). sse_dialects_spec decodes the fake's bytes with parley's own parsers and matches `anthropic_stream.txt` event for event (`:958`).
+- **The S6 envelope is checked** with a 5 s timing assert (`:614`).
+
+### 2. Critical findings
+- **Core concepts: the `provider_scenarios` row doesn't match the code** (plan line 66; `tests/helpers/provider_scenarios.lua`).
+  - The plan lists it under Pure entities as "ProviderScenario: the table of the scenarios × the providers… the integration specs iterate it, so adding a provider is one row".
+  - The module is IO glue. It calls `fixture_process.spawn`, `ready_port.wait_listening` and `vim.wait`. It mutates `dispatcher.providers[p].endpoint`, `logger.error`/`logger.warning` and the vault, and it reads files.
+  - It has no scenario table. The scenarios are hand-written `it(...)` blocks in `provider_anthropic_spec.lua`.
+  - Fix:
+    - Add a `## Revisions` entry that moves `provider_scenarios` to Integration points (the scenario driver).
+    - State where the scenario table lives. Either build it as a data table now, so M2's openai/googleai rows are added as data, or say the scenarios are per-dialect spec cases. If you take the second option, change M2 Task 8 to match, because it currently creates separate spec files.
+  - ARCH-PURE, ARCH-DRY: without a shared table, M2 will copy S1–S7 into two more spec files.
+
+### 3. Important findings
+None new.
+
+### 4. Minor findings
+- **ARCH-ORDER: the reader's state is now two loose booleans.** `out_reader` tracks `stdout_finished` and `threw` separately, so the unreachable `threw && stdout_finished` combination is representable. A small tagged state (`reading | threw | finished`) would make the legal states readable from the code.
+- **ARCH-ORDER: the only regression test for the fix depends on timing.** It relies on `--split frames --write-delay-ms 20` making each frame its own curl read. A deterministic unit case in `dispatcher_query_spec` would remove the timing dependence: feed `"line\n"` to `out_reader` with a throwing handler, then send `(nil, nil)`, and assert one handler call.
+- **`provider_scenarios.query` leaves state behind.** It may create `dispatcher.providers[p] = {}` and never removes it, and it never removes the dummy secret it adds. Both are in-memory and per-process, so this is harmless.
+- **`proof_run.lua:700` picks its port with `math.random`** instead of a free-port probe, so it can collide on a busy host.
+- **`"Hello, world! 👋"` is written out in three places:** `sse_dialects.py:222`, `provider_anthropic_spec.lua:522` and `sse_dialects_spec.lua:949`.
+
+### 5. Test coverage notes
+- Reverting `lua/parley/dispatcher.lua` to base fails exactly one case, "S7b frame-aligned reads". So the fix has a test that fails without it.
+- `run_proofs.sh` checks for the fixed notice on the branch but doesn't check that "response is empty" is absent there. That is acceptable, because each tree's needle is checked separately.
+- `fake_provider_spec` covers the behaviour table, the split invariant, the mode check, a curl per mode, a 404 for an unknown route, and the request-log gating.
+
+### 6. Architectural notes for upcoming work
+| Marker | Result | Notes |
+|---|---|---|
+| ARCH-DRY | pass, see Critical | One shared dialect module. Missing scenario table, see Critical. |
+| ARCH-PURE | flag | The Core-concepts contradiction above. Otherwise the pure dialect functions are well separated. |
+| ARCH-PURPOSE | pass for M1 | Anthropic only, as the milestones plan it. |
+| ARCH-MOCK | pass for M1 | The fake sits behind the production curl seam. Live conformance is scheduled for M3. |
+| ARCH-CONSTRAINTS | pass | The every_byte case is capped at 5 s and asserted. |
+| ARCH-SECURE | pass | Dummy secrets are held in memory only. The request log holds bodies, not headers, so the key never reaches it. The proofs set `HOME`/`XDG_*` to temp directories. |
+| ARCH-ORDER | minor | Ordering is controlled by the fake's `--split`/`--write-delay-ms`. See the Minor notes on the reader booleans and the timing-based test. |
+| ARCH-FUNERAL | pass | The request log is deleted in `after_each`, fakes are reaped, and the proof worktrees are removed by `trap`. |
+
+- **Docs:** the atlas covers the fix. The test-harness atlas pages are deferred to M3 Task 11 as planned. M1 adds nothing user-facing, so README is unaffected.
+
+### 7. Plan revision recommendations
+- Reclassify `provider_scenarios` as Integration (the scenario driver), and either deliver the ProviderScenario data table or record that scenarios are per-dialect spec cases. Make M2 Task 8 consistent with whichever you choose.
+- Plan line 226 still says the in-band error "is observable as `dispatcher._classify_ending(qt)`, not as a logged notice". BR-3 showed that is wrong, and the issue Log has already struck it through. Correct the plan's Revisions entry to match.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      run_proofs.sh:764-767 uses cap_empty/inband_error_empty and checks the notice text on each tree; ran it, 6/6 ok.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      tests/unit/fake_provider_spec.lua delivers the behaviour table, split invariant, check_mode, a curl per mode and request-log gating; 10/10 pass.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      S3 now asserts the warning containing "in-band — Overloaded" (provider_anthropic_spec.lua:578); the issue Log is struck through, but plan.md:226 still carries the retracted claim (see plan revisions).
+  - id: BR-4
+    disposition: addressed
+    note: |
+      provider_anthropic_spec.lua:649 asserts equals("Hello,", out.qt.response); passes.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      S6 asserts raw_at_first_chunk < the total raw bytes (:612); the vocabulary needle is now '"stop_reason":"end_turn"'.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      check_mode/check_split are argparse types (fake_provider:121-122); fake_provider_spec.lua:890 asserts exit 2 for a typo.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      The frames split (sse_dialects.py:368), S4 for 429/529/500 (:581) and the no_stop integration case (:636) are delivered and pass.
+findings:
+  - id: new
+    severity: Critical
+    kind: defect
+    family: core-concepts-table-drift
+    title: |
+      Core concepts lists provider_scenarios as a PURE scenario table; the code is an IO driver and no scenario table exists
+    detail: |
+      plan.md:66 and :79 describe a pure ProviderScenario table that the specs iterate, so adding a provider is one row. tests/helpers/provider_scenarios.lua spawns the fake, waits on uv, and mutates dispatcher.providers, logger and vault; it holds no table, and the scenarios are hand-written cases in provider_anthropic_spec.lua. Fix: a Revisions entry moving it to Integration points, and either build the data table before M2 or record per-dialect spec cases and align M2 Task 8 (ARCH-PURE, ARCH-DRY).
+  - id: new
+    severity: Minor
+    kind: defect
+    family: reader-state-flags
+    title: |
+      out_reader's reader state is two independent booleans, and the only test of the fix depends on write timing
+    detail: |
+      dispatcher.lua:531-532 tracks stdout_finished and threw separately (a tagged reading/threw/finished state would do). The regression test needs frames plus a 20 ms write delay to line up reads; a deterministic dispatcher_query_spec case (a line with a throwing handler, then EOF (nil,nil), expecting one handler call) would pin it without timing (ARCH-ORDER).
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"677f09f1-15bc-4ff9-83a4-c8f5edd516c6","repository":"github.com/xianxu/parley.nvim","issue_id":"000242","recipe":"milestone-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/f0854e826beaffeb","reviewed_head":"19bd7c773bd92def62ad64f28922cb001f54bb41","slot":"parley.nvim:4","requested_at":"2026-10-16T15:00:02.413673Z"},"phase":"finished","pid":1801,"started_at":"2026-10-16T15:00:02.5775Z","finished_at":"2026-10-16T15:02:55.221242Z","session_id":"4d04a54f-448d-4144-bd6c-9e2756031514","outcome":"returned"}] -->

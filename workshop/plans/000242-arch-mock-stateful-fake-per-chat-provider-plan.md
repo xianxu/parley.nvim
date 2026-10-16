@@ -63,7 +63,7 @@
 | `anthropic` (a Dialect; openai and googleai in M2) | `tests/fixtures/sse_dialects.py` | new |
 | `behaviour` (the BehaviorModel) | `tests/fixtures/sse_dialects.py` | new |
 | `split` (the FrameSplitter) | `tests/fixtures/sse_dialects.py` | new |
-| `provider_scenarios` | `tests/helpers/provider_scenarios.lua` | new |
+| `provider_scenario_table` (the ProviderScenario table and its judge `mismatches`) | `tests/helpers/provider_scenario_table.lua` | new |
 | `provider_vocabulary` | `tests/helpers/provider_vocabulary.lua` | new |
 
 - **Dialect**: pure functions from an abstract reply (`text`, `tool_use{id,name,input}`, `thinking`, `inband_error`, `cap`) to the exact SSE bytes one provider sends. The anthropic events are `message_start`, `content_block_start/delta/stop`, `message_delta` (`stop_reason`, usage) and `message_stop`. OpenAI is `choices[].delta`, `finish_reason` and `[DONE]`. googleai is `candidates[].content.parts[].text` plus `usageMetadata`. Event templates are lifted from the recorded fixtures, so the shape is real bytes.
@@ -84,6 +84,7 @@
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `fake_provider` | `tests/fixtures/fake_provider` | new | the provider HTTP APIs |
+| `provider_scenarios` (the driver: `run(row, profile)`) | `tests/helpers/provider_scenarios.lua` | new | `dispatcher.query`, the fake process, vault, logger |
 | `fake_cliproxy` chat surface | `tests/fixtures/fake_cliproxy` | modified | cliproxyapi's chat routes |
 | copilot token URL seam | `lua/parley/vault.lua` | new (test seam) | `api.github.com` token fetch |
 | `provider_live_conformance_spec` | `tests/integration/provider_live_conformance_spec.lua` | new | the real provider APIs |
@@ -174,8 +175,7 @@ Regression proofs: #228 (S3, S5) must fail on `dc548920^`, and #229 (S7b) on `63
 
 **Files:**
 - Modify: `lua/parley/vault.lua` (`vault._set_copilot_token_url`, a test seam with a reader in the spec)
-- Create: `tests/integration/provider_openai_family_spec.lua` (openai, azure with `{{model}}` in the endpoint, ollama, copilot through the token route)
-- Create: `tests/integration/provider_googleai_spec.lua` (`{{secret}}` and `{{model}}` in the URL)
+- ~~Create: `tests/integration/provider_openai_family_spec.lua`~~ / ~~`provider_googleai_spec.lua`~~ (superseded by the 2026-10-16 revision below). Modify `tests/helpers/provider_scenario_table.lua`: add one PROFILE each for openai, azure (with `{{model}}` in the endpoint), ollama, copilot (through the token route) and googleai (`{{secret}}` and `{{model}}` in the URL). Their names already appear in the rows' `applies`; `tests/integration/provider_scenarios_spec.lua` iterates the profiles unchanged.
 
 - [ ] The scenario table rows for each; failing first, then passing.
 - [ ] M2 boundary: full suite, orphan check, `sdlc milestone-close --milestone M2`.
@@ -223,7 +223,20 @@ Regression proofs: #228 (S3, S5) must fail on `dc548920^`, and #229 (S7b) on `63
 ### 2026-10-16, M1 build
 
 - The Core-concepts rows are renamed to the symbols that implement them: `anthropic`, `behaviour`, `split`, and the `provider_scenarios` / `provider_vocabulary` modules. The concept names stay in parentheses and the prose, and the sweeps guard checks each row against a real definition.
-- Found while building, with no production change: a query outside a generation needs a `deadline_ms`, so the scenario helper passes `tasker.deadline.stream`, which is what an unowned LLM stream uses. The in-band error is observable as `dispatcher._classify_ending(qt)`, not as a logged notice, because the dispatcher logs error-level notices only for an empty response (text arrived first).
+- Found while building, with no production change: a query outside a generation needs a `deadline_ms`, so the scenario helper passes `tasker.deadline.stream`, which is what an unowned LLM stream uses. ~~The in-band error is observable as `dispatcher._classify_ending(qt)`, not as a logged notice, because the dispatcher logs error-level notices only for an empty response (text arrived first).~~ That was wrong, as review BR-3 found. The dispatcher logs a warning-level "answer is TRUNCATED … in-band — Overloaded", and S3 asserts that warning.
 - The regression proofs are one driver plus one case script, not two scripts: `tests/regression/run_proofs.sh` creates scratch worktrees at `dc548920^` and `634e33a9^` and runs `tests/regression/proof_run.lua` on each tree and on the branch. Each case must print `PROOF-REACHED`, and the old tree and the branch must each show their own behaviour. The fake gained two modes, `cap_empty` and `inband_error_empty`. These are #228's real failure, bytes with no answer text, which the pre-fix code reported as "response is empty". This honours the plan advisory: the cap case asserts the cap notice, not the error callback. One file is placed in each old tree, the untracked generated `construct/generated/vocabulary/*.json`, which `setup()` reads. It is a build output, not code under test.
 - Measured result: all 6 cases pass. Pre-fix #228 reports "response is empty" for both, and the branch names the output-token cap and the in-band error. Pre-fix #229 completes the turn as a success after the reader throws, and the branch fails the attempt.
+
+### 2026-10-16, M1 review round 2 (REWORK, BR-8): the scenario table is data
+
+- What was wrong: Core concepts named `provider_scenarios` as the pure ProviderScenario table, but it was an IO driver, and the scenarios were hand-written cases in `provider_anthropic_spec.lua`.
+- What changed:
+  - `tests/helpers/provider_scenario_table.lua` is the pure entity. It holds `ROWS` (the plan's table, each row naming the providers it `applies` to), `PROFILES` (how each provider spells the wire-dependent parts), `rows_for` and the judge `mismatches(row, outcome, profile)`.
+  - The judge's unit spec is `tests/unit/provider_scenario_table_spec.lua`. It checks that a matching outcome passes and that each expectation catches its violation.
+  - `provider_scenarios.run(row, profile)` is the one IO driver, moved to Integration points.
+  - `tests/integration/provider_anthropic_spec.lua` became `tests/integration/provider_scenarios_spec.lua`, a loop over profiles × rows. M2's Task 8 adds profiles rather than spec files.
+- Scope (TL-approved, see the issue's Revisions): M1 fixes the `out_reader` duplicate-delta defect.
+  - Its timing-free regression tests are `dispatcher_query_spec` A6–A8, and each half of the fix has one that fails without it.
+  - The reader's flags are one tagged `reader_state` (reading / threw / finished), as BR-9 asked.
+- S6 now pauses 1 ms per write. Unpaced, the socket coalesced the whole body into one read in 1 run of 5, which made the incremental check flaky.
 

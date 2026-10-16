@@ -628,3 +628,5 @@ oracle, and the mutation that would make the test fail.
 
 - If a loop processes a line and only then drops it from its buffer, a throw leaves that line in place. A later flush, such as an EOF still delivered after the failure, then decodes it again. Take the input off the buffer first, and once the reader has thrown, its own flush decodes nothing.
 - An intermittent spec failure is evidence, not noise. Loop the case (30–40 runs) and print what differs. Then make the trigger deterministic with a fake knob (here, one frame per read) before fixing, so the regression test fails every time on the old code.
+- If the plan says the table is the product, build the table as data first: rows, which providers each applies to, and a pure judge. Hand-written cases that cover the same rows are not the table, and a Core-concepts row naming a pure table must point at a pure file.
+- A test that something arrives "incrementally" depends on the timing of the IO it watches. Pace the writer (a per-write delay knob on the fake) so the reads are really separate. Loop the case before trusting it: an unpaced single-byte writer sometimes coalesced into one read.

@@ -9,7 +9,6 @@ local ready_port = require("tests.helpers.ready_port")
 local M = {}
 
 M.FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_provider"
-M.ROUTE = { anthropic = "/v1/messages" }
 
 --- Start the fake for `dialect` in `mode` (with `split`, and `delay_ms` after
 --- each write); returns the port.
@@ -29,7 +28,8 @@ function M.query(provider, port, payload, opts)
     opts = opts or {}
     dispatcher.providers[provider] = dispatcher.providers[provider] or {}
     local saved = dispatcher.providers[provider].endpoint
-    dispatcher.providers[provider].endpoint = "http://127.0.0.1:" .. port .. M.ROUTE[provider]
+    dispatcher.providers[provider].endpoint = "http://127.0.0.1:" .. port
+        .. require("tests.helpers.provider_scenario_table").PROFILES[provider].route
     require("parley.vault").add_secret(provider, "sk-fake-" .. provider) -- dummy only (PQ-5)
     local logger = require("parley.logger")
     local saved_error, saved_warning = logger.error, logger.warning
@@ -63,6 +63,39 @@ function M.query(provider, port, payload, opts)
     logger.error, logger.warning = saved_error, saved_warning
     dispatcher.providers[provider].endpoint = saved
     assert(ok, err)
+    return out
+end
+
+--- Run one scenario-table row (tests/helpers/provider_scenario_table.lua) for
+--- `profile`; returns the outcome record `mismatches` judges. The only IO
+--- driver: the row and the profile are data.
+function M.run(row, profile, log_path)
+    local mode = row.mode == "disconnect" and ("disconnect_after:" .. profile.disconnect_bytes) or row.mode
+    local port = M.start(profile.dialect, mode, row.split, { PARLEY_FAKE_REQUEST_LOG = log_path }, row.delay_ms)
+    local tools = row.tool_loop and { "read_file" } or nil
+    local messages = { { role = "user", content = "hi" } }
+    local function ask(msgs, opts)
+        return M.query(profile.provider, port, dispatcher.prepare_payload(msgs, profile.model, profile.provider, tools), opts)
+    end
+    local raw_at_first_chunk
+    local started = vim.uv.now()
+    local out = ask(messages, { on_chunk = function(n, _, qt)
+        if n == 1 then raw_at_first_chunk = qt and #qt.raw_response end
+        if row.throw_at == n then error("consumer invalidated mid-stream") end
+    end })
+    out.elapsed_ms = vim.uv.now() - started
+    if row.tool_loop and not out.failure then
+        local calls = profile.decode_calls(out.qt.raw_response)
+        out.first_call_id = calls[1] and calls[1].id
+        local second = ask(profile.followup(messages, calls))
+        second.first_call_id = out.first_call_id
+        out = second
+    end
+    out.raw_at_first_chunk = raw_at_first_chunk
+    out.raw_bytes = out.qt and #out.qt.raw_response
+    out.partial = out.qt and out.qt.response
+    out.ending = out.qt and dispatcher._classify_ending(out.qt).class
+    out.requests = M.requests(log_path)
     return out
 end
 
