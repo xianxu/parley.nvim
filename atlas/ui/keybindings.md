@@ -38,15 +38,15 @@ There is no file-history Forward key.
 
 Code: `lua/parley/file_history_model.lua` owns pure ordering and positions;
 `lua/parley/file_history.lua` owns editor observations and safe switches.
+Markdown buffer preparation consults the read-only restoration scope so it does
+not reset mode or consume typeahead during Back.
 
 ## Attention finder
 
 `<M-u>` (Alt+u) in Normal or Insert mode, or `:ParleyAttention`, opens the
 [attention finder](attention_finder.md). Configure it with
 `global_shortcut_attention = { modes = { "n", "i" }, shortcut = "<M-u>" }`, or
-`shortcut = {}` to disable it. Couch's own key help lists it via pair#619.
-Markdown buffer preparation consults the read-only restoration scope so it does
-not reset mode or consume typeahead during Back.
+`shortcut = {}` to disable it. Adding it to Couch's own key help is pair#619.
 
 ## Command
 `:ParleyKeyBindings` (`<C-g>?`, alias `<M-h>`, #292): centered floating window showing context-scoped

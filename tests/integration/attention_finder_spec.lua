@@ -170,6 +170,30 @@ describe("attention finder", function()
         assert.equals("no Couch ledger for this file", Store.load().entries[b].unknown)
     end)
 
+    -- ARCH-ORDER, through the glue: a probe that started before a newer submit
+    -- returns without that submit's ID, and must not answer it.
+    it("a probe that started before a newer submit leaves that submit waiting", function()
+        local a = submitted("a.md", "m1")
+        local held
+        local run = function(argv, cb)
+            held = function() require("parley.couch").query(argv, cb) end
+        end
+        local refreshed
+        Attention.refresh({ run = run, store = { now = now } }, nil, function() refreshed = true end)
+        await(function() return held ~= nil end, "the probe never started")
+        -- While it runs: the operator submits again, and the agent folds the first.
+        now = now + 1
+        Couch.owe(registry, a, "m2")
+        apply({ type = "submitted", path = a, id = "m2" })
+        Couch.fold(registry, a, "m1")
+        Couch.fold(registry, a, "m2") -- even with m2 gone too, the probe predates it
+        held()
+        await(function() return refreshed end, "the probe never finished")
+        local entry = Store.load().entries[a]
+        assert.equals("waiting", Model.state_of(entry))
+        assert.same({ "m2" }, vim.tbl_keys(entry.pending))
+    end)
+
     it("runs at most 4 probes at once", function()
         for i = 1, 9 do submitted(("f%d.md"):format(i), "m" .. i) end
         local active, peak = 0, 0

@@ -218,3 +218,9 @@ All verified in the code on 2026-10-16.
   - Task 6 also updates README.md (the review's advisory), next to the Alt+Shift+O paragraph.
   - A probe reply whose `Status` is null (Couch keeps no ledger for the file) is `observe_failed`, not an empty `Owed`. Reading it as answered would be the failure the plan names as most likely.
   - The live check is the TL's to sequence, together with #353, since they share the restore seam. This slot doesn't stage it.
+- **2026-10-16, the M2 review.**
+  - BR-8 (Important, the second finding in the declared-ordering-untested family): the probe-start capture is now pinned through the glue. A held probe interleaves with a newer submit and folds, and moving the capture into the probe callback fails the spec.
+  - Class sweep of the ARCH-ORDER list against tests that drive production code: two editors (the store's held-lease specs), an observation after close, a failed probe, the stale probe vs a newer submit (now covered), and the 14-day trim (the same path as a fold).
+  - `observe_failed` records fixed reasons ("couch status unavailable", "no Couch ledger for this file"): `couch.query` returns nil for any Code other than ok, so the Code isn't visible here.
+  - `select` restores the breadcrumb, then applies `opened`.
+  - The keybindings atlas paragraph is back under File history.
