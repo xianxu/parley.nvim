@@ -586,3 +586,7 @@ oracle, and the mutation that would make the test fail.
 ## #346: wait on the record you read, not on its file existing
 
 - `vim.fn.writefile` creates the file before its bytes land. A wait that ends on `filereadable` and then reads a value can read an empty file. Make the wait predicate the parsed value itself, and return what the predicate read.
+
+## #347: `mkdir -p` is not race-safe at intermediate levels
+
+- Vim's `mkdir(path, "p")` raises E739 when another process creates an intermediate directory between its check and its create, and it leaves the leaf uncreated. Tolerating EEXIST only for the leaf is not enough. Create one level at a time and accept any level that is a directory afterwards.
