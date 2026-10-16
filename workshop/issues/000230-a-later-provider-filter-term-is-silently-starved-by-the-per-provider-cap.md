@@ -214,6 +214,9 @@ confidently at discovery, and the cause was two layers downstream of it.
 - Defaults: `codex:gpt-6,gpt-5!3` and `gemini!3`, per the TL decision, keep the default view its prior size. `per_provider` is gone from config, code, atlas and specs, except the notice that names it.
 - Lint clean (737 files).
 - Full suite on e0c389cc: one failure, starter_config_spec "retains product search terms". It pinned the old default strings; this issue deliberately replaced them with the written caps. Updated the expectation; 7/0, lint clean. Every other file passed.
+- Close review round 1. BR-1 (Important): the shipped default `codex:gpt-6,gpt-5!3` made diagnose warn on every refresh for any catalog without gpt-6, and `claude:opus,sonnet,fable` does the same where fable is absent. The class is shipped defaults naming lines an account may lack. Fix: the picker diagnoses only `_operator_specs`, the configured specs that are not verbatim shipped defaults; diagnose stays pure. Regression: defaults plus an operator typo against a catalog with neither gpt-6 nor fable gives exactly the typo's warning (and asserts the fixture would have warned for the defaults). Red with the filter removed (56/1), green 57/0.
+- Minors, same round: diagnose reuses `_select` (one search, cap 1) instead of its own match loop; the parser docstring, config comment and atlas state that a provider cap beside terms is rejected. Catalog 77/0, lint clean.
+- Lesson: a pure diagnostic over config needs the provenance of each entry. A shipped default and an operator's typo look the same to it.
 
 ## Revisions
 

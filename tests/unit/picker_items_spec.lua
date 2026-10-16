@@ -628,6 +628,39 @@ describe("agent_picker refresh gating", function()
 
     -- #230: a term matching nothing would read as "the provider lacks it". The
     -- picker reports it when a fetch resolves, once, and curate stays pure.
+    -- #230 BR-1: the shipped defaults name lines an account may lack (gpt-6,
+    -- fable); warning about parley's own default on every refresh is noise.
+    it("diagnoses only what the operator wrote, never a verbatim shipped default", function()
+        local defaults = require("parley.config").cliproxy.live_models.providers
+        local cliproxy = require("parley.cliproxy")
+        local saved_is_managed, saved_stale, saved_fetch, saved_cached =
+            cliproxy.is_managed, cliproxy.catalog_stale, cliproxy.fetch_catalog, cliproxy.catalog_cached
+        local catalog = { -- no gpt-6, no fable
+            { id = "gpt-5.6-sol", display = "GPT 5.6 Sol", owner = "openai", series = "gpt-sol" },
+            { id = "claude-opus-5", display = "Claude Opus 5", owner = "anthropic", series = "claude-opus" },
+        }
+        cliproxy.is_managed = function() return false end
+        cliproxy.catalog_stale = function() return true end
+        cliproxy.catalog_cached = function() return catalog end
+        cliproxy.fetch_catalog = function(cb) cb(catalog) end
+        local warnings = {}
+        local plugin = make_plugin("mango")
+        local providers = vim.list_extend(vim.deepcopy(defaults), { "codex:gtp-6" })
+        plugin.config = { cliproxy = { live_models = { providers = providers } } }
+        plugin.register_live_agent = function() end
+        plugin.logger = { info = function() end, warning = function(m) warnings[#warnings + 1] = m end }
+        plugin.refresh_state = function() end
+        plugin.cmd = { KeyBindings = function() end }
+        local ok, handle = pcall(require("parley.agent_picker").agent_picker, plugin)
+        cliproxy.is_managed, cliproxy.catalog_stale, cliproxy.fetch_catalog, cliproxy.catalog_cached =
+            saved_is_managed, saved_stale, saved_fetch, saved_cached
+        if ok and handle and not handle.is_closed() then handle.close() end
+        assert.is_true(ok, tostring(handle))
+        assert.is_true(#require("parley.cliproxy_catalog").diagnose(catalog, defaults) > 0,
+            "the fixture must be one where the defaults would warn")
+        assert.same({ 'live_models.providers "codex:gtp-6": "gtp-6" matches no codex model' }, warnings)
+    end)
+
     it("logs each diagnosis once when a catalog refresh resolves", function()
         local cliproxy = require("parley.cliproxy")
         local saved_is_managed, saved_stale, saved_fetch, saved_cached =

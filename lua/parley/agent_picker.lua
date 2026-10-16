@@ -16,6 +16,18 @@ local float_picker = require("parley.float_picker")
 ---@param models table[] # the full cached catalog
 ---@param providers string[] # configured `live_models.providers` entries
 ---@return table[] # { { provider = "antigravity" }, … }
+--- The specs the operator wrote, leaving out verbatim shipped defaults: those
+--- name model lines a given account may not have (`gpt-6`, `fable`), and a
+--- warning on every refresh for parley's own default is noise. What diagnose
+--- exists for is a typo the operator made (#230).
+---@param providers string[]|nil
+---@return string[]
+function M._operator_specs(providers)
+    local shipped = {}
+    for _, spec in ipairs(require("parley.config").cliproxy.live_models.providers or {}) do shipped[spec] = true end
+    return vim.tbl_filter(function(spec) return not shipped[spec] end, providers or {})
+end
+
 function M._providers_without_models(models, providers)
     local cat = require("parley.cliproxy_catalog")
     local cc = require("parley.cliproxy_config")
@@ -369,7 +381,7 @@ function M.agent_picker(plugin, opts)
             -- matching nothing would otherwise read as "the provider lacks it" (#230).
             if models then
                 local configured = (((plugin.config or {}).cliproxy or {}).live_models or {}).providers
-                for _, message in ipairs(require("parley.cliproxy_catalog").diagnose(models, configured)) do
+                for _, message in ipairs(require("parley.cliproxy_catalog").diagnose(models, M._operator_specs(configured))) do
                     plugin.logger.warning(message)
                 end
             end

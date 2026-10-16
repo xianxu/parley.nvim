@@ -163,13 +163,15 @@ reads that catalog instead of carrying model names in Lua.
   line is kept. **There is no hidden limit (#230):** a search shows every
   matching line unless it carries `!N`, which caps that term, or a bare
   provider, which is the search with the empty term. A malformed count
-  (`gpt-5!`, `!x`, `!0`) makes its spec contribute nothing, never "no limit".
+  (`gpt-5!`, `!x`, `!0`) and a provider cap beside terms (`codex!2:gpt-5`) make
+  their spec contribute nothing, never "no limit".
   Term order is display order; a model line matched by two searches renders
   once, under the first. Equal-date GPT rows prefer newer numeric
   generations/versions before alphabetical variants. When a catalog fetch
   resolves, the picker logs `cliproxy_catalog.diagnose`: malformed specs, and
-  terms that match none of a provider's models. It logs once per refresh, and
-  `curate` stays pure. The removed `per_provider` option draws one setup notice
+  terms that match none of a provider's models, for the specs the operator
+  wrote. Verbatim shipped defaults are left out: they name lines a given account
+  may lack. It logs once per refresh, and `curate` stays pure. The removed `per_provider` option draws one setup notice
   if a config still sets it.
 - **No `oauth-model-alias` is required.** cliproxyapi exposes an OAuth
   channel's models automatically once that channel has a credential — verified

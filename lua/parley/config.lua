@@ -144,7 +144,9 @@ local config = {
 		--
 		-- Terms narrow; the picker then keeps the newest of each model line. A
 		-- search shows every matching line unless it carries `!N`, which caps that
-		-- term, or a bare provider (`gemini!3`). There is no hidden limit (#230).
+		-- term, or a bare provider (`gemini!3`); a provider cap beside terms is
+		-- rejected (cap each term). There is no hidden limit (#230). A term you
+		-- write that matches no model is logged when the catalog refreshes.
 		-- Term order is display order. <C-a> in the picker
 		-- bypasses filter AND curation, so narrowing this never puts a model out
 		-- of reach. Nothing here names a model version, so nothing here goes

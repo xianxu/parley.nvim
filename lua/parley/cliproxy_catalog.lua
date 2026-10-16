@@ -116,7 +116,8 @@ end
 --- "<provider>[!N]" or "<provider>:<term>[!N][,<term>[!N]…]".
 --- `!N` caps the search it is attached to: a term, or a bare provider (which
 --- is the search with the empty term). No `!` means no limit (#230). A count
---- that is not a positive integer is an error, never read as "no limit".
+--- that is not a positive integer is an error, never read as "no limit", and
+--- so is a provider cap beside terms (`codex!2:gpt-5`): cap each term instead.
 ---@param spec string
 ---@return table|nil # { provider = string, cap = integer|nil, terms = { {text=string, cap=integer|nil} } }
 ---@return string|nil # why the spec is malformed, naming it
@@ -264,14 +265,11 @@ function M.diagnose(models, providers, owned_by)
         if not parsed then
             out[#out + 1] = err
         else
-            local pool = pool_for(models, parsed.provider, owned_by)
-            if #pool > 0 then
+            if #pool_for(models, parsed.provider, owned_by) > 0 then
                 for _, search in ipairs(parsed.terms) do
-                    local hit = false
-                    for _, m in ipairs(pool) do
-                        if matches(m, search.text) then hit = true; break end
-                    end
-                    if not hit then
+                    -- The same selection curate renders, one search at a time.
+                    local one = { provider = parsed.provider, terms = { { text = search.text, cap = 1 } } }
+                    if #M._select(models, one, owned_by) == 0 then
                         out[#out + 1] = ("live_models.providers %q: %q matches no %s model"):format(
                             spec, search.text, parsed.provider)
                     end
