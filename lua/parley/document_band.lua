@@ -50,14 +50,21 @@ local function read(win)
     return result
 end
 
-local function restore(win, record, target)
+-- A prepared record has no installed proof. Once installed, each option is
+-- retained only while the window still contains our last value; an override
+-- relinquishes that option for this record's lifetime, including later paints.
+local function install(win, record, target, first_paint)
     if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= record.buf then return end
+    local previous, installed = record.installed, {}
     for _, option in ipairs(options) do
         local opts = { win = win, scope = "local" }
-        if vim.api.nvim_get_option_value(option, opts) == record.installed[option] then
+        if (not previous and first_paint)
+            or (previous and previous[option] ~= nil and vim.api.nvim_get_option_value(option, opts) == previous[option]) then
             vim.api.nvim_set_option_value(option, target[option], opts)
+            installed[option] = target[option]
         end
     end
+    record.installed = installed
 end
 
 local function retire(win, record, remember)
@@ -65,7 +72,7 @@ local function retire(win, record, remember)
         cached[win] = cached[win] or {}
         cached[win][record.buf] = { buf = record.buf, before = record.before, installed = record.installed }
     end
-    restore(win, record, record.before)
+    install(win, record, record.before)
     for _, owner in ipairs(record.layers) do owner.views[win] = nil end
     windows[win] = nil
 end
@@ -73,7 +80,7 @@ end
 local function restore_cached(win, buf)
     local saved = cached[win] and cached[win][buf]
     if not saved then return end
-    restore(win, saved, saved.before)
+    install(win, saved, saved.before)
     cached[win][buf] = nil
     if not next(cached[win]) then cached[win] = nil end
 end
@@ -130,11 +137,8 @@ function M.refresh(win)
     record = record or record_for(win, buf)
     local value = value_for(win, record)
     if not value.winbar then retire(win, record); return end
-    record.installed = value
+    install(win, record, value, true)
     for _, owner in ipairs(record.layers) do owner.views[win] = value end
-    for _, option in ipairs(options) do
-        vim.api.nvim_set_option_value(option, value[option], { win = win, scope = "local" })
-    end
 end
 
 vim.api.nvim_create_autocmd("WinResized", { group = group, callback = function()
@@ -172,8 +176,7 @@ function M.new(buf)
                 remove(record, owner)
                 local value = value_for(win, record)
                 local target = value.winbar and value or record.before
-                restore(win, record, target)
-                record.installed = target
+                install(win, record, target)
                 if not value.winbar then windows[win] = nil end
             end
             owner.views[win] = nil

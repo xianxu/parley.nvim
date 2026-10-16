@@ -117,6 +117,37 @@ local function shorten(text, budget, ops, from_end)
     return table.concat(kept) .. ellipsis
 end
 
+-- Reserve a readable fragment of every protected segment before giving the
+-- leaf its full width and distributing the rest across its ancestors. Interior
+-- gaps are fixed markers; shortening labels must not silently remove a parent.
+local function fit_protected(labels, budget, ops)
+    local available = budget - ops.width(" › ") * (#labels - 1)
+    local widths, limits, remaining = {}, {}, available
+    for i, label in ipairs(labels) do
+        local units = ops.units(label)
+        local edge = i == #labels and units[#units] or units[1]
+        limits[i] = ops.width(label)
+        widths[i] = math.min(limits[i], ops.width(edge or "") + ops.width("…"))
+        remaining = remaining - widths[i]
+    end
+    if remaining < 0 then return nil end
+    local leaf = #labels
+    local growth = math.min(remaining, limits[leaf] - widths[leaf])
+    widths[leaf], remaining = widths[leaf] + growth, remaining - growth
+    while remaining > 0 do
+        local grew = false
+        for i = 1, leaf - 1 do
+            if remaining > 0 and widths[i] < limits[i] then
+                widths[i], remaining, grew = widths[i] + 1, remaining - 1, true
+            end
+        end
+        if not grew then break end
+    end
+    local result = {}
+    for i, label in ipairs(labels) do result[i] = shorten(label, widths[i], ops, i == leaf) end
+    return table.concat(result, " › ")
+end
+
 function M.project(value, budget, ops)
     budget = math.max(0, math.floor(budget))
     if budget == 0 or not value or #value.paths <= 1 then return "" end
@@ -131,6 +162,8 @@ function M.project(value, budget, ops)
     local compact = #labels > 3 and { labels[1], "…", labels[#labels - 1], labels[#labels] } or display
     local collapsed = table.concat(compact, " › ")
     if ops.width(collapsed) <= budget then return collapsed end
+    local protected = fit_protected(compact, budget, ops)
+    if protected then return protected end
     -- The leaf is the useful identity when separators alone would consume the
     -- space. A leading ellipsis also makes the missing ancestry explicit.
     local leaf = labels[#labels]

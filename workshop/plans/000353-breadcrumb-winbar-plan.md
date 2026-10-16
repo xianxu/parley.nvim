@@ -162,3 +162,7 @@ A real pending-move recovery exposed an ownership projection gap: a warning laye
 ### 2026-10-16 — Separate code verification from the operator hold
 
 Close-time checkboxes cover executable work and final-suite evidence. Review is the close gate itself, and staging/live acceptance remain later prose obligations. The current TL instruction explicitly forbids staging until the combined :0 check is complete; this replaces the earlier task wording that suggested staging immediately after close.
+
+### 2026-10-16 — Close review ownership and protected-width corrections
+
+BR-1/BR-2 require an explicit ownership lifecycle: a record may be prepared without installed options; such records retire without restoration. After installation, each option is owned only while its current value equals the last installed proof. Refresh, resize, layer handoff and cleanup may update only those owned options; observing a user override relinquishes that option for the record's lifetime. Test plain render→clear→leave→re-render, and the independent winbar/winhighlight/both override matrix for breadcrumb-only and state-owned views across repeated resize, explicit refresh, state updates and cleanup (ARCH-ORDER). BR-3 requires shortening the protected root and final two segments before removing the immediate parent; test narrow/wide budgets, Unicode widths and duplicate-label context (ARCH-PURPOSE). These correct approved behavior without changing the snapshot/restore API or adding durable state.

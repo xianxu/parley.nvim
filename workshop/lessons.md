@@ -674,3 +674,9 @@ oracle, and the mutation that would make the test fail.
 ## #349: deleting a local removes its readers too
 
 - Replacing `find_tree_root_file` deleted the local `root` that delete-tree's prompt still read, and the tests stubbed `confirm` without checking its text. Lint caught it in the suite. After deleting a local, run `make lint`, or grep the function for the name, before the suite; and a test that stubs a prompt asserts what the prompt says.
+
+## #353: rendering ownership is per option and survives every repaint
+
+- A renderer record can exist before anything was installed. Exercise plain/no-output views through the adapter, then clear, leave and re-render; pure composition tests cannot catch poisoned adapter cleanup.
+- Resize and state refresh must check the same per-option ownership proof as detach. If a window option differs from the last installed value, relinquish that option for the record's lifetime; do not recapture the override as our own proof. Test independent winbar/winhighlight overrides across repaint and cleanup.
+- When a width policy protects root and the final two segments, shorten those labels before dropping a protected segment. Include an oversized leaf: a leaf-only fast path must not bypass a combination that still fits.

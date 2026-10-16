@@ -344,6 +344,63 @@ describe("shared document bands", function()
     local failure = { state = "free", label = "submit failed: 50% unavailable", hl = "ParleySessionSyncFree",
         feedback = { label = "submit failed: 50% unavailable", hl = "DiagnosticError" } }
 
+    it("retires never-installed plain roots without poisoning later renders or cleanup", function()
+        local item = open("never-installed")
+        local owner = renderer(item)
+        local original = observe(item)
+        owner.render({ state = "plain", hl = "WinBar" })
+        assert.same(original, observe(item))
+        owner.clear()
+        owner.render({ state = "plain", hl = "WinBar" })
+        local other = open("after-plain-root")
+        vim.api.nvim_win_set_buf(item.win, other.buf)
+        owner.clear()
+        vim.api.nvim_win_set_buf(item.win, item.buf)
+        owner.render(free)
+        expect_view(item, free.label, free.hl)
+        owner.clear()
+        assert.same(original, observe(item))
+    end)
+
+    for _, kind in ipairs({ "breadcrumb-only", "state-owned" }) do
+        for _, overridden in ipairs({ "winbar", "winhighlight", "both" }) do
+            it("preserves " .. overridden .. " overrides through resize, refresh and cleanup for " .. kind, function()
+                local item = open("override-" .. kind .. "-" .. overridden)
+                local history, band = require("parley.file_history"), require("parley.document_band")
+                history.setup()
+                local ancestor = root .. "/ancestor.md"
+                vim.fn.writefile({ "ancestor" }, ancestor)
+                assert.is_true(history.restore(item.win, { version = 1, paths = { ancestor, item.path }, omitted = 0 }))
+                local owner = renderer(item)
+                if kind == "state-owned" then owner.render(free) end
+                local custom = { winbar = "operator custom bar", winhighlight = "StatusLine:IncSearch" }
+                local expected = { winbar = "original", winhighlight = "StatusLine:Search" }
+                for _, option in ipairs({ "winbar", "winhighlight" }) do
+                    if overridden == option or overridden == "both" then
+                        vim.wo[item.win][option] = custom[option]
+                        expected[option] = custom[option]
+                    end
+                end
+                for _ = 1, 2 do
+                    vim.api.nvim_exec_autocmds("WinResized", {})
+                    band.refresh(item.win)
+                    if kind == "state-owned" then owner.render(failure) end
+                    for _, option in ipairs({ "winbar", "winhighlight" }) do
+                        if overridden == option or overridden == "both" then
+                            assert.equals(custom[option], vim.wo[item.win][option])
+                        else
+                            assert.is_true(vim.wo[item.win][option] ~= expected[option], "unclaimed override must not disable owned option")
+                        end
+                    end
+                end
+                owner.clear()
+                assert.is_true(history.restore(item.win, { version = 1, paths = { item.path }, omitted = 0 }))
+                band.refresh(item.win)
+                assert.same(expected, observe(item))
+            end)
+        end
+    end
+
     it("restores a still-live session layer after temporary coordinator feedback clears", function()
         local item = open("layered")
         local session, coordinator = renderer(item), renderer(item)

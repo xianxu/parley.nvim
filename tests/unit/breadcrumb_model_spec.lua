@@ -94,10 +94,36 @@ describe("breadcrumb_model", function()
         assert.are.equal("…leaf", model.project(trail({ "/root", "/parent", "/leaf" }), 5, ops))
     end)
 
+    it("shortens protected labels before dropping the immediate parent", function()
+        assert.are.equal("root › … › veryl… › leaf", model.project(trail({
+            "/root", "/extra-long-middle", "/verylongparent", "/leaf",
+        }), 24, ops))
+        assert.are.equal("long… › pare… › leaf", model.project(trail({
+            "/longroot", "/parentlong", "/leaf",
+        }), 20, ops))
+    end)
+
+    it("shortens an oversized leaf before removing protected ancestors", function()
+        assert.are.equal("r… › … › p… › …789leaf", model.project(trail({
+            "/root", "/extra-long-middle", "/parent", "/verylongleaf123456789leaf",
+        }), 22, ops))
+    end)
+
+    it("retains protected Unicode and disambiguating parent context when shortened", function()
+        assert.are.equal("根… › … › 親… › 葉", model.project(trail({
+            "/根根根", "/extra-long-middle", "/親親親", "/葉",
+        }), 18, ops))
+        assert.are.equal("a/… › … › b/… › leaf", model.project(trail({
+            "/a/same.md", "/extra-long-middle", "/b/same.md", "/leaf",
+        }), 20, ops))
+    end)
+
     it("obeys generated display budgets without splitting Unicode units", function()
         local examples = {
             trail({ "/root", "/界界界", "/é%leaf" }),
             trail({ "/a/same.md", "/b/same.md", "/long/2026-01-01-wide界.md" }, 3),
+            trail({ "/ŕŕŕŕŕŕ", "/middle", "/ṕṕṕṕṕṕ", "/leaf" }),
+            trail({ "/root", "/middle", "/parent", "/verylongleaf123456789leaf" }),
         }
         for _, value in ipairs(examples) do
             for budget = 0, 120 do
