@@ -225,3 +225,24 @@ The pure document_session controller owns one bounded in-memory receipt (namespa
 Add deterministic clock/event tests for unchanged/changed/window boundaries, effective-owner replacement, stale/failed completion and busy presses; production-door tests count complete fake deliveries, verify literal feedback and minimal payload, and cover both move routes and explicit detach/reopen behavior. Keep existing turn reconciliation, baseline and outside-Couch routes shared (ARCH-DRY); no protocol change or additional Couch verb.
 
 - 2026-10-15 — final verification sequencing after the dedup Revision: targeted regressions74 green and lint751 clean; retain earlier unchanged-route mapped passes, then run the required full suite once on the final code head (includes native auto-save, review and keybindings). Future review/stage/live actions remain prose rather than prematurely checked verification. The native owned-move acknowledgement defect is covered through both public doors and the modified-handoff refusal; it preserves the original journal/turn contract.
+
+### Combined operator acceptance after SHIP
+
+The TL rebuilds the landed Pair/Couch side, coordinates the Couch restart, and
+has the operator restart Neovim with the staged parley.nvim:0 checkout. Use a
+named plain Markdown question in that Couch pane:
+
+1. Edit and press Alt+Return: disk contains the question, the pane agent receives
+   `submitted: PATH`, and the winbar retains `submitted to OWNER · HH:MM`.
+2. Press once with unchanged text: the winbar says `nothing to submit: no changes
+   since HH:MM`; press again within two seconds: one explicit resend and `resent`.
+3. Edit the body with the real immediate auto-save enabled: the operator turn is
+   held; undo to its acquisition baseline releases it and redo reacquires it.
+   Save/submit shows the new success receipt.
+4. Move through the normal Parley door or native saveas: identity and side links
+   follow. The next unchanged submit is skipped; the next edited submit and
+   ordinary auto-save work, with the edit turn still acquired before auto-save.
+
+The headless/fake checks establish deterministic failure and recovery paths;
+these steps establish acceptance in the actual editor. No live acceptance is
+claimed until the operator confirms it through the hub.
