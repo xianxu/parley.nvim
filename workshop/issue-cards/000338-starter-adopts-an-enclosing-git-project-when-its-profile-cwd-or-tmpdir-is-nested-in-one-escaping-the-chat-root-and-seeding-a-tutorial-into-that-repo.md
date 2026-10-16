@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.54
+actual_hours: 0.57
 tracker:
     version: 1
     completion:
-        token: close-2749e984fc71
+        token: close-da4facc7899c
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 57a01cb7a5314ab43df667f38e7d2adab55f994a
-        evidence_commit: 999cec9504d88353879d0ffa72504c1e1acd8d37
+        reviewed_head: 9b518f2d19e311e84bc8dbeeaee1a8c4c95d26de
+        evidence_commit: 78750706f17c0efd6d02a8c911b54789731d2d04
 ---
 
 # Starter adopts an enclosing git project when its profile cwd or TMPDIR is nested in one, escaping the chat root and seeding a tutorial into that repo
