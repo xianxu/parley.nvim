@@ -2,9 +2,17 @@
 id: 000226
 status: open
 created: 2026-09-08
-updated: 2026-09-08
+updated: 2026-10-16
 estimate_hours:
 github_issue:
+started: 2026-10-16T00:18:48-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Guard the sdlc resolve spawn behind an in-flight check
