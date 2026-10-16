@@ -74,3 +74,11 @@ The durable plan is `workshop/plans/000354-attention-finder-plan.md` (milestones
 ## Log
 
 ### 2026-10-16
+- Plan approved by the TL. The decisions: answered means folded, the chord is `<M-u>`, the grace defaults to 60 minutes. Plan-quality took three rounds. Round 1 found three Important issues, all accepted: the lease is non-blocking, a stale probe could answer a newer submit, and session-sync files were missed. Estimate: 3.39 h, against v3.1, whose source reads stale (provisional).
+- M1 built:
+  - `attention_model`: 27 specs. Mutations that ignore the probed set, or let a failed probe clear pending, both fail the specs.
+  - `attention_store`: 12 specs. Dropping the busy retry fails the held-lease spec. It is registered in `sidecars.lua`, and the degrade suite passes.
+  - The record hook in `release_and_send`: 10 specs. Disabling the hook fails the 3 path specs.
+  - Regression set (agentic document, registry, band, review_send, session_sync, couch, all arch): green.
+- Agreed with parley.nvim:2 that when #353's restore refuses, the ordinary open result stands (an existing trail is kept, and the reason is shown).
+- Pair follow-up for the TL to file: add `<M-u>` (parley attention finder) to Couch's key help, `pair/cmd/internal/keyhelp/catalog.go`.
