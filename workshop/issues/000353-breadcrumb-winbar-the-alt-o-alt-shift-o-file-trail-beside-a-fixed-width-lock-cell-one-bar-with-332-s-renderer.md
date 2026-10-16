@@ -69,3 +69,7 @@ Full-flow, single close boundary. Detailed design: [breadcrumb winbar plan](../p
 Agreed with parley.nvim:3: retain snapshot(win)/restore(win,value), with an opaque JSON-safe value. Finder owns opening the selected file; restore owns removing missing ancestors and installing the surviving trail/Back stack without opening files. It returns false plus a reason for invalid values, uncertain ancestor checks or final-file mismatch; finder keeps the opened file as a root on refusal. Detailed contract and regression cases are appended to the durable plan. Awaiting TL approval before implementation.
 
 - TL approved the design and contract Revision (receipt 5d93a58a-2467-42dd-bac4-6b468bbf15d1, submitted). Full-flow change-code next. Live-check override: report green without staging; :0 is reserved for a combined check and TL will sequence this one.
+
+### 2026-10-16 — Plan gate refinements
+
+Plan gate round1 identified PQ-1 (destination history must match a cross-window trail) and PQ-2 (name risky functions and generated adversarial strategies). Appended one install_trail transition for all follows/restores, with destination-history overlap/cursor rules and generated sequence/width/validation invariants. No implementation before the rerun admits the plan.
