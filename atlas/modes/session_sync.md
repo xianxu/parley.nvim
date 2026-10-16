@@ -202,3 +202,9 @@ including unknown/pending admission and pre-attachment feedback. The state
 owners still choose their views. Temporary views restore a live underlying
 view on release; buffer handoff retires old window ownership. Final detach
 restores original options only when they still contain our installed values.
+
+Neovim can cache a rendered window-local value before BufWinLeave. The renderer
+retains the original/installed option proof for that window/buffer pair until
+re-entry, consuming it before a new renderer captures its baseline. Re-entry,
+buffer wipe and window close remove these in-memory proofs; no file or timer
+is created, and repeated visits do not append history.

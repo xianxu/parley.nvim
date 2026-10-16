@@ -178,6 +178,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 
 - 2026-10-15 — close round3 is not finalized: FIX-THEN-SHIP verdict is blocked by Important BR-5 window-option-ownership. Reviewer independently passes14 mapped files, lint754, real/fake conformance; distinct-original A→B→A probe exposes baseline transfer after the window changes buffers. Fix the whole ownership class at the pre-leave boundary, with native/current/noncurrent and hidden-owner regressions, then a new full suite and ordinary close. Stage2a73063d remains installed; no landing.
 
+- 2026-10-15 — BR-5 distinct-original roundtrip RED reproduces2 failures (native :buffer and noncurrent nvim_win_set_buf). Pre-leave restoration alone exposed that Neovim had already cached the rendered options. The corrected shared renderer retains original/installed proofs per live window/buffer pair, consumes before entry/new baseline capture, never writes another buffer's options, and removes proofs on entry/wipe/window close. All15 matrix cases and14 mapped files400 cases pass, lint754 clean and no survivors. Logs /tmp/parley332-band-roundtrip-red.log, /tmp/parley332-band-roundtrip-green2.log and /tmp/parley332-band-roundtrip-mapped.log. New full suite and ordinary close remain pending, old stage held.
+
 ## Revisions
 
 - 2026-10-15 — record the already-approved persistent-feedback acceptance explicitly in Done when. Separate implementation verification from post-close staging/live/landing so the checklist records observed work without claiming future acceptance. The required suite is still pending; no close waiver or live acceptance is implied.

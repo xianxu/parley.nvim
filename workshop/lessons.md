@@ -2,6 +2,8 @@
 
 ## 2026-10-15 (#332 — document admission and lifetime)
 
+- Window-local options have per-buffer cached values. Test A→B→A with distinct originals: restoring at BufWinLeave alone can be too late for Neovim’s cache. Keep the original/installed proof per live pair until entry/wipe/close, consume before recapturing a baseline, and never restore into a different buffer.
+
 - Sharing labels does not share rendering. Winbar and StatusLine mapping must be installed and restored together, and equal strings cannot establish which owner may clear them. Compare real state snapshots across both file kinds and exercise older identical owners, live overlays and window-buffer handoff.
 
 - Keep a resource’s plan, runtime and atlas lifetime identical: closing a descriptor does not delete its lease pathname. If permanent bounded allocation replaces planned GC, append the Revision and correct the active design claim.

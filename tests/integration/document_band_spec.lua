@@ -317,4 +317,61 @@ describe("shared document bands", function()
         assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(first))
     end)
 
+    for _, mode in ipairs({ "native :buffer", "noncurrent nvim_win_set_buf" }) do
+        it("restores distinct A and B baselines through an A→B→A roundtrip with " .. mode, function()
+            local a, b = open("roundtrip-a"), open("roundtrip-b")
+            local target = a.win
+            local function switch(buf)
+                if mode == "native :buffer" then
+                    vim.api.nvim_set_current_win(target)
+                    vim.cmd("buffer " .. buf)
+                else
+                    vim.api.nvim_set_current_win(b.win)
+                    assert.is_true(target ~= vim.api.nvim_get_current_win())
+                    vim.api.nvim_win_set_buf(target, buf)
+                end
+            end
+            local original_a = { winbar = "original A", winhighlight = "StatusLine:Search" }
+            local original_b = { winbar = "original B", winhighlight = "StatusLine:IncSearch" }
+            vim.wo[target].winbar, vim.wo[target].winhighlight = original_a.winbar, original_a.winhighlight
+            local owner_a, owner_b = renderer(a), renderer(b)
+            owner_a.render(free)
+            switch(b.buf)
+            vim.wo[target].winbar, vim.wo[target].winhighlight = original_b.winbar, original_b.winhighlight
+            owner_b.render(free)
+            switch(a.buf)
+            owner_a.render(free)
+            owner_a.clear()
+            assert.same(original_a, observe(a), "A must recover its own options after returning from B")
+            switch(b.buf)
+            owner_b.render(free)
+            owner_b.clear()
+            assert.same(original_b, observe(a), "B must recover its own options after returning from A")
+        end)
+    end
+
+    it("clearing a hidden old owner cannot restore its options into B or disturb another A window", function()
+        local a, b = open("hidden-a"), open("hidden-b")
+        local target = a.win
+        vim.api.nvim_set_current_win(target)
+        vim.wo[target].winbar, vim.wo[target].winhighlight = "original A", "StatusLine:Search"
+        local hidden = renderer(a)
+        hidden.render(free)
+        vim.cmd("vsplit")
+        local other_a = { buf = a.buf, win = vim.api.nvim_get_current_win() }
+        local visible = renderer(a)
+        visible.render(free)
+        vim.api.nvim_win_set_buf(target, b.buf)
+        vim.wo[target].winbar, vim.wo[target].winhighlight = "original B", "StatusLine:IncSearch"
+        local owner_b = renderer(b)
+        owner_b.render(free)
+        hidden.clear()
+        expect_view(a, free.label, free.hl)
+        expect_view(other_a, free.label, free.hl)
+        owner_b.clear()
+        assert.same({ winbar = "original B", winhighlight = "StatusLine:IncSearch" }, observe(a))
+        expect_view(other_a, free.label, free.hl)
+        visible.clear()
+    end)
+
 end)
