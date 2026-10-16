@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "122f9c85", done: "3807f559"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Unify buffer_edit refusal handling across chat command call sites
@@ -125,6 +125,10 @@ Measured, 2026-10-16 (scratch probe, `tests/helpers/respond_fixture` driving a r
 
 ## Log
 
+
+
+- 2026-10-16: closed — Full suite green on 517b3bb2 (sdlc-local/suite). Round-2 fixes: BR-1 the editor-error passthrough pinned by a real oracle (a non-modifiable buffer gives status error; the warning carries Neovim text; mutation of the passthrough fails it). BR-5 ChatPrune pcalls the child write (writefile raises E482) and rolls back on a raise or -1; the test raises E482 as Neovim does; mutation (no pcall) fails it. BR-6 Done-when bullets rewritten to the built policy. Round-1 and earlier evidence holds: one policy via edit_user_lines and report_refusal across all keystroke edit sites, the arch spec over the whole direct-caller class, partial-state reorders tested under a real capacity refusal.; review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 221 added lines in code files (limit 100); an earlier round of this close already ran the full review
 ### 2026-09-16
 
 Filed from #263's boundary review (`workshop/plans/000263-quick-key-insert-chat-prefix-close-review.md`,

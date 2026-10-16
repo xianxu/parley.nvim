@@ -184,6 +184,97 @@ rounds:
       recipe: milestone-review
       isolation: checkout
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: d39ebac2-dec6-4840-9fe8-3986378adb5f
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000265"
+            recipe: milestone-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/96b473e061eb7252
+            reviewed_head: 517b3bb2b254a4c0eaf9ae600aad24b14f37bc04
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T11:58:00.544436Z"
+          phase: finished
+          pid: 56880
+          started_at: "2026-10-16T11:58:00.692657Z"
+          finished_at: "2026-10-16T12:04:30.377151Z"
+          session_id: 424116a9-1b99-43da-baae-1da01510a450
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 517b3bb2b254a4c0eaf9ae600aad24b14f37bc04
+        tracker_head: 263399187169f3beb975a3612daf13690ae57be0
+        branch_point: 99d396d5510868bf63e983b28d43c27b931492f9
+        since: "2026-10-16T04:02:56-07:00"
+        until: "2026-10-16T04:47:04-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T04:02:56-07:00"
+              end: "2026-10-16T04:47:04-07:00"
+              began: "2026-10-16T04:02:56-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: b39e05d16b76383a9ec81f343eb546d9f9784df6b0f718c190a0f60097f7cbe0
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 8035040
+              windows:
+                - start: "2026-10-16T04:02:56-07:00"
+                  end: "2026-10-16T04:47:04-07:00"
+        cuts:
+            - dispatched: "2026-10-16T04:24:28-07:00"
+              finalized: "2026-10-16T04:29:20-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T04:41:57-07:00"
+              finalized: "2026-10-16T04:46:01-07:00"
+              finalizing: false
+      "n": 3
+      timestamp: "2026-10-16T05:04:34-07:00"
+      dispatched: "2026-10-16T04:58:00-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: _replace_user_lines returns result.error and report_refusal carries it as detail. The real oracle is a non-modifiable buffer (user_buffer_edit_spec.lua:77). Dropping result.error turns that spec red (verified).
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: A refused header restore after a failed rename is now reported (init.lua:3349-3356). ChatPrune rolls the parent back on a raised or returned write failure, and this is tested.
+          round: 3
+        - id: BR-5
+          disposition: addressed
+          note: pcall(vim.fn.writefile) treats a raise and a -1 return as one failure. The test raises E482, which matches a real headless probe. Removing the pcall turns the ChatPrune rollback spec red (verified).
+          round: 3
+        - id: BR-6
+          disposition: addressed
+          note: 'Done-when bullets 1 and 3 are rewritten in place: the hand-capture commands are listed, the list of raising sites is stated empty, and the capacity helper replaces the live generation, with Revisions recording why.'
+          round: 3
+      findings:
+        - kind: defect
+          id: BR-7
+          severity: Minor
+          title: ChatPrune's child-write failure warning drops the writefile error text
+          detail: 'This is the 2nd finding in family refusal-drops-cause. The rule: every failure report carries the underlying cause (editor error or IO error) as detail. At init.lua:4550-4555, wresult (e.g. Vim:E482 no such file or directory) is discarded and the user sees only "could not write <file>". Fix: append tostring(wresult) when wrote is false.'
+          family: refusal-drops-cause
+          round: 3
+      recipe: milestone-review
+      isolation: checkout
+      reviewed: 517b3bb2b254a4c0eaf9ae600aad24b14f37bc04
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#265 (boundary-review)
@@ -220,9 +311,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-6** [Important] `done-when-tracks-revisions` (kind: defect) Done-when bullets 1 and 3 no longer describe what was built after the Revisions entry
   Bullet 3 still asks for a helper that puts a buffer under a live generation; the Revisions entry measured that as impossible and replaced it with the capacity helper. Bullet 1 covers only replace_user_lines refusals, but close round 1 also brought the hand-capture keystroke commands under the policy. Rewrite both bullets in place and state the empty list of sites that deliberately raise.
 
+## Round 3 — 2026-10-16T05:04:34-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — _replace_user_lines returns result.error and report_refusal carries it as detail. The real oracle is a non-modifiable buffer (user_buffer_edit_spec.lua:77). Dropping result.error turns that spec red (verified).
+- BR-4 — addressed — A refused header restore after a failed rename is now reported (init.lua:3349-3356). ChatPrune rolls the parent back on a raised or returned write failure, and this is tested.
+- BR-5 — addressed — pcall(vim.fn.writefile) treats a raise and a -1 return as one failure. The test raises E482, which matches a real headless probe. Removing the pcall turns the ChatPrune rollback spec red (verified).
+- BR-6 — addressed — Done-when bullets 1 and 3 are rewritten in place: the hand-capture commands are listed, the list of raising sites is stated empty, and the capacity helper replaces the live generation, with Revisions recording why.
+
+### Raised
+
+- **BR-7** [Minor] `refusal-drops-cause` (kind: defect) ChatPrune's child-write failure warning drops the writefile error text
+  This is the 2nd finding in family refusal-drops-cause. The rule: every failure report carries the underlying cause (editor error or IO error) as detail. At init.lua:4550-4555, wresult (e.g. Vim:E482 no such file or directory) is discarded and the user sees only "could not write <file>". Fix: append tostring(wresult) when wrote is false.
+
 ## Open findings
 
-- **BR-1** [Important] `refusal-drops-cause` (kind: defect) _replace_user_lines drops result.error, so an editor error is reported as "unexpected (error)" with no details anywhere
-- **BR-4** [Minor] `partial-state-on-refusal` (kind: defect) Slug rename header restore and ChatPrune write-failure ordering leave edge-case partial state
-- **BR-5** [Important] `partial-state-on-refusal` (kind: defect) ChatPrune's write-failure test fakes writefile returning -1, which the real function never does, so the broken production path passes
-- **BR-6** [Important] `done-when-tracks-revisions` (kind: defect) Done-when bullets 1 and 3 no longer describe what was built after the Revisions entry
+- **BR-7** [Minor] `refusal-drops-cause` (kind: defect) ChatPrune's child-write failure warning drops the writefile error text

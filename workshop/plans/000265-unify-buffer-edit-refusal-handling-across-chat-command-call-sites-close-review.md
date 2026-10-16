@@ -251,3 +251,104 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"4ec49ada-2203-4ed2-8bcd-88a5cee637da","repository":"github.com/xianxu/parley.nvim","issue_id":"000265","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/4524b214f87b624c","reviewed_head":"b7bcc8ee649f2002e7543c76bc4e09cf3dfe5448","slot":"parley.nvim:4","requested_at":"2026-10-16T11:41:57.60677Z"},"phase":"finished","pid":32131,"started_at":"2026-10-16T11:41:57.79695Z","finished_at":"2026-10-16T11:46:00.518111Z","session_id":"acf3963f-32b8-483d-ae22-671db538f6ad","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T05:04:33-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 265 — Unify buffer_edit refusal handling across chat command call sites |
+| repo | parley.nvim |
+| issue file | workshop/issues/000265-unify-buffer-edit-refusal-handling-across-chat-command-call-sites.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 99d396d5510868bf63e983b28d43c27b931492f9..517b3bb2b254a4c0eaf9ae600aad24b14f37bc04 |
+| command | sdlc close --issue 265 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T05:04:33-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Running the touched specs at the pinned head.
+
+Now reverting each claimed fix to confirm its test goes red.
+
+Both regressions go red. Next I'm checking that real `writefile` raises, then looking at BR-4 and BR-6.
+
+Fixes verified by mutation. Running the full suite once for regressions.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All four open findings from round 2 are resolved, and two of the fixes were checked by reverting them. Putting back the old `_replace_user_lines` return (without `result.error`) turns `tests/unit/user_buffer_edit_spec.lua` red with "the editor's own text is missing". Putting back the unprotected `writefile` turns "ChatPrune puts the exchanges back…" red. A headless probe confirmed that the real `vim.fn.writefile` raises `Vim:E482` for a missing directory, so the new fake now fails the way Neovim does. All 10 touched or related specs pass at head. The full suite has four failing specs (`scratch_placement`, `starter_project`, `starter_config`, `zero_config`), and the same four fail at the base commit `99d396d5`, so they come from this review environment, not from this diff. Nothing blocks SHIP. The one new finding is Minor.
+
+1. **Strengths**
+   - `buffer_edit.edit_user_lines` and `report_refusal` (`lua/parley/buffer_edit.lua:68-104`) are a small, stable surface. There is one non-raising entry point and one place that words a refusal, and the raw replace is private.
+   - The BR-1 test now uses a real failure, a buffer that isn't modifiable, instead of a stub. That stub was what let the passthrough be deleted while every test stayed green.
+   - The arch spec `tests/arch/user_edit_policy_spec.lua` enforces the policy as a whole class:
+     - It lists every file that calls capture/apply directly, with a reason, and fails on any file that's missing from the list or no longer calls them.
+     - It rejects hand-worded refusals in the keystroke files, and checks itself first ("the guard is blind").
+     - It fails if fewer than 17 policy sites are found, so a broken scan can't pass as clean.
+   - The edit-first commands are ordered so a refusal changes nothing: the slug rename (`init.lua:3329-3357`), ChatPrune, and ExchangeCut. Each has a test that a mutation turns red.
+   - `workshop/lessons.md` turns the round-2 mistakes into rules that carry over to other work: fakes must fail the way the real dependency does, and a passthrough needs a real failure to test against.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings**
+   - `init.lua:4550-4555`: when ChatPrune can't write the child file, it reports "could not write <file>" but drops the error text from the `pcall` (`wresult`, e.g. E482 "no such file or directory"). This is the 2nd finding in family `refusal-drops-cause`. The rule that covers both: any failure report carries the underlying cause text as its detail, whether the failure is an editor refusal or an IO error. The fix is to append `wresult` when `wrote` is false.
+   - If the ChatPrune rollback edit is itself refused, the user gets two warnings: one from `edit_user_lines` and one from ChatPrune. This only happens when a failed write is followed by a refused restore. Not raised separately.
+
+5. **Test coverage notes**
+   - The specs that use the capacity helper test against the document's real 64-slot guard, not a double.
+   - The `move_chat_tree` reference rewrite still has no test, because it is unreachable (tracked as #350). That is disclosed in the Log.
+   - The four suite failures happen at base and at head alike. Separately, every run of the suite writes a blank chat file into `workshop/parley/` in the repo tree, and that also happens at base. It's outside this issue, but some spec can write into the real tree, which is an ARCH-SECURE concern for a future issue.
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass.** Refusals are worded in one place (`report_refusal` → `refusal.edit`).
+   - **ARCH-PURE: pass.** The wording lives in `refusal.lua` as pure data plus a function. The commands stay thin.
+   - **ARCH-PURPOSE: pass.** All 17 sites plus the hand-capture commands are under the policy, and the list of sites that deliberately raise is empty, as stated.
+   - **ARCH-MOCK: pass.** The fixed `writefile` fake now fails the way Neovim does (verified by the probe), and both refusal oracles are real.
+   - **ARCH-CONSTRAINTS: N/A.** The changes are on the keystroke path but only reorder edits. No new cost.
+   - **ARCH-SECURE: pass for this diff.** The stray file from the suite is a separate, pre-existing issue (see section 5).
+   - **ARCH-ORDER: pass.** Every edit-first command now commits the buffer edit before its IO and rolls back on either a raise or an error return.
+   - **ARCH-FUNERAL: pass.** Nothing durable is created. ChatPrune never leaves an orphan child file.
+
+7. **Plan revision recommendations:** none. Done-when now matches the build, and Revisions records the change from the live-generation oracle to the capacity helper.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      _replace_user_lines returns result.error and report_refusal carries it as detail. The real oracle is a non-modifiable buffer (user_buffer_edit_spec.lua:77). Dropping result.error turns that spec red (verified).
+  - id: BR-4
+    disposition: addressed
+    note: |
+      A refused header restore after a failed rename is now reported (init.lua:3349-3356). ChatPrune rolls the parent back on a raised or returned write failure, and this is tested.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      pcall(vim.fn.writefile) treats a raise and a -1 return as one failure. The test raises E482, which matches a real headless probe. Removing the pcall turns the ChatPrune rollback spec red (verified).
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Done-when bullets 1 and 3 are rewritten in place: the hand-capture commands are listed, the list of raising sites is stated empty, and the capacity helper replaces the live generation, with Revisions recording why.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: refusal-drops-cause
+    title: |
+      ChatPrune's child-write failure warning drops the writefile error text
+    detail: |
+      This is the 2nd finding in family refusal-drops-cause. The rule: every failure report carries the underlying cause (editor error or IO error) as detail. At init.lua:4550-4555, wresult (e.g. Vim:E482 no such file or directory) is discarded and the user sees only "could not write <file>". Fix: append tostring(wresult) when wrote is false.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"d39ebac2-dec6-4840-9fe8-3986378adb5f","repository":"github.com/xianxu/parley.nvim","issue_id":"000265","recipe":"milestone-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/96b473e061eb7252","reviewed_head":"517b3bb2b254a4c0eaf9ae600aad24b14f37bc04","slot":"parley.nvim:4","requested_at":"2026-10-16T11:58:00.544436Z"},"phase":"finished","pid":56880,"started_at":"2026-10-16T11:58:00.692657Z","finished_at":"2026-10-16T12:04:30.377151Z","session_id":"424116a9-1b99-43da-baae-1da01510a450","outcome":"returned"}] -->
