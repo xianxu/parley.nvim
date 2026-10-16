@@ -161,7 +161,7 @@ Review is implemented as a **skill** in the unified skill system (see the [skill
 - **System prompt**: `lua/parley/skills/review/SKILL.md`
 - **Driver**: `lua/parley/skill_invoke.lua` — one tool-use exchange on the existing dispatcher, shared with other skills
 - **Rendering**: `lua/parley/skill_render.lua` — diagnostics + edit highlights
-- **Shim**: `lua/parley/review.lua` — backward-compatible re-exports for existing callers
+- **No shim**: callers require `parley.skills.review` directly (the `parley.review` re-export shim was removed in #236)
 - **Headless**: Direct API call, no chat buffer, no exchange model
 - **Stateless**: Each submit sends full document; markers carry conversation history
 - **Tool**: `propose_edits` tool with `{old_string, new_string, explain}` triples (forced via `tool_choice`)
@@ -302,7 +302,6 @@ review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- send 
 - `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
 - `lua/parley/skill_render.lua` — diagnostics + edit highlights
 - `lua/parley/tools/builtin/propose_edits.lua` — batch edit-apply (inline `.parley-backup`)
-- `lua/parley/review.lua` — backward-compatible shim
 - `lua/parley/highlighter.lua` — `ParleyReviewUser`/`ParleyReviewAgent` groups
 - `lua/parley/config.lua` — default keybindings and config
 - `tests/unit/review_spec.lua` — unit tests for the marker parser

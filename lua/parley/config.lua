@@ -690,14 +690,6 @@ local config = {
 		log_raw = false,
 	},
 
-	-- TODO: what are the following are needed?
-	-- command config and templates below are used by commands like GpRewrite, GpEnew, etc.
-	-- command prompt prefix for asking user for input (supports {{agent}} template variable)
-	command_prompt_prefix_template = "🤖 {{agent}} ~ ",
-	-- auto select command response (easier chaining of commands)
-	-- if false it also frees up the buffer cursor for further editing elsewhere
-	command_auto_select_response = true,
-
 	-- example hook functions (see Extend functionality section in the README)
 	hooks = {
 		-- ParleyInspectPlugin provides a detailed inspection of the plugin state

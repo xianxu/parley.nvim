@@ -103,13 +103,6 @@ M.project_root = function()
 	return M.helpers.find_git_root(vim.fn.getcwd())
 end
 
--- Discovery registry (#116): the repo's noun-vocabulary (what file types exist
--- and how to find their instances). Pure given mode context; current() reads it
--- from live config (repo_root + super_repo_members) via the injected M ref.
-local discovery = require("parley.discovery")
-discovery.setup(M)
-M.discovery = discovery
-
 -- Skill registry (#128): declarative skill manifests unioned from providers
 -- (plugin-disk ∪ user-disk ∪ repo/virtual seams). current() discovers the live
 -- stack; the per-turn assembly + read_skill tool (M2) consume it.
@@ -5405,7 +5398,7 @@ M.cmd.NextSystemPrompt = function()
 end
 
 ---@param name string | nil
----@return table # { cmd_prefix, name, model, system_prompt, provider }
+---@return table # { name, model, system_prompt, provider, ... }
 -- Get basic agent information from agent configuration
 M.get_agent = function(name)
 	name = name or M._state.agent
@@ -5419,8 +5412,6 @@ M.get_agent = function(name)
 		M.logger.warning("Agent " .. tostring(name) .. " not found, using " .. tostring(fallback))
 		name = fallback
 	end
-	local template = M.config.command_prompt_prefix_template
-	local cmd_prefix = M.render.template(template, { ["{{agent}}"] = name })
 	local agent_rec = M.agents[name]
 	if agent_rec == nil then
 		-- No agents at all. `error` here reaches the user as a stack trace over
@@ -5435,7 +5426,6 @@ M.get_agent = function(name)
 	local provider = agent_rec.provider
 	-- M.logger.debug("getting agent: " .. name)
 	return {
-		cmd_prefix = cmd_prefix,
 		name = name,
 		model = model,
 		system_prompt = system_prompt,

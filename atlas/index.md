@@ -94,7 +94,6 @@ its feature pages, and the three tutorials without reading personal files.
 - [Tree Export](export/tree_export.md): Export linked conversations as a browsable tree.
 
 ## 10. Discovery Registry
-- [Discovery Registry](discovery/registry.md): Repository vocabulary library and its current integration limits.
 
 ## 11. Traceability
 - [Traceability Map](traceability.yaml)

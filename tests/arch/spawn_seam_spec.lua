@@ -64,7 +64,6 @@ local OUTSIDE = {
     ["lua/parley/render_buffer.lua"] = { sync = 1 },
     ["lua/parley/log_emit.lua"] = { sync = 1 },
     ["lua/parley/memory_prefs.lua"] = { sync = 1 },
-    ["lua/parley/discovery/local_types.lua"] = { sync = 1 },
     ["lua/parley/tools/builtin/ls.lua"] = { sync = 1 },
     ["lua/parley/tools/builtin/find.lua"] = { sync = 1 },
     ["lua/parley/tools/builtin/grep.lua"] = { sync = 1 },
