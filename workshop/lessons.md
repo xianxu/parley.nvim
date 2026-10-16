@@ -582,3 +582,11 @@ oracle, and the mutation that would make the test fail.
 ## #226: a dedup no-op must agree with the staleness check
 
 - If a duplicate press is swallowed because a result is outstanding, that result must still be allowed to land for the swallowed press. Key the in-flight record on everything the staleness check reads (here, the origin buffer and window), or a press from elsewhere is dropped by both and nothing happens.
+
+## #243: an output-escaping fix sweeps every sink, not the one the issue names
+
+- The issue named the branch div. The close review found the page `<title>` one level up. For an escaping bug, list every place chat text is written into the output format (title, body, attributes, records restored after the escape) before fixing, and route them all through one escape helper.
+
+## #346: wait on the record you read, not on its file existing
+
+- `vim.fn.writefile` creates the file before its bytes land. A wait that ends on `filereadable` and then reads a value can read an empty file. Make the wait predicate the parsed value itself, and return what the predicate read.
