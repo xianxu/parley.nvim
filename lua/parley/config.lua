@@ -621,6 +621,11 @@ local config = {
 		reasoning_prefix = "🧠:",
 		-- text to replace omitted user messages
 		omit_user_text = "Summarize our chat",
+		-- side chats (asides, and chats nested under them) off the path from the
+		-- current chat to the root: "summary" sends each exchange as its 📝: line
+		-- (or, without one, its question alone, truncated); "full" renders them
+		-- like any exchange. Applies whether or not `enable` is on (#352).
+		side_chats = "summary",
 	},
 
 	-- memory preferences: per-tag user preference profiles from chat history

@@ -630,3 +630,16 @@ oracle, and the mutation that would make the test fail.
 - An intermittent spec failure is evidence, not noise. Loop the case (30–40 runs) and print what differs. Then make the trigger deterministic with a fake knob (here, one frame per read) before fixing, so the regression test fails every time on the old code.
 - If the plan says the table is the product, build the table as data first: rows, which providers each applies to, and a pure judge. Hand-written cases that cover the same rows are not the table, and a Core-concepts row naming a pure table must point at a pure file.
 - A test that something arrives "incrementally" depends on the timing of the IO it watches. Pace the writer (a per-write delay knob on the fake) so the reads are really separate. Loop the case before trusting it: an unpaced single-byte writer sometimes coalesced into one read.
+## #233: when a single-file input becomes a sequence, every consumer of the old input must derive from the sequence
+
+- The close review found four consumers still reading the one file after the tree walk became the request's context: remote resolution, the batch leg's filter, the memory window's count and the topic input. Before building, list everything that reads the old input (here `input_parsed` and `exchange_idx`), and move each to the sequence in the same change.
+- A cache shared across files needs one key per file (its resolved path), and a reference is read and written under the key of the file that holds it. A lookup for another file must not create an entry.
+- A main merge that deletes a module can break a branch test that requires it, with no textual conflict. After merging main, grep the branch's new code and tests for `require`s of modules main deleted, before running the suite.
+
+## #352: a new rendering form for an existing message kind reuses its builder
+
+- The close review found the off-path summary form restating the summarized branch's summary message and missing its blank-question guard. When a new path emits a message an existing branch already emits, call one shared helper, and carry over that branch's guards with it.
+
+## #349: deleting a local removes its readers too
+
+- Replacing `find_tree_root_file` deleted the local `root` that delete-tree's prompt still read, and the tests stubbed `confirm` without checking its text. Lint caught it in the suite. After deleting a local, run `make lint`, or grep the function for the name, before the suite; and a test that stubs a prompt asserts what the prompt says.
