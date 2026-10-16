@@ -1,6 +1,6 @@
 ---
 id: 000350
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -13,8 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.06
 tracker:
     version: 1
+    completion:
+        token: close-65a0b127d2bf
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 0ea8a86dadf6adbbc84a21d8c285677a449aa751
+        evidence_commit: a159c261140d6927e5f02de626eef56ef23dd2d1
 ---
 
 # move_chat_tree's 🌿 rewrite pass looks unreachable since resolve_chat_path resolves by basename
