@@ -1,12 +1,20 @@
 ---
 id: 000340
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: 'faa018dd8454bff3433c4d101a4cafcddfeff381' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'af21ff4c8fd71344670571388dc762da8a45dea4' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T23:44:45-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Credential-health persistent-404 test times out in the required suite
@@ -27,7 +35,24 @@ Investigate tests/integration/cliproxy_lifecycle_spec.lua, credential_health cas
 
 ## Plan
 
-- [ ]
+Measured 2026-10-16. The scratch harness wraps cliproxy's stages and runs 8 copies in parallel, like the suite's 8 jobs; the CPU burners did NOT reproduce it.
+The slow stage is the "is the old proxy down?" detection after `stop()`. Each slow case shows TWO
+health probes of about 2,020 ms, one in `wait_port_released` and one in `ensure_running`'s
+reuse check. Each ends in curl exit 28 with `time_connect=0`, and a raw libuv connect from the same
+nvim is also still pending 4 s later. The SYN to the just-closed port gets neither a SYN-ACK nor a
+reset, although `kill(pid, 0)` already reports the old pid gone. So "down" is learned only from
+`--max-time`, twice: about 4 s of an 8 s await before the respawn even starts. Plain Python
+(burst connects, killed listeners, the real fake killed 8-way, curl as the client) is always
+refused within 30 ms, so the kernel-level reason is not pinned (`netstat` is denied in the
+sandbox). The fix does not depend on it.
+
+Fix: wait on actual state, the exit of the processes `stop()` signalled, never a longer deadline.
+
+- [ ] `M.stop()` also returns the pids it signalled (the count stays the first return).
+- [ ] `wait_port_released` polls those pids' liveness (`uv.kill(pid, 0)`) and calls released the moment all have exited, with no port probe. At `PORT_RELEASE_MS` it probes once, so a proxy still answering is reported as before (#237 BR-8). With no pids it falls back to today's probe loop.
+- [ ] After a release confirmed by exit, `restart_managed` spawns directly through the extracted down-branch of `ensure_running` (`start_managed`), skipping the reuse probe that can stall the same way (ARCH-DRY: one spawn path).
+- [ ] Regression test: wrap `health_probe` to answer `down` only after a 3 s stall, emulating the dropped SYN. Assert that a restart of an exited proxy makes NO probe between the kill and the spawn, and that both credential_health cases pass under the stall.
+- [ ] The REPAIR BUDGET table is still an upper bound: the fallback path is unchanged.
 
 ## Log
 
