@@ -5,6 +5,18 @@ local M = {}
 
 local float_picker = require("parley.float_picker")
 
+--- The specs the operator wrote, leaving out verbatim shipped defaults: those
+--- name model lines a given account may not have (`gpt-6`, `fable`), and a
+--- warning on every refresh for parley's own default is noise. What diagnose
+--- exists for is a typo the operator made (#230).
+---@param providers string[]|nil
+---@return string[]
+function M._operator_specs(providers)
+    local shipped = {}
+    for _, spec in ipairs(require("parley.config").cliproxy.live_models.providers or {}) do shipped[spec] = true end
+    return vim.tbl_filter(function(spec) return not shipped[spec] end, providers or {})
+end
+
 --- Which configured providers advertise no models at all.
 ---
 --- The catalog IS the signal: cliproxy registers a channel's models only once
@@ -21,8 +33,9 @@ function M._providers_without_models(models, providers)
     local cc = require("parley.cliproxy_config")
     local out = {}
     for _, spec in ipairs(providers or {}) do
-        local provider = cat.parse_provider_spec(spec).provider
-        local owner = cc.provider_owned_by(provider)
+        local parsed = cat.parse_provider_spec(spec) -- malformed: diagnose reports it
+        local provider = parsed and parsed.provider
+        local owner = provider and cc.provider_owned_by(provider)
         -- Only a name parley can actually log into earns a login row. A typo
         -- ("claud") or an OWNER name ("anthropic") resolves to no channel, and
         -- offering `:ParleyProxy login claud` is an actionable-looking dead end.
@@ -190,7 +203,7 @@ function M._view_for(models, cfg, opts)
     -- catalog is precisely when every configured provider is logged out, which
     -- is the case those rows exist to report.
     local live = opts.all and models
-        or cat.curate(models, { providers = providers, per_provider = (cfg or {}).per_provider })
+        or cat.curate(models, { providers = providers })
 
     return {
         live = unregistered(live),
@@ -363,6 +376,14 @@ function M.agent_picker(plugin, opts)
             -- leave the picker showing a stale list instead.
             if models and handle and not handle.is_closed() then
                 repaint()
+            end
+            -- Once per refresh, never per repaint: a malformed spec or a term
+            -- matching nothing would otherwise read as "the provider lacks it" (#230).
+            if models then
+                local configured = (((plugin.config or {}).cliproxy or {}).live_models or {}).providers
+                for _, message in ipairs(require("parley.cliproxy_catalog").diagnose(models, M._operator_specs(configured))) do
+                    plugin.logger.warning(message)
+                end
             end
         end)
     end

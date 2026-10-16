@@ -250,6 +250,8 @@ alias chat finder/new chat; new question keeps Ctrl+g n without Alt+n to avoid
 a buffer-local collision. Both chat memory
 summaries and preference generation are disabled in this profile.
 `starter.start()` applies the policy, seeds missing bundled tutorials and reopens the welcome chat, and
+always does both in the profile's chat directory (or the `PARLEY_CHAT_DIR` override), never in a
+project mode's primary root: project mode keeps the profile as its global root (#338). The starter
 uses `:ParleyProxy connect` for account selection and login. The proxy command
 is available in ordinary plugin setup as well as the starter.
 `starter.connect()` delegates to the shared onboarding flow.

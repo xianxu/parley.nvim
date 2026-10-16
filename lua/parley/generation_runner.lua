@@ -418,7 +418,17 @@ local function written(s,effect,result,bytes)
 end
 local function write(s,effect)
     local value=s.blobs[effect.blob_ref]
-    if not value then return false end
+    if not value then
+        -- An inflight blob is released only after its receipt, so this is a broken
+        -- invariant. Settle the write uncertain instead of leaving it inflight with
+        -- no receipt, which stalled the generation without an outcome (#341).
+        if effect.type=='write' then
+            dispatch(s,{type='write_result',write=effect.id,attempted_bytes=effect.bytes,committed_bytes=0,status='uncertain'})
+        else
+            effect.done({status='uncertain',accepted_bytes=effect.accepted})
+        end
+        return false
+    end
     local generation=G.snapshot(s.machine)
     local grant=not s.detached and D.snapshot(s.doc).grants[effect.grant]
     if grant then effect.entity=grant.entity end

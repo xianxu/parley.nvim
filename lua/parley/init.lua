@@ -561,6 +561,15 @@ M.setup = function(opts)
 	-- reset M.config
 	M.config = vim.deepcopy(config)
 
+	-- #230 removed the hidden per-provider cap; `!N` on a search replaces it.
+	-- A leftover option would otherwise be ignored without a word.
+	local live = type(opts.cliproxy) == "table" and opts.cliproxy.live_models
+	if type(live) == "table" and live.per_provider ~= nil and not M._per_provider_noticed then
+		M._per_provider_noticed = true
+		M.logger.warning("cliproxy.live_models.per_provider was removed: searches show every match;"
+			.. " write !N on a term or bare provider to cap one (e.g. \"codex:gpt-5!3\")")
+	end
+
 	-- #214: record which shortcut knobs the USER set explicitly, so
 	-- `default_keymaps = false` can suppress parley's DEFAULT claims without
 	-- suppressing the keys you chose yourself. Without this the switch is a

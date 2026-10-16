@@ -158,14 +158,24 @@ reads that catalog instead of carrying model names in Lua.
   connection-refused is a no-op that leaves the cache in place. Opening a picker
   must not start a daemon — that is the dormancy contract from #131, pinned by a
   test that points at a free port and asserts it stays free.
-- **`cliproxy.live_models`** — `{ providers = { "claude:opus,sonnet,fable", … },
-  per_provider = 3 }`. An entry is `"<provider>[:<term>,…]"`; terms are
-  case-insensitive substrings matched against the id **and** the display name
-  (required, not cosmetic: antigravity's ids are unfilterable otherwise). Terms
-  narrow, then the newest of each model line is kept, with up to `per_provider`
-  results per search term (the option retains its legacy name). Term order is
-  display order; overlapping searches do not repeat a model line. Equal-date GPT
-  rows prefer newer numeric generations/versions before alphabetical variants.
+- **`cliproxy.live_models`** — `{ providers = { "claude:opus,sonnet,fable",
+  "codex:gpt-6,gpt-5!3", "gemini!3" } }`. An entry is `"<provider>[!N]"` or
+  `"<provider>:<term>[!N],…"`; terms are case-insensitive substrings matched
+  against the id **and** the display name (required, not cosmetic: antigravity's
+  ids are unfilterable otherwise). Terms narrow, then the newest of each model
+  line is kept. **There is no hidden limit (#230):** a search shows every
+  matching line unless it carries `!N`, which caps that term, or a bare
+  provider, which is the search with the empty term. A malformed count
+  (`gpt-5!`, `!x`, `!0`) and a provider cap beside terms (`codex!2:gpt-5`) make
+  their spec contribute nothing, never "no limit".
+  Term order is display order; a model line matched by two searches renders
+  once, under the first. Equal-date GPT rows prefer newer numeric
+  generations/versions before alphabetical variants. When a catalog fetch
+  resolves, the picker logs `cliproxy_catalog.diagnose`: malformed specs, and
+  terms that match none of a provider's models, for the specs the operator
+  wrote. Verbatim shipped defaults are left out: they name lines a given account
+  may lack. It logs once per refresh, and `curate` stays pure. The removed `per_provider` option draws one setup notice
+  if a config still sets it.
 - **No `oauth-model-alias` is required.** cliproxyapi exposes an OAuth
   channel's models automatically once that channel has a credential — verified
   against a live proxy: models absent from any alias block answer normally, and a

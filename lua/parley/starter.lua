@@ -86,7 +86,9 @@ local function migrate_welcome(parley, chat_dir)
     assert(ok, why)
 end
 
-local function welcome(parley, roots)
+-- Tutorials belong to the profile's chat directory, which project mode demotes
+-- to the global root; seeding the primary root wrote them into a project (#338).
+local function welcome(parley, roots, chat_dir)
     local lock = roots.state .. '/welcome-initializer'
     local deadline = uv.hrtime() + 300 * 1e9
     while not uv.fs_mkdir(lock, 448) do
@@ -118,7 +120,7 @@ local function welcome(parley, roots)
         end
     end
     local leave = vim.api.nvim_create_autocmd('VimLeavePre', { once = true, callback = cleanup })
-    local chat_dir = parley.config.chat_dir
+    local primary = parley.config.chat_dir
     local ok, result = xpcall(function()
         vim.fn.writefile({ tostring(uv.os_getpid()) }, lock .. '/owner')
         migrate_welcome(parley, chat_dir)
@@ -150,7 +152,7 @@ local function welcome(parley, roots)
         end
         return parley.open_buf(chat_dir .. '/welcome.md')
     end, debug.traceback)
-    parley.config.chat_dir = chat_dir
+    parley.config.chat_dir = primary
     cleanup()
     vim.api.nvim_del_autocmd(leave)
     assert(ok, result)
@@ -178,7 +180,7 @@ function M.start()
         vim.wo.conceallevel = 0
     end })
     if vim.fn.argc() == 0 then
-        welcome(parley, roots)
+        welcome(parley, roots, options.chat_dir)
         vim.wo.conceallevel = 0
         require('parley.starter_onboarding').start(parley)
     end

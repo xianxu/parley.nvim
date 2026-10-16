@@ -148,6 +148,18 @@ describe('production response provider adapter',function()
         assert.same({{call_id='call-a',arguments={id='call-a',name='read',input={path='file'}}}},s.calls)
         assert.same({'result','round','resolved'},s.events)
     end)
+    it('reports failure when the host refuses output, so the request never resolves unended (#341)',function()
+        local cb,s=callbacks();local output=cb.output
+        cb.output=function(bytes)if s.bytes~='' then s.events[#s.events+1]='refused';return false end;return output(bytes)end
+        local adapter=Provider.new();adapter.request(context(1),cb)
+        local p=processes.processes[4242]
+        p:emit('stdout','data: {"choices":[{"delta":{"content":"kept"}}]}\n\n')
+        p:emit('stdout','data: {"choices":[{"delta":{"content":"refused"}}]}\n\n')
+        status(p,'200');p:finish()
+        assert.is_true(vim.wait(100,function()return s.resolved==1 end,1))
+        assert.same({'output','refused','failed','resolved'},s.events)
+        assert.matches('^provider request failed',s.reason)
+    end)
     it('reports terminal failure after streamed output and still resolves physical cleanup',function()
         local cb,s=callbacks();local adapter=Provider.new();adapter.request(context(1),cb)
         local p=processes.processes[4242];p:emit('stdout','data: {"choices":[{"delta":{"content":"partial"}}]}\n\n')
