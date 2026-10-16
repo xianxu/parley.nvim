@@ -123,7 +123,13 @@ old behaviour moved rather than removed.
 
 ## Move (`:ParleyChatMove`)
 Moves the entire linked tree to another registered chat root and rewrites its
-`🌿:` references. Invoking it on a child first walks to the ancestor root, so
+`🌿:` references. Every file lands flat at `<target>/<basename>`, and most
+references need no rewrite: the resolver finds the moved file by exact name or by
+its timestamp (#224). The rewrite catches the one shape the resolver cannot
+follow (#350): a reference with an explicit directory (absolute, `~`, `../`, or
+`sub/<name>`) to a chat file without a timestamp. That reference would
+otherwise break. A rewrite refused in an open buffer is reported, and the move
+still completes (#265). Invoking it on a child first walks to the ancestor root, so
 parents and siblings move too. Chat Finder Ctrl+x uses this same tree operation.
 Associated asset folders follow their chats. Destinations must already be in
 the configured chat roots; pass a registered directory to `:ParleyChatMove [dir]`

@@ -186,6 +186,83 @@ describe("chat move", function()
         assert.equals(1, vim.fn.isdirectory(assets.folder_in(primary_dir, TS)), "stranded folder must stay put")
     end)
 
+    -- #350: the 🌿 rewrite pass IS reachable, for exactly one shape. Every tree
+    -- file moves flat to target/<basename>, so a reference to it resolves to
+    -- its NEW place whenever the resolver can find it there: an exact candidate,
+    -- or the timestamp glob (#224). It cannot for a reference with an explicit
+    -- directory (absolute, ~ or ../) to a child WITHOUT a timestamp. The
+    -- resolver then falls back to the literal path, the old one, and only the
+    -- rewrite keeps the reference from breaking.
+    it("rewrites an absolute reference to a moved child that has no timestamp", function()
+        local _, root_path = create_chat(TS .. "_abs-root.md")
+        local child_path = primary_dir .. "/notes-child.md" -- no timestamp prefix
+        vim.fn.writefile({ "---", "topic: Child", "file: notes-child.md", "---", "", "💬: Hi" }, child_path)
+        vim.fn.writefile({ "🌿: " .. child_path .. ": child" }, root_path, "a")
+        local root_buf = vim.fn.bufnr(root_path)
+        vim.api.nvim_buf_set_lines(root_buf, 0, -1, false, vim.fn.readfile(root_path))
+        vim.bo[root_buf].modified = false
+
+        local new_root, err = parley.move_chat_tree(root_path, secondary_dir)
+
+        assert.is_nil(err)
+        assert.equals(1, vim.fn.filereadable(secondary_dir .. "/notes-child.md"), "child not moved")
+        local expect = "🌿: notes-child.md: child"
+        local function branch_line(lines)
+            for _, l in ipairs(lines) do if l:sub(1, #"🌿:") == "🌿:" then return l end end
+        end
+        assert.equals(expect, branch_line(vim.api.nvim_buf_get_lines(root_buf, 0, -1, false)),
+            "the open buffer's reference was not rewritten")
+        assert.is_truthy(new_root)
+    end)
+
+    -- #350, the pass's SECOND condition: a relative reference with a
+    -- subdirectory (`sub/<name>`) to a child without a timestamp. The move
+    -- flattens it to target/<name>, so resolving from the new directory finds
+    -- nothing, while resolving from the old root falls back to the old path.
+    it("rewrites a subdirectory reference to a moved child that has no timestamp", function()
+        local _, root_path = create_chat(TS .. "_sub-root.md")
+        vim.fn.mkdir(primary_dir .. "/sub", "p")
+        local child_path = primary_dir .. "/sub/sub-notes.md"
+        vim.fn.writefile({ "---", "topic: Sub child", "file: sub-notes.md", "---", "", "💬: Hi" }, child_path)
+        vim.fn.writefile({ "🌿: sub/sub-notes.md: child" }, root_path, "a")
+        local root_buf = vim.fn.bufnr(root_path)
+        vim.api.nvim_buf_set_lines(root_buf, 0, -1, false, vim.fn.readfile(root_path))
+        vim.bo[root_buf].modified = false
+
+        local _, err = parley.move_chat_tree(root_path, secondary_dir)
+
+        assert.is_nil(err)
+        assert.equals(1, vim.fn.filereadable(secondary_dir .. "/sub-notes.md"), "child not moved (flattened)")
+        local line
+        for _, l in ipairs(vim.api.nvim_buf_get_lines(root_buf, 0, -1, false)) do
+            if l:sub(1, #"🌿:") == "🌿:" then line = l end
+        end
+        assert.equals("🌿: sub-notes.md: child", line)
+    end)
+
+    -- #265 + #350: a reference the pass must rewrite, in an open buffer whose
+    -- user edit is REFUSED (the guard slots held full): the move still
+    -- completes, and the caller hears exactly what was not rewritten.
+    it("reports a refused reference rewrite and still completes the move", function()
+        local _, root_path = create_chat(TS .. "_refused-root.md")
+        local child_path = primary_dir .. "/refused-child.md"
+        vim.fn.writefile({ "---", "topic: Child", "file: refused-child.md", "---", "", "💬: Hi" }, child_path)
+        vim.fn.writefile({ "🌿: " .. child_path .. ": child" }, root_path, "a")
+        local root_buf = vim.fn.bufnr(root_path)
+        vim.api.nvim_buf_set_lines(root_buf, 0, -1, false, vim.fn.readfile(root_path))
+        vim.bo[root_buf].modified = false
+        local held = require("tests.helpers.user_edit_capacity").hold(root_buf)
+
+        local new_root, err = parley.move_chat_tree(root_path, secondary_dir)
+        held.release()
+
+        assert.is_nil(new_root)
+        assert.matches("1 reference%(s%) not rewritten in open buffers", err)
+        assert.matches("capacity", err)
+        assert.equals(1, vim.fn.filereadable(secondary_dir .. "/refused-child.md"), "the move did not complete")
+        assert.equals(1, vim.fn.filereadable(secondary_dir .. "/" .. TS .. "_refused-root.md"), "root not moved")
+    end)
+
     it("deleting a tree removes its assets folders", function()
         local buf = create_chat(TS .. "_del.md")
         seed_assets(primary_dir)
