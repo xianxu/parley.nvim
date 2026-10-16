@@ -63,6 +63,7 @@ Measurement (2026-10-15, :3), red tests on the production machine and runner:
 ## Log
 
 ### 2026-10-15
+- 2026-10-15: closed — Prior evidence stands (red-measured stalls fixed; full suite exit 0 on b8a98818). Advisory (a): receipt validity computed once, same behavior (machine 70/0, sequences 33/0, provider 11/0, lint clean). (b) left as recorded per TL. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 - 2026-10-15: closed — Measured with red tests: runner stayed requesting forever after a refused output; machine rejected a short receipt leaving the write inflight. Fix: response_provider reports provider_failed before stopping the transport (red: output,refused,resolved with no failed; now failed precedes resolved), runner ends terminal provider_failed keeping landed bytes; inflight inconsistent receipt settles uncertain crediting only vouched bytes (machine 70/0); missing blob shown unreachable, branch reports uncertain. Machine resolution-before-completion contract kept (permutation test). Full make -k test exit 0 on b8a98818, lint clean. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 ### 2026-10-15 (:3)
