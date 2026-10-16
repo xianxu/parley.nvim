@@ -1,6 +1,6 @@
 ---
 id: 000243
-status: codecomplete
+status: done
 created: 2026-09-13
 updated: 2026-10-16
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 005efb89b09844672572bcc97ef0600a95303bf7
         evidence_commit: ecf1e0a563a6a3a0ed6ab96a2b360d752800aec3
+        landed_commit: 94d6f66b850eaf46554969bffc2b4eaabb6acf14
 ---
 
 # HTML export: branch topic is inserted unescaped by make_branch_div
