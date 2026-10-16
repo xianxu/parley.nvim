@@ -89,3 +89,12 @@ its --check passes unchanged, proving backward compatibility. Await the landed
 S2 M1 pin before refreshing the snapshot and final recorded full suite/close.
 Couch discovery in a login shell temporarily failed; the same bare command in
 a non-login shell resolves the installed binary normally. No resend needed.
+
+## Revisions
+
+### 2026-10-16 — priority interruption
+
+Hub delivery c322a428-5e9c-4da8-981f-e6cbccada6c2 prioritizes the shared
+cliproxy lifecycle flakes (#363/#364) before this issue. Consumer changes are
+committed and targeted green; preserve this branch while investigating from
+fresh main, then return here for the landed producer export and final gates.
