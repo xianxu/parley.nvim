@@ -746,13 +746,13 @@ local function poll_until_healthy(host, port, secret, pid, callback, on_error)
     tick()
 end
 
+local port_identity -- defined with the process-table reads below; used on a 401
+
 --- Ensure a healthy managed proxy is reachable, then call `callback`. On any
 --- failure call `on_error(msg)` so the dispatch path fails fast (never hangs).
 --- No-op pass-through when the feature isn't opted in.
 ---@param callback fun()
 ---@param on_error fun(msg: string)|nil
-local port_identity -- defined with the process-table reads below; used on a 401
-
 function M.ensure_running(callback, on_error)
     on_error = on_error or function() end
     if not M.is_managed() then
