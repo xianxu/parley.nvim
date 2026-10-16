@@ -1,12 +1,20 @@
 ---
 id: 000234
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-10-16
 estimate_hours:
-card_mirror: '879a7c85617f318358eb0102202b39641e821f35' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'b41dca02e8322b6e60b93823a2b18b778b1707d6' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T06:21:11-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Route the render walk's reasoning transitions through leave_row
@@ -54,10 +62,20 @@ route it through the same helpers or record why its semantics must differ.
 
 ## Plan
 
-- [ ] Export the per-row step (or a painting-friendly split of it) from `highlight_structure`.
-- [ ] Rewrite the render walk's state handling on it; keep painting local.
-- [ ] Parity property test: render-walk state vs `state_before`.
-- [ ] Sweep `chat_parser` (and any other reasoning walker) for the same rules.
+Read 2026-10-16:
+- `lexical.advance` already owns the structural termination of reasoning (💬/🤖/🔒/🌿/📝/🔧/📎 clear `in_reasoning`), plus question, code and tool state.
+- The render walk runs `advance` on a copy but keeps only code and tool from it. It then re-derives question and reasoning by hand: the structural-kind termination, `🧠:[END]` (which clears only `in_reasoning`, the drift the issue names), `🧠:` + lookahead, and the blank terminator.
+- `chat_parser` is a parser, not a state walk. It scopes reasoning to the answer component and accumulates content.
+
+- [ ] `highlight_structure` exports `enter_row` and `leave_row` (the step `derive` already uses).
+- [ ] The render walk keeps ONE state table:
+  - `enter_row` → the state it paints from (and reports through a test seam);
+  - paint decisions read that state plus a post-`advance` copy (code, tool, reasoning after structural termination);
+  - `leave_row` carries the state to the next row.
+  Kept local as render-time inputs, not transition rules: painting, the `🧠:` `explicit` verdict (from the structure's lookahead, or `streaming`), and the streaming overlay.
+- [ ] Parity property test: over random documents (#227's vocabulary), the state the render walk paints each row from equals `build`'s `state_before`.
+- [ ] `chat_parser`: documented as intentionally different (answer-scoped reasoning and content accumulation), with a test pinning the difference: a `🧠:` outside an answer opens no parsed reasoning, but it does dim.
+- [ ] Every existing highlighter spec unchanged and green; doc-block placement scan.
 
 ## Log
 
