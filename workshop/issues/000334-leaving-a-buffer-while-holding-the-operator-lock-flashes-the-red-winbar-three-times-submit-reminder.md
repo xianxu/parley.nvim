@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "7ce01dc5", done: "a33349a6"}
 ---
 
 # Leaving a buffer while holding the operator lock flashes the red winbar three times (submit reminder)
