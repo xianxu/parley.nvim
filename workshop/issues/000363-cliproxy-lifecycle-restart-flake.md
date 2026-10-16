@@ -127,3 +127,19 @@ did not weaken the closed-port regression. The new still-live refusal also
 fails under that mutant; five other cases pass, census clean.
 Log /tmp/parley-363-mutant.log. Tracked production code never changed.
 Recorded suite is queued on pushed code head 09f235c1b9e98e6234518f14e7dfb9ce82c0d894.
+
+### 2026-10-16 — first recorded suite, unrelated catalog flake
+
+Recorded suite on 09f235c1b9e98e6234518f14e7dfb9ce82c0d894 finished all
+files (make -k behavior), exit 2 in 3m21s after 2221s queue wait, lint 757
+clean and final process census clean. The lifecycle file PASSED (73s).
+Only cliproxy_catalog_spec.lua failed: its 401 case at line136 could not
+seed a nonempty warm catalog. This is the empty initial fetch after fake
+readiness tracked by #360, in another case's shared warm-up; not a rejected
+401 write or changed catalog policy. The code-identical focused catalog run
+passed all 22 cases, census clean (/tmp/parley-363-catalog-focused.log).
+
+Retained failed log: .git/sdlc/test-stats/failed/967cf6ec616ace4cd27d8c2c85d07fcd.log
+(SHA256 prefix a78f45c6dd70). Applying the issue-backed flake rule: exactly
+one unchanged full rerun on the same 09f235c1 commit, not the prose-only
+current HEAD. A second unrelated flake blocks for hub guidance.
