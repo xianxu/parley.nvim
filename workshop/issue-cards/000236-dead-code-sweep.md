@@ -1,6 +1,6 @@
 ---
 id: 000236
-status: working
+status: codecomplete
 created: 2026-09-11
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.28
+tracker:
+    version: 1
+    completion:
+        token: close-0f5766f1200f
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 430a6f913e1d4677bc330c907808a81c5274aaa8
+        evidence_commit: 7c3220878699fa4fe5be08197d482aac3e92bf19
 ---
 
 # delete unreachable modules and dead config
