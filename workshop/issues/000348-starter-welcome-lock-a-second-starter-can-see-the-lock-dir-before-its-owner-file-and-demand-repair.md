@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "af7551fb", done: "e9782999"}
 ---
 
 # starter welcome lock: a second starter can see the lock dir before its owner file and demand repair
