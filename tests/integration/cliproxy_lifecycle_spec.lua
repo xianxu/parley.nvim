@@ -480,6 +480,32 @@ describe("cliproxy IO lifecycle", function()
             assert.is_true(got.at < 3000, ("the wait decided at %d ms, past its 2 s deadline + a probe"):format(got.at))
         end)
 
+        -- #345 merge run: under the 8-way suite the real lsof passed its 2 s
+        -- limit, so stop_async listed nobody and signalled nobody. The restart
+        -- must say that, not claim the proxy "was told to stop".
+        it("a restart whose listener read times out says the proxy was not stopped", function()
+            local port = ready_port.free_port()
+            set_endpoint(port)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
+            local leftover = start_fake(port, "healthy")
+            ready_port.wait_listening(port)
+            vim.env.PARLEY_FAKE_LSOF_DELAY_MS = "4000" -- past the 2 s limit
+            vim.env.PARLEY_FAKE_LSOF_PIDS = tostring(leftover)
+            cliproxy._set_process_tools({ lsof = vim.fn.getcwd() .. "/tests/fixtures/fake_lsof" })
+            local outcome
+            cliproxy.restart_managed(function() outcome = { ok = true } end,
+                function(msg) outcome = { ok = false, msg = msg } end)
+            vim.wait(15000, function() return outcome ~= nil end, 20)
+            cliproxy._set_process_tools(nil)
+            vim.env.PARLEY_FAKE_LSOF_DELAY_MS, vim.env.PARLEY_FAKE_LSOF_PIDS = nil, nil
+            assert(outcome, "restart_managed never resolved")
+            assert.is_false(outcome.ok)
+            assert.is_truthy(outcome.msg:find("could not list the process on port " .. port .. " (lsof timed out)", 1, true),
+                outcome.msg)
+            assert.is_nil(outcome.msg:find("told to stop", 1, true))
+            assert.is_true(uv.kill(leftover, 0) == 0, "the leftover was signalled after all")
+        end)
+
         -- #340 close review: the signalled pids exiting frees the port only if
         -- they were all that held it. Parley's own proxy is on an earlier port, a
         -- peer cliproxy holds the managed one, and lsof cannot run — so stop()
@@ -501,7 +527,10 @@ describe("cliproxy IO lifecycle", function()
             cliproxy._set_process_tools(nil)
             assert(outcome, "restart_managed never resolved")
             assert.is_false(outcome.ok, "spawned past a peer still on the port")
-            assert.is_truthy(outcome.msg:find("still answers", 1, true), outcome.msg)
+            -- lsof could not list the peer, so it was never signalled: the
+            -- message says so (#345) rather than "still answers after stop".
+            assert.is_truthy(outcome.msg:find("could not list the process on port " .. peer_port, 1, true),
+                outcome.msg)
             assert.equals("ESRCH", select(3, uv.kill(ours, 0)), "our old proxy was not stopped")
         end)
 
@@ -602,10 +631,20 @@ describe("cliproxy IO lifecycle", function()
 
         -- One contract, two drivers: the sync stop() for teardown, and the
         -- stop_async() a restart and :ParleyProxy stop use (#345).
+        -- The async read has a 2 s limit that the real lsof can pass under the
+        -- 8-way suite (measured; #345 merge run), so the async driver lists the
+        -- port through fake_lsof, which reports exactly the live listeners
+        -- given. The sync driver keeps the real lsof.
+        local FAKE_LSOF = vim.fn.getcwd() .. "/tests/fixtures/fake_lsof"
         for name, stop in pairs({
             ["stop()"] = function() return cliproxy.stop() end,
-            ["stop_async()"] = function()
-                return await(function(done) cliproxy.stop_async(done) end)
+            ["stop_async()"] = function(listeners)
+                vim.env.PARLEY_FAKE_LSOF_PIDS = table.concat(listeners or {}, " ")
+                cliproxy._set_process_tools({ lsof = FAKE_LSOF })
+                local n = await(function(done) cliproxy.stop_async(done) end)
+                cliproxy._set_process_tools(nil)
+                vim.env.PARLEY_FAKE_LSOF_PIDS = nil
+                return n
             end,
         }) do
             it(name .. " kills only parley-spawned proxies and clears tracking", function()
@@ -627,10 +666,10 @@ describe("cliproxy IO lifecycle", function()
             it(name .. " reaps a leftover cliproxy on the port not spawned this session", function()
                 local port = ready_port.free_port()
                 set_endpoint(port)
-                start_fake(port, "healthy") -- tracked by the seam, NOT in _spawned
+                local leftover = start_fake(port, "healthy") -- tracked by the seam, NOT in _spawned
                 ready_port.wait_listening(port)
                 assert.equals(0, #cliproxy.spawned_pids()) -- this session spawned nothing
-                local n = stop()
+                local n = stop({ leftover })
                 assert.is_truthy(n >= 1) -- reaped the leftover via port identity
                 local state = await(function(done)
                     cliproxy.health_probe("127.0.0.1", port, "testkey", done)

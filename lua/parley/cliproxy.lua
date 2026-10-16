@@ -559,8 +559,14 @@ local start_managed -- ensure_running's spawn branch, defined with it below
 ---@param on_error fun(msg: string)
 function M.restart_managed(on_ready, on_error)
     local opts = render_opts()
-    M.stop_async(function(_, pids)
+    M.stop_async(function(_, pids, read_err)
         wait_port_released(opts.host, opts.port, opts.secret, pids, function(released, state, exited)
+            if not released and is_cliproxy_state(state) and read_err then
+                -- Say what happened: it was never told to stop (#345).
+                return on_error(("cliproxy: could not list the process on port %s (%s), so the proxy "
+                    .. "there was not stopped and no replacement was started — try again"):format(
+                    tostring(opts.port), read_err))
+            end
             if not released and is_cliproxy_state(state) then
                 return on_error(("cliproxy: the old proxy on port %s still answers %d s after it was told to "
                     .. "stop, so no replacement was started — try again once it has exited"):format(
@@ -1031,12 +1037,14 @@ end
 
 --- stop() without blocking the main loop (#345): the identity probe and the
 --- listener read are async, so a restart never freezes the editor on them.
---- The sync stop() stays for spec teardown.
----@param cb fun(killed: number, pids: integer[])
+--- The sync stop() stays for spec teardown. `read_err` says why a cliproxy the
+--- probe found on the port could not be listed — so it was NOT signalled. lsof
+--- measured 0.11 s idle and past its 2 s limit under the 8-way suite.
+---@param cb fun(killed: number, pids: integer[], read_err: string|nil)
 function M.stop_async(cb)
     local killed = kill_spawned()
-    local function done()
-        cb(vim.tbl_count(killed), vim.tbl_keys(killed))
+    local function done(read_err)
+        cb(vim.tbl_count(killed), vim.tbl_keys(killed), read_err)
     end
     local opts = render_opts()
     if not (opts.host and opts.port) then
@@ -1046,9 +1054,9 @@ function M.stop_async(cb)
         if not is_cliproxy_state(state) then
             return done()
         end
-        pids_on_port_async(opts.port, function(pids)
+        pids_on_port_async(opts.port, function(pids, err)
             sigterm_all(killed, pids)
-            done()
+            done(err)
         end)
     end)
 end
