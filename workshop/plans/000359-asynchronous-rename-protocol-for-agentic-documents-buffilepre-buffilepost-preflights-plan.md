@@ -74,7 +74,7 @@ What the operator sees at every point of a move, and the one recovery action. "N
 | 3 | Identity `unknown` (the open-time lookup is still pending or failed) | `move not confirmed: Couch hasn't confirmed this document yet; nothing moved. Run the move again`; the lookup is started | rerun the move |
 | 4 | Legacy `type: session-sync` file, not yet registered | `move not confirmed: registering this document first; nothing moved. Run the move again`; the register is started asynchronously | rerun the move |
 | 5 | Moved on disk; the metadata rename still in flight past `agentic_submit_timeout_ms` | `move not confirmed: finishing in the background` (warning colour); saving works | none; it clears on success, or becomes row 6 or 7 |
-| 6 | Moved on disk; Couch refused the rename with `target-conflict` (a stale registration at NEW) | `move not confirmed: NEW is registered to another document. Forget it (ask the agent to run couch --session-sync forget NEW), then reopen` | forget NEW, then reopen; the journal replays the rename |
+| 6 | Moved on disk; Couch refused the rename with `target-conflict` (a stale registration at NEW) | `move not confirmed: NEW is registered to another document. Run: couch --session-sync forget NEW, then reopen` (NEW is the literal path, so the operator can paste the command) | forget NEW, then reopen; the journal replays the rename |
 | 7 | Moved on disk; the metadata reply was lost or uncertain | `move pending: reopen to recover` (today's journal recovery) | reopen |
 | 8 | `:saveas!` onto an existing file, destination check answered absent within `agentic_move_timeout_ms` | as row 1 | none |
 | 9 | `:saveas!` onto an existing file, destination registered, or the check timed out | `rename not confirmed: …; rename back to OLD, then run it again` (today's text, from #357) | rename back, rerun |
@@ -109,7 +109,7 @@ The rows that stay synchronous are 8 and 9, an explicit overwrite of an existing
   - A registered document's `move_path` returns `new_path` in under 500 ms, the file at NEW. The band clears once the 3 s rename lands. (Rows 1 and 5.)
   - A document whose identity is unknown, because the open-time lookup is held: `move_path` returns row 3's error in under 500 ms, and nothing moved. The rerun after the lookup lands moves it.
   - A legacy session file: row 4, then the rerun moves it.
-  - A stale registration at NEW (register NEW, then delete its file): the move lands on disk, and the band shows row 6. After `forget NEW` and a reopen, the journal finishes.
+  - A stale registration at NEW (register NEW, then delete its file): the move lands on disk, and the band shows row 6, its text naming the literal NEW path in the runnable `couch --session-sync forget NEW` command. After `forget NEW` and a reopen, the journal finishes.
 - [ ] Run them. Expected: FAIL (today's code blocks, or returns #357's run-it-again text after the wait).
 - [ ] Implement:
   - `move_membership` decides by `move_preflight` with no wait. A refusal starts the async lookup or register and returns at once.
@@ -153,3 +153,10 @@ The rows that stay synchronous are 8 and 9, an explicit overwrite of an existing
 
 1. **Row 2's residual risk** (a plain document registered by another actor between open and rename). I'd accept it, with the background recheck as the backstop. It is today's external-`mv` behaviour, and the alternative re-adds W1's wait for every plain rename.
 2. **Row 6's action names a Couch command** for the operator to ask the agent for. The alternative is an automatic `forget` of a stale NEW registration, a mutation of another document's identity that I'd rather not automate.
+
+## Revisions
+
+- **2026-10-16, TL review (ops:0).** The design is approved. Building waits for #357 to land (#272).
+  - (1) Row 2's residual risk is accepted: it equals today's external `mv`, and the background recheck catches it.
+  - (2) There is no automatic forget. The change is that row 6's message shows the exact, pasteable command with the literal NEW path (`Run: couch --session-sync forget <NEW>, then reopen`), so the operator needs no agent. The row 6 test asserts that text.
+  - The operator's actions reduce to five: nothing, run again, reopen, forget and reopen, rename back.
