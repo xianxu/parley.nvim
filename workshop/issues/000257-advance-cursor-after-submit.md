@@ -82,8 +82,8 @@ ownership remain independent of the cursor.
 
 Steps:
 
-- [ ] `next_question_cursor` and `advance_after_submit` in chat_respond
-- [ ] Tests (chat_respond_spec, fake provider):
+- [x] `next_question_cursor` and `advance_after_submit` in chat_respond
+- [x] Tests (chat_respond_spec, fake provider):
   - q1 then q2: the cursor lands on q2 and stays there while q1's answer streams and completes; q1's writer is unaffected by typing in q2;
   - a resubmit mid-chat moves to the next question;
   - the last question leaves the cursor in place, and follow still follows;
@@ -92,7 +92,7 @@ Steps:
   - an explicit follow override does not move;
   - a cancel after the move does not move it again;
   - a unit case for `next_question_cursor`.
-- [ ] Atlas (chat lifecycle: respond, follow-cursor) and the README's follow-cursor line, if it has one
+- [x] Atlas (chat lifecycle: respond, follow-cursor) and the README's follow-cursor line, if it has one
 
 ## Log
 
@@ -102,3 +102,5 @@ Filed at the user's request as a follow-up to #254. Desired workflow: after
 submitting a question, advance to the next question so the operator can keep
 writing while the earlier answer generates. The cursor movement must remain a
 UI convenience and cannot become ownership authority for the submitted writer.
+- Built. Mutation checks, each reverted and cmp-restored: without the advance, the streaming, resubmit and visual cases fail; advancing despite an explicit follow override fails the override case.
+- The README has no follow-cursor section; the atlas covers it (chat/lifecycle, "Advance after submit").
