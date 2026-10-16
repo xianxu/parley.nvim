@@ -221,6 +221,81 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 7e5d8612-a520-41ed-b472-3e2ede2e6a2e
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000357"
+            recipe: milestone-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/cecb4226983a4e06
+            reviewed_head: 71341518fbb6feb4c69136b4c72d295f86e0a492
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T19:39:45.153852Z"
+          phase: finished
+          pid: 61607
+          started_at: "2026-10-16T19:39:45.517464Z"
+          finished_at: "2026-10-16T19:42:54.770959Z"
+          session_id: d7a0b498-8b69-4d63-817d-c7091b956aeb
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 71341518fbb6feb4c69136b4c72d295f86e0a492
+        tracker_head: 5adea0e62ad62ae0197697e716a4b138e4eac0f1
+        branch_point: a936c96ce50bc9034e175915f691b0eebc690b33
+        since: "2026-10-16T11:11:49-07:00"
+        until: "2026-10-16T12:38:42-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T11:11:49-07:00"
+              end: "2026-10-16T12:38:42-07:00"
+              began: "2026-10-16T11:11:49-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: 2e2560d64bccddf667b7b4416cc288c35a46d4c84d0b0db4b2b760f99b67f4ab
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 19347547
+              windows:
+                - start: "2026-10-16T11:11:49-07:00"
+                  end: "2026-10-16T12:38:42-07:00"
+        cuts:
+            - dispatched: "2026-10-16T12:18:03-07:00"
+              finalized: "2026-10-16T12:24:56-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T12:31:11-07:00"
+              finalized: "2026-10-16T12:36:31-07:00"
+              finalizing: false
+      "n": 3
+      timestamp: "2026-10-16T12:42:56-07:00"
+      dispatched: "2026-10-16T12:39:45-07:00"
+      agent: claude
+      dispose:
+        - id: BR-2
+          disposition: addressed
+          note: agentic_document.lua:272 passes timeout_ms=config_ms("agentic_submit_timeout_ms"). The test delay is 3 s, past the old 2.5 s. Reverting the option fails "a move whose rename stage outlasts the wait finishes in the background" (44/45); head passes 45/45.
+          round: 3
+        - id: BR-9
+          disposition: not-addressed
+          note: 'The BufFilePre lookup branch (:708) is now covered by the :saveas preflight test. The legacy register branch (:706) is still never run under a slow fake: the new legacy test reaches :557 through move_path, not BufFilePre. The Revisions claim of every call site is overstated.'
+          round: 3
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 71341518fbb6feb4c69136b4c72d295f86e0a492
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#357 (boundary-review)
@@ -267,7 +342,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-9** [Minor] `done-when-clause-tested` (kind: defect) BufFilePre membership preflight (unidentified buffer) is never exercised under the slow fake
   This is the 2nd finding in family done-when-clause-tested. Rule: every bounded_request and registry.request call site needs a slow-fake test whose delay exceeds the old default. Remaining instances are agentic_document.lua:705-708 (BufFilePre, reached only without a cached identity) and the rename stage (BR-2).
 
+## Round 3 — 2026-10-16T12:42:56-07:00 (claude) — passed
+
+### Disposed
+
+- BR-2 — addressed — agentic_document.lua:272 passes timeout_ms=config_ms("agentic_submit_timeout_ms"). The test delay is 3 s, past the old 2.5 s. Reverting the option fails "a move whose rename stage outlasts the wait finishes in the background" (44/45); head passes 45/45.
+- BR-9 — not-addressed — The BufFilePre lookup branch (:708) is now covered by the :saveas preflight test. The legacy register branch (:706) is still never run under a slow fake: the new legacy test reaches :557 through move_path, not BufFilePre. The Revisions claim of every call site is overstated.
+
 ## Open findings
 
-- **BR-2** [Important] `generous-deadline-every-couch-wait` (kind: defect) Move rename registry request still uses the old 2500 ms default deadline
 - **BR-9** [Minor] `done-when-clause-tested` (kind: defect) BufFilePre membership preflight (unidentified buffer) is never exercised under the slow fake

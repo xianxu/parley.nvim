@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "13367de4", done: "fbefdbd5"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Alt+Return times out under load: asynchronous submit, generous deadline, unconfirmed instead of failed
@@ -92,6 +92,8 @@ There is no new pure entity. The pure model (`document_session`) already refuses
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Round 2 FIX-THEN-SHIP answered in 71341518, applying the rule that every timed call site needs a slow-fake test past the old default. The rename-stage test now delays 3 s against the old 2.5 s, and reverting its timeout_ms fails it (mutation run). New agentic_document_spec cases: an unregistered :saveas (BufFilePre membership lookup) times out with "move not confirmed ... Run the move again", nothing renamed, rerun succeeds; a legacy session file move with a slow admission register (DELAY_OPS=register) returns the run-it-again error, nothing moved, rerun moves it. Every bounded_request and registry.request call site is now covered by a slow-fake test past 2.5 s: open/register (3 s registry submit), lookup-submit, rename, move_path preflight and legacy register, BufFilePre and BufFilePost. agentic_document_spec has 8 slow-Couch cases, all green; round 1 evidence stands (pure resubmit with 3 model cases, the TL-approved send-stage lock Revision, README, DRY defaults). (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 112 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Built:
   - `begin_submit` and `end_submit`: one submit at a time, with "submitting…", the configured deadline, and "not confirmed: submit again · <reason>". A press during a send joins it. A pending press now confirms and then submits the current bytes; the replay is skipped while still pending, so it can't loop.

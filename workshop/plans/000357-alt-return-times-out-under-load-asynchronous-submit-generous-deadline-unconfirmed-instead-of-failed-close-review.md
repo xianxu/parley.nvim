@@ -291,3 +291,93 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"0b31a673-7f16-43a1-b335-f91fa2510392","repository":"github.com/xianxu/parley.nvim","issue_id":"000357","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/68f731146be313fb","reviewed_head":"a49f6b55d28f81945ba9d9200f2b1b2a49a40ccd","slot":"parley.nvim:4","requested_at":"2026-10-16T19:31:11.5456Z"},"phase":"finished","pid":52162,"started_at":"2026-10-16T19:31:11.775884Z","finished_at":"2026-10-16T19:36:25.031455Z","session_id":"f4a3763f-257f-47e5-8c45-a8b911ba7df2","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T12:42:55-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 357 — Alt+Return times out under load: asynchronous submit, generous deadline, unconfirmed instead of failed |
+| repo | parley.nvim |
+| issue file | workshop/issues/000357-alt-return-times-out-under-load-asynchronous-submit-generous-deadline-unconfirmed-instead-of-failed.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a936c96ce50bc9034e175915f691b0eebc690b33..71341518fbb6feb4c69136b4c72d295f86e0a492 |
+| command | sdlc close --issue 357 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T12:42:55-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Focus on the open findings: BR-2 (rename) and BR-9 (BufFilePre).
+
+Checking how tests run so I can revert the BR-2 fix and confirm the regression test goes red.
+
+Running the integration spec at head (no `timeout` binary on macOS, retrying without it).
+
+Green at head. Now reverting the rename deadline (BR-2 fix) to confirm the test goes red.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This round fixes the one Important finding still open. The move's rename stage now uses the submit deadline (`lua/parley/agentic_document.lua:272`). I checked that the fix is what makes the test pass: I removed that `timeout_ms` option in the disposable checkout and ran `tests/integration/agentic_document_spec.lua` again. "a move whose rename stage outlasts the wait finishes in the background" then failed with "Couch registry deadline exceeded" (44 passed, 1 failed). At head the spec passes 45/45. BR-9 is only partly fixed. The `:saveas` membership lookup of an unregistered document (`:708`) now has a slow-fake test. The legacy `register` branch of the same BufFilePre preflight (`:706`) still has none. The new legacy test goes through `move_path`, which calls `register` at `:557`, not `:706`. The round-2 Revisions entry says every call site now has a slow-fake test, which isn't true for `:706`. That gap is Minor and doesn't block shipping.
+
+Done-when: current. The three slow-fake bullets (a slow submit that still succeeds, a deadline that ends unconfirmed and resolves with no double send, the move wait) still cover what was built after the Revisions amendments. The amendments changed the deadline outcome to "not confirmed: submit again" plus an idempotent resubmit, and bullet 2 already covers that.
+
+1. **Strengths**
+   - The rename-stage test's delay is now 3 s, past the old 2.5 s default (`tests/integration/agentic_document_spec.lua:236-239`). It fails when the fix is reverted, so it guards the fix.
+   - The `:saveas` preflight test (`agentic_document_spec.lua:193-208`) checks the exact recovery message, that nothing was written to the target, and that running it again succeeds.
+   - The legacy-move test pins the "Run the move again" contract for a slow `register` admission (`:557`), and also covers the rerun.
+   - `bounded_request` sets the registry's own timer past its wait (`:490`, `ms + 1000`), so the editor-side deadline is the one that decides. That rule lives in one place.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - The BufFilePre legacy `register` branch (`agentic_document.lua:705-706`) is never run under a slow fake (this is BR-9, still open, below). A fix: copy the `:saveas` preflight test, but open a `type: session-sync` file and set `FAKE_COUCH_REGISTRY_DELAY_OPS=register`.
+
+5. **Test coverage notes**
+   - At head the spec passes 45/45. With the rename deadline reverted it fails 1 of 45, so the regression test works.
+   - Here is the rule from BR-9 (family `done-when-clause-tested`) checked against every timed call site:
+     - `:235/248` (open/register): covered in earlier rounds.
+     - `:270` (rename): covered, and confirmed red without the fix.
+     - `:526` (preflight lookup): covered.
+     - `:557` (legacy register in `move_path`): covered.
+     - `:565` (destination lookup): covered.
+     - `:708` (BufFilePre lookup): covered.
+     - `:758` (BufFilePost): covered in round 1.
+     - `:706` (BufFilePre legacy register): **not covered**. This is the only gap.
+
+6. **Architecture notes**
+   - **ARCH-DRY: pass.** The defaults live only in config.lua, every caller goes through `config_ms`, and `bounded_request` is the one wrapper for timed calls.
+   - **ARCH-PURE: pass.** The resubmit decision is in the pure model (`retry{submit=true}`). The timer and the band stay in the shell.
+   - **ARCH-PURPOSE: pass**, apart from the BR-9 remainder.
+   - **ARCH-MOCK: pass.** All tests run against the stateful `fake_couch_registry.py`, which now supports per-operation delays.
+   - **ARCH-CONSTRAINTS: pass.** The submit is async with a 15 s deadline. The move waits are bounded to 5 s, and that limit is enforced in `bounded_request` and the `move_path` wait.
+   - **ARCH-SECURE: pass.** There is no new untrusted input; registry replies still go through `kind` checks.
+   - **ARCH-ORDER: pass.** An unconfirmed outcome is kept as "unconfirmed" and isn't reported as a failure. A late rename completes through the journal.
+   - **ARCH-FUNERAL: pass.** The only new resource is the submit timer, and `end_submit` closes it.
+   - For #359 (asynchronous rename): `move_path`'s synchronous `vim.wait` at `:602` is the seam to replace.
+
+7. **Plan revision recommendations**
+   - Correct the round-2 Revisions bullet "Every `bounded_request` and `registry.request` call site now has its slow-fake test … BufFilePre". It should say that only BufFilePre's lookup branch is covered and its legacy-register branch (`:706`) isn't. Alternatively, add the test and keep the bullet as written.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      agentic_document.lua:272 passes timeout_ms=config_ms("agentic_submit_timeout_ms"). The test delay is 3 s, past the old 2.5 s. Reverting the option fails "a move whose rename stage outlasts the wait finishes in the background" (44/45); head passes 45/45.
+  - id: BR-9
+    disposition: not-addressed
+    note: |
+      The BufFilePre lookup branch (:708) is now covered by the :saveas preflight test. The legacy register branch (:706) is still never run under a slow fake: the new legacy test reaches :557 through move_path, not BufFilePre. The Revisions claim of every call site is overstated.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"7e5d8612-a520-41ed-b472-3e2ede2e6a2e","repository":"github.com/xianxu/parley.nvim","issue_id":"000357","recipe":"milestone-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/cecb4226983a4e06","reviewed_head":"71341518fbb6feb4c69136b4c72d295f86e0a492","slot":"parley.nvim:4","requested_at":"2026-10-16T19:39:45.153852Z"},"phase":"finished","pid":61607,"started_at":"2026-10-16T19:39:45.517464Z","finished_at":"2026-10-16T19:42:54.770959Z","session_id":"d7a0b498-8b69-4d63-817d-c7091b956aeb","outcome":"returned"}] -->
