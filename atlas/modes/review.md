@@ -121,6 +121,9 @@ Inside a Couch pane, Alt+Return in a named Markdown document follows
 [agentic document submission](session_sync.md) (#332): save, register on first
 submission, attach the existing turn engine and send `submitted: <absolute
 path>`. It adds no frontmatter and does not prompt for a process instruction.
+Ariadne's `xx-universal-review` skill reads `process-instruction:` from the
+submitted file and computes changes since its last read through Couch. Parley
+sends no instruction prose or editor diff, and keeps no review-send baseline.
 The pane's agent is the default owner; explicit `couch-owner:` overrides it,
 while a business `owner:` field does not. Confirmed membership survives header
 edits. Unknown offline membership stays editable with `Couch unavailable:
@@ -306,12 +309,12 @@ review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- submi
 ## Key Files
 
 - `lua/parley/skills/review/init.lua` — skill definition (+ `source(ctx)` mode composition, `mode` arg), marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
-- `lua/parley/skills/review/mode.lua` — Mode parse/directives (PURE) + load/list IO seam
+- `lua/parley/skills/review/mode.lua` — Mode parse (PURE) + load/list IO seam
 - `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files
 - `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam
 - `lua/parley/review_send.lua` — `<M-CR>` dispatch to agentic submission in Couch; existing in-editor fallback, add-instruction prompt and `[` completion outside Couch
 - `lua/parley/agentic_document.lua` — named-document registration/admission and native rename hooks; see [session-sync](session_sync.md)
-- `lua/parley/skills/review/instruction.lua` — `process-instruction` grammar, mode expansion, brief (PURE)
+- `lua/parley/skills/review/instruction.lua` — `process-instruction` grammar, mode expansion and neutral context (PURE)
 - `lua/parley/frontmatter.lua` — shared frontmatter reader (hyphenated keys, raw values, quoting; PURE)
 - `lua/parley/couch.lua` — the `couch` seam: send, query, this editor's own actor
 - `lua/parley/skills/review/projection.lua` — decoration projection: re-render style on undo/redo per content-state

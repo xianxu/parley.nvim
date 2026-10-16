@@ -65,26 +65,26 @@ A packaged plugin without a sibling ariadne checkout must retain a working local
 ### 1. Wait for the foundations
 
 - [x] Record hub approval and the submitted-only contract; notify the #399 and #332 owners of this decision.
-- [ ] Wait for ariadne#399 and parley.nvim#332 to land; pair#573 remains the S1 prerequisite. Refresh through SDLC and inspect their final contracts before implementation.
-- [ ] Record concrete export paths from #399 and the final #332 entry point in the Log. Run `sdlc change-code --issue 319`; satisfy its inferred-flow plan-quality/estimate gates if applicable before editing code.
+- [x] Wait for ariadne#399 and parley.nvim#332 to land; pair#573 remains the S1 prerequisite. Refresh through SDLC and inspect their final contracts before implementation.
+- [x] Record concrete export paths from #399 and the final #332 entry point in the Log. Run `sdlc change-code --issue 319`; satisfy its inferred-flow plan-quality/estimate gates if applicable before editing code.
 
 ### 2. Pin the one submission path with failing tests
 
 Files: tests/integration/review_send_spec.lua, #332's landed agentic-document submission tests and existing stateful fake; retain tests/unit/review_instruction_spec.lua.
 
-- [ ] Registered-submission invariant: the real keymap always delegates a Couch-owned request to S1 and emits only submitted: ABS_PATH. Reuse the stateful registry/receipt fake to control failure and retry order; no alternate sender or inline prompt may run while S1 owns admission.
-- [ ] Outside-Couch invariant: local instruction selection and cancellation invoke only the existing in-editor review with canonical inline source, without Couch or installed shared-skill discovery.
-- [ ] Retire assertions for deleted payload/diff helpers; preserve instruction/frontmatter regression coverage. Run mapped tests red before implementation, then green.
+- [x] Registered-submission invariant: the real keymap always delegates a Couch-owned request to S1 and emits only submitted: ABS_PATH. Reuse the stateful registry/receipt fake to control failure and retry order; no alternate sender or inline prompt may run while S1 owns admission.
+- [x] Outside-Couch invariant: local instruction selection and cancellation invoke only the existing in-editor review with canonical inline source, without Couch or installed shared-skill discovery.
+- [x] Retire assertions for deleted payload/diff helpers; preserve instruction/frontmatter regression coverage. Run mapped tests red before implementation, then green.
 
 ### 3. Delete the retired producer and preserve inline review
 
 Files: lua/parley/review_send.lua, lua/parley/skills/review/init.lua, instruction.lua, existing SKILL.md/modes and the landed #399 export consumer as required.
 
-- [ ] Delete message, diff, DIFF_MAX_LINES, baseline and send_to_slot, and remove the now-unreachable legacy actor-query/send branch and stale module comments. Keep only imports used by the surviving paths.
-- [ ] Preserve S1-first admission and the outside-Couch inline review route. Do not modify send_registered's payload or add a callback/adapter to it.
-- [ ] Consume #399's canonical round/modes for the local prompt using its landed export mechanism. Keep the existing propose_edits adapter and completion/quoting behavior; verify all six stock modes and first-mode flags.
-- [ ] Add standalone fixture coverage with no ariadne checkout/shared-skill directory, proving the complete local review prompt remains available. If snapshots are generated, test deterministic output/freshness with the actual export; do not add a speculative runtime capability or version protocol.
-- [ ] Run targeted tests green, search all consumers for old verbose headings/baseline helpers, and commit the coherent deletion and fallback change.
+- [x] Delete message, diff, DIFF_MAX_LINES, baseline and send_to_slot, and remove the now-unreachable legacy actor-query/send branch and stale module comments. Keep only imports used by the surviving paths.
+- [x] Preserve S1-first admission and the outside-Couch inline review route. Do not modify send_registered's payload or add a callback/adapter to it.
+- [x] Consume #399's canonical round/modes for the local prompt using its landed export mechanism. Keep the existing propose_edits adapter and completion/quoting behavior; verify all six stock modes and first-mode flags.
+- [x] Add standalone fixture coverage with no ariadne checkout/shared-skill directory, proving the complete local review prompt remains available. If snapshots are generated, test deterministic output/freshness with the actual export; do not add a speculative runtime capability or version protocol.
+- [x] Run targeted tests green, search all consumers for old verbose headings/baseline helpers, and commit the coherent deletion and fallback change.
 
 ### 4. Verify, stage, review and land
 

@@ -6,8 +6,6 @@
 -- contribute their briefs; the first one's knobs (scope, deletions, frontier)
 -- govern the round, since one round has one set of directives.
 
-local mode = require("parley.skills.review.mode")
-
 local M = {}
 
 M.DEFAULT_MODE = "free-form"
@@ -74,26 +72,6 @@ M.expand = function(value, modes)
 		return nil, err
 	end
 	return { modes = resolved, text = parsed.text }
-end
-
---- The round's brief: each mode's prompt, the first mode's directives, then
---- the operator's text. Shared by the review skill's system prompt and the
---- message sent to a Couch slot.
----@param modes table[]
----@param text string|nil
----@return string
-M.brief = function(modes, text)
-	local parts = {}
-	for _, m in ipairs(modes) do
-		parts[#parts + 1] = "## Review mode: " .. m.name .. "\n" .. m.body
-	end
-	if modes[1] then
-		parts[#parts + 1] = mode.directives(modes[1])
-	end
-	if text and text ~= "" then
-		parts[#parts + 1] = "## Operator instruction\n" .. text
-	end
-	return table.concat(parts, "\n\n")
 end
 
 --- Neutral inputs for the canonical round; its flag table owns semantics.

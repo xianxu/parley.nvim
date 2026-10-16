@@ -194,3 +194,14 @@ item: milestone-review design=0.00 impl=0.20
 design-buffer: 0.15
 total: 2.25
 ```
+
+## Integration checkpoint
+
+2026-10-16: ops:0 delivery 6e7309b9-ac9f-4f11-ba1a-0e3166310839 authorized
+finishing after #332 landed. Merged origin/main (57f50cba) at 15f2cbd3; no
+unlanded branch used. S1 admission and registered send remain unchanged.
+Removed the verbose message/diff/baseline/actor-send branch and duplicate
+brief/directives. Outside-Couch local invocation now runs directly after
+instruction expansion. Regression first failed on the old actor lookup before
+removal; Couch long unknown instructions and failure/retry stay submitted-only.
+Direct pre-#342 test invocation refused isolation; used make test-spec instead.
