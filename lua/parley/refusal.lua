@@ -240,6 +240,7 @@ M.KIND_ACTION = {
     drill = AGAIN,
     topic = AGAIN,
     attachments = AGAIN,
+    edit = MOMENT, -- a refused user edit (#265): the command can simply be run again
 }
 
 -- What a revocation means depends on why it happened.
