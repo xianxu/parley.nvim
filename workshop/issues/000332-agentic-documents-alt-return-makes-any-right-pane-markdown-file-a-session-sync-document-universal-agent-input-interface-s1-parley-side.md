@@ -154,6 +154,10 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 
 - 2026-10-15 — final rework focused verification:174 cases pass (34 pure lifecycle,35 admission,14 public move,10 lifetime,64 real native session-sync,17 unit session-sync), lint752 files0 warnings/errors, clean process census, diff check clean. Log /tmp/parley332-rework-final-focused.log. Isolated production-client conformance re-passes against /Users/xianxu/workspace/pair/bin/couch and the stateful fake, including corrupted-fake rejection; all owned temporary paths removed. The new required full suite and ordinary close are pending; no operator acceptance or stage claimed.
 
+- 2026-10-15 — final preflight-yield sweep reproduces two more members of BR-1: a new submit starts while native OLD lookup or public target lookup pumps events. Both require rechecking the shared busy predicate after the bounded wait, before cancelling/reseeding or taking the migration lease/effects. The tests hold real actor/owner completions and assert the original submit still completes to OLD. Superseded11b8a5d4 required-suite attempt was cancelled while still queued (PID567 command/cwd verified, exit130, no suite recipe started, owned process tree reaped); no blind rerun or foreign process was touched. The final fixed head requires its own full run.
+
+- 2026-10-15 — final post-yield candidate passes176 focused cases (34 pure lifecycle,37 admission,14 owned move,10 lifetime,64 native session-sync,17 unit session-sync), lint752 files0 warnings/errors and clean process census. Retained /tmp/parley332-rework-final2-focused.log. No protocol/real-client change since the passing isolated Couch conformance. All three review findings have a concrete disposition; ordinary close and required full suite remain pending.
+
 ## Revisions
 
 - 2026-10-15 — record the already-approved persistent-feedback acceptance explicitly in Done when. Separate implementation verification from post-close staging/live/landing so the checklist records observed work without claiming future acceptance. The required suite is still pending; no close waiver or live acceptance is implied.

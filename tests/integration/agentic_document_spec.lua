@@ -801,4 +801,89 @@ describe("agentic markdown admission", function()
         assert.equals("pending",document.status(buf).phase)
     end)
 
+
+    it("rechecks submit activity started while native OLD membership confirmation pumps events", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        local _,side_lines=side_fixture()
+        local old_lines=vim.fn.readfile(file)
+        local couch=require("parley.couch")
+        local production_run=couch.run
+        local triggered,release_actor=false,nil
+        couch.run=function(argv,callback,options)
+            if argv[2] == "--session-sync" and argv[3] == "lookup" and argv[4] == file and not triggered then
+                triggered=true
+                return production_run(argv,function(result)
+                    -- This arrives inside BufFilePre's bounded vim.wait. The
+                    -- initial guard saw idle, but the genuine explicit submit
+                    -- now owns unresolved actor selection before lookup returns.
+                    document.submit(buf)
+                    callback(result)
+                end,options)
+            end
+            if argv[2] == "--actors" then
+                return production_run(argv,function(result)
+                    release_actor=function() release_actor=nil; callback(result) end
+                end,options)
+            end
+            return production_run(argv,callback,options)
+        end
+        local target=root .. "/membership-target.md"
+        local ok=pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target))
+        await(function() return release_actor ~= nil end)
+        assert.is_true(triggered,"fixture must start submit during the actual fresh OLD lookup")
+        assert.is_false(ok,"a new unresolved submit must be rechecked after the bounded membership lookup")
+        assert_refused_before_move(target,old_lines,side_lines)
+        assert.is_nil(document.identity(buf))
+        assert.is_nil(document.status(buf).operation)
+        release_actor()
+        await_submitted()
+    end)
+
+
+    it("rechecks registered submit activity pumped by public target membership confirmation", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        submit()
+        await_submitted()
+        vim.api.nvim_buf_set_lines(buf,4,5,false,{"operator edit waiting for submission"})
+        vim.cmd("silent write")
+        local _,side_lines=side_fixture()
+        local old_lines=vim.fn.readfile(file)
+        local old_lock=vim.fn.readfile(file .. ".lock")
+        local target=root .. "/membership-target.md"
+        local couch=require("parley.couch")
+        local production_run=couch.run
+        local triggered,held_owner=false,false
+        local release_owner
+        couch.run=function(argv,callback,options)
+            if argv[2] == "--session-sync" and argv[3] == "lookup" and argv[4] == target and not triggered then
+                triggered=true
+                return production_run(argv,function(result)
+                    -- The move has adopted/saved OLD but has not reserved its
+                    -- migration yet. This real submit starts owner confirmation.
+                    document.submit(buf)
+                    callback(result)
+                end,options)
+            end
+            if triggered and not held_owner and argv[2] == "--session-sync" and argv[3] == "lookup" and argv[4] == file then
+                held_owner=true
+                return production_run(argv,function(result)
+                    release_owner=function() release_owner=nil; callback(result) end
+                end,options)
+            end
+            return production_run(argv,callback,options)
+        end
+        local handled,moved,err=document.move_path(file,target)
+        await(function() return release_owner ~= nil end)
+        assert.is_true(triggered,"fixture must start submit inside the real target lookup completion")
+        assert.is_true(handled)
+        assert.is_nil(moved)
+        assert.is_true(type(err) == "string" and err ~= "")
+        assert_refused_before_move(target,old_lines,side_lines)
+        assert.same(old_lock,vim.fn.readfile(file .. ".lock"))
+        assert.equals(0,vim.fn.filereadable(target .. ".lock"),"busy recheck must precede destination protection")
+        assert.equals("",vim.fn.glob(root .. "/state/document-moves/*/*.json"),"no migration journal is authorized yet")
+        release_owner()
+        await_submitted()
+    end)
+
 end)

@@ -496,6 +496,7 @@ function M.move_path(old_path, new_path)
     local saved, save_error = ss.prepare_submit(buf)
     if not saved then return true, nil, save_error end
     local target = bounded_request("lookup", { new_path })
+    if migration_busy(s) then return true, nil, "document operation started during destination confirmation" end
     if target.kind ~= "absent" then return true, nil, "destination membership is occupied or unknown" end
     local lease, lease_error = require("parley.document_lease").acquire(s.namespace, identity.ID, { root = state_root() })
     if not lease then return true, nil, lease_error.message end
@@ -638,6 +639,7 @@ install_migration_hooks = function(s)
             else
                 result = bounded_request("lookup", { s.path })
             end
+            if migration_busy(s) then refuse("document operation started during membership confirmation") end
             if result.kind ~= "registered" and result.kind ~= "absent" then
                 refuse(result.error or "document membership unavailable")
             end
