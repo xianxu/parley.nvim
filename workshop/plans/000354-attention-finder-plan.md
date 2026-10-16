@@ -234,3 +234,14 @@ All verified in the code on 2026-10-16.
   - the model's `discovered` creates `{kind = "side", parent, pending = {}}`, which is answered. The scan's events apply as one `batch` (one store write). Side docs are entries, so nested side docs are found on the next open;
   - a side doc that leaves (sweep or bound) is `retired` (at most 256, the oldest drop first), so a later scan never brings it back. A rewrite of a seen side doc does not resurface it (only new files count). The row marker is `↳`, and the parent's name is searchable;
   - I found no separate answer-doc type in ariadne or ops; the TL was asked for the rule if answer docs differ.
+- **2026-10-16, the M2 review, round 3.**
+  - BR-13 (Important, reuse an existing owner): `is_side_doc` reads through `frontmatter.parse` (a closed block, case-folded keys, trailing comments) and the folder through `document_move_plan.side_path`. The spec gains a comment case and an unclosed block.
+  - The scope addition re-checks the cross-cutting sections (the plan-code-drift rule):
+    - **Core concepts, the state shape:** an entry also carries `recorded_at`, `kind = "side"` and `parent`; the state also carries `retired = {[path] = at}` (at most 256).
+    - **Events:** add `discovered(path, parent, at)` and `batch(events)`. Rows mark a side doc with `↳`.
+    - **ARCH-CONSTRAINTS:** opening the finder is the sweep write, a synchronous scan of at most 256 `.side/` folders (40 head lines per new candidate), and one batch write, then the rows render. It no longer just reads one file and renders at once.
+    - **ARCH-ORDER:** discovery is idempotent under the lease (an existing or retired path is ignored), so two editors scanning at once add each doc once.
+    - **ARCH-FUNERAL:** `retired` is bounded like the entries.
+    - **"New":** modified after the parent entered the finder, so a side doc older than its parent's entry counts once it is rewritten. The atlas says so.
+  - Minor: a refused batch warns "new side docs were not recorded", not a nil path.
+  - Class sweep of BR-13 ("a fact the codebase already owns is read through its owner") over the attention modules: the bounded probe loop was hand-rolled too, so `refresh` now runs through `async_operation_queue` (the queue `async_file_source` uses); the capture-point and limit mutations still fail their specs. No other owner was found for Couch's receipt line or for home-relative directory display; `attention_rows` stays pure Lua.

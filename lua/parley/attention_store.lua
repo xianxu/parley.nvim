@@ -130,7 +130,8 @@ function M.apply(event, options, on_done)
         if not ok then return fail(("%s for %s lost (%s)"):format(event.type, tostring(event.path), tostring(state))) end
         if not state then return fail(refused) end
         if refused == "full" then
-            logger.warning(("attention: %d files are waiting; %s was not recorded"):format(Model.LIMIT, tostring(event.path)))
+            local subject = event.type == "batch" and "new side docs were" or (tostring(event.path) .. " was")
+            logger.warning(("attention: %d files are waiting; %s not recorded"):format(Model.LIMIT, subject))
         end
         on_done(state, refused)
     end

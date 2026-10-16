@@ -90,44 +90,35 @@ function M.refresh(options, on_change, on_done)
     for _, entry in ipairs(Model.list(Store.load())) do
         if Model.state_of(entry) == "waiting" then queue[#queue + 1] = entry.path end
     end
-    local active, finished, next_index = 0, 0, 1
     if #queue == 0 then return on_done() end
-    local start
-    local function settle()
-        active, finished = active - 1, finished + 1
-        if finished == #queue then return on_done() end
-        start()
-    end
-    start = function()
-        while active < seam.limit and next_index <= #queue do
-            local path = queue[next_index]
-            next_index = next_index + 1
+    -- The shared bounded queue (async_operation_queue) runs at most `limit`
+    -- probes; each captures its entry's pending IDs as it starts.
+    local probes, finished = require("parley.async_operation_queue").new(vim.uv or vim.loop, seam.limit), 0
+    for _, path in ipairs(queue) do
+        local probed
+        probes:call(function(finish)
             local entry = Store.load().entries[path]
-            local probed = entry and vim.tbl_keys(entry.pending) or {}
-            active = active + 1
-            seam.run({ "couch", "--session-sync", "status", "--json", path }, function(data)
-                Store.apply(M.observation(path, probed, data), seam.store, function(state)
-                    if state then on_change(state) end
-                    settle()
-                end)
-            end, { timeout = seam.timeout })
-        end
+            probed = entry and vim.tbl_keys(entry.pending) or {}
+            return seam.run({ "couch", "--session-sync", "status", "--json", path }, finish, { timeout = seam.timeout })
+        end, function(data)
+            Store.apply(M.observation(path, probed, data), seam.store, function(state)
+                if state then on_change(state) end
+                finished = finished + 1
+                if finished == #queue then on_done() end
+            end)
+        end)
     end
-    start()
 end
 
---- Whether `lines` (the head of a file) open with frontmatter `type: side-doc`.
+--- Whether `lines` (the head of a file) open with a closed frontmatter block
+--- whose `type` is `side-doc`, read through the one frontmatter parser.
 function M.is_side_doc(lines)
-    if lines[1] ~= "---" then return false end
-    for i = 2, #lines do
-        if lines[i] == "---" then return false end
-        local kind = lines[i]:match("^type:%s*(.-)%s*$")
-        if kind then return kind:gsub("^[\"']", ""):gsub("[\"']$", "") == "side-doc" end
-    end
-    return false
+    local fm = require("parley.frontmatter").parse(lines)
+    return fm ~= nil and fm.fields.type == "side-doc"
 end
 
-local SIDE_HEAD_LINES = 12
+-- Enough lines for a frontmatter block; one that runs longer is not read as a side doc.
+local SIDE_HEAD_LINES = 40
 
 --- `discovered` events for the side docs the agent wrote: every `*.md` with
 --- frontmatter `type: side-doc` in the `.side/` folder of an entry already
@@ -137,7 +128,7 @@ function M.discover(state)
     local uv = vim.uv or vim.loop
     local events, seen = {}, {}
     for _, entry in pairs(state.entries) do
-        local folder = vim.fn.fnamemodify(entry.path, ":r") .. ".side"
+        local folder = require("parley.document_move_plan").side_path(entry.path)
         local since = entry.kind == "side" and entry.submitted_at or (entry.recorded_at or entry.submitted_at)
         local scan = uv.fs_scandir(folder)
         while scan do

@@ -383,6 +383,8 @@ describe("attention finder: side docs the agent wrote", function()
     it("reads the side-doc type from frontmatter only", function()
         assert.is_true(Attention.is_side_doc({ "---", "type: side-doc", "---" }))
         assert.is_true(Attention.is_side_doc({ "---", "parent: x", 'type: "side-doc"', "---" }))
+        assert.is_true(Attention.is_side_doc({ "---", "Type: side-doc # written by the agent", "---" }))
+        assert.is_false(Attention.is_side_doc({ "---", "type: side-doc" })) -- an unclosed block
         assert.is_false(Attention.is_side_doc({ "---", "type: pensive", "---" }))
         assert.is_false(Attention.is_side_doc({ "# title", "type: side-doc" }))
         assert.is_false(Attention.is_side_doc({ "---", "title: x", "---", "type: side-doc" }))
