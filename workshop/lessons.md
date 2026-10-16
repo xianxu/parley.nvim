@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-10-16 (#234 — render walk on the shared row step)
+
+- A parity property test earns its keep on the first run: #234's found a footer `🧠:` row whose lookahead verdict the render walk only computed inside a paint branch. When moving transitions onto a shared step, compute every transition INPUT before (and outside) the painting branches.
+- "Sweep for other copies" means grep the RULE, not check the copy the issue names. #234 checked chat_parser and missed `document/grammar.lua`'s render_before copy, which is the production path (close BR-1). Grep every writer of the state the rule changes (`in_reasoning =`), and justify each survivor.
+- Paste commit hashes from the `git rev-parse` output; never retype one. #234's plan message to the hub carried a typed, wrong hash, and needed a correction.
+
 ## 2026-10-16 (#236 — dead-code sweep)
 
 - When deleting code, sweep the docs for the CONCEPTS it carried, not just its file paths. #236 grepped atlas/ for deleted module paths and missed a page describing the "virtual provider" and "generator seams" in prose (close BR-1). List each deleted entity's names and nouns, grep those, and delete or rewrite every hit. Include CODE COMMENTS in that sweep: round 2 found three lua/ comments still naming the removed seams, after atlas was clean.

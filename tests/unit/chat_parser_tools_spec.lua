@@ -686,3 +686,33 @@ describe("tool-body extent desync (#200 BR-43)", function()
         }))
     end)
 end)
+
+-- #234: chat_parser's reasoning termination is INTENTIONALLY not on
+-- highlight_structure's row step. The parser reads reasoning only inside an
+-- ANSWER (it is part of what the model said, and is accumulated as content for
+-- replay); the highlight state is a lexical walk that dims a 🧠: line wherever it
+-- sits. This pins the one place the two disagree, so a future unification
+-- has to decide it on purpose.
+describe("chat_parser vs highlight_structure reasoning scope (#234)", function()
+    it("a 🧠: line inside a QUESTION is question text to the parser, reasoning to the highlight walk", function()
+        local lines = { "---", "topic: t", "file: f.md", "---", "", "💬: q", "🧠: thinking aloud", "still asking",
+            "", "🤖: [A]", "answer" }
+        local parsed = parser.parse_chat(lines, parser.find_header_end(lines), test_config())
+        assert.is_nil(parsed.exchanges[1].reasoning, "the parser opened reasoning outside an answer")
+        assert.matches("thinking aloud", parsed.exchanges[1].question.content)
+
+        local structure = require("parley.highlight_structure")
+        local built = structure.build(lines, structure.patterns(test_config()))
+        assert.is_true(built.state_before[8].in_reasoning, "the highlight walk did not dim the 🧠: continuation")
+    end)
+
+    it("inside an ANSWER both agree that 🧠: opens reasoning", function()
+        local lines = { "---", "topic: t", "file: f.md", "---", "", "💬: q", "", "🤖: [A]", "🧠: r", "more", "",
+            "after" }
+        local parsed = parser.parse_chat(lines, parser.find_header_end(lines), test_config())
+        assert.is_not_nil(parsed.exchanges[1].reasoning)
+        local structure = require("parley.highlight_structure")
+        local built = structure.build(lines, structure.patterns(test_config()))
+        assert.is_true(built.state_before[10].in_reasoning)
+    end)
+end)

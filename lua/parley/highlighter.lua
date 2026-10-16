@@ -182,45 +182,47 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
     -- lookahead-decided mode takes over and a real [END] / structural
     -- marker controls termination.
     local streaming = require("parley.tasker").is_busy(buf, true)
-    local initial = render_state(structure, start_line - 1, streaming)
-    local in_block = initial.in_question
-    local in_code_block = initial.in_code
-    local code_fence_len = initial.code_fence_len
-    local in_reasoning_block = initial.in_reasoning
-    local in_reasoning_explicit_end = initial.reasoning_explicit_end
-    local in_tool_block = initial.in_tool
+    -- ONE state table, stepped by highlight_structure's own row halves (#234):
+    -- enter_row gives the state a row paints from, leave_row carries it to the
+    -- next row. No transition is written here; only painting decisions are.
+    local state = render_state(structure, start_line - 1, streaming)
+    local footer_start0 = footer_range and footer_range.start_row or nil
 
     for offset, line in ipairs(lines) do
         local line_nr = start_line + offset - 1
-        if structure.document_rows then
-            local before = render_state(structure, line_nr - 1, streaming)
-            local current_row = row_metadata(structure, line_nr - 1)
-            local previous_row = row_metadata(structure, line_nr - 2)
-            if streaming and current_row and current_row.confirmed and previous_row and previous_row.confirmed then
-                before.in_reasoning = before.in_reasoning or in_reasoning_block
-            end
-            in_block, in_code_block, code_fence_len = before.in_question, before.in_code, before.code_fence_len
-            in_reasoning_block, in_reasoning_explicit_end = before.in_reasoning, before.reasoning_explicit_end
-            in_tool_block = before.in_tool
-        end
         local metadata = row_metadata(structure, line_nr - 1)
         local shifted = lines.text_offsets and (lines.text_offsets[line_nr - 1] or 0) > 0
         local classified = shifted and (metadata and metadata.token or { kind = "text", token = "t" })
             or highlight_structure.classify(line, patterns)
-        -- #218: this used to keep a private copy of the structure's fence
-        -- toggle — byte-identical logic, drifting independently, and neither
-        -- copy reset at a 💬:/🤖: partition. Both now go through the ONE
-        -- transition function. Phase is preserved: `advance` runs before the
-        -- row is rendered, exactly as the old inline toggle did, so the fence
-        -- delimiter still renders as part of its own block.
-        local walk = {
-            in_question = in_block, in_code = in_code_block,
-            code_fence_len = code_fence_len, in_reasoning = in_reasoning_block,
-            reasoning_explicit_end = in_reasoning_explicit_end, in_tool = in_tool_block,
-        }
-        highlight_structure.reset_partition(walk, classified.token)
+        if structure.document_rows then
+            local before = render_state(structure, line_nr - 1, streaming)
+            local previous_row = row_metadata(structure, line_nr - 2)
+            -- Streaming overlay, not a transition rule: an unfinished reasoning
+            -- block stays open across confirmed rows until the stream ends.
+            if streaming and metadata and metadata.confirmed and previous_row and previous_row.confirmed then
+                before.in_reasoning = before.in_reasoning or state.in_reasoning
+            end
+            state = before
+        end
+        highlight_structure.enter_row(state, line_nr - 1, classified.token, footer_start0)
+        if M._observe_render_state then M._observe_render_state(line_nr - 1, vim.deepcopy(state)) end
+        -- Painting reads the row's code/tool/reasoning AFTER the shared
+        -- `advance` (#218 phase: a fence delimiter renders as part of its own
+        -- block; a structural marker has already ended reasoning), and the
+        -- question state from BEFORE the row.
+        local walk = vim.deepcopy(state)
         highlight_structure.advance(walk, classified.token, classified.fence_len or classified.render_fence_width)
-        in_code_block, code_fence_len, in_tool_block = walk.in_code, walk.code_fence_len, walk.in_tool
+        local in_block, in_code_block, in_tool_block = state.in_question, walk.in_code, walk.in_tool
+        local in_reasoning_block, in_reasoning_explicit_end = walk.in_reasoning, walk.reasoning_explicit_end
+        -- The 🧠: lookahead verdict: a transition INPUT for leave_row, so it is
+        -- taken for every 🧠: row, footer rows included (which paint nothing);
+        -- the structure owns the lookahead, streaming overlays it.
+        local explicit
+        if classified.kind == "reasoning" then
+            local after = metadata and metadata.after and metadata.after.render
+                or render_state(structure, line_nr, streaming)
+            explicit = streaming or after.reasoning_explicit_end
+        end
 
         local highlighted_regions = {}
         local row = line_nr - 1
@@ -235,7 +237,6 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
         local is_footer = is_footer_row(structure, row, footer_range)
         if is_footer then
             table.insert(result[row], { hl_group = "ParleyFootnote", col_start = 0, col_end = -1 })
-            in_block = false
         else
             local pos = 1
             while true do
@@ -248,13 +249,9 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
                 pos = tag_end + 1
             end
 
-            -- Any structural marker terminates an in-progress reasoning
-            -- block. This mirrors chat_parser's lenient termination so the
-            -- highlight tracks parse boundaries even when the model omits
-            -- the canonical blank-line terminator (or in pre-existing
-            -- chats authored under the old single-line 🧠: convention).
-            local classification = classified
-            local kind = classification.kind
+            -- A structural marker has already ended reasoning in `walk`
+            -- (lexical.advance), so nothing here re-derives that rule.
+            local kind = classified.kind
             local is_user = kind == "user"
             local is_assistant = kind == "assistant"
             local is_branch = kind == "branch"
@@ -262,10 +259,6 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
             local is_summary = kind == "summary"
             local is_tool_use = kind == "tool_use"
             local is_tool_result = kind == "tool_result"
-            if is_user or is_assistant or is_branch or is_local
-                or is_summary or is_tool_use or is_tool_result then
-                in_reasoning_block = false
-            end
 
             if kind == "reasoning_end" then
                 -- 🧠:[END] explicit terminator. Highlight the marker line
@@ -274,15 +267,8 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
                 -- checked before reasoning_pattern since the END marker
                 -- also starts with the reasoning prefix.
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
-                in_reasoning_block = false
             elseif kind == "reasoning" then
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
-                in_reasoning_block = true
-                -- The structure owns terminator lookahead. Streaming is only
-                -- a redraw-time overlay for an unfinished reasoning block.
-                local after = metadata and metadata.after and metadata.after.render
-                    or render_state(structure, row + 1, streaming)
-                in_reasoning_explicit_end = streaming or after.reasoning_explicit_end
             elseif is_summary or not shifted and line:match("^👂:") then
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
             elseif is_tool_use or is_tool_result then
@@ -292,7 +278,6 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
                 else
                     table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
                 end
-                in_tool_block = true
             elseif in_tool_block and not in_block then
                 -- Inside tool block fenced content — dim
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
@@ -302,22 +287,16 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
                 -- explicit-end mode blank lines are preserved as part of
                 -- the reasoning region and stay dimmed. Non-blank lines
                 -- always stay dimmed as ParleyThinking.
-                if line:match("^%s*$") and not in_reasoning_explicit_end then
-                    in_reasoning_block = false
-                else
+                if not (line:match("^%s*$") and not in_reasoning_explicit_end) then
                     table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
                 end
             elseif is_user then
                 table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
-                in_block = true
-            elseif is_assistant then
-                in_block = false
             elseif is_branch then
                 table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
-                in_block = false
-            elseif is_local then
-                in_block = false
-            elseif in_block and not in_code_block then
+            -- An 🤖:/🔒: row is not question text even inside a question; the
+            -- question itself ends in leave_row.
+            elseif in_block and not in_code_block and not is_assistant and not is_local then
                 table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
                 if not shifted and line:match("^@@") then
                     local is_tag_at_start = false
@@ -335,6 +314,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
             end
         end
         result[row].line_length = #line
+        highlight_structure.leave_row(state, classified.token, explicit)
     end
 
     return result

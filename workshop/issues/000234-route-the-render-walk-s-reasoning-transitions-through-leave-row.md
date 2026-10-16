@@ -1,12 +1,22 @@
 ---
 id: 000234
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-10-16
 estimate_hours:
-card_mirror: '879a7c85617f318358eb0102202b39641e821f35' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '5b4f6ff00a2a0ba31f4802a2c5bc636046004a86' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T06:21:11-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "11cbd01d", done: "4dd4399e"}
+actual_hours: 0.48
 ---
 
 # Route the render walk's reasoning transitions through leave_row
@@ -52,12 +62,30 @@ route it through the same helpers or record why its semantics must differ.
 - `chat_parser`'s reasoning termination is either on the shared helpers or
   documented as intentionally different, with a test pinning the difference.
 
+## Core concepts
+
+| Entity | Status | Where | What |
+|---|---|---|---|
+| `enter_row` | changed | lua/parley/highlight_structure.lua | Now exported: the PRE-snapshot half of a row's step (footer and partition resets). The redraw walk calls it per row. |
+| `leave_row` | changed | lua/parley/highlight_structure.lua | Now exported: the row's own transition (`advance` plus reasoning: `🧠:[END]`, `🧠:` with its lookahead verdict, the blank terminator). The redraw walk calls it per row. |
+| `lexical.enter_row` / `lexical.leave_row` | added | lua/parley/document/lexical.lua | The ONE per-row step (close round 1): moved to the lowest shared module so the document grammar's `render_before` (the production redraw path) uses it too; `highlight_structure` delegates (its `enter_row` only adapts a row index to the footer boolean). |
+
 ## Plan
 
-- [ ] Export the per-row step (or a painting-friendly split of it) from `highlight_structure`.
-- [ ] Rewrite the render walk's state handling on it; keep painting local.
-- [ ] Parity property test: render-walk state vs `state_before`.
-- [ ] Sweep `chat_parser` (and any other reasoning walker) for the same rules.
+Read 2026-10-16:
+- `lexical.advance` already owns the structural termination of reasoning (💬/🤖/🔒/🌿/📝/🔧/📎 clear `in_reasoning`), plus question, code and tool state.
+- The render walk runs `advance` on a copy but keeps only code and tool from it. It then re-derives question and reasoning by hand: the structural-kind termination, `🧠:[END]` (which clears only `in_reasoning`, the drift the issue names), `🧠:` + lookahead, and the blank terminator.
+- `chat_parser` is a parser, not a state walk. It scopes reasoning to the answer component and accumulates content.
+
+- [x] `highlight_structure` exports `enter_row` and `leave_row` (the step `derive` already uses).
+- [x] The render walk keeps ONE state table:
+  - `enter_row` → the state it paints from (and reports through a test seam);
+  - paint decisions read that state plus a post-`advance` copy (code, tool, reasoning after structural termination);
+  - `leave_row` carries the state to the next row.
+  Kept local as render-time inputs, not transition rules: painting, the `🧠:` `explicit` verdict (from the structure's lookahead, or `streaming`), and the streaming overlay.
+- [x] Parity property test: over random documents (#227's vocabulary), the state the render walk paints each row from equals `build`'s `state_before`.
+- [x] `chat_parser`: documented as intentionally different (answer-scoped reasoning and content accumulation), with a test pinning the difference: a `🧠:` outside an answer opens no parsed reasoning, but it does dim.
+- [x] Every existing highlighter spec unchanged and green; doc-block placement scan.
 
 ## Log
 
@@ -65,3 +93,19 @@ route it through the same helpers or record why its semantics must differ.
 
 Filed from the #227 boundary review (BR-7, Minor, ARCH-DRY), deferred as a
 separable render-path refactor.
+
+### 2026-10-16 (parley.nvim:4)
+- 2026-10-16: closed — Full suite green on 82f1c26c (sdlc-local/suite). Round-1 BR-1 fixed as a class: the row step (enter_row/leave_row) now lives in parley.document.lexical, and the document grammar render_before (the production document_rows path), the structure build/replace and the redraw walk all step through it; highlight_structure delegates. Whole-lua sweep of reasoning-state writers: only constructors, the streaming overlay, chat_parser and the grammar semantic sections remain (both answer-scoped by design, documented, pinned). Parity: render_walk_parity_spec (legacy walk vs build state_before, 3881 rows) and a new random-document case in document_grammar_spec (grammar render_before vs build, over 2000 rows); mutation (dropping the verdict) fails them. 75 document, highlight and parser specs green.; review verdict: SHIP
+
+- Built as planned. `compute_chat_highlights` holds one `state` table. `enter_row` gives the state it paints from (`M._observe_render_state` is the test seam). Painting reads that state plus a post-`advance` copy, and `leave_row` carries the next row. Deleted from the walk: the hand-written structural-kind termination, the `🧠:[END]` / `🧠:` / blank transitions (the `[END]` drift named in the Problem), and the question-state assignments.
+- **The parity test found a real divergence on its first run.** The walk computed the `🧠:` lookahead verdict only inside its non-footer paint branch, so a `🧠:` row in the footer carried a stale `reasoning_explicit_end` into the next row. The verdict is a transition INPUT, so it is now taken for every `🧠:` row before painting.
+- `tests/integration/render_walk_parity_spec.lua`, seed 234: 300 random documents, 3881 rows, 182 inside reasoning. The non-vacuity bound is 100; my first guess of 200 was above the measured count. Mutation: dropping the verdict fails it.
+- `chat_parser`: documented as intentionally different (answer-scoped reasoning, accumulated as content). Pinned in `chat_parser_tools_spec`: a `🧠:` in a question is question text to the parser but dims in the highlight walk; in an answer both agree.
+- The 30 highlight/render/parser-related specs are unchanged and green.
+- Process slip: my plan message to the hub carried a commit hash I typed instead of reading it from `git rev-parse`; I sent a correction with the real one (69f44a95…).
+- Close round 1 (BR-1): `document/grammar.lua` held a THIRD hand-written copy of the row step, feeding `render_before`, the production `document_rows` render path. My sweep had checked only `chat_parser`.
+  - The step moved into `parley.document.lexical` (`enter_row(state, token, in_footer)`, `leave_row(state, token, explicit, fence_len)`), the lowest module all three walkers already depend on; `grammar.lua` now calls it.
+  - Equivalence of its inputs: `t.blank` is exactly the `_` token, since an all-whitespace line can classify as nothing else. `kind == 'reasoning'/'reasoning_end'` is exactly the token, and the grammar keeps its `render_fence_width`.
+  - Whole-class sweep of `lua/` reasoning-state writers: only state constructors, the streaming overlay, `chat_parser` (documented) and the grammar's SEMANTIC sections (answer-scoped, like chat_parser's; the comment now says so) remain.
+  - New random-document case in `document_grammar_spec`: grammar `render_before` equals `build` `state_before` (300 documents, over 2000 rows). Mutation: dropping the verdict fails it and both fixed render cases. 75 document, highlight and parser specs green.
+

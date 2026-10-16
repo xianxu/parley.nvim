@@ -301,6 +301,7 @@ atlas:
       - tests/unit/chat_respond_footnote_spec.lua
       - tests/unit/chat_history_spec.lua
       - tests/unit/highlight_structure_spec.lua
+      - tests/integration/render_walk_parity_spec.lua
       - tests/integration/perf_chat_typing_spec.lua
       - tests/integration/perf_ownership_spec.lua
       - tests/integration/diagnostic_refresh_spec.lua
