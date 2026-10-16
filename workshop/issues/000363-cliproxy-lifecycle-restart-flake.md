@@ -143,3 +143,10 @@ Retained failed log: .git/sdlc/test-stats/failed/967cf6ec616ace4cd27d8c2c85d07fc
 (SHA256 prefix a78f45c6dd70). Applying the issue-backed flake rule: exactly
 one unchanged full rerun on the same 09f235c1 commit, not the prose-only
 current HEAD. A second unrelated flake blocks for hub guidance.
+
+The rerun's first preflight refused (no test executed): 09f235c1 was no longer
+a remote branch tip after the documentation push. Published temporary
+verification-only ref verify-363-suite-09f235c1 at the exact original commit
+to satisfy that precondition without rewriting the issue branch. It holds no
+new development; delete it after the check finishes, including a failed check.
+The unchanged suite rerun is then invoked against 09f235c1 explicitly.
