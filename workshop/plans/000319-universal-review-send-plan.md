@@ -125,3 +125,55 @@ Returned two producer-adapter corrections: legacy tracked type must precede
 outside-Couch classification, and fold only captured asks reflected in the
 write. Export shape is accepted for #319; final consumption still waits for
 the landed producer pin and #332. No implementation or live check claimed.
+
+### 2026-10-15 18:01 — landed export and approved independent-first order
+
+Authority: ops:0 delivery e11ea5e9-3fe5-48c2-b152-6f0364faa234. Build the
+canonical-export/local-inline portion from main now. Defer old sender removal
+and S1-specific tests until #332 lands, then merge main and finish; never base
+on #332's branch. This supersedes task 1's requirement to wait for both before
+starting independent code. There remains one final review/landing boundary.
+
+#399 landed as ariadne PR #264, f19623c46566c209a1b90c6d95a4714ce61212a9.
+Re-read its final export; all nine member hashes/sizes verify and six modes
+remain byte-identical. round.md is now 5,058 bytes, sha256
+daf90002ea12a41dd7827d4e59dfbe66087f4966ecdc508399c5f909234058ab. Its final
+contract excludes the agent's own edits from changes, derives known mode names
+from files, defines the frontier/edit region, and treats propose-strike asks as
+proposals. Use these landed bytes, not the earlier pin. The TL owns the combined
+#332/#399 live acceptance.
+
+Independent implementation detail:
+- scripts/sync-review-protocol.py reads the version-1 export and verifies all
+  member resolved bytes/hashes before any output write. It snapshots round,
+  grammar and modes into lua/parley/skills/review/, plus the source export.json;
+  it excludes the Couch adapter from local composition. --source and --output
+  are explicit, --check never writes, unsafe/duplicate paths and malformed
+  records refuse, and stale generated modes require visible reconciliation.
+- Generate SKILL.md from round + grammar, with provenance; keep local-adapter.md
+  authored locally and append it AFTER selected mode data in skill.source.
+  The adapter requires propose_edits and overrides pane/file IO instructions.
+  Named modes arrive as raw name/flag/body values; no second directive prose.
+  Preserve the existing no-mode marker-only local invocation with explicit
+  parser-default flag values, distinct from a process-instruction free-form
+  round. No per-file editor baseline is added to the local invocation.
+- Add pure instruction.context(modes, text) for neutral mode data. During this
+  independent part keep instruction.brief/Mode.directives for the old Couch
+  sender only; delete those duplicate producers with that sender after #332.
+- Tests: new tests/integration/review_protocol_bundle_spec.lua exercises the
+  generator against portable fixture directories (valid, drifted, malformed,
+  unsafe, stale and standalone); tests/unit/review_instruction_spec.lua tests
+  context values/order without IO; tests/integration/review_mode_load_spec.lua
+  tests real packaged round/grammar -> modes -> local adapter composition and
+  unchanged local invocation selection. Extend atlas/traceability.yaml to map
+  the new generator fixture test to modes/review.
+
+| Name | Kind | Location | Status | Responsibility |
+| --- | --- | --- | --- | --- |
+| instruction.context | PURE | lua/parley/skills/review/instruction.lua | new | Neutral selected mode data and operator instruction. |
+| sync-review-protocol | INTEGRATION | scripts/sync-review-protocol.py | new | Validated source export to fixed standalone snapshots; check-only freshness. |
+| ReviewSource | INTEGRATION | lua/parley/skills/review/init.lua | modified | Existing mode selection plus generated source and final local tool adapter. |
+
+The generated prompt/data additions exceed the quick shell: enter full flow
+for plan-quality and derive an estimate only after it passes. Targeted TDD
+precedes implementation; full recorded suite and close wait for final S1 work.

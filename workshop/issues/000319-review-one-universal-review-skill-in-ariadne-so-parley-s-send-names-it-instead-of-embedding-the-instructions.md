@@ -130,3 +130,13 @@ old Spec/Done-when wording about an editor-built diff and skill-dependent send.
 The original implementation proposal is retained verbatim as
 workshop/plans/000319-universal-review-send-proposal.md; the durable plan now
 records the approved execution tasks. No code changed in this revision.
+
+### 2026-10-15 18:01 — independent-first execution order (approved)
+
+ops:0 delivery e11ea5e9-3fe5-48c2-b152-6f0364faa234 authorizes building the
+independent canonical-export/local-inline work from main now. #399 is confirmed
+landed at f19623c46566c209a1b90c6d95a4714ce61212a9; its final export hashes
+were rechecked. #332 remains unlanded, so old sender deletion and S1 integration
+still wait for it, followed by merging main. Never base on #332's branch.
+The durable plan records exact source/composition/test details. Enter full
+change-code for the generated prompt/data surface; no code edited yet.
