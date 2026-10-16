@@ -1,12 +1,20 @@
 ---
 id: 000362
-status: open
+status: working
 deps: [parley.nvim#319]
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '094886e63ca3636e5910d9ab1e5743da2f85e2ca' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '35486bcfe2e859798f929c26a758c60996822909' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T16:04:39-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Review-protocol sync accepts S2's collaboration-modes export member
@@ -28,8 +36,37 @@ S2 M1 (ops `universal-agent-input-interface/design.side/01-s2-section-modes.md`,
 
 ## Plan
 
-- [ ]
+- [ ] Extend pure validation/rendering for an optional singleton at the fixed
+  collaboration-modes.md path; compose round, grammar, collaboration modes.
+  Keep old version-1 exports and strict rejection of unknown roles.
+- [ ] Extend owned-output preflight and add Python pure/real-CLI regressions
+  for ordering, corruption, duplicate/unknown roles, stale/unsafe output and
+  examples exclusion. Verify the existing local source orders its adapter last.
+- [ ] Coordinate with ariadne:2 and snapshot the landed S2 M1 export; verify
+  --check and standalone packaged composition. Update atlas and README.
+- [ ] Run focused/mapped tests and a recorded full suite, close-review, land
+  on SHIP and report to the hub.
 
 ## Log
 
 - Filed by parley.nvim:4 as S2's design owner, from ariadne:2's question on the export member. It depends on #319 landing (the sync lives there) and on ariadne's M1 export.
+
+### 2026-10-16 — initial plan
+
+Dispatched by ops:0 in delivery 44a5640b-6633-4b68-8a4b-dee8c13e7a32.
+Quick plan posted to the hub (70229a8f-43ec-4ee3-80ff-8af4ef1b884f,
+submitted); proceeding unless objected. Producer coordination is queued to
+ariadne:2, asking for its landed export pin. Build from fresh main after #334.
+
+ARCH-DRY/PURE: reuse validate_manifest/render_snapshot (pure) and existing CLI
+preflight (IO); no parallel prompt builder or runtime peer lookup. ARCH-PURPOSE:
+consumer chain is export -> snapshot SKILL.md -> review.skill.source -> selected
+mode context -> local adapter. Fixed output ownership must include the new file
+so --check sees drift and preflight refuses symlinks before any write. The
+optional member preserves prior version-1 packages; other unknown roles refuse.
+One fixed package file is replaced by each sync, not an accumulating artifact
+(ARCH-FUNERAL). Source digests/path validation remain the trust boundary
+(ARCH-SECURE). This build-time batch adds no process or state between events
+(ARCH-ORDER); input sizes remain the finite manifest/package (ARCH-CONSTRAINTS).
+Real scratch source/output trees exercise IO without external services or mocks
+(ARCH-MOCK). Do not snapshot an unlanded producer branch.
