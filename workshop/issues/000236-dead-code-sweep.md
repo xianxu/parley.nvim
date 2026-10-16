@@ -118,6 +118,7 @@ entry points in the Spec found six unreached modules: `spinner`,
 `init.lua:99` requires it.
 
 ### 2026-10-16 (parley.nvim:4)
+- 2026-10-16: closed — Full suite green on d1daab0a (sdlc-local/suite); the later commits are atlas/docs and lua comment-only edits (lint clean). Round-2 fix: no lua/ comment names the removed skill seams (init.lua:107; skill_manifest.lua:4 and :14); the concept sweep now covers lua/ and tests/ as well as atlas/ and README. All earlier evidence holds (rows, reachability check red on a planted orphan, counts, net minus 1744 lines).; review verdict: SHIP
 
 Row by row (base 5abad047):
 

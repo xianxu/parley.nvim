@@ -167,3 +167,71 @@ dispose:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"cb16029b-eaf4-40ec-ba3c-c563fe688100","repository":"github.com/xianxu/parley.nvim","issue_id":"000236","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/880a7638b0d9ddb5","reviewed_head":"c1dbd49954e584805d1774b3a9958b030d244731","slot":"parley.nvim:4","requested_at":"2026-10-16T12:54:45.403943Z"},"phase":"finished","pid":25919,"started_at":"2026-10-16T12:54:45.54805Z","finished_at":"2026-10-16T12:56:05.96242Z","session_id":"a091b382-760b-45d7-b95a-c80c345e8dd5","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T06:00:15-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 236 — delete unreachable modules and dead config |
+| repo | parley.nvim |
+| issue file | workshop/issues/000236-dead-code-sweep.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 5abad04737d396828eb9614b28c20dbec43d7486..430a6f913e1d4677bc330c907808a81c5274aaa8 |
+| command | sdlc close --issue 236 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T06:00:15-07:00 |
+| verdict | SHIP |
+
+## Review
+
+I'm checking the BR-1 fix sites and running the affected specs before giving the verdict.
+
+Specs are failing to start in this checkout; I'm reading the runner output to see why.
+
+Now the reachability spec, plus a red check with a planted orphan:
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+BR-1 is fixed, and nothing new turned up. Every stale mention of the removed seams that BR-1 listed has been corrected at head:
+
+- `atlas/skills/skill-system.md:40-42` now says the stack is the plugin skills, then the user's skills. Line 68 now says "disk providers (plugin, then user)".
+- The comments in `lua/parley/init.lua:107`, `lua/parley/skill_manifest.lua:4` and `skill_manifest.lua:14` were updated in the same way. So were two more that BR-1 didn't list: the `skill_providers.lua` header and the `skill_registry.lua` precedence comment.
+
+I searched `lua/`, `tests/`, `atlas/`, `README.md`, `scripts/` and `packaging/` for the names of everything this issue deleted. The concepts searched were: discovery, `TypeDescriptor`, the virtual provider, the generators, `repo_discovery`, the agent's `cmd_prefix` field, the two config keys, `obfuscate`, `spinner`, `test_agent_picker`, `google_drive`, `tools.version`, and the `parley.review` shim. The only hits left are intentional notes that something was removed in #236, or unrelated things with similar names: `selection_spinner`, `progress.SPINNER`, `config.cmd_prefix`. No caller passes options to `skill_registry.current()`.
+
+1. **Strengths**
+   - `tests/arch/module_reachability_spec.lua`: the graph walk `unreached` is a pure function tested on a made-up graph that covers every edge form, including an orphan that requires other modules. The file-reading part is kept to `tree()`. It states its limit honestly: it finds orphaned files, not modules that are loaded but never used.
+   - I ran it red myself: a planted `lua/parley/zz_orphan.lua` fails it with `parley.zz_orphan`. It passes on the tree as committed.
+   - `review_spec.lua` now points at `parley.skills.review`, and all 48 marker-parsing cases still pass, so that coverage survives deleting the shim.
+   - Each row of the issue's table is either deleted or kept with a reason in the Log. Azure is kept, because a user's `providers` table can still reach it.
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor:** none worth raising.
+5. **Test coverage:** I ran these through `make test-spec`, and all passed:
+   - `skills/skill-system`, including `skill_providers_spec` (the 7 `providers.disk` cases) and the registry cases.
+   - `modes/review`, including the 48 `parse_markers` cases.
+   - `providers/tool_execution`, including the reachability spec, both green and red as described above.
+
+   I did not run the full `make test`. The Log records 435 spec files and 6319 cases after the change. `make test-changed` could not resolve a base ref in this checkout.
+6. **Architecture:**
+   - **ARCH-DRY: pass.** The diff is almost all deletions. The new spec reuses `arch_helper.worktree_files`.
+   - **ARCH-PURE: pass.** The pure graph walk is separate from the file reads.
+   - **ARCH-PURPOSE: pass.** The sweep searched by concept name, not just file path, across docs and code, which covers the class of stale reference rather than just the one site. The reachability check enforces "no orphan files" going forward.
+7. **Plan revisions:** none. The Core concepts rows (`current` changed, `virtual` deleted) match the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      At head: skill-system.md:40-42 and :68 describe only the plugin then user disk stack; init.lua:107, skill_manifest.lua:4 and :14, the skill_providers.lua header and skill_registry.lua comments name no virtual or repo seam; a concept search of lua/, tests/, atlas/, README, scripts and packaging finds only intentional removal notes.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"2e784204-3b9e-4cad-b161-e2217d262c6b","repository":"github.com/xianxu/parley.nvim","issue_id":"000236","recipe":"small-diff-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/28f23fc1e54b1938","reviewed_head":"430a6f913e1d4677bc330c907808a81c5274aaa8","slot":"parley.nvim:4","requested_at":"2026-10-16T12:57:29.95442Z"},"phase":"finished","pid":33725,"started_at":"2026-10-16T12:57:30.168864Z","finished_at":"2026-10-16T13:00:14.027052Z","session_id":"93ae4872-2be1-4b15-9efd-bf427bfca271","outcome":"returned"}] -->
