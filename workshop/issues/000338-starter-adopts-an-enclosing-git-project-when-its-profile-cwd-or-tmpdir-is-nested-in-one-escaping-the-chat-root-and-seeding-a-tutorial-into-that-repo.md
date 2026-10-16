@@ -6,7 +6,7 @@ github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '201c23693d01958c38bbe9771042c8be758f6757' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a235e4561606a79e535df15f8f50a42d2f601d58' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T17:04:18-07:00
 claimant:
     operator: Xian Xu
@@ -16,7 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "00ecb4cf", done: "dfdbf350"}
-actual_hours: 0.54
+actual_hours: 0.57
 ---
 
 # Starter adopts an enclosing git project when its profile cwd or TMPDIR is nested in one, escaping the chat root and seeding a tutorial into that repo
