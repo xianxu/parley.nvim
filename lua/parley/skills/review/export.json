@@ -1,0 +1,92 @@
+{
+  "schema": "ariadne/universal-review-export",
+  "version": 1,
+  "members": [
+    {
+      "role": "round",
+      "path": "round.md",
+      "bytes": 5058,
+      "sha256": "daf90002ea12a41dd7827d4e59dfbe66087f4966ecdc508399c5f909234058ab"
+    },
+    {
+      "role": "grammar",
+      "path": "review-convention.md",
+      "source": "construct/local/fix/review-convention.md",
+      "bytes": 8774,
+      "sha256": "56ba73da56b8968d56f8335c024c19038a709363aa8be42778be9af7572918ef"
+    },
+    {
+      "role": "adapter",
+      "name": "file-edit",
+      "path": "adapters/file-edit.md",
+      "bytes": 4596,
+      "sha256": "c5c481fe39564aacde59ea7a77eee4ade46aa98af14862b5b4733d6fe39cacff"
+    },
+    {
+      "role": "mode",
+      "name": "developmental",
+      "path": "modes/developmental.md",
+      "order": 1,
+      "scope": "whole-doc",
+      "deletions": "apply-with-gutter-why",
+      "frontier": "off",
+      "bytes": 531,
+      "sha256": "50ddea58a807bd44507265597f8e5a32ce6d3ee42edba81c08d4ad8bc5b9b4e3"
+    },
+    {
+      "role": "mode",
+      "name": "line-editing",
+      "path": "modes/line-editing.md",
+      "order": 2,
+      "scope": "whole-doc",
+      "deletions": "propose-strike",
+      "frontier": "on",
+      "bytes": 476,
+      "sha256": "ae596e467b3bf8eca06355e3fba14144dfdd84e7d2695a80e24bc513ddaf41cc"
+    },
+    {
+      "role": "mode",
+      "name": "copy-editing",
+      "path": "modes/copy-editing.md",
+      "order": 3,
+      "scope": "whole-doc",
+      "deletions": "propose-strike",
+      "frontier": "on",
+      "bytes": 531,
+      "sha256": "c5de437dbe5f7c228dc458cbc57a95e3afb5d75ac4f24cba4754e70432262b3f"
+    },
+    {
+      "role": "mode",
+      "name": "proofreading",
+      "path": "modes/proofreading.md",
+      "order": 4,
+      "scope": "whole-doc",
+      "deletions": "apply",
+      "frontier": "on",
+      "bytes": 464,
+      "sha256": "b19efa549e31c47d0c4d39612e2b4b28979476ee21996d8930a579e00e87ad3f"
+    },
+    {
+      "role": "mode",
+      "name": "fact-check",
+      "path": "modes/fact-check.md",
+      "order": 5,
+      "scope": "whole-doc",
+      "deletions": "propose-strike",
+      "frontier": "on",
+      "bytes": 510,
+      "sha256": "c3fbc512061b607a6bd776d9396c8143d5bd72ba005f71012f32387ae55f060b"
+    },
+    {
+      "role": "mode",
+      "name": "free-form",
+      "path": "modes/free-form.md",
+      "order": 6,
+      "scope": "whole-doc",
+      "deletions": "propose-strike",
+      "frontier": "off",
+      "bytes": 500,
+      "sha256": "1dd5a41723a959bbea5701edfaffa9bd246d3782f9f32f5d3724fe481d19faed"
+    }
+  ]
+}

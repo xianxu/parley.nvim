@@ -308,14 +308,49 @@ end
 
 local refresh, probe
 
+-- Every window's view of `buf`, with the text it was taken against (#356).
+local function capture_views(buf)
+    local snap = { lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false), wins = {} }
+    for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+        snap.wins[win] = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+    end
+    return snap
+end
+
+-- After an external write reloaded `buf`, put each window's cursor and top line
+-- back on the text they showed, mapped through the diff (#356). Without it the
+-- reload kept line NUMBERS, so an agent's edit above moved the operator.
+local function restore_views(buf, snap)
+    local view_map = require("parley.view_map")
+    local new = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local hs = view_map.hunks(snap.lines, new)
+    for win, view in pairs(snap.wins) do
+        if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+            local pos = view_map.map(snap.lines, new, { view.lnum, view.col }, hs)
+            -- curswant is a virtual column ($-sticky as MAXCOL): kept while the
+            -- column is, re-derived from the screen when the text moved it.
+            local moved = pos[2] ~= view.col
+            view.lnum, view.col = pos[1], pos[2]
+            if moved then view.curswant = nil end
+            view.topline = view_map.map_line(snap.lines, new, view.topline, hs)
+            vim.api.nvim_win_call(win, function()
+                vim.fn.winrestview(view)
+                if moved then vim.fn.winrestview({ curswant = vim.fn.virtcol(".") - 1 }) end
+            end)
+        end
+    end
+end
+
 -- A clean buffer follows the file on disk silently; the owed state is
 -- re-read at once, since a write is usually the agent's answer.
 local function reload(buf)
+    local views = capture_views(buf)
     M.with_buffer_read(buf, function()
         vim.api.nvim_buf_call(buf, function()
             vim.cmd("silent edit!")
         end)
     end)
+    restore_views(buf, views)
 	state[buf].probed = nil
 	probe(buf)
 end
@@ -642,6 +677,7 @@ M.attach = function(buf, identity, observed)
                     -- A scheduled callback can run inside that read's autocmds,
                     -- so scheduler progress cannot prove the read has ended.
                     native_reads[buf] = true
+                    s.views = capture_views(buf) -- restored at FileChangedShellPost
                 end
 				return
 			end
@@ -658,7 +694,10 @@ M.attach = function(buf, identity, observed)
 		group = group,
 		buffer = buf,
         callback = function(event)
-            if event.event == "FileChangedShellPost" then native_reads[buf] = nil end
+            if event.event == "FileChangedShellPost" then
+                native_reads[buf] = nil
+                if s.views then restore_views(buf, s.views); s.views = nil end
+            end
             if s.moving then return end
             s.loaded = disk_mtime(buf)
             if event.event ~= "BufWritePost" and s.feedback then s.feedback = nil; refresh(buf) end

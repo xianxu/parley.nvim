@@ -50,7 +50,10 @@ overwritten by the first edit. A failed send leaves the file free; `<M-CR>`
 resends. The lock is read from disk, so a reopened buffer shows it too. While
 the buffer is loaded, parley watches the file once a second: during a free
 turn an agent write reloads the unmodified buffer silently (and so does a
-buffer-local `FileChangedShell` on focus or `:checktime`). The operator's turn
+buffer-local `FileChangedShell` on focus or `:checktime`). Either reload keeps
+every window on the text it showed (#356): `view_map` maps each cursor and top
+line through a line diff, and a line the agent rewrote is followed by its own
+text. The operator's turn
 never starts on an old copy unnoticed: an agent write that landed just before
 the first edit lost the race, and goes through the violation path below with
 the operator's text kept. Outside the operator's turn, submit refuses to

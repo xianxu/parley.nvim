@@ -71,6 +71,12 @@ protection. Supported moves retain identity and migrate existing `.side/`
 backlinks through a forward-only recovery journal. Outside a Couch pane, the
 existing [document review](atlas/modes/review.md) flow remains.
 
+In a Couch pane, **Alt+Return** sends only `submitted: ABSOLUTE_PATH` through
+the registered document flow. The agent's shared `xx-universal-review` skill
+reads the file's `process-instruction:` and changes since its last read.
+Outside Couch, the same shortcut runs Parley's inline review using the bundled
+canonical round, modes and marker grammar with its local editing tool.
+
 Press **Alt+Shift+O** in Normal or Insert mode to return to the previous file
 in the current window, restoring its cursor position. Follow links with Alt+o,
 then use Alt+Shift+O repeatedly to return through answer and side documents to
