@@ -221,3 +221,95 @@ dispose:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"566a4c6c-d8cf-4d03-8585-f4e06ebbcba4","repository":"github.com/xianxu/parley.nvim","issue_id":"000345","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/d36c0dfe34d038d1","reviewed_head":"8787140f9b1204cfc3a255f2a5f9102c2f6097c4","slot":"parley.nvim:4","requested_at":"2026-10-16T09:03:42.418734Z"},"phase":"finished","pid":26188,"started_at":"2026-10-16T09:03:42.712443Z","finished_at":"2026-10-16T09:07:24.876979Z","session_id":"f7753cf0-0181-4254-9c77-3535742cb93f","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T02:20:57-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 345 — Restart path blocks the main loop on a synchronous lsof (and stop's identity probe) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000345-restart-path-blocks-the-main-loop-on-a-synchronous-lsof-and-stop-s-identity-probe.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 53be0c7ba673bb3aa243f05174d3719481259086..a3777a50afddb42c05796f811641dd8516a57c9d |
+| command | sdlc close --issue 345 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T02:20:57-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Reviewing the #345 diff; next I'll run the budget and lifecycle specs, then revert the BR-1 fix to confirm a test fails without it.
+
+Lifecycle spec ran; checking full output (my runner truncated it), then reverting the BR-1 fix.
+
+Now the mutation: drop the `remaining` limit from the post-exit read.
+
+BR-1's fix goes red when reverted. Now running the auth-login spec, the other spec this diff touched.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+**Verdict: SHIP.** The restart path now does its listener reads and its identity probe asynchronously. Each lsof call is capped at `LSOF_MAX_MS`, and a read that times out counts as unread rather than "no listener". The post-exit read now gets only the time left before the release deadline, so it and the fallback probe can no longer run back to back (BR-1). I checked BR-1 by reverting the fix (`end, remaining)` → `end)` at `lua/parley/cliproxy.lua:536`) and re-running the lifecycle spec. Exactly one test fails: "the release wait never runs its listener read past the deadline", which reports "the wait decided at 3789 ms". With the fix back, all specs pass: the lifecycle spec (64/0), cliproxy_budget_spec (3/0), cliproxy_auth_login_spec (21/0) and fixture_lifecycle_spec (4/0). The budget now adds up to 25 s against the 30 s backstop, exactly the 5 s headroom the spec requires. Only Minor findings remain: BR-4, which the author accepted as a known risk, and one misplaced doc comment.
+
+1. **Strengths**
+   - One lsof seam with two drivers: `lsof_argv` and `parse_listener_pids` (`cliproxy.lua:939-950`) are shared by the sync and async reads (ARCH-DRY).
+   - A timeout returns `"lsof timed out"`, not an empty list (`cliproxy.lua:973-975`). A read that never answered is never taken as "port free".
+   - `_restart_budget_keys` names the terms a restart spends, and the budget spec sums them and checks each key exists. This replaces a hand-written list that had already left out a term.
+   - `fake_lsof` checks whether each pid is still alive and logs what it printed. The responsiveness test can therefore prove the restart took the exit-confirmed path (`listed: <pid>`, then `listed: `).
+   - The stop contract tests now run against both `stop()` and `stop_async()`. The lesson about tests that wrap the old function is real: no product-side `cliproxy.stop =` wrappers remain, and the remaining sync `stop()` calls are all teardown.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - **Misplaced doc comment** (`cliproxy.lua:933-938`): the doc block for `pids_on_port` ("PIDs listening on `port`…") now sits above `lsof_argv`, because the new helpers were inserted between the comment and the function it describes. This is the 2nd finding in family `doc-annotation-placement` (BR-2 was the 1st). The rule that covers both: a new helper goes above an existing doc block, never between the block and its definition. I swept every insertion in this diff. `sigterm_all`/`kill_spawned`, `M._wait_port_released`, `_restart_budget_keys`, the `LSOF_MAX_MS` constant and the `port_release` comment are all placed correctly, so this is the only remaining instance.
+   - **Stale prose in the `wait_port_released` header** (`cliproxy.lua:487-496`): it still says "M.stop() returns immediately" and "the pids stop() signalled". The caller is now `stop_async`.
+   - **BR-4 is still open:** the async window during which a concurrent spawn can be reaped is unchanged. The Log records it as an accepted risk.
+
+5. **Test coverage notes**
+   - The responsiveness test asserts a maximum tick gap under 750 ms across two 1.5 s reads, plus the lsof log contents. This meets the "Done when" item.
+   - The time limit is covered twice: once at the default limit and once with a 300 ms limit passed in.
+   - The deadline pass-through is tested end to end, and that test fails when the fix is reverted (see above).
+   - Dropping `stop_listener_read` from `_restart_budget_keys` would not fail any test, because the compound case only asserts `>`. That is acceptable: the spec still catches a key that names no real term.
+
+6. **Architecture**
+   - ARCH-DRY: pass. The lsof argv and parse are shared, and the kill helpers are shared by both stops.
+   - ARCH-PURE: pass. `parse_listener_pids` is pure, and the IO stays in the two thin drivers.
+   - ARCH-PURPOSE: pass. Every caller on the restart path (`restart_managed`, `:ParleyProxy stop`) uses the async versions. The remaining sync reads are named and justified in the Log.
+   - ARCH-MOCK: pass. `fake_lsof` sits behind the existing `_set_process_tools` seam and models whether each listener is still alive. A live conformance check for lsof was already missing before this diff, and the change doesn't make that worse.
+   - ARCH-CONSTRAINTS: pass. lsof is bounded, the release read is clamped to the deadline, and the budget is derived from constants and checked by the spec.
+   - ARCH-SECURE: pass. The pids are parsed into numbers, and the argv is passed as an array.
+   - ARCH-ORDER: flag (Minor, BR-4). The `stop_async` window against a concurrent `ensure_running` is not modeled. Two concurrent restarts were already unmodeled before this diff.
+   - ARCH-FUNERAL: pass. Nothing durable is created; the test's lsof log is a `tempname()` file.
+
+7. **Plan revisions:** none. The plan's Core-concepts table matches the code; I checked every listed entity at its stated path.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The post-exit read is passed `remaining` (cliproxy.lua:536), stop_listener_read is in _restart_budget_keys, and the budget totals 25 s against 30 s. Reverting the pass-through fails "the release wait never runs its listener read past the deadline" (3789 ms); restored, all specs pass.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Still present. The Log accepts it as a known risk (an explicit restart racing a dispatch's spawn). Minor, non-blocking; it should become its own issue if kept.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: doc-annotation-placement
+    title: |
+      The pids_on_port doc block now sits above lsof_argv, separated from pids_on_port by the new helpers
+    detail: |
+      cliproxy.lua:933-938. 2nd instance in this family (after BR-2). The rule: insert a new helper above an existing doc block, never between the block and its definition. A sweep of every insertion in this diff found no other instance. Fix: move lsof_argv and parse_listener_pids above the "PIDs listening on `port`" comment. Separately, the wait_port_released header (lines 487-496) still names M.stop() where the caller is now stop_async.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"676f8dbb-ed64-49e8-9fd6-fc7a25e47a11","repository":"github.com/xianxu/parley.nvim","issue_id":"000345","recipe":"milestone-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/425de50f60fda53b","reviewed_head":"a3777a50afddb42c05796f811641dd8516a57c9d","slot":"parley.nvim:4","requested_at":"2026-10-16T09:17:17.228735Z"},"phase":"finished","pid":16716,"started_at":"2026-10-16T09:17:17.47803Z","finished_at":"2026-10-16T09:20:53.037786Z","session_id":"925103fa-19d7-490f-bb3d-029c4e1f018e","outcome":"returned"}] -->

@@ -169,6 +169,89 @@ rounds:
       recipe: milestone-review
       isolation: checkout
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 676f8dbb-ed64-49e8-9fd6-fc7a25e47a11
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000345"
+            recipe: milestone-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/425de50f60fda53b
+            reviewed_head: a3777a50afddb42c05796f811641dd8516a57c9d
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T09:17:17.228735Z"
+          phase: finished
+          pid: 16716
+          started_at: "2026-10-16T09:17:17.47803Z"
+          finished_at: "2026-10-16T09:20:53.037786Z"
+          session_id: 925103fa-19d7-490f-bb3d-029c4e1f018e
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: a3777a50afddb42c05796f811641dd8516a57c9d
+        tracker_head: e2b7da5ed6d5c8f0cdad99e86b567c4da73270da
+        branch_point: 53be0c7ba673bb3aa243f05174d3719481259086
+        since: "2026-10-16T01:01:31-07:00"
+        until: "2026-10-16T02:09:49-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T01:01:31-07:00"
+              end: "2026-10-16T02:09:49-07:00"
+              began: "2026-10-16T01:01:31-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: dea7bbfecce461b9e1aeac384d54d162ff6bd4c97509da00a9cd36e0d968ee08
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 4694671
+              windows:
+                - start: "2026-10-16T01:01:31-07:00"
+                  end: "2026-10-16T02:09:49-07:00"
+        cuts:
+            - dispatched: "2026-10-16T01:43:07-07:00"
+              finalized: "2026-10-16T01:46:51-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T02:03:42-07:00"
+              finalized: "2026-10-16T02:07:26-07:00"
+              finalizing: false
+      "n": 3
+      timestamp: "2026-10-16T02:20:57-07:00"
+      dispatched: "2026-10-16T02:17:17-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: The post-exit read is passed `remaining` (cliproxy.lua:536), stop_listener_read is in _restart_budget_keys, and the budget totals 25 s against 30 s. Reverting the pass-through fails "the release wait never runs its listener read past the deadline" (3789 ms); restored, all specs pass.
+          round: 3
+        - id: BR-4
+          disposition: not-addressed
+          note: Still present. The Log accepts it as a known risk (an explicit restart racing a dispatch's spawn). Minor, non-blocking; it should become its own issue if kept.
+          round: 3
+      findings:
+        - kind: defect
+          id: BR-5
+          severity: Minor
+          title: The pids_on_port doc block now sits above lsof_argv, separated from pids_on_port by the new helpers
+          detail: 'cliproxy.lua:933-938. 2nd instance in this family (after BR-2). The rule: insert a new helper above an existing doc block, never between the block and its definition. A sweep of every insertion in this diff found no other instance. Fix: move lsof_argv and parse_listener_pids above the "PIDs listening on `port`" comment. Separately, the wait_port_released header (lines 487-496) still names M.stop() where the caller is now stop_async.'
+          family: doc-annotation-placement
+          round: 3
+      recipe: milestone-review
+      isolation: checkout
+      reviewed: a3777a50afddb42c05796f811641dd8516a57c9d
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#345 (boundary-review)
@@ -198,7 +281,19 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-3 — addressed — fake_lsof filters to live pids, and the responsiveness test asserts the reads list the leftover and then nothing, so the exited fast path is covered; passes at head.
 - BR-4 — not-addressed — Accepted, not fixed (issue log). Minor and non-blocking: a dispatch's ensure_running racing an explicit restart can still be reaped in stop_async's async window.
 
+## Round 3 — 2026-10-16T02:20:57-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — The post-exit read is passed `remaining` (cliproxy.lua:536), stop_listener_read is in _restart_budget_keys, and the budget totals 25 s against 30 s. Reverting the pass-through fails "the release wait never runs its listener read past the deadline" (3789 ms); restored, all specs pass.
+- BR-4 — not-addressed — Still present. The Log accepts it as a known risk (an explicit restart racing a dispatch's spawn). Minor, non-blocking; it should become its own issue if kept.
+
+### Raised
+
+- **BR-5** [Minor] `doc-annotation-placement` (kind: defect) The pids_on_port doc block now sits above lsof_argv, separated from pids_on_port by the new helpers
+  cliproxy.lua:933-938. 2nd instance in this family (after BR-2). The rule: insert a new helper above an existing doc block, never between the block and its definition. A sweep of every insertion in this diff found no other instance. Fix: move lsof_argv and parse_listener_pids above the "PIDs listening on `port`" comment. Separately, the wait_port_released header (lines 487-496) still names M.stop() where the caller is now stop_async.
+
 ## Open findings
 
-- **BR-1** [Important] `repair-budget-term-derivation` (kind: defect) port_release budget uses max(lsof, probe) but the post-exit lsof read and the deadline probe run sequentially
 - **BR-4** [Minor] `unmodeled-async-interleaving` (kind: defect) stop_async's async probe and lsof window lets a concurrent ensure_running's fresh proxy be found and SIGTERMed
+- **BR-5** [Minor] `doc-annotation-placement` (kind: defect) The pids_on_port doc block now sits above lsof_argv, separated from pids_on_port by the new helpers

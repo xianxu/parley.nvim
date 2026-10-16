@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "15759629", done: "8e52f35c"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Restart path blocks the main loop on a synchronous lsof (and stop's identity probe)
@@ -94,6 +94,8 @@ blocked on its identity curl (up to 2 s) is the same user-visible freeze.
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Full suite green on a3777a50 (sdlc-local/suite, main merged); one earlier run hit an unrelated starter welcome-lock flake, filed as #348 (passed 3 of 3 alone, files untouched by this branch). Round-2 BR-1 items: _restart_budget_keys single-sources the restart terms (stop_listener_read added; the budget spec sums the keys and asserts each is a real term); a release-wait case with a process exiting at 1.7 s and a 4 s fake lsof decides before 3000 ms, and without the remaining-time pass-through it decides at 3787 ms (mutation fails it). Earlier evidence holds: no main-loop lsof or curl on the restart path; max tick gap under 750 ms; mutations: sync read 1, probe-only 4, no lsof timeout 1, ignored limit 1.; review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 127 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 ### 2026-10-16
 
