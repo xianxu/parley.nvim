@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "d45ae54a"}
 ---
 
 # help-parley omits the make goldens and make perf-finder targets
