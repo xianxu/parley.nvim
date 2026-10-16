@@ -6,13 +6,12 @@ describe("test_isolation.check", function()
     local root = "/scratch/env"
     local function env(over)
         return vim.tbl_extend("force", { PARLEY_TEST_ENV_ROOT = root, HOME = root .. "/home",
-            XDG_DATA_HOME = root .. "/xdg/data", XDG_STATE_HOME = root .. "/xdg/state",
+            XDG_CONFIG_HOME = root .. "/xdg/config", XDG_DATA_HOME = root .. "/xdg/data", XDG_STATE_HOME = root .. "/xdg/state",
             XDG_CACHE_HOME = root .. "/xdg/cache" }, over or {})
     end
 
     it("accepts every root inside the marked root", function()
         assert.same({}, iso.check(env()))
-        assert.same({}, iso.check(env({ XDG_CONFIG_HOME = root .. "/config" })))
     end)
     it("refuses an environment with no marker", function()
         local reasons = iso.check(env({ PARLEY_TEST_ENV_ROOT = "" }))
@@ -25,8 +24,9 @@ describe("test_isolation.check", function()
         assert.matches("^HOME=/Users/operator is outside", reasons[1])
         assert.matches("^XDG_CONFIG_HOME=", reasons[2])
     end)
-    it("refuses a required root that is unset, and a prefix that is not a parent", function()
+    it("refuses a root that is unset, and a prefix that is not a parent", function()
         assert.matches("XDG_DATA_HOME is unset", iso.check(env({ XDG_DATA_HOME = "" }))[1])
+        assert.matches("XDG_CONFIG_HOME is unset", iso.check(env({ XDG_CONFIG_HOME = "" }))[1])
         assert.equals(1, #iso.check(env({ HOME = root .. "-sibling/home" })))
     end)
     it("resolves links before comparing", function()
@@ -38,6 +38,22 @@ describe("test_isolation.check", function()
         assert.is_true(iso.inside(real .. "/target", link .. "/data"))
         assert.is_false(iso.inside(real .. "/target", real .. "/other"))
         vim.fn.delete(real, "rf")
+    end)
+end)
+
+-- An operator who exports a root the harness does not pin would have every
+-- harness run refused (#342 close review): TEST_ENV must pin each one.
+describe("the harness pins every guarded root", function()
+    it("assigns each test_isolation root inside TEST_ENV", function()
+        local line
+        for _, l in ipairs(vim.fn.readfile("Makefile.parley")) do
+            if l:match("^TEST_ENV = ") then line = l end
+        end
+        assert.is_not_nil(line, "Makefile.parley defines TEST_ENV")
+        assert.matches('PARLEY_TEST_ENV_ROOT="%$%(TEST_ENV_ROOT%)"', line)
+        for _, name in ipairs(iso.ROOTS) do
+            assert.matches(" " .. name .. '="%$%(TEST_', line, name .. " is not pinned by TEST_ENV")
+        end
     end)
 end)
 

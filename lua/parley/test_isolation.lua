@@ -4,6 +4,11 @@
 -- a spec when this fails; cliproxy refuses to write outside it in test mode.
 local M = {}
 
+--- Every root the harness must pin inside PARLEY_TEST_ENV_ROOT (Makefile.parley
+--- TEST_ENV), in check order. A root left unpinned would let an operator's own
+--- export of it refuse every harness run.
+M.ROOTS = { "HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME" }
+
 local function resolved(path)
     if type(path) ~= "string" or path == "" then return nil end
     local absolute = vim.fn.fnamemodify(path, ":p"):gsub("/+$", "")
@@ -37,12 +42,11 @@ function M.check(env)
         return { "PARLEY_TEST_ENV_ROOT is unset: this is not the harness's isolated environment" }
     end
     local reasons = {}
-    for _, name in ipairs({ "HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_CONFIG_HOME" }) do
+    for _, name in ipairs(M.ROOTS) do
         local value = env[name]
-        local required = name ~= "XDG_CONFIG_HOME" -- unset config follows HOME
-        if (value == nil or value == "") and required then
+        if value == nil or value == "" then
             reasons[#reasons + 1] = name .. " is unset"
-        elseif value and value ~= "" and not M.inside(root, value) then
+        elseif not M.inside(root, value) then
             reasons[#reasons + 1] = ("%s=%s is outside %s"):format(name, value, root)
         end
     end

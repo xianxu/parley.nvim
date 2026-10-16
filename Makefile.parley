@@ -1,7 +1,7 @@
 # Parley-specific targets (Lua/Neovim plugin) — include from your project Makefile:
 #   include Makefile.parley
 
-.PHONY: help-parley test test-unit test-integration test-spec test-changed perf lint fixtures goldens model-check model-checker test-clean-env
+.PHONY: help-parley test test-unit test-integration test-spec test-changed perf perf-finder lint fixtures goldens model-check model-checker test-clean-env
 
 help-parley:
 	@printf '%s\n' \
@@ -51,7 +51,7 @@ LEGACY_TEST_DIRS = "$(CURDIR)/.test-home" "$(CURDIR)/.test-xdg" "$(CURDIR)/.test
 # (#294). Probed on first use, once per make invocation, and only by targets
 # that expand TEST_ENV.
 TEST_NVIM_DIR = $(eval TEST_NVIM_DIR := $$(shell scripts/test-nvim.sh))$(TEST_NVIM_DIR)
-TEST_ENV = PARLEY_TEST_ENV_ROOT="$(TEST_ENV_ROOT)" HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)" $(if $(TEST_NVIM_DIR),PATH="$(TEST_NVIM_DIR):$$PATH")
+TEST_ENV = PARLEY_TEST_ENV_ROOT="$(TEST_ENV_ROOT)" HOME="$(TEST_HOME)" XDG_CONFIG_HOME="$(TEST_XDG)/config" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)" $(if $(TEST_NVIM_DIR),PATH="$(TEST_NVIM_DIR):$$PATH")
 
 # The orphan gate (#220). `before` reaps what an earlier interrupted run left;
 # `after` reports this run's survivors and fails. One owner, so a new test target
@@ -59,7 +59,7 @@ TEST_ENV = PARLEY_TEST_ENV_ROOT="$(TEST_ENV_ROOT)" HOME="$(TEST_HOME)" XDG_DATA_
 ORPHANS = python3 scripts/reap-test-orphans.py --root "$(CURDIR)"
 
 define PREP_TEST_ENV
-mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)" && $(ORPHANS) --phase before
+mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/config" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)" && $(ORPHANS) --phase before
 endef
 
 # Run the whole suite. Execution model (parallel fan-out, per-spec processes,
@@ -229,6 +229,14 @@ lint:
 		exit 1; \
 	}
 	@luacheck lua tests packaging
+
+# Report-only ChatFinder materializer benchmark, under the isolated TEST_ENV.
+perf-finder:
+	@$(PREP_TEST_ENV) || exit $$?; \
+	rc=0; \
+	$(TEST_ENV) nvim --headless -u "$(CURDIR)/tests/minimal_init.vim" -l tests/perf_chat_finder.lua || rc=1; \
+	$(ORPHANS) --phase after || rc=1; \
+	exit $$rc
 
 # Regenerate tests/fixtures/golden_payloads/*.json. Under TEST_ENV like every
 # harness run: tests/minimal_init.vim refuses a non-isolated environment (#342).

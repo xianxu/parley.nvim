@@ -1,5 +1,6 @@
 " Minimal Neovim init for headless test runs.
-" Usage: nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedDirectory tests/ {sequential=true}"
+" Usage: through make only (make test, make test-spec, make goldens, make perf-finder):
+" they export the isolated TEST_ENV this init requires (#342).
 " Loaded by the parent AND by every spec child (tests/helpers/spec_runner.lua).
 
 set nocompatible
@@ -12,7 +13,8 @@ set rtp+=.
 " wrote their real cliproxy cache. This runs before plenary loads a spec and
 " before any -c command, so nothing can touch the operator's real state.
 lua << ISOLATION
-local reasons = require("parley.test_isolation").check()
+local loaded, reasons = pcall(function() return require("parley.test_isolation").check() end)
+if not loaded then reasons = { "the isolation check could not run: " .. tostring(reasons) } end
 if #reasons > 0 then
   io.stderr:write("parley tests: environment not isolated (#342):\n  " .. table.concat(reasons, "\n  ")
     .. "\nRun specs through the harness: make test-spec SPEC=<feature> (or make test).\n")
