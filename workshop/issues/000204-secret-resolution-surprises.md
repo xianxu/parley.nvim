@@ -166,6 +166,7 @@ client secret is a local handshake token, which is why a fixed default is
 reasonable in the first place.
 
 ### 2026-10-15
+- 2026-10-15: closed — Full suite green on cb9bbbb3 (sdlc-local/suite), which has main merged. Folded the TL-requested advisories in: (a) the setup generation fences secret-command and copilot-fetch results, setup clears _state, and the bearer is keyed to sha256 of the copilot key (vault F3, V3, V4); (b) the lifecycle 401 test is split into ours, foreign and unknown via fake_ps; (c) a cmd_prefix() helper. Mutation: each vault guard removed fails its case; a constant identity fails all three 401 cases. Earlier evidence still holds: setup_api_keys_spec, vault F1/F2, mismatch_message unit tests.; review verdict: SHIP
 - 2026-10-15: closed — Full suite green on 7bf8ca72 (sdlc-local/suite). New: setup_api_keys_spec (partial api_keys keeps the cliproxyapi default; false drops it; a re-run setup with an edited key is what the renderer reads), vault_spec F1/F2, cliproxy_release_spec mismatch_message for ours, foreign and unknown, plus a lifecycle 401 assertion. Mutation: removing the vault reset fails 3 cases. Earlier suite run: update and lifecycle each failed one restart-timing case, then passed 3x in parallel runs and in the full re-run.; review verdict: SHIP
 
 - D1 needed no code: #307 already merges `api_keys`. `tests/unit/setup_api_keys_spec.lua` now pins it (a partial table, `false`, a re-run setup).
