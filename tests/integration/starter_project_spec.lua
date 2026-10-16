@@ -9,8 +9,9 @@ describe('starter project discovery', function()
     end)
     after_each(function() vim.fn.delete(scratch, 'rf') end)
 
-    local function run(cwd, marker, plugin_override)
+    local function run(cwd, marker, plugin_override, tmpdir)
         if marker then vim.fn.writefile({}, scratch .. '/project/.parley') end
+        if tmpdir then vim.fn.mkdir(tmpdir, 'p') end
         local probe = [[
             local notifications = {}
             local notify = vim.notify
@@ -25,8 +26,19 @@ describe('starter project discovery', function()
                 p.setup(opts)
             else
                 require('parley.starter').start()
-                assert(vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ':t') == 'welcome.md',
-                    'no-argument startup did not open welcome.md')
+                -- Tutorials belong to the profile, never to a discovered project (#338).
+                local profile = vim.env.PROFILE_CHAT
+                assert(vim.fs.normalize(vim.api.nvim_buf_get_name(0)) == profile .. '/welcome.md',
+                    'no-argument startup did not open the profile welcome.md: ' .. vim.api.nvim_buf_get_name(0))
+                assert(p.not_chat(vim.api.nvim_get_current_buf(), profile .. '/welcome.md') == nil,
+                    'profile welcome.md is not a recognized chat')
+                for _, name in ipairs(require('parley.tutorials').filenames) do
+                    assert(vim.fn.filereadable(profile .. '/' .. name) == 1, 'tutorial missing from profile: ' .. name)
+                    if vim.env.EXPECTED_PROJECT then
+                        assert(vim.fn.filereadable(vim.env.EXPECTED_PROJECT .. '/workshop/parley/' .. name) == 0,
+                            'tutorial seeded into the project: ' .. name)
+                    end
+                end
                 for _, message in ipairs(notifications) do
                     assert(not message:find('Welcome to Parley!', 1, true),
                         'duplicate welcome notification: ' .. message)
@@ -63,7 +75,7 @@ describe('starter project discovery', function()
             PATH = vim.env.PATH, HOME = scratch, NVIM_APPNAME = 'parley',
             XDG_CONFIG_HOME = scratch .. '/config', XDG_DATA_HOME = scratch .. '/data',
             XDG_STATE_HOME = scratch .. '/state', XDG_CACHE_HOME = scratch .. '/cache',
-            EXPECTED_CHAT = expected,
+            EXPECTED_CHAT = expected, PROFILE_CHAT = scratch .. '/data/parley/chats', TMPDIR = tmpdir,
             EXPECTED_PROJECT = marker and plugin_override ~= 'opt_out' and scratch .. '/project' or nil,
             GLOBAL_CHAT = scratch .. '/custom-chats',
             DETECT_PROJECT = plugin_override == 'detected' and '1' or nil,
@@ -75,6 +87,9 @@ describe('starter project discovery', function()
 
     it('uses a marker-only project without Git', function() run(scratch .. '/project', true) end)
     it('finds the marked project above a nested working directory', function() run(scratch .. '/project/nested', true) end)
+    it('seeds tutorials in the profile when cwd and TMPDIR are inside a marked project', function()
+        run(scratch .. '/project/nested', true, nil, scratch .. '/project/tmp')
+    end)
     it('keeps the global app profile without a marker', function() run(scratch .. '/project/nested', false) end)
     it('detects the marked project in plugin setup with an explicit global chat_dir', function()
         run(scratch .. '/project/nested', true, 'detected')
