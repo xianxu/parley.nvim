@@ -2,9 +2,17 @@
 id: 000235
 status: open
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-10-16
 estimate_hours:
 github_issue:
+started: 2026-10-16T05:22:52-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # One reader for the test-harness signal: file_tracker off g:parley_test_mode
