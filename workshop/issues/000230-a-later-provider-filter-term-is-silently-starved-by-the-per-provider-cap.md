@@ -209,6 +209,7 @@ orders, which located the cap. The symptom (a model "not showing up") pointed
 confidently at discovery, and the cause was two layers downstream of it.
 
 ### 2026-10-15 (:3)
+- 2026-10-15: closed — Post-close delta only: moved _providers_without_models annotations back onto their function (superseded_comment_spec 9/0, the guard the merge suite tripped) and added _select/_operator_specs Core-concepts rows (single_source_sweeps 25/0). picker_items 57/0, lint clean. Full suite on 296d98f8 clean apart from the Core-concepts rows, now fixed. (fixed-then-ship); review verdict: SHIP
 - 2026-10-15: closed — Prior evidence stands (19/77 red vs main, 77/0 green; full suite on e0c389cc, only starter_config default strings, fixed 7/0). BR-1: picker diagnoses only operator-written specs; defaults plus a typo against a catalog lacking gpt-6 and fable gives exactly the typo warning; red without the filter (56/1), green 57/0. Minors: diagnose reuses _select; docs state provider cap beside terms is rejected. Lint clean.; review verdict: SHIP
 - 2026-10-15: flow upgraded quick → full — 151 added lines in code files (limit 100); an earlier round of this close already ran the full review
 

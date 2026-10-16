@@ -193,3 +193,67 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"57a8f176-abed-417d-bfe3-1c62859e3183","repository":"github.com/xianxu/parley.nvim","issue_id":"000230","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/b241fa65a69aef21","reviewed_head":"d9e812c83ee6fdf62194bd5083ae592f7a187f35","slot":"parley.nvim:3","requested_at":"2026-10-16T02:56:25.191677Z"},"phase":"finished","pid":85113,"started_at":"2026-10-16T02:56:25.420776Z","finished_at":"2026-10-16T03:01:01.830372Z","session_id":"6ba2ee10-b9e8-4d19-824b-efc0eed8e35c","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T20:22:39-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 230 — a later provider filter term is silently starved by the per-provider cap |
+| repo | parley.nvim |
+| issue file | workshop/issues/000230-a-later-provider-filter-term-is-silently-starved-by-the-per-provider-cap.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 736037b48f7f29cb0c8dd00514507b874fb9b6ba..3646bebb2a5bfe06aed4447122e08f41e137c92b |
+| command | sdlc close --issue 230 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-15T20:22:39-07:00 |
+| verdict | SHIP |
+
+## Review
+
+BR-4's fix is in place. Next I'm running the guard specs that cover it: superseded_comment, single_source_sweeps and picker_items.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The only open finding, BR-4, is fixed, and it is fixed for the whole class rather than just the one site. In `lua/parley/agent_picker.lua`, `_operator_specs` and its own annotations now sit above line 19, so the `_providers_without_models` doc block (lines 20-30) is directly above that function again. The repo already has a guard for this class across the whole tree, `tests/arch/superseded_comment_spec.lua`. I tested it in the review checkout. With base's `agent_picker.lua` restored, the guard goes red (8/1, `lua/parley/agent_picker.lua:8 — @param models, but the signature is (providers)`). With the head version it is green (9/0). The rest of the window is bookkeeping:
+- the issue file gains Core-concepts rows for `_select` and `_operator_specs`. `single_source_sweeps_spec` requires those rows, and both entities exist, `_select` at `cliproxy_catalog.lua:236`.
+- Log entries, a lessons.md line, and the gate and review ledgers.
+
+None of it changes `## Spec`, `## Revisions` or `## Done when`, and none of it adds behavior. There is no scope change.
+
+1. **Strengths**
+   - `agent_picker.lua:8-30`: each function's annotations sit directly on that function, and `_operator_specs` now has its own `@param`/`@return`.
+   - The fix is backed by an existing guard that covers the whole tree, so it does not depend on a new test written for this one spot.
+   - The Core-concepts table now names the two entities the earlier rounds added (`_select`, `_operator_specs`), and they match the code: both are PURE, at the paths stated.
+   - The new lesson in `workshop/lessons.md` names the real process gap: the full suite was run on a commit before the final one.
+
+2. **Critical findings**: none.
+
+3. **Important findings**: none.
+
+4. **Minor findings**: none.
+
+5. **Test coverage notes**: run in this checkout at head: `superseded_comment_spec` 9/0, `single_source_sweeps_spec` 25/0, `picker_items_spec` 57/0. With the BR-4 fix reverted, `superseded_comment_spec` fails as expected (8/1). I restored the file afterwards.
+
+6. **Architectural notes** (interdiff only)
+   - **ARCH-DRY: pass.** The code change only moves a block; nothing is duplicated.
+   - **ARCH-PURE: pass.** No logic changed.
+   - **ARCH-PURPOSE: pass.** The class `misplaced-doc-annotation` is enforced tree-wide by `superseded_comment_spec`, which passes, so no sibling instance remains.
+
+7. **Plan revision recommendations**: none. The Core-concepts rows added in this window match the code.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: addressed
+    note: |
+      agent_picker.lua:8-30 _operator_specs now sits above the _providers_without_models doc block. The class is enforced tree-wide by tests/arch/superseded_comment_spec: red with the base file (8/1, agent_picker.lua:8 @param models vs (providers)), green at head (9/0).
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"245bf454-75f2-46e6-aa91-2103420cd7c8","repository":"github.com/xianxu/parley.nvim","issue_id":"000230","recipe":"fix-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/eaa73ef30bf6e57d","reviewed_head":"3646bebb2a5bfe06aed4447122e08f41e137c92b","slot":"parley.nvim:3","requested_at":"2026-10-16T03:21:49.812498Z"},"phase":"finished","pid":38149,"started_at":"2026-10-16T03:21:49.977193Z","finished_at":"2026-10-16T03:22:39.073003Z","session_id":"924a5f7b-22ca-4c15-9a0b-82eac31f6211","outcome":"returned"}] -->
