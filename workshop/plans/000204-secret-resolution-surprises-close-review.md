@@ -181,3 +181,59 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"b7837796-c11b-4be0-a5b1-38e57a526f2d","repository":"github.com/xianxu/parley.nvim","issue_id":"000204","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/007c661a4c679597","reviewed_head":"cb9bbbb3d181b448faa66b652aae6c56272ff70f","slot":"parley.nvim:4","requested_at":"2026-10-16T03:37:12.642235Z"},"phase":"finished","pid":35792,"started_at":"2026-10-16T03:37:12.821846Z","finished_at":"2026-10-16T03:39:39.438116Z","session_id":"b6989cdb-588e-4847-bf99-8000e8de873b","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T20:42:02-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 204 — a config change to api_keys silently does not take effect: the defaults table is replaced, and the vault pins the first secret it saw |
+| repo | parley.nvim |
+| issue file | workshop/issues/000204-secret-resolution-surprises.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 1f5bc8a6f870d2dc41734256fb13e5062c3d9da7..a8add1b4526fd3cd95f4ec4972c034ca8cba4638 |
+| command | sdlc close --issue 204 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-15T20:42:02-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This window fixes the one open finding, BR-4, and adds nothing else. The only code change is in `lua/parley/cliproxy.lua`. It moves the forward declaration `local port_identity` from between `M.ensure_running`'s `---` doc block and the function to above that doc block. Line 749 is now the declaration, 751–755 are the doc and `@param` lines, and 756 is `function M.ensure_running`, so LuaLS attaches the doc to the function again. The two `workshop/plans/` files only add generated records of the earlier review round. They do not touch `## Spec`, `## Revisions` or `## Done when`, so there is no scope change. The window resolves no conflicts. It introduces no new defects.
+
+1. **Strengths**
+   - The fix is a 2-line move that changes no behaviour, and the comment on the declaration still explains why it exists ("defined with the process-table reads below; used on a 401").
+   - The gate ledger in the plan files now matches the round history: BR-1, BR-2 and BR-3 are recorded as disposed, and BR-4 as the only open finding.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor:** none new. I swept `cliproxy.lua` and `vault.lua` for other places where a `---` doc block is followed by a line that is not a function. The only one is `cliproxy.lua:1690`: `local _catalog_memo` sits between `M.catalog_cached`'s doc block and the function. That code is identical at the base commit (`1f5bc8a6`), comes from #205, and is outside this window, so I'm not raising it here. It is the same pattern as BR-4 (family `hoist-detaches-doc-comment`) and could be cleaned up separately.
+
+5. **Test coverage notes:** the change only moves a doc comment and changes no behaviour, so no regression test is needed. The behaviour around `port_identity` was already pinned in round 2 (BR-2's mutation check) and this window does not change it.
+
+6. **Architectural notes:**
+   - ARCH-DRY: pass, no duplication added.
+   - ARCH-PURE: pass, no logic or IO changed.
+   - ARCH-PURPOSE: pass. The fix covers the whole pattern within the window: it is the only hoist the window adds, and the earlier round confirmed that the `vault.lua` insertions keep their doc comments attached.
+
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: addressed
+    note: |
+      cliproxy.lua:749 now declares local port_identity above the ensure_running doc block (751-755), which directly precedes function M.ensure_running at 756.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"86a5f499-d2b2-43af-8434-55558f88bc1e","repository":"github.com/xianxu/parley.nvim","issue_id":"000204","recipe":"fix-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/08eac8ec25356098","reviewed_head":"a8add1b4526fd3cd95f4ec4972c034ca8cba4638","slot":"parley.nvim:4","requested_at":"2026-10-16T03:41:36.892815Z"},"phase":"finished","pid":2536,"started_at":"2026-10-16T03:41:37.005134Z","finished_at":"2026-10-16T03:42:01.487086Z","session_id":"81ed4952-0029-43b6-9e5b-88b2fe90efd7","outcome":"returned"}] -->

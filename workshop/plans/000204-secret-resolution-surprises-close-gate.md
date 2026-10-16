@@ -170,6 +170,79 @@ rounds:
       isolation: checkout
       reviewed: cb9bbbb3d181b448faa66b652aae6c56272ff70f
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 86a5f499-d2b2-43af-8434-55558f88bc1e
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000204"
+            recipe: fix-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/08eac8ec25356098
+            reviewed_head: a8add1b4526fd3cd95f4ec4972c034ca8cba4638
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T03:41:36.892815Z"
+          phase: finished
+          pid: 2536
+          started_at: "2026-10-16T03:41:37.005134Z"
+          finished_at: "2026-10-16T03:42:01.487086Z"
+          session_id: 81ed4952-0029-43b6-9e5b-88b2fe90efd7
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: a8add1b4526fd3cd95f4ec4972c034ca8cba4638
+        tracker_head: f32d7966d4cfd4a278c96dcf9ce8e5c3288a3e30
+        branch_point: 3d0c2369d1e25b61819b3554cdf1fd7950e7823f
+        since: "2026-10-15T17:50:06-07:00"
+        until: "2026-10-15T20:40:29-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-15T17:50:06-07:00"
+              end: "2026-10-15T20:40:29-07:00"
+              began: "2026-10-15T17:50:06-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: ca90f6f834565ba19dfb200f9952ead45cd2fe441fb4fcb83c3e995d4ab2fbc5
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 1975228
+              windows:
+                - start: "2026-10-15T17:50:06-07:00"
+                  end: "2026-10-15T20:40:29-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 0.0299
+        cuts:
+            - dispatched: "2026-10-15T18:28:27-07:00"
+              finalized: "2026-10-15T18:30:39-07:00"
+              finalizing: true
+            - dispatched: "2026-10-15T20:37:12-07:00"
+              finalized: "2026-10-15T20:39:41-07:00"
+              finalizing: true
+      "n": 3
+      timestamp: "2026-10-15T20:42:02-07:00"
+      dispatched: "2026-10-15T20:41:36-07:00"
+      agent: claude
+      dispose:
+        - id: BR-4
+          disposition: addressed
+          note: cliproxy.lua:749 now declares local port_identity above the ensure_running doc block (751-755), which directly precedes function M.ensure_running at 756.
+          round: 3
+      recipe: fix-review
+      isolation: checkout
+      reviewed: a8add1b4526fd3cd95f4ec4972c034ca8cba4638
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#204 (boundary-review)
@@ -201,6 +274,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Minor] `hoist-detaches-doc-comment` (kind: defect) Forward declaration of port_identity splits ensure_running's doc block from the function
   cliproxy.lua:749-754: the triple-dash doc and param annotations now attach to local port_identity, not M.ensure_running. Move the declaration above the doc block. Only instance in the window; the vault.lua insertions do not detach any doc comment.
 
+## Round 3 — 2026-10-15T20:42:02-07:00 (claude) — passed
+
+### Disposed
+
+- BR-4 — addressed — cliproxy.lua:749 now declares local port_identity above the ensure_running doc block (751-755), which directly precedes function M.ensure_running at 756.
+
 ## Open findings
 
-- **BR-4** [Minor] `hoist-detaches-doc-comment` (kind: defect) Forward declaration of port_identity splits ensure_running's doc block from the function
+(none — every finding has been disposed)
