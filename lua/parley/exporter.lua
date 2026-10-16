@@ -17,6 +17,14 @@ local function sanitize_title(title)
 	return slug
 end
 
+--- Escape chat text for HTML text or a double-quoted attribute value: the one
+--- escape every chat string the export writes into HTML goes through (#243).
+--- Function replacement: a `%` in a string replacement corrupts under LuaJIT.
+local HTML_ESCAPES = { ["&"] = "&amp;", ["<"] = "&lt;", [">"] = "&gt;", ['"'] = "&quot;" }
+local function escape_html(s)
+	return (s:gsub('[&<>"]', function(c) return HTML_ESCAPES[c] end))
+end
+
 local function extract_date(name)
 	if not name or name == "" then
 		return nil
@@ -326,13 +334,6 @@ M._restore_all = restore_all
 -- Branch line processing
 --------------------------------------------------------------------------------
 
---- Escape chat text for HTML text or a double-quoted attribute value (#243).
---- Function replacement: a `%` in a string replacement corrupts under LuaJIT.
-local HTML_ESCAPES = { ["&"] = "&amp;", ["<"] = "&lt;", [">"] = "&gt;", ['"'] = "&quot;" }
-local function escape_html(s)
-	return (s:gsub('[&<>"]', function(c) return HTML_ESCAPES[c] end))
-end
-
 --- Build a branch navigation div (shared by both HTML and markdown formats).
 --- Escapes `topic` and `href` (chat text); `arrow` is trusted HTML. Neither
 --- format escapes the result later: html restores it after the body's escape,
@@ -470,26 +471,23 @@ end
 M.simple_markdown_to_html = function(markdown, records)
 	local html = markdown
 
-	-- Escape HTML special characters first
-	html = html:gsub("&", "&amp;")
-	html = html:gsub("<", "&lt;")
-	html = html:gsub(">", "&gt;")
+	-- Escape HTML special characters first (and `"`, so attribute values built
+	-- from this text below are already safe).
+	html = escape_html(html)
 
 	-- #231: image links become opaque tokens FIRST and <img> tags LAST. Every
 	-- inline rule below runs over the whole string, so an early <img> would
 	-- get <em> inside its attributes (a `_x_y_` filename is exactly what the
 	-- italic rule eats). Same mechanism as the branch placeholders
-	-- (BRANCH_PLACEHOLDER, write_html_file). `&`, `<`, `>` are already
-	-- escaped above; `"` is the one attribute delimiter still live.
+	-- (BRANCH_PLACEHOLDER, write_html_file). alt and src are already escaped
+	-- above, `"` included, so they drop into the attributes as they are.
 	-- Function replacement: alt/src are user text, and a `%` in a string
 	-- replacement corrupts silently under LuaJIT (#214 BR-34).
 	local images, image_count = {}, 0
 	html = html:gsub("!%[([^%]]*)%]%(([^%)%s]+)%)", function(alt, src)
-		local safe_src = src:gsub('"', "&quot;")
-		local safe_alt = alt:gsub('"', "&quot;")
 		image_count = image_count + 1
 		local token = IMG_PLACEHOLDER.token(image_count)
-		images[token] = '<img src="' .. safe_src .. '" alt="' .. safe_alt .. '" class="asset-image">'
+		images[token] = '<img src="' .. src .. '" alt="' .. alt .. '" class="asset-image">'
 		return token
 	end)
 
@@ -881,7 +879,7 @@ local function write_html_file(info, export_dir, link_map)
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>]] .. info.title .. [[</title>
+    <title>]] .. escape_html(info.title) .. [[</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script>hljs.highlightAll();</script>

@@ -46,7 +46,7 @@ describe("Tree export", function()
 	describe("Group A: HTML tree export", function()
 		it("A0: escapes a branch topic in the exported page (#243)", function()
 			local root = create_chat_file("2024-03-15-root.md", [[---
-topic: Root Chat
+topic: Root <script>alert(3)</script>
 file: 2024-03-15-root.md
 ---
 💬: Hello
@@ -65,9 +65,15 @@ file: 2024-03-15-child.md
 ]])
 			vim.cmd("edit " .. root)
 			M.cmd.ExportHTML()
-			local page = table.concat(vim.fn.readfile(export_html_dir .. "/2024-03-15-root_chat.html"), "\n")
-			for _, n in ipairs({ "1", "2" }) do
+			-- The topic reaches the slug too (sanitized), so find the root page by date.
+			local root_html = vim.fn.glob(export_html_dir .. "/2024-03-15-root*.html")
+			assert.is_true(root_html ~= "" and not root_html:find("\n"), "one root page: " .. root_html)
+			local page = table.concat(vim.fn.readfile(root_html), "\n")
+			assert.is_truthy(page:find("<title>Root &lt;script&gt;alert(3)&lt;/script&gt;</title>", 1, true), "title not escaped")
+			for _, n in ipairs({ "1", "2", "3" }) do
 				assert.is_nil(page:find("<script>alert(" .. n .. ")", 1, true), "raw topic " .. n .. " in the page")
+			end
+			for _, n in ipairs({ "1", "2" }) do
 				assert.is_truthy(page:find("&lt;script&gt;alert(" .. n .. ")&lt;/script&gt;", 1, true), "topic " .. n .. " missing")
 			end
 		end)

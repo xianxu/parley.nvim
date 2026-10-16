@@ -32,8 +32,8 @@ same gap.
 
 ## Spec
 
-The class: every HTML string the exporter builds from chat text on the branch
-path. These are the nav div (`make_branch_div`) and the inline link (now
+The class: every chat string the exporter writes into HTML. On the branch
+path (the first scope, widened by close review BR-1) that is the following. These are the nav div (`make_branch_div`) and the inline link (now
 `make_branch_anchor`), in both formats. HTML restores them after
 `simple_markdown_to_html`'s escape, and Markdown carries them as raw HTML
 blocks, so neither format escapes them later. The topic and href are escaped
@@ -56,7 +56,7 @@ for an empty title. The attribute escape covers HTML there.
 
 - [x] A branch topic containing `<script>`, `&` or `"` is escaped in the nav div and the inline link, in both the HTML and the Markdown export.
 - [x] The href is escaped as an attribute value.
-- [x] An end-to-end HTML export of such a chat has no raw topic in the page.
+- [x] An end-to-end HTML export of such a chat has no raw topic in the page, `<title>` included.
 
 ## Plan
 
@@ -73,3 +73,17 @@ for an empty title. The attribute escape covers HTML there.
 - Taken by parley.nvim:3. Red: all 7 Group G2 cases failed on the old code, and A0
   failed on the old code ("raw topic 1 in the page"). Green: exporter_tree_spec
   44/44, export_spec 16/16, tree_export_spec 13/13, luacheck clean.
+- Close review round 1, BR-1 (Important): the HTML page's `<title>` took the
+  chat topic raw. The class is any chat string written into HTML, not only
+  branches. The sweep found the title (now escaped), the body (escaped since
+  #231), and the Jekyll title (YAML, `''`-quoted, not HTML). A0 now gives the
+  root a `<script>` topic, and a mutation removing the title escape fails it
+  ("title not escaped"). Minor: `simple_markdown_to_html`'s own three gsubs and
+  the image quote escape now use `escape_html`. Since the body escape covers
+  `"`, the image attributes need no second pass. 44/16/13 green.
+
+## Revisions
+
+- 2026-10-16: the scope widens from the branch path to every chat string the
+  export writes into HTML (BR-1). The page title is added; the body escape is
+  single-sourced in `escape_html`.
