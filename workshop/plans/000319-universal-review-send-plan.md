@@ -195,3 +195,14 @@ The generator's main/load/write shell is integration: real fixture directories
 and the actual command prove --check/refusal leave output unchanged, and a
 valid snapshot runs the standalone source path. Retain property mutations in
 the executable tests rather than a prose case inventory.
+
+### 2026-10-15 18:12 — independent portion implemented and verified
+
+The canonical export generator, pinned packaged prompt/grammar/modes, neutral
+instruction.context, local adapter and local source composition are complete.
+The generator is build-time only and leaves local code/adapter files alone.
+Mapped modes/review, standalone source and pure mutation fixtures pass. Legacy
+brief/directives and the old sender remain only for the pre-S1 Couch path.
+The next task is to merge main after #332 lands, then delete that path and run
+S1 acceptance regressions, final recorded suite and close/landing. No separate
+milestone boundary or partial landing is introduced.

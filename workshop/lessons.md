@@ -544,3 +544,7 @@ oracle, and the mutation that would make the test fail.
 - A multiline inline scanner needs an explicit block-containment rule, not only blank/fence checks. Enumerate heading forms, thematic breaks, quotes, list/chat starts and range edges, with positive supported starts as well as negative joins.
 
 - Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.
+
+## 2026-10-15 (#319 — canonical review export consumer)
+
+- A versioned export consumer must accept the producer's valid optional and defaulted fields. Test producer examples with unordered modes, tied ordering and omitted mode flags; never turn the current six stock records into schema constraints.

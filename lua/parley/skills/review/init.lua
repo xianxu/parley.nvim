@@ -493,31 +493,27 @@ M.skill = {
         },
     },
 
-    -- Compose the system body: base SKILL.md ⊕ the selected mode's brief ⊕ its
-    -- flag directives ⊕ any free-form operator instruction. PURE given ctx
-    -- (the provider injects ctx.skill_md + ctx.skill_dir). With no mode, returns
-    -- the base SKILL.md unchanged — the legacy marker-only review. (#133)
+    -- Canonical round + grammar, neutral mode inputs, then the local IO adapter.
+    -- Filesystem access stays here; instruction.context is pure.
     source = function(ctx)
         ctx = ctx or {}
         local mode = require("parley.skills.review.mode")
         local args = ctx.args or {}
-        local parts = { ctx.skill_md or "" }
-        -- #316: `modes` (from a `process-instruction:` line) may name several
-        -- stock prompts; the skill picker's `mode` arg names one.
+        local dir = assert(ctx.skill_dir, "review source requires the packaged skill directory")
         local loaded = {}
-        if ctx.skill_dir then
-            for _, name in ipairs(M.mode_names(args)) do
-                local m = mode.load(ctx.skill_dir .. "/modes", name)
-                if m then
-                    table.insert(loaded, m)
-                end
-            end
+        for _, name in ipairs(M.mode_names(args)) do
+            local m, err = mode.load(dir .. "/modes", name)
+            assert(m, err)
+            table.insert(loaded, m)
         end
-        local brief = require("parley.skills.review.instruction").brief(loaded, args.instruction)
-        if brief ~= "" then
-            table.insert(parts, "\n\n" .. brief)
-        end
-        return table.concat(parts)
+        local adapter, err = io.open(dir .. "/local-adapter.md", "r")
+        assert(adapter, "review local adapter unavailable: " .. tostring(err))
+        local adapter_md = adapter:read("*a")
+        adapter:close()
+        assert(adapter_md and adapter_md ~= "", "review local adapter is empty")
+        assert(ctx.skill_md and ctx.skill_md ~= "", "review canonical source is empty")
+        return table.concat({ ctx.skill_md,
+            require("parley.skills.review.instruction").context(loaded, args.instruction), adapter_md }, "\n\n")
     end,
 
     -- Declarative manifest fields (#128). Runs through the skill_invoke driver

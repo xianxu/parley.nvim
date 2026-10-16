@@ -739,6 +739,7 @@ atlas:
 
   modes/review:
     code:
+      - scripts/sync-review-protocol.py
       - lua/parley/comment/codec.lua
       - lua/parley/comment/view.lua
       - lua/parley/comment/init.lua
@@ -751,6 +752,9 @@ atlas:
       - lua/parley/frontmatter.lua
       - lua/parley/couch.lua
     tests:
+      - tests/integration/review_protocol_bundle_spec.lua
+      - tests/integration/review_mode_load_spec.lua
+      - tests/unit/review_mode_spec.lua
       - tests/unit/review_instruction_spec.lua
       - tests/unit/frontmatter_spec.lua
       - tests/unit/couch_spec.lua

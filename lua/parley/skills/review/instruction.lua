@@ -96,6 +96,27 @@ M.brief = function(modes, text)
 	return table.concat(parts, "\n\n")
 end
 
+--- Neutral inputs for the canonical round; its flag table owns semantics.
+--- No selection retains the local marker-only invocation's parser defaults.
+---@param modes table[]
+---@param text string|nil
+---@return string
+M.context = function(modes, text)
+    local parts = {}
+    for _, m in ipairs(modes) do
+        parts[#parts + 1] = "## Review mode: " .. m.name .. "\n" .. m.body
+    end
+    local first = modes[1] or {}
+    parts[#parts + 1] = "## Selected round flags\n"
+        .. "scope: " .. (first.scope or "markers-only") .. "\n"
+        .. "deletions: " .. (first.deletions or "propose-strike") .. "\n"
+        .. "frontier: " .. (first.frontier or "on")
+    if text and text ~= "" then
+        parts[#parts + 1] = "## Operator instruction\n" .. text
+    end
+    return table.concat(parts, "\n\n")
+end
+
 --- Completion words for `[`: every mode name, closed.
 ---@param modes table[]
 ---@return string[]

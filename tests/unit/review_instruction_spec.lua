@@ -72,3 +72,35 @@ describe("instruction.complete", function()
         assert.truthy(vim.tbl_contains(words, "free-form]"))
     end)
 end)
+
+
+describe("instruction.context", function()
+    it("preserves mode order and raw bodies, with only the first mode flags", function()
+        for count = 1, 12 do
+            local selected = {}
+            for i = 1, count do
+                selected[i] = { name = "mode-" .. i, body = "Raw body " .. i .. "\n[keep]",
+                    scope = i == 1 and "markers-only" or "whole-doc",
+                    deletions = i == 1 and "apply" or "propose-strike", frontier = "on" }
+            end
+            local before = vim.deepcopy(selected)
+            local body = instruction.context(selected, "raw [text]\nsecond line")
+            local previous = 0
+            for _, m in ipairs(selected) do
+                local at = assert(body:find("## Review mode: " .. m.name .. "\n" .. m.body, 1, true))
+                assert.is_true(at > previous)
+                previous = at
+            end
+            assert.truthy(body:find("scope: markers-only\ndeletions: apply\nfrontier: on", 1, true))
+            assert.falsy(body:find("scope: whole-doc", 1, true))
+            assert.truthy(body:find("## Operator instruction\nraw [text]\nsecond line", 1, true))
+            assert.falsy(body:find("## How to apply this round", 1, true))
+            assert.same(before, selected)
+        end
+    end)
+
+    it("states parser defaults for legacy marker-only invocation", function()
+        local body = instruction.context({}, nil)
+        assert.truthy(body:find("scope: markers-only\ndeletions: propose-strike\nfrontier: on", 1, true))
+    end)
+end)

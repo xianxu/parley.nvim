@@ -85,6 +85,27 @@ COUCH_TREE-unset classification, and reflected-only folding of captured owed
 IDs. The durable plan records the exact provisional schema/composition.
 Awaiting the landed merge pin and #332; no implementation started.
 
+- 2026-10-15 18:08: Plan gate clean (PQ-1 addressed); estimate-quality INFO,
+  change-code accepted full flow at 52c0bb17. Lua primitive includes mode/source
+  tests and S1 integration regressions, final review includes recorded suite
+  and acceptance coordination; sender refactor covers deletion itself. The
+  remaining Lua design allowance covers canonical round versus legacy no-mode
+  semantics and tool adapter precedence. Export source refreshed in this
+  slot's own Ariadne checkout; no unlanded dependency branch used.
+- TDD: context tests failed twice for missing context, then all 8 passed.
+  Composition tests failed on canonical source/flags/adapter absence and silent
+  missing-mode/package handling before implementation (5 expected failures).
+
+- Independent portion verified: make test-spec SPEC=modes/review green;
+  skill_invoke_review_spec 20/20; source/mode IO 10/10; context/instruction
+  8/8; final Python export fixture suite 11/11 through the mapped wrapper.
+  Export --check against the landed source, make check-vocabulary, focused
+  luacheck (five files, zero warnings) and git diff --check all pass. The
+  export consumer accepts producer optional/defaulted metadata and tied orders.
+  Snapshot source matches ariadne f19623c4; the local adapter remains authored
+  separately. Legacy sender and its tests are deliberately untouched pending
+  #332; full recorded suite/close/landing remain pending.
+
 ## Revisions
 
 - 2026-10-14 — revise (operator): with QA-file follow-ups the review send is now frequent, and the embedded

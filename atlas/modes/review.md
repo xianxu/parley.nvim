@@ -129,8 +129,9 @@ process-instruction: "[copy-edit] keep the voice"
   (`[copy-edit]` → `copy-editing`); the rest is free text added to it. No
   `[name]` means `free-form`. Several names contribute their briefs; the first
   one's knobs (`scope`, `deletions`, `frontier`) give the round's directives.
-  `instruction.brief` renders it, for the slot message and for the in-editor
-  review's system prompt alike (`source(ctx)` takes `args.modes`).
+  The local source passes neutral mode data to the canonical round's flag
+  table (`source(ctx)` takes `args.modes`). The legacy slot sender temporarily
+  retains `instruction.brief` until S1 lands.
 - **Quoting:** `[copy-edit] keep` is not valid YAML (sdlc's yaml.v3 rejects it in
   issue frontmatter), so parley writes the value double-quoted when it needs it
   (`frontmatter.needs_quote`) and reads either form. Typing `[` in the value
@@ -174,13 +175,15 @@ Review is implemented as a **skill** in the unified skill system (see the [skill
 Review runs in a selectable **mode** (a stage of document construction). A mode is
 a sub-markdown file `lua/parley/skills/review/modes/<name>.md` = YAML frontmatter
 (behavior flags) + a prompt body. One skill owns all modes; there is no parallel
-engine — the review skill's `source(ctx)` composes `SKILL.md ⊕ mode.body ⊕
-mode.directives(flags) ⊕ operator-instruction`. No mode selected → base SKILL.md
-(the legacy marker-only review).
+engine. The review skill's `source(ctx)` composes the canonical round and
+grammar in `SKILL.md`, selected mode bodies/flag values and operator instruction,
+then `local-adapter.md`. The adapter requires `propose_edits` for all responses.
+With no mode selected, explicit parser defaults retain marker-only review.
+A local invocation uses its supplied full snapshot; it introduces no editor
+change baseline.
 
 - **`lua/parley/skills/review/mode.lua`** — `parse(content)` (PURE: frontmatter →
-  `{name,scope,deletions,frontier,order,body}`), `directives(m)` (PURE: flags → prose
-  the model obeys), and the thin IO seam `load(dir,name)`/`list(dir)` (sorted by
+  `{name,scope,deletions,frontier,order,body}`) and the thin IO seam `load(dir,name)`/`list(dir)` (sorted by
   `order` then name). Canonical name == file basename (kebab), so `load` resolves
   by the selected name; the menu prettifies for display.
 - **Behavior flags:** `scope` (`whole-doc` | `markers-only`), `deletions`
@@ -193,6 +196,19 @@ mode.directives(flags) ⊕ operator-instruction`. No mode selected → base SKIL
 - **`ctx.skill_dir` injection** (`skill_providers.lua`): the disk provider injects
   the skill's own absolute dir into `source(ctx)` (alongside `ctx.skill_md`) so the
   review skill reads its `modes/` subdir without re-deriving the path.
+
+### Canonical prompt snapshot
+
+Ariadne's `construct/local/universal-review/` owns the round, marker grammar
+and stock modes. `scripts/sync-review-protocol.py --source DIR --output
+lua/parley/skills/review` validates the versioned export and every resolved
+member's byte count and SHA256 before updating the fixed package snapshot.
+Add `--check` for a read-only freshness check. The plugin runs from its packaged
+files, with no sibling Ariadne checkout or runtime peer lookup required.
+`export.json` records the source manifest; generated `SKILL.md` combines the
+round and grammar. `local-adapter.md` stays Parley-owned and is appended last.
+The Couch file-edit adapter is excluded from local composition. The mapped
+bundle fixture tests exercise deterministic output and validation failures.
 
 ## Journal
 
