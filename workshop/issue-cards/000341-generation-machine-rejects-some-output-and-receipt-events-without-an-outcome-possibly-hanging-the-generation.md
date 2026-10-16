@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.18
+actual_hours: 0.20
 tracker:
     version: 1
     completion:
-        token: close-9de017c333e5
+        token: close-8d2e684386cc
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 9f9ef53e22c1459bada56338194af260814fb187
-        evidence_commit: 8ace10bf169dc2765021cc4c95866d9123160da6
+        reviewed_head: 2d0efab84cd098fc657a4327886d28cc59f8368e
+        evidence_commit: c0b29c8b9002c5bc5019840740d7bc5eb4df17ff
 ---
 
 # Generation machine rejects some output and receipt events without an outcome, possibly hanging the generation
