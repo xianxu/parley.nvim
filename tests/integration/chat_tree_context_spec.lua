@@ -144,6 +144,40 @@ describe("chat context over a real chat tree (#233)", function()
         assert.is_truthy(table.concat(out, "\n"):find("the cached page", 1, true), table.concat(out, "\n"))
     end)
 
+    -- Round 2: one file, however it is named. Under a symlinked chat dir the
+    -- buffer name and the walk's resolved path name the same cache.
+    it("reads the current file's cache through a symlinked chat dir", function()
+        local real = tmp_dir .. "/real-" .. math.random(1000000)
+        local link = tmp_dir .. "/link-" .. math.random(1000000)
+        vim.fn.mkdir(real, "p")
+        assert(vim.uv.fs_symlink(real, link))
+        local url = "https://example.com/linked-" .. math.random(1000000)
+        local named = link .. "/2026-10-16.12-00-00.030.md" -- the buffer's name
+        vim.fn.writefile({ "---", "topic: T", "file: x.md", "model: m", "provider: openai", "---", "",
+            "💬: read @@" .. url .. "@@", "", "🤖:[A]", "read it", "", "💬: and?", "" }, named)
+        chat_respond.get_chat_remote_reference_cache(named)[url] = "CACHED"
+        local parsed = parse(named)
+        local sequence, at = chat_respond._tree_sequence(named, parsed, 2, parsed, 2)
+        local resolved
+        chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
+            chat_file = named, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
+        assert.is_true(vim.wait(5000, function() return resolved ~= nil end, 10), "remote resolution never finished")
+        assert.equals("CACHED", resolved[url])
+    end)
+
+    it("looks up another file's cache without creating an entry for it", function()
+        local parsed = parse(root)
+        local sequence, at = chat_respond._tree_sequence(later, parse(later), 1, parse(later), 1)
+        local resolved
+        chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
+            chat_file = later, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
+        assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10))
+        local chats = chat_respond.load_remote_reference_cache().chats
+        for _, file in ipairs({ root, aside, nested }) do
+            assert.is_nil(chats[file], "a lookup created a cache entry for " .. file)
+        end
+    end)
+
     it("reads an unsaved child from its buffer", function()
         vim.cmd("edit " .. vim.fn.fnameescape(aside))
         local buf = vim.api.nvim_get_current_buf()

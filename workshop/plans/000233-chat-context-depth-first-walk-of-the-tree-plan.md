@@ -19,6 +19,9 @@ every later question.
 | `other_files` | new | test helper (`tests/helpers/tree_context.lua`): the text a request takes from the tree's other files |
 | `_conversation_after_lead` | modified | the topic request's input; it now keeps only the current file's messages |
 | `resolve_remote_references` | modified | walks the request's sequence, reading each file's own cache |
+| `chat_cache_key` | new | one remote-cache key per chat file, however it is named (the resolved absolute path) |
+| `peek_chat_remote_reference_cache` | new | read-only lookup of another file's remote cache; never creates an entry |
+| `get_chat_remote_reference_cache` | modified | keys by `chat_cache_key`, moving an entry saved under the raw name |
 | `build_ancestor_messages` | deleted | the second renderer, replaced by build_messages over the sequence |
 | `collect_ancestor_chain` | deleted | the upward-only walk, replaced by path_up and linearize |
 | `collect_ancestor_messages` | deleted | its wrapper |

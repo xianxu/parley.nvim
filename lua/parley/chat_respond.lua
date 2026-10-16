@@ -252,11 +252,28 @@ end
 
 ---@param chat_file string|nil
 ---@return table
+-- One key per chat file however it is named: a buffer name through a symlinked
+-- chat dir and the resolved path the tree walk uses are the same file (#233).
+local function chat_cache_key(chat_file)
+    if not chat_file or chat_file == "" then return "" end
+    return vim.fn.resolve(vim.fn.fnamemodify(chat_file, ":p"))
+end
+
 M.get_chat_remote_reference_cache = function(chat_file)
     local cache = M.load_remote_reference_cache()
-    local chat_key = chat_file or ""
+    local chat_key = chat_cache_key(chat_file)
+    -- An entry saved under the name as written moves to the canonical key.
+    if not cache.chats[chat_key] and chat_file and cache.chats[chat_file] then
+        cache.chats[chat_key], cache.chats[chat_file] = cache.chats[chat_file], nil
+    end
     cache.chats[chat_key] = cache.chats[chat_key] or {}
     return cache.chats[chat_key]
+end
+
+--- Read-only: another file's cache for a lookup, never creating an entry.
+M.peek_chat_remote_reference_cache = function(chat_file)
+    local cache = M.load_remote_reference_cache()
+    return cache.chats[chat_cache_key(chat_file)] or (chat_file and cache.chats[chat_file]) or {}
 end
 
 ---@param url string
@@ -1242,8 +1259,9 @@ M.resolve_remote_references = function(opts, callback)
             break
         end
         local exchange = item.exchange
-        local cache = item.file and item.file ~= chat_file and M.get_chat_remote_reference_cache(item.file)
-            or chat_cache
+        -- The current file's exchanges use its own cache; another file's are
+        -- looked up read-only in that file's (#233).
+        local cache = item.current == false and M.peek_chat_remote_reference_cache(item.file) or chat_cache
 
         if exchange.question and exchange.question.file_references then
             for _, file_ref in ipairs(exchange.question.file_references) do

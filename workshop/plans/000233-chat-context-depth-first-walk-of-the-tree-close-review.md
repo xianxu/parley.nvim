@@ -137,3 +137,120 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e44a0aa6-9f57-4bca-a58b-cf3e2f0a73dc","repository":"github.com/xianxu/parley.nvim","issue_id":"000233","recipe":"milestone-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/65150ce05fcfb88c","reviewed_head":"f2e1d5aaa40012ef930599bc1134ea5f3bd68c8b","slot":"parley.nvim:3","requested_at":"2026-10-16T10:51:43.842652Z"},"phase":"finished","pid":21282,"started_at":"2026-10-16T10:51:44.237447Z","finished_at":"2026-10-16T10:55:09.959142Z","session_id":"6611dd7f-dec9-40a8-a9b5-77abc6f0d4dd","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T04:03:54-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 233 — A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree |
+| repo | parley.nvim |
+| issue file | workshop/issues/000233-chat-context-depth-first-walk-of-the-tree.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 111893e128e74350964044dbe9b8007a38099149..e2ea2bb56b53eba6c413c4c7fc9b90747be3cf5d |
+| command | sdlc close --issue 233 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T04:03:54-07:00 |
+| verdict | REWORK |
+
+## Review
+
+Verifying the claimed fixes; now checking the remote-reference cache keying and then running the tests.
+
+Test runs produced no output; checking the raw output to see why.
+
+Writing a small probe for a suspected path-keying regression in the BR-1 fix (symlinked chat dir).
+
+Confirmed a regression. Now reverting each claimed fix in turn to confirm its regression test goes red.
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+All three Important findings from round 1 are fixed, and I confirmed each one by reverting it. With the BR-1, BR-2 or BR-3 change removed, `chat_tree_context_spec` goes red; with the head as committed, all 8 tests pass. These specs also pass at head: `chat_tree_spec` (11), `build_messages_spec` (104), `ancestor_chain_rename_spec` (6), `chat_respond_spec` (53) and `remote_references_spec` (11). One new problem blocks SHIP, and it comes from the BR-1 fix itself. `resolve_remote_references` now picks a cache by comparing paths: `item.file ~= chat_file` at `lua/parley/chat_respond.lua:1245`. `item.file` is the `vim.fn.resolve`d path, but `chat_file` is the buffer name, which is not resolved. When the chat dir sits behind a symlink, the current file's own earlier `@@url@@` references stop using their cache. They are fetched again on every submission, and if that fetch fails, the error text replaces the good cached content, both in the request and in the saved cache. I reproduced this with a probe spec against a symlinked chat dir. Before #233, the current file always read `chat_cache`.
+
+**Strengths**
+- `tree_sequence` (`chat_respond.lua:177-204`) is now the one source for the request's context. The walk runs once at the call site (`:1757-1760`), and both the remote fetches and `build_messages` read that same sequence. A walk failure goes through the existing `fail('request build failed: …')` path and is not swallowed.
+- Anchor tagging in `linearize` (`chat_tree.lua:85`) is small and correct. Nested asides inherit the outermost anchor, so dropping an exchange drops its whole subtree.
+- BR-3 keeps the single-file window exactly as before by appending the input's tail after the cut, and `idx <= exchange_idx` keeps the tail from being rendered.
+- Each fix has a regression test that fails without it (checked by reverting each one).
+- The plan's Core concepts table now lists status, including the deleted entities and the new `other_files` helper.
+
+**Critical findings**
+- `chat_respond.lua:1245`: the cache is chosen by comparing a resolved path with an unresolved one. With a symlinked `chat_dir`, earlier URLs in the current file are fetched again on every submit, and a failed fetch replaces good cached content (`chat_cache[url] = error`, saved). Ancestor caches have the same problem: they were written under the parent's buffer name, but lookups use the resolved path.
+  - Reproduced: the probe returned `"File: … [Error: Remote URL fetch failed …]"` instead of `CACHED`, and the cache file ended up holding both the link key and the real-path key.
+  - Fix sketch: use `item.current and chat_cache or …` for the current file. Make cache keys canonical in one place, for example `vim.fn.resolve(fnamemodify(f, ":p"))` inside `get_chat_remote_reference_cache`, and fall back to reading the legacy unresolved key.
+  - Add a test that goes through a symlinked dir. The current BR-1 test hides the bug because `write_chat` returns `vim.fn.resolve(path)` (`chat_tree_context_spec.lua:17`).
+
+**Important findings**
+- None.
+
+**Minor findings**
+- `get_chat_remote_reference_cache` creates an empty `chats[file] = {}` entry for every item in the tree, even items with no URLs. These entries are saved on the next fetch, and nothing ever prunes `cache.chats` (ARCH-FUNERAL). A read-only lookup that doesn't create entries would fix this along with the Critical fix.
+- If the BR-1 fix regresses, its test goes to the real network: reverting it produced an `HTTP 404 for https://example.com/...` (ARCH-MOCK). An unroutable host or an injected fetcher would avoid this.
+- The "build the default sequence from `parsed_chat`" fallback appears twice, at `:793-799` and `:1235-1239` (ARCH-DRY, small).
+
+**Test coverage notes**
+- BR-1, BR-2 and BR-3 are each pinned by tests that fail when the fix is reverted.
+- Nothing covers path identity: symlinked dirs, or a buffer name that differs from the resolved path.
+- An inline aside link inside a *question* gets `after_exchange = k` from the parser. So it is anchored to the previous exchange rather than the one it sits in. This is existing parser behaviour, but the anchor logic now relies on it, and no test covers it.
+
+**Architecture**
+- **ARCH-DRY:** pass. The helper was consolidated; only the minor duplicate fallback above remains.
+- **ARCH-PURE:** pass. `linearize` and `path_up` take injected `deps`; `io_deps` is the thin IO layer.
+- **ARCH-PURPOSE:** pass on the shadow-sweep. I enumerated every consumer of the sequence (`build_messages`, `resolve_remote_references`, the topic input via `current_messages`), and each derives from it. The one defect is file identity, not derivation.
+- **ARCH-MOCK:** flagged, minor (the network fallback in the test).
+- **ARCH-CONSTRAINTS:** pass. Latency was measured (0.25 ms per KB; median 11–16 ms on a 58 KB tree) and is stated in the atlas.
+- **ARCH-SECURE:** pass. Other files' caches and contents belong to the same user and go through the typed cache reader.
+- **ARCH-ORDER:** pass. The sequence is captured once before the async fetches and then reused as a consistent snapshot.
+- **ARCH-FUNERAL:** flagged, minor (the empty cache entries).
+
+**Plan revision recommendations**
+- After fixing, add a Revisions entry saying remote cache keys are canonical (resolved) paths, with a read fallback to the legacy key.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      resolve_remote_references walks the shared sequence with per-file caches; the chat_tree_context_spec test fails when the cache lookup is reverted. The new symlink regression is raised separately.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      linearize tags anchors and tree_sequence filters on them; both drop tests fail when the filter and anchor_row are reverted.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The tail after the cut restores the single-file total; the mid-chat window test fails when the tail loop is removed.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      tests/helpers/tree_context.lua other_files is used by both specs; no other copies are left in tests/.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Latency measured (0.25 ms/KB, median 11-16 ms on a 58 KB tree) and stated in atlas/chat/lifecycle.md.
+findings:
+  - id: new
+    severity: Critical
+    kind: defect
+    family: canonical-file-identity
+    title: |
+      Remote cache lookup compares a resolved path with the unresolved buffer name, so symlinked chat dirs refetch and can overwrite cached URLs with errors
+    detail: |
+      chat_respond.lua:1245 picks the cache by item.file ~= chat_file. tree_sequence stores vim.fn.resolve'd paths, but chat_file is frame.file_name (the buffer name). Under a symlinked chat_dir, the current file's earlier @@url@@ references miss chat_cache and are fetched again on every submit. A failed fetch writes error text into resolved and into chat_cache (saved), replacing good content. A probe with a symlinked dir returned the error stub instead of CACHED; before #233 the current file always read chat_cache. Ancestor caches miss the same way. Fix: use chat_cache for item.current, canonicalize keys in get_chat_remote_reference_cache with a legacy-key read fallback, and add a symlinked-dir regression test (write_chat's resolve() hides it today).
+  - id: new
+    severity: Minor
+    kind: defect
+    family: operating-envelope-undeclared
+    title: |
+      Per-item cache lookup saves an empty chats entry for every tree file, with no pruning
+    detail: |
+      This is the 2nd finding in family operating-envelope-undeclared. The rule: a lookup must not write. get_chat_remote_reference_cache creates chats[key] = {} for every item in every tree, including items with no URLs, and the next save persists those entries. Give it a read-only variant for lookups (ARCH-FUNERAL).
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"f71b39b0-22ed-41ef-befa-8b0f2d95315f","repository":"github.com/xianxu/parley.nvim","issue_id":"000233","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/72f789953e7006da","reviewed_head":"e2ea2bb56b53eba6c413c4c7fc9b90747be3cf5d","slot":"parley.nvim:3","requested_at":"2026-10-16T11:00:39.190762Z"},"phase":"finished","pid":91668,"started_at":"2026-10-16T11:00:39.349994Z","finished_at":"2026-10-16T11:03:49.511299Z","session_id":"cd414908-5754-4bbd-97d1-aebd5540b856","outcome":"returned"}] -->

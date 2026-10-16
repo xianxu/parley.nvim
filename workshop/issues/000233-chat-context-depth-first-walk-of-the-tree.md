@@ -177,4 +177,19 @@ Before merge (a gate held by the TL, not a build step): the operator decides on 
   11 to 16 ms (max 20 ms) over the 58 KB, three-file tree above, about 0.25 ms per
   KB read. It runs synchronously in the build, linear in the bytes to the left
   of the cut.
+- Close review round 2 returned REWORK, with one Critical and one Minor.
+  - Critical, file identity: picking the cache by `item.file ~= chat_file`
+    compared a resolved path with the unresolved buffer name. Under a
+    symlinked chat dir, the current file's cached URLs were refetched, and a
+    failed fetch could overwrite good content. The class: one key per file.
+    Cache keys are now the resolved absolute path (`chat_cache_key`), and an
+    entry saved under the raw name moves on first use. The current file
+    always uses its own cache, chosen by `item.current`, not by a path compare.
+  - Minor: a lookup created an empty cache entry for every tree file. Other
+    files are now read through `peek_chat_remote_reference_cache`, which
+    never writes.
+
+  Tests: a symlinked-dir case and a no-entry case. The old identity mutation
+  fails both; the writing-lookup mutation fails the second. remote_references 50,
+  helper_io 11, chat_tree_context 10, green.
 
