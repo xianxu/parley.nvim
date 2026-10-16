@@ -109,7 +109,12 @@ a process that actually answers as cliproxy. `:ParleyProxy restart` is
 `restart_managed`: `stop`, wait (≤2 s) for the old proxy to release the port,
 then ensure — without the wait a proxy still shutting down could be reused
 (#237). A cliproxyapi still answering when the wait ends is reported as an
-error, never taken for the replacement.
+error, never taken for the replacement. The wait watches the processes `stop`
+signalled (`kill(pid, 0)`), not the port (#340). Under the parallel suite, a
+probe of a just-closed port went unanswered until curl's `--max-time`. Once they
+have exited and `lsof` finds no listener left, the replacement spawns without a
+reuse probe. A port probe decides instead when no process was identified, a
+listener remains or cannot be read, or a process outlives the wait.
 
 ## Model catalog
 

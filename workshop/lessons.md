@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-10-16 (#340 — credential_health restart timing)
+
+- Measure under the load that fails, not a proxy for it. CPU burners never reproduced #340; 8 parallel copies of the spec (the suite's shape) did on the first run. The slow stage was a port probe that reached `down` only by curl `--max-time`, so wait on the process state you control (`kill(pid, 0)`), not on a probe of what it leaves behind.
+- Background load generators: zsh does not word-split an unquoted `$pids`, so `kill $pids` failed and 24 `yes` processes outlived the run. A later sandboxed command may not signal them (EPERM); only stopping the owning background task killed them. Kill in the same command, with an array (`kill "${pids[@]}"`), and confirm each pid reports ESRCH.
+
 ## 2026-10-15 (#204 — vault reset on setup)
 
 - Resetting a store also has to cover what is derived from it. #204 reset the vault's keys on setup, but the copilot bearer cache and any in-flight resolver still carried the old key (close-review advisory). List the derived state and the async writers before claiming "takes effect".
