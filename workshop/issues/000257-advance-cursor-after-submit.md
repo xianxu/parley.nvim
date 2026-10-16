@@ -107,6 +107,8 @@ Steps:
 
 ## Log
 
+
+- 2026-10-16: closed — Round 1 fixes: one submitted index feeds the submission and the advance (BR-1; cursor outside every exchange keeps its place, regression case); Done-when covers the stop rule (BR-2); the advance parses via chat_context.parse; Insert-mode landing tested. chat_respond_spec 63/63, chat_stop_generation 7/7 incl. the one-running direct stop; mutation checks fail each case. Operator live smoke PASSED on d3909bd9 (cursor advance); the stop rule and round-1 fixes are test-covered, not smoked. Full suite green on d4f4a10f (sdlc-local/suite); the first run hit the unrelated cliproxy_auth_login_spec restart-rung flake, which passed 21/21 twice alone.; review verdict: SHIP
 ### 2026-09-15
 
 Filed at the user's request as a follow-up to #254. Desired workflow: after
