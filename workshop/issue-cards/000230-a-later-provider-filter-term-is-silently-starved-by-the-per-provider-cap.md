@@ -1,6 +1,6 @@
 ---
 id: 000230
-status: working
+status: codecomplete
 created: 2026-09-10
 updated: 2026-10-15
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.33
+tracker:
+    version: 1
+    completion:
+        token: close-015524cfe7b3
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: d9e812c83ee6fdf62194bd5083ae592f7a187f35
+        evidence_commit: 6d448b82234d61b90badafe06d36e8f2a5803a5d
 ---
 
 # a later provider filter term is silently starved by the per-provider cap
