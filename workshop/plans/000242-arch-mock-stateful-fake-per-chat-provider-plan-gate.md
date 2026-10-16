@@ -1,4 +1,24 @@
 ---
+reviewer_runs:
+    - version: 1
+      intent:
+        id: c2334449-748f-4814-b1db-988d991e2f6f
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000242"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: claude
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        reviewed_head: e729d98dd0d9cf72769a1e65c3456649ae9d5ae0
+        slot: parley.nvim:4
+        requested_at: "2026-10-16T14:25:46.166343Z"
+      phase: finished
+      pid: 14087
+      started_at: "2026-10-16T14:25:46.317638Z"
+      finished_at: "2026-10-16T14:26:08.156201Z"
+      session_id: 190ede14-2200-42bf-8e44-09b6d30dd3d8
+      outcome: returned
 gate: plan-quality
 issue: 242
 id_prefix: PQ
@@ -128,7 +148,36 @@ rounds:
           family: regression-proof-runs-on-old-tree
           round: 2
       blocked: false
-content_hash: dbc6ddb0f709ca83d6bd33ae83283d6b6b4a2a83d0cf39397717917ce5d6e96e
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: c475ddc7-2254-4ffb-ab05-33cf1f5c20b2
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000242"
+            recipe: plan-quality
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+            reviewed_head: e729d98dd0d9cf72769a1e65c3456649ae9d5ae0
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T14:25:28.505252Z"
+          phase: finished
+          pid: 12926
+          started_at: "2026-10-16T14:25:28.659565Z"
+          finished_at: "2026-10-16T14:25:44.573639Z"
+          session_id: da3ae3ed-3a04-4747-867f-70d2d30ccc45
+          outcome: returned
+      "n": 3
+      timestamp: "2026-10-16T07:25:44-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-8
+          disposition: not-addressed
+          note: 'Still open. dispatcher.lua:856-865 routes a cap (and the in-band-error ending) through _ending_notice to a logger line and then legacy_complete, never the error callback. The PQ-1 revision still expects a failure on the branch for max_tokens. Fix by rule: each proof case names the observable both trees expose and checks it on the branch first. Minor, carried to the close review.'
+          round: 3
+      blocked: false
+content_hash: 01a731fcc13d47bfb98b7643df3f99740dd2c51e80b98f9edfa04a368d76d465
 ---
 
 # Gate ledger — parley.nvim#242 (plan-quality)
@@ -166,6 +215,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - **PQ-8** [Minor] `regression-proof-runs-on-old-tree` (kind: defect) The 228 proof expects a max_tokens stream to fail on the branch, but the branch classifies a cap as a notice, which may not reach the failure callback
   2nd finding in this family. Rule: each proof names, per case, the observable both trees expose (which callback fires and with what argument), and checks it on the branch before reading the old tree's result. _ending_notice treats class cap as advisory text, so the cap case may need to assert the notice or the stop_reason path rather than the error callback.
+
+## Round 3 — 2026-10-16T07:25:44-07:00 (claude) — passed
+
+### Disposed
+
+- PQ-8 — not-addressed — Still open. dispatcher.lua:856-865 routes a cap (and the in-band-error ending) through _ending_notice to a logger line and then legacy_complete, never the error callback. The PQ-1 revision still expects a failure on the branch for max_tokens. Fix by rule: each proof case names the observable both trees expose and checks it on the branch first. Minor, carried to the close review.
 
 ## Open findings
 
