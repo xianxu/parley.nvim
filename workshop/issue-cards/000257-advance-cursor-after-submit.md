@@ -1,6 +1,6 @@
 ---
 id: 000257
-status: working
+status: codecomplete
 created: 2026-09-15
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.77
+tracker:
+    version: 1
+    completion:
+        token: close-2f08040461b3
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: d4f4a10f3ed14a1719e822cb26ef28d40ad8e3c1
+        evidence_commit: e8e61009947995de02eda19fe5681979012f00d9
 ---
 
 # Advance cursor to the next question after submission
