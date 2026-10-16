@@ -65,3 +65,4 @@ The first two are existing files, and the old path no longer exists, so they nev
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Full suite green on 0ea8a86d (sdlc-local/suite, main merged). Established by tests that the chat-move reference rewrite IS reachable: (1) an absolute reference to a non-timestamp child, (2) a sub/name reference to a flattened non-timestamp child; each case fails when its condition is removed (mutation). Kept, not deleted. Plus the refused-rewrite report (real capacity hold; the move completes; mutation of the error collection fails it). Documented at the pass and in atlas lifecycle.md.; review verdict: SHIP
