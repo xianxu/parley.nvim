@@ -1,6 +1,6 @@
 ---
 id: 000358
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -14,6 +14,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 2.47
+tracker:
+    version: 1
+    completion:
+        token: close-93fe30ace220
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: b31928c1200e7b0e3932dbbcf2d2c3f434a85c2d
+        evidence_commit: 69e4a41287d7cc25c097f5b16945802494ca2104
 ---
 
 # Keep the cursor and view across parley's own agent rewrites (file_refresh, review round edit!)
