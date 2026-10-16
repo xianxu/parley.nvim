@@ -1,12 +1,12 @@
 ---
 id: 000348
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: 'ed06d115397e79375cc1ad231e0d35792cbac9d7' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '4b5fe513a991000c043648c94ad23ef4f93e9ef8' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T02:14:02-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "af7551fb", done: "e9782999"}
+actual_hours: 0.22
 ---
 
 # starter welcome lock: a second starter can see the lock dir before its owner file and demand repair
