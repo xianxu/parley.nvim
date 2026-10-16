@@ -51,11 +51,23 @@ The winbar confirms the destination and time after submission succeeds, until
 your next edit or the agent's write; failures show an error there. Unchanged
 content shows `nothing to submit` instead of sending again. Press Alt+Return
 a second time within two seconds to resend explicitly.
+The editor never waits on a submit: the winbar shows `submitting…`. If Couch
+hasn't confirmed it within `agentic_submit_timeout_ms` (default 15000), or the
+registry failed, it turns red with `not confirmed: submit again`. Alt+Return then
+completes it, and it never delivers twice: a press while a send is still out
+joins it. Moves and renames ask Couch inline, within `agentic_move_timeout_ms`
+(default 5000). On that deadline they say to run the move again, or after a
+rename, to rename back first.
 An explicit `couch-owner:` overrides the default; a business `owner:` does not
 (`owner:` remains a fallback only for legacy `type: session-sync` files).
 [Agentic documents](atlas/modes/session_sync.md) use the existing turn engine:
 the first edit takes your turn before auto-save, undo back to the pre-edit
 baseline releases it, and redo takes it again. Saves never move that baseline.
+Leaving a document with an unsubmitted turn gives three short red winbar pulses
+and a file-named `unsubmitted: Alt+Return to submit` reminder. Navigation stays
+free; after a same-window file switch the destination bar names the file left
+behind. Undo back to the baseline suppresses the reminder, while auto-save does
+not count as submission.
 Quiet owners with owed deliveries are pinged after `session_sync_ping_minutes`
 (default 15); unsent edits become stale after `session_sync_stale_minutes`
 (default 5). Unknown offline membership stays editable with `Couch unavailable:
@@ -63,6 +75,12 @@ agentic state unknown`, while known attached/cached documents keep turn
 protection. Supported moves retain identity and migrate existing `.side/`
 backlinks through a forward-only recovery journal. Outside a Couch pane, the
 existing [document review](atlas/modes/review.md) flow remains.
+
+In a Couch pane, **Alt+Return** sends only `submitted: ABSOLUTE_PATH` through
+the registered document flow. The agent's shared `xx-universal-review` skill
+reads the file's `process-instruction:` and changes since its last read.
+Outside Couch, the same shortcut runs Parley's inline review using the bundled
+canonical round, modes and marker grammar with its local editing tool.
 
 Press **Alt+Shift+O** in Normal or Insert mode to return to the previous file
 in the current window, restoring its cursor position. Follow links with Alt+o,

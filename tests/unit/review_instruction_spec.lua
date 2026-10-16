@@ -29,29 +29,28 @@ describe("instruction.expand", function()
         local e = assert(instruction.expand("[copy-edit] keep the voice", modes()))
         assert.same({ "copy-editing" }, names(e.modes))
         assert.equals("keep the voice", e.text)
-        local brief = instruction.brief(e.modes, e.text)
+        local brief = instruction.context(e.modes, e.text)
         assert.truthy(brief:find("## Review mode: copy-editing\nCopy edit.", 1, true))
         -- copy-editing's knobs: whole-doc, propose-strike, frontier on.
-        assert.truthy(brief:find("Scope: edit the whole document", 1, true))
-        assert.truthy(brief:find("propose each as a 🤖~old~{new} strike marker", 1, true))
-        assert.truthy(brief:find("Reading frontier", 1, true))
+        assert.truthy(brief:find("scope: whole-doc", 1, true))
+        assert.truthy(brief:find("deletions: propose-strike", 1, true))
+        assert.truthy(brief:find("frontier: on", 1, true))
         assert.truthy(brief:find("## Operator instruction\nkeep the voice", 1, true))
     end)
 
     it("no [name] means free-form", function()
         local e = assert(instruction.expand("what do you think?", modes()))
         assert.same({ "free-form" }, names(e.modes))
-        assert.falsy(instruction.brief(e.modes, e.text):find("Reading frontier", 1, true))
+        assert.truthy(instruction.context(e.modes, e.text):find("frontier: off", 1, true))
     end)
 
     it("several modes add their briefs; the first one's knobs govern", function()
         local e = assert(instruction.expand("[proofreading][copy-editing] x", modes()))
         assert.same({ "proofreading", "copy-editing" }, names(e.modes))
-        local brief = instruction.brief(e.modes, e.text)
+        local brief = instruction.context(e.modes, e.text)
         assert.truthy(brief:find("## Review mode: copy-editing", 1, true))
-        assert.equals(1, select(2, brief:gsub("## How to apply this round", "")))
-        local first = e.modes[1]
-        assert.truthy(brief:find(mode.directives(first), 1, true))
+        assert.equals(1, select(2, brief:gsub("## Selected round flags", "")))
+        assert.truthy(brief:find("scope: whole-doc\ndeletions: apply\nfrontier: on", 1, true))
     end)
 
     it("refuses an unknown or ambiguous name, naming the known ones", function()
@@ -70,5 +69,37 @@ describe("instruction.complete", function()
         assert.equals(#modes(), #words)
         assert.truthy(vim.tbl_contains(words, "copy-editing]"))
         assert.truthy(vim.tbl_contains(words, "free-form]"))
+    end)
+end)
+
+
+describe("instruction.context", function()
+    it("preserves mode order and raw bodies, with only the first mode flags", function()
+        for count = 1, 12 do
+            local selected = {}
+            for i = 1, count do
+                selected[i] = { name = "mode-" .. i, body = "Raw body " .. i .. "\n[keep]",
+                    scope = i == 1 and "markers-only" or "whole-doc",
+                    deletions = i == 1 and "apply" or "propose-strike", frontier = "on" }
+            end
+            local before = vim.deepcopy(selected)
+            local body = instruction.context(selected, "raw [text]\nsecond line")
+            local previous = 0
+            for _, m in ipairs(selected) do
+                local at = assert(body:find("## Review mode: " .. m.name .. "\n" .. m.body, 1, true))
+                assert.is_true(at > previous)
+                previous = at
+            end
+            assert.truthy(body:find("scope: markers-only\ndeletions: apply\nfrontier: on", 1, true))
+            assert.falsy(body:find("scope: whole-doc", 1, true))
+            assert.truthy(body:find("## Operator instruction\nraw [text]\nsecond line", 1, true))
+            assert.falsy(body:find("## How to apply this round", 1, true))
+            assert.same(before, selected)
+        end
+    end)
+
+    it("states parser defaults for legacy marker-only invocation", function()
+        local body = instruction.context({}, nil)
+        assert.truthy(body:find("scope: markers-only\ndeletions: propose-strike\nfrontier: on", 1, true))
     end)
 end)

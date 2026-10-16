@@ -6,8 +6,6 @@
 -- contribute their briefs; the first one's knobs (scope, deletions, frontier)
 -- govern the round, since one round has one set of directives.
 
-local mode = require("parley.skills.review.mode")
-
 local M = {}
 
 M.DEFAULT_MODE = "free-form"
@@ -76,24 +74,25 @@ M.expand = function(value, modes)
 	return { modes = resolved, text = parsed.text }
 end
 
---- The round's brief: each mode's prompt, the first mode's directives, then
---- the operator's text. Shared by the review skill's system prompt and the
---- message sent to a Couch slot.
+--- Neutral inputs for the canonical round; its flag table owns semantics.
+--- No selection retains the local marker-only invocation's parser defaults.
 ---@param modes table[]
 ---@param text string|nil
 ---@return string
-M.brief = function(modes, text)
-	local parts = {}
-	for _, m in ipairs(modes) do
-		parts[#parts + 1] = "## Review mode: " .. m.name .. "\n" .. m.body
-	end
-	if modes[1] then
-		parts[#parts + 1] = mode.directives(modes[1])
-	end
-	if text and text ~= "" then
-		parts[#parts + 1] = "## Operator instruction\n" .. text
-	end
-	return table.concat(parts, "\n\n")
+M.context = function(modes, text)
+    local parts = {}
+    for _, m in ipairs(modes) do
+        parts[#parts + 1] = "## Review mode: " .. m.name .. "\n" .. m.body
+    end
+    local first = modes[1] or {}
+    parts[#parts + 1] = "## Selected round flags\n"
+        .. "scope: " .. (first.scope or "markers-only") .. "\n"
+        .. "deletions: " .. (first.deletions or "propose-strike") .. "\n"
+        .. "frontier: " .. (first.frontier or "on")
+    if text and text ~= "" then
+        parts[#parts + 1] = "## Operator instruction\n" .. text
+    end
+    return table.concat(parts, "\n\n")
 end
 
 --- Completion words for `[`: every mode name, closed.
