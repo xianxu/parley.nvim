@@ -1,6 +1,8 @@
--- Most specs retain Plenary's default deadline. These real 50,000-row
--- conformance corpora need extra bootstrap time under parallel CI load.
+-- Most specs retain Plenary's default as a no-completed-case budget.
+-- These real 50,000-row corpora keep their larger bootstrap budget.
 local M={}
+local Deadline = require("tests.helpers.spec_deadline")
+local Progress = require("tests.helpers.spec_progress")
 local function absolute(path)
     return vim.fn.resolve(vim.fn.fnamemodify(path,':p'))
 end
@@ -17,30 +19,87 @@ end
 -- (a per-process query dir, the wordless-refusal watch) cover every spec rather
 -- than the ones that remember to ask (#261 M5 review BR-71).
 local INIT='tests/minimal_init.vim'
--- A deadline is a hang check, sized for a quiet machine. Other sessions' suites
--- share this one (#294 run 3: load average 72-105 on 12 cores), and there a
--- quiet-machine deadline kills specs that are only waiting their turn for a
--- CPU. So it stretches by how oversubscribed the machine is when the spec
--- starts, and stops stretching at LOAD_CAP so a real hang still ends.
+-- Keep the quiet-machine hang budget and bounded load scaling. It applies to
+-- completed-case inactivity; the independent absolute ceiling is base x4.
 local DEFAULT_TIMEOUT=50000 -- plenary.test_harness's own default
-local LOAD_CAP=4
-function M.load_factor(load1,ncpu)
-    return math.min(LOAD_CAP,math.max(1,load1/math.max(1,ncpu)))
+M.load_factor = Deadline.load_factor
+
+-- This headless adapter owns one child and its timer through observed exit.
+-- Tests can shorten the base, control load/CPUs and collect output; run() uses the
+-- shared defaults and the same child/bootstrap/assertion path.
+function M.execute(path, options)
+    options = options or {}
+    local uv = vim.uv or vim.loop
+    local function now() return uv.hrtime() / 1e6 end
+    local base = options.base_ms or (M.options(path) or {}).timeout or DEFAULT_TIMEOUT
+    local load1 = options.load1 or uv.loadavg()
+    local ncpu = options.ncpu or uv.available_parallelism()
+    local state = Deadline.new(base, load1, ncpu, now())
+    local output = options.output or function(stream, text)
+        local target = stream == "stderr" and io.stderr or io.stdout
+        target:write(text); target:flush()
+    end
+    -- The token is private to this invocation; nested runners cannot refresh it.
+    local token = "PARLEY_CASE_" .. tostring(uv.hrtime())
+    local reader = Progress.new(token, function(text) output("stdout", text) end, function(sequence)
+        state = Deadline.transition(state, { kind = "progress", sequence = sequence, now_ms = now() })
+    end)
+    local command = { vim.v.progpath, "--headless", "--noplugin", "-n", "-i", "NONE", "-u", INIT,
+        "-c", ("lua require('tests.helpers.spec_child').run(%q, %q)"):format(absolute(path), token) }
+    local result, child
+    local timer = uv.new_timer()
+    local ok, err = pcall(function()
+        child = vim.system(command, {
+            stdout = function(_, data) if data then reader.feed(data) end end,
+            stderr = function(_, data) if data then output("stderr", data) end end,
+        }, function(exited)
+            state = Deadline.transition(state, { kind = "exit", now_ms = now() })
+            result = exited
+        end)
+    end)
+    if not ok then
+        timer:close()
+        output("stderr", "cannot start spec child: " .. tostring(err) .. "\n")
+        return { code = 125, reason = tostring(err), completed = 0, reaped = true }
+    end
+    timer:start(0, 25, function()
+        if result then return end
+        state = Deadline.transition(state, { kind = "tick", now_ms = now() })
+        if Deadline.snapshot(state).status ~= "running" then
+            timer:stop()
+            pcall(child.kill, child, 15)
+        end
+    end)
+    local ceiling = Deadline.snapshot(state).absolute_ms
+    vim.wait(math.ceil(ceiling + 1000), function()
+        return result ~= nil or Deadline.snapshot(state).status ~= "running"
+    end, 10)
+    if not result then
+        pcall(child.kill, child, 15)
+        if not vim.wait(1000, function() return result ~= nil end, 10) then
+            pcall(child.kill, child, 9)
+            vim.wait(3000, function() return result ~= nil end, 10)
+        end
+    end
+    timer:stop(); timer:close()
+    reader.finish()
+    local snapshot = Deadline.snapshot(state)
+    local expired = snapshot.status == "stalled" or snapshot.status == "absolute-expired"
+    if expired then
+        output("stderr", ("DEADLINE: %s %s after %d completed case(s); idle %.0fms, absolute %.0fms\n")
+            :format(path, snapshot.status, snapshot.sequence, snapshot.idle_ms, snapshot.absolute_ms))
+    end
+    local code = result and result.code or 125
+    if result and (result.signal or 0) > 0 then code = 128 + result.signal end
+    return { code = expired and 124 or code,
+        signal = result and result.signal, reason = expired and snapshot.status or nil,
+        completed = snapshot.sequence, reaped = result ~= nil, pid = child.pid }
 end
--- Plenary kills a child at its deadline without a word, so a deadline kill read
--- as a failure with no assertion output (#294). The parent waits in vim.wait,
--- where timers run; one at the deadline names the cause.
+
 function M.run(path)
-    local harness=require('plenary.test_harness')
     if vim.env.PARLEY_TEST_JITSTAT=='1' then require('tests.helpers.jit_watch').silence() end
-    local opts=vim.tbl_extend('force',{minimal_init=INIT,timeout=DEFAULT_TIMEOUT},M.options(path) or {})
-    local base,load1,ncpu=opts.timeout,vim.uv.loadavg(),vim.uv.available_parallelism()
-    local factor=M.load_factor(load1,ncpu)
-    opts.timeout=math.floor(base*factor)
-    vim.defer_fn(function()
-        io.stdout:write(('DEADLINE: %s still running at its %ds deadline (%ds x%.1f for load %.0f on %d CPUs); killed\n')
-            :format(path,opts.timeout/1000,base/1000,factor,load1,ncpu))
-    end,opts.timeout)
-    return harness.test_directory(path,opts)
+    local result = M.execute(path)
+    if not result.reaped then io.stderr:write("spec child exit was not observed: " .. tostring(result.pid) .. "\n") end
+    return vim.cmd(result.code == 0 and "0cq" or "1cq")
 end
 return M

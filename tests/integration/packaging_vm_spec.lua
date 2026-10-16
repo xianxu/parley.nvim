@@ -152,8 +152,12 @@ describe('disposable packaging VM ownership', function()
             'local ok, result = pcall(function() return dofile(' .. string.format('%q', repository .. '/tests/packaging/vm_chat.lua') .. ').run("fake") end)',
             'if not ok then io.stderr:write(tostring(result)); vim.cmd("cquit 1") end',
             'assert(result.first_use and result.managed_route and result.response_nonempty)',
+            -- The login flow reopens the model picker; the probe must settle it, not race it (#336).
+            'for _, win in ipairs(vim.api.nvim_list_wins()) do assert(vim.api.nvim_win_get_config(win).relative == "", "guest probe left a floating window open") end',
+            -- Confinement is a property of the created chat, never of whatever holds focus.
+            'vim.cmd("enew")',
             'confined()',
-            'assert(vim.fn.resolve(vim.api.nvim_buf_get_name(0)):sub(1, #profile) == profile, "guest chat file escaped isolated profile")',
+            'assert(result.chat_file ~= "" and result.chat_file:sub(1, #profile) == profile, "guest chat file escaped isolated profile")',
             'assert(vim.fn.resolve(vim.fn.getcwd()) == vim.fn.resolve(' .. string.format('%q', root) .. '), "guest helper changed cwd")',
             'vim.cmd("qa!")',
         }, script)
