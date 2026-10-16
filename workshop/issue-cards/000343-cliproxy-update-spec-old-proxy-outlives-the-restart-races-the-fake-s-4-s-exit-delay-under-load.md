@@ -1,8 +1,8 @@
 ---
 id: 000343
-status: working
+status: codecomplete
 created: 2026-10-15
-updated: 2026-10-15
+updated: 2026-10-16
 estimate_hours:
 github_issue:
 started: 2026-10-15T20:29:03-07:00
@@ -13,8 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.24
 tracker:
     version: 1
+    completion:
+        token: close-3af99495e17c
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 10db2bcdc144b82f823a01f020d0e2e0e2fbcff0
+        evidence_commit: d3a9efd7527e868abdec6ce5d098854d4d26e142
 ---
 
 # cliproxy_update_spec: 'old proxy outlives the restart' races the fake's 4 s exit delay under load
