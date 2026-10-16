@@ -59,6 +59,7 @@ original error is raised. `vim.fn.mkdir` stays the one production seam.
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Measured old: 8 of 180 racing creators failed (E739 on intermediates). Red: ensure_dir_race_spec and the new prepare_dir_spec seam case fail on old code. Green: race spec 4 runs in a row 0 failures, prepare_dir_spec 10/10, luacheck clean.; review verdict: SHIP
 
 - Taken by parley.nvim:3. Measured on the old code: 6 concurrent nvim creators
   x 30 rounds on a shared 8-deep path failed 8 of 180, all E739 on an
