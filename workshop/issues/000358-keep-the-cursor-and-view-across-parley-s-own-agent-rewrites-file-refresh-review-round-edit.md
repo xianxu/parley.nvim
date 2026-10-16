@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "93e0d3d8"}
 ---
 
 # Keep the cursor and view across parley's own agent rewrites (file_refresh, review round edit!)
