@@ -1,6 +1,6 @@
 ---
 id: 000342
-status: codecomplete
+status: done
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: d4677890cc2ba8539394c6d4f9c97ded4d3176f3
         evidence_commit: 8fcfc96f784e43949c9d4542ef3b3e883356322d
+        landed_commit: 6a418d25a0654b7ac949a1cba332be86438d20d0
 ---
 
 # A spec or review run outside the test harness wrote the operator's real cliproxy catalog cache
