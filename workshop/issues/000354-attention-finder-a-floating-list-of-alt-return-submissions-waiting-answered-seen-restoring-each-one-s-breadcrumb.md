@@ -1,7 +1,7 @@
 ---
 id: 000354
 status: working
-deps: [parley.nvim#332]
+deps: [parley.nvim#332, parley.nvim#353]
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16

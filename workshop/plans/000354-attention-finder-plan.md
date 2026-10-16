@@ -54,7 +54,7 @@ All verified in the code on 2026-10-16.
     - **seen** when `pending` is empty and `seen_at >= answered_at`.
   - `transition(state, event, now) -> state'` handles these events:
     - `{type="submitted", path, id, breadcrumb}`: adds `id` to `pending` and replaces `submitted_at` and `breadcrumb`. A new submit resets the entry to waiting.
-    - `{type="observed", path, owed_ids}`: removes from `pending` every ID not in `owed_ids`, and sets `answered_at = now` when `pending` becomes empty. It ignores a path with no entry, and leaves alone an entry that has no pending IDs.
+    - `{type="observed", path, probed_ids, owed_ids}`: removes from `pending` every ID in `probed_ids` (the pending set when the probe started) that is not in `owed_ids`; an ID outside `probed_ids` is never removed, and sets `answered_at = now` when `pending` becomes empty. It ignores a path with no entry, and leaves alone an entry that has no pending IDs.
     - `{type="observe_failed", path, reason}`: sets `unknown = reason`. State is unchanged, because a failed probe is not evidence of an answer (ARCH-ORDER). The next successful observation clears it.
     - `{type="opened", path}`: sets `seen_at = now` only when the entry is answered. Opening a waiting entry changes nothing.
     - `{type="sweep", grace}`: removes an entry that is seen with `now - seen_at >= grace`. Waiting and answered entries never expire.
@@ -73,25 +73,27 @@ All verified in the code on 2026-10-16.
 |------|----------|--------|-------|
 | `attention_store` | `lua/parley/attention_store.lua` | new | the JSON file `state_dir/attention.json` |
 | `attention` | `lua/parley/attention.lua` | new | the couch CLI, the editor, #353's seam |
-| `agentic_document` send effect | `lua/parley/agentic_document.lua:247` | modified | records a submit |
+| `release_and_send` | `lua/parley/session_sync.lua:802` | modified | records a submit |
 
-- **attention_store:** `load()` and `apply(event)`.
-  - `apply` loads the file, runs the transition, then writes it with `helper.table_to_file_atomic` under `document_lease` (several editors may submit at once).
+- **attention_store:** `load()` and `apply(event, on_done)`.
+  - `apply` takes `document_lease.acquire("attention", "store", { root = state_dir })`, re-reads the file, runs the transition, writes it with `helper.table_to_file_atomic`, and releases. Several editors may submit at once.
+  - **Busy lease:** `acquire` is non-blocking (`LOCK_NB`; another holder returns `failure('busy')`). `apply` retries on `busy` with `vim.defer_fn`, at most 10 times, 25 ms apart (both injectable). After the last try it warns `attention: submit record for <file> lost (store busy)` and writes nothing. Any other failure (`unavailable`, `limit`) warns at once. A lost record is never silent.
   - **Input handling (ARCH-SECURE):** a missing, truncated or hand-edited file, or one written by a different version, is parsed into a typed state at the boundary. Anything that doesn't fit reads as empty and is reported once with a warning; it is never trusted as entries. The file joins `tests/helpers/sidecars.lua` for its corruption cases.
   - **Lifetime (ARCH-FUNERAL):** one file of at most 256 entries, each about 1 KB plus its breadcrumb. Entries leave by `sweep`, which runs on every `apply`, or by the bound.
 - **attention (glue):**
-  - `record(buf, send_result)` parses the message ID from the send's stdout, takes `file_history.snapshot(win)` (nil until #353 lands; a nil value is stored as no breadcrumb), and applies `submitted`. With no ID in the stdout it records nothing and logs why.
-  - `refresh(on_done)` probes each waiting entry with `couch.query({"couch","--session-sync","status","--json",path})`, at most 4 at a time. It applies `observed` with the `Owed` IDs, or `observe_failed` with the Couch `Code`.
+  - **Where a submit is recorded:** both Alt+Return paths that send through Couch end in `session_sync`'s `release_and_send`: the agentic document's send effect (`send_registered`) and `type: session-sync` files (`review_send.submit` → `session_sync.submit` → `submit_now`). One hook there covers both (ARCH-DRY). `release_and_send` takes `file_history.snapshot(vim.fn.bufwinid(buf))` before it sends, since the operator may move on while the send runs, and calls `attention.record(path, breadcrumb, obj)` in the send callback when `obj.code == 0`. The call sits before the callback's stale-state guard, because the message has been sent whatever the engine did meanwhile, and it uses the path captured at send time.
+  - `record(path, breadcrumb, send_result)` parses the message ID from the send's stdout and applies `submitted` (a nil breadcrumb, before #353 lands or with no observable window, is stored as no breadcrumb). With no ID in the stdout it records nothing and warns.
+  - The `process-instruction:` `couch.send` path stays out: nothing folds it, so it could never read as answered.
+  - `refresh(on_done)` probes each waiting entry with `couch.query({"couch","--session-sync","status","--json",path})`, at most 4 at a time. It captures the entry's pending IDs **when the probe starts** and applies `observed` with that set and the `Owed` IDs, or `observe_failed` with the Couch `Code`.
   - `open()` opens the picker from the stored state, starts a refresh, and calls `handle.update` as observations land. On select, it:
     1. opens the file in the current window, or reports a missing file and opens nothing;
     2. applies `opened`;
     3. calls `file_history.restore(win, entry.breadcrumb)` when #353 is present, keeping the file as a root if restore refuses.
   - **Injected:** the couch runner, the `file_history` seam and the clock, so the integration specs drive a stateful fake Couch.
-- **The fake Couch (ARCH-MOCK):** `tests/helpers/fake_couch.lua`, new or extending the #332 helper if one exists.
-  - It holds a per-file owed list.
-  - A send appends an ID and returns `<ID> me -> owner queued`.
-  - `fold(path, id)` removes an ID.
-  - Status returns the JSON above, or a refusal `Code`.
+- **The fake Couch (ARCH-MOCK):** extend the existing `tests/helpers/fake_couch.lua` (the shell `couch`) and `tests/fixtures/fake_couch_registry.py` (its `--session-sync` state file).
+  - **Send:** today it prints nothing on stdout. It will print `<ID> me -> <to> queued`, with IDs from a counter file beside the log, and append the ID to the file's `Owed` in the registry state when `$FAKE_COUCH_REGISTRY` is set.
+  - **Owed and fold:** the registry already persists a per-file `Status` (keyed by registration ID, or by path for an unregistered file) and returns it from `status`. A new helper, `fake_couch.fold(registry, path, id)`, removes an ID from that `Owed`, the way an agent's `write --fold` does.
+  - **Refusals:** the registry's existing `FAKE_COUCH_REGISTRY_MODE` (`unsupported`, `malformed`, `missing`) and `FAKE_COUCH_STATUS` give the failure codes.
   - Live conformance: the shape matches pair's `couchcmd/session_sync.go:234`. A live check is the operator's smoke in Couch's nvim.
 
 ### Interaction, constraints and ordering
@@ -101,9 +103,9 @@ All verified in the code on 2026-10-16.
   - Probes are asynchronous, bounded at 4 concurrent `couch` processes, and only for waiting entries. A finder with 50 waiting entries costs 50 short `couch` runs in the background, with no wait on the UI path.
   - Recording a submit is one atomic write, after the send has already succeeded.
 - **ARCH-ORDER:** the events that cannot be blocked are:
-  - two editors applying events at once: the lease serializes them, and each `apply` re-reads the file;
+  - two editors applying events at once: the lease admits one; the other gets `busy` and retries (bounded, then a visible warning), and each `apply` re-reads the file under the lease;
   - observations arriving after the finder closed: they apply to the store, and the update to the closed handle is skipped;
-  - an observation for a submit that a newer submit superseded: `observed` removes only IDs absent from `Owed`, so the newer, still-owed ID keeps the entry waiting;
+  - a probe that started before a newer submit: `observed` carries the pending set captured at probe start and removes only those IDs that are absent from `Owed`. An ID recorded after the probe started is outside that set, so it survives and the entry stays waiting. Without this, a stale probe would mark a fresh submit answered;
   - a failed probe: `observe_failed`, with no state change;
   - the 14-day ledger trim, which reads as answered. A trimmed ID really is past the point where Couch can tell us more.
 
@@ -128,18 +130,10 @@ All verified in the code on 2026-10-16.
 - Create: `lua/parley/attention_model.lua`
 - Test: `tests/unit/attention_model_spec.lua`
 
-- [ ] **Step 1: write the failing tests.** Cover:
-  - submitted → waiting;
-  - observed with the ID still owed → still waiting;
-  - observed with the ID gone → answered with `answered_at`;
-  - opened while answered → seen; opened while waiting → unchanged;
-  - a new submit after seen → waiting again;
-  - sweep: seen past the grace → removed; seen inside the grace → kept; answered and never opened → kept for any age; waiting → kept;
-  - `observe_failed` → state unchanged plus `unknown`; a later success clears it;
-  - two pending IDs with one folded → still waiting;
-  - an observation for an unknown path → no-op;
-  - the bound: the 257th submit drops the oldest seen, and all-waiting refuses;
-  - `list` order and `answered_unseen`.
+- [ ] **Step 1: write the failing tests.** Strategy:
+  - `transition`, table-driven over each event in each derived state (waiting, answered, seen, absent), plus random event sequences checked by properties: no `observe_failed` reaches answered; a waiting entry is never swept or dropped by the bound; an ID outside `probed_ids` survives `observed`.
+  - One named sequence pins the stale probe: probe starts, a submit records ID2, the probe's result without ID2 applies, and the entry is still waiting.
+  - `bound` and `list`: a 257-entry table checks the drop order (seen, then answered) and the refusal when all are waiting.
 - [ ] **Step 2:** run `make test-spec SPEC=scratch MAP_FILE=$TMPDIR/m.yaml` with the spec mapped. Expect it to fail, because the module doesn't exist yet.
 - [ ] **Step 3:** implement `transition`, `state_of`, `list`, `answered_unseen` and `bound`, as pure functions with no `vim.api`.
 - [ ] **Step 4:** run it. Expect a pass.
@@ -152,28 +146,21 @@ All verified in the code on 2026-10-16.
 - Modify: `tests/helpers/sidecars.lua` (register `attention.json`)
 - Test: `tests/unit/attention_store_spec.lua`
 
-- [ ] **Step 1: write the failing tests.** Cover:
-  - a round trip;
-  - `apply` re-reads before writing, so two stores over one path both keep their events;
-  - a missing file → empty;
-  - truncated JSON, wrong version, or an entry missing its path → empty plus one warning;
-  - the sweep runs on `apply`, with the grace taken from config.
-- [ ] **Steps 2-5:** run it (fail), implement with `helper.table_to_file_atomic`, `fs.ensure_dir` and `document_lease.acquire("attention", ...)`, run it (pass), commit.
+- [ ] **Step 1: write the failing tests.** Strategy:
+  - the parse boundary, through the `sidecars.lua` corruption cases (missing, truncated, wrong version, malformed entry): each reads as empty with one warning;
+  - the lease, with a real `document_lease` held by the test: released within the retry window → the event lands; held throughout → no write and the "lost (store busy)" warning; two stores over one path both keep their events.
+- [ ] **Steps 2-5:** run it (fail), implement with `helper.table_to_file_atomic`, `fs.ensure_dir` and `document_lease.acquire("attention", "store", { root = state_dir })` with the busy retry, run it (pass), commit.
 
 #### Task 3: recording a submit
 
 **Files:**
 - Create: `lua/parley/attention.lua` (`record`, `parse_message_id`)
-- Modify: `lua/parley/agentic_document.lua:247-253` (after a successful send, call `require("parley.attention").record(s.buf, result)`)
+- Modify: `lua/parley/session_sync.lua` (`release_and_send`: snapshot the breadcrumb before the send, and call `require("parley.attention").record(path, breadcrumb, obj)` on success, before the stale-state guard)
 - Modify: `lua/parley/config.lua` (`attention = { seen_grace_minutes = 60 }`)
-- Test: `tests/integration/attention_record_spec.lua`, with `tests/helpers/fake_couch.lua`
+- Modify: `tests/helpers/fake_couch.lua` and `tests/fixtures/fake_couch_registry.py` (the send prints `<ID> me -> <to> queued` and adds the ID to `Owed`; `fake_couch.fold`)
+- Test: `tests/integration/attention_record_spec.lua`
 
-- [ ] **Step 1: write the failing tests.**
-  - An Alt+Return submit through the fake Couch creates one waiting entry with the fake's ID.
-  - A failed send records nothing.
-  - Stdout without an ID records nothing and logs it.
-  - A second submit of the same file adds a second pending ID.
-  - The breadcrumb is `snapshot(win)` when the seam exists, and nil without it.
+- [ ] **Step 1: write the failing tests.** Strategy: drive both Alt+Return paths end to end through the fake Couch (an agentic document, and a `type: session-sync` file through `review_send.submit`); each must leave one waiting entry carrying the fake's ID. The failure paths (a failed send, stdout without an ID) leave no entry and warn. `parse_message_id` gets a table of stdout shapes.
 - [ ] **Steps 2-5:** run it (fail), implement, run it (pass), commit.
 - [ ] **M1 close:** run `sdlc milestone-close --issue 354 --milestone M1`.
 
@@ -196,16 +183,7 @@ All verified in the code on 2026-10-16.
 - Modify: `init.lua` (`:ParleyAttention`)
 - Test: `tests/integration/attention_finder_spec.lua`
 
-- [ ] **Step 1: write the failing tests.**
-  - The finder lists waiting entries, then shows answered after the fake folds one, live through `update`.
-  - Selecting an answered entry opens the file, marks it seen and calls `restore` with the stored value. Restore refusing leaves the file open as a root.
-  - Selecting a waiting entry opens it and leaves it waiting.
-  - A missing file is reported and nothing opens.
-  - A refusal `Code` shows `?` and keeps the state.
-  - At most 4 probes run at once.
-  - Typeahead filters by name.
-  - A seen entry past the grace is gone on the next open.
-  - An observation landing after close doesn't error.
+- [ ] **Step 1: write the failing tests.** Strategy: one spec per user path against the fake Couch, with the clock and the `file_history` seam injected: list then a live fold (`update` turns waiting into answered); select answered (opens, seen, `restore` called, refusal leaves a root); select waiting (unchanged); select a missing file (reported, nothing opens); a refusal `Code` (`?`, state kept); a probe counter asserting at most 4 at once; typeahead; a seen entry past the grace gone on the next open; an observation after close.
 - [ ] **Steps 2-5:** run it (fail), implement, run it (pass), commit.
 
 #### Task 6: docs
@@ -220,3 +198,9 @@ All verified in the code on 2026-10-16.
   2. the chord is `<M-u>`: the TL checked pair's zellij binds and Couch's key catalog, and it is free there. Adding it to Couch's key help (`pair/cmd/internal/keyhelp/catalog.go`) is pair work, handed to the TL to file rather than edited from this slot;
   3. `attention.seen_grace_minutes` defaults to 60 and stays a config value; the operator has not picked between 60 and 15;
   4. the winbar count and submits outside Couch stay out of scope.
+- **2026-10-16, plan-quality round 1.** Three blocking findings, all accepted:
+  - PQ-1: `document_lease.acquire` is non-blocking, so `apply` now retries `busy` (bounded) and warns when a record is lost;
+  - PQ-2: a probe that started before a newer submit could clear that submit's ID, so `observed` carries the pending set captured at probe start and removes only those IDs;
+  - PQ-3: `type: session-sync` files also send through Couch, so the record hook moves from the agentic document's send effect into `session_sync`'s `release_and_send`, which both paths share.
+
+  The minor findings were folded in too: the test lists became one strategy line each; the fake extends the existing `fake_couch.lua` and its registry fixture; and #353 is declared a dependency. Until #353 lands, the restore runs against the injected seam.
