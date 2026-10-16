@@ -1,6 +1,6 @@
 ---
 id: 000235
-status: working
+status: codecomplete
 created: 2026-09-10
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.08
+tracker:
+    version: 1
+    completion:
+        token: close-ab2176cb5d2f
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 3128170e1f784d1e067f5c67ab5d7f07f6bc28a5
+        evidence_commit: f44af9aabb7094fb0145aad36bd79e73124d0163
 ---
 
 # One reader for the test-harness signal: file_tracker off g:parley_test_mode
