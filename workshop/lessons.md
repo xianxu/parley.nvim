@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-10-16 (#234 — render walk on the shared row step)
+
+- A parity property test earns its keep on the first run: #234's found a footer `🧠:` row whose lookahead verdict the render walk only computed inside a paint branch. When moving transitions onto a shared step, compute every transition INPUT before (and outside) the painting branches.
+- Paste commit hashes from the `git rev-parse` output; never retype one. #234's plan message to the hub carried a typed, wrong hash, and needed a correction.
+
 ## 2026-10-16 (#236 — dead-code sweep)
 
 - When deleting code, sweep the docs for the CONCEPTS it carried, not just its file paths. #236 grepped atlas/ for deleted module paths and missed a page describing the "virtual provider" and "generator seams" in prose (close BR-1). List each deleted entity's names and nouns, grep those, and delete or rewrite every hit. Include CODE COMMENTS in that sweep: round 2 found three lua/ comments still naming the removed seams, after atlas was clean.

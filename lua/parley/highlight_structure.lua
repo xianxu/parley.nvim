@@ -98,6 +98,12 @@ local function leave_row(state, token, explicit)
     end
 end
 
+-- Exported (#234): the redraw walk in highlighter.lua steps rows through the
+-- same two halves, so the render and the structure share one definition of
+-- how a row changes question, code, reasoning and tool state.
+M.enter_row = enter_row
+M.leave_row = leave_row
+
 --- Backward 🧠: lookahead. The markers that end it are STRUCTURAL_TOKENS —
 --- the same set chat_parser terminates reasoning on — not a second list.
 local function reasoning_explicit_of(fingerprints, work)
