@@ -1,12 +1,22 @@
 ---
 id: 000204
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-10-15
 estimate_hours:
-card_mirror: 'ec984c147db4534851721c1d5a3964ed5eb3dcbe' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'c0c7e20df4bb6eb544da18c0e22db9d081e42b41' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T17:50:06-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "561e12cc", done: "565fefdd"}
+actual_hours: 0.99
 ---
 
 # a config change to api_keys silently does not take effect: the defaults table is replaced, and the vault pins the first secret it saw
@@ -101,21 +111,42 @@ or SAY that it cannot.
 
 ## Done when
 
-- [ ] A user who sets any `api_keys` entry still gets a working
+- [x] A user who sets any `api_keys` entry still gets a working
       `cliproxyapi` default, or is told at setup time exactly what to add.
-- [ ] Editing `api_keys.cliproxyapi` and running `:ParleyProxy restart` either
+- [x] Editing `api_keys.cliproxyapi` and running `:ParleyProxy restart` either
       takes effect, or reports that a full reload is required — the current
       behaviour of silently re-rendering the old value is gone.
-- [ ] The mismatch message distinguishes "your config is wrong" from "your
+- [x] The mismatch message distinguishes "your config is wrong" from "your
       config is right and the running proxy is stale", since the operator
       cannot tell those apart today.
 
 ## Plan
 
-- [ ] Decide D1 and D2 (they are independent).
-- [ ] A regression test per defect: a `setup{}` with a partial `api_keys` still
-      resolves `cliproxyapi`; and a second `add_secret` after a config change is
-      observable to the renderer.
+Decisions (2026-10-15):
+
+- **D1 is already fixed** by #307 (`afa83862`): `init.setup` now layers user
+  `api_keys` over the defaults with `vim.tbl_extend("force", …)`, and `false`
+  drops a default. Nothing pins it with a test, so this issue adds the regression test only.
+- **D2: `setup{}` is the authority, so `vault.setup` resets the secret store**
+  (`secrets` + `_obfuscated_secrets`). First-write-wins stays *within* one
+  setup, so dispatcher's `provider.secret` still does not clobber `api_keys`.
+  Re-sourcing the config (re-running `setup{}`) then takes effect on the next
+  render. The vault records `loaded_at`. Parley cannot see a config file edit until setup
+  re-runs, so the `:ParleyProxy restart` notice says which setup the key came
+  from: `restarted (client key from setup() at HH:MM:SS; re-run setup or
+  restart nvim to pick up config edits)`.
+- **Mismatch message:** on a 401 in `ensure_running` (only the failure branch, so the cost stays off the
+  hot path), read `port_identity` (ps+lsof, the same read `update` uses). A pure
+  `mismatch_message(identity, port, prefix)` chooses one of three messages:
+  `ours` → the config is right and the proxy is stale ("booted from an earlier key; run
+  `:ParleyProxy restart`"). `not ours` → the proxy on the port is not parley's, so its
+  api-keys must include `api_keys.cliproxyapi` (or stop it). If parley cannot
+  tell, the message names both (ARCH-PURE).
+
+- [x] Regression test: `setup{api_keys={openai=…}}` still resolves `cliproxyapi` to the default.
+- [x] Regression test: a second `setup{}` with a changed `cliproxyapi` is what `get_secret`/the render sees; vault_spec A3 is unchanged and gets a new reset case.
+- [x] `vault.setup` resets the store and records `loaded_at`; the restart notice names it.
+- [x] `mismatch_message` pure + unit-tested on all three identities; wired into the 401 branch.
 
 ## Log
 
@@ -133,3 +164,19 @@ INBOUND allowlist — the proxy authenticates its callers and returns 401 withou
 a match. The subscription credentials are separate, in the auth-dir. So the
 client secret is a local handshake token, which is why a fixed default is
 reasonable in the first place.
+
+### 2026-10-15
+- 2026-10-15: closed — Delta since abf8d57a: moved the port_identity forward declaration above the ensure_running doc block (close round 2 advisory). Comment and declaration placement only. Lint clean; cliproxy_lifecycle_spec 0 failed after the move. (fixed-then-ship); review verdict: SHIP
+- 2026-10-15: closed — Full suite green on cb9bbbb3 (sdlc-local/suite), which has main merged. Folded the TL-requested advisories in: (a) the setup generation fences secret-command and copilot-fetch results, setup clears _state, and the bearer is keyed to sha256 of the copilot key (vault F3, V3, V4); (b) the lifecycle 401 test is split into ours, foreign and unknown via fake_ps; (c) a cmd_prefix() helper. Mutation: each vault guard removed fails its case; a constant identity fails all three 401 cases. Earlier evidence still holds: setup_api_keys_spec, vault F1/F2, mismatch_message unit tests.; review verdict: SHIP
+- 2026-10-15: closed — Full suite green on 7bf8ca72 (sdlc-local/suite). New: setup_api_keys_spec (partial api_keys keeps the cliproxyapi default; false drops it; a re-run setup with an edited key is what the renderer reads), vault_spec F1/F2, cliproxy_release_spec mismatch_message for ours, foreign and unknown, plus a lifecycle 401 assertion. Mutation: removing the vault reset fails 3 cases. Earlier suite run: update and lifecycle each failed one restart-timing case, then passed 3x in parallel runs and in the full re-run.; review verdict: SHIP
+
+- D1 needed no code: #307 already merges `api_keys`. `tests/unit/setup_api_keys_spec.lua` now pins it (a partial table, `false`, a re-run setup).
+- D2 mutation check: with the `secrets = {}` reset removed, 3 cases fail (setup_api_keys ×2, vault F1). With it restored, everything passes.
+- `port_identity` is now forward-declared, because `ensure_running` precedes it. It runs only on the 401 branch (ARCH-PURE: the message choice is `rel.mismatch_message`, unit-tested on all three identities).
+- start-plan's `weave refresh` could not rewrite `.claude/settings.json` (sandbox: operation not permitted). A re-run succeeded. I reported this to the hub.
+- TL folded in close advisories (a), (b) and (c) before landing:
+  - (a) `vault.setup` also clears `_state` and bumps a generation. The secret-command and copilot-fetch callbacks discard a result from an earlier generation, and a bearer is keyed to `sha256(copilot key)`, so the disk cache is safe too. Tests: vault F3 and V3/V4. Mutation: each of the three guards, removed, fails its case.
+  - (b) The lifecycle 401 test is split into ours, foreign and unknown cases, with `fake_ps` deciding the identity. Mutation: with a constant identity, all 3 fail.
+  - (c) The `cmd_prefix()` helper is local to cliproxy.lua. agent_picker keeps its own one-liner, in a different module.
+- The cliproxy_update_spec restart-timing flake is filed as #343 and unclaimed for the TL. The lifecycle one is #340.
+

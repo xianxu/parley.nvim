@@ -278,4 +278,30 @@ function M.version_summary(v, update_cmd)
     return ("%s (%s)"):format(run, latest)
 end
 
+--- What to say when the proxy rejects parley's bearer (401), from who holds the
+--- port (#204). The two causes need opposite fixes, and the operator cannot
+--- tell them apart: a proxy parley started from an EARLIER render is stale
+--- (the config is right, restart it); a proxy someone else started has its own
+--- api-keys (the config must name a key it accepts, or it must be stopped).
+---@param identity table # port_identity: { ours = true|false, exe? } or { err = why }
+---@param port number|string
+---@param prefix string # command prefix, e.g. "Parley"
+---@return string
+function M.mismatch_message(identity, port, prefix)
+    local head = "cliproxy: client api-key mismatch on port " .. tostring(port) .. " — "
+    local restart = ("`:%sProxy restart`"):format(prefix)
+    if identity.ours == true then
+        return head .. "the running proxy was started from an earlier render of api_keys.cliproxyapi, "
+            .. "so your config is fine and the proxy is stale; run " .. restart
+    end
+    local own_keys = "checks its own api-keys: set api_keys.cliproxyapi to a key it accepts, or stop it "
+        .. "(e.g. `brew services stop cliproxyapi`) so parley can manage the port"
+    if identity.ours == false then
+        return head .. ("the proxy (%s) was not started by parley, so it "):format(identity.exe or "another process")
+            .. own_keys
+    end
+    return head .. "parley could not tell who started the proxy (" .. tostring(identity.err) .. "). If parley "
+        .. "started it, it is stale; run " .. restart .. ". If not, it " .. own_keys
+end
+
 return M

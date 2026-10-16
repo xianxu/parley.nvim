@@ -14,6 +14,9 @@ local V = {
 }
 
 local secrets = {} -- private secretes accessible only via vault.get_secret
+-- Bumped by every setup (#204). An async write (a secret command, the copilot
+-- token fetch) started under an earlier setup must not land in the new store.
+local generation = 0
 local secret_aliases = {
 	openai_api_key = "openai",
 }
@@ -27,6 +30,18 @@ end
 ---@param opts table # user config
 V.setup = function(opts)
 	logger.debug("vault setup started\n" .. vim.inspect(opts), true)
+
+	-- setup{} is the one authority on secrets (#204): a re-run setup must
+	-- replace what the last one loaded, or an edited key keeps rendering the
+	-- value first seen this session. First-write-wins (add_secret) still holds
+	-- WITHIN one setup, so a provider.secret never clobbers api_keys.
+	-- Derived state goes with it: the in-memory copilot bearer was fetched with
+	-- the previous key, and the generation fences writes still in flight.
+	secrets = {}
+	V._obfuscated_secrets = {}
+	V._state = {}
+	generation = generation + 1
+	V.loaded_at = os.time()
 
 	V.config.curl_params = opts.curl_params or default_config.curl_params
 	V.config.state_dir = opts.state_dir or default_config.state_dir
@@ -83,6 +98,7 @@ V.resolve_secret = function(name, secret, callback, on_error)
 			on_error(message)
 		end
 	end)
+	local started = generation
 	local stored = secrets[name]
 	if type(stored) == "string" and stored:match("%S") then
 		logger.debug("vault resolver secret " .. name .. " already resolved", true)
@@ -119,6 +135,12 @@ V.resolve_secret = function(name, secret, callback, on_error)
 		local cmd = table.remove(copy, 1)
 		local args = copy
 		tasker.run(nil, cmd, args, function(code, signal, stdout_data, stderr_data, io_error)
+			if started ~= generation then
+				-- setup re-ran while the command ran: its result is for the old
+				-- config, and the new store may already hold the edited key.
+				fail("vault resolver for " .. name .. " finished after setup() re-ran; its result was discarded")
+				return
+			end
 			if io_error then
 				fail("vault resolver for " .. name .. " failed: " .. tostring(io_error))
 				return
@@ -158,7 +180,13 @@ end
 -- endpoint's response and the cached copy in vault_state.json (#261 M1 review).
 -- A field of another type is dropped, so `expires_at` is never compared as
 -- anything but a number.
-local BEARER_SCHEMA = { token = "string", expires_at = "number" }
+local BEARER_SCHEMA = { token = "string", expires_at = "number", source = "string" }
+
+-- Which copilot key a bearer was fetched with (#204), so a cached bearer is
+-- reused only for the key it belongs to — across a re-run setup and a restart.
+local function bearer_source(secret)
+	return vim.fn.sha256(secret)
+end
 
 -- Every path calls back (#261 M4 W6): `callback()` once the bearer is ready,
 -- or `on_error(message)` — a request waiting on it must never be left waiting.
@@ -185,7 +213,8 @@ V.refresh_copilot_bearer = function(callback, on_error)
 	end
 
 	local bearer = V._state.copilot_bearer or state.copilot_bearer or {}
-	if bearer.token and bearer.expires_at and bearer.expires_at > os.time() then
+	if bearer.token and bearer.expires_at and bearer.expires_at > os.time()
+		and bearer.source == bearer_source(secret) then
 		secrets.copilot_bearer = bearer.token
 		logger.debug("vault refresh_copilot_bearer: token still valid, running callback", true)
 		callback()
@@ -214,7 +243,12 @@ V.refresh_copilot_bearer = function(callback, on_error)
 		table.insert(curl_params, arg)
 	end
 
+	local started = generation
 	tasker.run(nil, "curl", curl_params, function(code, signal, stdout, _stderr, io_error)
+		if started ~= generation then
+			failed("copilot bearer resolve finished after setup() re-ran; its token was discarded")
+			return
+		end
 		-- A kill reports code nil (#261 M3); every failure is reported, never thrown.
 		-- Neither output is shown: this request carries the Copilot token.
 		if code ~= 0 then
@@ -232,6 +266,7 @@ V.refresh_copilot_bearer = function(callback, on_error)
 			failed("copilot bearer resolve failed: the token endpoint did not return a token")
 			return
 		end
+		fetched.source = bearer_source(secret)
 		V._state.copilot_bearer = fetched
 		secrets.copilot_bearer = fetched.token
 		helpers.table_to_file(V._state, state_file)

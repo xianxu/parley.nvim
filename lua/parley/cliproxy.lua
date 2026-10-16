@@ -57,6 +57,11 @@ local function cfg()
     return nil
 end
 
+-- The user's command prefix, for messages that name a :<prefix>Proxy command.
+local function cmd_prefix()
+    return (require("parley").config or {}).cmd_prefix or "Parley"
+end
+
 local function endpoint()
     local ok, parley = pcall(require, "parley")
     if ok and parley and parley.dispatcher and parley.dispatcher.providers
@@ -741,6 +746,8 @@ local function poll_until_healthy(host, port, secret, pid, callback, on_error)
     tick()
 end
 
+local port_identity -- defined with the process-table reads below; used on a 401
+
 --- Ensure a healthy managed proxy is reachable, then call `callback`. On any
 --- failure call `on_error(msg)` so the dispatch path fails fast (never hangs).
 --- No-op pass-through when the feature isn't opted in.
@@ -775,8 +782,9 @@ function M.ensure_running(callback, on_error)
             return callback() -- reuse the already-running (brew service / other nvim)
         end
         if state == "client_key_mismatch" then
-            return on_error("cliproxy: client api-key mismatch — the rendered api-keys "
-                .. "do not match the bearer parley sends (check api_keys.cliproxyapi)")
+            -- Failure branch only, so the synchronous ps+lsof read stays off the
+            -- dispatch hot path (#204).
+            return on_error(rel.mismatch_message(port_identity(port), port, cmd_prefix()))
         end
         if state == "foreign" then
             return on_error("cliproxy: port " .. port .. " is held by a non-cliproxy process")
@@ -1075,8 +1083,9 @@ end
 -- command line was read, else { err = why } (cliproxy_release.running_identity).
 -- Never a guess: a read that failed is "could not tell", which update reports as
 -- such and never restarts (#237 BR-8). Synchronous ps + lsof (~80-150 ms);
--- :ParleyProxy update only, never the dispatch path.
-local function port_identity(port)
+-- :ParleyProxy update, and a dispatch that already failed with a 401 (#204) —
+-- never a dispatch that is still on its way.
+port_identity = function(port)
     local ok, id, why = pcall(function()
         local out, ps_err = ps_output()
         if not out then
@@ -1128,7 +1137,7 @@ function M.warn_about_peers(peers)
     if #peers == 0 then
         return
     end
-    local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
+    local prefix = cmd_prefix()
     -- `ps lstart` starts with the WEEKDAY ("Fri Jun 12 …"), so a lexicographic
     -- compare orders by day name — it would call a Friday process older than a
     -- Sunday one from months earlier.
@@ -1447,7 +1456,7 @@ local function prompt_login(login, message, done)
         -- — AND leaves _login_prompt_active true, so no login is ever offered
         -- again for the rest of the session.
         local prompt_ok, prompt_err = pcall(function()
-        local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
+        local prefix = cmd_prefix()
         vim.ui.select({ "Log in (" .. login .. ")", "Not now" }, { prompt = message },
             function(_, idx)
                 _login_prompt_active = false
