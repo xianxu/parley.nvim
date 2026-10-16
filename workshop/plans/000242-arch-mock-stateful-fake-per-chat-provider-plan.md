@@ -60,11 +60,11 @@
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `Dialect` (anthropic / openai / googleai) | `tests/fixtures/sse_dialects.py` | new |
-| `BehaviorModel` | `tests/fixtures/sse_dialects.py` | new |
-| `FrameSplitter` | `tests/fixtures/sse_dialects.py` | new |
-| `ProviderScenario` | `tests/helpers/provider_scenarios.lua` | new |
-| `EventVocabulary` | `tests/helpers/provider_vocabulary.lua` | new |
+| `anthropic` (a Dialect; openai and googleai in M2) | `tests/fixtures/sse_dialects.py` | new |
+| `behaviour` (the BehaviorModel) | `tests/fixtures/sse_dialects.py` | new |
+| `split` (the FrameSplitter) | `tests/fixtures/sse_dialects.py` | new |
+| `provider_scenarios` | `tests/helpers/provider_scenarios.lua` | new |
+| `provider_vocabulary` | `tests/helpers/provider_vocabulary.lua` | new |
 
 - **Dialect**: pure functions from an abstract reply (`text`, `tool_use{id,name,input}`, `thinking`, `inband_error`, `cap`) to the exact SSE bytes one provider sends. The anthropic events are `message_start`, `content_block_start/delta/stop`, `message_delta` (`stop_reason`, usage) and `message_stop`. OpenAI is `choices[].delta`, `finish_reason` and `[DONE]`. googleai is `candidates[].content.parts[].text` plus `usageMetadata`. Event templates are lifted from the recorded fixtures, so the shape is real bytes.
   - **Relationships:** 1 dialect : N providers (openai serves openai, azure, ollama, copilot and cliproxy's openai route).
@@ -219,4 +219,11 @@ Regression proofs: #228 (S3, S5) must fail on `dc548920^`, and #229 (S7b) on `63
 - **PQ-5, credentials.** Specs use dummy secrets only (`sk-ant-fake`, `ghu_fake`). The copilot seam is reset to `nil` (the real URL) in `after_each`, and a case asserts that no spec request reaches `api.github.com` (the fake's request log holds every request). The live spec never puts a key in an assertion message, and its failures name the provider and the missing vocabulary entry only.
 - **PQ-6.** Task 2's test plan is compressed to one strategy line per risky function (done above).
 - **PQ-7, operating envelope.** `--split every_byte` runs only on the small text fixture (≤ 4 KiB, so ≤ 4096 flushes). Measured in Task 2, the case must finish under 5 s on a loaded suite, or the cap is lowered to fit. The other cases use `--split random:<seed>` (8–64-byte slices).
+
+### 2026-10-16, M1 build
+
+- The Core-concepts rows are renamed to the symbols that implement them: `anthropic`, `behaviour`, `split`, and the `provider_scenarios` / `provider_vocabulary` modules. The concept names stay in parentheses and the prose, and the sweeps guard checks each row against a real definition.
+- Found while building, with no production change: a query outside a generation needs a `deadline_ms`, so the scenario helper passes `tasker.deadline.stream`, which is what an unowned LLM stream uses. The in-band error is observable as `dispatcher._classify_ending(qt)`, not as a logged notice, because the dispatcher logs error-level notices only for an empty response (text arrived first).
+- The regression proofs are one driver plus one case script, not two scripts: `tests/regression/run_proofs.sh` creates scratch worktrees at `dc548920^` and `634e33a9^` and runs `tests/regression/proof_run.lua` on each tree and on the branch. Each case must print `PROOF-REACHED`, and the old tree and the branch must each show their own behaviour. The fake gained two modes, `cap_empty` and `inband_error_empty`. These are #228's real failure, bytes with no answer text, which the pre-fix code reported as "response is empty". This honours the plan advisory: the cap case asserts the cap notice, not the error callback. One file is placed in each old tree, the untracked generated `construct/generated/vocabulary/*.json`, which `setup()` reads. It is a build output, not code under test.
+- Measured result: all 6 cases pass. Pre-fix #228 reports "response is empty" for both, and the branch names the output-token cap and the in-band error. Pre-fix #229 completes the turn as a success after the reader throws, and the branch fails the attempt.
 

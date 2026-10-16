@@ -28,7 +28,8 @@ TEXT_DELTAS = ["Hello,", " world! ", "👋"]
 
 
 def _event(name, payload):
-    return ("event: %s\ndata: %s\n\n" % (name, json.dumps(payload, ensure_ascii=False))).encode("utf-8")
+    # Compact, as the real API sends it.
+    return ("event: %s\ndata: %s\n\n" % (name, json.dumps(payload, ensure_ascii=False, separators=(",", ":")))).encode("utf-8")
 
 
 def _deltas(text):
@@ -108,6 +109,12 @@ def behaviour(request, mode):
                 "error_type": "overloaded_error", "message": "Overloaded"}
     if mode == "cap":
         return {"kind": "cap", "text": "The answer was cut off at the cap"}
+    # The empty-text variants are #228's reported failure: bytes arrived but no
+    # answer text, which the pre-fix code called "response is empty".
+    if mode == "cap_empty":
+        return {"kind": "cap", "text": ""}
+    if mode == "inband_error_empty":
+        return {"kind": "inband_error", "text": "", "error_type": "overloaded_error", "message": "Overloaded"}
     if mode == "no_stop":
         return {"kind": "no_stop", "text": FIXTURE_TEXT}
     if _has_tool_result(request):
