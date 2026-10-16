@@ -142,3 +142,4 @@ There is no new pure entity. The pure model (`document_session`) already refuses
   - New: an unregistered document's `:saveas` (BufFilePre's membership lookup) times out with "move not confirmed … Run the move again", nothing renamed, and the rerun works.
   - New: a legacy session file's move, with a slow admission `register` (`DELAY_OPS=register`), says to run it again, and the rerun moves it.
   - Every `bounded_request` and `registry.request` call site now has its slow-fake test: open, register, lookup, rename, the move preflights, and BufFilePre and BufFilePost.
+- 2026-10-16 Close: SHIP, round 3. Correction to round 2's "every call site": BufFilePre's legacy `register` branch (a `:saveas` of an unregistered `type: session-sync` file) is still not run under a slow fake. The legacy test reaches `move_path`'s register instead. That branch uses the same `bounded_request`, whose deadline and message the other tests pin. An advisory, left open.
