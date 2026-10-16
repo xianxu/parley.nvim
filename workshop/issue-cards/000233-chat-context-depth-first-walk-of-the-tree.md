@@ -1,6 +1,6 @@
 ---
 id: 000233
-status: working
+status: codecomplete
 created: 2026-09-10
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.57
+tracker:
+    version: 1
+    completion:
+        token: close-b6976703a070
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 73d62dcd0172cadfa810791c9cffb937ad75db57
+        evidence_commit: 55614426631ec89abd76903ae8cd83a78f6bf0c8
 ---
 
 # A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree
