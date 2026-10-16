@@ -1,6 +1,6 @@
 ---
 id: 000257
-status: codecomplete
+status: done
 created: 2026-09-15
 updated: 2026-10-16
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: d4f4a10f3ed14a1719e822cb26ef28d40ad8e3c1
         evidence_commit: e8e61009947995de02eda19fe5681979012f00d9
+        landed_commit: e366f6a6b10a2a81c15c5422b880b933bc2a15f0
 ---
 
 # Advance cursor to the next question after submission
