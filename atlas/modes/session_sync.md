@@ -1,28 +1,41 @@
-# Session-Sync Files
+# Agentic Documents and Session-Sync Files
 
-A markdown file whose frontmatter says `type: session-sync` is a turn-based
-shared file between the operator and one agent (#313). The ops TL's status file
-(`tl-status-<operator>.md`) is the first user: the operator comments with
-`🤖[…]` markers and hands the turn back with one key.
+In a Couch pane, the first Alt+Return in a named Markdown document saves it,
+registers it with Couch, attaches the existing session-sync turn engine and sends
+`submitted: <absolute path>` (#332). Registration supplies a stable document ID;
+no `type`, owner or instruction frontmatter is added or changed. Opening a
+registered file restores that identity through a bounded registry lookup. A
+positive null lookup proves a file plain; lookup failure leaves membership
+unknown. Plain files take no session-sync lock or watcher before admission.
+
+The default owner is the agent in this editor's own Couch pane, resolved from
+`COUCH_THREAD_SCOPE` / `COUCH_THREAD_TAG`. An explicit `couch-owner:` is an owner
+override honored by Couch. An ordinary business `owner:` field is ignored.
+Legacy `type: session-sync` files remain recognized: only that typed legacy
+form may use `owner:` as the fallback for missing `couch-owner:`. Registration
+adopts its existing state before a move. Once attached, the confirmed identity
+supplies every owner use: submit, band, liveness ping and violation notification;
+editing the header cannot detach the file or silently redirect those operations.
 
 ```yaml
-type: session-sync
-couch-owner: ops:0  # couch address of the agent that keeps the file
-operator: xian-xu   # who the operator is
+# Optional explicit Couch owner; no frontmatter is needed for first submit.
+couch-owner: ops:0
 ```
 
 | Key | Action |
 |---|---|
-| `<M-CR>` | Submit: save, delete the lock, run `couch --send-to <owner> --message "submitted: <absolute path>"`. The buffer stays editable. In any other markdown file it is the [review send](review.md#altreturn-process-instruction-and-the-slot-send-316). |
+| `<M-CR>` in a Couch pane | Save and register on first submit; confirm identity, release the operator lock and send `submitted: <absolute path>` on later submits. An unresolved pane agent or uncertain mutation keeps submission pending. |
+| `<M-CR>` outside a Couch pane | Existing [review behavior](review.md#altreturn-process-instruction-and-the-slot-send-316), including the typed legacy session-sync path. |
 
-**`couch-owner:` is a check, not a route (#316).** Inside a pair slot, submit first
-resolves this editor's own agent (`couch --actors`, matched on
-`COUCH_THREAD_SCOPE`/`TAG`) and the owner's; when they differ it warns and
-changes nothing (no save, the lock stays, no message). Outside pair there is no
-slot to compare, and the owner is sent to as before. `couch-owner:` is canonical;
-`owner:` remains a legacy fallback. When both are present, `couch-owner:` wins.
-One parser normalizes this owner for submit validation/sending, band labels,
-quiet detection, owed-response pings and foreign-write notifications.
+**Offline membership.** Unknown/unavailable Couch membership stays editable,
+with the exact band `Couch unavailable: agentic state unknown`. Parley never
+makes an unknown file read-only because Couch is unreachable. A known attached
+identity, or a validated namespace-scoped cache hit, retains full operator-turn
+protection while offline. The cache holds at most 256 registrations / 1 MiB;
+eviction, corruption or an unavailable cache loses knowledge, never proves a
+file plain. Confirmed absence removes its binding. A bounded retry reconciles
+loaded unknown files when Couch returns. If edits occurred while unknown,
+attachment acquires against the observed pre-edit baseline, even after auto-save.
 
 **The lock (#315: pessimistic for the human, optimistic for the agent).**
 The operator's lock is the only lock. The sidecar `<file>.lock` is absent
@@ -101,11 +114,97 @@ override them.
 | violated | `<owner> wrote under your lock: yours kept, theirs in .clobbered` (`changed as you started typing: …` for the race) | `ParleySessionSyncOperator` |
 | stale | `unsent edits, Alt+Return to submit` | `ParleySessionSyncStale` (orange, black bold) |
 
+A completed Couch-pane submission overlays the band with `submitted to OWNER ·
+HH:MM` (DiagnosticOk), retained through saves and status probes until the next
+operator edit or observed agent write. Explicit submit failures show a bounded
+literal error (DiagnosticError), including before registry attachment; this
+feedback changes neither turn ownership nor the acquisition baseline.
+
+The last confirmed successful submission also records its captured post-save
+content hash, stable document ID, namespace, effective owner and local time in
+memory. A later Alt+Return still saves/reconciles and confirms the owner first;
+unchanged content shows `nothing to submit: no changes since HH:MM` without
+sending. A second explicit idle press within two seconds sends anyway and shows
+`resent to OWNER · HH:MM`. Busy presses cannot queue a duplicate or authorize a
+resend. Changed content or ownership sends normally, and failed or uncertain
+sends never advance the receipt. An edit during an issued send keeps its newer
+turn and suppresses stale success feedback; confirmed delivery remembers only
+the issued content. Confirmed same-ID moves preserve the receipt. Detaching the
+buffer or restarting the editor forgets it; the known-path cache contains no
+submit history.
+
 An operator turn left idle for `session_sync_stale_minutes` (default 5) is stale.
 
 **The agent's side** is not parley's: the owner diffs the file against its own
 copy, resolves the markers and writes while no lock is held (Couch refuses a write
 under the operator's lock, pair#439). It never writes or deletes the lock.
 
-Code: `lua/parley/session_sync.lua`; dispatch and keys in
-`setup_markdown_keymaps` (`lua/parley/init.lua`).
+**Moves and recovery (#332).** The move contract is forward-only. A
+namespace/stable-ID kernel lease covers the exact OLD→NEW tuple, filesystem
+effects and Couch metadata confirmation. A second editor cannot execute or
+recover that journal while the lease is held. Native `:saveas` keeps its old
+file; metadata is never renamed merely because `BufFilePost` changed the buffer
+name. NEW must have a successful write first. The existing turn engine suspends
+and resumes the same turn and acquisition baseline across the move. After an
+owned filesystem rename, a guarded non-bang native read acknowledges the proven
+new file to Neovim so later ordinary writes and auto-save remain valid. It keeps
+undo and view, refuses a modified handoff, and reinstalls edit callbacks before
+releasing migration protection.
+
+An existing `project.side/` beside `project.md` moves to `renamed.side/` beside
+`renamed.md`; an occupied destination refuses instead of merging or overwriting.
+Only existing `parent:` frontmatter and body Markdown links resolving to the old
+parent are rewritten, relative to each moved child. Quoting, fragments and
+unrelated bytes are preserved; missing backlinks are not invented. Escaping
+symlinks, malformed/ambiguous relevant data and changed backlink preimages
+refuse before overwrite. Side scans stop at 4096 entries / 512 Markdown files.
+
+Journals live in configured `state_dir`, partitioned by Couch namespace and
+stable ID, at most 32 pending journals / 256 KiB each. They record the exact tuple,
+path/content witnesses and completed effects, not document snapshots. Recovery
+rechecks those witnesses under the same lease and resumes the same tuple; an
+unprovable partial effect stays pending for concrete recovery instead of
+rolling files back or overwriting new data. Metadata-only Couch rename must
+confirm the same ID and destination, returning the current effective owner; an idempotent replay succeeds. Only
+then is the matching OLD lock removed and the completed journal deleted.
+Unresolved journals are never aged out. Lease files are bounded to 4096 IDs per
+namespace and remain allocated; deleting a live lease pathname would split
+execution ownership. There is no automatic lease-file garbage collection.
+
+Code: `agentic_document.lua` owns admission, cached knowledge and native move
+hooks and the public Parley movers. Owned file moves journal intent before an
+atomic no-replace rename; native saveas waits for its successful write witness.
+`document_session.lua` owns the pure lifecycle; `document_registry.lua`
+uses the shared `couch.run` transport. `document_move_plan.lua` projects pure
+side/backlink effects, `document_move.lua` executes and recovers journals,
+`document_lease.lua` owns kernel leases, and `helper.write_file_atomic` is the
+shared checked byte writer. `session_sync.lua` remains the single edit-turn,
+watch, baseline/undo, ping and rendering engine. Dispatch and keys live in
+`setup_markdown_keymaps` (`lua/parley/init.lua`). The maintainer real/fake registry
+probe is documented in [TOOLING](../../TOOLING.md).
+
+Native and public move preflight also checks the loaded coordinator before
+plain fallback: unresolved owner selection, pending admission and an active
+submit cannot be renamed past. Fresh bounded OLD membership confirms the
+plain bypass; unavailable membership blocks migration while editing stays
+available.
+
+A true buffer unload retires its async incarnation and execution lease; reopen
+confirms registration and resumes any durable forward-only move journal.
+Controlled session-sync rereads and owned rename acknowledgements mark their
+native read epoch explicitly, retaining attachment and the successful receipt.
+Raw completions during that epoch wait until read observers have reconciled;
+they cannot authorize an old captured submit against newly loaded content.
+
+Window rendering is shared by legacy session files and registered ordinary
+Markdown in `document_band.lua`. It installs both winbar and StatusLine mapping,
+including unknown/pending admission and pre-attachment feedback. The state
+owners still choose their views. Temporary views restore a live underlying
+view on release; buffer handoff retires old window ownership. Final detach
+restores original options only when they still contain our installed values.
+
+Neovim can cache a rendered window-local value before BufWinLeave. The renderer
+retains the original/installed option proof for that window/buffer pair until
+re-entry, consuming it before a new renderer captures its baseline. Re-entry,
+buffer wipe and window close remove these in-memory proofs; no file or timer
+is created, and repeated visits do not append history.

@@ -46,6 +46,20 @@ describe('bounded process supervision',function()
         assert.equals('xxxxxxxx',result[1]);assert.is_true(#result[2]<=4);assert.is_not_nil(result[3])
         assert.equals(0,T.stats().retained_bytes)
     end)
+    it('ends the attempt visibly when a stream reader throws, never streaming past it (#229)',function()
+        local delivered,result={},nil
+        T.run(1,'fixture',{},function(_,_,_,_,failure)result={failure=failure}end,
+            function(_,bytes)
+                if bytes then delivered[#delivered+1]=bytes end
+                if bytes=='first' then error('reader bug') end
+            end,nil,nil,{kind='provider',collect_stdout=false,attempt_id='reader',deadline_ms=60000})
+        local p=processes.processes[4242]
+        p:emit('stdout','first');p:emit('stdout','second')
+        assert.same({'first'},delivered)
+        assert.equals(1,#processes.signals)
+        p:finish();wait(function()return result~=nil end)
+        assert.matches('stdout reader failed',tostring(result.failure))
+    end)
     it('streams provider output beyond capture limit with zero stdout retention',function()
         local received,result=0,nil
         T.run(1,'fixture',{},function(_,_,out,_,failure)result={out,failure}end,

@@ -126,7 +126,10 @@ function M.advance(state,t,facts)
     end
     local explicit
     -- Render reasoning and semantic reasoning consume the same lookahead
-    -- predicate, but role/section transitions below are intentionally distinct.
+    -- predicate, but role/section transitions below are intentionally distinct:
+    -- render state goes through the shared lexical row step (#234), while the
+    -- semantic sections are answer-scoped, as chat_parser's are (pinned in
+    -- chat_parser_tools_spec).
     if t.kind=='reasoning' then
         explicit,pending=need('reasoning'); if pending then return pending end
     end
@@ -135,14 +138,12 @@ function M.advance(state,t,facts)
         value,pending=need('preface'); if pending then return pending end
         preface=value and not s.memo_code
     end
+    -- The shared row step (#234): the same enter_row/leave_row as the structure
+    -- build and the redraw walk, never a copy of their rules.
     local r=s.render
-    if s.footer then r.in_question=false; r.in_reasoning=false end
-    lexical.reset_partition(r,t.token)
+    lexical.enter_row(r,t.token,s.footer)
     local render_before=copy(r)
-    lexical.advance(r,t.token,t.render_fence_width)
-    if t.kind=='reasoning_end' then r.in_reasoning=false; r.reasoning_explicit_end=false
-    elseif t.kind=='reasoning' then r.in_reasoning=true; r.reasoning_explicit_end=explicit
-    elseif r.in_reasoning and t.blank and not r.reasoning_explicit_end then r.in_reasoning=false end
+    lexical.leave_row(r,t.token,explicit,t.render_fence_width)
     -- Preface code containment uses the legacy backtick/tilde toggle dialect.
     if t.kind=='user' or t.kind=='assistant' or t.kind=='local' or t.kind=='branch' then
         s.memo_code=false

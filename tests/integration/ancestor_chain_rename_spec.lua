@@ -40,11 +40,13 @@ local function parse(path)
     return parley.chat_parser.parse_chat(lines, he, parley.config)
 end
 
-local function contents(msgs)
-    local out = {}
-    for _, m in ipairs(msgs or {}) do out[#out + 1] = tostring(m.content or "") end
-    return table.concat(out, "\n")
+-- The context a submission of the kid's last exchange gets from other files
+-- (#233: the tree walk, which replaced the ancestor chain).
+local function tree_context(kid, parsed)
+    return require("tests.helpers.tree_context").other_files(
+        chat_respond._tree_sequence(kid, parsed, #parsed.exchanges, parsed))
 end
+local function contents(out) return table.concat(out or {}, "\n") end
 
 describe("ancestor chain across a parent slug rename (#224)", function()
     -- The parent is created bare and renamed once it earns a topic; the child's
@@ -79,7 +81,7 @@ describe("ancestor chain across a parent slug rename (#224)", function()
 
     it("carries the parent conversation into the fork's messages", function()
         local kid = fork_with_renamed_parent("2026-09-09.08-00-00.001", "2026-09-09.08-05-00.002")
-        local msgs = chat_respond._collect_ancestor_messages(kid, parse(kid))
+        local msgs = tree_context(kid, parse(kid))
         local text = contents(msgs)
 
         assert.is_true(#msgs > 0, "the fork was submitted with NO parent context")
@@ -109,11 +111,13 @@ describe("ancestor chain across a parent slug rename (#224)", function()
             "🌿: " .. pstamp .. "_parent.md: Parent",
             "", "💬: child q", "", "🤖:[A]", "child a",
         })
-        local chain = chat_respond._collect_ancestor_chain(kid, parse(kid))
+        local Tree = require("parley.chat_tree")
+        local path = Tree.path_up(vim.fn.resolve(kid), parse(kid), Tree.io_deps())
 
-        assert.equals(1, #chain, "expected exactly one ancestor")
-        assert.is_true(chain[1].branch_after > 0,
-            "branch_after is " .. tostring(chain[1].branch_after)
+        assert.equals(2, #path, "expected exactly one ancestor")
+        local branch_after = path[1].parsed.branches[path[1].stop_branch].after_exchange
+        assert.is_true(branch_after > 0,
+            "branch_after is " .. tostring(branch_after)
             .. " — a renamed CHILD fails the parent-branch match, so the parent "
             .. "is truncated at exchange 0")
     end)
@@ -226,7 +230,7 @@ describe("ancestor chain across a parent slug rename (#224)", function()
         local kid = write_chat(cstamp .. "_child.md", {
             "🌿: " .. stamp .. ".md: Parent", "", "💬: q", "", "🤖:[A]", "a",
         })
-        local text = contents(chat_respond._collect_ancestor_messages(kid, parse(kid)))
+        local text = contents(tree_context(kid, parse(kid)))
         assert.is_truthy(text:match("plain parent question"), text)
     end)
 end)

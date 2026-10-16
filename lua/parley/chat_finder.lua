@@ -803,9 +803,12 @@ M.open = function(_)
 									vim.cmd("startinsert")
 								end
 								_parley.logger.info("Inserted chat reference: " .. rel_path)
+							else
+								edits.report_refusal("InsertChatReference", result.reason or result.status, result.error)
 							end
 						else
-							_parley.logger.warning("Chat reference cancelled: insertion target changed")
+							-- The insertion target changed while the picker was open (#265).
+							edits.report_refusal("InsertChatReference", "stale")
 						end
 					end
 

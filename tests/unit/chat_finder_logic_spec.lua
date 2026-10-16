@@ -1221,7 +1221,7 @@ describe("ChatFinder logic", function()
             local old_path = tmpdir .. "/" .. filename
             local new_path = secondary_tmpdir .. "/" .. filename
             local file = io.open(old_path, "w")
-            file:write("# topic: Move me\n")
+            file:write("---\ntopic: Move me\nfile: " .. filename .. "\nmodel: test-model\nprovider: openai\n---\n\n💬: Move fixture\n")
             file:close()
 
             M.cmd.ChatFinder()
@@ -1269,7 +1269,7 @@ describe("ChatFinder logic", function()
             local old_path = tmpdir .. "/" .. filename
             local new_path = special_tmpdir .. "/" .. filename
             local file = io.open(old_path, "w")
-            file:write("# topic: Escaped root\n")
+            file:write("---\ntopic: Escaped root\nfile: " .. filename .. "\nmodel: test-model\nprovider: openai\n---\n\n💬: Move fixture\n")
             file:close()
 
             M.cmd.ChatFinder()
@@ -1312,7 +1312,7 @@ describe("ChatFinder logic", function()
             local old_path = tmpdir .. "/" .. filename
             local new_path = special_tmpdir .. "/" .. filename
             local file = io.open(old_path, "w")
-            file:write("# topic: Tilde root\n")
+            file:write("---\ntopic: Tilde root\nfile: " .. filename .. "\nmodel: test-model\nprovider: openai\n---\n\n💬: Move fixture\n")
             file:close()
 
             M.cmd.ChatFinder()

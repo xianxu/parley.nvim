@@ -8,6 +8,9 @@ export PARLEY_BLINK_RUNTIME
 pin=$(git -C "$PARLEY_BLINK_RUNTIME" rev-parse HEAD)
 [ "$pin" = 78336bc89ee5365633bcf754d93df01678b5c08f ] || { echo 'Blink pin mismatch' >&2; exit 1; }
 spell_tmp=$(mktemp -d /tmp/parley-spell-compat.XXXXXX)
+# #342: test mode requires its writes to stay inside a declared isolated root.
+PARLEY_TEST_ENV_ROOT=$spell_tmp
+export PARLEY_TEST_ENV_ROOT
 trap 'rm -rf "$spell_tmp"' EXIT HUP INT TERM
 for profile in plugin app; do
     mkdir -p "$spell_tmp/$profile/home"

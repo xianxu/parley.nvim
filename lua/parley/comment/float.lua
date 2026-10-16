@@ -40,7 +40,15 @@ local function write_back(st)
     if not raw then return false, err end
     if raw ~= st.raw then
         local new = line:sub(1, col) .. raw .. line:sub(col + #st.raw + 1)
-        require("parley.buffer_edit").replace_user_lines(st.src, row, row + 1, false, { new })
+        -- Quiet: this caller shows the one message, so the thread is not lost
+        -- to a refusal (#265), exactly as on the stale path above.
+        local applied, why = require("parley.buffer_edit").edit_user_lines("CommentSave", st.src, row, row + 1,
+            { new }, { quiet = true })
+        if not applied then
+            vim.fn.setreg('"', float_text(st.float_buf))
+            return false, (require("parley.refusal").edit("CommentSave", why) or "the edit was not made")
+                .. ' — thread text kept in register "'
+        end
         st.raw = raw
         -- Rewriting the row drops the tracking extmark's column; re-anchor it
         -- at the marker's start so the next :w finds the bytes it wrote.

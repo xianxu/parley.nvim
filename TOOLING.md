@@ -5,6 +5,7 @@
 - Run tests: `make test` (runs all unit + integration tests via plenary.nvim in headless Neovim)
 - Lint: `make lint` (requires `luacheck`; see install note below)
 - Run tests for one spec: `make test-spec SPEC=chat/lifecycle` (uses `atlas/traceability.yaml` mapping)
+- Specs run only through make (`make test`, `make test-spec`, `make goldens`, `make fixtures`, `make perf-finder`): `tests/minimal_init.vim` refuses an environment whose HOME/XDG roots are not inside the harness's `PARLEY_TEST_ENV_ROOT` (#342), so a direct `nvim -u tests/minimal_init.vim` run cannot touch your real state.
 - Run tests for changed specs: `make test-changed` (runs mapped tests for changed `atlas/*/*.md` files), this is faster than full test run
 - Run the report-only real chat-typing benchmark: `make perf` (details below).
 - Refresh SSE fixtures: `ANTHROPIC_API_KEY=... OPENAI_API_KEY=... make fixtures`
@@ -48,6 +49,20 @@ reference and missing-reference failure. It uses the committed vocabulary for
 discovery and removes its fixtures on exit; it creates no real issues and needs
 no network. Missing sdlc makes this explicit maintainer check fail; normal tests
 use the filesystem-backed `tests/fixtures/fake_sdlc` instead.
+
+Run `make check-couch-registry-conformance` when the Couch registry client or
+its fake changes. Set `COUCH_CONFORMANCE_BINARY=/absolute/path/to/couch` to
+select a candidate. The check requires advertised `COUCH_ISOLATED_ROOT` support
+and public adopt-store preview/apply; it creates fresh temporary singleton,
+store, Pair-data and identity roots, never uses live actors, and needs no
+network. Real and fake executables both run through production
+`document_registry.request` / `couch.run`: registration, stable-ID retries,
+filesystem plus metadata rename, old/new lookup, replay, owner/target conflicts
+and positive-null absence. Fake malformed, missing and unsupported replies must
+retain uncertainty, and a deliberately corrupted fake must fail the probe.
+Fixtures are removed on exit. `python3 scripts/check-couch-registry-conformance.py
+--fake-only` exercises the probe and negative control without real Couch. This
+maintainer check does not replace the combined editor/operator acceptance check.
 
 ## Test Scratch Directories
 

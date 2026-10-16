@@ -181,6 +181,49 @@ describe('isolated starter runtime', function()
         assert.equals(1, #vim.fn.glob(scratch .. '/data/parley/chats/welcome.md', false, true))
     end)
 
+    -- #348: the lock must be complete or absent to a waiter, never a bare
+    -- directory between the owner's two steps. Each gate pauses the owner in a
+    -- gap the old mkdir-then-write and rf-delete exposed; under rename neither
+    -- gap shows a lock, so the second starter takes its own turn.
+    local function race_through(env_key)
+        local gate = scratch .. '/gate'
+        local first = run(nil, { [env_key] = gate }, true)
+        assert.is_true(vim.wait(8000, function() return vim.fn.filereadable(gate .. '.ready') == 1 end, 10),
+            'the owner never reached the gate')
+        local second = run(nil, nil, true)
+        vim.wait(400) -- several of the waiter's 100 ms polls land inside the gap
+        vim.fn.writefile({ 'release' }, gate .. '.release')
+        local one, two = first:wait(10000), second:wait(10000)
+        assert.equals(0, one.code, one.stderr)
+        assert.equals(0, two.code, two.stderr)
+        assert.equals(1, #vim.fn.glob(scratch .. '/data/parley/chats/welcome.md', false, true))
+    end
+
+    it('does not stop a starter that arrives while the owner is taking the lock', function()
+        race_through('STARTER_OWNER_GATE')
+    end)
+
+    it('does not stop a starter that arrives while the owner is retiring the lock', function()
+        race_through('STARTER_RETIRE_GATE')
+    end)
+
+    it('retries, not repairs, when the owner retires the lock between the waiter reads', function()
+        local hold, gate = scratch .. '/hold', scratch .. '/gate'
+        local first = run(nil, { STARTER_HOLD = hold }, true)
+        assert.is_true(vim.wait(8000, function() return vim.fn.filereadable(hold .. '.ready') == 1 end, 10))
+        -- The waiter found the lock and pauses before reading its owner record.
+        local second = run(nil, { STARTER_READ_GATE = gate }, true)
+        assert.is_true(vim.wait(8000, function() return vim.fn.filereadable(gate .. '.ready') == 1 end, 10),
+            'the waiter never reached the owner read')
+        vim.fn.writefile({ 'release' }, hold .. '.release')
+        local one = first:wait(10000) -- the owner retires the lock
+        assert.equals(0, one.code, one.stderr)
+        vim.fn.writefile({ 'release' }, gate .. '.release')
+        local two = second:wait(10000)
+        assert.equals(0, two.code, two.stderr)
+        assert.equals(1, #vim.fn.glob(scratch .. '/data/parley/chats/welcome.md', false, true))
+    end)
+
     it('recovers the chat created before owner death only after explicit lock repair', function()
         local hold = scratch .. '/hold'
         local first = run(nil, { STARTER_HOLD = hold }, true)

@@ -2,7 +2,7 @@
 --
 -- A provider is just `{ list = function() → {SkillManifest…} }`. The registry
 -- (skill_registry.lua) unions providers; consumers never branch on origin —
--- the disk/virtual difference lives entirely inside how the provider built the
+-- where a skill came from lives entirely inside how the provider built the
 -- manifest's `source` closure.
 --
 -- DiskProvider scans a root dir and loads each `<dir>/init.lua` by ABSOLUTE
@@ -121,26 +121,6 @@ function M.disk(root)
                         end
                     end
                     -- dir without a loadable init.lua/name → skipped (not an error)
-                end
-            end
-            return out
-        end,
-    }
-end
-
---- A virtual provider over a list of generators (`function() → SkillManifest`).
---- The seam for runtime-generated skills (the first, `repo_discovery`, arrives
---- in M5). A generator that errors is skipped (it shouldn't sink discovery).
---- @param generators table list of zero-arg manifest generators
---- @return table provider with a `list()` method
-function M.virtual(generators)
-    return {
-        list = function()
-            local out = {}
-            for _, gen in ipairs(generators or {}) do
-                local ok, m = pcall(gen)
-                if ok and type(m) == "table" then
-                    table.insert(out, m)
                 end
             end
             return out

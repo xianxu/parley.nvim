@@ -276,12 +276,14 @@ M.enter = function()
 	})
 	if capture then
 		local result = edits.apply_user(capture, { { region = 1, text = ":00min " } })
-		if result.status == "applied" and vim.api.nvim_get_current_buf() == buf then
+		if result.status ~= "applied" then
+			edits.report_refusal("InterviewTimestamp", result.reason or result.status, result.error)
+		elseif vim.api.nvim_get_current_buf() == buf then
 			vim.api.nvim_win_set_cursor(0, { cursor[1], column + 7 })
 			if vim.fn.mode() ~= "i" then vim.cmd(column==#line and "startinsert!" or "startinsert") end
 		end
 	else
-		_logger.warning("Interview timestamp unavailable: " .. tostring(reason))
+		edits.report_refusal("InterviewTimestamp", reason)
 	end
 
 	M.setup_keymap()

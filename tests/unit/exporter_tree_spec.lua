@@ -402,6 +402,59 @@ file: 2024-01-15-child.md
 		end)
 	end)
 
+	-- #243: branch records are restored AFTER the HTML escape (html) or ride as
+	-- raw HTML blocks (markdown), so the topic and href must be escaped where
+	-- the record is built.
+	describe("Group G2: branch topics are escaped in the HTML they build", function()
+		local EVIL = [[<script>alert("x")</script> & co]]
+		local SAFE = "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; co"
+		local function resolve_fn(path) return "/chats/" .. path end
+		local link_map = { ["/chats/c.md"] = "2024-01-15-c.html" }
+		local parsed = { parent_link = nil, branches = {} }
+
+		local function nav(format, map)
+			local result, placeholders = exporter._process_branch_lines(
+				{ "🌿: c.md: " .. EVIL }, parsed, format, map, "/chats", "🌿:", resolve_fn)
+			return format == "html" and placeholders[result[1]] or result[2]
+		end
+
+		local function inline(format)
+			local result, placeholders = exporter._process_branch_lines(
+				{ "see [🌿:" .. EVIL .. "](c.md) here" }, parsed, format, link_map, "/chats", "🌿:", resolve_fn)
+			if format == "html" then
+				local key = next(placeholders)
+				return placeholders[key]
+			end
+			return result[1]
+		end
+
+		for _, case in ipairs({
+			{ "html nav div with a link", function() return nav("html", link_map) end },
+			{ "html nav div without a link", function() return nav("html", {}) end },
+			{ "markdown nav div with a link", function() return nav("markdown", { ["/chats/c.md"] = "2024-01-15-c.markdown" }) end },
+			{ "markdown nav div without a link", function() return nav("markdown", {}) end },
+			{ "html inline link", function() return inline("html") end },
+			{ "markdown inline link", function()
+				link_map["/chats/c.md"] = "2024-01-15-c.markdown"
+				local out = inline("markdown")
+				link_map["/chats/c.md"] = "2024-01-15-c.html"
+				return out
+			end },
+		}) do
+			it(case[1], function()
+				local html = case[2]()
+				assert.is_truthy(html, "no record built")
+				assert.is_nil(html:find("<script>", 1, true), html)
+				assert.is_truthy(html:find(SAFE, 1, true), html)
+			end)
+		end
+
+		it("escapes the href as an attribute value", function()
+			assert.equals('<div class="branch-nav child-link"><a href="a&quot;onclick=&quot;x.html">&rarr; t</a></div>',
+				exporter._make_branch_div("child-link", "&rarr;", "t", 'a"onclick="x.html'))
+		end)
+	end)
+
 	describe("Group H: filename collision detection", function()
 		it("H1: returns nil when no collisions", function()
 			local link_map = {

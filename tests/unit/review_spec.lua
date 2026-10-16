@@ -1,7 +1,8 @@
--- Unit tests for lua/parley/review.lua — parse_markers
+-- Unit tests for marker parsing: parley.skills.review.parse_markers (the
+-- parley.review shim it was reached through is gone, #236)
 -- (Edit-application coverage lives in skill_edits_spec + tools_builtin_propose_edits_spec.)
 
-local review = require("parley.review")
+local review = require("parley.skills.review")
 
 describe("parse_markers", function()
     it("parses a human-initiated marker (ready)", function()

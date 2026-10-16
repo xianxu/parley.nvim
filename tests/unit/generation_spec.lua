@@ -79,6 +79,20 @@ describe('pure generation lifecycle',function()
         assert.equals('requesting',G.snapshot(s).phase)
     end)
 
+    -- #341: an event the machine cannot accept must not leave it waiting forever.
+    it('stops uncertain on an inconsistent receipt for the inflight write, ignoring other writes',function()
+        local s,a=requesting()
+        local r;s,r=output(s,a,1,10)
+        local write=effect(r,'write')
+        local same,ignored=send(s,{type='write_result',write='not-inflight',committed_bytes=10,status='applied'})
+        assert.is_false(ignored.accepted);assert.equals(s,same)
+        s,r=send(s,{type='write_result',write=write.id,committed_bytes=3,attempted_bytes=10,status='applied'})
+        assert.is_true(r.accepted)
+        local v=G.snapshot(s)
+        assert.equals('stopping',v.phase);assert.equals('uncertain',v.outcome)
+        assert.equals(3,v.committed_bytes);assert.equals(7,v.discarded_bytes)
+    end)
+
     it('accounts admitted output through partial receipts, suspension and retry offsets',function()
         local s,a=requesting()
         local r;s,r=output(s,a,1,10)
@@ -169,9 +183,11 @@ describe('pure generation lifecycle',function()
         s,r=output(s,a,2,1);assert.equals(before,s);assert.same({},r.effects)
         s,r=output(s,a,1,3);local write=effect(r,'write');before=s
         s,r=output(s,a,1,3);assert.equals(before,s)
-        s,r=send(s,{type='write_result',write=write.id,committed_bytes=4,status='applied'})
-        assert.equals(before,s);assert.is_false(r.accepted)
         s,r=send(s,{type='invented'});assert.equals(before,s);assert.same({},r.effects)
+        -- An impossible receipt for the inflight write settles it uncertain (#341).
+        s,r=send(s,{type='write_result',write=write.id,committed_bytes=4,status='applied'})
+        assert.is_true(r.accepted);assert.equals('uncertain',G.snapshot(s).outcome)
+        assert.equals(0,G.snapshot(s).committed_bytes)
     end)
 
     -- #266 M2: tools run as soon as they are declared; their blocks land one at a
@@ -519,8 +535,10 @@ describe('pure generation lifecycle',function()
         assert.equals(3841,G.snapshot(s).staged_bytes)
         local next_write=effect(r,'write');assert.equals(255,next_write.offset);assert.equals(3841,next_write.bytes)
         local prior=s
+        -- More committed than attempted cannot be trusted: uncertain, crediting none (#341).
         s,r=send(s,{type='write_result',write=next_write.id,attempted_bytes=10,committed_bytes=11,status='suspended'})
-        assert.equals(prior,s);assert.is_false(r.accepted)
+        assert.is_true(r.accepted);assert.is_not.equals(prior,s)
+        assert.equals('uncertain',G.snapshot(s).outcome);assert.equals(255,G.snapshot(s).committed_bytes)
     end)
 
     it('bounds retained operation records across one hundred completed tool rounds',function()

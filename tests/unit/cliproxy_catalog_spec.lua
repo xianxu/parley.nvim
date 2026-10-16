@@ -137,7 +137,7 @@ end)
 --------------------------------------------------------------------------------
 describe("parse_provider_spec", function()
     it("splits provider from terms", function()
-        assert.same({ provider = "claude", terms = { "opus", "sonnet" } },
+        assert.same({ provider = "claude", terms = { { text = "opus" }, { text = "sonnet" } } },
             cat.parse_provider_spec("claude:opus,sonnet"))
     end)
 
@@ -147,16 +147,33 @@ describe("parse_provider_spec", function()
     end)
 
     it("ignores whitespace and empty terms", function()
-        assert.same({ provider = "codex", terms = { "gpt-5.6" } },
+        assert.same({ provider = "codex", terms = { { text = "gpt-5.6" } } },
             cat.parse_provider_spec("codex: gpt-5.6 , "))
+    end)
+
+    -- #230: `!N` caps the search it is attached to; no `!` means no limit.
+    it("reads !N on a term and on a bare provider", function()
+        assert.same({ provider = "codex", terms = { { text = "gpt-5", cap = 3 }, { text = "gpt-6" } } },
+            cat.parse_provider_spec("codex:gpt-5!3,gpt-6"))
+        assert.same({ provider = "antigravity", cap = 2, terms = {} },
+            cat.parse_provider_spec("antigravity!2"))
+    end)
+
+    it("rejects a malformed count with a message naming the spec", function()
+        for _, spec in ipairs({ "codex:gpt-5!", "codex:gpt-5!x", "codex:gpt-5!0", "codex:!3",
+            "antigravity!", "codex!2:gpt-5" }) do
+            local parsed, err = cat.parse_provider_spec(spec)
+            assert.is_nil(parsed, spec)
+            assert.matches(vim.pesc(("%q"):format(spec)), err)
+        end
     end)
 end)
 
 describe("curate", function()
     local models = cat.parse(V1, V1BETA)
-    local function ids(spec, per)
+    local function ids(spec)
         local out = {}
-        for _, m in ipairs(cat.curate(models, { providers = { spec }, per_provider = per or 3 })) do
+        for _, m in ipairs(cat.curate(models, { providers = { spec } })) do
             out[#out + 1] = m.id
         end
         return out
@@ -174,13 +191,20 @@ describe("curate", function()
         -- the shipped default in config.lua; documented so the default view is
         -- covered by the same rule as every other row
         ["claude:opus,sonnet,fable"] = { "claude-opus-5", "claude-sonnet-5", "claude-fable-5" },
-        ["claude"] = { "claude-opus-5", "claude-sonnet-5", "claude-fable-5" },
+        -- #230: no `!` means every matching series; `!N` caps that search.
+        ["claude"] = { "claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-haiku-4-5-20251001" },
+        ["claude!3"] = { "claude-opus-5", "claude-sonnet-5", "claude-fable-5" },
         ["codex:gpt-5.6"] = { "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra" },
-        ["antigravity:pro,flash"] = { "gemini-3.1-pro-low", "gemini-pro-agent",
+        ["antigravity:pro!3,flash!3"] = { "gemini-3.1-pro-low", "gemini-pro-agent",
                                       "gemini-3.7-flash-high", "gemini-3-flash-agent",
                                       "gemini-3.5-flash-extra-low" },
-        ["antigravity"] = { "claude-opus-4-6-thinking", "claude-sonnet-4-6",
+        ["antigravity:pro,flash"] = { "gemini-3.1-pro-low", "gemini-pro-agent",
+                                      "gemini-3.7-flash-high", "gemini-3-flash-agent",
+                                      "gemini-3.5-flash-extra-low", "gemini-3.5-flash-low",
+                                      "gemini-3.1-flash-image", "gemini-3.1-flash-lite", "gemini-3-flash" },
+        ["antigravity!3"] = { "claude-opus-4-6-thinking", "claude-sonnet-4-6",
                             "gemini-3.7-flash-high" },
+        ["antigravity!2"] = { "claude-opus-4-6-thinking", "claude-sonnet-4-6" },
     }
 
     for spec, expected in pairs(SPEC_RENDERS) do
@@ -197,7 +221,7 @@ describe("curate", function()
             rows[#rows + 1] = { id = id, owned_by = "openai", created = 1783616400 }
         end
         local parsed = cat.parse(vim.json.encode({ data = rows }), "{}")
-        local selected = cat.curate(parsed, { providers = { "codex" } })
+        local selected = cat.curate(parsed, { providers = { "codex!3" } })
         assert.same({ "gpt-6-astra", "gpt-5.6-luna", "gpt-5.6-sol" },
             vim.tbl_map(function(m) return m.id end, selected))
     end)
@@ -219,19 +243,19 @@ describe("curate", function()
             rows[#rows + 1] = { id = id, owned_by = "openai", created = 100 }
         end
         local parsed = cat.parse(vim.json.encode({ data = rows }), "{}")
-        local selected = cat.curate(parsed, { providers = { "codex" }, per_provider = 10 })
+        local selected = cat.curate(parsed, { providers = { "codex" } })
         assert.same({ "claude-fable-10", "claude-opus-9", "gpt-6-astra",
             "gpt-5.10-sol", "gpt-5.9-luna", "gpt-oss-120b" },
             vim.tbl_map(function(m) return m.id end, selected))
     end)
 
-    it("gives each configured search its own quota without starving a later term", function()
+    it("gives each written cap to its own search without starving a later term", function()
         local rows = {}
         for _, id in ipairs({ "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-astra" }) do
             rows[#rows + 1] = { id = id, owned_by = "openai", created = 1783616400 }
         end
         local parsed = cat.parse(vim.json.encode({ data = rows }), "{}")
-        local selected = cat.curate(parsed, { providers = { "codex:gpt-5,gpt-6" }, per_provider = 3 })
+        local selected = cat.curate(parsed, { providers = { "codex:gpt-5!3,gpt-6" } })
         assert.same({ "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-astra" },
             vim.tbl_map(function(m) return m.id end, selected))
     end)
@@ -242,7 +266,7 @@ describe("curate", function()
             rows[#rows + 1] = { id = id, owned_by = "openai", created = 1783616400 }
         end
         local parsed = cat.parse(vim.json.encode({ data = rows }), "{}")
-        local selected = cat.curate(parsed, { providers = { "codex:luna,gpt-5,gpt-6" }, per_provider = 2 })
+        local selected = cat.curate(parsed, { providers = { "codex:luna!2,gpt-5!2,gpt-6!2" } })
         assert.same({ "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-astra" },
             vim.tbl_map(function(m) return m.id end, selected))
     end)
@@ -260,7 +284,7 @@ describe("curate", function()
     end)
 
     it("caps a bare provider as one search", function()
-        assert.equals(2, #ids("claude", 2))
+        assert.equals(2, #ids("claude!2"))
     end)
 
     it("does not let a parameter count outrank a version", function()
@@ -280,13 +304,56 @@ describe("curate", function()
         -- unrelated models under a heading the operator mistyped.
         local models_with_ownerless = { { id = "orphan-1", series = "orphan" } }
         assert.same({}, cat.curate(models_with_ownerless,
-            { providers = { "claud" }, per_provider = 3 }))
+            { providers = { "claud" } }))
     end)
 
     it("does not mutate the rows it was given", function()
         local before = vim.deepcopy(models)
-        cat.curate(models, { providers = { "claude" }, per_provider = 3 })
+        cat.curate(models, { providers = { "claude" } })
         assert.same(before, models)
+    end)
+end)
+
+describe("curate without a hidden limit (#230)", function()
+    -- The v1 capture plus gpt-6-astra (owner openai, the gpt-5.6 date): the shape
+    -- #230 was reported on. The live catalog it was measured on is gone (#342).
+    local models = cat.parse(fixture("cliproxy_catalog_230.json"), V1BETA)
+    local function ids(providers)
+        return vim.tbl_map(function(m) return m.id end, cat.curate(models, { providers = providers }))
+    end
+    local RECOMMENDED = { "claude:opus,sonnet,fable", "codex:gpt-5!3,gpt-6", "antigravity!2" }
+
+    it("keeps a later term beside a broad earlier one (the reported case)", function()
+        assert.is_true(vim.tbl_contains(ids({ "codex:gpt-5,gpt-6" }), "gpt-6-astra"))
+    end)
+    it("returns every matching series when no search carries !N", function()
+        assert.equals(22, #ids({ "claude:opus,sonnet,fable", "codex:gpt-5,gpt-6", "antigravity" }))
+        assert.equals(6, #ids({ "codex:gpt-5" }))
+    end)
+    it("renders the recommended config as exactly its nine rows, in term order", function()
+        assert.same({ "claude-opus-5", "claude-sonnet-5", "claude-fable-5",
+            "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-astra",
+            "claude-opus-4-6-thinking", "claude-sonnet-4-6" }, ids(RECOMMENDED))
+    end)
+    it("renders a series matched by two terms once", function()
+        local rows = ids({ "codex:gpt,gpt-5" })
+        local seen = {}
+        for _, id in ipairs(rows) do assert.is_nil(seen[id], id); seen[id] = true end
+        assert.same(ids({ "codex:gpt" }), rows)
+    end)
+    it("lets a malformed spec contribute nothing, never everything", function()
+        assert.same({}, ids({ "codex:gpt-5!x" }))
+        assert.same({}, ids({ "antigravity!0" }))
+    end)
+    it("diagnoses malformed specs and terms matching nothing, purely", function()
+        local before = vim.deepcopy(models)
+        local messages = cat.diagnose(models, { "codex:gtp-6", "codex:gpt-5!x", "codex:gpt-6", "claud:opus" })
+        assert.same({
+            'live_models.providers "codex:gtp-6": "gtp-6" matches no codex model',
+            'live_models.providers "codex:gpt-5!x": "gpt-5!x" needs a positive count after !',
+        }, messages)
+        assert.same(before, models)
+        assert.same({}, cat.diagnose({}, { "codex:gtp-6" }), "no catalog is the logged-out case, not a typo")
     end)
 end)
 
