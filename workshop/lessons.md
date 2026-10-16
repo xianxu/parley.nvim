@@ -1,5 +1,12 @@
 # Lessons
 
+## 2026-10-16 (#345 — async stop on the restart path)
+
+- A new helper or forward declaration goes ABOVE an existing doc block, never between the block and its definition. #204 and #340/#345 hit this four times (ensure_running, restart_managed, M.stop, pids_on_port). After inserting near a `---` block, read the three lines above the definition you meant to document.
+- When a design is revised mid-issue, sweep the issue's Plan, tables and Log for claims about the replaced mechanism in the same commit (a dated "superseded" note, not an overwrite). #345's option-B revision left four stale claims, which cost a close round (BR-6).
+
+- Moving a caller to a new function silently disarms every spec that observes the OLD one by wrapping it. #345 moved restarts from `stop` to `stop_async`. One "stops == 1" spec failed, but a "stops == 0" spec and #340's stall window kept passing, both now checking nothing. Before switching a caller, grep `tests/` for `<module>.<old> =` wrappers and move them with it. Then rerun the mutation that each one guards.
+
 ## 2026-10-16 (#340 — credential_health restart timing)
 
 - Measure under the load that fails, not a proxy for it. CPU burners never reproduced #340; 8 parallel copies of the spec (the suite's shape) did on the first run. The slow stage was a port probe that reached `down` only by curl `--max-time`, so wait on the process state you control (`kill(pid, 0)`), not on a probe of what it leaves behind.

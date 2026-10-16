@@ -10,6 +10,7 @@ local SEAM = "tests/helpers/fixture_process.lua"
 local CANNOT_BLOCK = {
     ["tests/fixtures/fake_clipboard"] = "one conversion, bounded by PARLEY_FAKE_CLIPBOARD_DELAY_MS",
     ["tests/fixtures/fake_git_file_list"] = "prints a file list and exits",
+    ["tests/fixtures/fake_lsof"] = "one listener read, bounded by PARLEY_FAKE_LSOF_DELAY_MS (≤ 10 s)",
     ["tests/fixtures/fake_packaging_curl"] = "one canned response",
     ["tests/fixtures/fake_packaging_upgrade_brew"] = "one canned upgrade transcript",
     ["tests/fixtures/fake_ps"] = "prints PARLEY_FAKE_PS_ROWS and exits",
@@ -83,7 +84,7 @@ describe("arch: fixture process lifecycle", function()
         assert.same({}, offenders)
         -- run_without_dns.py and run_packaging_vm.py are mode 644, outside
         -- this executable-fixture corpus.
-        assert.equals(13, #files, "expected 9 finite fixtures and 4 watched fixtures")
+        assert.equals(14, #files, "expected 10 finite fixtures and 4 watched fixtures")
     end)
 
     it("both watchdogs recognize a parent already reparented to init", function()

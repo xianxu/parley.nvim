@@ -377,6 +377,8 @@ describe("cliproxy.recover", function()
         -- One assertion on stop() would have failed the day that landed.
         serve()
         local stops = 0
+        -- The recovery rung is a budgeted path: it stops through the sync stop
+        -- (#345 option B).
         local saved_stop = cliproxy.stop
         cliproxy.stop = function(...)
             stops = stops + 1
@@ -403,6 +405,8 @@ describe("cliproxy.recover", function()
         vim.wait(6000, function() return seeded end, 20)
         assert.is_true(seeded, "could not seed the proxy's load time")
         local stops = 0
+        -- The recovery rung is a budgeted path: it stops through the sync stop
+        -- (#345 option B).
         local saved_stop = cliproxy.stop
         cliproxy.stop = function(...)
             stops = stops + 1
