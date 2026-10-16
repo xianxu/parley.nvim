@@ -680,6 +680,7 @@ atlas:
 
   infra/test_harness:
     code:
+      - lua/parley/test_isolation.lua
       - scripts/golden_fixture.lua
       - Makefile.parley
       - scripts/check-fresh-clone.sh
@@ -706,6 +707,8 @@ atlas:
       - tests/fixtures/orphan_me.sh
       - tests/perf/chat_typing.lua
     tests:
+      - tests/unit/test_isolation_spec.lua
+      - tests/integration/test_isolation_spec.lua
       - tests/unit/golden_fixture_spec.lua
       - tests/integration/fresh_clone_spec.lua
       - tests/integration/portable_make_spec.lua

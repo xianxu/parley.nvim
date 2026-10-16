@@ -6,11 +6,8 @@
 --
 -- Usage (two options):
 --   1. From terminal (headless Neovim):
---        make fixtures
---      or directly:
---        ANTHROPIC_API_KEY=sk-... OPENAI_API_KEY=sk-... GOOGLEAI_API_KEY=... \
---          nvim --headless --noplugin -u tests/minimal_init.vim \
---          -c "luafile scripts/record_fixtures.lua" -c "qa!"
+--        ANTHROPIC_API_KEY=sk-... OPENAI_API_KEY=sk-... GOOGLEAI_API_KEY=... make fixtures
+--      (tests/minimal_init.vim refuses a run outside the make harness, #342)
 --
 --   2. From inside Neovim (with API keys already in environment):
 --        :luafile scripts/record_fixtures.lua

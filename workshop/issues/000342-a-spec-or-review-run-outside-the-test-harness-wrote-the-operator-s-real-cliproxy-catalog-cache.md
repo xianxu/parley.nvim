@@ -1,12 +1,22 @@
 ---
 id: 000342
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: 'eed1b6f242b542ac57f1409f1fcb17126ddc6d2d' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '8733bc8c676771275c19e8f14d6cc737852ad8ab' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T20:29:30-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "a27b20a1", done: "58f88fed"}
+actual_hours: 0.88
 ---
 
 # A spec or review run outside the test harness wrote the operator's real cliproxy catalog cache
@@ -35,10 +45,47 @@ Make the write impossible rather than finding this one writer:
 - With the harness, every spec still runs; the full suite passes.
 - A catalog fetch against a fake endpoint with a non-isolated data dir refuses to write (unit or integration test), if the writer-side guard is adopted.
 
+## Core concepts
+
+| Entity | Kind | Status | Location | Responsibility |
+| --- | --- | --- | --- | --- |
+| `check` | PURE | new | `lua/parley/test_isolation.lua` | The reasons an environment is not isolated; empty when it is. |
+| `inside` | PURE | new | `lua/parley/test_isolation.lua` | Whether a path lies inside a root, links resolved. |
+| `test_isolation` | PURE | new | `lua/parley/test_isolation.lua` | The one rule: under the harness, a path must resolve inside `PARLEY_TEST_ENV_ROOT`; `check(env)` names what is not isolated. |
+| tests/minimal_init.vim | INTEGRATION | modified | `tests/minimal_init.vim` | Refuses to run any spec, before plenary loads one, when the env is not isolated. |
+| `single_source_sweeps_spec` | INTEGRATION | modified | `tests/arch/single_source_sweeps_spec.lua` | Diffs from the branch point against origin/main, not a lagging local main. |
+| `cliproxy` | INTEGRATION | modified | `lua/parley/cliproxy.lua` | `data_root()` refuses a root outside the isolated env in test mode, so no cache, config or binary write can reach real state. |
+| Makefile.parley | INTEGRATION | modified | `Makefile.parley` | Exports `PARLEY_TEST_ENV_ROOT` with the isolated env; a goldens target replaces the documented direct run. |
+
 ## Plan
 
-- [ ]
+Measurement (2026-10-15, :3): every `make` target that loads `tests/minimal_init.vim` (test, test-spec, perf, fixtures) exports `TEST_ENV` (an isolated HOME and XDG roots under `TEST_ENV_ROOT`). The init itself checks nothing, so a direct `nvim -u tests/minimal_init.vim -c PlenaryBustedFile …` runs every spec against the operator's real roots. That is the route behind the 19:26 write. `scripts/refresh_goldens.lua` is documented as exactly such a direct run. No spec spawns a `minimal_init` child with a cleared env (the children inherit the marker).
+
+- [x] `parley.test_isolation` (pure): `inside(root, path)` with symlinks resolved, and `check(env)` listing HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME (and XDG_CONFIG_HOME when set) that fall outside `PARLEY_TEST_ENV_ROOT`, or the marker itself missing. Unit-tested.
+- [x] Harness: `TEST_ENV` exports `PARLEY_TEST_ENV_ROOT`. `minimal_init.vim` runs the check first and `cquit`s with the reasons and "run it through make test-spec" when it fails, before any spec loads.
+- [x] Writer side: in test mode (`PARLEY_TEST_MODE=1`, which only the harness init sets), cliproxy's `data_root()` errors when the root (override or stdpath) is outside the isolated env. A spec forgetting `_set_data_dir` then fails loudly instead of writing elsewhere. Production (no test mode) is unchanged.
+- [x] `make goldens` runs `refresh_goldens.lua` under `TEST_ENV`; its usage comment points there. TOOLING.md documents that specs only run through make.
+- [x] Regression (red first): a child nvim on `minimal_init.vim` with a non-isolated env (a scratch HOME, no marker) and a spec that would write a sentinel under its data dir. Assert a nonzero exit, the refusal message, and no sentinel file. Also the writer guard: in test mode, `data_root()` with an outside root errors.
+- [x] Atlas test_harness: the isolation guard. Verify: the full suite.
+
 
 ## Log
 
 ### 2026-10-15
+- 2026-10-15: closed — Prior evidence stands (red-first child-nvim refusal; cliproxy writer guard). Round 1 fixes: TEST_ENV pins every test_isolation.ROOTS entry incl. XDG_CONFIG_HOME, asserted by a unit case; remaining direct minimal_init runs routed through make (fixtures, new perf-finder, init usage); guard fails closed on its own load error (red without pcall 3/1, green 4/0). Ariadne review-instruction Minor left per TL: the guard fails loudly with the make command, a stronger enforcement. Full make -k test exit 0 on f62f0404, lint clean.; review verdict: SHIP
+
+### 2026-10-15 (:3)
+
+- Red first: `tests/integration/test_isolation_spec` launches a child nvim on `minimal_init.vim` that writes a sentinel under its data dir. Before the guard, the unmarked child and the one with XDG_DATA_HOME outside the root both ran and wrote it (2 fail, 1 pass). After: 3/0 (refusal before any `-c`, reasons plus the `make test-spec` hint, no sentinel; an isolated child runs normally).
+- Writer guard: `tests/unit/test_isolation_spec` 8/0, including cliproxy refusing an outside root; red with the guard disabled (7/1).
+- `check-spell-compatibility.sh` runs in test mode with its own mktemp roots, so it now declares them as `PARLEY_TEST_ENV_ROOT`; one definition of isolation everywhere. `check-fresh-clone.sh` needs nothing (its probe is not in test mode; its inner `make test` sets the marker). `test_local_app.py` inherits the harness env.
+- Out of reach here: the close-review dispatcher lives in ariadne. With the guard, a reviewer's direct run fails loudly with the make command to use instead.
+- Full suite on def08221: one failing file, single_source_sweeps. Two causes. (1) My table backticked `minimal_init` and `goldens`, which are not Lua symbols, and lacked `check` and `inside`; fixed. (2) A real guard flaw: it took the branch point from `git merge-base HEAD main`. In the slot layout the local `main` is the :0 checkout's branch (here at 7762f5ed, far behind origin/main; untouched, since :0 is staged), so #230's `_operator_specs`, `_select` and `diagnose` were charged to this branch. A single `branch_point()` now prefers origin/main and falls back to main; both call sites use it. single_source_sweeps 25/0, lint clean.
+- Full suite on 541ccefd (final code commit): exit 0, lint clean (740 files).
+- Close review round 1, two Important, both taken as classes.
+  - BR-1: TEST_ENV did not pin XDG_CONFIG_HOME while the check refused an outside value, so an operator exporting it would have every harness run refused. Class: every root the check inspects must be pinned. `test_isolation.ROOTS` is now the single list (config required like the rest), TEST_ENV pins and PREP_TEST_ENV creates `$(TEST_XDG)/config`, and a unit case asserts that TEST_ENV assigns every ROOTS entry.
+  - BR-2: documented direct runs remained in `record_fixtures.lua` and `perf_chat_finder.lua`. Class sweep over `-u tests/minimal_init.vim` instructions: those two, plus minimal_init's own usage line, now point at make targets. A new `make perf-finder` covers the finder benchmark, which had none. The two June `workshop/continuation` handoff notes are archival and left as written.
+- Minor, same round: the init guard now fails closed. A require error becomes a refusal ("the isolation check could not run"). Red with the pcall removed (the unguarded child ran: 3/1), green 4/0. Minor (review-instruction follow-up in ariadne) is with the TL.
+- unit test_isolation 9/0, integration 4/0, lint clean.
+- Minor (close-review instructions in ariadne should say make test-spec): left by TL decision. The guard is the stronger enforcement: a direct run now fails before any spec with the make command to use, which no sentence in review instructions can match.
+- Full suite on f62f0404 (final code commit): exit 0, lint clean (740 files).
