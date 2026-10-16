@@ -268,6 +268,13 @@ describe("attention finder", function()
         assert.equals("couch status unavailable", Store.load().entries[a].unknown)
     end)
 
+    it("a probe that raises as it starts reads as couch unavailable", function()
+        local a = submitted("a.md", "m1")
+        open({ picker = fake_picker(), run = function() error("ENOENT: couch") end })
+        assert.equals("waiting", Model.state_of(Store.load().entries[a]))
+        assert.equals("couch status unavailable", Store.load().entries[a].unknown)
+    end)
+
     it("runs at most 4 probes at once", function()
         for i = 1, 9 do submitted(("f%d.md"):format(i), "m" .. i) end
         local active, peak = 0, 0

@@ -63,10 +63,12 @@ end
 
 --- The observation event for one probe of `path`. `probed` lists the IDs
 --- pending when the probe started; `data` is couch.query's decoded reply (nil
---- when couch failed). Only a reply with a ledger for the file is evidence: a
---- failure, or a file Couch keeps no ledger for, only marks the entry unknown.
+--- when couch failed; anything but a table, such as async_operation_queue's
+--- message for a probe that raised, counts as a failure too). Only a reply with
+--- a ledger for the file is evidence: a failure, or a file Couch keeps no
+--- ledger for, only marks the entry unknown.
 function M.observation(path, probed, data)
-    if not data then
+    if type(data) ~= "table" then
         return { type = "observe_failed", path = path, reason = "couch status unavailable" }
     end
     if type(data.Status) ~= "table" then
