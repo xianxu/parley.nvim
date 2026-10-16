@@ -1,12 +1,20 @@
 ---
 id: 000236
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-10-16
 estimate_hours:
-card_mirror: '8143a764d2514c0958988749c37bda9129d24b21' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'cafd037b6a6adafcfd884200ea9c2346c0c0787c' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T05:39:39-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # delete unreachable modules and dead config
@@ -70,12 +78,25 @@ Delete what does not run, and add a check that catches the next orphaned module.
 
 ## Plan
 
-- [ ] Decide discovery vs #115; if deleted, note the restore commit in #115.
-- [ ] Delete the unused modules with their specs and atlas entries; record counts before and after.
-- [ ] Point `highlighter.lua` and `review_spec.lua` at `parley.skills.review`; delete the shim.
-- [ ] Remove the dead config keys and `get_agent()`'s `cmd_prefix` field.
-- [ ] Remove azure, with a setup notice.
-- [ ] Add the reachability check; see it fail on a planted orphan.
+Evidence, 2026-10-16 (base 5abad047). Production code has no require by computed name: every `require(` in `lua/` takes a string literal, and the only `loadfile` is skill_providers' skill-directory loader. So the literal reference scan below is complete for `lua/`.
+- `spinner`, `test_agent_picker`, `google_drive`: no reference anywhere outside their own files.
+- `obfuscate`: required only by its own spec; `oauth.lua` does not use it.
+- `review.lua` shim: **now unreached in production**. `highlighter.lua` no longer reads through it, and `comment/view.lua` requires `parley.skills.review` directly. Only `tests/unit/review_spec.lua` requires the shim.
+- `skill_registry` `repo_generators` / `virtual_generators`: no caller passes either, so both are always `{}`.
+- `command_prompt_prefix_template`: read only to build `get_agent()`'s `cmd_prefix` field. No reader of an agent's `.cmd_prefix` exists in `lua/` or `tests/` (`config.cmd_prefix` is a different field).
+- `command_auto_select_response`: no reader.
+- panvimdoc markers: already gone from README.md.
+- Azure: **reachable**, through a user `providers` table that the dispatcher routes. And #213 never added the copilot setup notice the Spec cites (copilot still ships). Not dead, so it is kept, unless the TL decides to drop the provider.
+- discovery: required at load (`init.lua:109`), but `M.discovery` has no reader. It is the foundation open #115 is designed on (`TypeDescriptor`, `Matcher`). This is a design call for the TL. Recommended (the Spec's): delete, with a note in #115 naming the restore commit.
+
+Baseline counts (5abad047): 442 spec files, 6397 `it()` cases, 247 `lua/` files, 74823 `lua/` lines.
+
+- [ ] Delete spinner, test_agent_picker, google_drive, obfuscate (+ its spec).
+- [ ] Repoint `review_spec.lua` at `parley.skills.review`; delete the shim.
+- [ ] Drop the `skill_registry` generator seams; drop both dead config keys and `get_agent()`'s `cmd_prefix` field.
+- [ ] discovery and azure per the TL's call.
+- [ ] Reachability arch check: the static require graph from the entry points (`parley`, `parley.health`, the builtin tool names, each skill directory, loaded by `loadfile`). It fails on any unreached `lua/` module; seen red with a planted orphan. Its stated limit: it finds orphaned files, not required-but-unused modules (ARCH-PURPOSE).
+- [ ] After-counts, atlas and traceability cleanup, and a scan of `atlas/` for deleted names.
 
 ## Log
 
