@@ -569,3 +569,7 @@ oracle, and the mutation that would make the test fail.
 ## #344: a report hash is copied from git's output, never retyped
 
 - I sent the hub a typed hash twice in a row; the correction carried a second wrong one. Write any report that names a commit into the message file from `git rev-parse` / `git log --format=%H` with printf, and send that file.
+
+## #226: a dedup no-op must agree with the staleness check
+
+- If a duplicate press is swallowed because a result is outstanding, that result must still be allowed to land for the swallowed press. Key the in-flight record on everything the staleness check reads (here, the origin buffer and window), or a press from elsewhere is dropped by both and nothing happens.
