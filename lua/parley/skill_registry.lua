@@ -6,7 +6,7 @@
 -- fix-forward), and dedupes by name.
 --
 -- Precedence: LAST provider wins. Providers are stacked base→override, so the
--- default stack {plugin, user, repo, virtual} lets a user/repo skill shadow a
+-- default stack {plugin, user} lets a user skill shadow a
 -- plugin default of the same name. Insertion order in `names()` is first-
 -- appearance (stable display) while the value is last-seen (the override).
 
@@ -52,7 +52,7 @@ function M.discover(provider_list)
 end
 
 --- The default provider stack for the live parley install.
---- @param opts table { plugin_root, user_root?, repo_generators?, virtual_generators? }
+--- @param opts table { plugin_root, user_root? }
 --- @return table list of providers (base→override order)
 function M.default_stack(opts)
     opts = opts or {}
@@ -63,25 +63,20 @@ function M.default_stack(opts)
     if opts.user_root then
         table.insert(stack, providers.disk(opts.user_root)) -- shadows plugin
     end
-    -- repo + virtual seams (empty until later milestones / M5)
-    table.insert(stack, providers.virtual(opts.repo_generators or {}))
-    table.insert(stack, providers.virtual(opts.virtual_generators or {}))
+    -- The repo / virtual generator seams were never passed anything and their
+    -- planned consumer was withdrawn; removed in #236.
     return stack
 end
 
 --- Discover the registry for the live parley install: the plugin skills root
 --- (resolved via runtimepath — no debug.getinfo) ∪ the user config root.
---- @param opts table|nil { virtual_generators?, repo_generators? } (M5 hooks)
 --- @return table registry
-function M.current(opts)
-    opts = opts or {}
+function M.current()
     local plugin_root = (vim.api.nvim_get_runtime_file("lua/parley/skills", false) or {})[1]
     local user_root = vim.fn.expand("~/.config/parley/skills")
     return M.discover(M.default_stack({
         plugin_root = plugin_root,
         user_root = (vim.fn.isdirectory(user_root) == 1) and user_root or nil,
-        repo_generators = opts.repo_generators,
-        virtual_generators = opts.virtual_generators,
     }))
 end
 
