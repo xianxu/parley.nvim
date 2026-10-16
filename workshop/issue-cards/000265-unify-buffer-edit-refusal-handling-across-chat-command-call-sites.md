@@ -2,9 +2,17 @@
 id: 000265
 status: open
 created: 2026-09-16
-updated: 2026-09-16
+updated: 2026-10-16
 estimate_hours:
 github_issue:
+started: 2026-10-16T04:02:56-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Unify buffer_edit refusal handling across chat command call sites
