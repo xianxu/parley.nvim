@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "b6b87e44", done: "edfeb538"}
 ---
 
 # Asynchronous rename protocol for agentic documents (BufFilePre/BufFilePost preflights)
