@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "a6fe848e", done: "1b0ee071"}
 ---
 
 # delete unreachable modules and dead config
@@ -76,9 +77,16 @@ Delete what does not run, and add a check that catches the next orphaned module.
   the Log. The repo has no coverage tool; adding luacov is a plan-time decision.
 - `rg` over `atlas/` finds no reference to a deleted module.
 
+## Core concepts
+
+| Entity | Status | Where | What |
+|---|---|---|---|
+| `current` | changed | lua/parley/skill_registry.lua | `skill_registry.current()` takes no options: the repo/virtual generator seams it forwarded were always empty and are gone. |
+| `virtual` | deleted | lua/parley/skill_providers.lua | The virtual provider: its only callers were the two empty seams, and its planned consumer (`repo_discovery`) was withdrawn as a category error. |
+
 ## Plan
 
-Evidence, 2026-10-16 (base 5abad047). Production code has no require by computed name: every `require(` in `lua/` takes a string literal, and the only `loadfile` is skill_providers' skill-directory loader. So the literal reference scan below is complete for `lua/`.
+Evidence, 2026-10-16 (base 5abad047). Production code has exactly one require by computed name: `tools/init.lua` loads `"parley.tools.builtin." .. name` over BUILTIN_NAMES and OPTIONAL_NAMES. (The first draft of this Plan said none; the reachability check found the OPTIONAL list.) Every other `require` in `lua/` takes a string literal, and the only `loadfile` is skill_providers' skill-directory loader. So a literal reference scan plus those name lists is complete for `lua/`.
 - `spinner`, `test_agent_picker`, `google_drive`: no reference anywhere outside their own files.
 - `obfuscate`: required only by its own spec; `oauth.lua` does not use it.
 - `review.lua` shim: **now unreached in production**. `highlighter.lua` no longer reads through it, and `comment/view.lua` requires `parley.skills.review` directly. Only `tests/unit/review_spec.lua` requires the shim.
@@ -91,12 +99,12 @@ Evidence, 2026-10-16 (base 5abad047). Production code has no require by computed
 
 Baseline counts (5abad047): 442 spec files, 6397 `it()` cases, 247 `lua/` files, 74823 `lua/` lines.
 
-- [ ] Delete spinner, test_agent_picker, google_drive, obfuscate (+ its spec).
-- [ ] Repoint `review_spec.lua` at `parley.skills.review`; delete the shim.
-- [ ] Drop the `skill_registry` generator seams; drop both dead config keys and `get_agent()`'s `cmd_prefix` field.
-- [ ] discovery and azure per the TL's call.
-- [ ] Reachability arch check: the static require graph from the entry points (`parley`, `parley.health`, the builtin tool names, each skill directory, loaded by `loadfile`). It fails on any unreached `lua/` module; seen red with a planted orphan. Its stated limit: it finds orphaned files, not required-but-unused modules (ARCH-PURPOSE).
-- [ ] After-counts, atlas and traceability cleanup, and a scan of `atlas/` for deleted names.
+- [x] Delete spinner, test_agent_picker, google_drive, obfuscate (+ its spec).
+- [x] Repoint `review_spec.lua` at `parley.skills.review`; delete the shim.
+- [x] Drop the `skill_registry` generator seams; drop both dead config keys and `get_agent()`'s `cmd_prefix` field.
+- [x] discovery and azure per the TL's call.
+- [x] Reachability arch check: the static require graph from the entry points (`parley`, `parley.health`, the builtin tool names, each skill directory, loaded by `loadfile`). It fails on any unreached `lua/` module; seen red with a planted orphan. Its stated limit: it finds orphaned files, not required-but-unused modules (ARCH-PURPOSE).
+- [x] After-counts, atlas and traceability cleanup, and a scan of `atlas/` for deleted names.
 
 ## Log
 
@@ -108,3 +116,35 @@ entry points in the Spec found six unreached modules: `spinner`,
 `test_agent_picker`, `google_drive`, `obfuscate`, `discovery.descriptor` and
 `discovery.matcher`. The rest of discovery counts as reached only because
 `init.lua:99` requires it.
+
+### 2026-10-16 (parley.nvim:4)
+
+Row by row (base 5abad047):
+
+| Row | Outcome |
+|---|---|
+| `spinner`, `test_agent_picker`, `google_drive` | Deleted (no reference anywhere). `google_drive.lua` also dropped from atlas/context/google_drive.md and traceability. |
+| `obfuscate` | Deleted with `tests/unit/obfuscate_spec.lua` (only that spec required it). |
+| `review.lua` shim | Deleted. `highlighter.lua` no longer read through it, and `comment/view.lua` requires `parley.skills.review` directly. `review_spec.lua` (48 cases) now requires `parley.skills.review`; the atlas `modes/review.md` shim entries are removed. |
+| `skill_registry` seams | Deleted, with `skill_providers.virtual` and its 3-case spec block: the seams were its only caller. |
+| `command_prompt_prefix_template` | Deleted with `get_agent()`'s `cmd_prefix` field (no reader of an agent's `.cmd_prefix`). |
+| `command_auto_select_response` | Deleted (no reader). parley does not validate unknown setup keys, so a user who sets either key sees no change: they already did nothing. |
+| discovery | **Deleted by TL decision** (no reader; loaded on every start for an unscheduled feature): 7 modules, 7 specs, `atlas/discovery/registry.md`, the index line, the traceability block, the init.lua require, and its spawn_seam allowlist entry. #115 has a restore note naming main commit `5abad04737d396828eb9614b28c20dbec43d7486`. |
+| azure | **Kept, by TL decision**: it is reachable through a user's `providers` table, which the dispatcher routes. The Spec's "same setup notice #213 adds for copilot" does not exist (#213 kept copilot, which still ships). The atlas azure text stays accurate. |
+| panvimdoc markers | Already gone from README.md before this issue. |
+| `tools/version.lua` | **New, found by the reachability check**: a 7-line helper (`stable_command_version`) that nothing names anywhere. Deleted. |
+
+- Reachability check `tests/arch/module_reachability_spec.lua`:
+  - It walks literal `require` / `pcall(require, …)` / `package.loaded[…]` edges.
+  - Entries: `parley`, `parley.health` and `parley.starter`; BUILTIN_NAMES and OPTIONAL_NAMES; each skill directory; and what packaging/ and scripts/ require.
+  - Its first run found three modules. `parley.tools.builtin.ack` (OPTIONAL_NAMES) and `parley.editor_bundle` (the packaging launcher and the export script) were gaps in my entry list, now fixed. `parley.tools.version` was the real orphan.
+  - Seen red on a planted `lua/parley/zz_planted_orphan.lua`, and on a synthetic graph, where a planted orphan requiring others is still unreached.
+  - Its limit: it finds orphaned files, not required-but-unused modules (ARCH-PURPOSE).
+- Counts, before (5abad047) → after:
+  - spec files 442 → 435;
+  - `it()` cases 6397 → 6319;
+  - `lua/` files 247 → 234;
+  - `lua/` lines 74823 → 73980.
+  - Branch diff vs main: 36 files, +142 / −1886, a net deletion of 1744 lines (counted at the change, before the commit of this log).
+- `atlas/`, README, the Makefiles and scripts/ have no reference to a deleted module, and every file traceability.yaml routes exists.
+
