@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "278e155a", done: "cc8b3c0a"}
 ---
 
 # A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree
