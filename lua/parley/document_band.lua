@@ -18,8 +18,19 @@ end
 
 local function value_for(win, record)
     local top = record.layers[#record.layers]
-    return composition.compose(top and top.raw or { state = "plain", hl = "WinBar" },
-        trail_for(win), vim.api.nvim_win_get_width(win), text_ops)
+    local view = top and top.raw or { state = "plain", hl = "WinBar" }
+    if view.overlay then
+        for i = #record.layers - 1, 1, -1 do
+            local underlying = record.layers[i].raw
+            if underlying.state and not underlying.overlay then
+                local feedback = view.feedback
+                view = vim.deepcopy(underlying)
+                view.feedback = feedback
+                break
+            end
+        end
+    end
+    return composition.compose(view, trail_for(win), vim.api.nvim_win_get_width(win), text_ops)
 end
 
 local function literal(message)
@@ -142,7 +153,13 @@ function M.new(buf)
         for _, win in ipairs(vim.fn.win_findbuf(buf)) do
             local record = record_for(win, buf)
             remove(record, owner)
-            record.layers[#record.layers + 1] = owner
+            local index = #record.layers + 1
+            if not owner.raw.overlay then
+                for i, layer in ipairs(record.layers) do
+                    if layer.raw.overlay then index = i; break end
+                end
+            end
+            table.insert(record.layers, index, owner)
             owner.views[win] = true
             M.refresh(win)
         end
@@ -152,15 +169,12 @@ function M.new(buf)
         for win in pairs(owner.views) do
             local record = windows[win]
             if record then
-                local top = record.layers[#record.layers] == owner
                 remove(record, owner)
-                if top then
-                    local value = value_for(win, record)
-                    local target = value.winbar and value or record.before
-                    restore(win, record, target)
-                    record.installed = target
-                    if not value.winbar then windows[win] = nil end
-                end
+                local value = value_for(win, record)
+                local target = value.winbar and value or record.before
+                restore(win, record, target)
+                record.installed = target
+                if not value.winbar then windows[win] = nil end
             end
             owner.views[win] = nil
         end

@@ -80,6 +80,9 @@ Full-flow, single close boundary. Detailed design: [breadcrumb winbar plan](../p
 - Same-head focused replay of those two specs passes43 cases in `/tmp/parley353-cliproxy-repro.log`; no cliproxy source or fixture was edited. Filed separate unclaimed flake issues #360 (catalog) and #361 (auth), each with head, assertion, first-seen date, logs and deterministic-investigation Done when. Applying the approved issue-backed flake rule: one unchanged full-suite retry on f4239bcc, no waiver; if that fails, report the remaining blocker rather than blind retries.
 - Real/fake sdlc resolver conformance passes all6 cases through production run_resolve/parse/dispatch using an isolated temporary Git repository (`/tmp/parley353-sdlc-conformance.log`).
 
+- The one unchanged issue-backed retry passed448/448 spec files, lint749 clean, no survivors on f4239bccc3af35cd6fd0cbe65fafb1f128b45bb1; log /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/f4239bccc3af35cd6fd0cbe65fafb1f128b45bb1/suite.log, SHA256 4ed6914d565b6c50d3d49e8a592a82da850edb9d2c01071c069052a7c12ccf04. Both earlier failures remain linked to #360/#361. No waiver.
+- A focused pre-close ownership probe then reproduced a real remaining #353 bug: pending-move fallback rendered unknown/WarningMsg over an attached operator lock. Durable RED /tmp/parley353-overlay-red.log reproduces both real pending recovery and refresh-overlay ordering; /tmp/parley353-overlay-knowledge-red.log proves fallback errors were also inventing free state from severity. Fixed the full class with explicit overlay inputs, underlying state ownership, stable overlay ordering, recomposition after either owner detaches, and plain/unknown fallback knowledge. /tmp/parley353-overlay-final-green.log passes18 real window cases +6 composition cases; changed-file lint clean. The final full suite will run on the new production head.
+
 ## Revisions
 
 ### 2026-10-16 — #354 persisted-trail coordination

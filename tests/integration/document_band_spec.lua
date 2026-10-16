@@ -9,7 +9,7 @@ describe("shared document bands", function()
     local function observe(item)
         return { winbar = vim.wo[item.win].winbar, winhighlight = vim.wo[item.win].winhighlight }
     end
-    local function expect_view(item, label, highlight)
+    local function expect_view(item, label, highlight, cell_override, base_override)
         local cell, detail, base = "free     ", label, highlight
         if label == "free: editing takes your turn" then detail = ""
         elseif label == "your turn, Alt+Return to submit" then cell, detail = "yours ●  ", ""
@@ -19,6 +19,7 @@ describe("shared document bands", function()
         elseif highlight == "WarningMsg" then cell = "unknown  "
         end
         if highlight == "DiagnosticError" or highlight == "DiagnosticOk" then base = "ParleySessionSyncFree" end
+        cell, base = cell_override or cell, base_override or base
         local bar = "%#" .. base .. "#" .. cell
         if detail ~= "" then bar = bar .. " %#" .. highlight .. "#" .. detail:gsub("%%", "%%%%") end
         assert.same({ winbar = bar .. "%=", winhighlight = "StatusLine:" .. base }, observe(item))
@@ -84,11 +85,16 @@ describe("shared document bands", function()
         vim.fn.delete(root, "rf")
     end)
 
-    it("renders unknown membership identically for both file kinds", function()
+    it("renders a shared unknown fallback and preserves an attached session lock when present", function()
         vim.env.FAKE_COUCH_REGISTRY_MODE = "unsupported"
         local typed = open("typed-unknown", true)
         p.setup_markdown_keymaps(typed.buf)
         await(function() return document.status(typed.buf).phase == "unknown" end)
+        assert.equals("StatusLine:ParleySessionSyncFree", vim.wo[typed.win].winhighlight)
+        assert.truthy(vim.wo[typed.win].winbar:find("Couch unavailable: agentic state unknown", 1, true))
+        -- Membership uncertainty cannot replace an already attached lock view.
+        -- Once that owner detaches, the same fallback is used by either kind.
+        ss.detach(typed.buf)
         expect_view(typed, "Couch unavailable: agentic state unknown", "WarningMsg")
         local typed_view = observe(typed)
         local ordinary = open("unknown")
@@ -98,7 +104,7 @@ describe("shared document bands", function()
         assert.same(typed_view, observe(ordinary))
     end)
 
-    it("renders a pre-attachment submit error identically to attached session feedback", function()
+    it("shares error text while retaining proven-plain and attached lock knowledge", function()
         local typed = open("typed", true); ss.attach(typed.buf)
         local ordinary = open("unresolved")
         p.setup_markdown_keymaps(ordinary.buf)
@@ -108,8 +114,8 @@ describe("shared document bands", function()
         local message = "submit failed: cannot resolve this pane's agent"
         await(function() return vim.wo[ordinary.win].winbar:find(message, 1, true) ~= nil end)
         assert.is_true(ss.set_submission_feedback(typed.buf, message, true))
-        assert.same(observe(typed), observe(ordinary))
-        expect_view(ordinary, message, "DiagnosticError")
+        expect_view(typed, message, "DiagnosticError")
+        expect_view(ordinary, message, "DiagnosticError", "         ", "WinBar")
     end)
 
     local function pair()
@@ -135,7 +141,8 @@ describe("shared document bands", function()
         end)
         local label = feedback_label(ordinary)
         assert.is_true(ss.set_submission_feedback(typed.buf, label, is_error))
-        equivalent(typed, ordinary, label, is_error and "DiagnosticError" or "DiagnosticOk")
+        expect_view(typed, label, is_error and "DiagnosticError" or "DiagnosticOk")
+        expect_view(ordinary, label, is_error and "DiagnosticError" or "DiagnosticOk", "unknown  ", "WarningMsg")
         return label
     end
 
@@ -255,7 +262,10 @@ describe("shared document bands", function()
         p.setup_markdown_keymaps(ordinary.buf)
         local label = "Pending document move: open " .. destination .. " to recover"
         await(function() return feedback_label(ordinary) == label end)
-        expect_view(ordinary, label, "WarningMsg")
+        assert.is_truthy(ss.identity(ordinary.buf), "known pending document retains its attachment")
+        assert.equals("StatusLine:ParleySessionSyncOperator", vim.wo[ordinary.win].winhighlight)
+        assert.truthy(vim.wo[ordinary.win].winbar:find("yours", 1, true))
+        assert.is_nil(vim.wo[ordinary.win].winbar:find("unknown", 1, true))
     end)
 
     it("restores original options after unknown-to-registered handoff and detach", function()
@@ -343,6 +353,31 @@ describe("shared document bands", function()
         coordinator.clear()
         expect_view(item, free.label, free.hl)
         session.clear()
+        assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(item))
+    end)
+
+    it("keeps a pending overlay above refreshed lock state without hiding the lock cell", function()
+        local item = open("overlay-held", true); ss.attach(item.buf)
+        vim.api.nvim_buf_set_lines(item.buf, -1, -1, false, { "unsent" })
+        local overlay = renderer(item)
+        overlay.render({ overlay = true, state = "unknown", hl = "WarningMsg",
+            feedback = { label = "Pending document move", hl = "WarningMsg" } })
+        assert.truthy(vim.wo[item.win].winbar:find("yours ●", 1, true))
+        assert.truthy(vim.wo[item.win].winbar:find("Pending document move", 1, true))
+        assert.equals("StatusLine:ParleySessionSyncOperator", vim.wo[item.win].winhighlight)
+        assert.is_true(ss.set_submission_feedback(item.buf, "new state receipt", false))
+        assert.truthy(vim.wo[item.win].winbar:find("Pending document move", 1, true))
+        assert.truthy(vim.wo[item.win].winbar:find("yours ●", 1, true))
+        overlay.clear()
+        assert.truthy(vim.wo[item.win].winbar:find("new state receipt", 1, true))
+        assert.truthy(vim.wo[item.win].winbar:find("yours ●", 1, true))
+        assert.equals("StatusLine:ParleySessionSyncOperator", vim.wo[item.win].winhighlight)
+        overlay.render({ overlay = true, state = "unknown", hl = "WarningMsg",
+            feedback = { label = "Pending document move", hl = "WarningMsg" } })
+        ss.detach(item.buf)
+        assert.equals("StatusLine:WarningMsg", vim.wo[item.win].winhighlight)
+        assert.truthy(vim.wo[item.win].winbar:find("unknown", 1, true))
+        overlay.clear()
         assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(item))
     end)
 
