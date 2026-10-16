@@ -1,12 +1,12 @@
 ---
 id: 000345
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '449354728e33338d51b48a0fbc1ca8a869131eee' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '39e5c915ce33c90f35645ea9fd5d99cb978fd7f1' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T01:01:31-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 1.07
 ---
 
 # Restart path blocks the main loop on a synchronous lsof (and stop's identity probe)
