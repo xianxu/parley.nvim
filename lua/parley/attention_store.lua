@@ -15,7 +15,8 @@ local M = {}
 
 local TRIES, DELAY_MS = 10, 25
 
-local OPTIONAL = { answered_at = "number", seen_at = "number", breadcrumb = "table", unknown = "string" }
+local OPTIONAL = { answered_at = "number", seen_at = "number", breadcrumb = "table", unknown = "string",
+    recorded_at = "number", kind = "string", parent = "string" }
 
 -- One stored entry as a typed entry, or nil with why it cannot be one. A wrong
 -- optional field is dropped; a wrong required one drops the entry.
@@ -65,6 +66,10 @@ function M.parse(decoded, label)
         if clean then state.entries[key] = clean end
         if lossy then dropped = dropped + 1 end
     end
+    for path, at in pairs(type(decoded.retired) == "table" and decoded.retired or {}) do
+        if type(path) == "string" and type(at) == "number" then state.retired[path] = at else dropped = dropped + 1 end
+    end
+    if decoded.retired ~= nil and type(decoded.retired) ~= "table" then dropped = dropped + 1 end
     if dropped > 0 then
         logger.warning(("Ignoring malformed parts of %d attention entr%s of %s"):format(dropped,
             dropped == 1 and "y" or "ies", label))

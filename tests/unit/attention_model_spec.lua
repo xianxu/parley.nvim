@@ -226,3 +226,58 @@ describe("attention_model bound, list and answered_unseen", function()
         assert.equals(1, Model.answered_unseen(state))
     end)
 end)
+
+describe("attention_model side docs", function()
+    local function discovered(path, parent, at) return { type = "discovered", path = path, parent = parent, at = at } end
+
+    it("a discovered side doc is answered, not yet seen, and leaves by the same rule", function()
+        local state = run({ { discovered("/a.side/s.md", "/a.md", 50), 60 } })
+        local entry = state.entries["/a.side/s.md"]
+        assert.equals("answered", Model.state_of(entry))
+        assert.same({ "side", "/a.md", 50, 60 }, { entry.kind, entry.parent, entry.submitted_at, entry.recorded_at })
+        state = run({ { { type = "opened", path = "/a.side/s.md" }, 70 }, { { type = "sweep", grace = 10 }, 79 } }, state)
+        assert.equals("seen", state_of(state, "/a.side/s.md"))
+        state = run({ { { type = "sweep", grace = 10 }, 80 } }, state)
+        assert.equals("absent", state_of(state, "/a.side/s.md"))
+        assert.equals(80, state.retired["/a.side/s.md"])
+    end)
+
+    it("a retired or already-known path is never rediscovered", function()
+        local state = run({
+            { submitted("/a.side/s.md", "m1"), 10 },
+            { discovered("/a.side/s.md", "/a.md", 50), 60 },
+        })
+        assert.equals("waiting", state_of(state, "/a.side/s.md"))
+        state = Model.empty()
+        state.retired["/b.side/t.md"] = 5
+        state = Model.transition(state, discovered("/b.side/t.md", "/b.md", 50), 60)
+        assert.equals("absent", state_of(state, "/b.side/t.md"))
+    end)
+
+    it("an evicted side doc is retired too, and the retired set stays bounded", function()
+        local state = Model.empty()
+        for i = 1, Model.LIMIT do
+            state = Model.transition(state, discovered(("/s%03d.md"):format(i), "/p.md", i), i)
+        end
+        state = Model.transition(state, discovered("/extra.md", "/p.md", 1000), 1000)
+        assert.is_nil(state.entries["/s001.md"])
+        assert.equals(1000, state.retired["/s001.md"])
+        -- A full retired set drops its oldest path when one more retires.
+        state = Model.empty()
+        for i = 1, Model.LIMIT do state.retired["/r" .. i] = i end
+        state = run({ { discovered("/new.md", "/p.md", 1), 3000 }, { { type = "opened", path = "/new.md" }, 3001 },
+            { { type = "sweep", grace = 0 }, 3002 } }, state)
+        assert.equals(Model.LIMIT, vim.tbl_count(state.retired))
+        assert.is_nil(state.retired["/r1"])
+        assert.equals(3002, state.retired["/new.md"])
+    end)
+
+    it("a batch applies its events in order, as one change", function()
+        local state = Model.transition(Model.empty(), { type = "batch", events = {
+            discovered("/a.side/1.md", "/a.md", 5), discovered("/a.side/2.md", "/a.md", 6),
+            { type = "opened", path = "/a.side/1.md" },
+        } }, 10)
+        assert.same({ "/a.side/2.md", "/a.side/1.md" }, vim.tbl_map(function(e) return e.path end, Model.list(state)))
+        assert.equals("seen", state_of(state, "/a.side/1.md"))
+    end)
+end)

@@ -116,6 +116,49 @@ function M.refresh(options, on_change, on_done)
     start()
 end
 
+--- Whether `lines` (the head of a file) open with frontmatter `type: side-doc`.
+function M.is_side_doc(lines)
+    if lines[1] ~= "---" then return false end
+    for i = 2, #lines do
+        if lines[i] == "---" then return false end
+        local kind = lines[i]:match("^type:%s*(.-)%s*$")
+        if kind then return kind:gsub("^[\"']", ""):gsub("[\"']$", "") == "side-doc" end
+    end
+    return false
+end
+
+local SIDE_HEAD_LINES = 12
+
+--- `discovered` events for the side docs the agent wrote: every `*.md` with
+--- frontmatter `type: side-doc` in the `.side/` folder of an entry already
+--- in the finder, written after that entry entered it, and neither an entry
+--- nor retired. Side docs are entries too, so nesting is found on the next scan.
+function M.discover(state)
+    local uv = vim.uv or vim.loop
+    local events, seen = {}, {}
+    for _, entry in pairs(state.entries) do
+        local folder = vim.fn.fnamemodify(entry.path, ":r") .. ".side"
+        local since = entry.kind == "side" and entry.submitted_at or (entry.recorded_at or entry.submitted_at)
+        local scan = uv.fs_scandir(folder)
+        while scan do
+            local name, kind = uv.fs_scandir_next(scan)
+            if not name then break end
+            local path = folder .. "/" .. name
+            local stat = (kind == "file" or kind == "link") and name:match("%.md$") and uv.fs_stat(path)
+            if stat and stat.type == "file" and stat.mtime.sec > since and not seen[path]
+                and not state.entries[path] and not state.retired[path] then
+                local ok, head = pcall(vim.fn.readfile, path, "", SIDE_HEAD_LINES)
+                if ok and M.is_side_doc(head) then
+                    seen[path] = true
+                    events[#events + 1] = { type = "discovered", path = path, parent = entry.path, at = stat.mtime.sec }
+                end
+            end
+        end
+    end
+    table.sort(events, function(x, y) return x.path < y.path end)
+    return events
+end
+
 local function define_highlights()
     local groups = {
         ParleyAttentionWaiting = { link = "Normal" },
@@ -147,16 +190,16 @@ local function select(path, seam, on_done)
     Store.apply({ type = "opened", path = path }, seam.store, function() if on_done then on_done() end end)
 end
 
---- Open the finder: sweep, list the stored entries at once, then probe the
---- waiting ones and repaint as their results land.
+--- Open the finder: sweep, add the side docs the agent wrote, list the
+--- stored entries at once, then probe the waiting ones and repaint as their
+--- results land.
 ---@param options table|nil # { run, picker, history, limit, store, home } for tests
 function M.open(options)
     local seam = seams(options)
     local home = (options and options.home) or vim.env.HOME
     define_highlights()
     local function items(state) return Rows.items(Model.list(state), { home = home }) end
-    Store.apply({ type = "sweep", grace = Store.grace_seconds() }, seam.store, function(swept)
-        local state = swept or Store.load()
+    local function show(state)
         local handle
         handle = seam.picker.open({
             title = "Attention",
@@ -168,6 +211,14 @@ function M.open(options)
             local selected = handle.selected and handle.selected()
             handle.update(items(next_state), nil, selected and selected.value or nil)
         end, options and options.on_refreshed)
+    end
+    Store.apply({ type = "sweep", grace = Store.grace_seconds() }, seam.store, function(swept)
+        local state = swept or Store.load()
+        local events = M.discover(state)
+        if #events == 0 then return show(state) end
+        Store.apply({ type = "batch", events = events }, seam.store, function(found)
+            show(found or Store.load())
+        end)
     end)
 end
 

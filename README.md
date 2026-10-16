@@ -77,8 +77,9 @@ for the command and configuration.
 Press **Alt+u** (`:ParleyAttention`) to list every file you submitted with
 Alt+Return, newest first: **waiting** while the agent still owes it, **answered**
 once the agent has folded the submit, and **seen**, dimmed, once you have opened
-it from the finder. Opening an entry restores the trail of files it had when you
-submitted it. A seen entry leaves the list `attention.seen_grace_minutes` later
+it from the finder. New side docs the agent writes in a listed file's `.side/`
+folder appear too, as answered (`↳`). Opening an entry restores the trail of
+files it had when you submitted it. A seen entry leaves the list `attention.seen_grace_minutes` later
 (default 60); a new submit makes it waiting again. See the
 [attention finder](atlas/ui/attention_finder.md).
 

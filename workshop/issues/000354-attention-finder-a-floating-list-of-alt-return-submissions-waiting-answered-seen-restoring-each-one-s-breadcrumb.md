@@ -36,11 +36,15 @@ back when the agent answers a submitted file. Operator design, 2026-10-16 (ops Q
 - **Each entry stores the breadcrumb** (the per-file trail from the breadcrumb issue) at submit time; jumping from the
   finder restores that trail, so the tree stays intact.
 - **One free Alt chord** opens it in Couch's nvim; the session file's winbar may show a count of answered-but-unseen.
+- **Side docs the agent writes** (operator addition, 2026-10-16): a new `type: side-doc` file in the `.side/` folder of
+  a file already in the finder appears as **answered, not yet seen**, and leaves by the same rule (opened from the
+  finder, then the grace).
 
 ## Done when
 
 - Tests: entries appear on submit; state transitions (waiting, answered via a fold, seen on open); breadcrumb
-  restored on jump; typeahead; then the operator's live check.
+  restored on jump; typeahead; a new side doc listed as answered and leaving by the same rule; then the operator's live
+  check.
 
 ## Estimate
 

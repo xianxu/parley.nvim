@@ -20,8 +20,9 @@ local function basename(path)
     return path:match("([^/]*)$")
 end
 
---- `entries` as float_picker items: `<state> [?] <name>  <dir>  <HH:MM>`.
---- `?` marks an entry whose last probe failed. options: { home, clock }
+--- `entries` as float_picker items: `<state> <marker> <name>  <dir>  <HH:MM>`.
+--- The marker is `?` for an entry whose last probe failed, `↳` for a side doc
+--- the agent wrote (searchable by its parent's name). options: { home, clock }
 --- where clock(seconds) formats a submit time (os.date by default).
 function M.items(entries, options)
     options = options or {}
@@ -35,12 +36,13 @@ function M.items(entries, options)
         if home and home ~= "" and (dir == home or dir:sub(1, #home + 1) == home .. "/") then
             shown = "~" .. dir:sub(#home + 1)
         end
-        local display = ("%-8s %s %s  %s  %s"):format(state, entry.unknown and "?" or " ",
+        local marker = entry.unknown and "?" or (entry.kind == "side" and "↳" or " ")
+        local display = ("%-8s %s %s  %s  %s"):format(state, marker,
             basename(entry.path), shown, clock(entry.submitted_at))
         items[#items + 1] = {
             display = display,
             value = entry.path,
-            search_text = basename(entry.path) .. " " .. dir,
+            search_text = basename(entry.path) .. " " .. dir .. (entry.parent and (" " .. basename(entry.parent)) or ""),
             highlights = { { 0, #display, M.GROUPS[state] } },
         }
     end

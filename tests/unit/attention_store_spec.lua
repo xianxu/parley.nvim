@@ -69,6 +69,8 @@ describe("attention_store", function()
         { "an entry keyed by another path", { version = 1, entries = { ["/a.md"] = { path = "/b.md", pending = {}, submitted_at = 1 } } } },
         { "an entry without a submit time", { version = 1, entries = { ["/a.md"] = { path = "/a.md", pending = {} } } } },
         { "an entry with a scalar pending", { version = 1, entries = { ["/a.md"] = { path = "/a.md", pending = 3, submitted_at = 1 } } } },
+        { "a scalar retired set", { version = 1, entries = {}, retired = 3 } },
+        { "a retired path with a string time", { version = 1, entries = {}, retired = { ["/s.md"] = "x" } } },
     }
     for _, case in ipairs(corrupt) do
         it("reads " .. case[1] .. " as no entries, warning once", function()
@@ -77,6 +79,15 @@ describe("attention_store", function()
             assert.equals(1, #warnings)
         end)
     end
+
+    it("round-trips side docs and retired paths", function()
+        apply({ type = "discovered", path = "/a.side/s.md", parent = "/a.md", at = 5 }, { now = 10 })
+        apply({ type = "opened", path = "/a.side/s.md" }, { now = 11 })
+        local state = apply({ type = "sweep", grace = 0 }, { now = 12 })
+        assert.same({ ["/a.side/s.md"] = 12 }, state.retired)
+        assert.same(state, Store.load())
+        assert.same({}, warnings)
+    end)
 
     it("reads a missing or unparseable file as empty", function()
         assert.same(Model.empty(), Store.load())

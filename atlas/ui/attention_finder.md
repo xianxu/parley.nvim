@@ -1,6 +1,6 @@
 # Spec: Attention Finder (#354)
 
-Every file submitted with Alt+Return that Couch accepted is listed as **waiting**, **answered** or **seen**, so the operator can find what came back. Open it with `<M-u>` or `:ParleyAttention` (configured by `global_shortcut_attention`).
+Every file submitted with Alt+Return that Couch accepted, and every new side doc the agent writes for one, is listed as **waiting**, **answered** or **seen**, so the operator can find what came back. Open it with `<M-u>` or `:ParleyAttention` (configured by `global_shortcut_attention`).
 
 ## States
 - One pure transition, `attention_model.transition`, owns every change. States are derived, never stored:
@@ -11,6 +11,10 @@ Every file submitted with Alt+Return that Couch accepted is listed as **waiting*
 - An observation removes only the IDs captured when its probe started, so a stale probe can't answer a newer submit. A failed probe only marks the entry `unknown`.
 - A new submit resets the entry to waiting. A seen entry leaves `attention.seen_grace_minutes` (default 60) after it was opened. Answered and waiting entries never expire.
 - The bound is 256 entries: seen go first, then answered. Waiting entries are never dropped; when all 256 are waiting, a new file's submit is refused with a warning.
+
+## Side docs
+- A new side doc the agent writes is listed as **answered**, marked `↳`, and leaves by the same rule. On every open, `attention.discover` scans the `.side/` folder of each entry: a `*.md` with frontmatter `type: side-doc`, written after its parent entered the finder, becomes a `discovered` event (applied as one `batch`). Side docs are entries, so their own `.side/` folders are scanned on the next open.
+- A side doc that leaves is `retired` (at most 256), so a scan never brings it back; only new files count, not rewrites. Parley sees no agent writes, so this is a scan when the operator looks, not a file watcher.
 
 ## Recording
 - The one hook is in `session_sync`'s `release_and_send`, which both Alt+Return paths reach (agentic documents via `send_registered`, and `type: session-sync` files). It takes the breadcrumb through #353's `file_history.snapshot(win)` before sending, and calls `attention.record` when the send succeeds, before the engine's stale-state guard.

@@ -73,7 +73,7 @@ All verified in the code on 2026-10-16.
 |------|----------|--------|-------|
 | `attention_store` | `lua/parley/attention_store.lua` | new | the JSON file `state_dir/attention/attention.json`: `dir`, `path`, `parse`, `load`, `apply`, `grace_seconds` |
 | `couch.query` | `lua/parley/couch.lua` | modified | the couch CLI: `query` takes `options` for vim.system (the probe timeout) |
-| `attention` | `lua/parley/attention.lua` | new | the couch CLI, the editor, #353's seam: `record`, `parse_message_id`, `breadcrumb`, `observation`, `refresh`, `open` |
+| `attention` | `lua/parley/attention.lua` | new | the couch CLI, the editor, #353's seam: `record`, `parse_message_id`, `breadcrumb`, `observation`, `refresh`, `open`, `discover`, `is_side_doc` |
 | `release_and_send` | `lua/parley/session_sync.lua:802` | modified | records a submit |
 
 - **attention_store:** `load()` and `apply(event, on_done)`.
@@ -229,3 +229,8 @@ All verified in the code on 2026-10-16.
   - BR-11 (Important, second in plan-test-strategy-drift): Task 5's typeahead and cursor-keeping now run on the real `float_picker`. A typed filter and the selected row survive a repaint that inserts another editor's newer row above the cursor, and Enter opens the chosen row; dropping the repaint's selection identity fails it. The after-close case also runs on the real picker: it is cancelled before the probe lands, and the probe still reaches the store.
   - Class sweep of Task 5's strategy line against specs: list and live fold; select answered, waiting and missing; refused restore; `?`; the limit of 4; typeahead and cursor (real picker); the grace; after close (real picker). Each has a spec.
   - Minor: probes are bounded by a 5 s timeout through `couch.query`'s new `options`; expiry reads as failed (`?`), never as answered.
+- **2026-10-16, scope addition (the operator, via the TL): side docs.** New side docs (and answer docs) the agent writes appear as answered, not yet seen, and leave by the same rule. The mechanism (sent to the TL) is a scan, not a watch:
+  - on every finder open, `attention.discover` lists the `.side/` folder of each entry already in the finder. A `*.md` with frontmatter `type: side-doc` (`attention.is_side_doc`, the head of the file only), written after its parent entered the finder (`recorded_at`; for a side-doc parent, its own time), becomes a `discovered` event. Parley sees no agent writes, so a watch would need a watcher per folder, with its own lifetimes, for the same result at the moment the operator looks;
+  - the model's `discovered` creates `{kind = "side", parent, pending = {}}`, which is answered. The scan's events apply as one `batch` (one store write). Side docs are entries, so nested side docs are found on the next open;
+  - a side doc that leaves (sweep or bound) is `retired` (at most 256, the oldest drop first), so a later scan never brings it back. A rewrite of a seen side doc does not resurface it (only new files count). The row marker is `↳`, and the parent's name is searchable;
+  - I found no separate answer-doc type in ariadne or ops; the TL was asked for the rule if answer docs differ.

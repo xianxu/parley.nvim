@@ -318,3 +318,74 @@ describe("attention finder", function()
         assert.equals("function", type(p.cmd.Attention))
     end)
 end)
+
+describe("attention finder: side docs the agent wrote", function()
+    local function side(parent, name, lines, mtime)
+        local folder = vim.fn.fnamemodify(parent, ":r") .. ".side"
+        vim.fn.mkdir(folder, "p")
+        local path = folder .. "/" .. name
+        vim.fn.writefile(lines, path)
+        if mtime then assert((vim.uv or vim.loop).fs_utime(path, mtime, mtime)) end
+        return path
+    end
+    local DOC = { "---", "type: side-doc", "parent: ../a.md", "---", "", "# Answer" }
+
+    before_each(function()
+        root = vim.fn.resolve(vim.fn.tempname()); vim.fn.mkdir(root, "p")
+        registry = root .. "/registry.json"
+        Couch.write(root, root .. "/sent", root .. "/argv")
+        saved = { path = vim.env.PATH, registry = vim.env.FAKE_COUCH_REGISTRY, state_dir = p.config.state_dir,
+            attention = p.config.attention }
+        vim.env.PATH = root .. "/bin:" .. vim.env.PATH
+        vim.env.FAKE_COUCH_REGISTRY = registry
+        p.config.state_dir = root .. "/state"
+        p.config.attention = { seen_grace_minutes = 60 }
+        now = 1000
+    end)
+    after_each(function()
+        vim.env.PATH, vim.env.FAKE_COUCH_REGISTRY = saved.path, saved.registry
+        p.config.state_dir, p.config.attention = saved.state_dir, saved.attention
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("lists a new side doc as answered, leaving by the same rule, and never brings it back", function()
+        local a = submitted("a.md", "m1")
+        local doc = side(a, "01-answer.md", DOC, 2000)
+        side(a, "notes.md", { "# not a side doc" }, 2000)
+        side(a, "00-old.md", DOC, 900) -- written before a.md entered the finder
+        now = 2100
+        local picker = fake_picker()
+        open({ picker = picker })
+        assert.same({ "answered ↳ 01-answer.md  ~/a.side", "waiting    a.md  ~" }, picker.rows())
+        assert.equals(a, Store.load().entries[doc].parent)
+        -- Opened from the finder: seen; past the grace: gone, and not rediscovered.
+        apply({ type = "opened", path = doc })
+        now = now + 3600
+        picker = fake_picker()
+        open({ picker = picker })
+        assert.same({ "waiting    a.md  ~" }, picker.rows())
+        assert.is_truthy(Store.load().retired[doc])
+    end)
+
+    it("finds a side doc's own side docs on the next open", function()
+        local a = submitted("a.md", "m1")
+        local doc = side(a, "01.md", DOC, 2000)
+        local nested = side(doc, "02.md", DOC, 2001)
+        now = 2100
+        open({ picker = fake_picker() })
+        assert.is_nil(Store.load().entries[nested])
+        local picker = fake_picker()
+        open({ picker = picker })
+        assert.is_truthy(Store.load().entries[nested])
+        assert.equals(doc, Store.load().entries[nested].parent)
+    end)
+
+    it("reads the side-doc type from frontmatter only", function()
+        assert.is_true(Attention.is_side_doc({ "---", "type: side-doc", "---" }))
+        assert.is_true(Attention.is_side_doc({ "---", "parent: x", 'type: "side-doc"', "---" }))
+        assert.is_false(Attention.is_side_doc({ "---", "type: pensive", "---" }))
+        assert.is_false(Attention.is_side_doc({ "# title", "type: side-doc" }))
+        assert.is_false(Attention.is_side_doc({ "---", "title: x", "---", "type: side-doc" }))
+        assert.is_false(Attention.is_side_doc({}))
+    end)
+end)

@@ -17,6 +17,7 @@ describe("attention_rows.items", function()
         { "answered", entry("/srv/a.md", { answered_at = 700 }), "answered   a.md  /srv  10:00", "ParleyAttentionAnswered" },
         { "seen", entry("/srv/s.md", { answered_at = 700, seen_at = 800 }), "seen       s.md  /srv  10:00", "ParleyAttentionSeen" },
         { "unknown", entry("/srv/u.md", { pending = { m1 = 600 }, unknown = "unsupported" }), "waiting  ? u.md  /srv  10:00", "ParleyAttentionWaiting" },
+        { "side", entry("/srv/a.side/s.md", { answered_at = 600, kind = "side", parent = "/srv/a.md" }), "answered ↳ s.md  /srv/a.side  10:00", "ParleyAttentionAnswered" },
     }
     for _, case in ipairs(cases) do
         it("renders a " .. case[1] .. " entry", function()
@@ -24,7 +25,8 @@ describe("attention_rows.items", function()
             assert.equals(case[3], item.display)
             assert.same({ { 0, #case[3], case[4] } }, item.highlights)
             assert.equals(case[2].path, item.value)
-            assert.equals(vim.fn.fnamemodify(case[2].path, ":t") .. " " .. vim.fn.fnamemodify(case[2].path, ":h"), item.search_text)
+            local parent = case[2].parent and (" " .. vim.fn.fnamemodify(case[2].parent, ":t")) or ""
+            assert.equals(vim.fn.fnamemodify(case[2].path, ":t") .. " " .. vim.fn.fnamemodify(case[2].path, ":h") .. parent, item.search_text)
         end)
     end
 
