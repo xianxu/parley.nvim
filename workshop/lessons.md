@@ -544,3 +544,8 @@ oracle, and the mutation that would make the test fail.
 - A multiline inline scanner needs an explicit block-containment rule, not only blank/fence checks. Enumerate heading forms, thematic breaks, quotes, list/chat starts and range edges, with positive supported starts as well as negative joins.
 
 - Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.
+
+## 2026-10-15 (#338 — starter tutorials under project mode)
+
+- When a finding names one spec that breaks under an environment, run the whole suite in that environment before fixing that spec: here it was 14 files, and the cause was a harness invariant (scratch outside any marked project), not each spec. Guard the invariant once at the writer (scratch_placement_spec), and keep per-spec opt-outs out of specs that test the opted-out behavior.
+- Seeding shipped content follows the owner's root, not the current primary root: project mode re-primaries chat_dir, so anything the starter installs must use the profile directory captured before setup().

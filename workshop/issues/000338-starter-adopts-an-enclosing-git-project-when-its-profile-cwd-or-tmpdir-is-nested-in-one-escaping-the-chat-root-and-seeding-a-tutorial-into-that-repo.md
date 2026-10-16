@@ -45,6 +45,7 @@ The starter's chat root and tutorial seeding must stay inside the editor profile
 | --- | --- | --- | --- | --- |
 | `starter` | INTEGRATION | modified | `lua/parley/starter.lua` | Seeds and opens the bundled tutorials in the profile's own chat directory, whatever primary chat root project mode selects. |
 | `packaging_vm_spec` | INTEGRATION | modified | `tests/integration/packaging_vm_spec.lua` | Host-side guest emulation stays hermetic to marked ancestors, as the launcher does. |
+| `scratch_placement_spec` | INTEGRATION | modified | `tests/arch/scratch_placement_spec.lua` | Harness guard: test scratch has no project-marked ancestor. |
 | `starter_project_spec` | INTEGRATION | modified | `tests/integration/starter_project_spec.lua` | Regression: a starter in a marked project, with TMPDIR inside it, writes no tutorial there. |
 
 ## Plan
@@ -55,6 +56,7 @@ Root cause (traced): the trigger is a `.parley` marker above cwd, not git. `repo
 - [x] Regression in starter_project_spec: a marked project with cwd and TMPDIR inside it. Assert repo mode engages as documented, no tutorial `.md` exists under `<project>/workshop/parley`, the tutorials exist under the profile chats, and the opened buffer is the profile's welcome.md. Show it fails before the fix.
 - [x] packaging_vm_spec guest: set `PARLEY_REPO_MODE=0` in the guest env, as the `parley_app` launcher does. The probe models a fresh VM profile with no project, so a marked host ancestor is outside its scenario. Then run that spec with TMPDIR inside this checkout and show it passes.
 - [x] Atlas starter entry: tutorials live in the profile even in project mode.
+- [x] BR-1 (class fix): `scratch_placement_spec` also requires that tempname() and $HOME have no `.parley`-marked ancestor, so every spec's "no project" scenario is protected at the harness rather than one spec at a time.
 - [x] Verify: focused starter_project and packaging_vm (TMPDIR in- and outside a checkout), then the full suite.
 
 Not in scope: whether the installed app should enter project mode at all. That is documented behavior; changing it is a product decision for the TL.
@@ -65,6 +67,7 @@ Not in scope: whether the installed app should enter project mode at all. That i
 
 ### 2026-10-15
 - Full suite (make -k test) on 544ef394: exit 0, lint clean (738 files); starter_project, starter_* and packaging_vm_spec PASS.
+- Close review round 1, BR-1 (Important): the starter_project no-marker case fails when TMPDIR sits inside this marked checkout. Class sweep: the full suite with TMPDIR inside the checkout failed 14 files (arch/scratch_placement, git_markdown_source, issue_card_view, issue_command, issue_finder_tracker, issue_tracker, issue_tracker_buffer, markdown_finder_async, packaging_release, open_reference, starter_bootstrap, starter_project, starter_config, zero_config) and left an empty chat in the checkout's workshop/parley, which I removed. That configuration already breaks the #202 harness invariant that scratch stays outside the repo, and scratch_placement_spec failed on it. The invariant's gap is a marked ancestor OUTSIDE this repo, which no guard covered. Fix at the harness: a guard case requiring tempname() and $HOME to have no `.parley`-marked ancestor. Red: TMPDIR under an outside marked directory fails it 6/1 with the reason. Green: 7/0 under the normal harness. Per-spec opt-outs were rejected: the no-marker case tests discovery, so it must not set PARLEY_REPO_MODE=0.
 
 ## Revisions
 

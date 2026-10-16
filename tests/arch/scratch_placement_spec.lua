@@ -48,4 +48,17 @@ describe("arch: harness scratch stays out of the repo tree", function()
             assert_outside_repo("$" .. var, vim.env[var])
         end)
     end
+
+    it("scratch has no project-marked ancestor", function()
+        -- Specs build profiles and "no project" scenarios under tempname(). A
+        -- marked ancestor anywhere above it, this repo or any other, puts every
+        -- such spec into project mode; the sweep under a TMPDIR in a marked
+        -- tree failed 14 files (#338). Fail here, once, with the reason.
+        local marker = require("parley.config").repo_marker
+        for label, path in pairs({ ["vim.fn.tempname()"] = vim.fn.tempname(), ["$HOME"] = vim.env.HOME }) do
+            local root = require("parley.repo_mode").detect_root(vim.fn.fnamemodify(path, ":h"), marker)
+            assert.is_nil(root, ("%s (%s) sits under %s, which carries %s; specs would enter project mode")
+                :format(label, path, tostring(root), marker))
+        end
+    end)
 end)
