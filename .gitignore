@@ -23,6 +23,7 @@
 /.agents/skills/xx-session-retro
 /.agents/skills/xx-tl-lead
 /.agents/skills/xx-tl-worker
+/.agents/skills/xx-universal-review
 /.agents/skills/xx-vocabulary
 /.agents/skills/xx-voice-apply
 /.agents/skills/xx-voice-gen
@@ -52,6 +53,7 @@
 /.claude/skills/xx-session-retro
 /.claude/skills/xx-tl-lead
 /.claude/skills/xx-tl-worker
+/.claude/skills/xx-universal-review
 /.claude/skills/xx-vocabulary
 /.claude/skills/xx-voice-apply
 /.claude/skills/xx-voice-gen

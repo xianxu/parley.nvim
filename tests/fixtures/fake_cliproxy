@@ -48,6 +48,12 @@ a successful POST /v1/chat/completions, orthogonal to the error modes above:
                        tool_loop recursion against a process instead of mocks.
   tool_call_parallel   same, but the first response calls TWO tools at distinct
                        array indices.
+  stream               a long SSE answer sent as PARLEY_FAKE_STREAM_DELTAS
+                       (default 200) separate content deltas, each written and
+                       flushed on its own and paced PARLEY_FAKE_STREAM_PACE_MS
+                       (default 2) apart, so the client sees many stdout chunks.
+                       Lines split across deltas. Text is a pure function of the
+                       count (stream_text below), so a spec can rebuild it (#229).
 
 Login modes (PARLEY_FAKE_LOGIN_MODE), used when invoked with a -*-login flag —
 the four ways #197's login could end:
@@ -121,6 +127,16 @@ def parse_args(argv):
 # missed-reload signal parley's restart rung reads. Modelling load time as
 # "first time we saw this content" makes the fake honest about it.
 _LOADED = {}
+
+
+def stream_deltas(count):
+    """The `stream` mode's deltas: a newline after every seventh, a multibyte
+    word in every fifth, so lines and UTF-8 text both cross delta boundaries."""
+    deltas = []
+    for i in range(1, count + 1):
+        word = ("caf\u00e9-%d" if i % 5 == 0 else "w%d") % i
+        deltas.append(word + ("\n" if i % 7 == 0 else " "))
+    return deltas
 
 
 def read_auth_store(auth_store):
@@ -371,6 +387,24 @@ def main():
                                         "finish_reason": "tool_calls"}]})
             return chunks
 
+        def _stream_deltas(self, deltas, pace_ms):
+            """Write each delta as its own flushed SSE event: the shape a busy
+            client receives in many reads, unlike _sse's single body."""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            events = [{"choices": [{"index": 0, "delta": {"role": "assistant", "content": d}}]}
+                      for d in deltas]
+            events.append({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+            for event in events:
+                self.wfile.write(b"data: " + json.dumps(event).encode() + b"\n\n")
+                self.wfile.flush()
+                if pace_ms > 0:
+                    time.sleep(pace_ms / 1000.0)
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+
         def _streamed_text(self, text):
             self._sse([
                 {"choices": [{"index": 0, "delta": {"role": "assistant", "content": text}}]},
@@ -397,6 +431,11 @@ def main():
             # rather than from a counter: a request carrying a role:"tool"
             # message is by definition the second leg, which makes this correct
             # under retries and concurrent buffers where a counter would drift.
+            if response_mode == "stream" and error_mode == "ok":
+                count = int(os.environ.get("PARLEY_FAKE_STREAM_DELTAS") or "200")
+                pace = int(os.environ.get("PARLEY_FAKE_STREAM_PACE_MS") or "2")
+                self._stream_deltas(stream_deltas(count), pace)
+                return
             if response_mode in ("tool_call", "tool_call_parallel") and error_mode == "ok":
                 try:
                     parsed = json.loads(raw_body or b"{}")
