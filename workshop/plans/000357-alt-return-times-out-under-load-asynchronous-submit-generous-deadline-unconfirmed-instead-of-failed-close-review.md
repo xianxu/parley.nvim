@@ -168,3 +168,126 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e246a391-1e00-4f78-b99d-45a0198180c0","repository":"github.com/xianxu/parley.nvim","issue_id":"000357","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/27c54d2b2c0b7e6c","reviewed_head":"0654d0bf54f697534fb29782b55f47117ef708d0","slot":"parley.nvim:4","requested_at":"2026-10-16T19:18:03.140912Z"},"phase":"finished","pid":26671,"started_at":"2026-10-16T19:18:03.375885Z","finished_at":"2026-10-16T19:24:52.984734Z","session_id":"1b603c97-e2b9-44cd-8a73-76054c77f4ce","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T12:36:30-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 357 — Alt+Return times out under load: asynchronous submit, generous deadline, unconfirmed instead of failed |
+| repo | parley.nvim |
+| issue file | workshop/issues/000357-alt-return-times-out-under-load-asynchronous-submit-generous-deadline-unconfirmed-instead-of-failed.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a936c96ce50bc9034e175915f691b0eebc690b33..a49f6b55d28f81945ba9d9200f2b1b2a49a40ccd |
+| command | sdlc close --issue 357 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T12:36:30-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+Disposing round-1 findings: verifying the pure `resubmit` transition and its re-entrancy in the shell, then running the tests.
+
+I'll run the three touched spec files directly with the project's runner environment.
+
+Tests pass. Now reverting individual fixes to check the regression tests actually catch them.
+
+Rename-deadline revert stays green (the test's 2 s delay is below the old 2.5 s default). Next: revert the BufFilePost fix.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Round 1 fixed seven of its eight findings, and a revert-and-rerun proves it for the ones that change behaviour. The press on a pending registration now goes through the pure model, and BufFilePost gives the right recovery. With either fix reverted, its test fails. The one finding still open is BR-2. The rename stage's `timeout_ms` fix is in the code, but no test catches its removal. I reverted it and `agentic_document_spec` still passed. The cause is that the new rename-delay test sleeps 2 s, which is below the old 2500 ms default. Changing that delay to about 3 s closes the gap, so the code itself is right and the remaining work is one test change. The three touched spec files (`document_session_spec`, `agentic_document_spec`, `document_band_spec`) all pass at head.
+
+Done-when: current. The Revisions changed only who holds the lock at a send-stage deadline (TL option A). Every Done-when clause still matches what was built and is tested: a submit slower than 2.6 s that still succeeds without blocking, an unconfirmed result that then resolves from the receipt with exactly one delivery, and the move waits under the slow fake.
+
+**1. Strengths**
+- **Press on a pending registration (fixes BR-1):** "Confirm then submit" is now a pure transition. `retry{submit}` sets `args.resubmit` only for `register` (`lua/parley/document_session.lua:200`), and the `resubmit` effect is emitted only on a valid confirmation (`:341-343`). Three unit cases pin it, including a pending rename that must not resubmit. Reverting the effect fails both the unit spec and the integration spec.
+- **Submit timer always cleaned up:** the shell ends the submit and its timer on every outcome. A `reconcile` or `notify` calls `end_submit` (`lua/parley/agentic_document.lua:301-305`), and so does `detach` (`:~808`). The context-mismatch path in `pending()` emits `reconcile`, so it is covered too.
+- **BufFilePost recovery (fixes BR-3):** `agentic_document.lua:759-765` handles a timed-out destination lookup. The `:saveas` test checks the exact "rename back to OLD" message, then the `:file OLD` cancel path, then a successful rerun. Reverting the block fails that test.
+- **Defaults in one place (fixes BR-7):** `config_ms` (`:192-196`) falls back to the defaults in `config.lua`, and no 15000/5000 literals are left at call sites.
+
+**2. Critical findings**
+None.
+
+**3. Important findings**
+- **BR-2, still open (rename deadline has no regression test):** the fix is at `agentic_document.lua:272`. The test "a move whose rename stage outlasts the wait…" (`tests/integration/agentic_document_spec.lua:~393`) uses `FAKE_COUCH_REGISTRY_DELAY="2"`, which finishes inside the old 2500 ms default. Fix: raise the delay to "3" so that reverting the `timeout_ms` makes the rename go pending and the test fail.
+
+**4. Minor findings**
+- **BufFilePre preflight never runs under the slow fake:** this is the `bounded_request` call at `agentic_document.lua:705-708`, which only runs when the buffer has no cached identity. Every slow-fake test calls `registered()` first, so this branch is never reached. Its message ("move not confirmed … Run the move again") is correct, because nothing has been renamed yet; only the test is missing.
+
+**5. Test coverage notes**
+I reverted each fix in the disposable checkout and re-ran the specs:
+
+| Reverted fix | Result |
+|---|---|
+| `resubmit` effect | unit and integration specs fail |
+| BufFilePost `unconfirmed` block | integration spec fails (the `:saveas` case) |
+| rename `timeout_ms` | integration spec still passes (BR-2) |
+
+The integration specs run the real `vim.system` path against the stateful fake Couch registry.
+
+**6. Architectural notes**
+- **ARCH-DRY: pass.** Defaults come from one source.
+- **ARCH-PURE: pass.** The resubmit decision moved into the model. The deadline timer and the band stay shell state, as the Revision explains.
+- **ARCH-PURPOSE: pass**, apart from BR-2's missing test.
+- **ARCH-MOCK: pass.** The fake registry gains `FAKE_COUCH_REGISTRY_DELAY_OPS`, behind the same seam production uses.
+- **ARCH-CONSTRAINTS: pass.** Blocking waits are limited to the BufFilePre/BufFilePost preflights, and making those asynchronous is filed as #359.
+- **ARCH-SECURE: N/A.** No new untrusted input and no credentials.
+- **ARCH-ORDER: pass, with a note for #359.** The submit lifecycle is still several shell flags (`submitting`, `overdue`, `queued_submit`, `resolving`). An enum such as `idle|resolving|submitting|overdue` would make the legal combinations readable when #359 reworks this code.
+- **ARCH-FUNERAL: pass.** The submit timer is closed by `end_submit` and by `detach`, and nothing durable is created.
+
+**7. Plan revision recommendations**
+None. The Revisions already record the send-stage lock decision and the choice to test the deadline, join and late receipt in integration rather than in the model.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Pure retry{submit} to resubmit only for register (document_session.lua:200,343); reconcile and notify end_submit; reverting the effect fails the unit and integration specs.
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      The timeout_ms fix is at agentic_document.lua:272, but reverting it keeps agentic_document_spec green. The rename-delay test sleeps 2 s, under the old 2.5 s default. Raise FAKE_COUCH_REGISTRY_DELAY to 3 so the revert fails.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      BufFilePost unconfirmed branch (agentic_document.lua:759-765), atlas sentence corrected, and the saveas test fails when the branch is reverted.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      The Revision (TL option A) deliberately keeps the send-stage lock released, giving the stuck-answer rationale; the registry stage keeps the operator lock.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Added tests for the post-begin rename wait (DELAY_OPS=rename) and the BufFilePost timeout; the BufFilePre unidentified path is noted as a Minor follow-up.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      README.md:54-60 documents both keys, the submitting and not-confirmed states, the join rule and the move recovery.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      config_ms falls back to require("parley.config")[key]; no literal defaults remain at call sites.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      A Revision records that the deadline, join and late-receipt cases are shell-state integration tests; seconds now use ceil, and config.lua documents that background requests share the deadline.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: done-when-clause-tested
+    title: |
+      BufFilePre membership preflight (unidentified buffer) is never exercised under the slow fake
+    detail: |
+      This is the 2nd finding in family done-when-clause-tested. Rule: every bounded_request and registry.request call site needs a slow-fake test whose delay exceeds the old default. Remaining instances are agentic_document.lua:705-708 (BufFilePre, reached only without a cached identity) and the rename stage (BR-2).
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"0b31a673-7f16-43a1-b335-f91fa2510392","repository":"github.com/xianxu/parley.nvim","issue_id":"000357","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/68f731146be313fb","reviewed_head":"a49f6b55d28f81945ba9d9200f2b1b2a49a40ccd","slot":"parley.nvim:4","requested_at":"2026-10-16T19:31:11.5456Z"},"phase":"finished","pid":52162,"started_at":"2026-10-16T19:31:11.775884Z","finished_at":"2026-10-16T19:36:25.031455Z","session_id":"f4a3763f-257f-47e5-8c45-a8b911ba7df2","outcome":"returned"}] -->

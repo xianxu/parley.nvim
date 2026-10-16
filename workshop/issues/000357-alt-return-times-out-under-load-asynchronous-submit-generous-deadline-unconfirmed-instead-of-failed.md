@@ -134,3 +134,8 @@ There is no new pure entity. The pure model (`document_session`) already refuses
   - The defaults live only in config.lua.
   - Seconds round up.
   - The Plan's pure cases for the deadline, the join and the late receipt live in the shell's integration tests, because the deadline timer and the band are shell state. The model already refused a concurrent send.
+- 2026-10-16 Close review round 2, FIX-THEN-SHIP. Its rule: every timed call site needs a slow-fake test whose delay is past the old default.
+  - The rename-stage test now uses 3 s against the old 2.5 s. Reverting its deadline fails the test.
+  - New: an unregistered document's `:saveas` (BufFilePre's membership lookup) times out with "move not confirmed … Run the move again", nothing renamed, and the rerun works.
+  - New: a legacy session file's move, with a slow admission `register` (`DELAY_OPS=register`), says to run it again, and the rerun moves it.
+  - Every `bounded_request` and `registry.request` call site now has its slow-fake test: open, register, lookup, rename, the move preflights, and BufFilePre and BufFilePost.

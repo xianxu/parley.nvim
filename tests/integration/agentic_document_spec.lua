@@ -190,11 +190,53 @@ describe("agentic markdown admission", function()
             end)
         end)
 
+        it("an unregistered document's :saveas preflight times out before anything moved", function()
+            with_timeouts(15000, 500)
+            await(function() return document.status(buf).phase == "plain" end)
+            local target = root .. "/plain-renamed.md"
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            local ok, err = pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target))
+            assert.is_false(ok)
+            assert.truthy(tostring(err):find("move not confirmed: Couch did not answer within 1 s; nothing moved."
+                .. " Run the move again", 1, true), tostring(err))
+            assert.equals(0, vim.fn.filereadable(target))
+            vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+            config.agentic_move_timeout_ms = 5000
+            assert.is_true(pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target)))
+            assert.equals(1, vim.fn.filereadable(target))
+        end)
+
+        it("a legacy session file's move: a slow admission says to run it again, and the rerun moves it", function()
+            with_timeouts(15000, 500)
+            document.detach(buf); vim.api.nvim_buf_delete(buf, { force = true })
+            file = root .. "/legacy.md"
+            vim.fn.writefile({ "---", "type: session-sync", "owner: ops:0", "---", "body" }, file)
+            vim.cmd("edit " .. vim.fn.fnameescape(file)); buf = vim.api.nvim_get_current_buf()
+            require("parley").setup_markdown_keymaps(buf)
+            await(function() return document.status(buf) and document.status(buf).phase == "plain" end)
+            local target = root .. "/legacy-moved.md"
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "register"
+            local handled, moved, err = document.move_path(file, target)
+            assert.is_true(handled)
+            assert.is_nil(moved)
+            assert.equals("move not confirmed: Couch did not answer within 1 s; nothing moved. Run the move again", err)
+            assert.equals(1, vim.fn.filereadable(file))
+            assert.equals(0, vim.fn.filereadable(target))
+            vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+            config.agentic_move_timeout_ms = 5000
+            await(function() return not document.status(buf).operation end)
+            handled, moved, err = document.move_path(file, target)
+            assert.equals(vim.fn.resolve(target), moved, tostring(err))
+        end)
+
         it("a move whose rename stage outlasts the wait finishes in the background", function()
             with_timeouts(15000, 500)
             registered()
             local target = root .. "/later.md"
-            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            -- 3 s: past the registry's old 2.5 s default, so the rename stage
+            -- needs the submit deadline to finish at all
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "3"
             vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "rename"
             local handled, moved, err = document.move_path(file, target)
             assert.is_true(handled)
