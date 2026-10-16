@@ -162,6 +162,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 
 - 2026-10-15 — final required suite PASSES on935205a3fa6c558125c1b5acb54b5e21bd0b74fe:444/444 spec files, lint752 files0 warnings/errors, clean process census,2m41s execution after472s queue. New admission/lifetime/owned-move files pass, as do native session-sync, cliproxy lifecycle (#340), packaging VM (#336) and former #337 deadline cases. Full retained log /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/935205a3fa6c558125c1b5acb54b5e21bd0b74fe/suite.log; SHA25604c65fb7f4f1024a15eb625e3b302c15ef40ee5a2d8cdb4cf3afa59e42d2019c. No waiver or skip. The close dry run correctly refused while the suite checkbox was pending; ordinary close now has the required evidence. Staging and combined operator acceptance remain pending.
 
+- 2026-10-15 — ordinary close round2 SHIP: all three prior blocking findings addressed; no Critical/Important findings. Reviewer independently passes all13 mapped session-sync spec files, real/fake conformance and negative mutation checks. Corrected its one Minor plan/runtime traceability advisory: lease pathnames remain allocated with a4096-ID namespace cap and overflow refusal; no automatic GC is implemented. This post-close correction changes documentation only. Staging for combined operator acceptance is next; no live acceptance or landing claimed.
+
 ## Revisions
 
 - 2026-10-15 — record the already-approved persistent-feedback acceptance explicitly in Done when. Separate implementation verification from post-close staging/live/landing so the checklist records observed work without claiming future acceptance. The required suite is still pending; no close waiver or live acceptance is implied.

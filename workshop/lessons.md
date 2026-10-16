@@ -2,6 +2,8 @@
 
 ## 2026-10-15 (#332 — document admission and lifetime)
 
+- Keep a resource’s plan, runtime and atlas lifetime identical: closing a descriptor does not delete its lease pathname. If permanent bounded allocation replaces planned GC, append the Revision and correct the active design claim.
+
 - An unresolved read-only membership probe is not proof that a document is plain. Before migration, confirm OLD with a fresh bounded lookup; pending registration and owner resolution must block migration before filesystem effects.
 - BufUnload includes both true buffer retirement and synchronous native rereads. Retire async operations and execution leases on true unload; explicitly mark managed reads, defer their raw completions until loaded, and preserve the attached identity and receipt. Exercise callbacks inside the native unload event, not only after reopening.
 - Classify configured-root/live-buffer wrappers as INTEGRATION even when one branch takes supplied values. Keep the pure filename classifier separate rather than mislabeling the wrapper.
