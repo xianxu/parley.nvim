@@ -549,3 +549,8 @@ oracle, and the mutation that would make the test fail.
 
 - When a finding names one spec that breaks under an environment, run the whole suite in that environment before fixing that spec: here it was 14 files, and the cause was a harness invariant (scratch outside any marked project), not each spec. Guard the invariant once at the writer (scratch_placement_spec), and keep per-spec opt-outs out of specs that test the opted-out behavior.
 - Seeding shipped content follows the owner's root, not the current primary root: project mode re-primaries chat_dir, so anything the starter installs must use the profile directory captured before setup().
+
+## 2026-10-15 (#230 — no hidden limit in live_models)
+
+- A diagnostic over configuration must know who wrote each entry. Shipped defaults may name things a given environment lacks (a model line an account doesn't serve), so warn only on operator-written entries, and test the defaults against an environment where they would trigger (BR-1).
+- Run the full suite on the FINAL code commit before `sdlc merge`, not on an earlier one. A review fix can trip a tree-wide guard (here superseded_comment_spec) that the focused specs never load (#230).

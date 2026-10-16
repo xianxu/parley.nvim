@@ -191,7 +191,7 @@ describe("cliproxy model catalog", function()
         local ap = require("parley.agent_picker")
         assert.has_no.errors(function()
             ap._build_items({ _agents = {}, agents = {}, _state = { agent = "x" } },
-                ap._view_for(rows, { providers = { "codex" }, per_provider = 3 }, {}))
+                ap._view_for(rows, { providers = { "codex" } }, {}))
         end)
     end)
 
