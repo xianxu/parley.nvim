@@ -14,6 +14,9 @@ These credential stores have different owners:
   re-sourcing the config takes effect on the next request or proxy render, and
   `:ParleyProxy restart` names the setup time its client key came from. Within
   one setup the first value wins, so `api_keys` beats a `provider.secret`.
+  Each setup also starts a new generation. A secret command or token fetch
+  started under an earlier setup has its result discarded, and its request
+  fails with that reason, so it never writes an old key into the new store.
 - CLIProxyAPI account JSON lives in the explicit shared `~/.cli-proxy-api`
   directory. App profile isolation and uninstall do not remove those logins.
 - Document-provider OAuth accounts use the OS credential store: macOS `security`
@@ -21,7 +24,8 @@ These credential stores have different owners:
   `:ParleyGdriveLogout` deletes the local OAuth store; it does not revoke access
   at the provider's website.
 - Copilot bearer tokens are cached with expiry in `state_dir/vault_state.json`
-  and refreshed when needed.
+  and refreshed when needed. A cached bearer records a hash of the copilot key
+  it was fetched with, and is reused only for that key (#204).
 
 Credential commands and OAuth keychain and token calls belong to no generation.
 They stay in Neovim's session, so a command that prompts still works: pinentry,

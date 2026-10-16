@@ -172,3 +172,9 @@ reasonable in the first place.
 - D2 mutation check: with the `secrets = {}` reset removed, 3 cases fail (setup_api_keys ×2, vault F1). With it restored, everything passes.
 - `port_identity` is now forward-declared, because `ensure_running` precedes it. It runs only on the 401 branch (ARCH-PURE: the message choice is `rel.mismatch_message`, unit-tested on all three identities).
 - start-plan's `weave refresh` could not rewrite `.claude/settings.json` (sandbox: operation not permitted). A re-run succeeded. I reported this to the hub.
+- TL folded in close advisories (a), (b) and (c) before landing:
+  - (a) `vault.setup` also clears `_state` and bumps a generation. The secret-command and copilot-fetch callbacks discard a result from an earlier generation, and a bearer is keyed to `sha256(copilot key)`, so the disk cache is safe too. Tests: vault F3 and V3/V4. Mutation: each of the three guards, removed, fails its case.
+  - (b) The lifecycle 401 test is split into ours, foreign and unknown cases, with `fake_ps` deciding the identity. Mutation: with a constant identity, all 3 fail.
+  - (c) The `cmd_prefix()` helper is local to cliproxy.lua. agent_picker keeps its own one-liner, in a different module.
+- The cliproxy_update_spec restart-timing flake is filed as #343 and unclaimed for the TL. The lifecycle one is #340.
+

@@ -57,6 +57,11 @@ local function cfg()
     return nil
 end
 
+-- The user's command prefix, for messages that name a :<prefix>Proxy command.
+local function cmd_prefix()
+    return (require("parley").config or {}).cmd_prefix or "Parley"
+end
+
 local function endpoint()
     local ok, parley = pcall(require, "parley")
     if ok and parley and parley.dispatcher and parley.dispatcher.providers
@@ -779,8 +784,7 @@ function M.ensure_running(callback, on_error)
         if state == "client_key_mismatch" then
             -- Failure branch only, so the synchronous ps+lsof read stays off the
             -- dispatch hot path (#204).
-            local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
-            return on_error(rel.mismatch_message(port_identity(port), port, prefix))
+            return on_error(rel.mismatch_message(port_identity(port), port, cmd_prefix()))
         end
         if state == "foreign" then
             return on_error("cliproxy: port " .. port .. " is held by a non-cliproxy process")
@@ -1133,7 +1137,7 @@ function M.warn_about_peers(peers)
     if #peers == 0 then
         return
     end
-    local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
+    local prefix = cmd_prefix()
     -- `ps lstart` starts with the WEEKDAY ("Fri Jun 12 …"), so a lexicographic
     -- compare orders by day name — it would call a Friday process older than a
     -- Sunday one from months earlier.
@@ -1452,7 +1456,7 @@ local function prompt_login(login, message, done)
         -- — AND leaves _login_prompt_active true, so no login is ever offered
         -- again for the rest of the session.
         local prompt_ok, prompt_err = pcall(function()
-        local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
+        local prefix = cmd_prefix()
         vim.ui.select({ "Log in (" .. login .. ")", "Not now" }, { prompt = message },
             function(_, idx)
                 _login_prompt_active = false

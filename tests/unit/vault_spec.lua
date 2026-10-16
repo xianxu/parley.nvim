@@ -345,6 +345,26 @@ describe("vault", function()
             assert.equals("parley-local", vault.get_secret("cliproxyapi"))
         end)
 
+        it("F3: a secret command still running when setup re-runs cannot write the old key", function()
+            local original_run = tasker.run
+            local finish
+            tasker.run = function(_, _, _, callback) finish = callback end
+            local errors, called = {}, false
+            vault.setup({ state_dir = "/unused" })
+            vault.resolve_secret("cliproxyapi", { "security", "old" }, function() called = true end,
+                function(message) errors[#errors + 1] = message end)
+
+            vault.setup({ state_dir = "/unused" })
+            vault.add_secret("cliproxyapi", "edited")
+            finish(0, 0, "old-key", "")
+            tasker.run = original_run
+
+            assert.equals("edited", vault.get_secret("cliproxyapi"))
+            assert.is_false(called)
+            assert.equals(1, #errors)
+            assert.is_truthy(errors[1]:find("setup() re-ran", 1, true))
+        end)
+
         it("F2: setup records when it loaded, for the restart notice", function()
             vault.setup({ state_dir = "/unused" })
             assert.is_true(math.abs(vault.loaded_at - os.time()) <= 1)
@@ -425,10 +445,45 @@ describe("vault copilot bearer from the token endpoint", function()
         assert.is_true(vim.wait(1000, function() return processes.spawn_calls == 1 end, 5))
         answer('{"token":"t","expires_at":"soon"}')
         assert.is_true(vim.wait(1000, function() return refreshed == 1 end, 5))
-        assert.same({ token = "t" }, vault._state.copilot_bearer)
+        assert.equals("t", vault._state.copilot_bearer.token)
+        assert.is_nil(vault._state.copilot_bearer.expires_at)
         local ok, err = pcall(vault.refresh_copilot_bearer, function() refreshed = refreshed + 1 end)
         assert(ok, err)
         assert.is_true(vim.wait(1000, function() return processes.spawn_calls == 2 end, 5),
             "a bearer without a numeric expiry must be fetched again")
+    end)
+    -- #204: a bearer is reused only for the copilot key it was fetched with,
+    -- in memory and from the disk cache alike.
+    it("V3: a re-run setup with another copilot key fetches a new bearer; the same key reuses it", function()
+        local ready = 0
+        local function refresh() vault.refresh_copilot_bearer(function() ready = ready + 1 end) end
+        refresh()
+        answer(('{"token":"t1","expires_at":%d}'):format(os.time() + 3600))
+        assert.is_true(vim.wait(1000, function() return ready == 1 end, 5))
+
+        vault.setup({ state_dir = dir })
+        vault.add_secret("copilot", "fixture-token")
+        assert.is_nil(vault._state.copilot_bearer, "setup must drop the in-memory bearer")
+        refresh()
+        assert.equals(2, ready, "the same key must reuse the cached bearer")
+        assert.equals(1, processes.spawn_calls)
+
+        vault.setup({ state_dir = dir })
+        vault.add_secret("copilot", "edited-token")
+        refresh()
+        assert.is_true(vim.wait(1000, function() return processes.spawn_calls == 2 end, 5),
+            "a bearer fetched with the old key must not be reused")
+    end)
+    it("V4: a token fetch still running when setup re-runs is discarded", function()
+        local errors, ready = {}, 0
+        vault.refresh_copilot_bearer(function() ready = ready + 1 end,
+            function(message) errors[#errors + 1] = message end)
+        vault.setup({ state_dir = dir })
+        answer(('{"token":"old","expires_at":%d}'):format(os.time() + 3600))
+        assert.is_true(vim.wait(1000, function() return #errors == 1 end, 5))
+        assert.is_truthy(errors[1]:find("setup() re-ran", 1, true))
+        assert.equals(0, ready)
+        assert.is_nil(vault._state.copilot_bearer)
+        assert.is_nil(vault.get_secret("copilot_bearer"))
     end)
 end)
