@@ -53,6 +53,7 @@ Corrected a malformed explanatory comment before committing. Chat transcripts
 are excluded. The unrelated SVG prompt instruction is a separate local commit.
 
 ### 2026-10-16
+- 2026-10-16: closed — Shipped as c105136c (ancestor of origin/main). Both default key sources carry only <M-i> and <C-g>i, asserted by keybindings_spec. On current main: keybindings_spec 63, branch_submit_spec 18, branch_child_spec 81 pass. No code change in this window.; review verdict: SHIP
 
 - Taken by parley.nvim:3. The removal shipped as c105136c, an ancestor of
   origin/main. `config.lua` and the registry fallback both carry only `<M-i>`
