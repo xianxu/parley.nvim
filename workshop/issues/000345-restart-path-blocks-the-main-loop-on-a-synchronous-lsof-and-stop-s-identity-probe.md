@@ -42,7 +42,7 @@ Make the restart path's listener read asynchronous (a `vim.system` callback), so
 the wait no longer blocks the main loop, and keep #340's contract:
 - release is confirmed by the signalled pids exiting AND no listener being left;
 - a leftover listener, or a read that fails, falls back to the probe;
-- a proxy still answering at the deadline is reported (#237 BR-8).
+- a proxy still answering at the deadline is reported (#237 BR-8). *(Superseded by option B, see ## Revisions: only the interactive commands read async; the budgeted restart paths keep the sync reads.)*
 
 Decide at planning: whether `stop()`'s synchronous identity probe and lsof move too.
 `stop()` is public and returns a count to `:ParleyProxy stop`. An async variant for
@@ -77,7 +77,7 @@ blocked on its identity curl (up to 2 s) is the same user-visible freeze.
       vim.system raises on EPERM).
 - [x] `M.stop_async(cb)`: kill the `_spawned` pids, then run the async identity probe
       (`M.health_probe` + `is_cliproxy_state`, as `port_holds_cliproxy` does), then the async
-      listener read, then kill. It calls `cb(count, pids)`. The kill steps are helpers shared with
+      listener read, then kill. It calls `cb(count, pids)` *(now `cb(count, pids, read_err)`, see ## Revisions)*. The kill steps are helpers shared with
       the sync `M.stop()`, which stays for spec teardown (10 sites) and keeps its
       return shape. *(Superseded by option B, see ## Revisions: the sync `M.stop()` also stays the stop of the budgeted paths, and returns `read_err` too.)*
 - [x] `restart_managed` uses `stop_async`, and `wait_port_released`'s post-exit check uses
@@ -96,13 +96,14 @@ blocked on its identity curl (up to 2 s) is the same user-visible freeze.
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Round-4 fixes on 383e8a4a, full suite green there (sdlc-local/suite). BR-6: the issue Plan, Core-concepts and Log claims about option A are corrected with dated superseded notes, and the current main-loop sync-read list is justified. Minors: :ParleyProxy stop WARNs naming read_err when a cliproxy on the port could not be listed (command spec INFO and WARN cases); the restart command test asserts interactive = true; the pids_on_port doc block is reattached; the wait_port_released header names both stops. Lifecycle and command specs green, sweeps guard green. (fixed-then-ship); review verdict: FIX-THEN-SHIP
 - 2026-10-16: closed — Option B per TL (recorded in ## Revisions with measurements: lsof 0.11 s idle, over 2 s under 8-way load; why A and C were not taken). Full suite green on 04169ca6 (sdlc-local/suite, main merged). Only :ParleyProxy restart (interactive) and stop read async, behind a 10 s hang guard; the in-dispatch repair, recovery rung and update keep main sync reads, and the repair budget equals main. 8-parallel lifecycle spec: 8 of 8 green (the A-shaped branch was 6 of 8 red; main 8 of 8). Mutation: interactive with sync reads stalls 1600 ms and fails 2; a sync stop without read_err fails the peer-left case; a probe-only release fails 4; a guard that is ignored fails 1. The honest not-stopped message holds on both paths.; review verdict: FIX-THEN-SHIP
-- 2026-10-16: closed — Full suite green on a3777a50 (sdlc-local/suite, main merged); one earlier run hit an unrelated starter welcome-lock flake, filed as #348 (passed 3 of 3 alone, files untouched by this branch). Round-2 BR-1 items: _restart_budget_keys single-sources the restart terms (stop_listener_read added; the budget spec sums the keys and asserts each is a real term); a release-wait case with a process exiting at 1.7 s and a 4 s fake lsof decides before 3000 ms, and without the remaining-time pass-through it decides at 3787 ms (mutation fails it). Earlier evidence holds: no main-loop lsof or curl on the restart path; max tick gap under 750 ms; mutations: sync read 1, probe-only 4, no lsof timeout 1, ignored limit 1.; review verdict: SHIP
+- 2026-10-16: closed — Full suite green on a3777a50 (sdlc-local/suite, main merged); one earlier run hit an unrelated starter welcome-lock flake, filed as #348 (passed 3 of 3 alone, files untouched by this branch). Round-2 BR-1 items: _restart_budget_keys single-sources the restart terms (stop_listener_read added; the budget spec sums the keys and asserts each is a real term); a release-wait case with a process exiting at 1.7 s and a 4 s fake lsof decides before 3000 ms, and without the remaining-time pass-through it decides at 3787 ms (mutation fails it). Earlier evidence holds: no main-loop lsof or curl on the restart path *(superseded by option B: true only for the interactive commands)*; max tick gap under 750 ms; mutations: sync read 1, probe-only 4, no lsof timeout 1, ignored limit 1.; review verdict: SHIP
 - 2026-10-16: flow upgraded quick → full — 127 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 ### 2026-10-16
 
-- The restart path now has no main-loop lsof or curl. Remaining sync reads, each justified:
+- The restart path now has no main-loop lsof or curl. Remaining sync reads, each justified: *(Superseded by option B, see ## Revisions: only the interactive commands, `:ParleyProxy restart` and `stop`, are off the main loop; the budgeted paths keep the sync reads.)*
   - `port_identity` (ps + lsof): only on the 401 failure branch of `ensure_running` and in `:ParleyProxy update`. A dispatch that already failed, or an explicit maintenance command.
   - `peers()` (ps + lsof): once per session, behind the latch (documented ~80–150 ms).
   - The sync `stop()`: spec teardown only; no product caller remains. *(Superseded by option B, see ## Revisions: the budgeted paths call it again.)*

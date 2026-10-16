@@ -423,3 +423,83 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"2aa09c87-03de-4e7c-be03-8aab438f1937","repository":"github.com/xianxu/parley.nvim","issue_id":"000345","recipe":"milestone-review","round":4,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/0365519ebe104a7a","reviewed_head":"04169ca621b7b7c6faa94adfda2bdea4eb90ced4","slot":"parley.nvim:4","requested_at":"2026-10-16T10:34:31.205247Z"},"phase":"finished","pid":89081,"started_at":"2026-10-16T10:34:31.342914Z","finished_at":"2026-10-16T10:37:09.078519Z","session_id":"f2d84c91-b57b-4b3b-97da-babecfe8098d","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T03:54:04-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 345 — Restart path blocks the main loop on a synchronous lsof (and stop's identity probe) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000345-restart-path-blocks-the-main-loop-on-a-synchronous-lsof-and-stop-s-identity-probe.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 8c81d753ada87aabd2b691f54a600bb813d02c55..383e8a4aab82ca42ece2df4cd98c3aa9e365aebd |
+| command | sdlc close --issue 345 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T03:54:04-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+I've read the window's diff. Next I'll run the command spec and do a quick mutation check on the BR-7 fix.
+
+The spec passes, and it goes red when the BR-7 WARN is removed. Next I'll check that removing the `{ interactive = true }` argument also fails the test.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+This round's code fixes are correct and tested. The **BR-7** fix (`init.lua:384-391`) makes `:ParleyProxy stop` WARN and name `read_err` when a cliproxy on the port could not be listed. The **BR-5** fix moves `pids_on_port`'s doc block back onto it (`cliproxy.lua:966-970`), and the `wait_port_released` header now names both stops. I ran the command spec in the harness on the pinned head and it passes. I then ran two mutations: changing `if read_err` to `if false` fails the new WARN case, and replacing `{ interactive = true }` with `nil` fails the restart command case. That closes the coverage gap round 4 noted. I restored the tree afterwards (`git status` clean).
+
+One thing keeps this from a plain SHIP. **BR-6** is only partly fixed. The new Revisions entry says every stale claim was swept, but the Log's headline sentence that round 4 quoted is still there and unmarked: "The restart path now has no main-loop lsof or curl" (issue line 105). Under option B the budgeted restarts do read lsof and curl synchronously on the main loop. The fix is a one-line "Superseded" note. The Revisions change records fixes only, so the scope has not changed.
+
+1. **Strengths**
+   - The WARN wording in `init.lua:388-390` matches the restart path's "was NOT stopped" message, and it reports the count alongside the reason.
+   - The stop command spec covers both the INFO and the WARN branch, using the stub-and-restore pattern the file already uses (`cliproxy_command_spec.lua:200-220`).
+   - The restart command test now pins `{ interactive = true }`, and removing it fails the test (checked by mutation).
+   - The rule in `lessons.md` covers the whole `doc-annotation-placement` class (all four instances), not just this one site.
+   - The "Superseded by option B" notes are dated and added alongside the old text, so the history survives (issue lines 82, 84, 87, 93, 108, 110, 111).
+
+2. **Critical:** none.
+
+3. **Important**
+   - **BR-6 (not addressed):** the issue file still says "The restart path now has no main-loop lsof or curl" (line 105). That is false for the in-dispatch repair, the recovery rung and update. Fix: append "*(Superseded by option B, see ## Revisions: only the interactive commands are off the main loop; the budgeted paths keep sync reads.)*". Optionally also annotate line 80's `cb(count, pids)`, which is now `(count, pids, read_err)`.
+
+4. **Minor**
+   - **BR-4:** still not modelled and still accepted in the Log (Minor, no change this round).
+   - The rewrapped `wait_port_released` header line (`cliproxy.lua:487`) runs past the surrounding comment width. This is a style nit only and is not raised as a finding.
+
+5. **Test coverage:** The two new command cases and the new `restart_opts` assertion each fail under the matching mutation. No gaps remain in this window.
+
+6. **Architecture**
+   - **ARCH-DRY:** pass.
+   - **ARCH-PURE:** pass. The WARN lives in the thin command layer and only formats what `stop_async` returns.
+   - **ARCH-PURPOSE:** the code fixes cover their whole class (`read_err` is now honoured by every caller of `stop_async`: the restart and the stop command). The BR-6 prose sweep is incomplete, as above.
+
+7. **Plan revisions:** annotate Log line 105 as superseded. Nothing else is needed.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      No code change in this window. The race is still accepted in the Log and limited to the interactive commands, but it is not modelled. Stays Minor.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      At head, cliproxy.lua:966-970 puts the "PIDs listening on `port`" doc block directly above pids_on_port, with lsof_argv and parse_listener_pids above it. The wait_port_released header (487-488) names both M.stop() and M.stop_async(). The lessons.md rule covers the class.
+  - id: BR-6
+    disposition: not-addressed
+    note: |
+      Partly fixed: the stop row, the Plan items, two Log bullets and the Done-when list are corrected. But Log line 105, "The restart path now has no main-loop lsof or curl", which round 4 quoted, is still unmarked and false for the budgeted paths. The Revisions claim that every stale claim was swept is therefore inaccurate. Fix: one Superseded note.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      init.lua:384-391 WARNs and names read_err. The new spec case fails when the branch is disabled (if read_err changed to if false), verified in the harness and then restored.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"d5bcbd80-11c9-4530-9ed4-42def1e16b8f","repository":"github.com/xianxu/parley.nvim","issue_id":"000345","recipe":"fix-review","round":5,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/0eb114a3d86121d2","reviewed_head":"383e8a4aab82ca42ece2df4cd98c3aa9e365aebd","slot":"parley.nvim:4","requested_at":"2026-10-16T10:52:47.259756Z"},"phase":"finished","pid":32088,"started_at":"2026-10-16T10:52:47.419756Z","finished_at":"2026-10-16T10:54:03.623907Z","session_id":"1639a0fa-2252-43dd-bf4f-09d3db300f44","outcome":"returned"}] -->

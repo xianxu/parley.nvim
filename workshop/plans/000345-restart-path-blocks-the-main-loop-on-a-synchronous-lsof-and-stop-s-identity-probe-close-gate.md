@@ -345,6 +345,95 @@ rounds:
       isolation: checkout
       reviewed: 04169ca621b7b7c6faa94adfda2bdea4eb90ced4
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: d5bcbd80-11c9-4530-9ed4-42def1e16b8f
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000345"
+            recipe: fix-review
+            round: 5
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/0eb114a3d86121d2
+            reviewed_head: 383e8a4aab82ca42ece2df4cd98c3aa9e365aebd
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T10:52:47.259756Z"
+          phase: finished
+          pid: 32088
+          started_at: "2026-10-16T10:52:47.419756Z"
+          finished_at: "2026-10-16T10:54:03.623907Z"
+          session_id: 1639a0fa-2252-43dd-bf4f-09d3db300f44
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 383e8a4aab82ca42ece2df4cd98c3aa9e365aebd
+        tracker_head: f77f0575d4a4015824d9a169f4ae2631bb9f772c
+        branch_point: 0a616029f43d1a239f5a46bb3fc0b42a129dcd9a
+        since: "2026-10-16T01:01:31-07:00"
+        until: "2026-10-16T03:39:22-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T01:01:31-07:00"
+              end: "2026-10-16T03:39:22-07:00"
+              began: "2026-10-16T01:01:31-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: 3970203d94b9bced65e8aae75fea72702c7af2c2df6e7fec4bca69c51bfb2cad
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 5484170
+              windows:
+                - start: "2026-10-16T01:01:31-07:00"
+                  end: "2026-10-16T03:39:22-07:00"
+        cuts:
+            - dispatched: "2026-10-16T01:43:07-07:00"
+              finalized: "2026-10-16T01:46:51-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T02:03:42-07:00"
+              finalized: "2026-10-16T02:07:26-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T02:17:17-07:00"
+              finalized: "2026-10-16T02:20:57-07:00"
+              finalizing: true
+            - dispatched: "2026-10-16T03:34:31-07:00"
+              finalized: "2026-10-16T03:37:10-07:00"
+              finalizing: true
+      "n": 5
+      timestamp: "2026-10-16T03:54:05-07:00"
+      dispatched: "2026-10-16T03:52:47-07:00"
+      agent: claude
+      dispose:
+        - id: BR-4
+          disposition: not-addressed
+          note: No code change in this window. The race is still accepted in the Log and limited to the interactive commands, but it is not modelled. Stays Minor.
+          round: 5
+        - id: BR-5
+          disposition: addressed
+          note: At head, cliproxy.lua:966-970 puts the "PIDs listening on `port`" doc block directly above pids_on_port, with lsof_argv and parse_listener_pids above it. The wait_port_released header (487-488) names both M.stop() and M.stop_async(). The lessons.md rule covers the class.
+          round: 5
+        - id: BR-6
+          disposition: not-addressed
+          note: 'Partly fixed: the stop row, the Plan items, two Log bullets and the Done-when list are corrected. But Log line 105, "The restart path now has no main-loop lsof or curl", which round 4 quoted, is still unmarked and false for the budgeted paths. The Revisions claim that every stale claim was swept is therefore inaccurate. Fix: one Superseded note.'
+          round: 5
+        - id: BR-7
+          disposition: addressed
+          note: init.lua:384-391 WARNs and names read_err. The new spec case fails when the branch is disabled (if read_err changed to if false), verified in the harness and then restored.
+          round: 5
+      recipe: fix-review
+      isolation: checkout
+      reviewed: 383e8a4aab82ca42ece2df4cd98c3aa9e365aebd
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#345 (boundary-review)
@@ -400,9 +489,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-7** [Minor] `read-error-dropped-by-caller` (kind: defect) :ParleyProxy stop ignores stop_async's read_err and reports "stopped 0"
   init.lua:384 only takes `n`. When the probe found a cliproxy but lsof timed out or failed, the proxy keeps running and the user is not told, while the restart path reports the same case. Notify a WARN that names read_err.
 
+## Round 5 — 2026-10-16T03:54:05-07:00 (claude) — passed
+
+### Disposed
+
+- BR-4 — not-addressed — No code change in this window. The race is still accepted in the Log and limited to the interactive commands, but it is not modelled. Stays Minor.
+- BR-5 — addressed — At head, cliproxy.lua:966-970 puts the "PIDs listening on `port`" doc block directly above pids_on_port, with lsof_argv and parse_listener_pids above it. The wait_port_released header (487-488) names both M.stop() and M.stop_async(). The lessons.md rule covers the class.
+- BR-6 — not-addressed — Partly fixed: the stop row, the Plan items, two Log bullets and the Done-when list are corrected. But Log line 105, "The restart path now has no main-loop lsof or curl", which round 4 quoted, is still unmarked and false for the budgeted paths. The Revisions claim that every stale claim was swept is therefore inaccurate. Fix: one Superseded note.
+- BR-7 — addressed — init.lua:384-391 WARNs and names read_err. The new spec case fails when the branch is disabled (if read_err changed to if false), verified in the harness and then restored.
+
 ## Open findings
 
 - **BR-4** [Minor] `unmodeled-async-interleaving` (kind: defect) stop_async's async probe and lsof window lets a concurrent ensure_running's fresh proxy be found and SIGTERMed
-- **BR-5** [Minor] `doc-annotation-placement` (kind: defect) The pids_on_port doc block now sits above lsof_argv, separated from pids_on_port by the new helpers
 - **BR-6** [Important] `plan-stale-after-revision` (kind: defect) The issue's Plan, Core-concepts stop row and Log still describe option A after the option-B revision
-- **BR-7** [Minor] `read-error-dropped-by-caller` (kind: defect) :ParleyProxy stop ignores stop_async's read_err and reports "stopped 0"
