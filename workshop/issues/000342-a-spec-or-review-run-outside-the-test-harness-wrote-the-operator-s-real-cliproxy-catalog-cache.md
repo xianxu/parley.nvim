@@ -1,12 +1,12 @@
 ---
 id: 000342
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '2635ba69559234591ae0675fe33aa1975e398037' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '8733bc8c676771275c19e8f14d6cc737852ad8ab' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T20:29:30-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "a27b20a1", done: "58f88fed"}
+actual_hours: 0.88
 ---
 
 # A spec or review run outside the test harness wrote the operator's real cliproxy catalog cache
