@@ -393,14 +393,6 @@ function M.replace_line_at(buf, line_0_indexed, text)
     vim.api.nvim_buf_set_lines(buf, line_0_indexed, line_0_indexed + 1, false, { text or "" })
 end
 
---- Replace one line at line_0_indexed with multiple lines. Used by
---- dispatcher.create_handler's streaming chunk replacement path —
---- the existing single line at write_at gets replaced with the
---- newly-completed lines plus the trailing pending "ghost" line.
-function M.stream_replace_at_line(buf, line_0_indexed, lines)
-    vim.api.nvim_buf_set_lines(buf, line_0_indexed, line_0_indexed + 1, false, lines)
-end
-
 --- Replace a whole buffer's lines: a scratch view rendered in one piece
 --- (#309's tracker card view), not a user document.
 function M.replace_all(buf, lines)
