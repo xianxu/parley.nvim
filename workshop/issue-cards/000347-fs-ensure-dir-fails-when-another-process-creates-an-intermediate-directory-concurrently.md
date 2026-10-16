@@ -1,6 +1,6 @@
 ---
 id: 000347
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -14,8 +14,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.04
 tracker:
     version: 1
+    completion:
+        token: close-45ac24c4f41f
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 3d9726a73cf806d5ca83e0acdd7f085a10a1ebdd
+        evidence_commit: 2475a982d42643b5696a1c4bcb521edea4737571
 ---
 
 # fs.ensure_dir fails when another process creates an intermediate directory concurrently
