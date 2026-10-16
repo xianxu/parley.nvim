@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "4da32fa3", done: "63f2f451"}
 ---
 
 # Advance cursor to the next question after submission
