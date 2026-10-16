@@ -3935,7 +3935,11 @@ M.move_chat_tree = function(file_name, target_dir)
 		require("parley.file_tracker").track_file_access(path_map[src])
 	end
 
-	-- Update 🌿: references in all moved files
+	-- Update 🌿: references in all moved files. Live, though narrow (#350):
+	-- the resolver already finds a moved file by name or timestamp (#224), so
+	-- this fires only for a reference with an explicit directory (absolute, ~,
+	-- ../, sub/<name>) to a child WITHOUT a timestamp, which would otherwise
+	-- point at the old path. Pinned in chat_move_spec.
 	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 	for _, new_path in pairs(path_map) do
 		if vim.fn.filereadable(new_path) == 1 then
