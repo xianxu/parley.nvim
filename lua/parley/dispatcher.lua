@@ -528,7 +528,10 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 	local out_reader = function()
 		local buffer = ""
 		local sse_record_active = false
-		local stdout_finished = false
+		-- "reading" → "finished" at EOF, or "threw" if decoding a line raised
+		-- (set while a line is decoded, so a raise leaves it). A reader that
+		-- threw has lost its place: it decodes nothing more, EOF included.
+		local reader_state = "reading"
 
 		local function emit_activity(query_id)
 			if type(on_activity) == "function" then
@@ -568,10 +571,10 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		end
 
 		local function finish_stdout(qt)
-			if stdout_finished then
+			if reader_state == "finished" then
 				return
 			end
-			stdout_finished = true
+			reader_state = "finished"
 			logger.debug(qt.provider .. " response received: body_bytes=" .. #qt.raw_response)
 
 			local adapter = providers.get(qt.provider)
@@ -639,14 +642,27 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 
 			if err then
 				logger.error(qt.provider .. " query stdout error: " .. vim.inspect(err))
+			elseif reader_state == "threw" then
+				-- tasker still delivers EOF after a reader failure (#182), but the
+				-- bytes after the failure point are not this reader's to decode.
+				-- finish_stdout is skipped too: its usage and stop_reason are
+				-- success-path data the failure path never reads, and its
+				-- non-streaming fallback would hand content to the handler again.
+				buffer = ""
 			elseif chunk then
 				qt.raw_response = qt.raw_response .. chunk
 				buffer = buffer .. chunk
 				while true do
 					local newline = buffer:find("\n", 1, true)
 					if not newline then break end
-					process_line(buffer:sub(1, newline - 1):gsub("\r$", ""))
+					-- Off the buffer BEFORE it is decoded: a throwing handler (#229)
+					-- used to leave its line there, and the EOF flush decoded it
+					-- again — the same delta written twice (#242).
+					local line = buffer:sub(1, newline - 1)
 					buffer = buffer:sub(newline + 1)
+					reader_state = "threw"
+					process_line((line:gsub("\r$", "")))
+					reader_state = "reading"
 				end
 			else
 				if #buffer > 0 then
