@@ -81,6 +81,7 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 ## Log
 
 ### 2026-10-15
+- 2026-10-15: closed — Required suite passes444/444 on935205a3fa6c558125c1b5acb54b5e21bd0b74fe; lint752 clean; no survivors; retained suite.log SHA25604c65fb7f4f1024a15eb625e3b302c15ef40ee5a2d8cdb4cf3afa59e42d2019c. Focused176 cases and isolated real/fake Couch conformance pass. BR-1 guarded across native/public preflight and post-wait races; BR-2 true unload retires operations/leases while managed reads reconcile before raw callback replay; BR-3 not_chat classified INTEGRATION. No waiver. Combined operator live check pending; stage only after SHIP, land only after operator acceptance.; review verdict: SHIP
 
 - Read the approved ops S1 project/design and the frozen pair#573 caller contract. #327 landed and its stage cleared before claiming/starting this branch; no stacked work. Used brainstorming/writing-plans and read-only bounded scouts; no production code or tests changed.
 - Contract agreed with pair:5: capitalized envelope/effective Registration+Changed, null-only absence, nonzero/invalid envelope as unavailable, metadata-only rename after caller filesystem effects, stable ID and exact-argument uncertain retry. Pair public verbs/full review were still pending at the last peer report.

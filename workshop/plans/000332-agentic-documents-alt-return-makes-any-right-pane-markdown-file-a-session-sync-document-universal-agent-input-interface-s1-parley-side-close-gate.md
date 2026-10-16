@@ -180,6 +180,187 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 573a6836-0896-4182-985f-202f9ccb5fff
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000332"
+            recipe: milestone-review
+            round: 2
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/f20b0868a22e44d9
+            reviewed_head: 2fee90247e1fef6cddb9402f80b828cbbb29ba45
+            slot: parley.nvim:2
+            requested_at: "2026-10-16T02:00:24.7537Z"
+          phase: finished
+          pid: 6635
+          started_at: "2026-10-16T02:00:25.015296Z"
+          finished_at: "2026-10-16T02:05:09.978746Z"
+          session_id: 01a14270-6835-7b32-ac76-31c411029d5d
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 2fee90247e1fef6cddb9402f80b828cbbb29ba45
+        tracker_head: 803cd288813e9b51749b17f37e9a277b25749fc3
+        branch_point: e23163d1bb9f42765fdd899f18951b6f32c6208e
+        since: "2026-10-15T13:07:57-07:00"
+        until: "2026-10-15T18:59:38-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-15T13:07:57-07:00"
+              end: "2026-10-15T18:59:38-07:00"
+              began: "2026-10-15T13:07:57-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a13b56-32ec-7310-8650-104071939f2f
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: ebb3dbed8dbbf7c15c5686da1ba69cf9b9c357370f526fdc7dedda876e247c3b
+              started: "2026-10-14T16:54:39.906Z"
+              spawned: false
+              bytes: 44071794
+              windows:
+                - start: "2026-10-15T13:07:57-07:00"
+                  end: "2026-10-15T18:59:38-07:00"
+            - harness: codex
+              id: 01a1412e-8523-7fa2-9e8c-d8873b1348df
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: 55d32eabe6849de7420d62370c1ee8cbdffa559d7544e690fbb279d03bf6fcb1
+              started: "2026-10-15T20:08:50.417Z"
+              spawned: true
+              bytes: 562266
+              windows:
+                - start: "2026-10-15T20:08:50.417Z"
+                  end: "2026-10-15T18:59:38-07:00"
+            - harness: codex
+              id: 01a1412e-a904-7710-88fe-3f3326bacbcc
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: e19cce2151caca3c6a35df764819278eb98007792e2be7960f124d75267c2922
+              started: "2026-10-15T20:08:59.629Z"
+              spawned: true
+              bytes: 1012259
+              windows:
+                - start: "2026-10-15T20:08:59.629Z"
+                  end: "2026-10-15T18:59:38-07:00"
+            - harness: codex
+              id: 01a1413f-64e8-7932-b32b-744dfcf3fea1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: 0a52ac8e8d17b31dddcd9fa12c53d6c59414c4f769fdd84edbbe32e78c039069
+              started: "2026-10-15T20:27:17Z"
+              spawned: false
+              bytes: 662693
+              windows:
+                - start: "2026-10-15T20:27:17Z"
+                  end: "2026-10-15T18:59:38-07:00"
+            - harness: codex
+              id: 01a14146-2a57-7681-bcb7-c9aa20efd9d8
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: 863c26a3a60d78138d7d4d9e026dc076d3dcd52ebf4d6fd91eb39cd79f6e26f5
+              started: "2026-10-15T20:34:40.952Z"
+              spawned: false
+              bytes: 443654
+              windows:
+                - start: "2026-10-15T20:34:40.952Z"
+                  end: "2026-10-15T18:59:38-07:00"
+            - harness: codex
+              id: 01a14148-4d6b-7bc1-a650-2ac9c3c9c103
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: e408e478d4696e1747739db1fb465c979f69c4b263451e6ada34ac2395ff57eb
+              started: "2026-10-15T20:37:00.683Z"
+              spawned: false
+              bytes: 431233
+              windows:
+                - start: "2026-10-15T20:37:00.683Z"
+                  end: "2026-10-15T18:59:38-07:00"
+            - harness: codex
+              id: 01a14148-d1e2-7301-9d8e-167ed3bc3b48
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: d706bfd9766ca0500d3ad296a41a7ee61746e7dfe1db8060b2344292e176d0d9
+              started: "2026-10-15T20:37:34.757Z"
+              spawned: false
+              bytes: 458095
+              windows:
+                - start: "2026-10-15T20:37:34.757Z"
+                  end: "2026-10-15T18:59:38-07:00"
+            - harness: codex
+              id: 01a1414a-f880-7dc2-b5fa-55ab37d93fa5
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: da138dcad941f05a1b1f6f9f70a8a97a9ca4b82bfa42e55aa1a70316283847c8
+              started: "2026-10-15T20:39:54.868Z"
+              spawned: true
+              bytes: 4008905
+              windows:
+                - start: "2026-10-15T20:39:54.868Z"
+                  end: "2026-10-15T18:59:38-07:00"
+            - harness: codex
+              id: 01a1414b-1aae-7ea1-955b-65ac06abf8d8
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: f79fa3e5773c745bd6d37cb14c93d6c8f372f5ebf53fedb94e32ec3998d41764
+              started: "2026-10-15T20:40:03.611Z"
+              spawned: true
+              bytes: 1814060
+              windows:
+                - start: "2026-10-15T20:40:03.611Z"
+                  end: "2026-10-15T18:59:38-07:00"
+            - harness: codex
+              id: 01a1414b-3f7d-78f1-8ff5-cf30539ca92f
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: b02baa44cbefc9362a50cd1ce250a165174260c13b4357a9694bede5be835a96
+              started: "2026-10-15T20:40:13.046Z"
+              spawned: true
+              bytes: 4441012
+              windows:
+                - start: "2026-10-15T20:40:13.046Z"
+                  end: "2026-10-15T18:59:38-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 0.029516666666666667
+        cuts:
+            - dispatched: "2026-10-15T18:14:21-07:00"
+              finalized: "2026-10-15T18:17:38-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-15T19:05:11-07:00"
+      dispatched: "2026-10-15T19:00:24-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Native and public migration preflight now require confirmed membership and recheck activity after waits. Controlled regressions in agentic_document_spec.lua:595 onward pass at HEAD and fail with the pre-fix coordinator.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: True BufUnload retires the incarnation, cancels requests and releases migration leases; managed rereads defer completions. Lifetime regressions cover lookup, register, rename and send across unload/reopen; restoring the pre-fix coordinator produces five failures.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: Plan line 38 now classifies not_chat as INTEGRATION, with the correction explained under Revisions at line 252. This matches configured-root resolution and optional buffer reads in init.lua:1845-1856 and its existing integration tests.
+          round: 2
+      findings:
+        - kind: defect
+          id: BR-4
+          severity: Minor
+          title: Plan still promises lease-file cleanup that the implementation deliberately omits
+          detail: workshop/plans/000332-agentic-documents-plan.md:113 promises opportunistic cleanup after forgetting/completed recovery. document_lease.lua:76-79 only closes descriptors, and atlas/modes/session_sync.md:170-172 explicitly documents permanent allocation without automatic GC. Under ARCH-FUNERAL, align the Plan with the implemented 4096-entry bound and overflow refusal.
+          family: plan-runtime-traceability
+          round: 2
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 2fee90247e1fef6cddb9402f80b828cbbb29ba45
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#332 (boundary-review)
@@ -198,8 +379,19 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Critical] `core-concept-purity-contract` (kind: defect) Core concepts declares not_chat PURE despite editor and filesystem dependencies
   workshop/plans/000332-agentic-documents-plan.md:38 labels not_chat PURE, but lua/parley/init.lua:1845 resolves configured chat roots and line 1856 reads buffer contents when supplied_lines is omitted. Its existing tests/integration/not_chat_spec.lua creates directories, writes files and constructs buffers. This contradicts the required Core concepts classification and ARCH-PURE. Promote this wrapper to INTEGRATION, or extract a value-only classifier and classify/test that separately; record the correction under Revisions.
 
+## Round 2 — 2026-10-15T19:05:11-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Native and public migration preflight now require confirmed membership and recheck activity after waits. Controlled regressions in agentic_document_spec.lua:595 onward pass at HEAD and fail with the pre-fix coordinator.
+- BR-2 — addressed — True BufUnload retires the incarnation, cancels requests and releases migration leases; managed rereads defer completions. Lifetime regressions cover lookup, register, rename and send across unload/reopen; restoring the pre-fix coordinator produces five failures.
+- BR-3 — addressed — Plan line 38 now classifies not_chat as INTEGRATION, with the correction explained under Revisions at line 252. This matches configured-root resolution and optional buffer reads in init.lua:1845-1856 and its existing integration tests.
+
+### Raised
+
+- **BR-4** [Minor] `plan-runtime-traceability` (kind: defect) Plan still promises lease-file cleanup that the implementation deliberately omits
+  workshop/plans/000332-agentic-documents-plan.md:113 promises opportunistic cleanup after forgetting/completed recovery. document_lease.lua:76-79 only closes descriptors, and atlas/modes/session_sync.md:170-172 explicitly documents permanent allocation without automatic GC. Under ARCH-FUNERAL, align the Plan with the implemented 4096-entry bound and overflow refusal.
+
 ## Open findings
 
-- **BR-1** [Critical] `membership-before-migration` (kind: defect) Native rename treats unresolved membership as plain and strands registration
-- **BR-2** [Critical] `async-buffer-lifetime` (kind: defect) Lookup completion during buffer unload permanently strands the operation on reopen
-- **BR-3** [Critical] `core-concept-purity-contract` (kind: defect) Core concepts declares not_chat PURE despite editor and filesystem dependencies
+- **BR-4** [Minor] `plan-runtime-traceability` (kind: defect) Plan still promises lease-file cleanup that the implementation deliberately omits
