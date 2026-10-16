@@ -6,7 +6,7 @@ github_issue:
 created: 2026-09-10
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '07f72636062f5ae2bafb5359f7381c22dfed0b50' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd5e93766e6ef78701d5ff01801c480ed21aae4ea' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T19:35:17-07:00
 claimant:
     operator: Xian Xu
@@ -16,7 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
-actual_hours: 0.33
+actual_hours: 0.66
 ---
 
 # a later provider filter term is silently starved by the per-provider cap
