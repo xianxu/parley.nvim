@@ -110,12 +110,12 @@ or SAY that it cannot.
 
 ## Done when
 
-- [ ] A user who sets any `api_keys` entry still gets a working
+- [x] A user who sets any `api_keys` entry still gets a working
       `cliproxyapi` default, or is told at setup time exactly what to add.
-- [ ] Editing `api_keys.cliproxyapi` and running `:ParleyProxy restart` either
+- [x] Editing `api_keys.cliproxyapi` and running `:ParleyProxy restart` either
       takes effect, or reports that a full reload is required — the current
       behaviour of silently re-rendering the old value is gone.
-- [ ] The mismatch message distinguishes "your config is wrong" from "your
+- [x] The mismatch message distinguishes "your config is wrong" from "your
       config is right and the running proxy is stale", since the operator
       cannot tell those apart today.
 
