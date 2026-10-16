@@ -94,3 +94,12 @@ Target the quick shell (at most 100 added production lines); pause and re-plan
 before implementation if the renderer extension cannot stay bounded there.
 The destination-window interpretation and transient renderer mechanism are
 being sent to the hub for approval before change-code.
+
+## Revisions
+
+### 2026-10-16 — approved window pulse
+
+Hub approved the window interpretation and one cancellable document_band pulse
+per window in delivery a60ed2ea-1a52-48e5-b74e-2f0bcc33c58d. Keep the quick
+shell; report green without staging, since the hub sequences live acceptance.
+No navigation blocking or confirm setting.
