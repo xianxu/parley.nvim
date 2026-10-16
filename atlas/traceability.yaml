@@ -109,6 +109,7 @@ atlas:
       - tests/unit/editor_dependencies_spec.lua
       - tests/integration/editor_bundle_spec.lua
       - tests/unit/prepare_dir_spec.lua
+      - tests/integration/ensure_dir_race_spec.lua
       - tests/unit/help_content_spec.lua
       - tests/integration/parley_help_spec.lua
       - tests/integration/documentation_spec.lua
