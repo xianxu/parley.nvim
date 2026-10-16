@@ -167,6 +167,8 @@ describe('disposable packaging VM ownership', function()
                 XDG_CONFIG_HOME = root .. '/config', XDG_DATA_HOME = root .. '/data',
                 XDG_STATE_HOME = root .. '/state', XDG_CACHE_HOME = root .. '/cache',
                 TMPDIR = root, PARLEY_RUNTIME = repository,
+                -- A fresh guest profile has no project; a marked host ancestor is not part of it (#338).
+                PARLEY_REPO_MODE = '0',
             }}):wait(45000)
         assert.equals(0, result.code, result.stderr)
     end)

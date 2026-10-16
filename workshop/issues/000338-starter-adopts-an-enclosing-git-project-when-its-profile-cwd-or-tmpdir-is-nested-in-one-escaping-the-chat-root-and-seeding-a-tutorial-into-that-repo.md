@@ -51,14 +51,20 @@ The starter's chat root and tutorial seeding must stay inside the editor profile
 
 Root cause (traced): the trigger is a `.parley` marker above cwd, not git. `repo_mode.detect_root` walks up from cwd, and `setup()`'s `apply_repo_local` makes `<root>/workshop/parley` the primary `chat_dir`, demoting the profile's chats to the "global" root. Project mode in the app is documented (atlas/infra/starter.md links project mode; starter_project_spec asserts it). The defect is `starter.welcome()`: it seeds the four tutorials and opens welcome.md in `parley.config.chat_dir`, so a no-argument start inside a marked project writes `welcome.md`, `basics.md`, `advanced.md` and `vim-basics.md` into that repository. In #336's review run, TMPDIR sat inside the parley.nvim checkout, which has a `.parley` marker, so the guest emulation entered project mode.
 
-- [ ] `starter.welcome()` targets the profile chat directory: `options.chat_dir`, i.e. `stdpath('data')/chats` or the `PARLEY_CHAT_DIR` override, captured before `setup()`. Tutorials never follow project mode. Project mode keeps its documented primary root, and the profile directory stays registered as its "global" root, so welcome.md is still a recognized chat.
-- [ ] Regression in starter_project_spec: a marked project with cwd and TMPDIR inside it. Assert repo mode engages as documented, no tutorial `.md` exists under `<project>/workshop/parley`, the tutorials exist under the profile chats, and the opened buffer is the profile's welcome.md. Show it fails before the fix.
-- [ ] packaging_vm_spec guest: set `PARLEY_REPO_MODE=0` in the guest env, as the `parley_app` launcher does. The probe models a fresh VM profile with no project, so a marked host ancestor is outside its scenario. Then run that spec with TMPDIR inside this checkout and show it passes.
-- [ ] Atlas starter entry: tutorials live in the profile even in project mode.
+- [x] `starter.welcome()` targets the profile chat directory: `options.chat_dir`, i.e. `stdpath('data')/chats` or the `PARLEY_CHAT_DIR` override, captured before `setup()`. Tutorials never follow project mode. Project mode keeps its documented primary root, and the profile directory stays registered as its "global" root, so welcome.md is still a recognized chat.
+- [x] Regression in starter_project_spec: a marked project with cwd and TMPDIR inside it. Assert repo mode engages as documented, no tutorial `.md` exists under `<project>/workshop/parley`, the tutorials exist under the profile chats, and the opened buffer is the profile's welcome.md. Show it fails before the fix.
+- [x] packaging_vm_spec guest: set `PARLEY_REPO_MODE=0` in the guest env, as the `parley_app` launcher does. The probe models a fresh VM profile with no project, so a marked host ancestor is outside its scenario. Then run that spec with TMPDIR inside this checkout and show it passes.
+- [x] Atlas starter entry: tutorials live in the profile even in project mode.
 - [ ] Verify: focused starter_project and packaging_vm (TMPDIR in- and outside a checkout), then the full suite.
 
 Not in scope: whether the installed app should enter project mode at all. That is documented behavior; changing it is a product decision for the TL.
 
 ## Log
 
+- 2026-10-15 (:3): red: the regression (profile welcome opened, every tutorial in the profile, none under the project's workshop/parley, plus a new case with cwd and TMPDIR inside the marked project) failed all 3 marked-project cases 3/3 with welcome.md opened from `<project>/workshop/parley`. Green after `welcome(parley, roots, options.chat_dir)` (the primary chat_dir is still restored after seeding): starter_project 6/0, including the profile welcome being a recognized chat. packaging_vm_spec with TMPDIR inside this checkout (which has `.parley`): without `PARLEY_REPO_MODE=0` it fails 16/1 at `fake-chat.lua:4` "guest chat root escaped isolated profile" (the reviewer's finding reproduced), and no tutorial lands in the checkout's workshop now. With it: 17/0.
+
 ### 2026-10-15
+
+## Revisions
+
+- 2026-10-15: narrowed Done-when bullet 1. The trigger is a `.parley` marker (documented project mode), not any git repository. Inside a marked project the primary chat root legitimately becomes the project's; the invariant defended is that nothing is written into the project (tutorials and welcome stay in the profile). The chat-root-in-profile assertion stays where the scenario has no project: the VM guest, made hermetic with `PARLEY_REPO_MODE=0` like the launcher.
