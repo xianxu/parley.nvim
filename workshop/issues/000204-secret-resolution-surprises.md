@@ -1,12 +1,20 @@
 ---
 id: 000204
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-10-15
 estimate_hours:
-card_mirror: 'ec984c147db4534851721c1d5a3964ed5eb3dcbe' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '8c3196180b86103664cb6aea108e00c4595db0ff' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T17:50:06-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # a config change to api_keys silently does not take effect: the defaults table is replaced, and the vault pins the first secret it saw
@@ -112,10 +120,31 @@ or SAY that it cannot.
 
 ## Plan
 
-- [ ] Decide D1 and D2 (they are independent).
-- [ ] A regression test per defect: a `setup{}` with a partial `api_keys` still
-      resolves `cliproxyapi`; and a second `add_secret` after a config change is
-      observable to the renderer.
+Decisions (2026-10-15):
+
+- **D1 is already fixed** by #307 (`afa83862`): `init.setup` now layers user
+  `api_keys` over the defaults with `vim.tbl_extend("force", …)`, and `false`
+  drops a default. Nothing pins it with a test, so this issue adds the regression test only.
+- **D2: `setup{}` is the authority, so `vault.setup` resets the secret store**
+  (`secrets` + `_obfuscated_secrets`). First-write-wins stays *within* one
+  setup, so dispatcher's `provider.secret` still does not clobber `api_keys`.
+  Re-sourcing the config (re-running `setup{}`) then takes effect on the next
+  render. The vault records `loaded_at`. Parley cannot see a config file edit until setup
+  re-runs, so the `:ParleyProxy restart` notice says which setup the key came
+  from: `restarted (client key from setup() at HH:MM:SS; re-run setup or
+  restart nvim to pick up config edits)`.
+- **Mismatch message:** on a 401 in `ensure_running` (only the failure branch, so the cost stays off the
+  hot path), read `port_identity` (ps+lsof, the same read `update` uses). A pure
+  `mismatch_message(identity, port, prefix)` chooses one of three messages:
+  `ours` → the config is right and the proxy is stale ("booted from an earlier key; run
+  `:ParleyProxy restart`"). `not ours` → the proxy on the port is not parley's, so its
+  api-keys must include `api_keys.cliproxyapi` (or stop it). If parley cannot
+  tell, the message names both (ARCH-PURE).
+
+- [ ] Regression test: `setup{api_keys={openai=…}}` still resolves `cliproxyapi` to the default.
+- [ ] Regression test: a second `setup{}` with a changed `cliproxyapi` is what `get_secret`/the render sees; vault_spec A3 is unchanged and gets a new reset case.
+- [ ] `vault.setup` resets the store and records `loaded_at`; the restart notice names it.
+- [ ] `mismatch_message` pure + unit-tested on all three identities; wired into the 401 branch.
 
 ## Log
 
