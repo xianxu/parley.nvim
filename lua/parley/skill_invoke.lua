@@ -29,6 +29,7 @@ local _gen = {}
 -- Cancelled final reads keep this physical owner until positive cleanup.
 local _terminals = {}
 local SourceRead=require('parley.skill_source_read')
+local Views=require('parley.window_views')
 local source_pool=SourceRead.pool(16) -- at most 16MiB across all buffers
 
 --- Is a skill exchange in flight for `buf`? Cleared on on_exit/on_abort, so an
@@ -537,10 +538,10 @@ function M.invoke(buf, manifest, args, opts)
                         -- readfile compatibility: a final file newline is buffer metadata.
                         local disk=read.data:gsub('\r\n','\n'):gsub('\n$','')
                         -- A whole-buffer replace keeps line numbers only (#358).
-                        local views=require('parley.window_views').capture(buf)
+                        local views=Views.capture(buf)
                         local receipt=edits.apply_user(source_capture,{{region=1,text=disk}})
                         if receipt.status~='applied' then refuse(receipt.reason);return end
-                        require('parley.window_views').restore(buf,views)
+                        Views.restore(buf,views)
                         deliver_completion()
                     end
                     local handle=source_filesystem:read(artifact_path,on_source_read)

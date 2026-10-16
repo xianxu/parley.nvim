@@ -25,7 +25,7 @@ flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "93e0d3d8"}
 
 #356 keeps each window's cursor and top line on its text across the two external-write reload paths in `session_sync`: `reload()`'s `edit!`, and the native `FileChangedShell` reload. That covers the session file and every agentic document. Two other paths also rewrite a document the operator has open, and they still keep line numbers, so the cursor jumps:
 - `lua/parley/tools/file_refresh.lua`: after parley's own chat agent writes a file (the write and edit tools), it refreshes the captured buffers from the committed bytes.
-- `lua/parley/skills/review/init.lua`: the review round reloads its document with `:edit!` (the projection watcher is suppressed around it).
+- `lua/parley/skills/review/init.lua`: the review round reloads its document through `skill_invoke`'s `source_completion`, a whole-buffer `apply_user` (the projection watcher is suppressed around it).
 
 Found by #356's close review (an advisory, ARCH-PURPOSE). It was out of #356's scope, which was session_sync.
 
@@ -74,4 +74,8 @@ A partial edit keeps Neovim's own cursor adjustment. A whole-buffer replace lose
 - Mutation checks (copy, perl, cmp; no stash): removing file_refresh's restore fails both "lines added above" cases (plain buffer and attached document). Removing skill_invoke's restore fails its case. The append-below case passes either way, because a whole-buffer replace already keeps that view; it guards that the restore doesn't disturb it. That's a correction to "each test fails without the restore".
 - Also folded in #356's re-close advisory (family view-restore-fidelity): `window_views_spec` covers both curswant paths. A moved column re-derives curswant, and removing the second `winrestview` fails it. An unchanged column stays $-sticky.
 - A refused refresh, with a human edit after capture, leaves Neovim's own cursor adjustment untouched (tested).
+
+## Revisions
+
+- **2026-10-16, close review round 1 (FIX-THEN-SHIP).** Done when's "each test fails without the restore" applies to the edit-above cases only. The edit-below cases pass with or without the restore, because a whole-buffer replace already keeps that view; they guard that the restore doesn't disturb it. The edit-below case now exists for every path: the file_refresh plain buffer, the file_refresh attached document, and the review round. The Problem section's `:edit!` is corrected to the review round's real mechanism, a whole-buffer `apply_user`.
 
