@@ -160,3 +160,14 @@ Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-p
   and error modes (lines 342-369, 475), so the OpenAI dialect is mostly a
   rename; the direct providers have fixtures but no seam-level double; the
   per-provider `endpoint` makes the seam testable without transport changes.
+
+### 2026-10-16 (parley.nvim:4)
+
+- Plan approved by the TL, all five decisions as proposed:
+  1. HTTP errors are tested as surfaced failures carrying the API message; "retry transient provider errors" is filed as #351 (unclaimed).
+  2. #228's regression targets what landed, proven on `dc548920^`.
+  3. One test seam for the copilot token URL, no user config.
+  4. A shared `sse_dialects` module that both fakes import.
+  5. The live halves are built with offline proofs; the operator runs the live runs, which the TL schedules.
+- TL guidance: keep it lean (the scenario table is the product; keep the fake shell thin). M1 first, and report at its milestone close before M2.
+
