@@ -65,12 +65,12 @@ Design (quick flow: about 30 code lines added, about 90 removed):
 
 Steps:
 
-- [ ] `chat_tree.root` and `chat_tree.files`, with unit cases (order, a cycle, the depth cap, an unloadable file, an orphaned child as its own root)
-- [ ] init: delete-tree, move and `get_chat_tree_files` on chat_tree; delete the old walkers
-- [ ] exporter on chat_tree with its own loader; update the seams or the spec
-- [ ] outline `<M-t>` root from chat_tree; delete `find_tree_root`; port `outline._find_tree_root`'s test seam
-- [ ] sweep guard, with the outline exception explained
-- [ ] atlas (chat/lifecycle, export, outline) and traceability
+- [x] `chat_tree.root` and `chat_tree.files`, with unit cases (order, a cycle, the depth cap, an unloadable file, an orphaned child as its own root)
+- [x] init: delete-tree, move and `get_chat_tree_files` on chat_tree; delete the old walkers
+- [x] exporter on chat_tree with its own loader; update the seams or the spec
+- [x] outline `<M-t>` root from chat_tree; delete `find_tree_root`; port `outline._find_tree_root`'s test seam
+- [x] sweep guard, with the outline exception explained
+- [x] atlas (chat/lifecycle, export, outline) and traceability
 
 ## Revisions
 
