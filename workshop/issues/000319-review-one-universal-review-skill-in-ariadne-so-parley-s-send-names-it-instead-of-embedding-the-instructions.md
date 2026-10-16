@@ -227,3 +227,11 @@ Log: .git/sdlc/local-checks/dec9c3f08c6d3a9a71b088fd116018e8ee5057ae/suite.log
 (in the common Git dir). Queue wait 810s; all test phases finished and orphan
 census clean. No code changes since this suite head, only issue bookkeeping.
 Awaiting operator live acceptance before landing; no acceptance claimed.
+
+### 2026-10-16 — operator accepted combined smoke
+
+Hub delivery 20a83170-e3d1-4580-8564-3f796f4818b2 reports the operator accepted
+#319 + #356 + #357: "tested, seems to be working, treat this as smoke tested".
+Authorized to land #319 from this branch through the landing line, then #334.
+Merged current origin/main cleanly before close; repeating recorded suite
+because main's code changed since the prior green run. No #319 code changed.
