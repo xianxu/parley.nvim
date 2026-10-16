@@ -165,6 +165,7 @@ client secret is a local handshake token, which is why a fixed default is
 reasonable in the first place.
 
 ### 2026-10-15
+- 2026-10-15: closed — Full suite green on 7bf8ca72 (sdlc-local/suite). New: setup_api_keys_spec (partial api_keys keeps the cliproxyapi default; false drops it; a re-run setup with an edited key is what the renderer reads), vault_spec F1/F2, cliproxy_release_spec mismatch_message for ours, foreign and unknown, plus a lifecycle 401 assertion. Mutation: removing the vault reset fails 3 cases. Earlier suite run: update and lifecycle each failed one restart-timing case, then passed 3x in parallel runs and in the full re-run.; review verdict: SHIP
 
 - D1 needed no code: #307 already merges `api_keys`. `tests/unit/setup_api_keys_spec.lua` now pins it (a partial table, `false`, a re-run setup).
 - D2 mutation check: with the `secrets = {}` reset removed, 3 cases fail (setup_api_keys ×2, vault F1). With it restored, everything passes.
