@@ -27,6 +27,18 @@ The chat tree is walked by five copies of the same logic. There are three root-f
 
 ## Spec
 
+### Core concepts
+
+| Concept | Status | Meaning |
+|---|---|---|
+| `root` | new | `chat_tree.root(file, deps)`: the first file of `path_up`; an unloadable or orphaned file is its own root |
+| `files` | new | `chat_tree.files(root, deps)`: the tree's files in depth-first pre-order, each once, depth-capped |
+| `disk_deps` | new | `chat_tree.disk_deps()`: the walker's IO over saved files, for commands that act on files |
+| `chat_tree_files` | new | init's one call into `root` and `files` for delete-tree, move and `get_chat_tree_files` |
+| `find_tree_root` | modified | exporter and outline: thin wrappers over `chat_tree.root` |
+| `collect_tree` | modified | exporter: the info objects for `chat_tree.files`, each file read once |
+| find_tree_root_file, collect_tree_files | deleted | init's copies of the root-finder and the downward walk |
+
 ## Done when
 
 - The root-finders and downward walkers derive from `chat_tree`: a `root(abs)` built from its link-following, and `files(root)` (its DFS file order).
@@ -59,6 +71,11 @@ Steps:
 - [ ] outline `<M-t>` root from chat_tree; delete `find_tree_root`; port `outline._find_tree_root`'s test seam
 - [ ] sweep guard, with the outline exception explained
 - [ ] atlas (chat/lifecycle, export, outline) and traceability
+
+## Revisions
+
+- 2026-10-16, TL: keep the new root rule. The old rule was a bug, and one walker means one notion of the tree; note the change in the close and the atlas.
+- 2026-10-16, build: delete-tree, move, export and the outline load through `chat_tree.disk_deps()`, not `io_deps()`. They act on the saved files, and the outline renders from disk. Two chat_move cases found this: they append the 🌿 line on disk while the root's buffer is loaded. The request context keeps `io_deps` (buffer first). A header-less file is no longer part of a tree; the old init walker listed one.
 
 ## Log
 

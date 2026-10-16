@@ -97,6 +97,55 @@ function M.linearize(path, cut, deps)
     return items
 end
 
+--- The root of `file`'s tree: the first file of its path_up. A file that
+--- cannot be loaded is its own root. Every command that acts on a whole tree
+--- starts here (#349), so the tree is the one the request context sees.
+--- @param file string absolute, resolved path
+--- @param deps { load, resolve } as for path_up
+--- @return string root
+function M.root(file, deps)
+    local parsed = deps.load(file)
+    if not parsed then return file end
+    return M.path_up(file, parsed, deps)[1].file
+end
+
+--- Every file of the tree under `root`, in depth-first pre-order: a file, then
+--- each of its branches in line order. A file reached twice is listed once; an
+--- unloadable file is skipped with its subtree; depth is capped.
+--- @param root string absolute, resolved path
+--- @param deps { load, resolve } as for path_up
+--- @return table[] files: { file, parsed }
+function M.files(root, deps)
+    local out, seen = {}, {}
+    local function visit(file, depth)
+        if depth > MAX_DEPTH or seen[file] then return end
+        seen[file] = true
+        local parsed = deps.load(file)
+        if not parsed then return end
+        out[#out + 1] = { file = file, parsed = parsed }
+        local dir = vim.fn.fnamemodify(file, ":h")
+        for _, branch in ipairs(parsed.branches or {}) do visit(deps.resolve(branch.path, dir), depth + 1) end
+    end
+    visit(root, 0)
+    return out
+end
+
+--- The files' saved state: commands that act on the files themselves (delete,
+--- move, export, the outline, which renders from disk) see the tree as it is
+--- on disk, not as an unsaved buffer has it.
+function M.disk_deps()
+    local parley = require("parley")
+    return {
+        resolve = function(ref, dir) return parley.resolve_chat_path(ref, dir) end,
+        load = function(file)
+            if vim.fn.filereadable(file) == 0 then return nil end
+            local lines = vim.fn.readfile(file)
+            local header_end = parley.chat_parser.find_header_end(lines)
+            return header_end and parley.parse_chat(lines, header_end) or nil
+        end,
+    }
+end
+
 --- The editor's IO: files are read from their loaded buffer when there is one
 --- (ahead of the disk while an answer streams or edits are unsaved), and an
 --- exchange still being regenerated contributes its previous answer.

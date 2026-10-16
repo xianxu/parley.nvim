@@ -917,3 +917,36 @@ describe("arch: one reader for the test-harness signal (#235)", function()
     end)
 end)
 
+
+-- #349: one walker for the chat tree. Five copies of the root-finder and the
+-- downward walk had grown in init, exporter and outline; the old root-finders
+-- followed a parent that no longer listed the child, so delete-tree removed a
+-- tree the operator was not in. A module that resolves a parent link or a
+-- branch path itself is walking the tree, and is a finding.
+describe("arch: one chat tree walker (#349)", function()
+    local HOME = "lua/parley/chat_tree.lua"
+    -- The outline resolves each branch row's child for display (its topic and
+    -- the expand target); it walks rendered rows, not files.
+    local BRANCH_ROWS = "lua/parley/outline.lua"
+    local function follows(line, file)
+        if line:match("^%s*%-%-") then return false end
+        if line:find("resolve[%w_]*%(%s*[%w_.]*parent_link%.path") then return true end
+        return file ~= BRANCH_ROWS and line:find("resolve[%w_]*%(%s*[%w_.]*branch%.path") ~= nil
+    end
+    it("no lua/ module follows parent links or branch paths except chat_tree", function()
+        local found = {}
+        for _, file in ipairs(repo_files("git ls-files --cached --others --exclude-standard -- 'lua/*.lua'")) do
+            if file ~= HOME then
+                for n, line in ipairs(vim.fn.readfile(file)) do
+                    if follows(line, file) then found[#found + 1] = file .. ":" .. n .. ": " .. vim.trim(line) end
+                end
+            end
+        end
+        assert.same({}, found, "derive from require('parley.chat_tree').root/files")
+        local hits = 0
+        for _, line in ipairs(vim.fn.readfile(HOME)) do
+            if follows(line, HOME) then hits = hits + 1 end
+        end
+        assert.is_true(hits >= 3, "the patterns no longer match the walker itself: update this guard")
+    end)
+end)

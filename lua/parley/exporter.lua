@@ -136,56 +136,28 @@ end
 -- Tree discovery
 --------------------------------------------------------------------------------
 
-local function find_tree_root(file_path, depth)
-	depth = depth or 0
-	if depth > 20 then
-		return file_path
-	end
-	local abs_path = _parley.helpers.abs_path(file_path)
-	if vim.fn.filereadable(abs_path) == 0 then
-		return abs_path
-	end
-
-	local info = read_chat_file(abs_path)
-	if not info or not info.parsed.parent_link then
-		return abs_path
-	end
-
-	local parent_dir = vim.fn.fnamemodify(abs_path, ":h")
-	local parent_abs = _parley.resolve_chat_path(info.parsed.parent_link.path, parent_dir)
-	if vim.fn.filereadable(parent_abs) == 0 then
-		return abs_path
-	end
-	return find_tree_root(parent_abs, depth + 1)
+-- The tree is chat_tree's (#349). Its loader is read_chat_file, and each
+-- file's info is kept, so the export reads every file once.
+local function tree_deps(infos)
+	return {
+		resolve = function(ref, dir) return _parley.resolve_chat_path(ref, dir) end,
+		load = function(abs)
+			if infos[abs] == nil then infos[abs] = read_chat_file(abs) or false end
+			return infos[abs] and infos[abs].parsed or nil
+		end,
+	}
 end
 
---- Collect all files in a chat tree, returning a list of info objects.
---- Each entry is the parsed info table (from build_info/read_chat_file).
---- Files that exist but can't be parsed are skipped.
-local function collect_tree(file_path, visited)
-	visited = visited or {}
-	local abs_path = _parley.helpers.abs_path(file_path)
-	if visited[abs_path] then
-		return {}
-	end
-	visited[abs_path] = true
-	if vim.fn.filereadable(abs_path) == 0 then
-		return {}
-	end
+local function find_tree_root(file_path, infos)
+	return require("parley.chat_tree").root(_parley.helpers.abs_path(file_path), tree_deps(infos or {}))
+end
 
-	local info = read_chat_file(abs_path)
-	if not info then
-		return {}
-	end
-
-	local result = { info }
-	local file_dir = vim.fn.fnamemodify(abs_path, ":h")
-	for _, branch in ipairs(info.parsed.branches) do
-		local child_abs = _parley.resolve_chat_path(branch.path, file_dir)
-		local child_infos = collect_tree(child_abs, visited)
-		for _, child_info in ipairs(child_infos) do
-			table.insert(result, child_info)
-		end
+--- Every file of the tree under `file_path`, as info objects (build_info).
+local function collect_tree(file_path, infos)
+	infos = infos or {}
+	local result = {}
+	for _, item in ipairs(require("parley.chat_tree").files(_parley.helpers.abs_path(file_path), tree_deps(infos))) do
+		result[#result + 1] = infos[item.file]
 	end
 	return result
 end
@@ -1000,9 +972,9 @@ local function export_tree(params, format, write_fn, config_dir_key, extension)
 		return
 	end
 
-	-- Discover tree (collect_tree returns info objects, avoiding redundant reads)
-	local root_path = find_tree_root(file_name)
-	local tree_infos = collect_tree(root_path)
+	-- Discover tree: one info table per file, read once by root and walk alike
+	local infos = {}
+	local tree_infos = collect_tree(find_tree_root(file_name, infos), infos)
 	local link_map = build_link_map(tree_infos, extension)
 
 	-- Check for filename collisions

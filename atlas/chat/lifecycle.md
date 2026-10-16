@@ -307,6 +307,18 @@ user sees it (`helper.chat_lines`): from its loaded buffer when one is open, els
 from the file. An exchange still being regenerated contributes its previous
 answer, as above.
 
+One walker for the tree (#349). The root is `chat_tree.root`, the first file
+of `path_up`, and the whole tree is `chat_tree.files`, depth-first from the
+root. Delete-tree, move, export and the `<M-t>` outline derive from them, over
+`chat_tree.disk_deps()` (the saved files they act on). The request context uses
+`io_deps()`. A parent that no longer lists the child ends the walk here too: from an
+orphaned child, delete-tree, move, export and the outline act on the child's own
+tree. The old root finders climbed to the parent, whose tree does not contain the
+child, so delete-tree removed the parent and kept the operator's file. A sweep in
+`tests/arch/single_source_sweeps_spec.lua` refuses another module that resolves
+a parent link or a branch path. The outline's branch rows are exempt: they resolve
+a child for display.
+
 Each aside off the current file carries its anchor (the exchange it hangs
 after, and the row of its branch reference). A batch leg that leaves the
 exchange out leaves the aside out too, and a visual range keeps an aside when it

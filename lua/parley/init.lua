@@ -3721,54 +3721,24 @@ local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 	return nil
 end
 
--- Walk parent_link chain to find the tree root file path.
-local function find_tree_root_file(file_path, depth)
-	depth = depth or 0
-	if depth > 20 then return file_path end
-	local abs_path = M.helpers.abs_path(file_path)
-	if vim.fn.filereadable(abs_path) == 0 then return abs_path end
-	local lines = vim.fn.readfile(abs_path)
-	local header_end = M.chat_parser.find_header_end(lines)
-	if not header_end then return abs_path end
-	local parsed = M.chat_parser.parse_chat(lines, header_end, M.config)
-	if not parsed.parent_link then return abs_path end
-	local parent_dir = vim.fn.fnamemodify(abs_path, ":h")
-	local parent_abs = resolve_chat_path(parsed.parent_link.path, parent_dir)
-	if vim.fn.filereadable(parent_abs) == 0 then return abs_path end
-	return find_tree_root_file(parent_abs, depth + 1)
-end
-
--- Collect all file paths in a chat tree (root + all descendants via branches).
-local function collect_tree_files(file_path, visited)
-	visited = visited or {}
-	local abs_path = M.helpers.abs_path(file_path)
-	if visited[abs_path] then return {} end
-	visited[abs_path] = true
-	if vim.fn.filereadable(abs_path) == 0 then return {} end
-
-	local result = { abs_path }
-	local lines = vim.fn.readfile(abs_path)
-	local header_end = M.chat_parser.find_header_end(lines)
-	if not header_end then return result end
-	local parsed = M.chat_parser.parse_chat(lines, header_end, M.config)
-	local file_dir = vim.fn.fnamemodify(abs_path, ":h")
-
-	for _, branch in ipairs(parsed.branches) do
-		local child_abs = resolve_chat_path(branch.path, file_dir)
-		local child_files = collect_tree_files(child_abs, visited)
-		for _, f in ipairs(child_files) do
-			table.insert(result, f)
-		end
+-- The chat tree containing `file_path`, as chat_tree defines it (#349): the
+-- files under its root, depth-first. One walker for the request context,
+-- delete-tree, move, export and the outline.
+local function chat_tree_files(file_path)
+	local Tree = require("parley.chat_tree")
+	local deps = Tree.disk_deps()
+	local out = {}
+	for _, item in ipairs(Tree.files(Tree.root(M.helpers.abs_path(file_path), deps), deps)) do
+		out[#out + 1] = item.file
 	end
-	return result
+	return out
 end
 
 -- Delete an entire chat tree (root + all descendants) after confirmation.
 M.delete_chat_tree = function(buf)
 	local file = vim.api.nvim_buf_get_name(buf)
 	if file == "" then return end
-	local root = find_tree_root_file(file)
-	local tree_files = collect_tree_files(root)
+	local tree_files = chat_tree_files(file)
 	if #tree_files == 0 then return end
 
 	-- #231: the operator consents to what the prompt names — every assets
@@ -3868,9 +3838,8 @@ M.move_chat_tree = function(file_name, target_dir)
 		return nil, "chat is already in that directory"
 	end
 
-	-- Find tree root and collect all files
-	local tree_root = find_tree_root_file(file_name)
-	local tree_files = collect_tree_files(tree_root)
+	-- The whole tree, from its root
+	local tree_files = chat_tree_files(file_name)
 
 	if #tree_files == 0 then
 		return nil, "no files found in tree"
@@ -3986,7 +3955,7 @@ M.move_chat_tree = function(file_name, target_dir)
 
 	-- Return the new path of the originally requested file
 	local resolved_file = M.helpers.abs_path(file_name)
-	return path_map[resolved_file] or path_map[tree_root]
+	return path_map[resolved_file] or path_map[tree_files[1]]
 end
 
 M.prompt_chat_move = function(file_name, on_complete, on_cancel)
@@ -5246,8 +5215,7 @@ end
 
 -- Get all files in a chat tree (root + descendants) for a given file path.
 M.get_chat_tree_files = function(file_path)
-	local root = find_tree_root_file(file_path)
-	return collect_tree_files(root)
+	return chat_tree_files(file_path)
 end
 
 M._reopen_note_finder = function(source_win, selection_index, selection_value)

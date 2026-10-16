@@ -152,3 +152,50 @@ describe("chat_tree.path_up (#233)", function()
         assert.equals(21, #path) -- the current file and 20 ancestors
     end)
 end)
+
+describe("chat_tree.root and files (#349)", function()
+    local function names(list)
+        local out = {}
+        for _, item in ipairs(list) do out[#out + 1] = item.file:gsub("^/c/", "") end
+        return out
+    end
+
+    it("finds the root through every linked ancestor", function()
+        local files = {
+            ["root.md"] = file({ "R1", { branch = "a.md" } }),
+            ["a.md"] = file({ "A1", { branch = "aa.md" } }, "root.md"),
+            ["aa.md"] = file({ "AA1" }, "a.md"),
+        }
+        assert.equals("/c/root.md", Tree.root("/c/aa.md", deps(files)))
+    end)
+
+    it("makes an orphaned child its own root: the parent no longer lists it", function()
+        local files = {
+            ["root.md"] = file({ "R1" }),
+            ["a.md"] = file({ "A1" }, "root.md"),
+        }
+        assert.equals("/c/a.md", Tree.root("/c/a.md", deps(files)))
+    end)
+
+    it("makes an unloadable file its own root", function()
+        assert.equals("/c/gone.md", Tree.root("/c/gone.md", deps({})))
+    end)
+
+    it("lists the tree depth-first, each file once, skipping unloadable ones", function()
+        local files = {
+            ["root.md"] = file({ "R1", { branch = "a.md" }, "R2", { branch = "b.md" }, { branch = "gone.md" } }),
+            ["a.md"] = file({ "A1", { branch = "aa.md" }, { branch = "root.md" } }, "root.md"),
+            ["aa.md"] = file({ "AA1" }, "a.md"),
+            ["b.md"] = file({ "B1" }, "root.md"),
+        }
+        local list = Tree.files("/c/root.md", deps(files))
+        assert.same({ "root.md", "a.md", "aa.md", "b.md" }, names(list))
+        assert.equals(files["a.md"], list[2].parsed)
+    end)
+
+    it("stops at the depth cap", function()
+        local files = {}
+        for i = 0, 30 do files["f" .. i .. ".md"] = file({ "Q" .. i, { branch = "f" .. (i + 1) .. ".md" } }) end
+        assert.equals(21, #Tree.files("/c/f0.md", deps(files)))
+    end)
+end)

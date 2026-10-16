@@ -333,6 +333,24 @@ describe("chat context over a real chat tree (#233)", function()
         end)
     end)
 
+    -- #349: delete-tree, move and export act on chat_tree's tree.
+    it("gives delete-tree and move the whole tree from any of its files, depth-first", function()
+        assert.same({ root, aside, nested, later }, parley.get_chat_tree_files(nested))
+    end)
+
+    it("makes an orphaned child its own tree: the parent no longer lists it", function()
+        local parent = write_chat("2026-10-16.17-00-00.080.md", { "💬: P1", "", "🤖:[A]", "p", "" })
+        local child = write_chat("2026-10-16.17-01-00.081.md", {
+            "🌿: 2026-10-16.17-00-00.080.md: Parent", "", "💬: C1", "",
+        })
+        -- The old root finder followed the link anyway, and the parent's tree
+        -- does not contain the child: delete-tree removed the parent, kept the child.
+        assert.same({ child }, parley.get_chat_tree_files(child))
+        assert.equals(child, require("parley.outline")._find_tree_root(child))
+        assert.equals(child, require("parley.exporter")._find_tree_root(child))
+        assert.is_true(vim.fn.filereadable(parent) == 1)
+    end)
+
     it("reads an unsaved child from its buffer", function()
         vim.cmd("edit " .. vim.fn.fnameescape(aside))
         local buf = vim.api.nvim_get_current_buf()
