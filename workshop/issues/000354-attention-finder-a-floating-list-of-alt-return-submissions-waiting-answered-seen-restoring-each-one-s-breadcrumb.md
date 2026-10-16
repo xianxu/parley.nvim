@@ -5,8 +5,8 @@ deps: [parley.nvim#332, parley.nvim#353]
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
-estimate_hours:
-card_mirror: '25a30c5c03e9fc997840666fd251a1b66e81cfbe' # card fields mirrored from issue-cards; edit via sdlc
+estimate_hours: 3.39
+card_mirror: 'ceeda60e4f61f8f9c829179583ea002befe00762' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T11:20:37-07:00
 claimant:
     operator: Xian Xu
@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: inferred}
 ---
 
 # Attention finder: a floating list of Alt+Return submissions (waiting / answered / seen), restoring each one's breadcrumb
@@ -40,6 +41,28 @@ back when the agent answers a submitted file. Operator design, 2026-10-16 (ops Q
 
 - Tests: entries appear on submit; state transitions (waiting, answered via a fold, seen on open); breadcrumb
   restored on jump; typeahead; then the operator's live check.
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md` (the source reads stale, so the hours are provisional). Method A only.*
+
+- `issue-spec`: planning since the claim (the research into Couch's owed IDs, the durable plan, the #353 seam with parley.nvim:2, and two plan-quality rounds) is mostly spent already, so design is at the middle of the range.
+- `lua-neovim` ×2, M1 (the model, the store with its lease, the record hook) and M2 (rows, refresh, open, the chord): design ×0.2, because the plan settles the schemas, events and seams. Impl is the middle of the range at 40%.
+- `milestone-review` ×2 and `atlas-docs`: impl at 40% of the middle of the range.
+- Familiar territory (`float_picker`, `couch.query`, `document_lease` and the fake Couch all exist): ×1.0. Design buffer +15%, for a thorough plan doc.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec        design=1.0 impl=0.08
+item: lua-neovim        design=0.4 impl=0.4
+item: lua-neovim        design=0.4 impl=0.4
+item: milestone-review  design=0.0 impl=0.14
+item: milestone-review  design=0.0 impl=0.14
+item: atlas-docs        design=0.1 impl=0.04
+design-buffer: 0.15
+total: 3.39
+```
 
 ## Plan
 
