@@ -47,6 +47,7 @@ It passed 3 of 3 runs alone. Likely cause, read from the code: the barrier scrip
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Red: the new case (an empty ready file, pid written 100 ms later) got nil from the old await_ready. Green: packaging_launcher_spec 11/11 in 6 concurrent runs, luacheck clean. Test-only fix, no architectural surface (no-atlas).; review verdict: SHIP
 
 - Taken by parley.nvim:3. Red: the new case got nil from the old `await_ready`
   (:76, expected 4242). Green: 11/11, in 6 concurrent runs, luacheck clean.
