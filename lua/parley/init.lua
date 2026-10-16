@@ -1853,10 +1853,11 @@ end
 
 --- Checks if a file should be considered a chat transcript, it enforces that a file needs to be in one configured chat root
 --- and have a valid header portion.
----@param buf number # buffer number
+---@param buf number|nil # buffer number, optional when supplied_lines is provided
 ---@param file_name string # file name
+---@param supplied_lines string[]|nil # classify a file without loading a buffer
 ---@return string | nil # reason for not being a chat or nil if it is a chat
-M.not_chat = function(buf, file_name)
+M.not_chat = function(buf, file_name, supplied_lines)
 	local chat_dir, resolved_file = find_chat_root(file_name)
 	if not chat_dir then
 		return "resolved file (" .. resolved_file .. ") not in configured chat roots (" .. table.concat(M.get_chat_dirs(), ", ") .. ")"
@@ -1868,7 +1869,7 @@ M.not_chat = function(buf, file_name)
 		return "file does not have timestamp format"
 	end
 
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local lines = supplied_lines or vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	if #lines < 5 then
 		return "file too short"
 	end
@@ -3088,11 +3089,14 @@ M.setup_markdown_keymaps = function(buf)
 	-- Document review actions. The skill supplies the callbacks; the REGISTRY
 	-- installs them (#214 C1) — it used to install them itself from raw config,
 	-- which put <C-g>ve/<M-s>/<M-CR> outside the master switch and made a
-	-- `shortcut = ""` disable raise on every markdown BufEnter. nil = journal
-	-- sidecar, which gets no review keys.
+	-- `shortcut = ""` disable raise on every markdown BufEnter. Journal
+	-- sidecars omit marker review keys; pane submission remains available.
 	local review_skill = require("parley.skills.review")
 	local session_sync = require("parley.session_sync")
 	local review_cbs = review_skill.registry_callbacks(buf) or {}
+	if require("parley.couch").thread() then
+		review_cbs.review_next = function() require("parley.review_send").submit(buf) end
+	end
 
 	-- Branch inserters: shared with chat buffers (#214). Markdown links INLINE
 	-- by absolute path, since the file may live anywhere; the standalone ref
@@ -3198,6 +3202,7 @@ M.setup_markdown_keymaps = function(buf)
 	-- #312: compact 🤖 markers (conceal + cursor snap), same as chat buffers.
 	require("parley.comment").attach(buf)
 	session_sync.attach(buf)
+	require("parley.agentic_document").attach(buf)
 	if review_cbs.review_next then
 		require("parley.review_send").attach(buf)
 	end
@@ -3491,14 +3496,15 @@ M.move_chat = function(file_name, target_dir)
 		return nil, clash
 	end
 
-	sync_moved_chat_buffers(resolved_file, nil)
-
-	local ok, err = os.rename(resolved_file, target_file)
-	if not ok then
-		return nil, "failed to move chat: " .. tostring(err)
+	local handled, moved, move_error = require("parley.agentic_document").move_path(resolved_file, target_file)
+	if handled then
+		if not moved then return nil, move_error end
+	else
+		sync_moved_chat_buffers(resolved_file, nil)
+		local ok, err = os.rename(resolved_file, target_file)
+		if not ok then return nil, "failed to move chat: " .. tostring(err) end
+		sync_moved_chat_buffers(resolved_file, target_file)
 	end
-
-	sync_moved_chat_buffers(resolved_file, target_file)
 
 	-- The .md move is done and stays done: the folder failing to follow is
 	-- reported only after the state and tracking have followed the file.
@@ -3876,13 +3882,22 @@ M.move_chat_tree = function(file_name, target_dir)
 	end
 
 	-- Move all files
+	-- Prove membership for the whole set before any sibling moves. An unavailable
+	-- registry is not evidence that the existing plain-file path is safe.
 	for _, src in ipairs(tree_files) do
-		sync_moved_chat_buffers(src, nil)
-		local ok, err = os.rename(src, path_map[src])
-		if not ok then
-			return nil, "failed to move " .. src .. ": " .. tostring(err)
+		local member, membership_error = require("parley.agentic_document").move_membership(src)
+		if member == nil then return nil, membership_error end
+	end
+	for _, src in ipairs(tree_files) do
+		local handled, moved, move_error = require("parley.agentic_document").move_path(src, path_map[src])
+		if handled then
+			if not moved then return nil, move_error end
+		else
+			sync_moved_chat_buffers(src, nil)
+			local ok, err = os.rename(src, path_map[src])
+			if not ok then return nil, "failed to move " .. src .. ": " .. tostring(err) end
+			sync_moved_chat_buffers(src, path_map[src])
 		end
-		sync_moved_chat_buffers(src, path_map[src])
 
 		-- The .md move stays done: a folder that fails to follow is collected
 		-- and reported after the state refresh and the 🌿 rewrite complete.

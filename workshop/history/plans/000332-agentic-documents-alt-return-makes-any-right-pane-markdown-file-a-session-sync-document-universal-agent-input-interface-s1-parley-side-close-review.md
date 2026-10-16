@@ -1,0 +1,356 @@
+# Boundary Review — parley.nvim#332 (whole-issue close)
+
+| field | value |
+|-------|-------|
+| issue | 332 — Agentic documents: Alt+Return makes any right-pane markdown file a session-sync document (universal-agent-input-interface S1, parley side) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000332-agentic-documents-alt-return-makes-any-right-pane-markdown-file-a-session-sync-document-universal-agent-input-interface-s1-parley-side.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | e23163d1bb9f42765fdd899f18951b6f32c6208e..c3b815092d3044a516fb0914f69a95614cdc069e |
+| command | sdlc close --issue 332 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T18:17:38-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The implementation delivers substantial coverage, shared turn handling, bounded registry access, and documented recovery. However, two reproduced lifecycle defects break registration/protection or strand submission, and the Core concepts table incorrectly classifies an IO-dependent function as PURE. These need correction before close.
+
+```findings
+findings:
+  - id: new
+    severity: Critical
+    kind: defect
+    family: membership-before-migration
+    title: |
+      Native rename treats unresolved membership as plain and strands registration
+    detail: |
+      lua/parley/agentic_document.lua:554-557 returns from BufFilePre when neither coordinator nor legacy identity is attached, including while initial lookup is pending or unavailable. Reproduced with an existing registration and delayed initial lookup: native :saveas succeeded, NEW became plain with no identity or edit lock, and independent registry queries reported OLD registered / NEW absent. ARCH-PURPOSE and ARCH-ORDER: require confirmed absence before allowing the plain rename path; resolve membership or refuse only the migration when membership is unknown. Add controlled-order regressions for native rename during probing and unavailable admission.
+  - id: new
+    severity: Critical
+    kind: defect
+    family: async-buffer-lifetime
+    title: |
+      Lookup completion during buffer unload permanently strands the operation on reopen
+    detail: |
+      lua/parley/agentic_document.lua:185 discards callbacks when the buffer is unloaded, but line 315 detaches only on BufWipeout. Reproduced by holding initial lookup, running :bdelete, completing lookup while unloaded, then reopening: the controller remained probing with its completed lookup still recorded, and subsequent submit could neither requery nor submit. ARCH-ORDER and ARCH-FUNERAL: invalidate the buffer incarnation and close owned requests/leases on unload, or explicitly model suspended completion and restart admission on reload; preserve uncertain mutation/journal recovery. Add delayed-completion unload/reopen tests across lookup, mutation and migration.
+  - id: new
+    severity: Critical
+    kind: defect
+    family: core-concept-purity-contract
+    title: |
+      Core concepts declares not_chat PURE despite editor and filesystem dependencies
+    detail: |
+      workshop/plans/000332-agentic-documents-plan.md:38 labels not_chat PURE, but lua/parley/init.lua:1845 resolves configured chat roots and line 1856 reads buffer contents when supplied_lines is omitted. Its existing tests/integration/not_chat_spec.lua creates directories, writes files and constructs buffers. This contradicts the required Core concepts classification and ARCH-PURE. Promote this wrapper to INTEGRATION, or extract a value-only classifier and classify/test that separately; record the correction under Revisions.
+```
+
+1. **Strengths**
+
+   - Explicit JSON-null validation prevents malformed or failed lookups from proving absence.
+   - Migration uses kernel leases, atomic no-replace renames, persisted witnesses, and forward recovery.
+   - Submission receipts and rapid-resend authorization live in the pure lifecycle controller.
+   - README, atlas, and traceability updates cover the new user-facing surface.
+
+2. **Critical findings**
+
+   - [agentic_document.lua:554](lua/parley/agentic_document.lua:554): unresolved membership bypasses native migration protection.
+   - [agentic_document.lua:185](lua/parley/agentic_document.lua:185): unload discards completion without retiring the pending operation.
+   - [Plan:38](workshop/plans/000332-agentic-documents-plan.md:38): `not_chat` purity classification contradicts production code and tests.
+
+   Fix sketches and reproduction evidence appear in the findings block.
+
+3. **Important findings**
+
+   None additional.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   `make test-spec SPEC=modes/session_sync` passed all 12 mapped spec files, with no surviving test processes. Fake-registry conformance and its corrupted negative control also passed.
+
+   Separate controlled-callback probes reproduced both runtime defects. Existing tests miss those event orderings. I did not rerun the full repository suite or real-Couch conformance.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** admission reuses the existing turn engine and checked writer.
+   - **ARCH-PURE — flag:** incorrect `not_chat` classification; the new lifecycle/projection modules otherwise separate logic from IO.
+   - **ARCH-PURPOSE — flag:** native migration loses agentic identity during unresolved admission.
+   - **ARCH-MOCK — pass:** production transport and tests share a stateful executable fake; a conformance driver exists.
+   - **ARCH-CONSTRAINTS — pass:** requests, queues, caches, journals, and side scans have explicit bounds.
+   - **ARCH-SECURE — pass:** inspected registry/journal readers validate external data, and subprocess calls use argv arrays.
+   - **ARCH-ORDER — flag:** pending lookup/rename and unload/completion interleavings remain incorrect.
+   - **ARCH-FUNERAL — flag:** unload does not retire coordinator requests and operation ownership as planned.
+
+7. **Plan revision recommendations**
+
+   Add `## Revisions` entries that:
+
+   - Require confirmed plain membership before bypassing native migration.
+   - Specify unload/reload transitions, handle cleanup, and uncertain-mutation recovery, with controllable completion-order tests.
+   - Reclassify `not_chat` as INTEGRATION, or identify an extracted PURE classifier separately.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"d005ac77-a86e-4347-b2ad-c31155e637f7","repository":"github.com/xianxu/parley.nvim","issue_id":"000332","recipe":"milestone-review","round":1,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/62e82e6231b05a0c","reviewed_head":"c3b815092d3044a516fb0914f69a95614cdc069e","slot":"parley.nvim:2","requested_at":"2026-10-16T01:14:21.24309Z"},"phase":"finished","pid":37967,"started_at":"2026-10-16T01:14:21.619261Z","finished_at":"2026-10-16T01:17:38.290309Z","session_id":"01a14246-3e92-7491-ac90-0ed30b7f1e45","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T19:05:11-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 332 — Agentic documents: Alt+Return makes any right-pane markdown file a session-sync document (universal-agent-input-interface S1, parley side) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000332-agentic-documents-alt-return-makes-any-right-pane-markdown-file-a-session-sync-document-universal-agent-input-interface-s1-parley-side.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | e23163d1bb9f42765fdd899f18951b6f32c6208e..2fee90247e1fef6cddb9402f80b828cbbb29ba45 |
+| command | sdlc close --issue 332 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T19:05:11-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The three prior findings are addressed, with regressions that fail without the coordinator fixes. The pinned implementation passes all 13 mapped session-sync spec files and isolated real/fake Couch conformance. No blocking findings remain; one minor Plan discrepancy should be corrected.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Native and public migration preflight now require confirmed membership and recheck activity after waits. Controlled regressions in agentic_document_spec.lua:595 onward pass at HEAD and fail with the pre-fix coordinator.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      True BufUnload retires the incarnation, cancels requests and releases migration leases; managed rereads defer completions. Lifetime regressions cover lookup, register, rename and send across unload/reopen; restoring the pre-fix coordinator produces five failures.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Plan line 38 now classifies not_chat as INTEGRATION, with the correction explained under Revisions at line 252. This matches configured-root resolution and optional buffer reads in init.lua:1845-1856 and its existing integration tests.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: plan-runtime-traceability
+    title: |
+      Plan still promises lease-file cleanup that the implementation deliberately omits
+    detail: |
+      workshop/plans/000332-agentic-documents-plan.md:113 promises opportunistic cleanup after forgetting/completed recovery. document_lease.lua:76-79 only closes descriptors, and atlas/modes/session_sync.md:170-172 explicitly documents permanent allocation without automatic GC. Under ARCH-FUNERAL, align the Plan with the implemented 4096-entry bound and overflow refusal.
+```
+
+1. **Strengths**
+
+   - Membership preflight covers native and public move doors, including submits starting while bounded waits pump editor events.
+   - Buffer lifetime tests control actual subprocess completions across unload, reopen and managed reload.
+   - Registry parsing distinguishes explicit absence from malformed, unavailable and uncertain outcomes.
+   - README, atlas and traceability document the new submission, feedback, offline and migration surfaces.
+
+2. **Critical findings**
+
+   None.
+
+3. **Important findings**
+
+   None.
+
+4. **Minor findings**
+
+   Plan line 113 should describe permanent, bounded lease allocation consistently with code and atlas.
+
+5. **Test coverage notes**
+
+   - `make test-spec SPEC=modes/session_sync`: all 13 files passed; no surviving test processes.
+   - Disposable-checkout negative checks using the supported Neovim and pre-fix coordinator produced 11 admission failures and five lifetime failures.
+   - Isolated real/fake registry conformance passed, including rejection of the deliberately corrupted fake.
+   - Range whitespace check passed. The full repository suite was not independently rerun during this review.
+
+6. **Architectural notes**
+
+   | Principle | Assessment |
+   |---|---|
+   | ARCH-DRY | Pass: shared turn engine, process seam and atomic writer are reused. |
+   | ARCH-PURE | Pass: lifecycle/projection modules use value inputs; the corrected catalog identifies IO wrappers. |
+   | ARCH-PURPOSE | Pass: admission, routing, protection and both move doors deliver the documented purpose. |
+   | ARCH-MOCK | Pass: production transport exercises a persisted fake; real/fake conformance passed. |
+   | ARCH-CONSTRAINTS | Pass: request, queue, cache, journal and scan bounds have enforcement and coverage. |
+   | ARCH-SECURE | Pass: replies and persisted state are validated; subprocess arguments remain structural. |
+   | ARCH-ORDER | Pass: incarnation guards, post-wait checks and controlled completion tests address the temporal defects. |
+   | ARCH-FUNERAL | Pass with the minor documentation flag: handles retire, completed journals disappear, and retained leases are capped. |
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry stating that lease files remain permanently allocated, automatic GC is not implemented, and new allocations refuse at the 4096-entry namespace limit. Correct line 113 accordingly.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"573a6836-0896-4182-985f-202f9ccb5fff","repository":"github.com/xianxu/parley.nvim","issue_id":"000332","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/f20b0868a22e44d9","reviewed_head":"2fee90247e1fef6cddb9402f80b828cbbb29ba45","slot":"parley.nvim:2","requested_at":"2026-10-16T02:00:24.7537Z"},"phase":"finished","pid":6635,"started_at":"2026-10-16T02:00:25.015296Z","finished_at":"2026-10-16T02:05:09.978746Z","session_id":"01a14270-6835-7b32-ac76-31c411029d5d","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T22:04:04-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 332 — Agentic documents: Alt+Return makes any right-pane markdown file a session-sync document (universal-agent-input-interface S1, parley side) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000332-agentic-documents-alt-return-makes-any-right-pane-markdown-file-a-session-sync-document-universal-agent-input-interface-s1-parley-side.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | e23163d1bb9f42765fdd899f18951b6f32c6208e..67638184a0c31d67c6673edd3884c19fe45bb75f |
+| command | sdlc close --issue 332 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T22:04:04-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The implementation substantially delivers the issue, and BR-4 is addressed. All 14 mapped spec files, lint, and isolated real/fake Couch conformance passed. One reproducible window-option restoration bug needs correction before shipping.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Plan line 113 now explicitly documents permanent lease allocation, no automatic GC, and the 4096-entry bound with overflow refusal. This matches document_lease.lua and atlas/modes/session_sync.md:170-172; the pinned correction is prose-only.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: window-option-ownership
+    title: |
+      Buffer round trips restore another buffer's original window options
+    detail: |
+      lua/parley/document_band.lua:59 retires the previous buffer's record after the window already displays the next buffer; restore() therefore applies that previous record's baseline to the current buffer. A native headless A→B→A probe with distinct original options and identical rendered bands restored A to "original B" / "StatusLine:IncSearch", instead of "original A" / "StatusLine:Search". Preserve ownership and original values per window/buffer pair, or restore before leaving the owning buffer. Add round-trip coverage with distinct originals; the existing handoff test uses identical originals and misses this defect. ARCH-ORDER.
+```
+
+1. **Strengths**
+
+   - Admission and submission reuse the existing edit-turn engine.
+   - Registry absence requires an explicit successful null response; malformed replies retain uncertainty.
+   - Migration journals preserve completed effects and require stable-ID confirmation.
+   - README, atlas, and traceability updates cover the new surface.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** The renderer ownership defect above, at `lua/parley/document_band.lua:59`.
+
+4. **Minor findings:** None remaining.
+
+5. **Test coverage:** All 14 `modes/session_sync` mapped files passed; lint passed across 754 files; diff checks passed. Real/fake conformance passed, including rejection of the corrupted fake. Add the distinct-baseline round-trip regression.
+
+6. **Architecture:** ARCH-DRY, ARCH-PURE, ARCH-PURPOSE, ARCH-MOCK, ARCH-CONSTRAINTS, ARCH-SECURE, and ARCH-FUNERAL pass. ARCH-ORDER flags the renderer’s buffer-handoff ownership transition; the admission lifecycle’s guarded transitions are validated.
+
+7. **Plan revision:** Amend the shared-renderer `## Revisions` entry to define ownership by window/buffer pair and require A→B→A restoration with distinct original options.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e5631d20-6320-4ebe-bb3c-a743d96a875b","repository":"github.com/xianxu/parley.nvim","issue_id":"000332","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/46f447859467b623","reviewed_head":"67638184a0c31d67c6673edd3884c19fe45bb75f","slot":"parley.nvim:2","requested_at":"2026-10-16T05:01:31.061459Z"},"phase":"finished","pid":86660,"started_at":"2026-10-16T05:01:31.144503Z","finished_at":"2026-10-16T05:04:04.622349Z","session_id":"01a14316-3564-7483-be1b-d4d6f20dbd9a","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T22:18:13-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 332 — Agentic documents: Alt+Return makes any right-pane markdown file a session-sync document (universal-agent-input-interface S1, parley side) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000332-agentic-documents-alt-return-makes-any-right-pane-markdown-file-a-session-sync-document-universal-agent-input-interface-s1-parley-side.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | e23163d1bb9f42765fdd899f18951b6f32c6208e..0c4552064aa5a005038317f90d5f87c3a2a45613 |
+| command | sdlc close --issue 332 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T22:18:13-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies the issue’s revised Spec and Plan. BR-5 is addressed with regression tests that fail against the previous renderer. No new Critical, Important, or Minor findings emerged. Staging and combined operator acceptance remain separate post-review steps.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Native and public move preflight confirms OLD membership and rechecks busy state after yielding; admission and owned-move regressions pass.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      True unload retires the incarnation and lease; managed reads defer completions until reconciliation. All 10 buffer-lifetime regressions pass.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The plan Core concepts table correctly classifies not_chat as INTEGRATION; init.lua retains the editor/filesystem-dependent wrapper.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      The plan explicitly states that lease files remain permanently allocated, automatic GC is absent, and allocation is capped at 4096 IDs per namespace; document_lease.lua implements that contract.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      document_band.lua preserves restoration proofs per window/buffer pair and checks buffer ownership before restoring. Both distinct-baseline round-trip tests pass at HEAD and fail when only the renderer is replaced with its pre-fix version, reproducing B's originals being restored into A.
+```
+
+1. **Strengths**
+
+   - Window restoration now verifies both buffer ownership and installed option values, preserving user overrides (`lua/parley/document_band.lua:25`).
+   - Distinct-original tests cover native and noncurrent-window switching, plus hidden-owner and other-window safety (`tests/integration/document_band_spec.lua:320`).
+   - Registry absence requires explicit successful null evidence; malformed responses retain uncertainty.
+   - README, atlas, traceability, and maintainer conformance documentation cover the new surface.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   Independently verified:
+
+   - All 14 mapped session-sync spec files: **400 passing cases**.
+   - Mapped review and keybinding suites pass.
+   - Lint: **754 files, zero warnings/errors**.
+   - Isolated real/fake Couch conformance passes; deliberately corrupted fake is rejected.
+   - BR-5 mutation check produces exactly the two expected round-trip failures.
+   - Diff whitespace check passes; test process censuses are clean.
+
+   The disposable mutation checkout was removed. I did not rerun the entire repository suite.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared renderer, byte writer, process seam, and edit-turn engine.
+   - **ARCH-PURE — pass:** lifecycle and migration projections have direct tests without IO mocks.
+   - **ARCH-PURPOSE — pass:** first submit, continued protection, reopen, and supported move routes are delivered.
+   - **ARCH-MOCK — pass:** persisted executable fake shares production transport; real conformance passes.
+   - **ARCH-CONSTRAINTS — pass:** request deadlines, queue limits, scan limits, and storage bounds are explicit.
+   - **ARCH-SECURE — pass:** external replies and recovery artifacts receive boundary validation; subprocess arguments use arrays.
+   - **ARCH-ORDER — pass:** operation witnesses, unload/read distinctions, migration checkpoints, and window ownership have adversarial sequence coverage.
+   - **ARCH-FUNERAL — pass:** handles and window proofs have cleanup paths; journals, caches, and retained lease files have documented bounds.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"2e8f23c6-e615-4439-973e-7b09c462e527","repository":"github.com/xianxu/parley.nvim","issue_id":"000332","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/45fb772892ccf261","reviewed_head":"0c4552064aa5a005038317f90d5f87c3a2a45613","slot":"parley.nvim:2","requested_at":"2026-10-16T05:15:15.155018Z"},"phase":"finished","pid":80081,"started_at":"2026-10-16T05:15:15.246213Z","finished_at":"2026-10-16T05:18:11.955377Z","session_id":"01a14322-c897-7783-a97a-0affd43fd853","outcome":"returned"}] -->
