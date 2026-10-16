@@ -163,7 +163,9 @@ or ends the generation with a stated outcome. Writer not alive: `revoked` or
 `cancelled`. Staging over budget: `overflow`. A stale, refused or interrupted
 write: `revoked` or `uncertain`. A queue dropped on stop: counted in
 `discarded_bytes`. A stream reader that throws: the attempt stops with
-`<stream> reader failed` rather than reading on past the lost bytes. The only
+`<stream> reader failed` rather than reading on past the lost bytes, and its
+own EOF flush decodes nothing more: the line that threw is never written twice
+(#242, found by the provider fake). The only
 uncounted change is the deliberate strip of a response's leading newlines.
 Neither side may leave a generation waiting (#341). A provider adapter that
 refuses output reports `provider_failed` before it stops the transport. The

@@ -223,9 +223,15 @@ Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-p
 - **FINDING: a production defect, so STOP per plan Task 3.** S7b is intermittent: 3/40 and 4/30 under stress. After the handler throws, the handler gets the SAME delta again (`{"Hello,","Hello,"}`).
   - Cause: `dispatcher.lua` out_reader's chunk loop calls `process_line` BEFORE dropping the line from `buffer`. A throw leaves the line in place. tasker still delivers the terminal EOF `(nil,nil)` (#182), and the EOF branch flushes the leftover buffer through `process_line`, so the thrown line is decoded again.
   - This is #229's class: tasker gates data after a failure, but the reader's own EOF flush re-reads it.
-  - Reported to the TL; the fix is pending its decision.
+  - Reported to the TL. The TL said to fold the fix in as a scope revision.
+- 2026-10-16 **M1 found and fixed a production bug.** In `dispatcher.lua` out_reader, each line now comes off the buffer before `process_line` runs. The reader is marked as having thrown until the call returns, and once it has thrown, EOF decodes nothing more (no flush, no `finish_stdout`).
+  - Regression test: the new S7b frame-aligned case. The fake writes one frame per read (`--split frames --write-delay-ms 20`). Before the fix it duplicated `"Hello,"` 3/3; after the fix it passes.
+  - Stress, the every_byte S7b loop: before the fix, 3/40 and 4/30 duplicated; after it, 0/40 twice, and all 80 runs failed the attempt.
+  - The dispatcher, dispatcher_query, tasker and stream_integrity specs are green.
 
 ## Revisions
+
+- 2026-10-16, scope revision (TL-approved): M1 includes a production fix. The fake found a duplicate-delta defect in #229's class, the out_reader EOF flush re-decoding the line that threw. It is fixed in `dispatcher.lua`, with S7b as the regression test. The plan's "no production change expected" no longer holds for M1.
 
 - 2026-10-16, the TL-approved decisions revise the Spec (recorded at the plan-quality gate's request, PQ-3):
   - Spec 3's "HTTP error with retry" is now "HTTP error surfaced as a failure carrying the API message, no retry"; retry is #351.

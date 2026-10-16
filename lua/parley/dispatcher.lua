@@ -529,6 +529,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		local buffer = ""
 		local sse_record_active = false
 		local stdout_finished = false
+		local threw = false -- a process_line call raised; see the chunk loop
 
 		local function emit_activity(query_id)
 			if type(on_activity) == "function" then
@@ -645,9 +646,20 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 				while true do
 					local newline = buffer:find("\n", 1, true)
 					if not newline then break end
-					process_line(buffer:sub(1, newline - 1):gsub("\r$", ""))
+					-- Off the buffer BEFORE it is processed, and the reader marked
+					-- failed until it returns: a throwing handler (#229) used to
+					-- leave its line in the buffer, and the EOF flush below then
+					-- decoded it again — the same delta written twice (#242).
+					local line = buffer:sub(1, newline - 1)
 					buffer = buffer:sub(newline + 1)
+					threw = true
+					process_line((line:gsub("\r$", "")))
+					threw = false
 				end
+			elseif threw then
+				-- tasker still delivers EOF after a reader failure (#182), but the
+				-- bytes after the failure point are not this reader's to decode.
+				buffer = ""
 			else
 				if #buffer > 0 then
 					process_line(buffer:gsub("\r$", ""))

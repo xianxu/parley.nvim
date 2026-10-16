@@ -623,3 +623,8 @@ oracle, and the mutation that would make the test fail.
 - A lock directory made by mkdir and then an owner write, or removed by an rf delete, is visible half-made in both directions. Publish it by renaming a staging directory that already holds the record, and retire it by renaming it away before deleting it.
 - A waiter that misses a read counts it as garbage only after re-checking that the same lock (inode and device) is still there.
 - Each such re-check needs its own gate test that fails without it.
+
+## #242: a reader that can throw must consume input before it processes it
+
+- If a loop processes a line and only then drops it from its buffer, a throw leaves that line in place. A later flush, such as an EOF still delivered after the failure, then decodes it again. Take the input off the buffer first, and once the reader has thrown, its own flush decodes nothing.
+- An intermittent spec failure is evidence, not noise. Loop the case (30–40 runs) and print what differs. Then make the trigger deterministic with a fake knob (here, one frame per read) before fixing, so the regression test fails every time on the old code.

@@ -11,11 +11,12 @@ local M = {}
 M.FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_provider"
 M.ROUTE = { anthropic = "/v1/messages" }
 
---- Start the fake for `dialect` in `mode` (with `split`); returns the port.
-function M.start(dialect, mode, split, env)
+--- Start the fake for `dialect` in `mode` (with `split`, and `delay_ms` after
+--- each write); returns the port.
+function M.start(dialect, mode, split, env, delay_ms)
     local port = ready_port.free_port()
     local handle, _, err = fixture_process.spawn(M.FAKE, { "--dialect", dialect, "--port", tostring(port),
-        "--mode", mode or "ok", "--split", split or "none" }, env)
+        "--mode", mode or "ok", "--split", split or "none", "--write-delay-ms", tostring(delay_ms or 0) }, env)
     assert(handle, "spawn fake_provider: " .. tostring(err))
     assert(ready_port.wait_listening(port), "fake_provider did not come up on " .. port)
     return port

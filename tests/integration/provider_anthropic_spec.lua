@@ -148,4 +148,16 @@ describe("anthropic through dispatcher -> curl -> fake_provider (#242)", functio
         assert.is_truthy(tostring(out.failure.exit):find("reader", 1, true), vim.inspect(out.failure.exit))
         assert.equals(1, #out.chunks, "chunks were consumed after the throw")
     end)
+
+    it("S7b frame-aligned reads: the line that threw is never decoded again at EOF (#242)", function()
+        -- One frame per read, so the throwing line's read ends at its newline.
+        -- That left the line in the reader's buffer, and the EOF flush decoded
+        -- it a second time: the same delta written twice.
+        local port = scenarios.start("anthropic", "ok", "frames", nil, 20)
+        local out = scenarios.query("anthropic", port, payload(messages()), {
+            on_chunk = function(n) if n == 1 then error("consumer invalidated mid-stream") end end,
+        })
+        assert.is_table(out.failure, "the attempt went on after its reader threw")
+        assert.same({ "Hello," }, out.chunks)
+    end)
 end)

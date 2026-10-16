@@ -10,6 +10,8 @@ bytes the real API streams, chooses the reply from the REQUEST
   --mode   ok | http_<status> | http_<status>_once | inband_error[_empty] |
            cap[_empty] | no_stop | thinking | disconnect_after:<bytes>
   --split  none | every_byte | frames | random:<seed>   (the write boundaries)
+  --write-delay-ms N   pause after each write, so each slice reaches curl as
+           its own read (a slice boundary becomes a read boundary)
 
 An unknown mode or split is refused at startup (sse_dialects.check_mode), so a
 typo fails loudly instead of serving a passing text stream.
@@ -22,6 +24,7 @@ import http.server
 import json
 import os
 import sys
+import time
 
 sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -35,6 +38,7 @@ parser.add_argument("--dialect", required=True, choices=sorted(sse_dialects.DIAL
 parser.add_argument("--port", type=int, required=True)
 parser.add_argument("--mode", default="ok", type=sse_dialects.check_mode)
 parser.add_argument("--split", default="none", type=sse_dialects.check_split)
+parser.add_argument("--write-delay-ms", type=int, default=0)
 args = parser.parse_args()
 served = {"n": 0}
 
@@ -94,6 +98,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         for piece in sse_dialects.split(body, args.split):
             self.wfile.write(piece)
             self.wfile.flush()
+            if args.write_delay_ms:
+                time.sleep(args.write_delay_ms / 1000.0)
         self.close_connection = True
 
 

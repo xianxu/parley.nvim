@@ -877,6 +877,7 @@ atlas:
       - tests/unit/dispatcher_query_spec.lua
       - tests/unit/sse_parsing_spec.lua
       - tests/unit/sse_dialects_spec.lua
+      - tests/unit/fake_provider_spec.lua
       - tests/integration/provider_anthropic_spec.lua
 
   providers/openai:
