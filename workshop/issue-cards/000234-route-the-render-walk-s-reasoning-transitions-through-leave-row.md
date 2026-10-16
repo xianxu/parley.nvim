@@ -1,6 +1,6 @@
 ---
 id: 000234
-status: working
+status: codecomplete
 created: 2026-09-10
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.48
+tracker:
+    version: 1
+    completion:
+        token: close-4d1799432e0e
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 82f1c26c445fe64022ccd0c36ef4515b41738037
+        evidence_commit: 8bad6bf3cdfcf56c445fec7dd52f1f762e6e287d
 ---
 
 # Route the render walk's reasoning transitions through leave_row
