@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "3904125b", done: "f76a2a6e"}
 ---
 
 # HTML export: branch topic is inserted unescaped by make_branch_div
