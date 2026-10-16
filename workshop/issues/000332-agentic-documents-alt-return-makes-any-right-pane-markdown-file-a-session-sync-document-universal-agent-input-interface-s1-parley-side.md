@@ -77,7 +77,7 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - [x] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
 - [x] Add isolated real/fake conformance and docs/traceability; verify production-door submission feedback and native edit-turn regressions.
 - [x] Add unchanged-submit suppression and explicit rapid resend with lifecycle and production-door regressions.
-- [x] Complete the required full suite on the final implementation before close.
+- [ ] Complete the required full suite on the final implementation before close.
 
 - [x] Unify window rendering/restoration and verify session-versus-agentic equality across every lock, owed, admission and feedback state.
 
@@ -175,6 +175,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 - 2026-10-15 — shared-renderer required suite passes445/445 on13d849f8f54121ef6c76f7ea7054605566b125c2 in1m44s, lint754 clean and no survivors. Retained /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/13d849f8f54121ef6c76f7ea7054605566b125c2/suite.log, SHA256b3be77d002bd14334323eb22412103593312f969de80196e454a23163aad39ec. Final test-only strengthening compares actual unknown-state snapshots for both typed and ordinary files (rather than only the ordinary expected view),12 matrix cases remain green in /tmp/parley332-band-unknown-pair.log. Production is unchanged; the final test head still gets its own required suite record before re-close.
 
 - 2026-10-15 — final shared-renderer test head da36d4d0634ae47367a2726885249989d667025b passes the required full suite445/445 in2m44s, lint754 files0 warnings/errors and no survivors. Retained /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/da36d4d0634ae47367a2726885249989d667025b/suite.log, SHA256baee091a145606db38fb561c6a1082a6a36ab5eeea43327b11cd4528aa1ebd0a. Both original and strengthened matrix heads pass without waiver; no code or tests change after this record. Updated Done when explicitly reflects the approved one-renderer contract. Ordinary re-close and restage remain pending; landing held for operator acceptance.
+
+- 2026-10-15 — close round3 is not finalized: FIX-THEN-SHIP verdict is blocked by Important BR-5 window-option-ownership. Reviewer independently passes14 mapped files, lint754, real/fake conformance; distinct-original A→B→A probe exposes baseline transfer after the window changes buffers. Fix the whole ownership class at the pre-leave boundary, with native/current/noncurrent and hidden-owner regressions, then a new full suite and ordinary close. Stage2a73063d remains installed; no landing.
 
 ## Revisions
 

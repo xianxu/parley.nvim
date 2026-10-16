@@ -197,3 +197,68 @@ findings:
    Add a `## Revisions` entry stating that lease files remain permanently allocated, automatic GC is not implemented, and new allocations refuse at the 4096-entry namespace limit. Correct line 113 accordingly.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"573a6836-0896-4182-985f-202f9ccb5fff","repository":"github.com/xianxu/parley.nvim","issue_id":"000332","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/f20b0868a22e44d9","reviewed_head":"2fee90247e1fef6cddb9402f80b828cbbb29ba45","slot":"parley.nvim:2","requested_at":"2026-10-16T02:00:24.7537Z"},"phase":"finished","pid":6635,"started_at":"2026-10-16T02:00:25.015296Z","finished_at":"2026-10-16T02:05:09.978746Z","session_id":"01a14270-6835-7b32-ac76-31c411029d5d","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T22:04:04-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 332 — Agentic documents: Alt+Return makes any right-pane markdown file a session-sync document (universal-agent-input-interface S1, parley side) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000332-agentic-documents-alt-return-makes-any-right-pane-markdown-file-a-session-sync-document-universal-agent-input-interface-s1-parley-side.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | e23163d1bb9f42765fdd899f18951b6f32c6208e..67638184a0c31d67c6673edd3884c19fe45bb75f |
+| command | sdlc close --issue 332 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-15T22:04:04-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The implementation substantially delivers the issue, and BR-4 is addressed. All 14 mapped spec files, lint, and isolated real/fake Couch conformance passed. One reproducible window-option restoration bug needs correction before shipping.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Plan line 113 now explicitly documents permanent lease allocation, no automatic GC, and the 4096-entry bound with overflow refusal. This matches document_lease.lua and atlas/modes/session_sync.md:170-172; the pinned correction is prose-only.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: window-option-ownership
+    title: |
+      Buffer round trips restore another buffer's original window options
+    detail: |
+      lua/parley/document_band.lua:59 retires the previous buffer's record after the window already displays the next buffer; restore() therefore applies that previous record's baseline to the current buffer. A native headless A→B→A probe with distinct original options and identical rendered bands restored A to "original B" / "StatusLine:IncSearch", instead of "original A" / "StatusLine:Search". Preserve ownership and original values per window/buffer pair, or restore before leaving the owning buffer. Add round-trip coverage with distinct originals; the existing handoff test uses identical originals and misses this defect. ARCH-ORDER.
+```
+
+1. **Strengths**
+
+   - Admission and submission reuse the existing edit-turn engine.
+   - Registry absence requires an explicit successful null response; malformed replies retain uncertainty.
+   - Migration journals preserve completed effects and require stable-ID confirmation.
+   - README, atlas, and traceability updates cover the new surface.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** The renderer ownership defect above, at `lua/parley/document_band.lua:59`.
+
+4. **Minor findings:** None remaining.
+
+5. **Test coverage:** All 14 `modes/session_sync` mapped files passed; lint passed across 754 files; diff checks passed. Real/fake conformance passed, including rejection of the corrupted fake. Add the distinct-baseline round-trip regression.
+
+6. **Architecture:** ARCH-DRY, ARCH-PURE, ARCH-PURPOSE, ARCH-MOCK, ARCH-CONSTRAINTS, ARCH-SECURE, and ARCH-FUNERAL pass. ARCH-ORDER flags the renderer’s buffer-handoff ownership transition; the admission lifecycle’s guarded transitions are validated.
+
+7. **Plan revision:** Amend the shared-renderer `## Revisions` entry to define ownership by window/buffer pair and require A→B→A restoration with distinct original options.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e5631d20-6320-4ebe-bb3c-a743d96a875b","repository":"github.com/xianxu/parley.nvim","issue_id":"000332","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/46f447859467b623","reviewed_head":"67638184a0c31d67c6673edd3884c19fe45bb75f","slot":"parley.nvim:2","requested_at":"2026-10-16T05:01:31.061459Z"},"phase":"finished","pid":86660,"started_at":"2026-10-16T05:01:31.144503Z","finished_at":"2026-10-16T05:04:04.622349Z","session_id":"01a14316-3564-7483-be1b-d4d6f20dbd9a","outcome":"returned"}] -->

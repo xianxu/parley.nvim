@@ -361,6 +361,181 @@ rounds:
       isolation: fenced
       reviewed: 2fee90247e1fef6cddb9402f80b828cbbb29ba45
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: e5631d20-6320-4ebe-bb3c-a743d96a875b
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000332"
+            recipe: milestone-review
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/46f447859467b623
+            reviewed_head: 67638184a0c31d67c6673edd3884c19fe45bb75f
+            slot: parley.nvim:2
+            requested_at: "2026-10-16T05:01:31.061459Z"
+          phase: finished
+          pid: 86660
+          started_at: "2026-10-16T05:01:31.144503Z"
+          finished_at: "2026-10-16T05:04:04.622349Z"
+          session_id: 01a14316-3564-7483-be1b-d4d6f20dbd9a
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 67638184a0c31d67c6673edd3884c19fe45bb75f
+        tracker_head: b95922db0ea603cf0846b78e5e59a0474b5e07a9
+        branch_point: e23163d1bb9f42765fdd899f18951b6f32c6208e
+        since: "2026-10-15T13:07:57-07:00"
+        until: "2026-10-15T22:01:14-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-15T13:07:57-07:00"
+              end: "2026-10-15T22:01:14-07:00"
+              began: "2026-10-15T13:07:57-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a13b56-32ec-7310-8650-104071939f2f
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: efef1e3aaff6afe697a5496e017d3c3f592d3cd01305ec3740c76aa3b00b6c0d
+              started: "2026-10-14T16:54:39.906Z"
+              spawned: false
+              bytes: 45746877
+              windows:
+                - start: "2026-10-15T13:07:57-07:00"
+                  end: "2026-10-15T22:01:14-07:00"
+            - harness: codex
+              id: 01a1412e-8523-7fa2-9e8c-d8873b1348df
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: 55d32eabe6849de7420d62370c1ee8cbdffa559d7544e690fbb279d03bf6fcb1
+              started: "2026-10-15T20:08:50.417Z"
+              spawned: true
+              bytes: 562266
+              windows:
+                - start: "2026-10-15T20:08:50.417Z"
+                  end: "2026-10-15T22:01:14-07:00"
+            - harness: codex
+              id: 01a1412e-a904-7710-88fe-3f3326bacbcc
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: e19cce2151caca3c6a35df764819278eb98007792e2be7960f124d75267c2922
+              started: "2026-10-15T20:08:59.629Z"
+              spawned: true
+              bytes: 1012259
+              windows:
+                - start: "2026-10-15T20:08:59.629Z"
+                  end: "2026-10-15T22:01:14-07:00"
+            - harness: codex
+              id: 01a1413f-64e8-7932-b32b-744dfcf3fea1
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: 0a52ac8e8d17b31dddcd9fa12c53d6c59414c4f769fdd84edbbe32e78c039069
+              started: "2026-10-15T20:27:17Z"
+              spawned: false
+              bytes: 662693
+              windows:
+                - start: "2026-10-15T20:27:17Z"
+                  end: "2026-10-15T22:01:14-07:00"
+            - harness: codex
+              id: 01a14146-2a57-7681-bcb7-c9aa20efd9d8
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: 863c26a3a60d78138d7d4d9e026dc076d3dcd52ebf4d6fd91eb39cd79f6e26f5
+              started: "2026-10-15T20:34:40.952Z"
+              spawned: false
+              bytes: 443654
+              windows:
+                - start: "2026-10-15T20:34:40.952Z"
+                  end: "2026-10-15T22:01:14-07:00"
+            - harness: codex
+              id: 01a14148-4d6b-7bc1-a650-2ac9c3c9c103
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: e408e478d4696e1747739db1fb465c979f69c4b263451e6ada34ac2395ff57eb
+              started: "2026-10-15T20:37:00.683Z"
+              spawned: false
+              bytes: 431233
+              windows:
+                - start: "2026-10-15T20:37:00.683Z"
+                  end: "2026-10-15T22:01:14-07:00"
+            - harness: codex
+              id: 01a14148-d1e2-7301-9d8e-167ed3bc3b48
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              digest: d706bfd9766ca0500d3ad296a41a7ee61746e7dfe1db8060b2344292e176d0d9
+              started: "2026-10-15T20:37:34.757Z"
+              spawned: false
+              bytes: 458095
+              windows:
+                - start: "2026-10-15T20:37:34.757Z"
+                  end: "2026-10-15T22:01:14-07:00"
+            - harness: codex
+              id: 01a1414a-f880-7dc2-b5fa-55ab37d93fa5
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: d72b70f61dbe88787e1ffa6ff6f62da8097ba0e88cf107cda61b2425d97d4bdc
+              started: "2026-10-15T20:39:54.868Z"
+              spawned: true
+              bytes: 4946974
+              windows:
+                - start: "2026-10-15T20:39:54.868Z"
+                  end: "2026-10-15T22:01:14-07:00"
+            - harness: codex
+              id: 01a1414b-1aae-7ea1-955b-65ac06abf8d8
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: f79fa3e5773c745bd6d37cb14c93d6c8f372f5ebf53fedb94e32ec3998d41764
+              started: "2026-10-15T20:40:03.611Z"
+              spawned: true
+              bytes: 1814060
+              windows:
+                - start: "2026-10-15T20:40:03.611Z"
+                  end: "2026-10-15T22:01:14-07:00"
+            - harness: codex
+              id: 01a1414b-3f7d-78f1-8ff5-cf30539ca92f
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+              parent_id: 01a13b56-32ec-7310-8650-104071939f2f
+              digest: b02baa44cbefc9362a50cd1ce250a165174260c13b4357a9694bede5be835a96
+              started: "2026-10-15T20:40:13.046Z"
+              spawned: true
+              bytes: 4441012
+              windows:
+                - start: "2026-10-15T20:40:13.046Z"
+                  end: "2026-10-15T22:01:14-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 15.059416666666666
+        cuts:
+            - dispatched: "2026-10-15T18:14:21-07:00"
+              finalized: "2026-10-15T18:17:38-07:00"
+              finalizing: false
+            - dispatched: "2026-10-15T19:00:24-07:00"
+              finalized: "2026-10-15T19:05:11-07:00"
+              finalizing: true
+      "n": 3
+      timestamp: "2026-10-15T22:04:05-07:00"
+      dispatched: "2026-10-15T22:01:31-07:00"
+      agent: codex
+      dispose:
+        - id: BR-4
+          disposition: addressed
+          note: Plan line 113 now explicitly documents permanent lease allocation, no automatic GC, and the 4096-entry bound with overflow refusal. This matches document_lease.lua and atlas/modes/session_sync.md:170-172; the pinned correction is prose-only.
+          round: 3
+      findings:
+        - kind: defect
+          id: BR-5
+          severity: Important
+          title: Buffer round trips restore another buffer's original window options
+          detail: lua/parley/document_band.lua:59 retires the previous buffer's record after the window already displays the next buffer; restore() therefore applies that previous record's baseline to the current buffer. A native headless A→B→A probe with distinct original options and identical rendered bands restored A to "original B" / "StatusLine:IncSearch", instead of "original A" / "StatusLine:Search". Preserve ownership and original values per window/buffer pair, or restore before leaving the owning buffer. Add round-trip coverage with distinct originals; the existing handoff test uses identical originals and misses this defect. ARCH-ORDER.
+          family: window-option-ownership
+          round: 3
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#332 (boundary-review)
@@ -392,6 +567,17 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Minor] `plan-runtime-traceability` (kind: defect) Plan still promises lease-file cleanup that the implementation deliberately omits
   workshop/plans/000332-agentic-documents-plan.md:113 promises opportunistic cleanup after forgetting/completed recovery. document_lease.lua:76-79 only closes descriptors, and atlas/modes/session_sync.md:170-172 explicitly documents permanent allocation without automatic GC. Under ARCH-FUNERAL, align the Plan with the implemented 4096-entry bound and overflow refusal.
 
+## Round 3 — 2026-10-15T22:04:05-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-4 — addressed — Plan line 113 now explicitly documents permanent lease allocation, no automatic GC, and the 4096-entry bound with overflow refusal. This matches document_lease.lua and atlas/modes/session_sync.md:170-172; the pinned correction is prose-only.
+
+### Raised
+
+- **BR-5** [Important] `window-option-ownership` (kind: defect) Buffer round trips restore another buffer's original window options
+  lua/parley/document_band.lua:59 retires the previous buffer's record after the window already displays the next buffer; restore() therefore applies that previous record's baseline to the current buffer. A native headless A→B→A probe with distinct original options and identical rendered bands restored A to "original B" / "StatusLine:IncSearch", instead of "original A" / "StatusLine:Search". Preserve ownership and original values per window/buffer pair, or restore before leaving the owning buffer. Add round-trip coverage with distinct originals; the existing handoff test uses identical originals and misses this defect. ARCH-ORDER.
+
 ## Open findings
 
-- **BR-4** [Minor] `plan-runtime-traceability` (kind: defect) Plan still promises lease-file cleanup that the implementation deliberately omits
+- **BR-5** [Important] `window-option-ownership` (kind: defect) Buffer round trips restore another buffer's original window options
