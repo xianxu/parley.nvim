@@ -249,7 +249,9 @@ describe(":ParleyProxy command", function()
                 vim.cmd("ParleyProxy restart")
             end)
             assert.is_true(called)
-            assert.equals("cliproxy: restarted", msgs[#msgs].msg)
+            -- #204: the notice names the setup its client key came from, since
+            -- a config edit is invisible until setup re-runs.
+            assert.is_truthy(msgs[#msgs].msg:match("^cliproxy: restarted %(client key from setup%(%) at %d%d:%d%d:%d%d;"))
         end)
 
         it("the help says update installs the latest release", function()
