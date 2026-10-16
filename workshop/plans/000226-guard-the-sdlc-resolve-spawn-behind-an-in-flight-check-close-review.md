@@ -99,3 +99,99 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"2e5badc5-4976-4e4d-ad9e-66047a42dc6a","repository":"github.com/xianxu/parley.nvim","issue_id":"000226","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/9dd0efd76a2952c0","reviewed_head":"5478f45fc9db5e3ae6e41fbbca41a81af60581c8","slot":"parley.nvim:3","requested_at":"2026-10-16T07:29:39.209437Z"},"phase":"finished","pid":13381,"started_at":"2026-10-16T07:29:39.389455Z","finished_at":"2026-10-16T07:32:53.631175Z","session_id":"e983eb5b-bbb3-4bb9-9fe7-d11076bc5d48","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T00:37:15-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 226 — Guard the sdlc resolve spawn behind an in-flight check |
+| repo | parley.nvim |
+| issue file | workshop/issues/000226-guard-the-sdlc-resolve-spawn-behind-an-in-flight-check.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 90c6262c54b10fc220d9c0c170d633105dca7053..2f49f51bddfecf8a72586f4550fa40d0ceda761b |
+| command | sdlc close --issue 226 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T00:37:15-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Running the artifact_ref spec now, then I'll revert the BR-1 fix to confirm its regression test goes red.
+
+The test harness needs its isolated env; running the mapped spec set through `make test-spec`.
+
+Now reverting the origin-in-key (BR-1) to confirm the regression test fails without it.
+
+Confirmed: BR-1's test goes red without the fix. Doing a quick mutation check on BR-4's picker test as well.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All four prior findings are fixed, and I checked each one against the code at the pinned head. On BR-1, the in-flight key now includes the origin buffer and window (`lua/parley/artifact_ref.lua:234`). The new test for this, "lets the same ref pressed from another window supersede, and opens there", passes at head (40/40 via `make test-spec SPEC=context/file_references`). When I took `origin_buf, origin_win` out of the key, that test alone went red (39/1). When I took the window check out of `is_current`, both window-staleness cases went red (38/2), including the new BR-4 picker-selection case. The only thing left is one Minor: the Plan bullet and the Core concepts table in the issue file still describe the record's key and fields as they were before BR-1. Nothing blocks SHIP.
+
+Done-when: current. Its four clauses (same ref gives one spawn and one open; a different ref supersedes; a default origin check for both buffer and window; everything asserted through the runner seam) are the guarantees this diff delivers, and each has a passing test. The BR-1 Spec change only tightens the key so that the no-op agrees with the staleness check, which is what keeps clauses 1 and 3 true together. It doesn't add a new guarantee that Done-when would need to name.
+
+1. **Strengths**
+   - `artifact_ref.lua:248-252`: `is_current` combines supersession (`inflight == mine`), the origin buf/win and the caller's `opts.is_current` with AND. A caller can only narrow the check, never widen it, as the Spec says.
+   - `artifact_ref.lua:289-293`: a spawn that raises releases the key and then raises again with `error(handle, 0)`, so the error is not swallowed. The "releases the key when the spawn raises" test covers it.
+   - `artifact_ref.lua:264`: a superseded resolve that had already exited is dropped through `inflight ~= mine`. The supersede test checks both the kill and the late completion.
+   - The tests use the real runner seam with an observable fake handle, and both window and buffer departure are exercised. There is no mocking of the code under test.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - The issue file's Plan bullet (line 81) still says "keyed on the ref, kind and cwd", and the Core concepts row (line 68) says the record holds a "token", but the actual record is `{ key, handle, done }`, where identity (`mine`) does the work of a token. Both are restatements left over from before BR-1 (see the findings block).
+
+5. **Test coverage**
+   - All the Done-when modes are covered: buffer departure and window departure, result and picker selection, same key and different key (ref, kind, origin), and the spawn-raises path.
+   - Mutation checks run in this review:
+     - Removing the origin from the key fails 1 test.
+     - Removing the window check fails 2 tests.
+
+6. **Architecture**
+   - **ARCH-DRY: pass.** Nothing is duplicated. The test `runner`/`drain` helpers are local to the new describe block and don't copy the existing guarded-completion fixtures in a way that calls for sharing.
+   - **ARCH-PURE: pass.** `goto_ref_at_cursor` is the documented thin IO shell. The spawn is injected through `opts.runner`, and the parsing and picker-item logic stay in the existing pure helpers.
+   - **ARCH-PURPOSE: pass.** `gf`, `<M-o>` and the project jump all go through `goto_ref_at_cursor`, so every consumer gets the dedup and the default staleness check, not just the reference-navigation fallback. The shadow sweep of the key restatements found the Spec Key bullet, the atlas bullet (`artifact_refs.md:50-57`) and the doc comment (`artifact_ref.lua:204-213`) all updated. Only the issue's Plan bullet and Core concepts row are stale (Minor below).
+
+7. **Plan revision recommendations**
+   - Plan line 81: change to "keyed on the ref, kind, cwd and origin buffer/window".
+   - Core concepts row: change to "its key, process handle and done flag (record identity marks the latest)".
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Key includes origin_buf/origin_win (artifact_ref.lua:234); the supersede-from-another-window test fails when the origin is removed from the key (verified 39/1), passes at head 40/40; Spec, atlas and doc comment updated.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      inflight and _reset_inflight now at artifact_ref.lua:182-186, above the goto_ref_at_cursor doc block, which runs contiguously into the function.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      atlas/context/artifact_refs.md:51-53 now ties the double-press guarantee to the same-key no-op sentence; supersede is its own sentence.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      New test "drops a family selection made after the user left the window" calls press() without is_current; it fails when the window check is removed from is_current (verified).
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: contract-restatement-sweep
+    title: |
+      Issue Plan bullet and Core concepts row still restate the record as it was before BR-1
+    detail: |
+      The issue's Plan item at line 81 says the record is keyed on "the ref, kind and cwd" (origin buf/win is missing), and the Core concepts row at line 68 lists a "token" the record does not have (it is { key, handle, done }). The rule: when a contract changes, update every restatement of it. Enumerating this window's restatements of the key and record: Spec Key bullet (updated), atlas artifact_refs.md:50 (updated), artifact_ref.lua:182 and :204 comments (updated), Plan line 81 (stale), Core concepts line 68 (stale). Fix the two stale ones.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"18d12083-adc4-4acd-84d7-ed1bd02d704c","repository":"github.com/xianxu/parley.nvim","issue_id":"000226","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/4ee6fa566e4e74c6","reviewed_head":"2f49f51bddfecf8a72586f4550fa40d0ceda761b","slot":"parley.nvim:3","requested_at":"2026-10-16T07:34:31.141842Z"},"phase":"finished","pid":77381,"started_at":"2026-10-16T07:34:31.376917Z","finished_at":"2026-10-16T07:37:12.473655Z","session_id":"5f4d0389-b029-491a-9e4a-0d33a66c743f","outcome":"returned"}] -->

@@ -91,6 +91,7 @@ Filed out of #225's close review rather than folded into it — the key move
 needs the supersede-vs-queue decision above.
 
 ### 2026-10-16
+- 2026-10-16: closed — Red first: 4 of 6 runner-seam cases fail on old code. BR-1: key holds origin buf/win; mutation removing it fails the other-window case. artifact_ref_spec 40/40, luacheck clean; raise-release mutation fails its case. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 - Taken by parley.nvim:3. The Spec's open questions are now decided (see Revisions). #327's `opts.is_current` already covers the
   caller-owned half, so this issue adds the in-flight record and the default
