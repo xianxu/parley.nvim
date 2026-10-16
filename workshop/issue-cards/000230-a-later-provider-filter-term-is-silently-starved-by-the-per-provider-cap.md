@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.33
+actual_hours: 0.66
 tracker:
     version: 1
     completion:
-        token: close-015524cfe7b3
+        token: close-efd0394c58d1
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: d9e812c83ee6fdf62194bd5083ae592f7a187f35
-        evidence_commit: 6d448b82234d61b90badafe06d36e8f2a5803a5d
+        reviewed_head: 3646bebb2a5bfe06aed4447122e08f41e137c92b
+        evidence_commit: 6e242b5d41d7199898c784b1f627d59d9284c27f
 ---
 
 # a later provider filter term is silently starved by the per-provider cap
