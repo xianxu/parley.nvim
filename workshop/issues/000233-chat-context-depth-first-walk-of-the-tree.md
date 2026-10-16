@@ -149,7 +149,7 @@ Before merge (a gate held by the TL, not a build step): the operator decides on 
 
   | submission | memory off (default) | memory on, 4 full exchanges |
   |---|---|---|
-  | root, question right after the aside (R3) | 3.6k to 11.4k tokens | 1.6k to 5.8k |
+  | root, question right after the aside (R3) | 3.6k to 11.4k tokens | 1.6k to 2.2k (re-measured on the final code: the window counts back from the end of the file, BR-3) |
   | root, last question (R7) | 8.3k to 16.1k | 5.2k to 5.8k |
   | aside, last question | 8.2k to 11.3k | 8.2k to 5.7k |
   | nested aside, last question | 3.3k to 7.3k | 3.3k to 6.2k |
