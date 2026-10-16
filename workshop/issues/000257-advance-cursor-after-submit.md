@@ -105,6 +105,9 @@ Steps:
   - **BR-1 (Critical):** with the cursor outside every exchange, the submission answers the last exchange, but the advance read `exchange_idx or 0` and jumped to question 1. Now one index, `submitted`, feeds both the submission and the advance. Regression case added.
   - **BR-2 (Important):** Done-when gains the stop-rule clause.
   - **Minors:** the advance parses through `chat_context.parse` (ARCH-DRY), and that parse is the one extra parse per submit (the Plan's "already done on that path" was wrong). Insert-mode submission is tested: the command's stopinsert ends Insert mode after it returns, moving the cursor left like `<Esc>`, so from Insert the cursor is placed one character further.
+- 2026-10-16, close review round 2 (advisories):
+  - **Drill-in:** a drill-in submission first moves the cursor to its new turn, then the general rule applies: it advances to the next question after that turn, if there is one. That is intended, since the operator submitted and moves on. The drill-in path's cursor move exists so highlights land on the new turn, and they still do.
+  - **Signature:** the code's signature is `next_question_cursor(parsed, index, lines, prefix)`, not the Plan's `(parsed, index, config)`.
 
 ## Log
 
