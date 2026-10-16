@@ -1,13 +1,21 @@
 ---
 id: 000346
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: '919c72b3596018ec372f8e7f09258c371db9147c' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'c32ac15d8450a2a965d3befff2acbc101a55e606' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T01:21:45-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # packaging_launcher_spec: await_ready can read the barrier's pid file before it is written
@@ -26,13 +34,18 @@ It passed 3 of 3 runs alone. Likely cause, read from the code: the barrier scrip
 
 ## Done when
 
-- `await_ready` waits on the state it needs (a parsed pid), or the barrier publishes the file atomically (write a temp file, then rename), so an empty read cannot return.
-- A test reproduces the empty-file read and fails on the old code.
+- [x] `await_ready` waits on the state it needs (a parsed pid), or the barrier publishes the file atomically (write a temp file, then rename), so an empty read cannot return.
+- [x] A test reproduces the empty-file read and fails on the old code.
 
 ## Plan
 
-- [ ]
+- [x] `await_ready` waits on a parseable pid read from the ready file. The
+      barrier is unchanged, so the fix is one, at the reader.
+- [x] Red first: an empty ready file, with its pid written 100 ms later.
 
 ## Log
 
 ### 2026-10-16
+
+- Taken by parley.nvim:3. Red: the new case got nil from the old `await_ready`
+  (:76, expected 4242). Green: 11/11, in 6 concurrent runs, luacheck clean.
