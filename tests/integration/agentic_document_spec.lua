@@ -93,7 +93,7 @@ describe("agentic markdown admission", function()
         end
         after_each(function()
             if before then config.agentic_submit_timeout_ms, config.agentic_move_timeout_ms = before[1], before[2] end
-            before, vim.env.FAKE_COUCH_REGISTRY_DELAY = nil, nil
+            before, vim.env.FAKE_COUCH_REGISTRY_DELAY, vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = nil, nil, nil
         end)
         local function band() return vim.wo[vim.fn.bufwinid(buf)].winbar end
         local function sends() return vim.fn.filereadable(root .. "/sent") == 1 and #vim.fn.readfile(root .. "/sent") or 0 end
@@ -166,6 +166,45 @@ describe("agentic markdown admission", function()
             handled, moved, err = document.move_path(file, target)
             assert.is_true(handled, tostring(err))
             assert.equals(vim.fn.resolve(target), moved, tostring(err))
+            assert.equals(1, vim.fn.filereadable(target))
+        end)
+
+        it("a :saveas whose destination check times out says to rename back, and that recovers", function()
+            with_timeouts(15000, 500)
+            registered()
+            local target = root .. "/renamed.md"
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            local ok, err = pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target))
+            assert.is_false(ok)
+            assert.truthy(tostring(err):find("rename not confirmed: Couch did not answer within 1 s; rename back to "
+                .. file .. ", then run it again", 1, true), tostring(err))
+            assert.equals(0, vim.fn.filereadable(target))
+            vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+            assert.is_true(pcall(vim.cmd, "file " .. vim.fn.fnameescape(file)))
+            assert.equals(file, document.identity(buf).File)
+            config.agentic_move_timeout_ms = 5000
+            assert.is_true(pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target)))
+            await(function()
+                local identity = document.identity(buf)
+                return identity and identity.File == vim.fn.resolve(target) and not document.status(buf).operation
+            end)
+        end)
+
+        it("a move whose rename stage outlasts the wait finishes in the background", function()
+            with_timeouts(15000, 500)
+            registered()
+            local target = root .. "/later.md"
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "rename"
+            local handled, moved, err = document.move_path(file, target)
+            assert.is_true(handled)
+            assert.is_nil(moved)
+            assert.equals("document move pending; preserve its journal and reopen to recover", err)
+            -- after anything moved, the journal carries it: no rerun is needed
+            await(function()
+                local identity = document.identity(buf)
+                return identity and identity.File == vim.fn.resolve(target) and not document.status(buf).operation
+            end)
             assert.equals(1, vim.fn.filereadable(target))
         end)
     end)

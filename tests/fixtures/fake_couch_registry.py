@@ -61,7 +61,10 @@ def main():
         return 0
     if mode == "delay":
         # FAKE_COUCH_REGISTRY_DELAY (seconds, default 1): a slow registry (#357).
-        time.sleep(float(os.environ.get("FAKE_COUCH_REGISTRY_DELAY") or "1"))
+        # FAKE_COUCH_REGISTRY_DELAY_OPS (comma list, default all) slows only those.
+        only = os.environ.get("FAKE_COUCH_REGISTRY_DELAY_OPS")
+        if not only or (args[1] if len(args) > 1 else "") in only.split(","):
+            time.sleep(float(os.environ.get("FAKE_COUCH_REGISTRY_DELAY") or "1"))
     state_path = Path(os.environ["FAKE_COUCH_REGISTRY"])
     with open(str(state_path) + ".lock", "a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)

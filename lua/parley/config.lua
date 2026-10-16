@@ -492,6 +492,8 @@ local config = {
 	-- #357: how long an Alt+Return submit (the registry stage and the send
 	-- together) may take before it shows "not confirmed: submit again". The
 	-- editor never waits for it; a busy machine's couch CLI can take seconds.
+	-- Every other asynchronous registry request (the open-time lookup, a
+	-- move's rename) uses the same deadline.
 	agentic_submit_timeout_ms = 15000,
 	-- #357: the move and rename preflights block the editor while they ask
 	-- Couch (they run inside BufFilePre/BufFilePost), so this one stays modest.

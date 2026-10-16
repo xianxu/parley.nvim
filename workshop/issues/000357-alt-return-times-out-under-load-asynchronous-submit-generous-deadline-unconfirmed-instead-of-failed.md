@@ -121,3 +121,16 @@ There is no new pure entity. The pure model (`document_session`) already refuses
   - Spec point 4: do (a). Filed (c) as #359, unclaimed. No full asynchronous rename here.
   - Re-plan: `move_path`'s callers in init.lua (moving one chat, moving a chat tree) are synchronous chains, so (b) folds into #359. #357 does (a) only.
   - The actions split at "before anything moved", where the action is "Run the move again", and "after", where the existing journal recovery applies.
+- 2026-10-16 Send-stage lock, approved by the TL as option (A), replacing the amendment's "return the lock to the operator" for the SEND stage only:
+  - The registry stage keeps the operator's lock, because the send never started.
+  - At a send-stage deadline the lock is NOT re-taken. The send already released it, as today, and it may still land. A re-taken lock would refuse the agent's answer (exit 3), and the operator's identical resubmit gives "nothing to submit", which never releases the lock. The answer would stay stuck until the text changed: the stuck-answer case.
+  - The red "not confirmed: submit again" band still makes the resubmit obvious, which was the operator's intent. Their next edit takes the turn as usual.
+- 2026-10-16 Close review round 1 was REWORK. Its fixes:
+  - Critical: the shell's queued submit could outlive a pending rename or reconcile. "Confirm then submit" is now the pure model's `retry{submit=true}` → `resubmit` effect, only for a pending register. It has 3 `document_session_spec` cases.
+  - The rename stage takes the async deadline.
+  - At BufFilePost, which runs after Neovim renamed, a timeout says "rename not confirmed … rename back to OLD, then run it again", the cancel path that exists. It has a `:saveas` test.
+  - A test for the post-begin wait, using a rename-only registry delay: the move finishes through the journal.
+  - README documents the two keys and the states.
+  - The defaults live only in config.lua.
+  - Seconds round up.
+  - The Plan's pure cases for the deadline, the join and the late receipt live in the shell's integration tests, because the deadline timer and the band are shell state. The model already refused a concurrent send.

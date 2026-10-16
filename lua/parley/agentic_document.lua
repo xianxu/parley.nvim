@@ -187,9 +187,12 @@ local function adopt(s, registration)
     cache(s, registration)
 end
 
-local function config_ms(key, default)
+-- A deadline from the operator's config, else the shipped default (config.lua
+-- is the one place the numbers live).
+local function config_ms(key)
     local value = (require("parley").config or {})[key]
-    return type(value) == "number" and value > 0 and value or default
+    if type(value) == "number" and value > 0 then return value end
+    return require("parley.config")[key]
 end
 
 -- #357: one submit at a time per document, from the press to its outcome. The
@@ -209,11 +212,11 @@ local function begin_submit(s)
     local submitting = { timer = uv.new_timer() }
     s.submitting = submitting
     show_feedback(s, "submitting…", false)
-    local ms = config_ms("agentic_submit_timeout_ms", 15000)
+    local ms = config_ms("agentic_submit_timeout_ms")
     submitting.timer:start(ms, 0, vim.schedule_wrap(function()
         if s.submitting ~= submitting or not valid(s) then return end
         submitting.overdue = true
-        show_feedback(s, NOT_CONFIRMED .. " · Couch did not answer within " .. math.floor(ms / 1000) .. " s", true)
+        show_feedback(s, NOT_CONFIRMED .. " · Couch did not answer within " .. math.ceil(ms / 1000) .. " s", true)
     end))
 end
 
@@ -240,12 +243,9 @@ local function execute(s, effects)
                 if s.model.snapshot().phase == "unknown" then ensure_retry() end
                 if s.queued_submit and not s.model.snapshot().operation then
                     s.queued_submit = false
-                    -- A press that only confirmed a pending registration used to
-                    -- end there, so the agent got nothing until a third press
-                    -- (#357). The replay is a fresh submit of the current bytes.
-                    if s.model.snapshot().phase ~= "pending" then M.submit(s.buf) end
+                    M.submit(s.buf)
                 end
-            end), { timeout_ms = config_ms("agentic_submit_timeout_ms", 15000) })
+            end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
         elseif kind == "save" then
             local ss = require("parley.session_sync")
             local ok, err
@@ -254,6 +254,9 @@ local function execute(s, effects)
             if ok then s.saved_hash = hash(s.buf) end
             dispatch(s, { type = "saved", witness = effect.witness, ok = not not ok, error = err, hash = s.saved_hash })
         elseif kind == "attach" then adopt(s, effect.registration)
+        elseif kind == "resubmit" then
+            end_submit(s)
+            M.submit(s.buf)
         elseif kind == "detach_turn" then
             local ss = require("parley.session_sync")
             local token, err = ss.begin_move(s.buf)
@@ -266,7 +269,7 @@ local function execute(s, effects)
         elseif kind == "rename" then
             s.request = registry.request("rename", { effect.old_path, effect.new_path }, effect.witness, completed(s, function(result)
                 if valid(s) then dispatch(s, { type = "reply", witness = effect.witness, result = result }) end
-            end))
+            end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
         elseif kind == "finish_move" then
             local moving = s.move
             local ok, err = require("parley.session_sync").finish_move(s.buf, moving.token, effect.registration)
@@ -435,11 +438,12 @@ function M.submit(buf)
     if s.recovery_pending then recover_migration(s); return true end
     local snapshot = s.model.snapshot()
     if snapshot.phase == "pending" then
-        -- The operator pressed again: confirm the registration, then submit the
-        -- current bytes (#357). The confirmation itself never sends the old ones.
-        s.queued_submit = true
-        begin_submit(s)
-        dispatch(s, { type = "retry" })
+        -- The operator pressed again. A pending registration is confirmed and
+        -- then submitted afresh (the model's `resubmit`, #357); a pending rename
+        -- or move is only confirmed.
+        local resubmit = snapshot.pending and snapshot.pending.witness.operation == "register"
+        if resubmit then begin_submit(s) end
+        dispatch(s, { type = "retry", submit = resubmit })
         return true
     end
     if snapshot.operation then
@@ -476,11 +480,12 @@ function M.submit(buf)
 end
 
 -- The move and rename preflights must answer inline (BufFilePre decides before
--- Neovim renames), so these block; asynchronous moves are #359. Every caller
--- runs before anything moved, so the one recovery is running the move again
--- (#357). The registry's own timer is set past this wait, so this one decides.
+-- Neovim renames), so these block; asynchronous moves are #359. Before anything
+-- moved the one recovery is running the move again (#357); BufFilePost, where
+-- the buffer is already renamed, says to rename back first. The registry's own
+-- timer is set past this wait, so this one decides.
 local function bounded_request(operation, arguments)
-    local ms = config_ms("agentic_move_timeout_ms", 5000)
+    local ms = config_ms("agentic_move_timeout_ms")
     local result
     local child = registry.request(operation, arguments, {}, function(value) result = value end, { timeout_ms = ms + 1000 })
     local ready = vim.wait(ms, function() return result ~= nil end, 10)
@@ -594,7 +599,7 @@ function M.move_path(old_path, new_path)
     moving.operation = operation
     dispatch(s, { type = "rename", new_path = new_path })
     advance_move(s)
-    local complete = vim.wait(config_ms("agentic_move_timeout_ms", 5000), function() return s.move == nil end, 10)
+    local complete = vim.wait(config_ms("agentic_move_timeout_ms"), function() return s.move == nil end, 10)
     if not complete then return true, nil, "document move pending; preserve its journal and reopen to recover" end
     return true, new_path
 end
@@ -751,6 +756,13 @@ install_migration_hooks = function(s)
             return
         end
         local target = bounded_request("lookup", { moving.new_path })
+        if target.unconfirmed then
+            -- Neovim already renamed the buffer here, so "run it again" alone
+            -- would not do: renaming back aborts this move (cancel_attempt).
+            moving.error = ("rename not confirmed: Couch did not answer within %d s;"
+                .. " rename back to %s, then run it again"):format(math.ceil(config_ms("agentic_move_timeout_ms") / 1000), moving.old_path)
+            refuse(moving.error)
+        end
         if target.kind ~= "absent" then moving.error = "destination membership is occupied or unknown"; refuse(moving.error) end
         local operation, err = require("parley.document_move").begin(s.namespace, moving.identity, moving.new_path, {
             root = state_root(), lease = moving.lease, destination_registered = false,

@@ -135,8 +135,11 @@ state, and Alt+Return is its one action:
 
 The move and rename preflights still block, because they decide inside
 BufFilePre and BufFilePost (asynchronous moves are #359). Their deadline is
-`agentic_move_timeout_ms`, 5 s. Every one runs before anything moved, so their
-recovery is `move not confirmed: … nothing moved. Run the move again`.
+`agentic_move_timeout_ms`, 5 s. Before anything moved, the recovery is `move
+not confirmed: … nothing moved. Run the move again`. At BufFilePost Neovim has
+already renamed the buffer, so the recovery there is `rename not confirmed: …
+rename back to OLD, then run it again`; renaming back aborts the move. A move
+whose registry rename outlasts the wait finishes through its journal.
 
 The last confirmed successful submission also records its captured post-save
 content hash, stable document ID, namespace, effective owner and local time in
