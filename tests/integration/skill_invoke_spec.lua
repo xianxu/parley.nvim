@@ -406,6 +406,29 @@ describe("skill_invoke.invoke", function()
         assert.are.equal("uppercase", done_result.decorations[1].explain)
     end)
 
+    -- #358: the reload replaces the whole buffer, which keeps only line numbers.
+    it("keeps the cursor and top line on their text when the round inserts above", function()
+        local lines = {}
+        for i = 1, 60 do lines[i] = "line " .. i end
+        vim.fn.writefile(lines, path)
+        vim.cmd("silent edit!")
+        vim.fn.winrestview({ lnum = 30, col = 2, topline = 25 })
+        parley.dispatcher.query = function(_buf, _provider, _payload, _handler, on_exit)
+            tasker.set_query("qid_test", {
+                raw_response = propose_edits_sse({
+                    { old_string = "line 1\n", new_string = "new a\nnew b\nline 1\n", explain = "insert above" },
+                }),
+            })
+            vim.schedule(function() on_exit("qid_test") end)
+        end
+        skill_invoke.invoke(buf, manifest(), {}, { manual = true, on_done = function(r) done_result = r end })
+        assert.is_true(vim.wait(2000, function() return done_result ~= nil end), "on_done never ran")
+        assert.is_true(done_result.ok)
+        assert.equals("new a", vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
+        local view = vim.fn.winsaveview()
+        assert.same({ 32, 2, 27 }, { view.lnum, view.col, view.topline })
+    end)
+
     it("preserves unsaved human text when a disk-editing skill completes", function()
         skill_invoke.invoke(buf, manifest(), {}, {
             on_done = function(r) done_result = r end,

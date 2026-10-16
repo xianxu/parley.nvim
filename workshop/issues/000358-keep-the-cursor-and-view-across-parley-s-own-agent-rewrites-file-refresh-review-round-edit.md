@@ -56,10 +56,10 @@ A partial edit keeps Neovim's own cursor adjustment. A whole-buffer replace lose
 `window_views` is the integration half of #356, lifted out of `session_sync` unchanged (ARCH-DRY). It wraps the editor's windows. The pure mapping stays in `view_map`, which already has its tests.
 
 **Steps**
-- [ ] Move `capture_views` and `restore_views` from `session_sync.lua` into `lua/parley/window_views.lua` as `capture(buf)` and `restore(buf, snap)`. `session_sync` calls them at its two reload paths. #356's `session_sync_spec` cases stay green unchanged, which proves the move.
-- [ ] `file_refresh.complete`: capture each buffer's views before its whole-buffer apply. Restore after a successful apply, meaning when `matches()` holds. A refused or reconciling refresh leaves the views alone.
-- [ ] `skill_invoke` `source_completion`: capture before `apply_user` and restore when the receipt says `applied`.
-- [ ] Tests:
+- [x] Move `capture_views` and `restore_views` from `session_sync.lua` into `lua/parley/window_views.lua` as `capture(buf)` and `restore(buf, snap)`. `session_sync` calls them at its two reload paths. #356's `session_sync_spec` cases stay green unchanged, which proves the move.
+- [x] `file_refresh.complete`: capture each buffer's views before its whole-buffer apply. Restore after a successful apply, meaning when `matches()` holds. A refused or reconciling refresh leaves the views alone.
+- [x] `skill_invoke` `source_completion`: capture before `apply_user` and restore when the receipt says `applied`.
+- [x] Tests:
   - `tool_file_refresh_spec`: a buffer of numbered lines in two windows. A `write_file` that adds lines above the cursor shifts both cursors onto the same text; one that appends below leaves cursor and top line exact.
   - `skill_invoke_review_spec`: a round that inserts above the cursor keeps it on its text.
   - Each test fails with the restore removed.
@@ -69,3 +69,9 @@ A partial edit keeps Neovim's own cursor adjustment. A whole-buffer replace lose
 ## Log
 
 ### 2026-10-16
+- Built after #356 landed (PR #274) and main was merged in. `window_views.capture` and `restore` are #356's pair, lifted unchanged. `session_sync_spec` (63) and `view_map_spec` (10) are green with no test edits, which proves the move.
+- The review-round test lives in `skill_invoke_spec`, not `skill_invoke_review_spec`: the latter stubs `skill_invoke.invoke`, so it never reaches `source_completion`. The new case drives a real `propose_edits` exchange that inserts two lines above.
+- Mutation checks (copy, perl, cmp; no stash): removing file_refresh's restore fails both "lines added above" cases (plain buffer and attached document). Removing skill_invoke's restore fails its case. The append-below case passes either way, because a whole-buffer replace already keeps that view; it guards that the restore doesn't disturb it. That's a correction to "each test fails without the restore".
+- Also folded in #356's re-close advisory (family view-restore-fidelity): `window_views_spec` covers both curswant paths. A moved column re-derives curswant, and removing the second `winrestview` fails it. An unchanged column stays $-sticky.
+- A refused refresh, with a human edit after capture, leaves Neovim's own cursor adjustment untouched (tested).
+

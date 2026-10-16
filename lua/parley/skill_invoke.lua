@@ -536,8 +536,11 @@ function M.invoke(buf, manifest, args, opts)
                         if not edits.resolve_user(source_capture) then refuse('source changed');return end
                         -- readfile compatibility: a final file newline is buffer metadata.
                         local disk=read.data:gsub('\r\n','\n'):gsub('\n$','')
+                        -- A whole-buffer replace keeps line numbers only (#358).
+                        local views=require('parley.window_views').capture(buf)
                         local receipt=edits.apply_user(source_capture,{{region=1,text=disk}})
                         if receipt.status~='applied' then refuse(receipt.reason);return end
+                        require('parley.window_views').restore(buf,views)
                         deliver_completion()
                     end
                     local handle=source_filesystem:read(artifact_path,on_source_read)
