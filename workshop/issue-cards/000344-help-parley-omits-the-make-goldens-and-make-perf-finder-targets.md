@@ -1,6 +1,6 @@
 ---
 id: 000344
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -14,6 +14,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.01
+tracker:
+    version: 1
+    completion:
+        token: close-7e51721f0d51
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: b3ce489106e4353652201bb9cfaa3b396edb8b6e
+        evidence_commit: 9b096e3c3c61a60a0144fd89d30d5630690fb8a4
 ---
 
 # help-parley omits the make goldens and make perf-finder targets
