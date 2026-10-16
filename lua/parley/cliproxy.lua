@@ -468,6 +468,11 @@ M._repair_budget_sec = {
     second_read = CURL_MAX_TIME,
 }
 
+-- The terms a plain restart (restart_managed) spends, by name, so a spec sums
+-- the same set the code runs instead of hand-listing it (#345 close BR-1).
+M._restart_budget_keys = { "stop_identity_probe", "stop_listener_read", "port_release", "ensure_probe",
+    "poll_healthy" }
+
 function M._reset_management_restart() -- test seam
     _management_restart_done = false
 end
@@ -538,6 +543,8 @@ local function wait_port_released(host, port, secret, pids, cb)
     end
     exit_poll()
 end
+
+M._wait_port_released = wait_port_released -- test seam (#345)
 
 local start_managed -- ensure_running's spawn branch, defined with it below
 

@@ -456,6 +456,30 @@ describe("cliproxy IO lifecycle", function()
             assert.is_true(got.at < 1500, ("a 300 ms read took %d ms"):format(got.at))
         end)
 
+        -- #345 close BR-1, end to end: an old process that exits just before the
+        -- release deadline leaves the post-exit read only the time that is left.
+        -- lsof takes 4 s here; passed the remaining ~0.3 s, the wait decides at
+        -- about the deadline, and passed its full 2 s limit it would decide ~1.7 s
+        -- late (the read and the fallback probe stacked).
+        it("the release wait never runs its listener read past the deadline", function()
+            local handle, _, err, pid = fixture_process.spawn("python3", { "-c", "import time; time.sleep(1.7)" })
+            assert(handle, tostring(err))
+            vim.env.PARLEY_FAKE_LSOF_DELAY_MS = "4000"
+            cliproxy._set_process_tools({ lsof = vim.fn.getcwd() .. "/tests/fixtures/fake_lsof" })
+            local started = uv.now()
+            local got = await(function(done)
+                cliproxy._wait_port_released("127.0.0.1", ready_port.free_port(), "testkey", { pid },
+                    function(released, state, exited)
+                        done({ released = released, state = state, exited = exited, at = uv.now() - started })
+                    end)
+            end)
+            cliproxy._set_process_tools(nil)
+            vim.env.PARLEY_FAKE_LSOF_DELAY_MS = nil
+            assert.is_true(got.released) -- the probe on the empty port decided
+            assert.is_false(got.exited) -- the cut-off read is "unread", not "no listener"
+            assert.is_true(got.at < 3000, ("the wait decided at %d ms, past its 2 s deadline + a probe"):format(got.at))
+        end)
+
         -- #340 close review: the signalled pids exiting frees the port only if
         -- they were all that held it. Parley's own proxy is on an earlier port, a
         -- peer cliproxy holds the managed one, and lsof cannot run — so stop()

@@ -128,3 +128,96 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ca5de75c-3819-4152-a108-620a9606e4c7","repository":"github.com/xianxu/parley.nvim","issue_id":"000345","recipe":"milestone-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/353ea23f56b3b4c1","reviewed_head":"202bafa72fef2bbbb17b96a78027f37850da7fc1","slot":"parley.nvim:4","requested_at":"2026-10-16T08:43:07.9057Z"},"phase":"finished","pid":65260,"started_at":"2026-10-16T08:43:08.449313Z","finished_at":"2026-10-16T08:46:44.461702Z","session_id":"ee69bd4c-d01a-41ca-b30e-af8548055738","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T02:07:26-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 345 — Restart path blocks the main loop on a synchronous lsof (and stop's identity probe) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000345-restart-path-blocks-the-main-loop-on-a-synchronous-lsof-and-stop-s-identity-probe.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | f3931fb58d00b50a2ec6a7511a06a353c538fdf0..8787140f9b1204cfc3a255f2a5f9102c2f6097c4 |
+| command | sdlc close --issue 345 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T02:07:26-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+Prior findings checked against the diff so far; now reading the budget spec and lifecycle tests.
+
+Running the budget spec and the new lsof tests to confirm they pass at head.
+
+Running the mapped cliproxy spec suite through the harness.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: medium
+```
+
+The restart path no longer blocks the main loop. `M.stop_async` (`lua/parley/cliproxy.lua:1029`) runs its identity probe and listener read asynchronously. The post-exit listener read in `wait_port_released` is also async, and it gets only the time left before the release deadline (`cliproxy.lua:523-532`). `:ParleyProxy stop` uses the async path too (`init.lua:384`). All 15 spec files mapped to `providers/cliproxy-managed` pass at head through `make test-spec SPEC=providers/cliproxy-managed`, including `cliproxy_budget_spec` and the 63 lifecycle cases. BR-2 and BR-3 are fixed. Two things keep BR-1 open:
+- The `restart_only` sum in `tests/unit/cliproxy_budget_spec.lua:31-34` still leaves out the new `stop_listener_read` term, which the prior finding asked for by name.
+- No test fails if `exit_poll` stops passing `remaining` to the read. Only the seam's own timeout parameter is pinned.
+
+Neither is a correctness bug at head, so this is FIX-THEN-SHIP, not REWORK.
+
+**1. Strengths**
+- `cliproxy.lua:930-943`: the sync and async readers share one argv (`lsof_argv`) and one parser (`parse_listener_pids`). `sigterm_all` and `kill_spawned` remove the copy-pasted kill loop between `stop` and `stop_async`.
+- `cliproxy.lua:968-970`: an lsof timeout (code 124) is reported as the error `"lsof timed out"`, never as "no listener", so a timeout never looks like a released port.
+- `tests/fixtures/fake_lsof` now models state: it lists only pids that are still alive. The responsiveness test asserts both reads (`{"listed: <pid>", "listed: "}`), so it now covers the exited fast path, and it bounds the main-loop gap at under half the read time.
+- The `stop`/`stop_async` contract specs are parameterised over both drivers (lifecycle spec around line 579).
+- The fix for the wrappers that stopped testing anything (stall window, `stops == 0`) is carried over to `stop_async`, and the lesson is recorded in `workshop/lessons.md`.
+
+**2. Critical findings:** none.
+
+**3. Important findings:** none new. BR-1 is re-raised through its disposition below.
+
+**4. Minor findings:** none new. BR-4 stays open as an accepted risk.
+
+**5. Test coverage notes**
+- BR-1's call-site half (`remaining` passed into `pids_on_port_async` at `cliproxy.lua:531`) is checked only by reading the code. A test needs a proxy that exits close to the deadline, plus a fake lsof slower than the time left. The implementer notes that the exit-delay knob is being retired by #343. If no test is practical, record that explicitly as an accepted gap rather than a fix.
+- The budget unit spec can't tell whether `restart_only` is complete, because the compound assertion uses `>`. A missing term only makes that check easier to pass.
+
+**6. Architecture**
+
+| Principle | Result |
+|---|---|
+| ARCH-DRY | **Pass.** One argv and parse; shared `sigterm_all` and `kill_spawned`. |
+| ARCH-PURE | **Pass for this scope.** `parse_listener_pids` is pure. The IO stays at the lsof seam (`_set_process_tools`). |
+| ARCH-PURPOSE | **Flag (inside BR-1).** `restart_only` is a hand-written list of the restart's budget terms and has drifted from the derived `_repair_budget_sec`. Build it from named keys shared with production, or add the term. |
+| ARCH-MOCK | **Pass.** `fake_lsof` sits behind the same seam as production, now tracks liveness, and is registered in the fixture-lifecycle corpus. |
+| ARCH-CONSTRAINTS | **Pass.** The read is capped (`LSOF_MAX_MS`, plus the time left), it is now included in the budget, and main-loop responsiveness is measured. |
+| ARCH-SECURE | **Pass.** argv array, no string interpolation into a shell; an lsof failure counts as unread, not as a fabricated "empty". |
+| ARCH-ORDER | **Flag (BR-4, accepted).** `_spawned` is cleared before the async window, and a concurrent spawn in that window is not modeled. |
+| ARCH-FUNERAL | **Pass.** No durable artifacts. The test log file is a tempname. |
+
+**7. Plan revision recommendations**
+- Add a `## Revisions` entry saying the `exit_poll → remaining` wiring has no restart-level regression test, and why (it waits on #343's exit-delay retirement).
+- Record that `restart_only` in the budget spec now includes `stop_listener_read`, or why it shouldn't.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: not-addressed
+    note: |
+      The stacking is fixed in code (cliproxy.lua:523-532 passes the time left, port_release is deadline + one probe again), and the seam test pins the timeout parameter. Two things remain. First, restart_only in tests/unit/cliproxy_budget_spec.lua:31-34 still omits stop_listener_read, which the finding asked for explicitly; it should be derived from shared key names, not hand-listed (repair-budget-term-derivation). Second, no test fails if exit_poll stops passing remaining. Add the term, then either add a near-deadline restart test or record the untested wiring as an accepted gap in the plan.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      cliproxy.lua:1009-1016: the M.stop doc block and @return lines sit directly above function M.stop; the helpers moved above the block.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      fake_lsof filters to live pids, and the responsiveness test asserts the reads list the leftover and then nothing, so the exited fast path is covered; passes at head.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Accepted, not fixed (issue log). Minor and non-blocking: a dispatch's ensure_running racing an explicit restart can still be reaped in stop_async's async window.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"566a4c6c-d8cf-4d03-8585-f4e06ebbcba4","repository":"github.com/xianxu/parley.nvim","issue_id":"000345","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/d36c0dfe34d038d1","reviewed_head":"8787140f9b1204cfc3a255f2a5f9102c2f6097c4","slot":"parley.nvim:4","requested_at":"2026-10-16T09:03:42.418734Z"},"phase":"finished","pid":26188,"started_at":"2026-10-16T09:03:42.712443Z","finished_at":"2026-10-16T09:07:24.876979Z","session_id":"f7753cf0-0181-4254-9c77-3535742cb93f","outcome":"returned"}] -->

@@ -59,6 +59,8 @@ the restart path, with the sync command kept, is one option.
 |---|---|---|---|
 | `stop` | changed | lua/parley/cliproxy.lua | The sync stop: kills `_spawned`, then reaps a cliproxy on the managed port. Kept for spec teardown; its kill steps are shared with `stop_async`. |
 | `stop_async` | added | lua/parley/cliproxy.lua | The same stop with the identity probe and the listener read async; `cb(count, pids)`. Used by `restart_managed` and `:ParleyProxy stop`. |
+| `_wait_port_released` | added | lua/parley/cliproxy.lua | Test seam for the release wait, so a spec can drive a process that exits near the deadline (#345 close BR-1). |
+| `_restart_budget_keys` | added | lua/parley/cliproxy.lua | The repair-budget terms a plain restart spends, by name; cliproxy_budget_spec sums these instead of a hand-written list. |
 | `_pids_on_port_async` | added | lua/parley/cliproxy.lua | Test seam for the async listener read: lsof through a `vim.system` callback, limited to `LSOF_MAX_MS`; a timeout reports `lsof timed out`, never "no listener". |
 
 ## Plan
@@ -112,4 +114,7 @@ blocked on its identity curl (up to 2 s) is the same user-visible freeze.
   - The doc block: `M.stop`'s doc and annotations are back on `M.stop`; the helpers moved above it.
   - The stateless fake: `fake_lsof` now lists only live pids and logs what it printed. The responsiveness test asserts read 1 listed the leftover and read 2 listed none, so it covers the exit-confirmed path.
   - Concurrent spawn reaped during `stop_async`'s async window: accepted, not fixed. The window already existed during the release wait (#340), and a dispatch's `ensure_running` racing an explicit restart is outside this issue. Recorded here.
+- Close round 2 (BR-1 kept open):
+  - The restart-only budget is now derived: `M._restart_budget_keys` names the terms (adding `stop_listener_read`, which the hand-written list omitted), and cliproxy_budget_spec sums them, asserting each is a real term.
+  - The `remaining` pass-through is now tested end to end: "the release wait never runs its listener read past the deadline" drives `_wait_port_released` with a process that exits at 1.7 s and a 4 s fake lsof. Mutation: passing no limit makes the wait decide at 3787 ms, and the case fails (the bound is 3000).
 
