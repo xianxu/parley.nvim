@@ -5,8 +5,8 @@ deps: [parley.nvim#332]
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
-estimate_hours:
-card_mirror: 'c329791d83c041854feeb0ae3577ba9a6a1d6ed3' # card fields mirrored from issue-cards; edit via sdlc
+estimate_hours: 4.54
+card_mirror: 'ff06dcb52eb216c52dd51840577e7e21d0e50bf2' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T09:59:46-07:00
 claimant:
     operator: Xian Xu
@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: operator}
 ---
 
 # Breadcrumb winbar: the Alt+o / Alt+Shift+O file trail beside a fixed-width lock cell (one bar with #332's renderer)
@@ -73,3 +74,21 @@ Agreed with parley.nvim:3: retain snapshot(win)/restore(win,value), with an opaq
 ### 2026-10-16 — Plan gate refinements
 
 Plan gate round1 identified PQ-1 (destination history must match a cross-window trail) and PQ-2 (name risky functions and generated adversarial strategies). Appended one install_trail transition for all follows/restores, with destination-history overlap/cursor rules and generated sequence/width/validation invariants. No implementation before the rerun admits the plan.
+
+## Estimate
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only. Calibration source is tagged stale by estimate-source, so rates remain provisional. Three focused Lua primitives cover pure trail/history, native/async navigation and shared renderer wiring. One TUI projection covers width/state composition; docs, cross-file integration and one close review are separate. Existing history, renderer and text measurement APIs remove novel-stack discovery; no external library is needed. Thorough approved plan gives design ×0.2 (Lua midpoint2h→0.4h each; TUI midpoint1.25h→0.25h) and15% design buffer; implementation values are40% of the upper v2 ranges. Familiar territory uses1.0. Sum design1.62×1.15 + impl2.68 =4.543, rounded4.54h.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.6
+item: lua-neovim design=0.4 impl=0.6
+item: lua-neovim design=0.4 impl=0.6
+item: tui-screen design=0.25 impl=0.4
+item: cross-cutting-refactor design=0.12 impl=0.2
+item: atlas-docs design=0.03 impl=0.08
+item: milestone-review design=0.02 impl=0.2
+design-buffer: 0.15
+total: 4.54
+```
