@@ -94,6 +94,16 @@ local function current_issue_docs()
     return id, docs
 end
 
+-- Where this branch left main. origin/main first: in a slot layout the local
+-- `main` is another checkout's branch and can lag far behind, which charges
+-- every issue landed since to this branch (#342). Plain `main` is the fallback.
+local function branch_point()
+    for _, ref in ipairs({ "origin/main", "main" }) do
+        local found = vim.fn.systemlist({ "git", "merge-base", "HEAD", ref })[1]
+        if vim.v.shell_error == 0 and found and found:match("^%x+$") then return found end
+    end
+end
+
 describe("arch: single-source sweeps stay swept", function()
     it("the plan's Core-concepts tables name every entity THIS issue added", function()
         -- The other direction of the referent sweep, and scoped to the issue's
@@ -114,7 +124,7 @@ describe("arch: single-source sweeps stay swept", function()
         -- #205, so the original worked; on a branch cut from a main that has
         -- moved on, diffing from the issue commit attributes every unrelated
         -- merge to this issue and demands table rows for other issues' work.
-        local base = vim.fn.systemlist("git merge-base HEAD main")[1]
+        local base = branch_point()
         if not base or base == "" then
             pending("branch point not found")
             return
@@ -818,7 +828,7 @@ describe("arch: traceability.yaml lists every file it claims to map (#214)", fun
             pending("not on an issue branch — this guard is scoped to a branch's own diff")
             return
         end
-        local base = vim.fn.systemlist("git merge-base HEAD main")[1]
+        local base = branch_point()
         if not base or base == "" then
             pending("branch point not found")
             return

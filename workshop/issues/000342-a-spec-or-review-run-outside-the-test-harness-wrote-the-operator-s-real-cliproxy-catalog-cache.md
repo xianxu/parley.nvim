@@ -48,10 +48,13 @@ Make the write impossible rather than finding this one writer:
 
 | Entity | Kind | Status | Location | Responsibility |
 | --- | --- | --- | --- | --- |
+| `check` | PURE | new | `lua/parley/test_isolation.lua` | The reasons an environment is not isolated; empty when it is. |
+| `inside` | PURE | new | `lua/parley/test_isolation.lua` | Whether a path lies inside a root, links resolved. |
 | `test_isolation` | PURE | new | `lua/parley/test_isolation.lua` | The one rule: under the harness, a path must resolve inside `PARLEY_TEST_ENV_ROOT`; `check(env)` names what is not isolated. |
-| `minimal_init` | INTEGRATION | modified | `tests/minimal_init.vim` | Refuses to run any spec, before plenary loads one, when the env is not isolated. |
+| tests/minimal_init.vim | INTEGRATION | modified | `tests/minimal_init.vim` | Refuses to run any spec, before plenary loads one, when the env is not isolated. |
+| `single_source_sweeps_spec` | INTEGRATION | modified | `tests/arch/single_source_sweeps_spec.lua` | Diffs from the branch point against origin/main, not a lagging local main. |
 | `cliproxy` | INTEGRATION | modified | `lua/parley/cliproxy.lua` | `data_root()` refuses a root outside the isolated env in test mode, so no cache, config or binary write can reach real state. |
-| `Makefile.parley` | INTEGRATION | modified | `Makefile.parley` | Exports `PARLEY_TEST_ENV_ROOT` with the isolated env; a `goldens` target replaces the documented direct run. |
+| Makefile.parley | INTEGRATION | modified | `Makefile.parley` | Exports `PARLEY_TEST_ENV_ROOT` with the isolated env; a goldens target replaces the documented direct run. |
 
 ## Plan
 
@@ -75,3 +78,4 @@ Measurement (2026-10-15, :3): every `make` target that loads `tests/minimal_init
 - Writer guard: `tests/unit/test_isolation_spec` 8/0, including cliproxy refusing an outside root; red with the guard disabled (7/1).
 - `check-spell-compatibility.sh` runs in test mode with its own mktemp roots, so it now declares them as `PARLEY_TEST_ENV_ROOT`; one definition of isolation everywhere. `check-fresh-clone.sh` needs nothing (its probe is not in test mode; its inner `make test` sets the marker). `test_local_app.py` inherits the harness env.
 - Out of reach here: the close-review dispatcher lives in ariadne. With the guard, a reviewer's direct run fails loudly with the make command to use instead.
+- Full suite on def08221: one failing file, single_source_sweeps. Two causes. (1) My table backticked `minimal_init` and `goldens`, which are not Lua symbols, and lacked `check` and `inside`; fixed. (2) A real guard flaw: it took the branch point from `git merge-base HEAD main`. In the slot layout the local `main` is the :0 checkout's branch (here at 7762f5ed, far behind origin/main; untouched, since :0 is staged), so #230's `_operator_specs`, `_select` and `diagnose` were charged to this branch. A single `branch_point()` now prefers origin/main and falls back to main; both call sites use it. single_source_sweeps 25/0, lint clean.
