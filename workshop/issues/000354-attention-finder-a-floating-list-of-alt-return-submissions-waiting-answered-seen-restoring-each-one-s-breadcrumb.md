@@ -68,12 +68,13 @@ total: 3.39
 
 The durable plan is `workshop/plans/000354-attention-finder-plan.md` (milestones M1 and M2). Operator addition (TL, 2026-10-16), folded into the plan's model: a seen entry leaves after `attention.seen_grace_minutes` (default 60, pending the operator's 1 h vs 15 min); a new submit resets it to waiting; answered entries never opened don't expire.
 
-- [ ] M1 — the model, store and submit recording
+- [x] M1 — the model, store and submit recording
 - [ ] M2 — the finder (rows, refresh, open, chord, docs)
 
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed M1 — M1 specs green after merging main: attention_model 27, attention_store 12, attention_record 12 (both Alt+Return paths through the fake Couch, plus BR-2 late completion after a buffer wipe, and a throwing record); mutations of the probed-set, failed-probe, busy-retry, hook, hook-order and record-guard rules each fail their specs; agentic/registry/band/review_send/session_sync/couch/sidecar/arch regression set green; lint clean; review verdict: SHIP
 - Plan approved by the TL. The decisions: answered means folded, the chord is `<M-u>`, the grace defaults to 60 minutes. Plan-quality took three rounds. Round 1 found three Important issues, all accepted: the lease is non-blocking, a stale probe could answer a newer submit, and session-sync files were missed. Estimate: 3.39 h, against v3.1, whose source reads stale (provisional).
 - M1 built:
   - `attention_model`: 27 specs. Mutations that ignore the probed set, or let a failed probe clear pending, both fail the specs.
