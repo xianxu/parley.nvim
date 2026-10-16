@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-10-16 (#353 — displayed ancestry and native history)
+
+- A displayed trail and Back entries must commit together in the actual landing window, including reused splits. Reconstruct through one pure transition; changing only the label can send Back into an unrelated file.
+- Repeated paths are visits with distinct cursor provenance. When a bounded trail drops interior entries, keep cursor positions by retained visit index rather than matching path text.
+- Stripping date prefixes can erase the last distinguishing component of filenames in the same directory. Test that collision and fall back to original identity after parent suffixes are exhausted.
+
 ## 2026-10-16 (#332 — shared stage ownership)
 
 - A stage can be replaced by another worker before the original item lands. Inspect the current staged commit before clearing it; clear only the stage owned by the completed item. A newer stage belongs to its worker even when the earlier task authorized cleanup.

@@ -10,8 +10,18 @@ describe("shared document bands", function()
         return { winbar = vim.wo[item.win].winbar, winhighlight = vim.wo[item.win].winhighlight }
     end
     local function expect_view(item, label, highlight)
-        assert.same({ winbar = "%#" .. highlight .. "# " .. label:gsub("%%", "%%%%") .. "%=",
-            winhighlight = "StatusLine:" .. highlight }, observe(item))
+        local cell, detail, base = "free     ", label, highlight
+        if label == "free: editing takes your turn" then detail = ""
+        elseif label == "your turn, Alt+Return to submit" then cell, detail = "yours ●  ", ""
+        elseif label == "unsent edits, Alt+Return to submit" then cell, detail = "stale    ", ""
+        elseif highlight == "ParleySessionSyncOperator" then cell = "stale    "
+        elseif highlight == "ParleySessionSyncOwed" then cell = "agent…   "
+        elseif highlight == "WarningMsg" then cell = "unknown  "
+        end
+        if highlight == "DiagnosticError" or highlight == "DiagnosticOk" then base = "ParleySessionSyncFree" end
+        local bar = "%#" .. base .. "#" .. cell
+        if detail ~= "" then bar = bar .. " %#" .. highlight .. "#" .. detail:gsub("%%", "%%%%") end
+        assert.same({ winbar = bar .. "%=", winhighlight = "StatusLine:" .. base }, observe(item))
     end
     local function open(name, typed)
         local path = root .. "/" .. name .. ".md"
@@ -53,6 +63,7 @@ describe("shared document bands", function()
         p, ss, document = require("parley"), require("parley.session_sync"), require("parley.agentic_document")
         saved.state_dir, saved.shortcut = p.config.state_dir, p.config.review_shortcut_next
         saved.date = os.date
+        saved.columns = vim.o.columns; vim.o.columns = 500
         saved.stale, saved.poll, saved.ping = p.config.session_sync_stale_minutes, ss.POLL_MS, ss.PING_CHECK_MS
         p.config.state_dir = root .. "/state"
         p.config.review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" }
@@ -65,6 +76,7 @@ describe("shared document bands", function()
         end
         require("parley.document_registry").shutdown()
         rawset(os, "date", saved.date)
+        vim.o.columns = saved.columns
         vim.cmd("silent only")
         for _, key in ipairs(env_keys) do vim.env[key] = saved.env[key] end
         p.config.state_dir, p.config.review_shortcut_next = saved.state_dir, saved.shortcut
@@ -112,7 +124,8 @@ describe("shared document bands", function()
         expect_view(ordinary, label, highlight)
     end
     local function feedback_label(item)
-        return vim.wo[item.win].winbar:match("^%%#[^#]+# (.*)%%=$")
+        local label = vim.wo[item.win].winbar:match(".*%%#[^#]+#(.*)%%=$")
+        return label and label:gsub("%%%%", "%%")
     end
     local function compare_feedback(typed, ordinary, fragment, is_error)
         await(function()
@@ -134,13 +147,13 @@ describe("shared document bands", function()
             vim.api.nvim_buf_set_lines(item.buf, -1, -1, false, { "operator edit" })
         end
         await(function()
-            return vim.wo[typed.win].winbar:find("your turn", 1, true) ~= nil
-                and vim.wo[ordinary.win].winbar:find("your turn", 1, true) ~= nil
+            return vim.wo[typed.win].winbar:find("yours ●", 1, true) ~= nil
+                and vim.wo[ordinary.win].winbar:find("yours ●", 1, true) ~= nil
         end)
         equivalent(typed, ordinary, "your turn, Alt+Return to submit", "ParleySessionSyncOperator")
         await(function()
-            return vim.wo[typed.win].winbar:find("unsent edits", 1, true) ~= nil
-                and vim.wo[ordinary.win].winbar:find("unsent edits", 1, true) ~= nil
+            return vim.wo[typed.win].winbar:find("stale", 1, true) ~= nil
+                and vim.wo[ordinary.win].winbar:find("stale", 1, true) ~= nil
         end)
         equivalent(typed, ordinary, "unsent edits, Alt+Return to submit", "ParleySessionSyncStale")
         for _, item in ipairs({ typed, ordinary }) do
@@ -262,20 +275,71 @@ describe("shared document bands", function()
         expect_view(unrelated, "free: editing takes your turn", "ParleySessionSyncFree")
     end)
 
+    it("keeps matching trails and lock cells for actual session and registered file states", function()
+        vim.fn.mkdir(root .. "/typed", "p"); vim.fn.mkdir(root .. "/ordinary", "p")
+        local typed = open("typed/question", true); ss.attach(typed.buf)
+        local ordinary = open("ordinary/question"); register(ordinary); admit(ordinary)
+        local history = require("parley.file_history")
+        history.setup()
+        local base = root .. "/2026-10-16-root.md"; vim.fn.writefile({ "root" }, base)
+        for _, item in ipairs({ typed, ordinary }) do
+            assert.is_true(history.restore(item.win, { version = 1, paths = { base, item.path }, omitted = 0 }))
+        end
+        assert.same(observe(typed), observe(ordinary))
+        assert.truthy(vim.wo[ordinary.win].winbar:find("root › question", 1, true))
+        for _, item in ipairs({ typed, ordinary }) do
+            vim.api.nvim_buf_set_lines(item.buf, -1, -1, false, { "unsubmitted" })
+            assert.is_true(ss.set_submission_feedback(item.buf, "submit failed: busy", true))
+        end
+        assert.same(observe(typed), observe(ordinary))
+        for _, item in ipairs({ typed, ordinary }) do
+            assert.equals("StatusLine:ParleySessionSyncOperator", vim.wo[item.win].winhighlight)
+            assert.truthy(vim.wo[item.win].winbar:find("yours ●", 1, true))
+            assert.truthy(vim.wo[item.win].winbar:find("submit failed: busy", 1, true))
+            assert.truthy(vim.wo[item.win].winbar:find("root › question", 1, true))
+        end
+    end)
+
+    it("composes independent trails in two windows showing the same attached buffer", function()
+        local item = open("same-window-buffer", true); ss.attach(item.buf)
+        local history = require("parley.file_history"); history.setup()
+        local first = item.win
+        vim.cmd("vsplit")
+        local second = vim.api.nvim_get_current_win()
+        local a, b = root .. "/first.md", root .. "/second.md"
+        vim.fn.writefile({ "a" }, a); vim.fn.writefile({ "b" }, b)
+        assert.is_true(history.restore(first, { version = 1, paths = { a, item.path }, omitted = 0 }))
+        assert.is_true(history.restore(second, { version = 1, paths = { b, item.path }, omitted = 0 }))
+        assert.is_true(ss.set_submission_feedback(item.buf, "submitted to ops:0 · 14:23", false))
+        assert.truthy(vim.wo[first].winbar:find("first › same-window-buffer", 1, true))
+        assert.truthy(vim.wo[second].winbar:find("second › same-window-buffer", 1, true))
+        for _, win in ipairs({ first, second }) do
+            assert.truthy(vim.wo[win].winbar:find("submitted to ops:0", 1, true))
+            assert.equals("StatusLine:ParleySessionSyncFree", vim.wo[win].winhighlight)
+        end
+        vim.api.nvim_win_set_width(second, 24)
+        vim.api.nvim_exec_autocmds("WinResized", {})
+        local rendered = vim.api.nvim_eval_statusline(vim.wo[second].winbar,
+            { winid = second, use_winbar = true, maxwidth = 1000 }).str
+        assert.is_true(vim.fn.strdisplaywidth(vim.trim(rendered)) <= 24)
+        assert.truthy(vim.wo[first].winbar:find("first › same-window-buffer", 1, true))
+    end)
+
     local function renderer(item)
         local ok, module = pcall(require, "parley.document_band")
         assert.is_true(ok, "shared renderer module must load")
         return module.new(item.buf)
     end
-    local free = { label = "free: editing takes your turn", hl = "ParleySessionSyncFree" }
-    local failure = { label = "submit failed: 50% unavailable", hl = "DiagnosticError" }
+    local free = { state = "free", label = "free: editing takes your turn", hl = "ParleySessionSyncFree" }
+    local failure = { state = "free", label = "submit failed: 50% unavailable", hl = "ParleySessionSyncFree",
+        feedback = { label = "submit failed: 50% unavailable", hl = "DiagnosticError" } }
 
     it("restores a still-live session layer after temporary coordinator feedback clears", function()
         local item = open("layered")
         local session, coordinator = renderer(item), renderer(item)
         session.render(free)
         coordinator.render(failure)
-        expect_view(item, failure.label, failure.hl)
+        expect_view(item, failure.label, "DiagnosticError")
         coordinator.clear()
         expect_view(item, free.label, free.hl)
         session.clear()

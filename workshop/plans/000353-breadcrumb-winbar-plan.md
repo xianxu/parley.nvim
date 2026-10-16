@@ -1,6 +1,6 @@
 # Breadcrumb Winbar Implementation Plan
 
-> **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy) to determine the appropriate execution approach: use superpowers-subagent-driven-development (if subagents are suitable per AGENTS.md) or superpowers-executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy) to determine the appropriate execution approach: use superpowers-subagent-driven-development (if subagents are suitable per AGENTS.md) or superpowers-executing-plans to implement this plan. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Show the per-window Alt+o trail beside a fixed nine-display-cell lock indicator through the shared document renderer, with a reusable trail snapshot.
 
@@ -20,9 +20,10 @@ No click targets, finder UI, persisted trail database or extra winbar writer. Th
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| Breadcrumb value and transition | lua/parley/breadcrumb_model.lua | new |
-| Breadcrumb segment/width projection | lua/parley/breadcrumb_model.lua | new |
-| File visit/history with breadcrumb snapshots | lua/parley/file_history_model.lua | modified |
+| `transition`, `validate` (breadcrumb value) | lua/parley/breadcrumb_model.lua | new |
+| `project` (segment/width projection) | lua/parley/breadcrumb_model.lua | new |
+| `compose` (lock, trail and feedback projection) | lua/parley/document_band_model.lua | new |
+| `install_trail`, `transition` (visit/history snapshots) | lua/parley/file_history_model.lua | modified |
 
 Breadcrumb value: `{version=1, paths={absolute_path,...}, omitted=0}`. Snapshot callers receive copies. Root is one path; it renders no trail. Follow appends a different target; same-file jumps do not grow it. Ordinary file opens reset to a one-path root. Back restores the saved target visit's value, so Alt+o descent pops naturally while native Back still traverses earlier roots. Root does not disable native Back; a native visit remains its own root. This interpretation preserves #333's contract and needs TL approval.
 
@@ -32,9 +33,9 @@ Pure transitions receive canonical paths/cursor values from integration. Sequenc
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| File-history controller and snapshot/restore | lua/parley/file_history.lua | modified | native visits, cursors, windows |
+| `snapshot`, `restore`, `origin`, `follow`, `peek` (history controller) | lua/parley/file_history.lua | modified | native visits, cursors, windows |
 | Successful follow boundary | lua/parley/init.lua; lua/parley/artifact_ref.lua | modified | sync local opens, native gf, async resolution/pickers |
-| Shared window renderer | lua/parley/document_band.lua | modified | winbar/winhighlight ownership and width |
+| `refresh`, `new` (shared renderer) | lua/parley/document_band.lua | modified | winbar/winhighlight ownership and width |
 | Lock/feedback view selection | lua/parley/session_sync.lua; lua/parley/agentic_document.lua | modified | existing lock, baseline, membership and receipts |
 
 Use real temporary files and windows for navigation. Artifact resolution keeps the existing production runner/stateful fake; Couch tests reuse tests/fixtures/fake_couch through production document_registry transport. No new binary/service dependency or production state store.
@@ -80,34 +81,34 @@ ARCH-DRY: existing file-history owns visits/cursors; document_band is the sole r
 
 Files: new lua/parley/breadcrumb_model.lua and tests/unit/breadcrumb_model_spec.lua; modify lua/parley/file_history_model.lua and tests/unit/file_history_model_spec.lua.
 
-- [ ] Write failing transition tests: root/follow/follow/back, non-follow reset, same-file jump, forward-tail truncation, independent copies, invalid restore and capacity overflow.
-- [ ] Write independent display oracles for prefix/suffix stripping, duplicate labels, equal parents, middle collapse, narrow widths, percent/control data, Unicode units/widths and nine-cell state labels.
-- [ ] Run `make -k test-spec SPEC=ui/keybindings` after mapping the new units; confirm missing-model assertions fail, not harness setup.
-- [ ] Implement immutable transitions/width projection and rerun the mapped tests green. Commit the pure model and tests.
+- [x] Write failing transition tests: root/follow/follow/back, non-follow reset, same-file jump, forward-tail truncation, independent copies, invalid restore and capacity overflow.
+- [x] Write independent display oracles for prefix/suffix stripping, duplicate labels, equal parents, middle collapse, narrow widths, percent/control data, Unicode units/widths and nine-cell state labels.
+- [x] Run `make -k test-spec SPEC=ui/keybindings` after mapping the new units; confirm missing-model assertions fail, not harness setup.
+- [x] Implement immutable transitions/width projection and rerun the mapped tests green. Commit the pure model and tests.
 
 ### 2. Real navigation and snapshot seam
 
 Files: lua/parley/file_history.lua, lua/parley/init.lua, lua/parley/artifact_ref.lua; tests/integration/file_history_spec.lua, tests/integration/entity_navigation_native_spec.lua, tests/integration/open_reference_spec.lua, tests/integration/entity_resolve_spec.lua.
 
-- [ ] Add red real-key Alt+o descent/Back/reset tests and exercise actual selected candidates, src/branch/@@ and gf fallback.
-- [ ] Add async cancel/stale/failure/duplicate scenarios through existing fake resolver, then an unrelated native open; assert no accidental push.
-- [ ] Cover M.open_buf cross-split/reuse targeting, independent two-window trails, native split copy, failed switch, unload/reopen and snapshot restore mismatch/copy safety.
-- [ ] Implement only the explicit follow/snapshot integration described above. Preserve all prior #333 native Back cursor/missing-file behavior. Run mapped navigation tests and commit.
+- [x] Add red real-key Alt+o descent/Back/reset tests and exercise actual selected candidates, src/branch/@@ and gf fallback.
+- [x] Add async cancel/stale/failure/duplicate scenarios through existing fake resolver, then an unrelated native open; assert no accidental push.
+- [x] Cover M.open_buf cross-split/reuse targeting, independent two-window trails, native split copy, failed switch, unload/reopen and snapshot restore mismatch/copy safety.
+- [x] Implement only the explicit follow/snapshot integration described above. Preserve all prior #333 native Back cursor/missing-file behavior. Run mapped navigation tests and commit.
 
 ### 3. Shared composition and ownership
 
 Files: lua/parley/document_band.lua, lua/parley/session_sync.lua, lua/parley/agentic_document.lua; tests/integration/document_band_spec.lua; new tests/integration/breadcrumb_winbar_spec.lua.
 
-- [ ] Add red actual session/ordinary-agentic pairs for each lock/feedback state with and without trails, including autosaved unsent-dot, clean undo, submitted/unchanged/resent/error, offline unknown and plain files.
-- [ ] Add real two-window same-buffer different-trail/width cases, resize, overlays, custom originals, detach and A→B→A round trips. Assert rendered display width and both options, not only string fragments.
-- [ ] Implement structured state+feedback composition through the shared renderer, repaint affected windows and retain ownership restoration. No independent winbar writer.
-- [ ] Run `make -k test-spec SPEC=modes/session_sync` and `make -k test-spec SPEC=ui/keybindings`; confirm existing renderer parity/restoration and native history remain green. Commit.
+- [x] Add red actual session/ordinary-agentic pairs for each lock/feedback state with and without trails, including autosaved unsent-dot, clean undo, submitted/unchanged/resent/error, offline unknown and plain files.
+- [x] Add real two-window same-buffer different-trail/width cases, resize, overlays, custom originals, detach and A→B→A round trips. Assert rendered display width and both options, not only string fragments.
+- [x] Implement structured state+feedback composition through the shared renderer, repaint affected windows and retain ownership restoration. No independent winbar writer.
+- [x] Run `make -k test-spec SPEC=modes/session_sync` and `make -k test-spec SPEC=ui/keybindings`; confirm existing renderer parity/restoration and native history remain green. Commit.
 
 ### 4. Documentation and required gates
 
 Files: atlas/ui/keybindings.md, atlas/modes/session_sync.md, atlas/traceability.yaml, README.md, issue and this plan.
 
-- [ ] Document root/reset/Back semantics, nine-cell precedence, width fallback and snapshot/restore contract. Update traceability for all new tests; atlas index already links both pages.
+- [x] Document root/reset/Back semantics, nine-cell precedence, width fallback and snapshot/restore contract. Update traceability for all new tests; atlas index already links both pages.
 - [ ] Push through sdlc pr, then run the declared full suite via `sdlc local-check run --name suite` on the final code head; retain exact head/log/hash and all failures.
 - [ ] Close with measured evidence via sdlc close --issue 353; mandatory fresh review is binary-owned. Fix blocking findings across the full family and reverify changed surfaces.
 - [ ] Ask the hub to coordinate :0 availability, stage with sdlc stage --build, report exact stage and live steps. Operator checks actual Alt+o/Alt+Shift+O trail, a split, narrow width and edit/submit lock cell. Land on SHIP after the required live decision. Inspect stage identity before any clear so another worker's replacement is preserved.
@@ -148,3 +149,7 @@ PQ-2 (function-level-test-strategy): the following named functions and adversari
 | `document_band` per-window composition/cleanup | Real state owners and executable Couch fake: pair every state/feedback for both file kinds; vary window widths/trails, interleave old/new owners and native A→B→A switches; evaluate rendered width plus both option values and independently chosen originals. Generated projection cases stay in the pure unit file, real observer ordering stays in integration. |
 
 No additional service, disk format or product scope is introduced. TL's approved navigation/renderer/contract boundaries are unchanged; these refinements specify atomicity and verification.
+
+### 2026-10-16 — Implementation names and repaint boundary
+
+The Core concepts table now names the concrete callables used by implementation. Pure lock/trail/feedback composition lives in document_band_model.compose rather than inside the window adapter. file_history.peek is the internal detached cached read used by paint: no filesystem observation, generation mutation or recursive repaint. Public snapshot performs a current-file observation before returning that same value. No public #354 contract changes. Estimate allocation clarification: Lua rows cover trail/history state, opener/controller integration and window ownership plumbing respectively; TUI covers pure width/state projection only; cross-cutting row covers updating legacy view assertions and traceability. Every implementation row includes its tests and focused verification; review row covers the one close review. Full suite and live handoff fit the combined impl budget rather than another feature allocation.

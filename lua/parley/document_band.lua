@@ -4,6 +4,23 @@
 local M = {}
 local windows, cached = {}, {}
 local options = { "winbar", "winhighlight" }
+local composition = require("parley.document_band_model")
+local text_ops = { width = vim.fn.strdisplaywidth, units = function(text)
+    local units = {}
+    for i = 0, vim.fn.strchars(text) - 1 do units[#units + 1] = vim.fn.strcharpart(text, i, 1) end
+    return units
+end }
+
+local function trail_for(win)
+    local history = package.loaded["parley.file_history"]
+    return history and history.peek and history.peek(win) or nil
+end
+
+local function value_for(win, record)
+    local top = record.layers[#record.layers]
+    return composition.compose(top and top.raw or { state = "plain", hl = "WinBar" },
+        trail_for(win), vim.api.nvim_win_get_width(win), text_ops)
+end
 
 local function literal(message)
     local label = type(message) == "string" and message or tostring(message or "")
@@ -61,6 +78,7 @@ vim.api.nvim_create_autocmd("BufWinLeave", { group = group, callback = function(
 end })
 vim.api.nvim_create_autocmd("BufWinEnter", { group = group, callback = function(event)
     restore_cached(vim.api.nvim_get_current_win(), event.buf)
+    M.refresh(vim.api.nvim_get_current_win())
 end })
 vim.api.nvim_create_autocmd("WinClosed", { group = group, callback = function(event)
     local win = tonumber(event.match)
@@ -80,30 +98,53 @@ local function remove(record, owner)
     end
 end
 
+local function record_for(win, buf)
+    restore_cached(win, buf)
+    local record = windows[win]
+    if record and record.buf ~= buf then retire(win, record, true); record = nil end
+    if not record then
+        record = { buf = buf, before = read(win), layers = {} }
+        windows[win] = record
+    end
+    return record
+end
+
+function M.refresh(win)
+    win = (not win or win == 0) and vim.api.nvim_get_current_win() or win
+    if not vim.api.nvim_win_is_valid(win) then return end
+    local buf, record = vim.api.nvim_win_get_buf(win), windows[win]
+    if record and record.buf ~= buf then retire(win, record, true); record = nil end
+    local trail = trail_for(win)
+    if not record and (not trail or #trail.paths < 2) then return end
+    record = record or record_for(win, buf)
+    local value = value_for(win, record)
+    if not value.winbar then retire(win, record); return end
+    record.installed = value
+    for _, owner in ipairs(record.layers) do owner.views[win] = value end
+    for _, option in ipairs(options) do
+        vim.api.nvim_set_option_value(option, value[option], { win = win, scope = "local" })
+    end
+end
+
+vim.api.nvim_create_autocmd("WinResized", { group = group, callback = function()
+    for _, win in ipairs(vim.api.nvim_list_wins()) do M.refresh(win) end
+end })
+
 function M.new(buf)
     local owner = { views = {} }
     local handle = {}
 
     function handle.render(view)
-        local value = { winbar = "%#" .. view.hl .. "# " .. view.label:gsub("%%", "%%%%") .. "%=",
-            winhighlight = "StatusLine:" .. view.hl }
+        owner.raw = vim.deepcopy(view)
         for win in pairs(owner.views) do
-            if not vim.api.nvim_win_is_valid(win) then retire(win, windows[win]) end
+            if not vim.api.nvim_win_is_valid(win) and windows[win] then retire(win, windows[win]) end
         end
         for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-            restore_cached(win, buf)
-            local record = windows[win]
-            if record and record.buf ~= buf then retire(win, record, true); record = nil end
-            if not record then
-                record = { buf = buf, before = read(win), layers = {} }
-                windows[win] = record
-            end
+            local record = record_for(win, buf)
             remove(record, owner)
             record.layers[#record.layers + 1] = owner
-            owner.views[win], record.installed = value, value
-            for _, option in ipairs(options) do
-                vim.api.nvim_set_option_value(option, value[option], { win = win, scope = "local" })
-            end
+            owner.views[win] = true
+            M.refresh(win)
         end
     end
 
@@ -113,13 +154,13 @@ function M.new(buf)
             if record then
                 local top = record.layers[#record.layers] == owner
                 remove(record, owner)
-                local next_owner = record.layers[#record.layers]
                 if top then
-                    local target = next_owner and next_owner.views[win] or record.before
+                    local value = value_for(win, record)
+                    local target = value.winbar and value or record.before
                     restore(win, record, target)
                     record.installed = target
+                    if not value.winbar then windows[win] = nil end
                 end
-                if not next_owner then windows[win] = nil end
             end
             owner.views[win] = nil
         end

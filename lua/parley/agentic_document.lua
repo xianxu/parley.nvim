@@ -102,7 +102,12 @@ end
 
 local function band(s, message, highlight)
     if message == "" then s.renderer.clear()
-    else s.renderer.render({ label = message, hl = highlight or "WarningMsg" }) end
+    else
+        local warning = not highlight or highlight == "WarningMsg"
+        s.renderer.render({ state = warning and "unknown" or "free",
+            hl = warning and "WarningMsg" or "ParleySessionSyncFree",
+            feedback = { label = message, hl = highlight or "WarningMsg" } })
+    end
 end
 
 local function show_feedback(s, message, is_error)

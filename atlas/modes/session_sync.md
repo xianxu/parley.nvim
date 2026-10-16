@@ -208,3 +208,6 @@ retains the original/installed option proof for that window/buffer pair until
 re-entry, consuming it before a new renderer captures its baseline. Re-entry,
 buffer wipe and window close remove these in-memory proofs; no file or timer
 is created, and repeated visits do not append history.
+
+
+The shared renderer also composes [per-window breadcrumb trails](../ui/breadcrumb.md). State selection supplies the underlying lock and a separate feedback value; a submission receipt does not replace that lock cell. Window width and cached trail are composition inputs, with no filesystem or subprocess work on repaint. The acquisition-baseline hash supplies the unsubmitted dot even after auto-save.

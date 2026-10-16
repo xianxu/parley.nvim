@@ -48,10 +48,10 @@ universal-agent-input-interface.
 
 Full-flow, single close boundary. Detailed design: [breadcrumb winbar plan](../plans/000353-breadcrumb-winbar-plan.md).
 
-- [ ] Add pure breadcrumb transitions and display projection, with direct sequence/width tests.
-- [ ] Record successful Alt+o destinations through the existing file history; expose snapshot/restore values and preserve native Back behavior.
-- [ ] Compose a nine-cell lock state, breadcrumb and feedback in document_band; keep its restoration ownership and both file kinds identical.
-- [ ] Exercise native keys, async resolution, split/window lifecycle and every lock/feedback state; update atlas/README/traceability.
+- [x] Add pure breadcrumb transitions and display projection, with direct sequence/width tests.
+- [x] Record successful Alt+o destinations through the existing file history; expose snapshot/restore values and preserve native Back behavior.
+- [x] Compose a nine-cell lock state, breadcrumb and feedback in document_band; keep its restoration ownership and both file kinds identical.
+- [x] Exercise native keys, async resolution, split/window lifecycle and every lock/feedback state; update atlas/README/traceability.
 - [ ] Run the required suite, close on SHIP, stage with the hub's coordination and perform the operator's live check before landing.
 
 ## Log
@@ -62,6 +62,16 @@ Full-flow, single close boundary. Detailed design: [breadcrumb winbar plan](../p
 - Existing `file_history` records every native file visit, not only Alt+o, and restores cursors/skips missing paths on Back. Breadcrumb is a value carried by those visits, not a replacement for this history (ARCH-DRY). `M.open_buf` may focus another editing window, so follow must commit against the actual destination window; async artifact/family resolution must carry the same explicit origin rather than leave a global pending flag.
 - Staging lesson from #332: a later worker had replaced :0's stage with #257 at `d3909bd93e7cc6a0194fe255a1778099f489c5b7`; unconditional stage --clear removed that newer stage. Hub informed in the submitted landing report. Inspect the current stage identity before clearing; if another item's stage replaced ours, leave it to its owner.
 - Design pending TL approval; no implementation started.
+
+### Implementation evidence
+
+- Pure model RED and GREEN: /tmp/parley353-core-red.log, /tmp/parley353-core-red2.log, /tmp/parley353-core-green2.log (6 breadcrumb +12 history cases). Generated independent-window sequences protect immutability, trail/Back coherence and bounds.
+- Navigation RED→GREEN captured missing APIs, redirected target rejection, unavailable-origin ordinary navigation and repeated-path overflow cursor provenance. Final /tmp/parley353-navigation-references-green.log has386 passing cases; file_history has44 passing cases. Existing security/native/async resolver paths remain green.
+- Composition RED: /tmp/parley353-band-red.log, six assertion failures and zero errors for the absent model. GREEN: /tmp/parley353-band-green.log, all six cases pass. Native shared-renderer run /tmp/parley353-band-mapped.log passed new matching-trail and same-buffer/two-window/resize cases; two legacy whole-bar receipt assertions needed updated independent lock/feedback expectations, with corrected mapped rerun pending.
+- Corrected focused run /tmp/parley353-render-green.log passes all17 window/ownership/parity cases and6 pure composition cases. The only remaining mapped-renderer failure was a test helper trimming a trailing literal newline-space from an error; raw receipt extraction now preserves exact literal feedback and the focused rerun passes. All prior session-sync native lock/undo cases passed the mapped run.
+- Final keybinding mapping /tmp/parley353-keybindings-final.log passes, including architecture concept/symbol guards and plain native Alt+o/Back bar assertions. Context/file_references mapping passes386 cases. Changed-file lint and diff checks are clean.
+- Collision regression /tmp/parley353-core-collision-red.log fails for irreducible stripped names; /tmp/parley353-core-collision-green.log passes7 breadcrumb and12 history-model cases after original-identity fallback.
+- No staging: TL reserves :0 and will sequence the live check after green review.
 
 ## Revisions
 
