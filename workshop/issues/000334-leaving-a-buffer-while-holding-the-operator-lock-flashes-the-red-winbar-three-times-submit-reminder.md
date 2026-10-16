@@ -128,3 +128,13 @@ whitespace checks pass. The mapped session-sync suite also passed before the
 last queued-leave guard; the recorded full suite will verify the final candidate.
 Production delta is 87 added lines, within the approved quick shell. README and
 atlas updated. Hub sequences live check; no stage performed.
+
+### 2026-10-16 — green handoff for hub-sequenced live check
+
+Recorded full suite PASSED on e3a56262af275415ce5abeab175a8f93d952ea4f:
+exit 0 in 2m40s, log SHA256 prefix 0e678d6485c3, process census clean.
+The log is in the common Git dir at sdlc/local-checks/<sha>/suite.log.
+This includes the final queued-leave guard and current-main #356 integration.
+Fourteen controlled native-event regressions passed separately; production
+additions remain 87 lines. PR #276 is ready for the hub's live-check sequence.
+No stage or operator acceptance claimed; final close/landing await that check.
