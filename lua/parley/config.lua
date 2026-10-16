@@ -628,6 +628,13 @@ local config = {
 		side_chats = "summary",
 	},
 
+	-- the attention finder (#354): files submitted with Alt+Return, as waiting,
+	-- answered or seen. A seen entry (opened from the finder after its answer)
+	-- leaves the finder this many minutes later.
+	attention = {
+		seen_grace_minutes = 60,
+	},
+
 	-- memory preferences: per-tag user preference profiles from chat history
 	memory_prefs = {
 		-- enable auto-generation and system prompt injection

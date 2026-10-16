@@ -817,7 +817,13 @@ local function release_and_send(buf, owner, callback)
     restart_idle(buf)
     local s = state[buf]
     local epoch, path = s.epoch, file_of(buf)
+    -- The attention finder (#354) records every submit Couch accepted, with the
+    -- breadcrumb taken now: the operator may move on while the send runs.
+    local attention = require("parley.attention")
+    local breadcrumb = attention.breadcrumb(vim.fn.bufwinid(buf))
     send(owner, "submitted: " .. path, function(obj)
+        -- Sent is sent, whatever the engine did meanwhile: record before the guard.
+        if obj.code == 0 then attention.record(path, breadcrumb, obj) end
         if state[buf] ~= s or s.moving or s.epoch ~= epoch then return end
         if obj.code ~= 0 then
             notify("send to " .. owner .. " failed, Alt+Return resends: " .. vim.trim(obj.stderr or ""), vim.log.levels.ERROR)

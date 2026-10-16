@@ -41,10 +41,10 @@ All verified in the code on 2026-10-16.
 
 ### Pure entities
 
-| Name | Lives in | Status |
-|------|----------|--------|
-| `attention_model` | `lua/parley/attention_model.lua` | new |
-| `attention_rows` | `lua/parley/attention_rows.lua` | new |
+| Name | Lives in | Status | Surface |
+|------|----------|--------|---------|
+| `attention_model` | `lua/parley/attention_model.lua` | new | `empty`, `transition`, `state_of`, `list`, `answered_unseen` |
+| `attention_rows` | `lua/parley/attention_rows.lua` | new | (M2) |
 
 - **attention_model:** the entries and their transitions.
   - State: `{version = 1, entries = {[path] = Entry}}`, with `Entry = {path, pending = {[message_id] = submitted_at}, submitted_at, answered_at?, seen_at?, breadcrumb?, unknown?}`.
@@ -71,8 +71,8 @@ All verified in the code on 2026-10-16.
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `attention_store` | `lua/parley/attention_store.lua` | new | the JSON file `state_dir/attention.json` |
-| `attention` | `lua/parley/attention.lua` | new | the couch CLI, the editor, #353's seam |
+| `attention_store` | `lua/parley/attention_store.lua` | new | the JSON file `state_dir/attention/attention.json`: `dir`, `path`, `parse`, `load`, `apply`, `grace_seconds` |
+| `attention` | `lua/parley/attention.lua` | new | the couch CLI, the editor, #353's seam: `record`, `parse_message_id`, `breadcrumb`; M2 adds `refresh`, `open` |
 | `release_and_send` | `lua/parley/session_sync.lua:802` | modified | records a submit |
 
 - **attention_store:** `load()` and `apply(event, on_done)`.
@@ -130,14 +130,14 @@ All verified in the code on 2026-10-16.
 - Create: `lua/parley/attention_model.lua`
 - Test: `tests/unit/attention_model_spec.lua`
 
-- [ ] **Step 1: write the failing tests.** Strategy:
+- [x] **Step 1: write the failing tests.** Strategy:
   - `transition`, table-driven over each event in each derived state (waiting, answered, seen, absent), plus random event sequences checked by properties: no `observe_failed` reaches answered; a waiting entry is never swept or dropped by the bound; an ID outside `probed_ids` survives `observed`.
   - One named sequence pins the stale probe: probe starts, a submit records ID2, the probe's result without ID2 applies, and the entry is still waiting.
   - `bound` and `list`: a 257-entry table checks the drop order (seen, then answered) and the refusal when all are waiting.
-- [ ] **Step 2:** run `make test-spec SPEC=scratch MAP_FILE=$TMPDIR/m.yaml` with the spec mapped. Expect it to fail, because the module doesn't exist yet.
-- [ ] **Step 3:** implement `transition`, `state_of`, `list`, `answered_unseen` and `bound`, as pure functions with no `vim.api`.
-- [ ] **Step 4:** run it. Expect a pass.
-- [ ] **Step 5:** commit with `git commit -m "#354: attention model: one transition owns waiting, answered, seen and the sweep"`.
+- [x] **Step 2:** run `make test-spec SPEC=scratch MAP_FILE=$TMPDIR/m.yaml` with the spec mapped. Expect it to fail, because the module doesn't exist yet.
+- [x] **Step 3:** implement `transition`, `state_of`, `list`, `answered_unseen` and `bound`, as pure functions with no `vim.api`.
+- [x] **Step 4:** run it. Expect a pass.
+- [x] **Step 5:** commit with `git commit -m "#354: attention model: one transition owns waiting, answered, seen and the sweep"`.
 
 #### Task 2: attention_store
 
@@ -146,10 +146,10 @@ All verified in the code on 2026-10-16.
 - Modify: `tests/helpers/sidecars.lua` (register `attention.json`)
 - Test: `tests/unit/attention_store_spec.lua`
 
-- [ ] **Step 1: write the failing tests.** Strategy:
+- [x] **Step 1: write the failing tests.** Strategy:
   - the parse boundary, through the `sidecars.lua` corruption cases (missing, truncated, wrong version, malformed entry): each reads as empty with one warning;
   - the lease, with a real `document_lease` held by the test: released within the retry window → the event lands; held throughout → no write and the "lost (store busy)" warning; two stores over one path both keep their events.
-- [ ] **Steps 2-5:** run it (fail), implement with `helper.table_to_file_atomic`, `fs.ensure_dir` and `document_lease.acquire("attention", "store", { root = state_dir })` with the busy retry, run it (pass), commit.
+- [x] **Steps 2-5:** run it (fail), implement with `helper.table_to_file_atomic`, `fs.ensure_dir` and `document_lease.acquire("attention", "store", { root = state_dir })` with the busy retry, run it (pass), commit.
 
 #### Task 3: recording a submit
 
@@ -160,8 +160,8 @@ All verified in the code on 2026-10-16.
 - Modify: `tests/helpers/fake_couch.lua` and `tests/fixtures/fake_couch_registry.py` (the send prints `<ID> me -> <to> queued` and adds the ID to `Owed`; `fake_couch.fold`)
 - Test: `tests/integration/attention_record_spec.lua`
 
-- [ ] **Step 1: write the failing tests.** Strategy: drive both Alt+Return paths end to end through the fake Couch (an agentic document, and a `type: session-sync` file through `review_send.submit`); each must leave one waiting entry carrying the fake's ID. The failure paths (a failed send, stdout without an ID) leave no entry and warn. `parse_message_id` gets a table of stdout shapes.
-- [ ] **Steps 2-5:** run it (fail), implement, run it (pass), commit.
+- [x] **Step 1: write the failing tests.** Strategy: drive both Alt+Return paths end to end through the fake Couch (an agentic document, and a `type: session-sync` file through `review_send.submit`); each must leave one waiting entry carrying the fake's ID. The failure paths (a failed send, stdout without an ID) leave no entry and warn. `parse_message_id` gets a table of stdout shapes.
+- [x] **Steps 2-5:** run it (fail), implement, run it (pass), commit.
 - [ ] **M1 close:** run `sdlc milestone-close --issue 354 --milestone M1`.
 
 ### M2: the finder
@@ -183,7 +183,7 @@ All verified in the code on 2026-10-16.
 - Modify: `init.lua` (`:ParleyAttention`)
 - Test: `tests/integration/attention_finder_spec.lua`
 
-- [ ] **Step 1: write the failing tests.** Strategy: one spec per user path against the fake Couch, with the clock and the `file_history` seam injected: list then a live fold (`update` turns waiting into answered); select answered (opens, seen, `restore` called, refusal leaves a root); select waiting (unchanged); select a missing file (reported, nothing opens); a refusal `Code` (`?`, state kept); a probe counter asserting at most 4 at once; typeahead; a seen entry past the grace gone on the next open; an observation after close.
+- [ ] **Step 1: write the failing tests.** Strategy: one spec per user path against the fake Couch, with the clock and the `file_history` seam injected: list then a live fold (`update` turns waiting into answered); select answered (opens, seen, `restore` called; a refusal keeps the ordinary open result and shows the reason); select waiting (unchanged); select a missing file (reported, nothing opens); a refusal `Code` (`?`, state kept); a probe counter asserting at most 4 at once; typeahead; a seen entry past the grace gone on the next open; an observation after close.
 - [ ] **Steps 2-5:** run it (fail), implement, run it (pass), commit.
 
 #### Task 6: docs
@@ -204,3 +204,8 @@ All verified in the code on 2026-10-16.
   - PQ-3: `type: session-sync` files also send through Couch, so the record hook moves from the agentic document's send effect into `session_sync`'s `release_and_send`, which both paths share.
 
   The minor findings were folded in too: the test lists became one strategy line each; the fake extends the existing `fake_couch.lua` and its registry fixture; and #353 is declared a dependency. Until #353 lands, the restore runs against the injected seam.
+- **2026-10-16, building M1.**
+  - The store file moved to its own directory, `state_dir/attention/attention.json`. That way stale `table_to_file_atomic` temps can be removed under the lease without touching other sidecars' in-flight writes in `state_dir` (ARCH-FUNERAL).
+  - The parse does its own typing, without `helper.conform`: `sidecar_degrade_spec` allows one warning per read, and conform plus a dropped-entry warning made two.
+  - The fake's owed recording is opt-in (`FAKE_COUCH_OWED`), so the existing session-sync specs, whose winbar renders owed events, keep their ledgers.
+  - Agreed with parley.nvim:2 on #353's refusal edge: when `restore` refuses, the ordinary open result stands. A reused, already-current file keeps its existing trail, and the reason is shown in one notice. There is no root-reset operation, and the finder never reads snapshot fields.
