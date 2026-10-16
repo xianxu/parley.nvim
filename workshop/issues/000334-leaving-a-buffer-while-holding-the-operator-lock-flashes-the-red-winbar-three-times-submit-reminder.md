@@ -1,12 +1,12 @@
 ---
 id: 000334
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '04cc6bb3de9dfb94959a3754e3a6aba16a20fa89' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '703a58120c02f76620c6d7e93f6bf471c9a6018d' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T15:03:12-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "7ce01dc5", done: "a33349a6"}
+actual_hours: 0.54
 ---
 
 # Leaving a buffer while holding the operator lock flashes the red winbar three times (submit reminder)
