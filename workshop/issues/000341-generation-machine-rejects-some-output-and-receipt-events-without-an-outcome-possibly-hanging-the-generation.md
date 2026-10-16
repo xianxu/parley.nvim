@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "e95c79f0", done: "bd766b2f"}
 ---
 
 # Generation machine rejects some output and receipt events without an outcome, possibly hanging the generation
