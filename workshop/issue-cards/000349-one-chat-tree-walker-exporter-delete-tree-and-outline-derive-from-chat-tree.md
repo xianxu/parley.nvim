@@ -1,6 +1,6 @@
 ---
 id: 000349
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -14,8 +14,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.41
 tracker:
     version: 1
+    completion:
+        token: close-8133e82cadaa
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 5f72682db64c82b47452ac2f7dcbde6a1c85a1ab
+        evidence_commit: 4602e8c812b8faa90323131d81eb9066fab871c3
 ---
 
 # One chat tree walker: exporter, delete-tree and outline derive from chat_tree
