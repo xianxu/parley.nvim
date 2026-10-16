@@ -1,6 +1,6 @@
 ---
 id: 000355
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -14,6 +14,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.21
+tracker:
+    version: 1
+    completion:
+        token: close-a929b6978109
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: fb0694d52d805cdb99e84e395484a64d4e797fb1
+        evidence_commit: 5e76e74014ad45b81d87f40062c5801aca6b570f
 ---
 
 # cliproxy_auth_login_spec restart-rung case flakes under load (fixed 6 s wait)
