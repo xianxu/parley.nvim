@@ -38,5 +38,6 @@ flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "d45ae54a"}
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — make help-parley prints make perf-finder and make goldens lines; Makefile help text only, no new architectural surface (no-atlas).; review verdict: SHIP
 
 - `make help-parley` now prints `make perf-finder` after `make perf`, and `make goldens` after `make fixtures`. No spec covers the help text.
