@@ -212,3 +212,18 @@ whitespace checks pass. PR #270 checks pass. Recorded full suite is queued
 for dec9c3f08c6d3a9a71b088fd116018e8ee5057ae. Requested coordinated staging
 from the hub (59e0942b-ca6d-4cfd-b76a-bbf4b6a92363, submitted); live acceptance
 and landing remain open. Active-time preview succeeded (2.03h, not a waiver).
+
+2026-10-16 live-check staging: sdlc stage --build put exact
+ dec9c3f08c6d3a9a71b088fd116018e8ee5057ae on parley.nvim:0, verified by
+ git rev-parse. This Lua plugin has no cmd/*/main.go or Go binaries to verify.
+Own slot restored to issue branch. Instructions saved in
+/tmp/parley-319-stage-report.md. Two stage reports timed out; receipts
+c04bb08c-d957-4096-b7ac-743ff67a7b13 and
+67dca700-df8a-463a-9930-9ad1d0474ae0 became unavailable, so no blind resend.
+
+Recorded full suite PASSED on dec9c3f08c6d3a9a71b088fd116018e8ee5057ae:
+sdlc-local/suite exit 0 in 2m55s; log SHA256 prefix 5a601766ae5b.
+Log: .git/sdlc/local-checks/dec9c3f08c6d3a9a71b088fd116018e8ee5057ae/suite.log
+(in the common Git dir). Queue wait 810s; all test phases finished and orphan
+census clean. No code changes since this suite head, only issue bookkeeping.
+Awaiting operator live acceptance before landing; no acceptance claimed.
