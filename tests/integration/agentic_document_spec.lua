@@ -82,6 +82,175 @@ describe("agentic markdown admission", function()
         require("parley.session_sync").PING_CHECK_MS = saved.ping_check
         vim.fn.delete(root, "rf")
     end)
+    -- #357: Alt+Return under load. The editor never waits for Couch; past the
+    -- deadline the band offers one action, and a resubmit never delivers twice.
+    describe("under a slow Couch (#357)", function()
+        local config = require("parley").config
+        local before
+        local function with_timeouts(submit_ms, move_ms)
+            before = before or { config.agentic_submit_timeout_ms, config.agentic_move_timeout_ms }
+            config.agentic_submit_timeout_ms, config.agentic_move_timeout_ms = submit_ms, move_ms
+        end
+        after_each(function()
+            if before then config.agentic_submit_timeout_ms, config.agentic_move_timeout_ms = before[1], before[2] end
+            before, vim.env.FAKE_COUCH_REGISTRY_DELAY, vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = nil, nil, nil
+        end)
+        local function band() return vim.wo[vim.fn.bufwinid(buf)].winbar end
+        local function sends() return vim.fn.filereadable(root .. "/sent") == 1 and #vim.fn.readfile(root .. "/sent") or 0 end
+        local function registered()
+            await(function() return document.status(buf).phase == "plain" end)
+            submit(); await_submitted()
+            return sends()
+        end
+
+        it("a registry slower than the old 2.5 s deadline still submits, and the press returns at once", function()
+            with_timeouts(15000, 5000)
+            await(function() return document.status(buf).phase == "plain" end)
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "3"
+            local started = vim.uv.hrtime()
+            submit()
+            assert.is_true((vim.uv.hrtime() - started) / 1e6 < 500, "Alt+Return blocked the editor")
+            assert.truthy(band():find("submitting…", 1, true))
+            await_submitted()
+            assert.equals(1, sends())
+        end)
+
+        it("a send past the deadline: not confirmed, a press joins it, and the identical resubmit sends nothing", function()
+            with_timeouts(1000, 5000)
+            local before = registered()
+            vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "second thought" })
+            vim.env.FAKE_COUCH_SLEEP = "3"
+            submit()
+            await(function() return band():find("not confirmed: submit again", 1, true) ~= nil end)
+            submit() -- the operator presses again while the first send is still out
+            assert.truthy(band():find("submitting… still waiting for Couch", 1, true))
+            await(function() return band():find("submitted to ops:0", 1, true) ~= nil end)
+            assert.equals(before + 1, sends())
+            vim.env.FAKE_COUCH_SLEEP = nil
+            submit() -- same file, same content: the late success's receipt covers it
+            await(function() return band():find("nothing to submit", 1, true) ~= nil end)
+            assert.equals(before + 1, sends())
+        end)
+
+        it("a registry stage past the deadline keeps the operator's lock; the next press submits once", function()
+            with_timeouts(1000, 5000)
+            local before = registered()
+            vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "third thought" })
+            await(function() return vim.fn.filereadable(file .. ".lock") == 1 end)
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "3"
+            submit()
+            await(function() return band():find("not confirmed: submit again", 1, true) ~= nil end)
+            await(function() return not document.status(buf).operation end)
+            assert.equals(1, vim.fn.filereadable(file .. ".lock"))
+            assert.equals(before, sends())
+            vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+            submit()
+            await(function() return sends() == before + 1 end)
+            await(function() return band():find("submitted to ops:0", 1, true) ~= nil end)
+        end)
+
+        it("a move whose preflight times out says to run it again, moves nothing, and the rerun moves it", function()
+            with_timeouts(15000, 500)
+            registered()
+            local target = root .. "/moved.md"
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            local handled, moved, err = document.move_path(file, target)
+            assert.is_true(handled)
+            assert.is_nil(moved)
+            assert.equals("move not confirmed: Couch did not answer within 1 s; nothing moved. Run the move again", err)
+            assert.equals(1, vim.fn.filereadable(file))
+            assert.equals(0, vim.fn.filereadable(target))
+            vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+            await(function() return not document.status(buf).operation and document.status(buf).phase == "registered" end)
+            config.agentic_move_timeout_ms = 5000
+            handled, moved, err = document.move_path(file, target)
+            assert.is_true(handled, tostring(err))
+            assert.equals(vim.fn.resolve(target), moved, tostring(err))
+            assert.equals(1, vim.fn.filereadable(target))
+        end)
+
+        it("a :saveas whose destination check times out says to rename back, and that recovers", function()
+            with_timeouts(15000, 500)
+            registered()
+            local target = root .. "/renamed.md"
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            local ok, err = pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target))
+            assert.is_false(ok)
+            assert.truthy(tostring(err):find("rename not confirmed: Couch did not answer within 1 s; rename back to "
+                .. file .. ", then run it again", 1, true), tostring(err))
+            assert.equals(0, vim.fn.filereadable(target))
+            vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+            assert.is_true(pcall(vim.cmd, "file " .. vim.fn.fnameescape(file)))
+            assert.equals(file, document.identity(buf).File)
+            config.agentic_move_timeout_ms = 5000
+            assert.is_true(pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target)))
+            await(function()
+                local identity = document.identity(buf)
+                return identity and identity.File == vim.fn.resolve(target) and not document.status(buf).operation
+            end)
+        end)
+
+        it("an unregistered document's :saveas preflight times out before anything moved", function()
+            with_timeouts(15000, 500)
+            await(function() return document.status(buf).phase == "plain" end)
+            local target = root .. "/plain-renamed.md"
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            local ok, err = pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target))
+            assert.is_false(ok)
+            assert.truthy(tostring(err):find("move not confirmed: Couch did not answer within 1 s; nothing moved."
+                .. " Run the move again", 1, true), tostring(err))
+            assert.equals(0, vim.fn.filereadable(target))
+            vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+            config.agentic_move_timeout_ms = 5000
+            assert.is_true(pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target)))
+            assert.equals(1, vim.fn.filereadable(target))
+        end)
+
+        it("a legacy session file's move: a slow admission says to run it again, and the rerun moves it", function()
+            with_timeouts(15000, 500)
+            document.detach(buf); vim.api.nvim_buf_delete(buf, { force = true })
+            file = root .. "/legacy.md"
+            vim.fn.writefile({ "---", "type: session-sync", "owner: ops:0", "---", "body" }, file)
+            vim.cmd("edit " .. vim.fn.fnameescape(file)); buf = vim.api.nvim_get_current_buf()
+            require("parley").setup_markdown_keymaps(buf)
+            await(function() return document.status(buf) and document.status(buf).phase == "plain" end)
+            local target = root .. "/legacy-moved.md"
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "register"
+            local handled, moved, err = document.move_path(file, target)
+            assert.is_true(handled)
+            assert.is_nil(moved)
+            assert.equals("move not confirmed: Couch did not answer within 1 s; nothing moved. Run the move again", err)
+            assert.equals(1, vim.fn.filereadable(file))
+            assert.equals(0, vim.fn.filereadable(target))
+            vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+            config.agentic_move_timeout_ms = 5000
+            await(function() return not document.status(buf).operation end)
+            handled, moved, err = document.move_path(file, target)
+            assert.equals(vim.fn.resolve(target), moved, tostring(err))
+        end)
+
+        it("a move whose rename stage outlasts the wait finishes in the background", function()
+            with_timeouts(15000, 500)
+            registered()
+            local target = root .. "/later.md"
+            -- 3 s: past the registry's old 2.5 s default, so the rename stage
+            -- needs the submit deadline to finish at all
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "3"
+            vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "rename"
+            local handled, moved, err = document.move_path(file, target)
+            assert.is_true(handled)
+            assert.is_nil(moved)
+            assert.equals("document move pending; preserve its journal and reopen to recover", err)
+            -- after anything moved, the journal carries it: no rerun is needed
+            await(function()
+                local identity = document.identity(buf)
+                return identity and identity.File == vim.fn.resolve(target) and not document.status(buf).operation
+            end)
+            assert.equals(1, vim.fn.filereadable(target))
+        end)
+    end)
+
     it("opens plain, then saves registers and submits without changing frontmatter", function()
         await(function() return document.status(buf).phase == "plain" end)
         assert.equals(0, vim.fn.filereadable(file .. ".lock"))
@@ -173,7 +342,7 @@ describe("agentic markdown admission", function()
         assert.equals(1, vim.fn.filereadable(new .. ".lock"))
         assert.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
     end)
-    it("does not send an edited in-flight registration and confirms it without automatic resend", function()
+    it("does not send an edited in-flight registration; the next press confirms it and submits the current text (#357)", function()
         await(function() return document.status(buf).phase == "plain" end)
         vim.env.FAKE_COUCH_REGISTRY_MODE = "delay"
         submit()
@@ -185,10 +354,17 @@ describe("agentic markdown admission", function()
         await(function() return document.status(buf).phase == "pending" end)
         assert.equals(0, vim.fn.filereadable(root .. "/sent.last"))
         vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+        -- The operator's press confirms the registration and then submits: it
+        -- used to stop at the confirmation, so the agent heard nothing until a
+        -- third press (#357). What is sent is the current text, saved anew.
         submit()
-        await(function() return document.status(buf).phase == "registered" end)
-        assert.equals(0, vim.fn.filereadable(root .. "/sent.last"))
-        assert.equals(1, vim.fn.filereadable(file .. ".lock"))
+        await(function()
+            local status = document.status(buf)
+            return vim.fn.filereadable(root .. "/sent.last") == 1 and status.phase == "registered" and not status.operation
+        end)
+        assert.equals(1, #vim.fn.readfile(root .. "/sent"))
+        assert.equals("typed during registration", vim.fn.readfile(file)[5])
+        assert.is_false(vim.bo[buf].modified)
     end)
     it("confirms a newly saved couch-owner override before routing a registered submit", function()
         await(function() return document.status(buf).phase == "plain" end)

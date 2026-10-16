@@ -665,6 +665,11 @@ oracle, and the mutation that would make the test fail.
 
 - Replacing `find_tree_root_file` deleted the local `root` that delete-tree's prompt still read, and the tests stubbed `confirm` without checking its text. Lint caught it in the suite. After deleting a local, run `make lint`, or grep the function for the name, before the suite; and a test that stubs a prompt asserts what the prompt says.
 
+## #357: intent that crosses an async callback belongs in the pure model
+
+- A shell flag (`queued_submit`), set by a press and cleared in only one callback, outlived every other outcome: a pending rename, or a reconcile. A later unrelated lookup could then send a submit nobody pressed for. When an intent spans an asynchronous round trip, make it an event field on the pure model's transition (`retry{submit=true}` → `resubmit` effect), so every outcome decides it and unit tests cover each branch. Don't use a flag that each callback must remember to clear.
+- Read the code path before accepting an issue's premise. "Alt+Return blocks in vim.wait" was wrong: the submit was already async, and the felt bug was a press that confirmed but never sent.
+- When a change moves a deadline, every call site of the timed seam gets a slow-fake test whose delay is past the OLD default. A delay under the old value passes with the change reverted, so it pins nothing. #357 round 2 found the rename stage tested at 2 s against an old 2.5 s.
 ## #334: transient window values can be cloned
 
 - Test native split creation during a temporary highlight, not only before it.

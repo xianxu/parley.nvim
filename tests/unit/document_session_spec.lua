@@ -242,6 +242,51 @@ describe("document_session lifecycle", function()
         assert.same({}, reply(s, retry, outcome("registered")))
     end)
 
+    -- #357: the operator's press on a pending registration confirms it and asks
+    -- the shell for a fresh submit (current bytes); it never sends the stale ones.
+    local function pending_register(s)
+        plain(s)
+        local save = s.dispatch({ type = "submit", owner = "ops:1" })[1]
+        local register = s.dispatch({ type = "saved", witness = save.witness, ok = true, hash = "h1" })[1]
+        reply(s, register, { kind = "unavailable", error = "Couch registry deadline exceeded" })
+        assert.equals("pending", s.snapshot().phase)
+    end
+    it("a pressed retry of a pending registration confirms it, then asks for a fresh submit (#357)", function()
+        local s = session()
+        pending_register(s)
+        local retry = s.dispatch({ type = "retry", submit = true })[1]
+        assert.equals("register", retry.kind)
+        assert.is_true(retry.resume_only)
+        local effects = reply(s, retry, outcome("registered"))
+        assert.same({ "attach", "resubmit" }, { effects[1].kind, effects[2] and effects[2].kind })
+        assert.equals("registered", s.snapshot().phase)
+        for _, effect in ipairs(effects) do assert.is_not.equals("send", effect.kind) end
+    end)
+    it("an unpressed retry, or one that fails again, asks for no submit (#357)", function()
+        local s = session()
+        pending_register(s)
+        local effects = reply(s, s.dispatch({ type = "retry" })[1], outcome("registered"))
+        assert.equals(1, #effects)
+        s = session()
+        pending_register(s)
+        local again = reply(s, s.dispatch({ type = "retry", submit = true })[1], { kind = "unavailable", error = "slow" })
+        assert.equals("pending", s.snapshot().phase)
+        assert.same({ "reconcile" }, { again[1].kind })
+        assert.is_nil(again[2])
+    end)
+    it("a pressed retry of a pending rename only confirms it (#357)", function()
+        local s = session()
+        attached(s)
+        local move = s.dispatch({ type = "rename", new_path = "/new.md" })[1]
+        local metadata = s.dispatch({ type = "moved", witness = move.witness, ok = true })[1]
+        reply(s, metadata, { kind = "uncertain" })
+        local retry = s.dispatch({ type = "retry", submit = true })[1]
+        assert.is_nil(retry.resubmit)
+        local done = reply(s, retry, outcome("registered", "/new.md"))
+        assert.same({ "finish_move" }, { done[1].kind })
+        assert.is_nil(done[2])
+    end)
+
     it("does not reauthorize a pending registration in another path or namespace", function()
         for _, change in ipairs({ { type="changed", path="/other.md" }, { type="changed", namespace="another" } }) do
             local s = session()
