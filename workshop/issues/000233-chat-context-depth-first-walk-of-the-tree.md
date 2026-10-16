@@ -1,12 +1,20 @@
 ---
 id: 000233
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-10-16
 estimate_hours:
-card_mirror: 'c01661e7ab6970b7df64d40b9680648b5d44354a' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '6b065a73a258e6ecfa8eb1748a7f714428910d1b' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T03:36:06-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree
@@ -89,17 +97,20 @@ real case shows up.
   children of the current exchange when regenerating.
 - `chat_memory` summarization applies across the linearized sequence, with no separate
   ancestor renderer.
-- One root-finder and one downward walker; exporter/delete/tree-files derive from them.
+- One root-finder and one downward walker; exporter/delete/tree-files derive from them. (Split out as #349.)
 - An unsaved child buffer's latest exchange is included.
 - Unit tests on the pure linearizer (hand-built parsed trees) plus an integration test over
   real files with nested and inline branches.
 
 ## Plan
 
-- [ ] Pure `linearize(tree, cut)` → ordered exchange list, with tests for the cases above
-- [ ] Single tree walker (root-find + DFS, buffer-first, visited set) and migrate exporter/init callers
-- [ ] Feed the linearized sequence through the existing current-file message loop and delete `build_ancestor_messages` / `collect_ancestor_chain`
-- [ ] Integration test over real chat files; manual check of the R1 → A → R2 case with `<M-i>`
+Durable plan: `workshop/plans/000233-chat-context-depth-first-walk-of-the-tree-plan.md`.
+M2 (one tree walker) is split out as #349.
+
+- [x] Pure `chat_tree.linearize` and `path_up`, with tests for the cases above
+- [x] Feed the linearized sequence through `build_messages`, and delete `build_ancestor_messages` / `collect_ancestor_chain`
+- [x] Integration test over real chat files with nested and inline branches and an unsaved child buffer
+- [ ] The operator's decision on full ancestors inside the memory window (below), before merge
 
 ## Log
 
@@ -112,3 +123,38 @@ real case shows up.
   directly after the answer it is about.
 - Related: #224 (ancestor walk uses the shared resolver), #232 (outline tree builder has its
   own item rule, the same drift from duplicated tree code).
+
+### 2026-10-16
+
+- Taken by parley.nvim:3. The plan was approved for M1, with M2 split out as #349.
+- Red: with `linearize`'s subtree descent removed (the old behaviour: no
+  asides), 3 of 4 `chat_tree_context_spec` cases and 4 of 11 `chat_tree_spec`
+  cases fail. Green: chat_tree 11, chat_tree_context 4, build_messages 104,
+  chat_respond 53, ancestor_chain_rename 6, topic_gen 11, all 20 arch specs.
+  luacheck clean.
+- Found while building: topic requests excluded ancestors by message count.
+  `build_messages` now returns the current file's messages, and the topic
+  input keeps only those (`build_messages_spec`).
+- Request size, before (origin/main) vs after (this branch). Bytes are the JSON
+  of the messages array; tokens are estimated as bytes / 4. The tree is built
+  from real repo chats: root = the graphviz chat (27.7 KB, 7 questions); an aside
+  after root exchange 2 = the 2026-04-03.22-21 chat (26.3 KB, 4 questions); a
+  nested aside after the aside's exchange 1 = the refractive-index chat
+  (4.4 KB, 2 questions). The answers carry `📝:` summaries, as real ones do.
+
+  | submission | memory off (default) | memory on, 4 full exchanges |
+  |---|---|---|
+  | root, question right after the aside (R3) | 3.6k to 11.4k tokens | 1.6k to 5.8k |
+  | root, last question (R7) | 8.3k to 16.1k | 5.2k to 5.8k |
+  | aside, last question | 8.2k to 11.3k | 8.2k to 5.7k |
+  | nested aside, last question | 3.3k to 7.3k | 3.3k to 6.2k |
+  | real repo pair basics.md to refractive-index (aside after the cut / the child) | unchanged (1.3k / 2.4k) | n/a |
+
+  There are two effects. (1) The asides are now visible, which is the point: R3
+  and R7 gain the aside's 7.8k tokens. (2) Ancestors were always sent as their
+  `📝:` summaries; now they render like any exchange, so with memory off they
+  are sent in full, `🧠:` lines included as in the current file. That is the
+  nested case's growth with the same 9 messages. With `chat_memory` enabled,
+  the window spans the whole linearized tree, so the long cases come out
+  smaller than before.
+

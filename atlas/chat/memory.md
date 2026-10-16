@@ -5,9 +5,10 @@
 - `chat_memory.max_full_exchanges`: number of recent full exchanges to keep when enabled (default `242`)
 - `chat_memory.omit_user_text`: replacement text for summarized user messages
 
-Ancestor context is assembled separately: available ancestor answer summaries
-are used even when `chat_memory.enable` is false. Ancestors contribute exchanges
-through each branch position, oldest ancestor first; see [chat lifecycle](lifecycle.md).
+Tree-of-chat context is not assembled separately (#233). The request's
+exchanges are the chat tree linearized in depth-first order, ancestors and
+asides included, and this window spans that whole sequence. With memory
+disabled, every exchange in it is sent in full; see [chat lifecycle](lifecycle.md).
 
 ## Mechanism
 - Exchanges beyond `max_full_exchanges` threshold: user message replaced with `omit_user_text`, assistant message replaced with `📝:` summary line content

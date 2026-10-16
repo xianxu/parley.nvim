@@ -410,7 +410,12 @@ describe('chat_respond: scoped session integration',function()
         local Parser=require('parley.chat_parser')
         local parsed=Parser.parse_chat(lines,Parser.find_header_end(lines),parley.config)
         local out={}
-        for _,m in ipairs(Respond._collect_ancestor_messages(child,parsed))do out[#out+1]=tostring(m.content)end
+        for _,item in ipairs(Respond._tree_sequence(child,parsed,#parsed.exchanges,parsed))do
+            if not item.current then
+                out[#out+1]=tostring(item.exchange.question and item.exchange.question.content or '')
+                out[#out+1]=tostring(item.exchange.answer and item.exchange.answer.content or '')
+            end
+        end
         return table.concat(out,'\n')
     end
     it('gives a sub-chat the previous answer of a parent exchange being regenerated (#255)',function()

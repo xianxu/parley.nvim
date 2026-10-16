@@ -7,6 +7,17 @@ exchange being submitted: the ancestor path plus every subtree to its left,
 rendered by ONE message builder. Asides that `<M-i>` creates become visible to
 every later question.
 
+## Core concepts
+
+| Concept | Meaning |
+|---|---|
+| `path_up` | the path from the topmost ancestor that links back down to the current file |
+| `linearize` | the tree in depth-first pre-order along the path, cut at the submitted exchange |
+| `io_deps` | the editor's IO for the walk: buffer-first reads and the previous-answer substitution |
+| `tree_sequence` | a request's exchanges: the linearized tree, with the current file's own input copies |
+| `_tree_sequence` | test seam for `tree_sequence` |
+| `_conversation_after_lead` | the topic request's input; it now keeps only the current file's messages |
+
 ## The walk (the simplest one that is correct)
 
 Two steps, and only the second is new.
@@ -84,31 +95,38 @@ linearizer, or to `build_messages` over a sequence.
 
 ## Milestones
 
-- [ ] M1: context.
-  - `lua/parley/chat_tree.lua`: `path_up`, `linearize`, `load`.
-  - `build_messages` over the sequence.
-  - `chat_respond` wires it and drops the ancestor renderer.
-  - Unit tests on `linearize`: R1 → A → R2 sends R1, A1, R2; sibling A to
-    the left of B; nothing to the right; regenerate excludes the exchange's
-    children; a visited/cycle guard; a non-reciprocal parent; the depth cap.
-  - `build_messages`: the memory window spans the sequence; the visual range
-    is current-file only; per-file image paths.
-  - Integration test over real files with nested and inline branches,
-    including an unsaved child buffer.
-  - Atlas: chat branching/context.
-- [ ] M2: one tree walker. The three root-finders (`exporter.find_tree_root`,
-  `init.find_tree_root_file`, `outline`'s copy) and the two downward walkers
-  (`exporter.collect_tree`, `init.collect_tree_files`) derive from
-  `chat_tree`. They need a `root(abs)` built from `path_up`'s link-following,
-  and `files(root)`, the DFS file order (`linearize` with no cut, files only).
-  Export, delete-tree and the outline keep their tests green, plus a
-  single-source sweep that no other module follows `parent_link`.
+One boundary (M2 split out as #349 per the TL, so no Mx tags):
 
-M2 is separable: it changes no request. If you prefer, it can be filed as its
-own issue, and #233 closes at M1.
+- [x] `lua/parley/chat_tree.lua`: `path_up`, `linearize`, `io_deps`.
+- [x] `build_messages` over the sequence: the memory window spans it, the
+  visual range applies to the current file only, images resolve per file, and
+  it returns the current file's messages for the topic request.
+- [x] `chat_respond` wires `tree_sequence` and drops the ancestor renderer.
+- [x] Unit tests: `chat_tree_spec` (linearize, path_up) and
+  `build_messages_spec` (tree sequence).
+- [x] Integration test `chat_tree_context_spec` over real files, with nested
+  and inline branches and an unsaved child buffer. The ported specs are
+  `ancestor_chain_rename_spec` and `chat_respond_spec`.
+- [x] Atlas: chat/lifecycle (Context Assembly), chat/memory, chat/attachments,
+  traceability.
 
 ## Not doing
 
 - No timestamps or chronological reordering.
 - No mode toggle and no opt-out marker (the issue's v1).
 - No change to how a file's own exchanges render.
+
+## Revisions
+
+- 2026-10-16, TL approval. M1 is approved; M2 (one tree walker for the exporter,
+  delete-tree and the outline) is split out as #349, and #233 closes at M1.
+  Behaviour (a), (b) and (c) are accepted. The operator decides on (a), full
+  ancestors inside the memory window, with the measured request sizes, before
+  merge. Delta: M2 removed from this plan, and the one remaining boundary takes
+  plain checkboxes.
+- 2026-10-16, found while building: automatic topic requests used to exclude
+  ancestor context by message count, because the ancestors were contiguous after
+  the lead. The tree's other files are now interleaved, so `build_messages`
+  returns the messages its current-file exchanges produced, and the topic input
+  keeps only those.
+

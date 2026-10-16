@@ -166,111 +166,33 @@ local function find_chat_header_end(lines)
     return _parley.chat_parser.find_header_end(lines)
 end
 
--- Pure function: given an ordered ancestor chain (oldest first), build a flat
--- message list of Q+A pairs up to each level's branch point.
---
--- ancestor_chain: array of { exchanges, branch_after } where:
---   exchanges    = parsed_chat.exchanges from that ancestor file
---   branch_after = number of exchanges to include (exchanges[1..branch_after])
---
--- Returns a flat array of {role, content} tables (no system prompt).
-M.build_ancestor_messages = function(ancestor_chain)
-    local msgs = {}
-    for _, level in ipairs(ancestor_chain) do
-        for idx, exchange in ipairs(level.exchanges) do
-            if idx > level.branch_after then
-                break
-            end
-            if exchange.question then
-                local content = require("parley.question_tags").compose_question(
-                    exchange.preface and exchange.preface.content, question_tags.content(exchange.question))
-                    :gsub("^%s*(.-)%s*$", "%1")
-                if content ~= "" then
-                    table.insert(msgs, { role = "user", content = content })
-                end
-            end
-            if exchange.answer then
-                -- Use summary when available (mirrors memory-aware answer handling)
-                local raw = exchange.summary and question_tags.content(exchange.summary) or question_tags.content(exchange.answer)
-                local content = (raw or ""):gsub("^%s*(.-)%s*$", "%1")
-                if content ~= "" then
-                    table.insert(msgs, { role = "assistant", content = content })
-                end
-            end
+-- #233: a request's exchanges are the chat tree in depth-first order, cut at
+-- the exchange being submitted (chat_tree). The current file's exchanges are
+-- the request's own input copies, matched by question row: a batch leg's input
+-- keeps only some of them, and the previous answer of a regenerating exchange
+-- is already substituted there. Returns the sequence and the cut's position.
+local function tree_sequence(file, parsed, index, input_parsed, deps)
+    local Tree = require("parley.chat_tree")
+    deps = deps or Tree.io_deps()
+    file = vim.fn.resolve(vim.fn.fnamemodify(file, ":p"))
+    local items = Tree.linearize(Tree.path_up(file, parsed, deps), index, deps)
+    local by_row = {}
+    for _, exchange in ipairs(input_parsed.exchanges) do
+        if exchange.question then by_row[exchange.question.line_start] = exchange end
+    end
+    local sequence = {}
+    for _, item in ipairs(items) do
+        if item.current then
+            local own = item.exchange.question and by_row[item.exchange.question.line_start]
+            if own then sequence[#sequence + 1] = { exchange = own, file = file, current = true } end
+        else
+            sequence[#sequence + 1] = item
         end
     end
-    return msgs
+    return sequence, #sequence
 end
 
--- Walk the ancestor chain via parent_link, building an ordered list of
--- { exchanges, branch_after } records (oldest ancestor first).
--- Returns an empty table when there is no parent or the parent is unreadable.
-local function collect_ancestor_chain(current_file, parsed_chat, depth)
-    depth = depth or 0
-    if depth > 20 then
-        _parley.logger.warning("collect_ancestor_chain: max depth reached, stopping")
-        return {}
-    end
-
-    if not parsed_chat.parent_link then
-        return {}
-    end
-
-    local current_dir = vim.fn.fnamemodify(current_file, ":h")
-    -- THE resolver, called directly (#224). A local wrapper named resolve_path is
-    -- what this module had before, and it was exact-match-only: it worked for
-    -- every reference whose parent had not been renamed yet.
-    local abs_parent = _parley.resolve_chat_path(parsed_chat.parent_link.path, current_dir)
-
-    -- #261/#255: the parent as the user sees it — its loaded buffer if open,
-    -- which is ahead of the disk while an answer streams into it or while it
-    -- holds unsaved edits.
-    local parent_lines, parent_buf = _parley.helpers.chat_lines(abs_parent)
-    if not parent_lines then
-        _parley.logger.warning("collect_ancestor_chain: parent file not readable: " .. abs_parent)
-        return {}
-    end
-    local parent_header_end = find_chat_header_end(parent_lines)
-    if not parent_header_end then
-        return {}
-    end
-
-    local parent_parsed = _parley.parse_chat(parent_lines, parent_header_end)
-    -- An exchange of the parent still being regenerated contributes its
-    -- previous answer, as it does in the parent's own requests.
-    local parent_doc = parent_buf and require('parley.document').get(parent_buf)
-    if parent_doc then
-        parent_parsed = require('parley.previous_answer').substitute(parent_parsed,
-            require('parley.document').previous_answers(parent_doc), nil)
-    end
-
-    -- Find which branch in the parent points back to current_file
-    local branch_after = 0
-    local current_abs = vim.fn.resolve(current_file)
-    local parent_dir = vim.fn.fnamemodify(abs_parent, ":h")
-    for _, branch in ipairs(parent_parsed.branches) do
-        if _parley.resolve_chat_path(branch.path, parent_dir) == current_abs then
-            branch_after = branch.after_exchange
-            break
-        end
-    end
-
-    -- Recurse upward first so the chain is ordered oldest → newest
-    local chain = collect_ancestor_chain(abs_parent, parent_parsed, depth + 1)
-    table.insert(chain, { exchanges = parent_parsed.exchanges, branch_after = branch_after })
-    return chain
-end
-
-local function collect_ancestor_messages(current_file, parsed_chat)
-    local chain = collect_ancestor_chain(current_file, parsed_chat)
-    return M.build_ancestor_messages(chain)
-end
-
--- Test seam (#224): the ancestor walk is IO — it reads the parent files off
--- disk and resolves their references — so the defect it carries cannot be
--- reached through `build_ancestor_messages`, which is the pure half.
-M._collect_ancestor_messages = function(...) return collect_ancestor_messages(...) end
-M._collect_ancestor_chain = function(...) return collect_ancestor_chain(...) end
+M._tree_sequence = tree_sequence -- test seam: the walk reads files and buffers
 
 local function is_follow_cursor_enabled(override_free_cursor)
     if override_free_cursor ~= nil then
@@ -420,7 +342,7 @@ end
 --- same image linked twice is two candidates — each counted and charged.
 --- The slot's attachments are copied, not mutated: the parse result is the
 --- caller's.
-local function attach_question_images(messages, slots, chat_path, logger)
+local function attach_question_images(messages, slots, logger)
     if #slots == 0 then
         return
     end
@@ -430,7 +352,7 @@ local function attach_question_images(messages, slots, chat_path, logger)
         local keyed = {}
         for n, att in ipairs(slot.attachments) do
             keyed[n] = vim.tbl_extend("force", att, { id = slot.order .. ":" .. n })
-            local size, err = asset_size(chat_path, att.path)
+            local size, err = asset_size(slot.chat_path, att.path)
             candidates[#candidates + 1] = { id = keyed[n].id, order = slot.order, path = att.path, size = size, err = err }
         end
         slot.attachments = keyed
@@ -450,13 +372,15 @@ local function attach_question_images(messages, slots, chat_path, logger)
         local message = Refusal.describe('attachments', nil, 'attachments dropped: ' .. plan.warning)
         logger.warning(message)
     end
-    local function read(rel)
-        if chat_path == nil or chat_path == "" then
-            return nil, "chat_path not supplied to build_messages"
-        end
-        return assets.read_bounded(chat_path, rel)
-    end
     for _, slot in ipairs(slots) do
+        -- An attachment resolves against its own chat file (#233: a tree's
+        -- exchanges come from several).
+        local function read(rel)
+            if slot.chat_path == nil or slot.chat_path == "" then
+                return nil, "chat_path not supplied to build_messages"
+            end
+            return assets.read_bounded(slot.chat_path, rel)
+        end
         slot.message.content = assets.question_content(slot.message.content, slot.attachments, plan, read)
     end
 end
@@ -555,7 +479,8 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info, opts)
                     if #attachments > 0 then
                         local pinned = #chat_parser.extract_file_refs(text) > 0
                         if M.preserve_exchange(k, target_idx, total_exchanges, max_exchanges, pinned) then
-                            slots[#slots + 1] = { message = message, order = k, attachments = attachments }
+                            slots[#slots + 1] = { message = message, order = k, attachments = attachments,
+                                chat_path = opts.chat_path }
                         else
                             message.content = assets.omitted_text(text, attachments)
                         end
@@ -614,7 +539,7 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info, opts)
         flush_answer()
     end
 
-    attach_question_images(messages, slots, opts.chat_path,
+    attach_question_images(messages, slots,
         (_parley and _parley.logger) or { warning = function() end })
     return messages
 end
@@ -850,12 +775,35 @@ M.build_messages = function(opts)
     -- exchange loop, not seeded as a placeholder.
     local messages = {}
 
+    -- #233: the exchanges to render, in order. A request over a chat tree passes
+    -- the linearized tree (chat_tree.linearize): exchanges from other files carry
+    -- their own `file`, and `exchange_idx` is the cut's position in the sequence.
+    -- The visual-range line numbers belong to the current file only.
+    local sequence = opts.sequence
+    if not sequence then
+        sequence = {}
+        for _, exchange in ipairs(parsed_chat.exchanges) do
+            sequence[#sequence + 1] = { exchange = exchange, current = true }
+        end
+    end
+
     -- Process each exchange, determining whether to preserve or summarize
-    local total_exchanges = #parsed_chat.exchanges
+    local total_exchanges = #sequence
+
+    -- The messages each current-file exchange produced, by identity: a topic
+    -- request reads only the current file's conversation (#233), and the tree's
+    -- other files are interleaved with it.
+    local current_messages = {}
 
     -- Single pass through all exchanges
-    for idx, exchange in ipairs(parsed_chat.exchanges) do
-        if exchange.question and exchange.question.line_start >= start_index and idx <= exchange_idx then
+    for idx, item in ipairs(sequence) do
+        local exchange = item.exchange
+        local function push(message)
+            messages[#messages + 1] = message
+            if item.current then current_messages[message] = true end
+        end
+        if exchange.question and (not item.current or exchange.question.line_start >= start_index)
+            and idx <= exchange_idx then
             -- Preserve in full: the current question, a recent exchange, or
             -- one pinned by file references (M.preserve_exchange).
             local should_preserve = M.preserve_exchange(
@@ -923,7 +871,8 @@ M.build_messages = function(opts)
                     local user_message = { role = "user", content = question_content }
                     local attachments = exchange.question.attachments
                     if attachments and #attachments > 0 then
-                        slots[#slots + 1] = { message = user_message, order = idx, attachments = attachments }
+                        slots[#slots + 1] = { message = user_message, order = idx, attachments = attachments,
+                            chat_path = item.file or opts.chat_path }
                     end
 
                     -- Handle provider-specific file reference processing for questions with file references
@@ -932,20 +881,20 @@ M.build_messages = function(opts)
                         -- a system message that contains file content. and a user message containing the question.
                         -- the cache-control key is only needed for Anthropic, but since it doesn't cause problem
                         -- with Google or OpenAI, I'll leave it here.
-                        table.insert(messages, {
+                        push({
                             role = "system",
                             content = table.concat(file_content_parts, "\n") .. "\n",
                             cache_control = { type = "ephemeral" },
                         })
-                        table.insert(messages, user_message)
+                        push(user_message)
                     else
                         -- No file references, just add the question as user message
-                        table.insert(messages, user_message)
+                        push(user_message)
                     end
                 else
                     -- The placeholder for a summarized question; it says an
                     -- image was there, so the model is not left inferring it.
-                    table.insert(messages, {
+                    push({
                         role = "user",
                         content = assets.omitted_text(omit_user_text, exchange.question.attachments),
                     })
@@ -969,7 +918,7 @@ M.build_messages = function(opts)
                 end
             end
             local include_answer = exchange.answer
-                and exchange.answer.line_start <= end_index
+                and (not item.current or exchange.answer.line_start <= end_index)
                 and (idx < exchange_idx or answer_has_tool_blocks)
 
             if include_answer then
@@ -983,23 +932,23 @@ M.build_messages = function(opts)
                     --      message (byte-identical to pre-#81).
                     if answer_has_tool_blocks then
                         for _, m in ipairs(M._emit_content_blocks_as_messages(scrub_content_blocks(exchange.answer.content_blocks))) do
-                            table.insert(messages, m)
+                            push(m)
                         end
                     else
-                        table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.answer)) })
+                        push({ role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.answer)) })
                     end
                 else
                     -- Use the summary if available
                     if exchange.summary then
-                        table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.summary)) })
+                        push({ role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.summary)) })
                     else
                         -- If no summary is available, use the full content (fallback)
                         if answer_has_tool_blocks then
                             for _, m in ipairs(M._emit_content_blocks_as_messages(scrub_content_blocks(exchange.answer.content_blocks))) do
-                                table.insert(messages, m)
+                                push(m)
                             end
                         else
-                            table.insert(messages, { role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.answer)) })
+                            push({ role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.answer)) })
                         end
                     end
                 end
@@ -1036,9 +985,9 @@ M.build_messages = function(opts)
 
     -- #231: after trimming and the leading messages, so the budget sees the
     -- request as it will go out and the text blocks carry the trimmed text.
-    attach_question_images(messages, slots, opts.chat_path, logger)
+    attach_question_images(messages, slots, logger)
 
-    return messages, #leading
+    return messages, #leading, current_messages
 end
 
 -- Find the 0-indexed line number of the `topic:` header line in a buffer.
@@ -1079,10 +1028,13 @@ end
 ---@param messages table[]
 ---@param lead integer
 ---@return table[]
-function M._conversation_after_lead(messages, lead)
+---@param only table|nil when given, keep only these messages (by identity)
+function M._conversation_after_lead(messages, lead, only)
     local out = {}
     for i = (lead or 0) + 1, #messages do
-        out[#out + 1] = vim.deepcopy(messages[i])
+        if not only or only[messages[i]] then
+            out[#out + 1] = vim.deepcopy(messages[i])
+        end
     end
     return out
 end
@@ -1613,7 +1565,7 @@ local function start_scoped_response(frame)
     entry.pending_previous_entity = pending_entity
     entry.pending_previous_owner = pending_owner
     local latest, messages, final_payload, topic_source, topic_parent, failure_notice, completion_failure
-    local message_lead = 0
+    local message_lead, current_messages = 0, nil
     local topic_attempted, main_finished, topic_finished = false, false, true
     if parsed.headers.topic == '?' then
         for row = 1, find_chat_header_end(frame.lines) do
@@ -1672,7 +1624,7 @@ local function start_scoped_response(frame)
         local parents = topic_parent and D.resolve_user(doc, topic_parent)
         if not header or not parents then return end
         local Topic = require('parley.response_topic')
-        local conversation = M._conversation_after_lead(messages or {}, message_lead)
+        local conversation = M._conversation_after_lead(messages or {}, message_lead, current_messages)
         conversation[#conversation + 1] = {role = 'assistant', content = question_tags.context_text(latest and latest.response or '', config)}
         local input = Topic.input(conversation, info.provider, info.model, config.chat_topic_gen_prompt, _parley.dispatcher)
         input.buf = buf
@@ -1735,15 +1687,13 @@ local function start_scoped_response(frame)
             if operation.cancelled or ctx.cancelled() then resolve(); return end
             if remote_error then fail(remote_error); return end
             local ok, err = xpcall(function()
-                messages, message_lead = M.build_messages({parsed_chat = input_parsed, start_index = frame.start_index,
-                    end_index = frame.end_index, exchange_idx = input_index, agent = agent, config = config,
-                    helpers = _parley.helpers, logger = _parley.logger, resolved_remote_content = remote,
-                    root_policy = info.root_policy, chat_path = frame.file_name})
-                if parsed.parent_link then
-                    local ancestors = collect_ancestor_messages(frame.file_name, parsed)
-                    for i = #ancestors, 1, -1 do table.insert(messages, message_lead + 1, ancestors[i]) end
-                    message_lead = message_lead + #ancestors
-                end
+                local sequence, cut = tree_sequence(frame.file_name, parsed, index, input_parsed)
+                messages, message_lead, current_messages = M.build_messages({parsed_chat = input_parsed,
+                    start_index = frame.start_index, end_index = frame.end_index, exchange_idx = cut,
+                    sequence = sequence, agent = agent,
+                    config = config, helpers = _parley.helpers, logger = _parley.logger,
+                    resolved_remote_content = remote, root_policy = info.root_policy,
+                    chat_path = frame.file_name})
                 -- The raw payload build_messages found lives on the input the
                 -- request was built from, not on this function's copy of it.
                 final_payload = input_parsed.exchanges[input_index].question.raw_payload
