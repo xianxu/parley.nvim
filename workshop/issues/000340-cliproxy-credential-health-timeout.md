@@ -6,7 +6,7 @@ github_issue:
 created: 2026-10-15
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '2be660486257201a253478a526389edc64504b48' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '54d4a6a9ae9ab43319a84ac89c46663607363b97' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T23:44:45-07:00
 claimant:
     operator: Xian Xu
@@ -16,7 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
-actual_hours: 0.40
+actual_hours: 0.46
 ---
 
 # Credential-health persistent-404 test times out in the required suite
