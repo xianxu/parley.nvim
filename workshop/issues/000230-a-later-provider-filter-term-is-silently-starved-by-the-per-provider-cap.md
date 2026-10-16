@@ -1,12 +1,20 @@
 ---
 id: 000230
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-10-15
 estimate_hours:
-card_mirror: '993b816c4ae7fe54de0ab76554473f84908d76e7' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'fce4e942b25d58c008a66fbbfb7b6d604248957f' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T19:35:17-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # a later provider filter term is silently starved by the per-provider cap
@@ -157,15 +165,30 @@ provider. Specific terms rarely need it: the operator's first draft
 - `per_provider` is gone from the code path and from any documentation or default
   config that mentions it.
 
+## Core concepts
+
+| Entity | Kind | Status | Location | Responsibility |
+| --- | --- | --- | --- | --- |
+| `parse_provider_spec` | PURE | modified | `lua/parley/cliproxy_catalog.lua` | Parses `!N` on each term and on a bare provider; rejects a malformed count with an error naming the spec. |
+| `curate` | PURE | modified | `lua/parley/cliproxy_catalog.lua` | Per-search budgets, no limit without `!N`, global series de-dup, term order kept; no `per_provider`. |
+| `diagnose` | PURE | new | `lua/parley/cliproxy_catalog.lua` | The specs that are malformed and the terms that match nothing, for a caller to report. |
+| `agent_picker` | INTEGRATION | modified | `lua/parley/agent_picker.lua` | Logs `diagnose` once per catalog refresh; stops passing `per_provider`. |
+| `cliproxy_catalog_230.json` | INTEGRATION | new | `tests/fixtures/cliproxy_catalog_230.json` | The v1 fixture plus `gpt-6-astra` (owner openai): the shape #230 was measured on. |
+
 ## Plan
 
-- [ ] Fixture: the current catalog. Red test for the measured failing case.
-- [ ] `parse_provider_spec`: strip and validate `!N` on terms and on the bare provider.
-- [ ] `curate`: per-search budgets, no provider ceiling, global series de-dup, term
-      order preserved.
-- [ ] Remove `per_provider`; sweep docs and defaults for it.
-- [ ] Caller-side, once-per-refresh log for terms that match nothing.
-- [ ] Tests per Done-when, including the 17-row and 9-row counts.
+Measurement (2026-10-15, :3):
+- #247 already made the cap per term (`curate` counts `term_count`), so the measured starvation is gone: on a catalog with `gpt-6-astra`, `codex:gpt-5,gpt-6` includes it today. That Done-when bullet becomes a guard test, not a red one.
+- The approved Spec is otherwise unmet. A hidden default of 3 per term remains: `gpt-5` matches 6 series in the v1 fixture and 3 are hidden silently. There is no `!N`, `antigravity!2` still parses as a provider named `antigravity!2` (contributes nothing), no malformed-count rejection, no log for a term matching nothing, and `per_provider` remains in config.lua, cliproxy_catalog.lua, agent_picker.lua, the atlas and 6 specs.
+- The catalog the 17-row count came from was overwritten (see #342). On the v1 fixture plus `gpt-6-astra`, the uncapped searches yield opus 1, sonnet 1, fable 1, gpt-5 6, gpt-6 1 and bare antigravity 12 = **22**. The recommended config (`claude:opus,sonnet,fable`, `codex:gpt-5!3,gpt-6`, `antigravity!2`) still yields exactly **9**.
+
+- [ ] Fixture `cliproxy_catalog_230.json`; guard test for the measured case; red tests per Done-when (uncapped search returns every series, 22; `!N` on a term and on a bare provider; the 9-row recommended config in term order; a model matched by two terms renders once).
+- [ ] `parse_provider_spec`: strip and validate `!N` on terms and on the provider half (`antigravity!2` gives provider `antigravity`, cap 2). `gpt-5!`, `gpt-5!x` and `gpt-5!0` return an error naming the spec. In `curate` a malformed spec contributes nothing, never "no limit".
+- [ ] `curate`: per-search budget from `!N`, no limit without it, no provider ceiling, global series de-dup, term order. `per_provider` removed.
+- [ ] `diagnose(models, providers)` (pure): malformed specs and terms matching nothing. agent_picker logs it when a catalog fetch resolves (once per refresh, not per repaint or toggle). An empty catalog reports nothing (that is the logged-out case, already shown).
+- [ ] Remove `per_provider` from config defaults, the atlas and specs. The default `live_models.providers` writes explicit `!N` where the old hidden 3 mattered (`codex:gpt-6,gpt-5!3`, `gemini!3`), so the default view keeps its size. An operator config still setting `per_provider` gets one notice at setup: removed, write `!N`. Without it the option would be silently ignored, the same silence class.
+- [ ] Atlas providers/cliproxy-managed: the `!N` grammar and the logging.
+- [ ] Verify: catalog, picker and options specs, then the full suite.
 
 ## Log
 
@@ -204,3 +227,9 @@ more terms than slots could not starve either. Replaced because:
 
 The Problem and measurements are unchanged; only Spec, Done when, and Plan were
 rewritten.
+
+### 2026-10-15 — measured against today's code; counts restated
+
+**Reason.** #247 made the cap per term after this issue was filed, and the catalog behind the 17-row count was overwritten (#342).
+
+**Delta.** The measured failing case is now a guard test, since it passes today. The uncapped total is 22 on `tests/fixtures/cliproxy_catalog_230.json` (v1 fixture plus `gpt-6-astra`) instead of 17; the 9-row recommended config is unchanged. Added: a one-time setup notice for a leftover `per_provider`, and explicit `!N` in the shipped defaults so the default view keeps its size.
