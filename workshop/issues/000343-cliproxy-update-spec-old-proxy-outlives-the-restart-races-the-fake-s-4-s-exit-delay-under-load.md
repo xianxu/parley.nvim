@@ -1,12 +1,12 @@
 ---
 id: 000343
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-15
-updated: 2026-10-15
+updated: 2026-10-16
 estimate_hours:
-card_mirror: 'da5e98e496f2d8ff1e13995a66839d7b388d5323' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '8b2eff037b438815fb274f0415aacfc846076508' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T20:29:03-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "8dd4d658", done: "c6cbae93"}
+actual_hours: 0.24
 ---
 
 # cliproxy_update_spec: 'old proxy outlives the restart' races the fake's 4 s exit delay under load
