@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 12.89
+actual_hours: 14.61
 tracker:
     version: 1
     completion:
-        token: close-862c9f55a3c9
+        token: close-49ce95711517
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 2fee90247e1fef6cddb9402f80b828cbbb29ba45
-        evidence_commit: fbe5c42376545e56e9cb6e67eab2d85a5491c4f7
+        reviewed_head: 0c4552064aa5a005038317f90d5f87c3a2a45613
+        evidence_commit: ecad3d09e4eaec584c20b6cc609bed87ba2aefab
 ---
 
 # Agentic documents: Alt+Return makes any right-pane markdown file a session-sync document (universal-agent-input-interface S1, parley side)
