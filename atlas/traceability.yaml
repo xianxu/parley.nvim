@@ -1224,11 +1224,14 @@ atlas:
       - lua/parley/attention_model.lua
       - lua/parley/attention_store.lua
       - lua/parley/attention.lua
+      - lua/parley/attention_rows.lua
       - lua/parley/session_sync.lua
     tests:
       - tests/unit/attention_model_spec.lua
       - tests/unit/attention_store_spec.lua
+      - tests/unit/attention_rows_spec.lua
       - tests/integration/attention_record_spec.lua
+      - tests/integration/attention_finder_spec.lua
 
   ui/outline:
     code:

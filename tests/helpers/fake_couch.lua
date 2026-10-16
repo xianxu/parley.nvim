@@ -44,12 +44,23 @@ function M.write(root, log_file, argv_file)
     assert((vim.uv or vim.loop).fs_chmod(bin, 493))
 end
 
+-- Edit the registry's ledger as the test side of the protocol: `--owe` records
+-- a `submitted: PATH` send as owed, `--fold` removes it.
+local function ledger(registry, verb, id, subject)
+    local result = vim.system({ "python3", vim.fn.fnamemodify("tests/fixtures/fake_couch_registry.py", ":p"),
+        verb, id, subject }, { text = true, env = { FAKE_COUCH_REGISTRY = registry } }):wait()
+    assert(result.code == 0, "fake couch " .. verb .. " failed: " .. tostring(result.stderr))
+end
+
+--- Record message `id` as owed for `path` in the registry at `registry`.
+function M.owe(registry, path, id)
+    ledger(registry, "--owe", id, "submitted: " .. path)
+end
+
 --- Fold message `id` for `path` in the registry at `registry`: remove it from
 --- the file's owed events.
 function M.fold(registry, path, id)
-    local result = vim.system({ "python3", vim.fn.fnamemodify("tests/fixtures/fake_couch_registry.py", ":p"),
-        "--fold", id, path }, { text = true, env = { FAKE_COUCH_REGISTRY = registry } }):wait()
-    assert(result.code == 0, "fake couch fold failed: " .. tostring(result.stderr))
+    ledger(registry, "--fold", id, path)
 end
 
 return M

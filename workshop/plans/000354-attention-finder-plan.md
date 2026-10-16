@@ -44,7 +44,7 @@ All verified in the code on 2026-10-16.
 | Name | Lives in | Status | Surface |
 |------|----------|--------|---------|
 | `attention_model` | `lua/parley/attention_model.lua` | new | `empty`, `transition`, `state_of`, `list`, `answered_unseen` |
-| `attention_rows` | `lua/parley/attention_rows.lua` | new | (M2) |
+| `attention_rows` | `lua/parley/attention_rows.lua` | new | `items` |
 
 - **attention_model:** the entries and their transitions.
   - State: `{version = 1, entries = {[path] = Entry}}`, with `Entry = {path, pending = {[message_id] = submitted_at}, submitted_at, answered_at?, seen_at?, breadcrumb?, unknown?}`.
@@ -72,7 +72,7 @@ All verified in the code on 2026-10-16.
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `attention_store` | `lua/parley/attention_store.lua` | new | the JSON file `state_dir/attention/attention.json`: `dir`, `path`, `parse`, `load`, `apply`, `grace_seconds` |
-| `attention` | `lua/parley/attention.lua` | new | the couch CLI, the editor, #353's seam: `record`, `parse_message_id`, `breadcrumb`; M2 adds `refresh`, `open` |
+| `attention` | `lua/parley/attention.lua` | new | the couch CLI, the editor, #353's seam: `record`, `parse_message_id`, `breadcrumb`, `observation`, `refresh`, `open` |
 | `release_and_send` | `lua/parley/session_sync.lua:802` | modified | records a submit |
 
 - **attention_store:** `load()` and `apply(event, on_done)`.
@@ -173,7 +173,7 @@ All verified in the code on 2026-10-16.
 - Modify: the highlight definitions (`ParleyAttention*`, linked to existing groups, with Seen dimmer)
 - Test: `tests/unit/attention_rows_spec.lua`
 
-- [ ] **Steps 1-5:** test-driven: the row text, the highlight ranges for each state, the `?` marker, `search_text` (basename plus dir), newest first.
+- [x] **Steps 1-5:** test-driven: the row text, the highlight ranges for each state, the `?` marker, `search_text` (basename plus dir), newest first.
 
 #### Task 5: refresh and open
 
@@ -183,12 +183,12 @@ All verified in the code on 2026-10-16.
 - Modify: `init.lua` (`:ParleyAttention`)
 - Test: `tests/integration/attention_finder_spec.lua`
 
-- [ ] **Step 1: write the failing tests.** Strategy: one spec per user path against the fake Couch, with the clock and the `file_history` seam injected: list then a live fold (`update` turns waiting into answered); select answered (opens, seen, `restore` called; a refusal keeps the ordinary open result and shows the reason); select waiting (unchanged); select a missing file (reported, nothing opens); a refusal `Code` (`?`, state kept); a probe counter asserting at most 4 at once; typeahead; a seen entry past the grace gone on the next open; an observation after close.
-- [ ] **Steps 2-5:** run it (fail), implement, run it (pass), commit.
+- [x] **Step 1: write the failing tests.** Strategy: one spec per user path against the fake Couch, with the clock and the `file_history` seam injected: list then a live fold (`update` turns waiting into answered); select answered (opens, seen, `restore` called; a refusal keeps the ordinary open result and shows the reason); select waiting (unchanged); select a missing file (reported, nothing opens); a refusal `Code` (`?`, state kept); a probe counter asserting at most 4 at once; typeahead; a seen entry past the grace gone on the next open; an observation after close.
+- [x] **Steps 2-5:** run it (fail), implement, run it (pass), commit.
 
 #### Task 6: docs
 
-- [ ] Add `atlas/ui/attention_finder.md` and link it from `atlas/index.md`. Add the chord to `atlas/ui/keybindings.md` and the specs to `atlas/traceability.yaml`.
+- [x] Add `atlas/ui/attention_finder.md` and link it from `atlas/index.md`. Add the chord to `atlas/ui/keybindings.md` and the specs to `atlas/traceability.yaml`.
 - [ ] **M2 close:** run `sdlc milestone-close`, then `sdlc close`, then the operator's live check in Couch's nvim (staged only with the hub's go).
 
 ## Revisions
@@ -214,3 +214,7 @@ All verified in the code on 2026-10-16.
   - Minor: the record and the breadcrumb snapshot run under `pcall` in the send callback, and a throwing record is tested.
   - Minor: `attention_model` uses a local copy, not `vim.deepcopy`.
   - Minor: the "two stores over one path" store test interleaves a direct write between two applies. It can't contend for the lease inside one process; the held-lease specs cover contention.
+- **2026-10-16, building M2.**
+  - Task 6 also updates README.md (the review's advisory), next to the Alt+Shift+O paragraph.
+  - A probe reply whose `Status` is null (Couch keeps no ledger for the file) is `observe_failed`, not an empty `Owed`. Reading it as answered would be the failure the plan names as most likely.
+  - The live check is the TL's to sequence, together with #353, since they share the restore seam. This slot doesn't stage it.

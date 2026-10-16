@@ -131,6 +131,15 @@ M.entries = {
 		preserve_insert = true,
 	},
 	{
+		id = "attention",
+		config_key = "global_shortcut_attention",
+		default_key = "<M-u>",
+		default_modes = { "n", "i" },
+		scope = "global",
+		desc = "Parley attention finder: Alt+Return submits, waiting, answered or seen",
+		help_desc = "Attention finder (submits waiting, answered, seen)",
+	},
+	{
 		id = "chat_new",
 		config_key = "global_shortcut_new",
 		default_key = "<C-g>c",

@@ -1006,6 +1006,7 @@ M.setup = function(opts)
 		{
 			help = function() M.cmd.KeyBindings() end,
 			file_back = function() M.cmd.FileBack() end,
+			attention = function() M.cmd.Attention() end,
 			chat_new = function() M.cmd.ChatNew({}) end,
 			chat_finder = function() M.cmd.ChatFinder() end,
 			chat_review = function() M.cmd.ChatReview({}) end,
@@ -5072,6 +5073,8 @@ M.cmd.CopyContext = function() copy_mod.copy_context(2, 2) end
 M.cmd.CopyContextWide = function() copy_mod.copy_context(5, 10) end
 
 M.cmd.FileBack = function() return require("parley.file_history").back() end
+-- The attention finder (#354): files submitted with Alt+Return, waiting, answered or seen.
+M.cmd.Attention = function() return require("parley.attention").open() end
 
 -- One invocation generation invalidates older entity pickers and resolutions.
 local reference_generation = 0
