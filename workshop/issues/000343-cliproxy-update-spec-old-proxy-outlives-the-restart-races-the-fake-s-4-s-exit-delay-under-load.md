@@ -78,18 +78,26 @@ only reason was this window).
 
 ## Done when
 
-- [ ] The case no longer depends on the old fake outliving a wall-clock window
+- [x] The case no longer depends on the old fake outliving a wall-clock window
       (e.g. the fake ignores SIGTERM until released by the case, then is reaped).
-- [ ] The case passes under a loaded full suite (repeat runs as evidence).
+- [x] The case passes under a loaded full suite (repeat runs as evidence).
 
 ## Plan
 
-- [ ] fake_cliproxy: `PARLEY_FAKE_IGNORE_SIGTERM` replaces `PARLEY_FAKE_EXIT_DELAY_MS`.
-- [ ] cliproxy_update_spec: the case uses it; reap uses SIGKILL; comments in
+- [x] fake_cliproxy: `PARLEY_FAKE_IGNORE_SIGTERM` replaces `PARLEY_FAKE_EXIT_DELAY_MS`.
+- [x] cliproxy_update_spec: the case uses it; reap uses SIGKILL; comments in
       cliproxy.lua, fixture_process.lua and fixture_reaping_spec follow.
-- [ ] Red: the old case fails at a compressed window; the new case has no window.
-- [ ] Evidence: the case passes in repeated runs under a loaded machine (parallel runs).
+- [x] Red: the old case fails at a compressed window; the new case has no window.
+- [x] Evidence: the case passes in repeated runs under a loaded machine (parallel runs).
 
 ## Log
 
 ### 2026-10-15
+
+- Red: the shipped case with the exit delay shrunk to 1000 ms and to 2500 ms
+  failed both times at :490 (mode 2). So the race is real, and the margin at
+  4000 ms is under 1.5 s on an idle machine.
+- Green: `PARLEY_FAKE_IGNORE_SIGTERM`. 12 concurrent runs of
+  cliproxy_update_spec, 40/40 each. fixture_reaping_spec 12/12. No fake_cliproxy
+  left running after them, because the watchdog exits via `os._exit` and does
+  not depend on SIGTERM.
