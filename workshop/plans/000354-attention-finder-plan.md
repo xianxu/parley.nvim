@@ -209,3 +209,8 @@ All verified in the code on 2026-10-16.
   - The parse does its own typing, without `helper.conform`: `sidecar_degrade_spec` allows one warning per read, and conform plus a dropped-entry warning made two.
   - The fake's owed recording is opt-in (`FAKE_COUCH_OWED`), so the existing session-sync specs, whose winbar renders owed events, keep their ledgers.
   - Agreed with parley.nvim:2 on #353's refusal edge: when `restore` refuses, the ordinary open result stands. A reused, already-current file keeps its existing trail, and the reason is shown in one notice. There is no root-reset operation, and the finder never reads snapshot fields.
+- **2026-10-16, the M1 review.**
+  - BR-2 (Important): fixed with a late-completion spec. A slow send completes after its buffer is wiped, and the record still lands; moving the record below the guard fails it.
+  - Minor: the record and the breadcrumb snapshot run under `pcall` in the send callback, and a throwing record is tested.
+  - Minor: `attention_model` uses a local copy, not `vim.deepcopy`.
+  - Minor: the "two stores over one path" store test interleaves a direct write between two applies. It can't contend for the lease inside one process; the held-lease specs cover contention.

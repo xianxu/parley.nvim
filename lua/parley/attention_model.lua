@@ -1,5 +1,5 @@
 -- parley.attention_model — the attention finder's entries and their one
--- transition (#354). Pure: no vim.api, no IO; time arrives as `now`.
+-- transition (#354). Pure Lua: no vim.*, no IO; time arrives as `now`.
 --
 -- An entry is a file submitted with Alt+Return. Its state is derived from its
 -- pending message IDs and its answered/seen times, never stored:
@@ -33,13 +33,20 @@ local function set(list)
     return result
 end
 
+local function copy(value)
+    if type(value) ~= "table" then return value end
+    local result = {}
+    for key, inner in pairs(value) do result[key] = copy(inner) end
+    return result
+end
+
 -- A copy of `state` whose entry for `path` may be changed in place.
 local function with_entry(state, path)
     local entries = {}
     for key, entry in pairs(state.entries) do entries[key] = entry end
     local entry = entries[path]
     if entry then
-        entry = vim.deepcopy(entry)
+        entry = copy(entry)
         entries[path] = entry
     end
     return { version = state.version, entries = entries }, entry
@@ -125,8 +132,8 @@ end
 function handlers.opened(state, event, now)
     local entry = state.entries[event.path]
     if not entry or M.state_of(entry) ~= "answered" then return state end
-    local next_state, copy = with_entry(state, event.path)
-    copy.seen_at = now
+    local next_state, opened = with_entry(state, event.path)
+    opened.seen_at = now
     return next_state
 end
 

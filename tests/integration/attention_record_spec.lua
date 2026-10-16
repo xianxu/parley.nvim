@@ -143,6 +143,36 @@ describe("attention: a session-sync file's Alt+Return", function()
         assert.is_nil(entry(file).breadcrumb)
     end)
 
+    -- ARCH-ORDER late completion: the send completes after its buffer is
+    -- gone, so the engine's stale-state guard drops the callback. The message
+    -- was sent, so the record must land anyway.
+    it("records a send that completes after its buffer was wiped", function()
+        vim.env.FAKE_COUCH_SLEEP = "0.3"
+        open()
+        edit("- item")
+        keymap(buf, "<M-CR>")()
+        vim.api.nvim_buf_delete(buf, { force = true })
+        await(function() return entry(file) ~= nil end, "a send completing after its buffer was wiped was not recorded")
+        assert.same({ "msg-1" }, vim.tbl_keys(entry(file).pending))
+    end)
+
+    it("a record that throws leaves the submit's own completion intact", function()
+        local record, notify, notices = Attention.record, vim.notify, {}
+        Attention.record = function() error("store exploded") end
+        vim.notify = function(message) notices[#notices + 1] = message end
+        local ok, err = pcall(function()
+            open()
+            edit("- item")
+            keymap(buf, "<M-CR>")()
+            await(function()
+                return vim.iter(notices):any(function(m) return m:find("submitted to ops:0", 1, true) ~= nil end)
+            end, "the submit never completed")
+        end)
+        Attention.record, vim.notify = record, notify
+        assert(ok, err)
+        assert.is_true(vim.iter(notices):any(function(m) return m:find("not tracked: .*store exploded") ~= nil end))
+    end)
+
     it("records nothing when the send fails", function()
         vim.env.FAKE_COUCH_EXIT = "1"
         open()

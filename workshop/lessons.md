@@ -661,3 +661,8 @@ oracle, and the mutation that would make the test fail.
 ## #349: deleting a local removes its readers too
 
 - Replacing `find_tree_root_file` deleted the local `root` that delete-tree's prompt still read, and the tests stubbed `confirm` without checking its text. Lint caught it in the suite. After deleting a local, run `make lint`, or grep the function for the name, before the suite; and a test that stubs a prompt asserts what the prompt says.
+
+## #354: an ordering the code depends on gets its own test
+
+- The M1 review found no test for recording a submit *before* the send callback's stale-state guard. Every spec kept the buffer alive, so moving the line below the guard stayed green. When a comment says "this must happen before X", write the test where X happens: here, the buffer is wiped while a slow send runs. Then mutate the order to see the test fail.
+- Optional work added to a critical callback (here, the attention record in the send completion) goes in a `pcall` with a warning, and a test makes it throw.
