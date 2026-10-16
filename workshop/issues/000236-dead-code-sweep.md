@@ -1,12 +1,12 @@
 ---
 id: 000236
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-11
 updated: 2026-10-16
 estimate_hours:
-card_mirror: 'cafd037b6a6adafcfd884200ea9c2346c0c0787c' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '9ede63a67da205ca2302aa04606934b6f39d5f25' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T05:39:39-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "a6fe848e", done: "1b0ee071"}
+actual_hours: 0.28
 ---
 
 # delete unreachable modules and dead config
