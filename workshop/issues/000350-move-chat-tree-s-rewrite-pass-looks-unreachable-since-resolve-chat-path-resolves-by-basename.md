@@ -1,12 +1,12 @@
 ---
 id: 000350
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '7a1b5dcd9b192b61cc52c170f9909b8d65f49786' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '34b418050e6358f9aabbe467ba58ef2596e57d95' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T04:13:22-07:00
 claimant:
     operator: Xian Xu
@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.06
 ---
 
 # move_chat_tree's 🌿 rewrite pass looks unreachable since resolve_chat_path resolves by basename
