@@ -69,6 +69,7 @@ for an empty title. The attribute escape covers HTML there.
 ### 2026-09-13
 
 ### 2026-10-16
+- 2026-10-16: closed — Red: 7 Group G2 unit cases and A0 e2e export fail on old code. BR-1: page title escaped; A0 root topic <script>; mutation removing the title escape fails A0. Body escape single-sourced in escape_html. exporter_tree_spec 44/44, export_spec 16/16, tree_export_spec 13/13, luacheck clean.; review verdict: SHIP
 
 - Taken by parley.nvim:3. Red: all 7 Group G2 cases failed on the old code, and A0
   failed on the old code ("raw topic 1 in the page"). Green: exporter_tree_spec

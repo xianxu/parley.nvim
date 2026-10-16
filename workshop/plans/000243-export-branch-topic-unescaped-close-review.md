@@ -82,3 +82,69 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"4f4f5428-2fcf-45f5-a57a-ef1494a9d40a","repository":"github.com/xianxu/parley.nvim","issue_id":"000243","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/a77483556ebaabae","reviewed_head":"eba015a3047130fe96ded4df63664dec59b25309","slot":"parley.nvim:3","requested_at":"2026-10-16T07:47:41.37071Z"},"phase":"finished","pid":55581,"started_at":"2026-10-16T07:47:41.565166Z","finished_at":"2026-10-16T07:48:50.636573Z","session_id":"e58bcf4d-2e93-4cc8-9d42-1173ef77d44c","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T00:51:52-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 243 — HTML export: branch topic is inserted unescaped by make_branch_div |
+| repo | parley.nvim |
+| issue file | workshop/issues/000243-export-branch-topic-unescaped.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 45eda77e14d6dd2a2b5422a6ac954b817673b871..005efb89b09844672572bcc97ef0600a95303bf7 |
+| command | sdlc close --issue 243 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T00:51:52-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Run the tests at head, then revert the title escape and the body escape change to confirm the tests go red.
+
+Tree-export specs pass at head (13 + 44). Next I'm running export_spec and the revert checks.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Both findings from round 1 are fixed, and the tests prove it. I ran the specs at head and all pass: `export/tree_export` 13 integration and 44 unit, `export/formats` 16. To check BR-1, I removed `escape_html` from the `<title>` line at `lua/parley/exporter.lua:882`. A0 then failed and nothing else did, so A0 catches that regression. I restored the file afterwards. For BR-2, `simple_markdown_to_html` now calls the shared helper (`exporter.lua:476`). The image attributes no longer escape quotes a second time, and the existing tests that check `"` in image alt/src (`tests/unit/exporter_tree_spec.lua:507-508`) still pass. I also checked whether escaping `"` in body text could break anything later in the pipeline. It can't: no later rule matches `"`, and the branch token `XBRANCHX` contains no character that gets escaped. Every Done-when item is delivered and checked by a test.
+
+1. **Strengths**
+   - Chat text has one escape helper now (`exporter.lua:23-26`). It escapes `&`, `<`, `>` and `"`, and uses a function for the replacement, which avoids the LuaJIT problem with `%` in replacement strings.
+   - A0 (`tests/integration/tree_export_spec.lua:47`) reads the exported HTML file itself and checks the title, the nav div and the inline link together. It fails when the title escape is removed.
+   - The G2 table tests cover nav div and inline link, each with and without a target, in both formats. There is also a separate test for escaping inside the href attribute.
+   - The issue's Spec and `## Revisions` were updated to say the scope widened from the branch path to every chat string written into HTML.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings:** none new.
+
+5. **Test coverage:** The title escape is checked by A0, and I confirmed A0 fails without it. The quote escape in `escape_html` is checked by G2 and by the image tests at 507-508.
+
+6. **Architecture:**
+   - **ARCH-DRY: pass.** The body text, the title and both branch builders all use `escape_html`. Searching `lua/` for `&lt;`, `&quot;` and `<title>` finds no other hand-written escapes.
+   - **ARCH-PURE: pass.** The builders and the escape helper are pure. The escaping is tested through `_process_branch_lines` without IO.
+   - **ARCH-PURPOSE: pass.** I checked every place the HTML export writes chat text: the title, the body, image attributes, the nav div and the inline anchor. All of them are escaped. The Markdown export's Jekyll title is YAML, not HTML.
+
+7. **Plan revisions needed:** none. The existing Revisions entry matches the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      exporter.lua:882 now uses escape_html(info.title). A0 checks the escaped title, and removing the escape makes A0 fail (12/13). Restored afterwards.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      simple_markdown_to_html now calls escape_html (exporter.lua:476), and the image code no longer escapes quotes itself. The quote-escape tests at exporter_tree_spec.lua:507-508 still pass.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"a7e8f406-bb37-4e46-90c7-a3c9bc87684a","repository":"github.com/xianxu/parley.nvim","issue_id":"000243","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/46e7de1be5806678","reviewed_head":"005efb89b09844672572bcc97ef0600a95303bf7","slot":"parley.nvim:3","requested_at":"2026-10-16T07:50:26.605098Z"},"phase":"finished","pid":69111,"started_at":"2026-10-16T07:50:26.819942Z","finished_at":"2026-10-16T07:51:51.010262Z","session_id":"bfc2a2c7-26c7-4fe5-809d-1f5ada2d26c2","outcome":"returned"}] -->
