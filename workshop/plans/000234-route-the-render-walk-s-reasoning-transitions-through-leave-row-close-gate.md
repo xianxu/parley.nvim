@@ -97,6 +97,90 @@ rounds:
       recipe: small-diff-review
       isolation: checkout
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 780ece31-aac7-49c0-804d-93c66afcdb30
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000234"
+            recipe: small-diff-review
+            round: 2
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/c0359a1cbf6467f0
+            reviewed_head: 82f1c26c445fe64022ccd0c36ef4515b41738037
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T13:54:24.575426Z"
+          phase: finished
+          pid: 58221
+          started_at: "2026-10-16T13:54:24.780541Z"
+          finished_at: "2026-10-16T14:09:15.975353Z"
+          session_id: 4d70e364-29ae-492a-9cbf-535605d3b5b5
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 82f1c26c445fe64022ccd0c36ef4515b41738037
+        tracker_head: 7ef8c9bd1d49003ba3f034dee613500d75884a7a
+        branch_point: 4dec7d7dfb20ce53a8de297683a461a28f06adc8
+        since: "2026-10-16T06:21:11-07:00"
+        until: "2026-10-16T06:50:48-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T06:21:11-07:00"
+              end: "2026-10-16T06:50:48-07:00"
+              began: "2026-10-16T06:21:11-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: 10d5bb9d6dc9bf364dfc58702656d30b35e9a6efcd0a7ba0da3d5a1f4cea4524
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 11269144
+              windows:
+                - start: "2026-10-16T06:21:11-07:00"
+                  end: "2026-10-16T06:50:48-07:00"
+        cuts:
+            - dispatched: "2026-10-16T06:41:17-07:00"
+              finalized: "2026-10-16T06:44:42-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-16T07:09:18-07:00"
+      dispatched: "2026-10-16T06:54:24-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: The step lives only in lexical.lua:180-203; grammar.lua:144-146 calls it. Deleting reasoning_explicit_end=false from the END branch fails highlight_structure_spec. Mutating the grammar's in_footer or explicit inputs fails the new document_grammar_spec random-document case.
+          round: 2
+        - id: BR-2
+          disposition: not-addressed
+          note: highlighter.lua:290 is unchanged this round; it still repeats the blank terminator using the line text. Minor, does not block.
+          round: 2
+        - id: BR-3
+          disposition: not-addressed
+          note: 'Partly covered: grammar render_before, the source the document_rows path reads, is now compared against build. The walk''s own document_rows branch and the streaming overlay (highlighter.lua:197-205) are still not compared.'
+          round: 2
+        - id: BR-4
+          disposition: not-addressed
+          note: vim.deepcopy still runs for every row at highlighter.lua:213; unchanged this round.
+          round: 2
+        - id: BR-5
+          disposition: not-addressed
+          note: atlas/traceability.yaml:304 still lists render_walk_parity_spec under chat/lifecycle.
+          round: 2
+      recipe: small-diff-review
+      isolation: checkout
+      reviewed: 82f1c26c445fe64022ccd0c36ef4515b41738037
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#234 (boundary-review)
@@ -119,9 +203,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-5** [Minor] `traceability-mapping-placement` (kind: defect) render_walk_parity_spec mapped under chat/lifecycle rather than ui/highlights
   atlas/ui/highlights.md documents the test, but make test-spec SPEC=ui/highlights does not run it.
 
+## Round 2 — 2026-10-16T07:09:18-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — The step lives only in lexical.lua:180-203; grammar.lua:144-146 calls it. Deleting reasoning_explicit_end=false from the END branch fails highlight_structure_spec. Mutating the grammar's in_footer or explicit inputs fails the new document_grammar_spec random-document case.
+- BR-2 — not-addressed — highlighter.lua:290 is unchanged this round; it still repeats the blank terminator using the line text. Minor, does not block.
+- BR-3 — not-addressed — Partly covered: grammar render_before, the source the document_rows path reads, is now compared against build. The walk's own document_rows branch and the streaming overlay (highlighter.lua:197-205) are still not compared.
+- BR-4 — not-addressed — vim.deepcopy still runs for every row at highlighter.lua:213; unchanged this round.
+- BR-5 — not-addressed — atlas/traceability.yaml:304 still lists render_walk_parity_spec under chat/lifecycle.
+
 ## Open findings
 
-- **BR-1** [Important] `shared-row-step-single-source` (kind: defect) document/grammar.lua:139-145 still hand-writes enter_row/leave_row for the production render_before path
 - **BR-2** [Minor] `shared-row-step-single-source` (kind: defect) highlighter.lua:290 blank-row paint condition restates leave_row's blank terminator rule
 - **BR-3** [Minor] `render-parity-coverage-scope` (kind: defect) Parity test covers only the fingerprint-structure path with streaming off
 - **BR-4** [Minor] `hot-path-copy-helper` (kind: defect) vim.deepcopy per rendered row where lexical.copy_state exists

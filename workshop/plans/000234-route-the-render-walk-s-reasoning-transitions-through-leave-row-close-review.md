@@ -132,3 +132,101 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"07d3876f-539e-4e4a-9aa7-9a4aa2df7953","repository":"github.com/xianxu/parley.nvim","issue_id":"000234","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/b2ac595aaeb33600","reviewed_head":"0d857ce217bc60e8aec96af3e47191bcb8f5de8a","slot":"parley.nvim:4","requested_at":"2026-10-16T13:41:17.15869Z"},"phase":"finished","pid":77885,"started_at":"2026-10-16T13:41:17.505958Z","finished_at":"2026-10-16T13:44:42.105039Z","session_id":"5264aaae-3960-4232-9000-6bba0165ab12","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T07:09:18-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 234 — Route the render walk's reasoning transitions through leave_row |
+| repo | parley.nvim |
+| issue file | workshop/issues/000234-route-the-render-walk-s-reasoning-transitions-through-leave-row.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4dec7d7dfb20ce53a8de297683a461a28f06adc8..82f1c26c445fe64022ccd0c36ef4515b41738037 |
+| command | sdlc close --issue 234 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T07:09:18-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking how tests run, then running the grammar spec plus a mutation of the shared row step.
+
+Specs are slow; checking the interim output.
+
+Grammar spec is green under the harness. Now the mutation run on the shared row step.
+
+BR-1's rule is now caught (highlight_structure_spec goes red). Next I'm checking that the new grammar parity test catches drift in the grammar's *inputs*, the only part that can still differ.
+
+Both input mutations go red, so the new test does real work. Last step: checking the atlas/doc claims against highlight_structure's build and replace.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+**Verdict: SHIP.** Round 2 fixes BR-1, the only blocking finding, and fixes it for the whole class rather than the one copy. The row step now exists once, as `enter_row` and `leave_row` in `lua/parley/document/lexical.lua:180-203`. Every state walk calls it:
+- the document grammar (`grammar.lua:144-146`), which produces the `render_before` that the live-buffer render reads;
+- `highlight_structure`'s build, derive and replace (`:112-114`, `:162`, `:242-252`), through a thin adapter;
+- the redraw walk in `highlighter.lua` (`:207`, `:317`).
+
+Grepping every writer of `in_reasoning` and `reasoning_explicit_end` under `lua/` leaves only state constructors, the streaming overlay, the deliberately different `chat_parser`, and the grammar's answer-scoped semantic sections; the last now has a comment saying so. The four Minor findings from round 1 were not touched this round. They stay open and do not block.
+
+1. **Strengths**
+   - **The rule moved down, not sideways.** Putting the step in `lexical`, which all three walkers already depend on, adds no new dependency. `highlight_structure.enter_row` only converts a row index into the footer boolean (`highlight_structure.lua:73-76`).
+   - **The new grammar test catches real drift.** The case in `document_grammar_spec.lua:104-132` compares the grammar's `render_before` with `build`'s `state_before` over 300 random documents. I changed the grammar's inputs in two ways:
+     - Passing `in_footer=false`: only this new test went red, so it is the one guarding the footer input.
+     - Passing `explicit=false`: this test and two fixed cases went red.
+   - **The shared rule has its own pin.** I deleted `reasoning_explicit_end=false` from the `[END]` branch of `lexical.leave_row`, which is the drift #234 is named after. `highlight_structure_spec` ("builds state, footer, and multiple half-open draft ranges") went red.
+   - **The lesson is about the right thing.** The `workshop/lessons.md` entry says to sweep by searching for every writer of the state, not by checking the copy the issue happens to name.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings** (all carried over from round 1, not new)
+   - BR-2: `highlighter.lua:290` still repeats the blank-line terminator rule using the line text.
+   - BR-3: the walk's own `document_rows` branch and the streaming overlay (`highlighter.lua:197-205`) are still not compared against `state_before`. The grammar side of that path is now covered.
+   - BR-4: `vim.deepcopy` still runs for every row at `highlighter.lua:213`.
+   - BR-5: `render_walk_parity_spec` is still listed under `chat/lifecycle` in `atlas/traceability.yaml:304`.
+
+5. **Test coverage notes**
+   - **What I ran.** All of `make test-spec SPEC=chat/document` passed, including `document_grammar_spec` (15/15) and `highlighter_document_spec`. I mutated the code in this throwaway checkout and restored it after each run; `git status` was clean afterwards.
+   - **Limit of the parity tests.** Both parity tests now run the same shared functions on both sides. That means they check the *inputs* (footer and lookahead verdict), not the transition rules. Only the fixed expectations in `highlight_structure_spec` pin the rules. That is correct for a single shared function, but nothing else catches a change to the rule itself.
+
+6. **Architecture**
+   - **ARCH-DRY: pass.** There is one row-step definition, and the remaining restatement is the BR-2 Minor.
+   - **ARCH-PURE: pass.** The step is a pure state transition, and painting stays separate from it.
+   - **ARCH-PURPOSE: pass.** Every walker that tracks render state now calls the shared step, and `chat_parser` is documented and pinned as intentionally different.
+   - **Small wording issue.** The comment at `chat_parser.lua:377` says "highlight_structure's enter_row/leave_row", but they now live in `lexical`. `highlight_structure` re-exports them, so the comment is still accurate.
+
+7. **Plan revisions:** none needed. The Core concepts row for `lexical.enter_row`/`leave_row` and the Log entry for close round 1 match the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The step lives only in lexical.lua:180-203; grammar.lua:144-146 calls it. Deleting reasoning_explicit_end=false from the END branch fails highlight_structure_spec. Mutating the grammar's in_footer or explicit inputs fails the new document_grammar_spec random-document case.
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      highlighter.lua:290 is unchanged this round; it still repeats the blank terminator using the line text. Minor, does not block.
+  - id: BR-3
+    disposition: not-addressed
+    note: |
+      Partly covered: grammar render_before, the source the document_rows path reads, is now compared against build. The walk's own document_rows branch and the streaming overlay (highlighter.lua:197-205) are still not compared.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      vim.deepcopy still runs for every row at highlighter.lua:213; unchanged this round.
+  - id: BR-5
+    disposition: not-addressed
+    note: |
+      atlas/traceability.yaml:304 still lists render_walk_parity_spec under chat/lifecycle.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"780ece31-aac7-49c0-804d-93c66afcdb30","repository":"github.com/xianxu/parley.nvim","issue_id":"000234","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/c0359a1cbf6467f0","reviewed_head":"82f1c26c445fe64022ccd0c36ef4515b41738037","slot":"parley.nvim:4","requested_at":"2026-10-16T13:54:24.575426Z"},"phase":"finished","pid":58221,"started_at":"2026-10-16T13:54:24.780541Z","finished_at":"2026-10-16T14:09:15.975353Z","session_id":"4d70e364-29ae-492a-9cbf-535605d3b5b5","outcome":"returned"}] -->
