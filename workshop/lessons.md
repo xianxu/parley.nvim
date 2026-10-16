@@ -2,6 +2,8 @@
 
 ## 2026-10-15 (#332 — document admission and lifetime)
 
+- Sharing labels does not share rendering. Winbar and StatusLine mapping must be installed and restored together, and equal strings cannot establish which owner may clear them. Compare real state snapshots across both file kinds and exercise older identical owners, live overlays and window-buffer handoff.
+
 - Keep a resource’s plan, runtime and atlas lifetime identical: closing a descriptor does not delete its lease pathname. If permanent bounded allocation replaces planned GC, append the Revision and correct the active design claim.
 
 - An unresolved read-only membership probe is not proof that a document is plain. Before migration, confirm OLD with a fresh bounded lookup; pending registration and owner resolution must block migration before filesystem effects.
