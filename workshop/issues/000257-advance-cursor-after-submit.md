@@ -58,6 +58,9 @@ ownership remain independent of the cursor.
   the wrong question; reload and cancellation do not cause a late cursor move.
 - Normal, insert and visual submission paths share the behavior, and existing
   cursor-follow configuration has explicit regression coverage.
+- Stop at cursor (`<C-g>x`) with the cursor on no running response stops the
+  one response running in the chat directly; with two or more running, it asks
+  which (see Revisions).
 
 ## Plan
 
@@ -97,6 +100,10 @@ Steps:
 ## Revisions
 
 - 2026-10-16, suite on d3909bd9; TL decision (a): after the advance, submit-then-stop (`<C-g>x`) opened a picker with one choice, since the cursor is no longer on the answer. Two specs hung on that picker. The stop rule changes: with the cursor on no running response and exactly one running in the chat, stop it directly; two or more still open the picker. It has its own test. The under-cursor case puts the cursor back on its question, and the stale-picker case runs two responses so the picker still opens. Atlas: chat/lifecycle, "Stopping and correcting a response".
+- 2026-10-16, close review round 1:
+  - **BR-1 (Critical):** with the cursor outside every exchange, the submission answers the last exchange, but the advance read `exchange_idx or 0` and jumped to question 1. Now one index, `submitted`, feeds both the submission and the advance. Regression case added.
+  - **BR-2 (Important):** Done-when gains the stop-rule clause.
+  - **Minors:** the advance parses through `chat_context.parse` (ARCH-DRY), and that parse is the one extra parse per submit (the Plan's "already done on that path" was wrong). Insert-mode submission is tested: the command's stopinsert ends Insert mode after it returns, moving the cursor left like `<Esc>`, so from Insert the cursor is placed one character further.
 
 ## Log
 

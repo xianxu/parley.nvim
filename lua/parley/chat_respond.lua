@@ -1983,16 +1983,19 @@ end
 -- nothing can edit between it and the move, and nothing schedules another.
 -- The streamed answer inserts above the cursor, which moves with its text;
 -- follow-cursor stops because the cursor is no longer where it left it.
-local function advance_after_submit(buf, win, index)
+-- `from_insert`: the command's stopinsert ends Insert mode after it returns,
+-- moving the cursor one character left as <Esc> does, so it is placed one
+-- character further to land after the prefix.
+local function advance_after_submit(buf, win, index, from_insert)
     if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_get_current_win() ~= win
         or vim.api.nvim_win_get_buf(win) ~= buf then return end
-    local config = _parley.config
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local header_end = require("parley.chat_parser").find_header_end(lines)
-    if not header_end then return end
-    local parsed = require("parley.chat_parser").parse_chat(lines, header_end, config)
-    local cursor = M.next_question_cursor(parsed, index, lines, config.chat_user_prefix)
-    if cursor then pcall(vim.api.nvim_win_set_cursor, win, cursor) end
+    local ctx = require("parley.chat_context").parse({ buf = buf, win = win })
+    if not ctx then return end
+    local cursor = M.next_question_cursor(ctx.parsed_chat, index, ctx.lines, _parley.config.chat_user_prefix)
+    if not cursor then return end
+    local line = ctx.lines[cursor[1]]
+    if from_insert and cursor[2] < #line then cursor[2] = vim.str_utf_end(line, cursor[2] + 1) + cursor[2] + 1 end
+    pcall(vim.api.nvim_win_set_cursor, win, cursor)
 end
 
 M.respond = function(params, callback, override_free_cursor)
@@ -2010,6 +2013,7 @@ M.respond = function(params, callback, override_free_cursor)
     )
 
     -- go to normal mode
+    local from_insert = vim.api.nvim_get_mode().mode:match("^[iR]") ~= nil
     vim.cmd("stopinsert")
 
     -- The shared not_chat -> header -> parse sequence (parley.chat_context owns
@@ -2188,12 +2192,15 @@ M.respond = function(params, callback, override_free_cursor)
         end
     end
 
+    -- One index for the submission and the advance (#257): with the cursor
+    -- outside every exchange, the last one is submitted.
+    local submitted = exchange_idx or #parsed_chat.exchanges
     local session, reason = start_scoped_response({buf = buf, win = win, cursor = vim.api.nvim_win_get_cursor(win),
         params = vim.deepcopy(params), parsed = parsed_chat, lines = lines, file_name = file_name,
-        exchange_idx = exchange_idx, start_index = start_index, end_index = end_index,
+        exchange_idx = submitted, start_index = start_index, end_index = end_index,
         follow = override_free_cursor, callback = callback})
     -- #257: an explicit request to follow the answer keeps the cursor.
-    if session and override_free_cursor ~= true then advance_after_submit(buf, win, exchange_idx or 0) end
+    if session and override_free_cursor ~= true then advance_after_submit(buf, win, submitted, from_insert) end
     return session, reason
 end
 
