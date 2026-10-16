@@ -1,13 +1,13 @@
 ---
 id: 000346
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: 'c32ac15d8450a2a965d3befff2acbc101a55e606' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '0b7474c2be7844052e2df04d4a17cdc8f8b801e7' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T01:21:45-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "bedd66df"}
+actual_hours: 0.03
 ---
 
 # packaging_launcher_spec: await_ready can read the barrier's pid file before it is written
