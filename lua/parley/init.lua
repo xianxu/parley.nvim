@@ -104,7 +104,7 @@ M.project_root = function()
 end
 
 -- Skill registry (#128): declarative skill manifests unioned from providers
--- (plugin-disk ∪ user-disk ∪ repo/virtual seams). current() discovers the live
+-- (plugin-disk ∪ user-disk). current() discovers the live
 -- stack; the per-turn assembly + read_skill tool (M2) consume it.
 M.skills = require("parley.skill_registry")
 

@@ -150,4 +150,5 @@ Row by row (base 5abad047):
 - Close round 1 (FIX-THEN-SHIP):
   - BR-1: `atlas/skills/skill-system.md` still described the deleted virtual provider and generator seams. My atlas scan had matched module PATHS, not the concepts the deleted code carried. The re-sweep covered `atlas/` and README by concept name: virtual provider, generators, repo_discovery, TypeDescriptor, Matcher, discovery registry, cmd_prefix field, the two config keys, the shim, the alias, the tools/version helper. That page was the only remaining instance; it now states the actual stack (plugin, then user).
   - Minor: the empty "10. Discovery Registry" heading is gone from `atlas/index.md`, and Traceability is 10.
+- Close round 2 (BR-1 kept open): the concept re-sweep had covered `atlas/` and README but not `lua/` comments. Three comments still named the removed seams: `init.lua:107`, and `skill_manifest.lua:4` and `:14`. All three are fixed. The concept sweep is now run over `lua/` and `tests/` too; the other "virtual" hits are Neovim virtual lines and virtual text, which are unrelated.
 

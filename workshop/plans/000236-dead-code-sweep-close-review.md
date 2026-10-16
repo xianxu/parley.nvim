@@ -89,3 +89,81 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"8aa21b78-3040-467b-8f7e-15f5335aa305","repository":"github.com/xianxu/parley.nvim","issue_id":"000236","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/c82aa16ba0e06af0","reviewed_head":"d1daab0afe2a00a881424d67f54759925983f252","slot":"parley.nvim:4","requested_at":"2026-10-16T12:50:34.838505Z"},"phase":"finished","pid":16814,"started_at":"2026-10-16T12:50:34.993561Z","finished_at":"2026-10-16T12:53:34.233717Z","session_id":"3d6f5382-07ef-49f7-9588-abb70e9bbacd","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T05:56:06-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 236 — delete unreachable modules and dead config |
+| repo | parley.nvim |
+| issue file | workshop/issues/000236-dead-code-sweep.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 5abad04737d396828eb9614b28c20dbec43d7486..c1dbd49954e584805d1774b3a9958b030d244731 |
+| command | sdlc close --issue 236 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T05:56:06-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+Checking that the reachability spec runs, then I'll write up the verdict.
+
+Still setting up the test environment to run the three touched specs.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Round 2 fixed the atlas half of BR-1. `atlas/skills/skill-system.md` now describes the real two-provider stack (plugin, then user). BR-2 is also fixed: the empty Discovery heading is gone and Traceability is now section 10. The code half of BR-1 is still open. The finding named three Lua comments as part of its fix, and all three still describe the deleted repo/virtual seams. The Log says the re-sweep covered only "`atlas/` and README by concept name", so `lua/` was never re-checked. The Done-when clause about atlas now holds. Those three comment edits are the only thing left. I ran the three touched specs at head and all pass: reachability 2/2, review 48/48, skill_providers 7/7.
+
+### 1. Strengths
+- `tests/arch/module_reachability_spec.lua:33-50`: `unreached()` is a pure function, and its first test plants an orphan in a fake graph, so the checker's own logic is tested without reading the repo. The planted orphan also requires other modules, which catches the mistake of treating a requirer as reached. The size check (`> 100` modules) catches a scan that silently selects nothing.
+- The test states its limit in its header (lines 17-19): it finds orphaned files, not modules that are required but never used. That limit is the ARCH-PURPOSE point the Spec asked to have stated.
+- The check found a real orphan (`tools/version.lua`) and two gaps in its own entry list (`builtin.ack` and `editor_bundle`). Both are recorded in the Log.
+- `review_spec.lua` was repointed at `parley.skills.review` and runs all 48 cases, so the marker-parsing coverage survived deleting the shim.
+- `skill_registry.current()` lost its `opts` parameter cleanly, and the docstrings at `skill_registry.lua:55,72` match the new signature.
+
+### 2. Critical findings
+None.
+
+### 3. Important findings
+- **BR-1 (not addressed): the code comments still describe the deleted seams.** These are the three lines the finding named, plus nothing else found by grep over `lua/` for `repo/virtual|disk/virtual|virtual provider|repo_generators|virtual_generators|providers.virtual|repo_discovery`:
+  - `lua/parley/init.lua:107`: "(plugin-disk ∪ user-disk ∪ repo/virtual seams)". Should say "(plugin-disk ∪ user-disk)".
+  - `lua/parley/skill_manifest.lua:4`: "(disk / user / repo / virtual)". Should say "(plugin / user disk)".
+  - `lua/parley/skill_manifest.lua:14`: "unified disk/virtual". Should say "closure over the provider's source", or simply "the body".
+  - The rule for the fix: sweep each deleted concept name across `lua/` comments as well as `atlas/` and README. Round 2 ran the concept sweep only over the docs.
+
+### 4. Minor findings
+- `skill_registry.lua:66-67` adds a comment saying the seams "were removed in #236". A comment about code that no longer exists will go stale; git history already records this. Optional.
+
+### 5. Test coverage notes
+- Reachability check: red on a planted orphan (synthetic-graph test) and green on the tree. I confirmed both at head.
+- The deleted `providers.virtual` spec block went with its code. The remaining `providers.disk` cases (7) still cover the only provider.
+- The orphan-process check was skipped in this environment because `ps` is unavailable. That has no bearing on this diff.
+
+### 6. Architectural notes
+- **ARCH-DRY: pass.** The diff is almost entirely deletion. The reachability spec reuses `arch_helper.worktree_files`, and the `EDGES` patterns are shared between scanning `lua/` sources and the packaging/scripts entry points.
+- **ARCH-PURE: pass.** The graph walk (`unreached`) is pure and tested directly. File IO stays in `tree()`.
+- **ARCH-PURPOSE: pass, with the BR-1 remainder.** Every row is either deleted or kept with its reason in the Log: azure is kept because it is reachable, and the panvimdoc markers were already gone. The check enforces the "no orphans" rule rather than just documenting it. The leftover seam comments are the one part of the stale-reference cleanup still to finish.
+
+### 7. Plan revision recommendations
+None. The Core concepts rows (`current` changed, `virtual` deleted) match the code.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: not-addressed
+    note: |
+      atlas/skills/skill-system.md:40-42 and :68 are fixed, but the three code comments the finding named are unchanged: lua/parley/init.lua:107 (repo/virtual seams), lua/parley/skill_manifest.lua:4 (disk / user / repo / virtual) and :14 (unified disk/virtual). The round-2 concept sweep covered only atlas/ and README, not lua/ comments.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      atlas/index.md: the empty "10. Discovery Registry" heading is deleted and Traceability is renumbered to "## 10."
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"cb16029b-eaf4-40ec-ba3c-c563fe688100","repository":"github.com/xianxu/parley.nvim","issue_id":"000236","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/880a7638b0d9ddb5","reviewed_head":"c1dbd49954e584805d1774b3a9958b030d244731","slot":"parley.nvim:4","requested_at":"2026-10-16T12:54:45.403943Z"},"phase":"finished","pid":25919,"started_at":"2026-10-16T12:54:45.54805Z","finished_at":"2026-10-16T12:56:05.96242Z","session_id":"a091b382-760b-45d7-b95a-c80c345e8dd5","outcome":"returned"}] -->

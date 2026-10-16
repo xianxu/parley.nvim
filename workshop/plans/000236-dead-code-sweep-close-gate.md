@@ -76,6 +76,77 @@ rounds:
       recipe: small-diff-review
       isolation: checkout
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: cb16029b-eaf4-40ec-ba3c-c563fe688100
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000236"
+            recipe: small-diff-review
+            round: 2
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/880a7638b0d9ddb5
+            reviewed_head: c1dbd49954e584805d1774b3a9958b030d244731
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T12:54:45.403943Z"
+          phase: finished
+          pid: 25919
+          started_at: "2026-10-16T12:54:45.54805Z"
+          finished_at: "2026-10-16T12:56:05.96242Z"
+          session_id: a091b382-760b-45d7-b95a-c80c345e8dd5
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: c1dbd49954e584805d1774b3a9958b030d244731
+        tracker_head: 35e57438cd5b777048f002335505d380af7dd3e0
+        branch_point: 5abad04737d396828eb9614b28c20dbec43d7486
+        since: "2026-10-16T05:39:39-07:00"
+        until: "2026-10-16T05:54:19-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T05:39:39-07:00"
+              end: "2026-10-16T05:54:19-07:00"
+              began: "2026-10-16T05:39:39-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: 6c3dc1e2f2edc70127436bff1d33cf2d54b3d0b3dea0f0e15330b5266be2f315
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 9734843
+              windows:
+                - start: "2026-10-16T05:39:39-07:00"
+                  end: "2026-10-16T05:54:19-07:00"
+        cuts:
+            - dispatched: "2026-10-16T05:50:34-07:00"
+              finalized: "2026-10-16T05:53:35-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-16T05:56:07-07:00"
+      dispatched: "2026-10-16T05:54:45-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: not-addressed
+          note: 'atlas/skills/skill-system.md:40-42 and :68 are fixed, but the three code comments the finding named are unchanged: lua/parley/init.lua:107 (repo/virtual seams), lua/parley/skill_manifest.lua:4 (disk / user / repo / virtual) and :14 (unified disk/virtual). The round-2 concept sweep covered only atlas/ and README, not lua/ comments.'
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: 'atlas/index.md: the empty "10. Discovery Registry" heading is deleted and Traceability is renumbered to "## 10."'
+          round: 2
+      recipe: small-diff-review
+      isolation: checkout
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#236 (boundary-review)
@@ -92,7 +163,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-2** [Minor] `deleted-surface-stale-reference` (kind: defect) atlas/index.md keeps an empty "10. Discovery Registry" section heading
   Its only entry was removed. Delete the heading and renumber the sections after it (Traceability becomes 10).
 
+## Round 2 — 2026-10-16T05:56:07-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-1 — not-addressed — atlas/skills/skill-system.md:40-42 and :68 are fixed, but the three code comments the finding named are unchanged: lua/parley/init.lua:107 (repo/virtual seams), lua/parley/skill_manifest.lua:4 (disk / user / repo / virtual) and :14 (unified disk/virtual). The round-2 concept sweep covered only atlas/ and README, not lua/ comments.
+- BR-2 — addressed — atlas/index.md: the empty "10. Discovery Registry" heading is deleted and Traceability is renumbered to "## 10."
+
 ## Open findings
 
 - **BR-1** [Important] `deleted-surface-stale-reference` (kind: defect) atlas/skills/skill-system.md still documents the deleted virtual provider and default_stack generator seams
-- **BR-2** [Minor] `deleted-surface-stale-reference` (kind: defect) atlas/index.md keeps an empty "10. Discovery Registry" section heading

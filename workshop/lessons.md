@@ -2,7 +2,7 @@
 
 ## 2026-10-16 (#236 — dead-code sweep)
 
-- When deleting code, sweep the docs for the CONCEPTS it carried, not just its file paths. #236 grepped atlas/ for deleted module paths and missed a page describing the "virtual provider" and "generator seams" in prose (close BR-1). List each deleted entity's names and nouns, grep those, and delete or rewrite every hit.
+- When deleting code, sweep the docs for the CONCEPTS it carried, not just its file paths. #236 grepped atlas/ for deleted module paths and missed a page describing the "virtual provider" and "generator seams" in prose (close BR-1). List each deleted entity's names and nouns, grep those, and delete or rewrite every hit. Include CODE COMMENTS in that sweep: round 2 found three lua/ comments still naming the removed seams, after atlas was clean.
 
 ## 2026-10-16 (#350 — a "dead" branch that was live)
 
