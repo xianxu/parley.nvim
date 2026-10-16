@@ -52,7 +52,9 @@ Full-flow, single close boundary. Detailed design: [breadcrumb winbar plan](../p
 - [x] Record successful Alt+o destinations through the existing file history; expose snapshot/restore values and preserve native Back behavior.
 - [x] Compose a nine-cell lock state, breadcrumb and feedback in document_band; keep its restoration ownership and both file kinds identical.
 - [x] Exercise native keys, async resolution, split/window lifecycle and every lock/feedback state; update atlas/README/traceability.
-- [ ] Run the required suite, close on SHIP, stage with the hub's coordination and perform the operator's live check before landing.
+- [x] Run the required suite and retain final-head verification evidence.
+
+After code verification: close on SHIP and report green to TL. Do not stage; :0 holds a combined operator check. TL sequences the live check before any landing decision.
 
 ## Log
 
@@ -82,6 +84,8 @@ Full-flow, single close boundary. Detailed design: [breadcrumb winbar plan](../p
 
 - The one unchanged issue-backed retry passed448/448 spec files, lint749 clean, no survivors on f4239bccc3af35cd6fd0cbe65fafb1f128b45bb1; log /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/f4239bccc3af35cd6fd0cbe65fafb1f128b45bb1/suite.log, SHA256 4ed6914d565b6c50d3d49e8a592a82da850edb9d2c01071c069052a7c12ccf04. Both earlier failures remain linked to #360/#361. No waiver.
 - A focused pre-close ownership probe then reproduced a real remaining #353 bug: pending-move fallback rendered unknown/WarningMsg over an attached operator lock. Durable RED /tmp/parley353-overlay-red.log reproduces both real pending recovery and refresh-overlay ordering; /tmp/parley353-overlay-knowledge-red.log proves fallback errors were also inventing free state from severity. Fixed the full class with explicit overlay inputs, underlying state ownership, stable overlay ordering, recomposition after either owner detaches, and plain/unknown fallback knowledge. /tmp/parley353-overlay-final-green.log passes18 real window cases +6 composition cases; changed-file lint clean. The final full suite will run on the new production head.
+
+- Final production-head required suite passed448/448 spec files, lint749 clean, no surviving test processes on `bf196623e36642c1368ccdbc33be4ca135d0f166` (2m35s). Retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/bf196623e36642c1368ccdbc33be4ca135d0f166/suite.log`, SHA256 `c39a78cc28c7f39bc0c4298fde6716a4326d7b1fc5397c523d916606fcdbceb1`. Final overlay focused evidence passes18 native window/ownership/parity cases +6 pure composition cases;45 real-history and6 real/fake resolver conformance cases also pass. Prior failed attempts and issue-backed retry remain retained against #360/#361. Close review follows; no staging per TL.
 
 ## Revisions
 

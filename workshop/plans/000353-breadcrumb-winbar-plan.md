@@ -109,9 +109,10 @@ Files: lua/parley/document_band.lua, lua/parley/session_sync.lua, lua/parley/age
 Files: atlas/ui/keybindings.md, atlas/modes/session_sync.md, atlas/traceability.yaml, README.md, issue and this plan.
 
 - [x] Document root/reset/Back semantics, nine-cell precedence, width fallback and snapshot/restore contract. Update traceability for all new tests; atlas index already links both pages.
-- [ ] Push through sdlc pr, then run the declared full suite via `sdlc local-check run --name suite` on the final code head; retain exact head/log/hash and all failures.
-- [ ] Close with measured evidence via sdlc close --issue 353; mandatory fresh review is binary-owned. Fix blocking findings across the full family and reverify changed surfaces.
-- [ ] Ask the hub to coordinate :0 availability, stage with sdlc stage --build, report exact stage and live steps. Operator checks actual Alt+o/Alt+Shift+O trail, a split, narrow width and edit/submit lock cell. Land on SHIP after the required live decision. Inspect stage identity before any clear so another worker's replacement is preserved.
+- [x] Push through sdlc pr, then run the declared full suite via `sdlc local-check run --name suite` on the final code head; retain exact head/log/hash and all failures.
+After code verification, close with measured evidence via `sdlc close --issue 353`; the binary owns the mandatory fresh review. Fix blocking findings across their full family and reverify changed surfaces.
+
+After SHIP, report green to the hub and DO NOT stage: TL's latest direction reserves :0 for a combined operator check and sequences this one afterwards. Operator checks actual Alt+o/Alt+Shift+O trail, a split, narrow width and edit/submit lock cell. Landing waits for the TL's required live decision. Inspect stage identity before any later clear so another worker's replacement is preserved.
 
 ## Approval
 
@@ -157,3 +158,7 @@ The Core concepts table now names the concrete callables used by implementation.
 ### 2026-10-16 — Preserve lock truth across coordinator overlays
 
 A real pending-move recovery exposed an ownership projection gap: a warning layer could hide an attached operator cell. Coordinator notices now explicitly mark overlay inputs. document_band composes their feedback with the highest underlying state owner; normal state refresh stays below overlays, and removing either owner recomputes the surface. Without a state owner, the coordinator selects blank plain or unknown from lifecycle knowledge, never free from message severity. This completes the approved “feedback never hides the lock” rule without changing lock acquisition or the #354 API. Tests cover pending recovery, state refresh, base detach, overlay clear, user-original restoration, and known versus missing lock knowledge.
+
+### 2026-10-16 — Separate code verification from the operator hold
+
+Close-time checkboxes cover executable work and final-suite evidence. Review is the close gate itself, and staging/live acceptance remain later prose obligations. The current TL instruction explicitly forbids staging until the combined :0 check is complete; this replaces the earlier task wording that suggested staging immediately after close.
