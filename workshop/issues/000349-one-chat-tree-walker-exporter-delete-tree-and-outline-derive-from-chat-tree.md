@@ -1,13 +1,13 @@
 ---
 id: 000349
-status: working
+status: codecomplete
 deps: [parley.nvim#233]
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: '8a238ecdf49a9a6fdbbeeedb36eff261b872ea04' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '85d0b60ff9cffeeb8c749a815ed06c317e71f688' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T03:39:20-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 0.41
 ---
 
 # One chat tree walker: exporter, delete-tree and outline derive from chat_tree
