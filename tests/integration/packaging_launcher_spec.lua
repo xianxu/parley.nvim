@@ -54,10 +54,16 @@ describe('installed launcher', function()
         return { TEST_BARRIER_SCRIPT = path, TEST_READY = scratch .. '/ready', TEST_PROCEED = scratch .. '/proceed' }
     end
 
+    -- Wait on the record itself, a parseable pid: the barrier's writefile
+    -- creates the file before its bytes land, so existence alone is not it (#346).
     local function await_ready()
-        assert.is_true(vim.wait(3000, function() return vim.fn.filereadable(scratch .. '/ready') == 1 end, 10),
-            'publisher did not reach the filesystem barrier')
-        return tonumber(vim.fn.readfile(scratch .. '/ready')[1])
+        local pid
+        assert.is_true(vim.wait(3000, function()
+            local ready = scratch .. '/ready'
+            pid = vim.fn.filereadable(ready) == 1 and tonumber(vim.fn.readfile(ready)[1] or '') or nil
+            return pid ~= nil
+        end, 10), 'publisher did not reach the filesystem barrier')
+        return pid
     end
 
 
@@ -66,6 +72,15 @@ describe('installed launcher', function()
             text = true, clear_env = true, env = vim.tbl_extend('force', environment, extra or {}),
         }):wait(10000)
     end
+
+    it('waits for the barrier pid bytes, not only for the ready file', function()
+        -- writefile creates the file before its bytes land; reading in between
+        -- returned a nil pid that uv.kill then refused (#346).
+        local ready = scratch .. '/ready'
+        vim.fn.writefile({}, ready)
+        vim.defer_fn(function() vim.fn.writefile({ '4242' }, ready) end, 100)
+        assert.equals(4242, await_ready())
+    end)
 
     it('publishes the complete starter and preserves exact arguments and exit status', function()
         local result = launch({ 'notes with spaces.md', 'literal;$(nothing)' }, { TEST_EXIT = '23' })

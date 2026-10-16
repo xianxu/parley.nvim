@@ -1,11 +1,26 @@
 " Minimal Neovim init for headless test runs.
-" Usage: nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedDirectory tests/ {sequential=true}"
+" Usage: through make only (make test, make test-spec, make goldens, make perf-finder):
+" they export the isolated TEST_ENV this init requires (#342).
 " Loaded by the parent AND by every spec child (tests/helpers/spec_runner.lua).
 
 set nocompatible
 
 " Add parley.nvim root to runtimepath so require("parley") resolves
 set rtp+=.
+
+" #342: refuse to run any spec outside the harness's isolated HOME/XDG roots. A
+" direct `nvim -u tests/minimal_init.vim` with the operator's environment once
+" wrote their real cliproxy cache. This runs before plenary loads a spec and
+" before any -c command, so nothing can touch the operator's real state.
+lua << ISOLATION
+local loaded, reasons = pcall(function() return require("parley.test_isolation").check() end)
+if not loaded then reasons = { "the isolation check could not run: " .. tostring(reasons) } end
+if #reasons > 0 then
+  io.stderr:write("parley tests: environment not isolated (#342):\n  " .. table.concat(reasons, "\n  ")
+    .. "\nRun specs through the harness: make test-spec SPEC=<feature> (or make test).\n")
+  vim.cmd("cquit 3")
+end
+ISOLATION
 
 " Add plenary (installed via lazy.nvim)
 if exists('$NVIM_TEST_PLENARY') && !empty($NVIM_TEST_PLENARY)
@@ -22,13 +37,10 @@ runtime plugin/plenary.vim
 " root, which Makefile.parley places outside $(CURDIR).
 set noswapfile
 execute 'set directory=' . fnameescape(empty($TMPDIR) ? '/tmp' : $TMPDIR) . '//'
-let g:parley_test_mode = v:true
-" Since #261 M5 every spec child loads this init (tests/helpers/spec_runner.lua
-" passes it to plenary), so what is set here — `g:` included — reaches specs.
-" Before that, children started without it and only the environment carried over;
-" code that must know it is under the harness still reads $PARLEY_TEST_MODE
-" (#227), which works either way. A spec that needs a different value for
-" `g:parley_test_mode` sets it itself (file_tracker_spec, sidecars.lua).
+" The harness signal (#235): one variable, one reader —
+" require('parley.test_isolation').active(). It is an environment variable so
+" every spec child inherits it however it is started (#227). A spec that needs
+" the real behavior clears it for its case (file_tracker_spec, sidecars.lua).
 let $PARLEY_TEST_MODE = '1'
 " #307: this checkout carries a `.parley` marker and specs run from it. Setup
 " detects repo mode from cwd even with an explicit chat_dir, so without this a

@@ -46,15 +46,16 @@ the spec, and the harness-only guards it installs (a per-process
 `$PARLEY_QUERY_DIR`, the watch for a refusal with no words) cover the whole
 suite rather than the specs that remember to ask (#261 M5). Before that, children
 started with no `-u` at all and only the environment carried over, which is why
-the init also exports `$PARLEY_TEST_MODE=1`; production code that must know it is
-under the harness reads that, and works either way. A spec that needs
-`g:parley_test_mode` to differ sets it itself: `file_tracker_spec` clears it to
-exercise real persistence, `tests/helpers/sidecars.lua` clears it for one tracked
-open, and `chat_move_spec` sets it. The highlight
-structure's scheduled repair (#227) keys on it: under the harness no repair
-timer fires on its own, and a spec opts into the real clock with
-`highlighter._set_repair_deferral(nil, ms)` or fires one by hand
-(`tests/helpers/decoration.lua`).
+the harness signal is an environment variable, `$PARLEY_TEST_MODE=1`, which every
+child inherits however it starts. It has ONE reader, `test_isolation.active()`
+(#235). `file_tracker` asks it, so the suite never writes the shared
+`file_access.json`; so do `cliproxy`, which refuses data roots outside the
+isolated env and honors a releases-URL override only in tests, and
+`issue_tracker`, which never fetches a remote. `single_source_sweeps_spec`
+refuses any other `lua/` reader, including the retired `g:parley_test_mode`. A
+spec that needs the real behavior clears the variable for its case:
+`file_tracker_spec` exercises real persistence, and `tests/helpers/sidecars.lua`
+does one tracked open.
 
 `tests/arch/scratch_placement_spec.lua` is the guard: it asserts
 `vim.fn.tempname()`, `'directory'`, `$HOME`, and the `$XDG_*` dirs all resolve
@@ -64,6 +65,19 @@ rather than the env vars on purpose: nvim's tempdir fallback chain ends at the
 cwd, so an unwritable `$TMPDIR` would silently put scratch back in-tree.
 (`PREP_TEST_ENV`'s `mkdir -p` aborts a `make` run before that, but the guard
 does not depend on that failure being loud.)
+
+**Specs never run against the operator's real state (#342).** `TEST_ENV`
+exports `PARLEY_TEST_ENV_ROOT`, and `tests/minimal_init.vim` (loaded by the
+parent and every spec child) first runs `parley.test_isolation.check()`. When
+the marker is missing, or HOME or an XDG root resolves outside it, the init quits
+with the reasons and the `make test-spec` to use, before plenary loads a spec or
+any `-c` command runs. A direct `nvim -u tests/minimal_init.vim` with the real
+environment once rewrote the operator's cliproxy catalog. Behind it, in test mode
+(`PARLEY_TEST_MODE=1`), cliproxy's `data_root()` refuses a root outside the marked
+one, so a spec that forgets `_set_data_dir` fails instead of writing elsewhere.
+Scripts that run in test mode with their own roots declare them the same way
+(`check-spell-compatibility.sh`). `make goldens` replaces the direct golden
+refresh. Pinned by `test_isolation_spec` (unit and integration).
 
 Corollary worth keeping: a full `make test` mutates nothing inside the repo
 working tree. That is checkable — snapshot `find . -path ./.git -prune -o -print`
@@ -211,7 +225,7 @@ remains independent of those maintainer tools.
 
 ### Concurrent directory creation
 
-`tests/unit/prepare_dir_spec.lua` reproduces a competing directory creator at the mkdir boundary using real temporary directories. `lua/parley/fs.lua` owns the literal-path directory postcondition; helper path expansion remains in `helper.prepare_dir`. A source guard keeps all production directory creators on that seam.
+`tests/unit/prepare_dir_spec.lua` reproduces a competing directory creator at the mkdir boundary using real temporary directories. `lua/parley/fs.lua` owns the literal-path directory postcondition; helper path expansion remains in `helper.prepare_dir`. A source guard keeps all production directory creators on that seam. `fs.ensure_dir` creates one level at a time and accepts any level a competitor created first. `mkdir -p` raised E739 on a concurrently created intermediate (#347). `tests/integration/ensure_dir_race_spec.lua` races real nvim processes on shared intermediates.
 
 ### Large native fold conformance
 

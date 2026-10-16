@@ -7,8 +7,10 @@
 
 local M = {}
 
+-- The harness signal has one reader (#235); this used to read a g: flag that
+-- only some specs set, so others leaked into the shared file_access.json.
 local function is_test_mode()
-    return vim.g and vim.g.parley_test_mode == true
+    return require("parley.test_isolation").active()
 end
 
 -- Structure to store file access information

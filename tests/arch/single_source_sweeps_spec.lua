@@ -94,6 +94,16 @@ local function current_issue_docs()
     return id, docs
 end
 
+-- Where this branch left main. origin/main first: in a slot layout the local
+-- `main` is another checkout's branch and can lag far behind, which charges
+-- every issue landed since to this branch (#342). Plain `main` is the fallback.
+local function branch_point()
+    for _, ref in ipairs({ "origin/main", "main" }) do
+        local found = vim.fn.systemlist({ "git", "merge-base", "HEAD", ref })[1]
+        if vim.v.shell_error == 0 and found and found:match("^%x+$") then return found end
+    end
+end
+
 describe("arch: single-source sweeps stay swept", function()
     it("the plan's Core-concepts tables name every entity THIS issue added", function()
         -- The other direction of the referent sweep, and scoped to the issue's
@@ -114,7 +124,7 @@ describe("arch: single-source sweeps stay swept", function()
         -- #205, so the original worked; on a branch cut from a main that has
         -- moved on, diffing from the issue commit attributes every unrelated
         -- merge to this issue and demands table rows for other issues' work.
-        local base = vim.fn.systemlist("git merge-base HEAD main")[1]
+        local base = branch_point()
         if not base or base == "" then
             pending("branch point not found")
             return
@@ -818,7 +828,7 @@ describe("arch: traceability.yaml lists every file it claims to map (#214)", fun
             pending("not on an issue branch — this guard is scoped to a branch's own diff")
             return
         end
-        local base = vim.fn.systemlist("git merge-base HEAD main")[1]
+        local base = branch_point()
         if not base or base == "" then
             pending("branch point not found")
             return
@@ -877,5 +887,66 @@ describe("arch: composed writefile lines are flattened (#214 M3)", function()
 
     it("flatten_lines exists and is exported", function()
         assert.is_function(require("parley.helper").flatten_lines)
+    end)
+end)
+
+-- #235: the test-harness signal has ONE reader, parley.test_isolation.active().
+-- A g: flag that only some specs set used to be the second, so the rest wrote
+-- the shared file_access.json; a new reader of either spelling is a finding.
+describe("arch: one reader for the test-harness signal (#235)", function()
+    local HOME = "lua/parley/test_isolation.lua"
+    local function readers(files)
+        local found = {}
+        for _, file in ipairs(files) do
+            if file ~= HOME then
+                for n, line in ipairs(vim.fn.readfile(file)) do
+                    if not line:match("^%s*%-%-") and (line:find("parley_test_mode", 1, true)
+                        or line:find("PARLEY_TEST_MODE", 1, true)) then
+                        found[#found + 1] = file .. ":" .. n .. ": " .. vim.trim(line)
+                    end
+                end
+            end
+        end
+        return found
+    end
+    it("no lua/ module reads the signal except test_isolation.active()", function()
+        local files = repo_files("git ls-files --cached --others --exclude-standard -- 'lua/*.lua'")
+        assert.same({}, readers(files), "ask require('parley.test_isolation').active()")
+        local home = table.concat(vim.fn.readfile(HOME), "\n")
+        assert.is_truthy(home:find('PARLEY_TEST_MODE == "1"', 1, true), "the one reader moved: update this guard")
+    end)
+end)
+
+
+-- #349: one walker for the chat tree. Five copies of the root-finder and the
+-- downward walk had grown in init, exporter and outline; the old root-finders
+-- followed a parent that no longer listed the child, so delete-tree removed a
+-- tree the operator was not in. A module that resolves a parent link or a
+-- branch path itself is walking the tree, and is a finding.
+describe("arch: one chat tree walker (#349)", function()
+    local HOME = "lua/parley/chat_tree.lua"
+    -- The outline resolves each branch row's child for display (its topic and
+    -- the expand target); it walks rendered rows, not files.
+    local BRANCH_ROWS = "lua/parley/outline.lua"
+    local function follows(line, file)
+        if line:match("^%s*%-%-") then return false end
+        if line:find("resolve[%w_]*%(%s*[%w_.]*parent_link%.path") then return true end
+        return file ~= BRANCH_ROWS and line:find("resolve[%w_]*%(%s*[%w_.]*branch%.path") ~= nil
+    end
+    it("no lua/ module follows parent links or branch paths except chat_tree", function()
+        local found = {}
+        for _, file in ipairs(repo_files("git ls-files --cached --others --exclude-standard -- 'lua/*.lua'")) do
+            if file ~= HOME then
+                for n, line in ipairs(vim.fn.readfile(file)) do
+                    if follows(line, file) then found[#found + 1] = file .. ":" .. n .. ": " .. vim.trim(line) end
+                end
+            end
+        end
+        assert.same({}, found, "derive from require('parley.chat_tree').root/files")
+        local hits = 0
+        for _, line in ipairs(vim.fn.readfile(HOME)) do
+            if follows(line, HOME) then hits = hits + 1 end
+        end
+        assert.is_true(hits >= 3, "the patterns no longer match the walker itself: update this guard")
     end)
 end)

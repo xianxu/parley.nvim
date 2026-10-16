@@ -93,6 +93,10 @@ function M.new(opts)
             if not alive(r)then return false end
             local ok,accepted=safe(r.cb.output,bytes)
             if not ok or accepted~=true then
+                -- Refusing output ends this request: say so before stopping the
+                -- transport. Going inactive makes the exit report nothing, and a
+                -- request that only resolves leaves the host waiting (#341).
+                failed(r,'provider request failed: output refused')
                 r.active=false;tasker.stop_owner(r.owner);return false
             end
             return true

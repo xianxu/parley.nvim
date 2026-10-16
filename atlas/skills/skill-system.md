@@ -37,9 +37,9 @@ injects `ctx.skill_dir` and, when present, `ctx.skill_md`, so dynamic prompts ca
 compose local resources. Manifest validation drops invalid entries; discovery
 deduplicates by name with the last provider winning.
 
-`skill_registry.default_stack` also accepts explicit repo/virtual generator
-providers. These are extension seams, not automatic discovery of every repo's
-agent skills. `config.skills` currently supplies per-skill agent overrides; the
+`skill_registry.default_stack` is the plugin skills root, then the user's
+`~/.config/parley/skills`. There are no repo or generated skill providers: their
+always-empty seams and the virtual provider were removed in #236. `config.skills` currently supplies per-skill agent overrides; the
 picker does not implement a `disable` filter there.
 
 ## Agent selection
@@ -65,7 +65,7 @@ fallback-to-selection behavior.
 | Module | Responsibility |
 |---|---|
 | `skill_manifest.lua` | Validate the declarative manifest |
-| `skill_providers.lua`, `skill_registry.lua` | Load disk/virtual providers and resolve overrides |
+| `skill_providers.lua`, `skill_registry.lua` | Load disk providers (plugin, then user) and resolve overrides |
 | `skill_picker.lua` | Select skill/arguments and dispatch review or generic invocation |
 | `skill_assembly.lua` | Build invocation context and resolve the agent |
 | `skill_invoke.lua` | Run one exchange, execute tools, refresh the captured source and call completion hooks |

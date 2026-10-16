@@ -1,7 +1,7 @@
 -- Regenerate tests/fixtures/golden_payloads/*.json by running the
--- harness against each transcript fixture. Run via:
---   nvim --headless --noplugin -u tests/minimal_init.vim \
---     -c 'luafile scripts/refresh_goldens.lua' -c 'qa!'
+-- harness against each transcript fixture. Run via `make goldens`, which gives
+-- it the harness's isolated HOME/XDG: tests/minimal_init.vim refuses a direct run
+-- with the operator's environment (#342).
 --
 -- Writes the NORMALIZED payload, not the raw one. Tool descriptions embed host
 -- probe results -- "BSD ls (macOS)", "ripgrep 15.1.0" -- so a raw fixture

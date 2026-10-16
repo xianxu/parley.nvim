@@ -1,0 +1,89 @@
+---
+id: 000349
+status: done
+deps: [parley.nvim#233]
+github_issue:
+created: 2026-10-16
+updated: 2026-10-16
+estimate_hours:
+severity: low
+card_mirror: 'c95b2a83d307a1a38c56506ecc0b33f60bff657c' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T03:39:20-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: inferred}
+actual_hours: 0.41
+---
+
+# One chat tree walker: exporter, delete-tree and outline derive from chat_tree
+
+## Problem
+
+The chat tree is walked by five copies of the same logic. There are three root-finders that follow `parent_link` upward: `exporter.find_tree_root`, `init.find_tree_root_file` and outline's copy. There are two downward walkers: `exporter.collect_tree` and `init.collect_tree_files`. #233 adds `lua/parley/chat_tree.lua` as the walker for request context; split out of #233 (M2) per the TL.
+
+## Spec
+
+### Core concepts
+
+| Concept | Status | Meaning |
+|---|---|---|
+| `root` | new | `chat_tree.root(file, deps)`: the first file of `path_up`; an unloadable or orphaned file is its own root |
+| `files` | new | `chat_tree.files(root, deps)`: the tree's files in depth-first pre-order, each once, with no depth cap (see Revisions) |
+| `resolve` | new | `chat_tree.resolve(ref, dir)`: the one resolver the walker's IOs and the exporter's loader use |
+| `disk_deps` | new | `chat_tree.disk_deps()`: the walker's IO over saved files, for commands that act on files |
+| `chat_tree_files` | new | init's one call into `root` and `files` for delete-tree, move and `get_chat_tree_files` |
+| `find_tree_root` | modified | exporter and outline: thin wrappers over `chat_tree.root` |
+| `collect_tree` | modified | exporter: the info objects for `chat_tree.files`, each file read once |
+| find_tree_root_file, collect_tree_files | deleted | init's copies of the root-finder and the downward walk |
+
+## Done when
+
+- The root-finders and downward walkers derive from `chat_tree`: a `root(abs)` built from its link-following, and `files(root)` (its DFS file order).
+- Export, delete-tree and the outline keep their tests green.
+- A single-source sweep fails when any other module follows `parent_link` or walks `branches` itself.
+
+## Plan
+
+Design (quick flow: about 30 code lines added, about 90 removed):
+
+- **`chat_tree.root(file, deps)`:** the first file of `path_up`. Load the file, walk `path_up` and return `path[1].file`. A file that cannot be loaded is its own root. One link-following rule (ARCH-DRY).
+- **`chat_tree.files(root, deps)`:** the tree's files in DFS pre-order (root, then each branch in order, recursively). Each visited file is visited once, under the same depth cap as `linearize` (removed in close round 1; see Revisions). Returns `{ file, parsed }[]`; an unloadable file is skipped. Pure over `deps`, like `path_up` (ARCH-PURE): unit-tested with hand-built parses.
+- **Consumers derive:**
+  - **init** (delete-tree, chat move, `get_chat_tree_files`): `find_tree_root_file` and `collect_tree_files` are deleted; they call `root` and `files` with `io_deps()`.
+  - **exporter:** `find_tree_root` and `collect_tree` are deleted. Its `deps.load` is `read_chat_file`, keeping the info object per file, so each file is still read once (the comment at the call site). Its test seams `_find_tree_root` and `_collect_tree` become thin wrappers, or `exporter_tree_spec` moves to the new seams.
+  - **outline:** `find_tree_root` is deleted; `<M-t>` calls `root` with `io_deps()`. The outline's downward render walk (`_build_tree_outline_items`) stays: it recurses through rendered branch rows under the expand/collapse state, so it is not a file walk. It takes its root from `chat_tree`.
+- **Behaviour change (one, deliberate):** the three old root-finders followed `parent_link` as long as the parent was readable, even when the parent no longer listed the child. Starting from such an orphaned child, delete-tree, export, move and `<M-t>` then acted on the parent's tree, which does not contain the current file. Delete removed a tree the operator wasn't in and left their file. `path_up` stops at a parent that doesn't link back, so these now act on the child's own subtree, the same as the request context. A test pins this for delete-tree's file list.
+- **Loading:** `io_deps` reads a loaded buffer ahead of the disk. Root and files only read `parent_link` and `branches`, so an unsaved edit to either is now honoured.
+- **Sweep (tests/arch/single_source_sweeps_spec.lua):**
+  - `parent_link.path` is followed only in `chat_tree.lua`.
+  - `resolve_chat_path(branch.path` appears only in `chat_tree.lua` and `outline.lua`. The outline's branch rows resolve their own child path for display; the sweep names this reason.
+  - Each pattern must select a non-empty corpus.
+- ARCH-CONSTRAINTS: interactive commands over a tree of a few files; the same reads as before. ARCH-MOCK, SECURE, ORDER, FUNERAL: N/A. There is no external IO beyond the chat files already read, no new input boundary, no state held between events (each command walks afresh), and nothing durable is created.
+
+Steps:
+
+- [x] `chat_tree.root` and `chat_tree.files`, with unit cases (order, a cycle, the depth cap, an unloadable file, an orphaned child as its own root)
+- [x] init: delete-tree, move and `get_chat_tree_files` on chat_tree; delete the old walkers
+- [x] exporter on chat_tree with its own loader; update the seams or the spec
+- [x] outline `<M-t>` root from chat_tree; delete `find_tree_root`; port `outline._find_tree_root`'s test seam
+- [x] sweep guard, with the outline exception explained
+- [x] atlas (chat/lifecycle, export, outline) and traceability
+
+## Revisions
+
+- 2026-10-16, TL: keep the new root rule. The old rule was a bug, and one walker means one notion of the tree; note the change in the close and the atlas.
+- 2026-10-16, build: delete-tree, move, export and the outline load through `chat_tree.disk_deps()`, not `io_deps()`. They act on the saved files, and the outline renders from disk. Two chat_move cases found this: they append the 🌿 line on disk while the root's buffer is loaded. The request context keeps `io_deps` (buffer first). A readable file without a header (a legacy `# topic:` chat) loads as a leaf with no links, as the old init walker listed it. chat_finder_logic_spec's move cases found this.
+
+- 2026-10-16, close review round 1 (BR-1, Important): `files` capped the downward walk at 20 levels, where the old walkers had none, so delete-tree, move and export could silently act on part of a deep tree. The same is true of the upward walk: `path_up` kept the old root-finders' cap of 20, so from the deepest file of a 23-file chain the root came out two files down. Every cap in the walker belongs to this class, so all three go: `path_up`, `linearize` and `files`. The `seen` sets already end every cycle. `files` walks with an explicit stack. This is the second behaviour change: a tree deeper than 20 is now seen whole, by the request context too. Tests: a 31-file chain up (`path_up`) and down with a cycle back to the top (`files`), and `get_chat_tree_files` from the deepest file of a 23-file chain on disk.
+- Same round, minors: the resolver is `chat_tree.resolve`, shared by `io_deps`, `disk_deps` and the exporter's loader, and the header parse is one local. The `chat_tree.lua` header and the `chat_tree_files` comment now say who uses what. A unit case shows an unloadable file's subtree is skipped. Accepted as is: the sweep matches a parent link or branch path resolved in one expression. Pulling the field into a local first gets past it. The exporter reads `parent_link` for a link label, and a per-line allow list would be more fragile than the pattern.
+
+## Log
+
+### 2026-10-16
+- 2026-10-16: closed — Round 1 BR-1: no depth cap in path_up, linearize or files (seen sets end cycles); 31-file chain up and down with a cycle (unit), get_chat_tree_files from the deepest of a 23-file chain on disk (integration); one shared resolver; comments; unloadable-subtree case. Full suite green on 5f72682d (sdlc-local/suite). (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 125 added lines in code files (limit 100)

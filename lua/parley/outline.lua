@@ -300,33 +300,11 @@ M._load_live_items=load_live_items
 -- Tree-aware outline: recursively build outline items across 🌿: linked files
 --------------------------------------------------------------------------------
 
--- Walk parent_link chain to find the tree root file path.
--- Returns absolute path of root.
-local function find_tree_root(file_path, config, depth)
-  depth = depth or 0
-  if depth > 20 then return file_path end
-
-  local abs_path = require("parley.helper").abs_path(file_path)
-  if vim.fn.filereadable(abs_path) == 0 then return abs_path end
-
-  local lines = vim.fn.readfile(abs_path)
-  local chat_parser = require("parley.chat_parser")
-  local header_end = chat_parser.find_header_end(lines)
-  if not header_end then return abs_path end
-
-  local parsed = chat_parser.parse_chat(lines, header_end, config)
-  if not parsed.parent_link then return abs_path end
-
-  local parent_dir = vim.fn.fnamemodify(abs_path, ":h")
-  -- THE resolver (#224). #225 C3 merged this module's private resolver with
-  -- chat_respond's byte-identical copy — correctly by ARCH-DRY, and onto the
-  -- NAIVE one. A renamed parent then made find_tree_root return the CHILD as
-  -- tree root, so <M-t> never reached the parent. A DRY consolidation has to
-  -- pick the more-correct implementation as the survivor.
-  local parent_abs = require("parley").resolve_chat_path(parsed.parent_link.path, parent_dir)
-  if vim.fn.filereadable(parent_abs) == 0 then return abs_path end
-
-  return find_tree_root(parent_abs, config, depth + 1)
+-- The tree root, as chat_tree defines it (#349): the same tree the request
+-- context, delete-tree and export see. Returns the root's absolute path.
+local function find_tree_root(file_path)
+  local Tree = require("parley.chat_tree")
+  return Tree.root(require("parley.helper").abs_path(file_path), Tree.disk_deps())
 end
 
 -- Build outline items for a single file at a given depth.
@@ -536,7 +514,7 @@ function M.question_picker(config)
   end
 
   -- Chat file: build tree outline with expand/collapse
-  local root = find_tree_root(buf_name, config)
+  local root = find_tree_root(buf_name)
   -- Start fully expanded (nil = expand all); toggling a branch sets it to a table
   local expanded_set = nil
 

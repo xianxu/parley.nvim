@@ -21,7 +21,7 @@ local M = {}
 M.MARKER = "workshop/issue-tracker.json"
 M.fetch_interval_s = 60
 -- Specs never reach a real remote unless they opt in (their fixtures are local).
-M.fetch_enabled = vim.env.PARLEY_TEST_MODE ~= "1"
+M.fetch_enabled = not require("parley.test_isolation").active()
 M.fetch_timeout_ms = 15000
 M.read_timeout_ms = 10000
 M._on_git = nil -- test hook: observes each git argv before it runs

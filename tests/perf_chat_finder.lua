@@ -1,7 +1,7 @@
 -- Performance benchmark for ChatFinder's pure record materializer.
 --
 -- Usage:
---   nvim --headless -u tests/minimal_init.vim -l tests/perf_chat_finder.lua
+--   make perf-finder   (tests/minimal_init.vim refuses a run outside the make harness, #342)
 --
 -- Discovery, stat, and header IO are intentionally excluded. The benchmark
 -- receives the same prebuilt raw records a settled FinderLoadSession delivers,

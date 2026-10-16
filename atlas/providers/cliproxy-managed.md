@@ -57,7 +57,10 @@ accounts. The command surface is defined by `SUBS_HELP` in `lua/parley/init.lua`
   (`parse_version`/`compare_versions`), the parsers for GitHub's
   `releases/latest` redirect and the proxy's `X-Cpa-Version` header,
   `running_identity` (who holds the managed port), the update decision table
-  (`update_refusal`, `plan_update`), and the status text (`version_summary`).
+  (`update_refusal`, `plan_update`), the status text (`version_summary`), and
+  `mismatch_message` (#204: a 401 from parley's own proxy means a stale
+  proxy and calls for a restart; from anyone else's proxy it means that proxy's
+  api-keys, so the config has to change).
   Unit-tested, no mocks.
 - **`cliproxy.lua`** (IO): `discover_binary` (`cliproxy.binary_path` → parley's
   managed download → `cliproxyapi`/`cli-proxy-api` on PATH), `health_probe`
@@ -106,7 +109,19 @@ a process that actually answers as cliproxy. `:ParleyProxy restart` is
 `restart_managed`: `stop`, wait (≤2 s) for the old proxy to release the port,
 then ensure — without the wait a proxy still shutting down could be reused
 (#237). A cliproxyapi still answering when the wait ends is reported as an
-error, never taken for the replacement.
+error, never taken for the replacement. The wait watches the processes `stop`
+signalled (`kill(pid, 0)`), not the port (#340). Under the parallel suite, a
+probe of a just-closed port went unanswered until curl's `--max-time`. Once they
+have exited and `lsof` finds no listener left, the replacement spawns without a
+reuse probe. A port probe decides instead when no process was identified, a
+listener remains or cannot be read, or a process outlives the wait.
+`:ParleyProxy restart` (`restart_managed(…, { interactive = true })`) and
+`:ParleyProxy stop` (`stop_async`) read the process table async, so the editor
+never blocks on `lsof` (#345). They take a 10 s hang guard, because those
+commands have no backstop, and a timeout counts as unread. The budgeted paths
+(the in-dispatch repair, the recovery rung, `:ParleyProxy update`) keep the sync
+reads: `lsof` measured over 2 s under load, and a cap would push them onto the
+stalling probe. A cliproxy that could not be listed is reported as not stopped.
 
 ## Model catalog
 
@@ -155,14 +170,24 @@ reads that catalog instead of carrying model names in Lua.
   connection-refused is a no-op that leaves the cache in place. Opening a picker
   must not start a daemon — that is the dormancy contract from #131, pinned by a
   test that points at a free port and asserts it stays free.
-- **`cliproxy.live_models`** — `{ providers = { "claude:opus,sonnet,fable", … },
-  per_provider = 3 }`. An entry is `"<provider>[:<term>,…]"`; terms are
-  case-insensitive substrings matched against the id **and** the display name
-  (required, not cosmetic: antigravity's ids are unfilterable otherwise). Terms
-  narrow, then the newest of each model line is kept, with up to `per_provider`
-  results per search term (the option retains its legacy name). Term order is
-  display order; overlapping searches do not repeat a model line. Equal-date GPT
-  rows prefer newer numeric generations/versions before alphabetical variants.
+- **`cliproxy.live_models`** — `{ providers = { "claude:opus,sonnet,fable",
+  "codex:gpt-6,gpt-5!3", "gemini!3" } }`. An entry is `"<provider>[!N]"` or
+  `"<provider>:<term>[!N],…"`; terms are case-insensitive substrings matched
+  against the id **and** the display name (required, not cosmetic: antigravity's
+  ids are unfilterable otherwise). Terms narrow, then the newest of each model
+  line is kept. **There is no hidden limit (#230):** a search shows every
+  matching line unless it carries `!N`, which caps that term, or a bare
+  provider, which is the search with the empty term. A malformed count
+  (`gpt-5!`, `!x`, `!0`) and a provider cap beside terms (`codex!2:gpt-5`) make
+  their spec contribute nothing, never "no limit".
+  Term order is display order; a model line matched by two searches renders
+  once, under the first. Equal-date GPT rows prefer newer numeric
+  generations/versions before alphabetical variants. When a catalog fetch
+  resolves, the picker logs `cliproxy_catalog.diagnose`: malformed specs, and
+  terms that match none of a provider's models, for the specs the operator
+  wrote. Verbatim shipped defaults are left out: they name lines a given account
+  may lack. It logs once per refresh, and `curate` stays pure. The removed `per_provider` option draws one setup notice
+  if a config still sets it.
 - **No `oauth-model-alias` is required.** cliproxyapi exposes an OAuth
   channel's models automatically once that channel has a credential — verified
   against a live proxy: models absent from any alias block answer normally, and a
@@ -385,7 +410,11 @@ notice rather than hand-building failure tables.
 `classify_auth_files` reads still exist — including the 404-without-key
 behavior the entire repair branches on. Never point that at the real auth-dir:
 cliproxy refreshes at startup and every 15m, and Claude's refresh tokens rotate
-on use — the race that caused this issue.
+on use — the race that caused this issue. The expired OAuth credential registers no
+models, so the catalog cases (#238) add a fabricated `claude-api-key` entry. The
+proxy serves its built-in Claude catalog for an API key, offline included, and
+never refreshes it: the proxy writes nothing to the throwaway auth-dir, nothing
+real is ever in it, and nothing can rotate.
 
 ## Models & providers
 
@@ -471,8 +500,9 @@ release is running" is observable end to end. Specs point lookups at the fake
 with `_set_releases_url`; `tests/minimal_init.vim` points them at a dead local
 port (`$PARLEY_CLIPROXY_RELEASES_URL`) so no spec reaches GitHub by accident;
 parley reads that variable only under `$PARLEY_TEST_MODE`, which the harness
-also exports. `PARLEY_FAKE_EXIT_DELAY_MS` keeps `fake_cliproxy` serving after
-SIGTERM, as the real binary's graceful shutdown does, and `_set_process_tools`
+also exports. `PARLEY_FAKE_IGNORE_SIGTERM` keeps `fake_cliproxy` serving through
+SIGTERM until the spec that set it SIGKILLs it, standing in for the real binary's graceful
+shutdown as a state rather than a timed window (#343), and `_set_process_tools`
 names a missing `ps` or `lsof` to reproduce a machine without one.
 `tests/fixtures/fixture_watchdog.py` makes a fixture exit when the nvim that
 started it dies. Since #220 that is unconditional and comes from

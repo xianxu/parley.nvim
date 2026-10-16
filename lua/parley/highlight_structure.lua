@@ -67,36 +67,19 @@ local function finish_markers(markers, row_count)
     return markers.footer_start0, markers.draft_ranges
 end
 
---- PRE-snapshot half of a row's forward step: what the row resets on entry.
---- The footer ends exchange colouring; a partition clears code state (#218),
---- and must land before the row is recorded — a partition line is not itself
---- inside a code block.
+--- The row step lives in parley.document.lexical, shared with the document
+--- grammar (#234). `enter_row` here only adapts a row index and the footer's
+--- start row to the footer boolean the lexical step takes.
 local function enter_row(state, row0, token, footer_start0)
-    if footer_start0 and row0 >= footer_start0 then
-        state.in_question = false
-        state.in_reasoning = false
-    end
-    M.reset_partition(state, token)
+    lexical.enter_row(state, token, footer_start0 ~= nil and row0 >= footer_start0)
 end
+local leave_row = lexical.leave_row
 
---- POST-snapshot half: the row's own transition. `explicit` is the lookahead
---- verdict for a 🧠: row — does its 🧠:[END] arrive before the next marker.
---- Blank rows are the `_` token: `classify` gives it to exactly the lines the
---- old `^%s*$` test matched, so the walk needs no line text.
-local function leave_row(state, token, explicit)
-    M.advance(state, token)
-    -- Reasoning's blank-line terminator is lookahead-dependent, so it stays
-    -- here rather than in the shared transition.
-    if token == TOKENS.reasoning_end then
-        state.in_reasoning = false
-        state.reasoning_explicit_end = false
-    elseif token == TOKENS.reasoning then
-        state.in_reasoning = true
-        state.reasoning_explicit_end = explicit or false
-    elseif state.in_reasoning and token == TOKENS.blank and not state.reasoning_explicit_end then
-        state.in_reasoning = false
-    end
-end
+-- Exported (#234): the redraw walk in highlighter.lua steps rows through the
+-- same two halves, so the render and the structure share one definition of
+-- how a row changes question, code, reasoning and tool state.
+M.enter_row = enter_row
+M.leave_row = leave_row
 
 --- Backward 🧠: lookahead. The markers that end it are STRUCTURAL_TOKENS —
 --- the same set chat_parser terminates reasoning on — not a second list.

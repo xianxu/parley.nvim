@@ -11,6 +11,42 @@
 - An unresolved read-only membership probe is not proof that a document is plain. Before migration, confirm OLD with a fresh bounded lookup; pending registration and owner resolution must block migration before filesystem effects.
 - BufUnload includes both true buffer retirement and synchronous native rereads. Retire async operations and execution leases on true unload; explicitly mark managed reads, defer their raw completions until loaded, and preserve the attached identity and receipt. Exercise callbacks inside the native unload event, not only after reopening.
 - Classify configured-root/live-buffer wrappers as INTEGRATION even when one branch takes supplied values. Keep the pure filename classifier separate rather than mislabeling the wrapper.
+## 2026-10-16 (#234 — render walk on the shared row step)
+
+- A parity property test earns its keep on the first run: #234's found a footer `🧠:` row whose lookahead verdict the render walk only computed inside a paint branch. When moving transitions onto a shared step, compute every transition INPUT before (and outside) the painting branches.
+- "Sweep for other copies" means grep the RULE, not check the copy the issue names. #234 checked chat_parser and missed `document/grammar.lua`'s render_before copy, which is the production path (close BR-1). Grep every writer of the state the rule changes (`in_reasoning =`), and justify each survivor.
+- Paste commit hashes from the `git rev-parse` output; never retype one. #234's plan message to the hub carried a typed, wrong hash, and needed a correction.
+
+## 2026-10-16 (#236 — dead-code sweep)
+
+- When deleting code, sweep the docs for the CONCEPTS it carried, not just its file paths. #236 grepped atlas/ for deleted module paths and missed a page describing the "virtual provider" and "generator seams" in prose (close BR-1). List each deleted entity's names and nouns, grep those, and delete or rewrite every hit. Include CODE COMMENTS in that sweep: round 2 found three lua/ comments still naming the removed seams, after atlas was clean.
+
+## 2026-10-16 (#350 — a "dead" branch that was live)
+
+- One trace never proves a branch unreachable. In #265 I traced a single move with a TIMESTAMPED child, saw the rewrite skipped, and filed it dead; it fires for non-timestamp children behind an explicit or sub/ path. To call code dead, enumerate what its condition depends on (here, resolve_chat_path's three return cases) and show each one fails, or write the reaching test.
+
+## 2026-10-16 (#265 — one user-edit refusal policy)
+
+- A fake must fail the way the real dependency fails. #265's ChatPrune test faked `writefile` returning -1, but the real one RAISES (E482), so the test passed while the production rollback never ran (close BR-5). Probe the real failure first, and treat a raise and an error return from fallible IO as one failure.
+- Pin a passthrough with a real oracle, not a stub at the seam you are testing. A stubbed `_replace_user_lines` let the error-detail passthrough be deleted with every spec green (close BR-1); a non-modifiable buffer produces the real `error` status.
+- An enforcement spec named after one function enforces only that function. The refusal policy banned the raw replace, but hand-capturing commands kept their own wording (close BR-2). Name the class (every direct caller, with reasons), not the one symbol.
+
+## 2026-10-16 (#345 — async stop on the restart path)
+
+- A new helper or forward declaration goes ABOVE an existing doc block, never between the block and its definition. #204 and #340/#345 hit this four times (ensure_running, restart_managed, M.stop, pids_on_port). After inserting near a `---` block, read the three lines above the definition you meant to document.
+- When a design is revised mid-issue, sweep the issue's Plan, tables and Log for claims about the replaced mechanism in the same commit (a dated "superseded" note, not an overwrite). #345's option-B revision left four stale claims, which cost a close round (BR-6).
+
+- Moving a caller to a new function silently disarms every spec that observes the OLD one by wrapping it. #345 moved restarts from `stop` to `stop_async`. One "stops == 1" spec failed, but a "stops == 0" spec and #340's stall window kept passing, both now checking nothing. Before switching a caller, grep `tests/` for `<module>.<old> =` wrappers and move them with it. Then rerun the mutation that each one guards.
+
+## 2026-10-16 (#340 — credential_health restart timing)
+
+- Measure under the load that fails, not a proxy for it. CPU burners never reproduced #340; 8 parallel copies of the spec (the suite's shape) did on the first run. The slow stage was a port probe that reached `down` only by curl `--max-time`, so wait on the process state you control (`kill(pid, 0)`), not on a probe of what it leaves behind.
+- Background load generators: zsh does not word-split an unquoted `$pids`, so `kill $pids` failed and 24 `yes` processes outlived the run. A later sandboxed command may not signal them (EPERM); only stopping the owning background task killed them. Kill in the same command, with an array (`kill "${pids[@]}"`), and confirm each pid reports ESRCH.
+
+## 2026-10-15 (#204 — vault reset on setup)
+
+- Resetting a store also has to cover what is derived from it. #204 reset the vault's keys on setup, but the copilot bearer cache and any in-flight resolver still carried the old key (close-review advisory). List the derived state and the async writers before claiming "takes effect".
+- An integration assertion has to tell the branches apart: a substring shared by two of three messages pins no wiring.
 
 ## 2026-10-15 (#337 — whole-file deadline flakes)
 
@@ -564,3 +600,58 @@ oracle, and the mutation that would make the test fail.
 - Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.
 
 - A successful filesystem move plus nvim_buf_set_name does not make Neovim consider NEW read: its not-edited flag blocks ordinary writes and checktime skips it. Test the next submit/auto-save, acknowledge proven unchanged NEW with a non-bang native read, and reattach native edit observers detached by that read. Never bypass the guard with an unconditional forced write.
+## 2026-10-15 (#338 — starter tutorials under project mode)
+
+- When a finding names one spec that breaks under an environment, run the whole suite in that environment before fixing that spec: here it was 14 files, and the cause was a harness invariant (scratch outside any marked project), not each spec. Guard the invariant once at the writer (scratch_placement_spec), and keep per-spec opt-outs out of specs that test the opted-out behavior.
+- Seeding shipped content follows the owner's root, not the current primary root: project mode re-primaries chat_dir, so anything the starter installs must use the profile directory captured before setup().
+
+## 2026-10-15 (#230 — no hidden limit in live_models)
+
+- A diagnostic over configuration must know who wrote each entry. Shipped defaults may name things a given environment lacks (a model line an account doesn't serve), so warn only on operator-written entries, and test the defaults against an environment where they would trigger (BR-1).
+- Run the full suite on the FINAL code commit before `sdlc merge`, not on an earlier one. A review fix can trip a tree-wide guard (here superseded_comment_spec) that the focused specs never load (#230).
+
+## #343: a fake that ignores a signal is a process you now own
+
+- Replace a wall-clock race window with a state the case holds (a fake that ignores SIGTERM until released), not a longer delay.
+- Whoever makes a process unkillable by the normal path must kill it. The fixture reap only sees fixture_process spawns, and a proxy the code under test spawned is outside it. Hold the pids, SIGKILL them in the case, wait for the port to go down, and kill them again in after_each for the failure path.
+- Check for leaks while the owner is still alive. A check after nvim exits sees the watchdog's cleanup, not the spec's.
+
+## #344: a report hash is copied from git's output, never retyped
+
+- I sent the hub a typed hash twice in a row; the correction carried a second wrong one. Write any report that names a commit into the message file from `git rev-parse` / `git log --format=%H` with printf, and send that file.
+
+## #226: a dedup no-op must agree with the staleness check
+
+- If a duplicate press is swallowed because a result is outstanding, that result must still be allowed to land for the swallowed press. Key the in-flight record on everything the staleness check reads (here, the origin buffer and window), or a press from elsewhere is dropped by both and nothing happens.
+
+## #243: an output-escaping fix sweeps every sink, not the one the issue names
+
+- The issue named the branch div. The close review found the page `<title>` one level up. For an escaping bug, list every place chat text is written into the output format (title, body, attributes, records restored after the escape) before fixing, and route them all through one escape helper.
+
+## #346: wait on the record you read, not on its file existing
+
+- `vim.fn.writefile` creates the file before its bytes land. A wait that ends on `filereadable` and then reads a value can read an empty file. Make the wait predicate the parsed value itself, and return what the predicate read.
+
+## #347: `mkdir -p` is not race-safe at intermediate levels
+
+- Vim's `mkdir(path, "p")` raises E739 when another process creates an intermediate directory between its check and its create, and it leaves the leaf uncreated. Tolerating EEXIST only for the leaf is not enough. Create one level at a time and accept any level that is a directory afterwards.
+
+## #348: a lock that waiters inspect must be published and retired atomically
+
+- A lock directory made by mkdir and then an owner write, or removed by an rf delete, is visible half-made in both directions. Publish it by renaming a staging directory that already holds the record, and retire it by renaming it away before deleting it.
+- A waiter that misses a read counts it as garbage only after re-checking that the same lock (inode and device) is still there.
+- Each such re-check needs its own gate test that fails without it.
+
+## #233: when a single-file input becomes a sequence, every consumer of the old input must derive from the sequence
+
+- The close review found four consumers still reading the one file after the tree walk became the request's context: remote resolution, the batch leg's filter, the memory window's count and the topic input. Before building, list everything that reads the old input (here `input_parsed` and `exchange_idx`), and move each to the sequence in the same change.
+- A cache shared across files needs one key per file (its resolved path), and a reference is read and written under the key of the file that holds it. A lookup for another file must not create an entry.
+- A main merge that deletes a module can break a branch test that requires it, with no textual conflict. After merging main, grep the branch's new code and tests for `require`s of modules main deleted, before running the suite.
+
+## #352: a new rendering form for an existing message kind reuses its builder
+
+- The close review found the off-path summary form restating the summarized branch's summary message and missing its blank-question guard. When a new path emits a message an existing branch already emits, call one shared helper, and carry over that branch's guards with it.
+
+## #349: deleting a local removes its readers too
+
+- Replacing `find_tree_root_file` deleted the local `root` that delete-tree's prompt still read, and the tests stubbed `confirm` without checking its text. Lint caught it in the suite. After deleting a local, run `make lint`, or grep the function for the name, before the suite; and a test that stubs a prompt asserts what the prompt says.

@@ -35,6 +35,5 @@ placeholder rather than a new remote request.
 ## Implementation and verification
 
 - `lua/parley/oauth.lua` — public fetch, provider URL parsing/export, account storage, refresh, and logout.
-- `lua/parley/google_drive.lua` — compatibility alias to `oauth`.
 - `lua/parley/init.lua`, `chat_respond.lua` — remote-reference caching and message assembly.
 - `tests/unit/oauth_spec.lua`, `tests/unit/remote_references_spec.lua`, `tests/unit/build_messages_spec.lua`.

@@ -96,6 +96,40 @@ describe('document grammar', function()
         local expected=legacy.build(lines,patterns)
         for i,row in ipairs(rows) do assert.are.same(expected.state_before[i],row.render_before,'row '..i) end
     end)
+    -- #234: the document grammar's render_before and highlight_structure's
+    -- build step rows through the SAME lexical enter_row/leave_row, so over
+    -- random documents they agree on every row. The two render facts (footer,
+    -- and each 🧠: row's lookahead verdict) come from build, so what is under
+    -- test is the transition rules themselves.
+    it('agrees with build on render state over random documents (#234)', function()
+        local VOCAB={'prose','prose','prose','more prose','','','   ','```','````','=== d ===','=== end ===',
+            '💬: q','🤖: a','🧠: r','🧠:[END]','[^n]: f','📝: s','🔧: t','📎: r','🌿: b','🔒: l'}
+        math.randomseed(2341)
+        local checked=0
+        for _=1,300 do
+            local lines={}
+            for i=1,math.random(1,20) do lines[i]=VOCAB[math.random(#VOCAB)] end
+            local built=legacy.build(lines,patterns)
+            local extra={}
+            -- The grammar reads the footer fact once, on its first row.
+            if built.footer_start0 then
+                extra[1]={footer={start=built.footer_start0+1,content_start=built.footer_start0+1}}
+            end
+            for i,fp in ipairs(built.fingerprints) do
+                if fp=='r' then
+                    local after=built.state_before[i+1]
+                    extra[i]=extra[i] or {}
+                    extra[i].reasoning=after and after.reasoning_explicit_end or false
+                end
+            end
+            local rows=run(lines,extra)
+            for i,row in ipairs(rows) do
+                assert.are.same(built.state_before[i],row.render_before,'row '..i..'\n'..table.concat(lines,'\n'))
+                checked=checked+1
+            end
+        end
+        assert.is_true(checked>2000,'rows checked: '..checked)
+    end)
     it('finishes legacy tool sections at annotation boundaries', function()
         local rows=run({'💬: q','🤖: a','📎: unclosed','body','🔒: note','plain'})
         assert.equals('tool_result',rows[4].semantic.section_kind)

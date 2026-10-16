@@ -89,3 +89,14 @@ Reconciled ownership with #186: #186 delivers the registry-independent facet
 policy engine plus current Chat/Issue adapters; #115 depends on it and retains
 ownership only of registry facet declarations and full finder unification
 (`ARCH-DRY`, `ARCH-PURPOSE`).
+
+### 2026-10-16 — the discovery registry this design builds on was deleted (#236)
+
+`lua/parley/discovery/` (`TypeDescriptor`, `Matcher`, base/local types, registry, merge) was loaded on every start but had no reader (`M.discovery` was never consumed), so #236 deleted it with its 7 specs and `atlas/discovery/registry.md`, by TL decision. To build this issue on it, restore from main commit `5abad04737d396828eb9614b28c20dbec43d7486`, the last one that has it:
+
+    git checkout 5abad04737d396828eb9614b28c20dbec43d7486 -- lua/parley/discovery \
+      tests/unit/discovery_{base,descriptor,matcher,merge,registry}_spec.lua \
+      tests/integration/discovery_{local_types,builder}_spec.lua atlas/discovery/registry.md
+
+It was also wired into `init.lua` (`require("parley.discovery").setup(M)`). Restore that only together with a real consumer.
+

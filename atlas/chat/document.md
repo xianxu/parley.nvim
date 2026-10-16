@@ -118,6 +118,25 @@ another generation's writes move it without staling it (#261, see
 move a grant without cancelling its writer, but retire plans with old revisions.
 Reload replaces the epoch and invalidates every old grant and callback.
 
+A chat command edits the user's text through `buffer_edit.edit_user_lines(command, …)`
+(#265), the one refusal policy. A refused edit leaves the buffer unchanged and logs
+one warning naming the command, in `parley.refusal`'s words ("<command> — Edit not
+made: …"). It never raises, and it returns `false, reason` so the command stops
+before anything that depends on the edit. Commands that also write files or
+publish a clipboard edit first and act only once the edit applied:
+- **ChatPrune:** the parent edit, then the child file.
+- **Slug rename:** the `file:` header, then the rename.
+- **ExchangeCut:** the cut, then the clipboard.
+- **Inline branch:** the anchor, then the child.
+
+ChatReview, whose back-reference needs the new chat's name, reports "back-reference
+not added". Two cosmetic edits are quiet (debug log only) because a later event
+retries them: the CursorHold reference repair, and the CompleteDone requote. A live
+generation does not refuse user edits (measured). What a user can meet is
+`capacity` (the 64 user-guard slots held), a stale capture or a closed chat.
+`tests/arch/user_edit_policy_spec.lua` refuses a direct call to the private
+replace.
+
 A write plan names its epoch, generation, entity, grant, and revision. The editor
 checks exact expected text and authority before each patch, then compares the
 observed native event with the intended patch. Unexpected nested edits stop the
@@ -137,6 +156,24 @@ answer is its own entry, then the new answer is one, so the first undo shows
 the question unanswered and the second restores the old answer. `answer_undo_spec` covers regeneration, concurrent chats,
 mid-stream reload, saves, tool rounds, cancel,
 provider failure, reload, separate answers and mid-stream user edits.
+
+Streamed text never vanishes while the stream goes on (#229). The dispatcher's
+`qt.response` is what the model sent; every byte of it either reaches the answer
+or ends the generation with a stated outcome. Writer not alive: `revoked` or
+`cancelled`. Staging over budget: `overflow`. A stale, refused or interrupted
+write: `revoked` or `uncertain`. A queue dropped on stop: counted in
+`discarded_bytes`. A stream reader that throws: the attempt stops with
+`<stream> reader failed` rather than reading on past the lost bytes. The only
+uncounted change is the deliberate strip of a response's leading newlines.
+Neither side may leave a generation waiting (#341). A provider adapter that
+refuses output reports `provider_failed` before it stops the transport. The
+machine allows resolution before completion, so resolving alone ends nothing.
+A receipt naming the inflight write but inconsistent, or a write whose blob is
+gone, settles it `uncertain`, crediting only bytes the receipt can vouch for.
+Receipts for any other write are ignored.
+`stream_integrity_spec` drives the real transport against `fake_cliproxy`'s
+`stream` mode while edits above the answer and a busy loop race each write,
+and asserts the answer equals `qt.response` exactly.
 
 ## Live consumers
 

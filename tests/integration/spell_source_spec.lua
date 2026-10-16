@@ -153,12 +153,23 @@ describe("Blink spell source", function()
 		assert.equals(1, calls)
 	end)
 
-	it("finishes the callback even when the native edit refuses a locked buffer", function()
+	-- #265: a refused correction is REPORTED (one warning, buffer unchanged),
+	-- never raised at the user; the completion callback still finishes.
+	it("finishes the callback and reports, not raises, when the native edit refuses a locked buffer", function()
 		local source, _, ctx, result = fixture("teh", "teh")
+		local before = vim.api.nvim_buf_get_lines(ctx.bufnr, 0, -1, false)
 		vim.bo[ctx.bufnr].modifiable = false
+		local logger, warned = require("parley.logger"), {}
+		local saved = logger.warning
+		logger.warning = function(m) warned[#warned + 1] = tostring(m) end
 		local calls = 0
-		local ok = pcall(source.execute, source, ctx, result.items[1], function() calls = calls + 1 end, function() end)
-		assert.is_false(ok)
+		local ok, err = pcall(source.execute, source, ctx, result.items[1], function() calls = calls + 1 end, function() end)
+		logger.warning = saved
+		vim.bo[ctx.bufnr].modifiable = true
+		assert.is_true(ok, tostring(err))
 		assert.equals(1, calls)
+		assert.same(before, vim.api.nvim_buf_get_lines(ctx.bufnr, 0, -1, false))
+		assert.equals(1, #warned)
+		assert.is_truthy(warned[1]:find("SpellCorrection — Edit not made", 1, true), warned[1])
 	end)
 end)

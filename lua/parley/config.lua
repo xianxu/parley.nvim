@@ -135,23 +135,25 @@ local config = {
 		-- moves on its own — an antigravity login registered 13 new models with
 		-- no restart — so parley reads it instead of carrying model names here.
 		--
-		-- Entry syntax: "<provider>[:<term>,…]". The provider is the thing you log
+		-- Entry syntax: "<provider>[!N]" or "<provider>:<term>[!N],…". The provider is the thing you log
 		-- into; the optional terms are case-insensitive substrings matched against
 		-- the model id AND its display name. Matching the display name is
 		-- required, not a nicety: antigravity's ids are opaque handles
 		-- (`gemini-pro-agent` displays as "Gemini 3.1 Pro (High)"), so an id-only
 		-- match would leave that provider unfilterable.
 		--
-		-- Terms narrow; the picker then keeps the newest of each model line and
-		-- caps each search term at per_provider (legacy option name).
+		-- Terms narrow; the picker then keeps the newest of each model line. A
+		-- search shows every matching line unless it carries `!N`, which caps that
+		-- term, or a bare provider (`gemini!3`); a provider cap beside terms is
+		-- rejected (cap each term). There is no hidden limit (#230). A term you
+		-- write that matches no model is logged when the catalog refreshes.
 		-- Term order is display order. <C-a> in the picker
 		-- bypasses filter AND curation, so narrowing this never puts a model out
 		-- of reach. Nothing here names a model version, so nothing here goes
 		-- stale. A configured provider you are not logged into shows as
 		-- "(logged out)" and selecting it starts its login.
 		live_models = {
-			providers = { "claude:opus,sonnet,fable", "codex:gpt-6,gpt-5", "gemini" },
-			per_provider = 3,
+			providers = { "claude:opus,sonnet,fable", "codex:gpt-6,gpt-5!3", "gemini!3" },
 			-- Local tool policy for live picks, including restored selections.
 			-- Set {} to disable local tools, or list tools/groups.
 			tools = vim.deepcopy(learner_tools),
@@ -619,6 +621,11 @@ local config = {
 		reasoning_prefix = "🧠:",
 		-- text to replace omitted user messages
 		omit_user_text = "Summarize our chat",
+		-- side chats (asides, and chats nested under them) off the path from the
+		-- current chat to the root: "summary" sends each exchange as its 📝: line
+		-- (or, without one, its question alone, truncated); "full" renders them
+		-- like any exchange. Applies whether or not `enable` is on (#352).
+		side_chats = "summary",
 	},
 
 	-- memory preferences: per-tag user preference profiles from chat history
@@ -687,14 +694,6 @@ local config = {
 		-- (YAML), and raw SSE stream lines.
 		log_raw = false,
 	},
-
-	-- TODO: what are the following are needed?
-	-- command config and templates below are used by commands like GpRewrite, GpEnew, etc.
-	-- command prompt prefix for asking user for input (supports {{agent}} template variable)
-	command_prompt_prefix_template = "🤖 {{agent}} ~ ",
-	-- auto select command response (easier chaining of commands)
-	-- if false it also frees up the buffer cursor for further editing elsewhere
-	command_auto_select_response = true,
 
 	-- example hook functions (see Extend functionality section in the README)
 	hooks = {

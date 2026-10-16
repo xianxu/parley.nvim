@@ -341,16 +341,25 @@ function M.transition(handle,event)
         end
     elseif kind=='write_result' then
         local pending=s.inflight
+        -- A receipt for any other write (a duplicate, a retired write) is ignorable.
+        if not pending or event.write~=pending.id then return reject('receipt') end
         local status=event.status
-        local attempted=event.attempted_bytes or (pending and pending.bytes)
-        if not pending or event.write~=pending.id or not integer(event.committed_bytes)
-            or not integer(attempted) or attempted<1 or attempted>pending.bytes
-            or event.committed_bytes>attempted or (status~='applied' and status~='suspended'
-                and status~='revoked' and status~='uncertain')
-            or (status=='applied' and event.committed_bytes~=attempted) then return reject('receipt') end
+        local attempted=event.attempted_bytes or pending.bytes
+        local committed=event.committed_bytes
+        -- One naming the inflight write must settle it: rejecting it left the write
+        -- inflight and the queue stalled with no outcome (#341). An inconsistent
+        -- one cannot say what landed, so it stops uncertain, crediting only the
+        -- committed bytes it can vouch for.
+        local counted=integer(attempted) and attempted>=1 and attempted<=pending.bytes
+            and integer(committed) and committed>=0 and committed<=attempted
+        if not counted or (status~='applied' and status~='suspended' and status~='revoked' and status~='uncertain')
+            or (status=='applied' and committed~=attempted) then
+            status='uncertain'
+            if not counted then committed=0 end
+        end
         local item=pending.item;s.inflight=nil
-        s.committed_bytes=s.committed_bytes+event.committed_bytes
-        item.bytes=item.bytes-event.committed_bytes;item.offset=item.offset+event.committed_bytes
+        s.committed_bytes=s.committed_bytes+committed
+        item.bytes=item.bytes-committed;item.offset=item.offset+committed
         if status=='revoked' or status=='uncertain' then stop(s,effects,status) end
         if s.phase=='stopping' then
             s.discarded_bytes=s.discarded_bytes+item.bytes

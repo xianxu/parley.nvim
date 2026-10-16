@@ -17,13 +17,12 @@ describe("file_tracker", function()
     local original_test_mode
 
     before_each(function()
-        -- `load_data`/`save_data` short-circuit under g:parley_test_mode so a test
-        -- run never writes the operator's data directory. These cases exercise the
-        -- real persistence against a redirected stdpath, so they clear the flag
-        -- themselves instead of depending on the harness not setting it: since
-        -- #261 M5 every spec child loads tests/minimal_init.vim, which does.
-        original_test_mode = vim.g.parley_test_mode
-        vim.g.parley_test_mode = nil
+        -- `load_data`/`save_data` short-circuit under the harness signal
+        -- (test_isolation.active(), #235) so a test run never writes the shared
+        -- data directory. These cases exercise the real persistence against a
+        -- redirected stdpath, so they clear the signal for the case.
+        original_test_mode = vim.env.PARLEY_TEST_MODE
+        vim.env.PARLEY_TEST_MODE = nil
         local random_suffix = string.format("%x", math.random(0, 0xFFFFFF))
         tmpdir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-tracker-" .. random_suffix
         vim.fn.mkdir(tmpdir .. "/parley", "p")
@@ -45,7 +44,7 @@ describe("file_tracker", function()
     end)
 
     after_each(function()
-        vim.g.parley_test_mode = original_test_mode
+        vim.env.PARLEY_TEST_MODE = original_test_mode
         vim.fn.stdpath = original_stdpath
         if tmpdir then
             vim.fn.delete(tmpdir, "rf")
@@ -211,3 +210,21 @@ describe("file_tracker", function()
         end)
     end)
 end)
+
+-- #235: under the harness signal the tracker writes NO file_access.json. Every
+-- spec child carries the signal, so no spec can leak access history into the
+-- data directory that the parallel suite shares.
+describe("file_tracker under the harness", function()
+    it("tracks in memory but never writes file_access.json", function()
+        assert.is_true(require("parley.test_isolation").active(), "the harness signal is missing")
+        package.loaded["parley.file_tracker"] = nil
+        local tracker = require("parley.file_tracker")
+        local path = tracker.file_path()
+        vim.fn.delete(path)
+        tracker.track_file_access("/harness/fixture.md")
+        tracker.save_data()
+        assert.equals(1, tracker.get_access_count("/harness/fixture.md"))
+        assert.equals(0, vim.fn.filereadable(path), "the tracker wrote " .. path .. " under the harness")
+    end)
+end)
+

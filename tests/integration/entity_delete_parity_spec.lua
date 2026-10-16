@@ -2,10 +2,11 @@
 -- buffers, for every cursor row, or the "two surfaces, one range function"
 -- design is a claim rather than a fact.
 --
--- Scoped deliberately to a QUIESCENT document: the command path inherits
--- buffer_edit.replace_user_lines' refusal while a response streams into the
--- exchange and the native operator does not. That asymmetry is intended and
--- documented (ARCH-ORDER); everything else must match.
+-- Scoped deliberately to a QUIESCENT document: the command path edits through
+-- buffer_edit.edit_user_lines and reports its refusals (#265: a held-full guard
+-- registry, not a streaming response, which measured to refuse nothing); the
+-- native operator does not. That asymmetry is intended and documented
+-- (ARCH-ORDER); everything else must match.
 --
 -- The fixture carries a CLOSED FOLD, because `G` cannot enter one and snaps to
 -- its first line. A flat-buffer version of this test passes while the feature
