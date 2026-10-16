@@ -66,6 +66,7 @@ e.g. flash the winbar three times.
 ### 2026-10-15
 
 ### 2026-10-16 — initial design (pending hub approval)
+- 2026-10-16: closed — Fourteen focused native-event/timer regressions pass, including exact three pulses, undo, save, split copies, cancellation and late ticks. Recorded full suite passed on e3a56262af275415ce5abeab175a8f93d952ea4f: 453 spec files, 757 lint files clean, exit 0 in 2m40s, clean process census; log SHA256 prefix 0e678d6485c3. Only issue prose changed since. README and atlas updated. Hub delivery 5f93392b-ae5f-4a74-9950-b0108f259300 authorizes no separate live check: operator smoke-tests in use, fix forward; close review and land on SHIP. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 The issue is claimed and start-plan passed from fresh main after #319 landed.
 The own-slot Ariadne refresh was blocked by weave-generated review discovery
