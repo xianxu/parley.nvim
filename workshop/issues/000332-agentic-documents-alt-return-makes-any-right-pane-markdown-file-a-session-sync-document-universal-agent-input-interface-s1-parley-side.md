@@ -183,6 +183,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 
 - 2026-10-15 — corrected BR-5 candidate e5ba732c2cbb8c77b490a1a168930936515bc640 passes required suite445/445 in1m50s; lint754 files0 warnings/errors, no survivors. Retained /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/e5ba732c2cbb8c77b490a1a168930936515bc640/suite.log, SHA256158b04ad55af8df7a005db77eb2350f24103d0fdea7512732202987fbed9851c. Includes15 renderer cases, distinct-baseline native/noncurrent round trips, other-window/hidden-owner safety and all prior session-sync/native cases. No waiver or skip. Ordinary close must dispose BR-5 before restage; old stage remains installed.
 
+- Renderer re-close round 4 returned SHIP: no new findings, all five findings disposed. Restaged with `sdlc stage --build` on parley.nvim:0 at `7a662f3fc5b36bdc9324063b9f3158628ddece9a` (verified target HEAD); no Go binaries apply. Required suite remains 445/445 on `e5ba732c2cbb8c77b490a1a168930936515bc640`, lint754 clean; subsequent changes are evidence only. CI local-gates checks pass. Restart Neovim for the visual recheck of identical session/agentic free, held, submit/error bands and A→B→A original styling. Landing remains held for operator confirmation. Hub send failed before returning a receipt: “Couch cannot find a live caller or recipient registration”; report must be resent after registration reconnects.
+
 ## Revisions
 
 - 2026-10-15 — record the already-approved persistent-feedback acceptance explicitly in Done when. Separate implementation verification from post-close staging/live/landing so the checklist records observed work without claiming future acceptance. The required suite is still pending; no close waiver or live acceptance is implied.
