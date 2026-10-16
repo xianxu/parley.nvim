@@ -75,6 +75,75 @@ describe("chat context over a real chat tree (#233)", function()
         assert.same({ "R1", "A1" }, questions(aside, 1)) -- not AA1, R2 or the later branch
     end)
 
+    local function messages_for(path, cut, opts)
+        opts = opts or {}
+        local parsed = parse(path)
+        local input = opts.input or parsed
+        local input_index = opts.input_index or cut
+        local sequence, at = chat_respond._tree_sequence(path, parsed, cut, input, input_index)
+        local config = vim.tbl_deep_extend("force", parley.config,
+            { chat_memory = opts.memory or { enable = false } })
+        local messages = chat_respond.build_messages({ parsed_chat = input, sequence = sequence,
+            start_index = opts.start_index or 1, end_index = 100000, exchange_idx = at,
+            agent = { name = "t", provider = "openai", model = "m", system_prompt = "S" },
+            config = config, helpers = parley.helpers, logger = parley.logger, chat_path = path,
+            resolved_remote_content = opts.remote })
+        local out = {}
+        for i = 2, #messages do out[#out + 1] = vim.trim(tostring(messages[i].content)) end
+        return out, sequence, at
+    end
+
+    -- BR-2: a request that leaves an exchange out leaves out the asides off it.
+    it("drops an aside with the batch leg's exchange it hangs off", function()
+        local parsed = parse(root)
+        local input = vim.deepcopy(parsed)
+        table.remove(input.exchanges, 1) -- the leg keeps R2 and R3, not R1
+        local _, sequence = messages_for(root, 2, { input = input, input_index = 1 })
+        local qs = {}
+        for i = 1, #sequence - 1 do qs[#qs + 1] = vim.trim(sequence[i].exchange.question.content) end
+        assert.same({ "R2" }, qs) -- no A1/AA1: R1, the exchange they are about, is not sent
+    end)
+
+    it("drops an aside whose branch reference is outside the visual range", function()
+        local r2_row = parse(root).exchanges[2].question.line_start
+        local out = messages_for(root, 2, { start_index = r2_row })
+        assert.same({ "R2" }, out)
+    end)
+
+    -- BR-3: the window counts back from the end of the current file, as it
+    -- did for a single file, not from the cut.
+    it("keeps the single-file window when resubmitting mid-chat", function()
+        local body = {}
+        for i = 1, 10 do vim.list_extend(body, { "💬: Q" .. i, "", "🤖:[A]", "a" .. i, "", "📝: s" .. i, "" }) end
+        local single = write_chat("2026-10-16.10-00-00.010.md", body)
+        local out = messages_for(single, 3, { memory = { enable = true, max_full_exchanges = 4 } })
+        local omitted = parley.config.chat_memory.omit_user_text or "[Previous messages omitted]"
+        assert.same({ omitted, "s1", omitted, "s2", "Q3" }, out)
+    end)
+
+    -- BR-1: a remote reference in another file of the tree reads that file's
+    -- cache, so its content is sent instead of a "not cached" stub.
+    it("resolves a remote reference in an ancestor from the ancestor's cache", function()
+        local url = "https://example.com/tree-" .. math.random(1000000)
+        local parent = write_chat("2026-10-16.11-00-00.020.md", {
+            "💬: read @@" .. url .. "@@", "", "🤖:[A]", "read it", "",
+            "🌿: 2026-10-16.11-01-00.021.md: Child", "",
+        })
+        local child = write_chat("2026-10-16.11-01-00.021.md", {
+            "🌿: 2026-10-16.11-00-00.020.md: Parent", "", "💬: and then?", "",
+        })
+        chat_respond.get_chat_remote_reference_cache(parent)[url] = "the cached page"
+        local parsed = parse(child)
+        local sequence, at = chat_respond._tree_sequence(child, parsed, 1, parsed, 1)
+        local resolved
+        chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
+            chat_file = child, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
+        assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10), "remote resolution never finished")
+        assert.equals("the cached page", resolved[url])
+        local out = messages_for(child, 1, { remote = resolved })
+        assert.is_truthy(table.concat(out, "\n"):find("the cached page", 1, true), table.concat(out, "\n"))
+    end)
+
     it("reads an unsaved child from its buffer", function()
         vim.cmd("edit " .. vim.fn.fnameescape(aside))
         local buf = vim.api.nvim_get_current_buf()

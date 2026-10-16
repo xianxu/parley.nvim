@@ -301,6 +301,15 @@ user sees it (`helper.chat_lines`): from its loaded buffer when one is open, els
 from the file. An exchange still being regenerated contributes its previous
 answer, as above.
 
+Each aside off the current file carries its anchor (the exchange it hangs
+after, and the row of its branch reference). A batch leg that leaves the
+exchange out leaves the aside out too, and a visual range keeps an aside when it
+keeps its branch row. The current file's exchanges after the cut follow it in
+the sequence, so the memory window counts back from the end of the file, as for
+a single file. The walk reads synchronously, linear in the bytes to the left of
+the cut (about 0.25 ms per KB measured). Remote `@@url@@` resolution walks the
+same sequence, using each file's own cache.
+
 One renderer: `build_messages` renders the linearized sequence like a single
 chat. The `chat_memory` window (`max_full_exchanges` plus `📝:` summaries) spans
 the whole sequence, so with memory disabled, ancestors and asides are sent in

@@ -52,33 +52,37 @@ end
 --- @param path table[] from path_up
 --- @param cut integer the current file's exchange being submitted
 --- @param deps { load, resolve } as for path_up
---- @return table[] items: { exchange, file, current }
+--- An item from a subtree hanging off the current file carries `anchor`: the
+--- current file's exchange it hangs after (0 = before the first question) and
+--- the row of its branch reference, so a request that leaves that exchange out
+--- can leave its asides out too.
+--- @return table[] items: { exchange, file, current, anchor? }
 function M.linearize(path, cut, deps)
     local items, seen = {}, {}
     for _, node in ipairs(path) do seen[node.file] = true end
     local emit
 
-    local function subtree(branch, from_file, depth)
+    local function subtree(branch, from_file, depth, anchor)
         if depth > MAX_DEPTH then return end
         local file = deps.resolve(branch.path, vim.fn.fnamemodify(from_file, ":h"))
         if seen[file] then return end
         seen[file] = true
         local parsed = deps.load(file)
-        if parsed then emit(file, parsed, false, nil, depth) end
+        if parsed then emit(file, parsed, false, nil, depth, anchor) end
     end
 
     -- `stop` is { branch = i } (descend at the path's branch) or { cut = n }.
-    emit = function(file, parsed, current, stop, depth)
+    emit = function(file, parsed, current, stop, depth, anchor)
         local exchanges, branches = parsed.exchanges or {}, parsed.branches or {}
         for k = 0, #exchanges do
             if k >= 1 then
-                items[#items + 1] = { exchange = exchanges[k], file = file, current = current }
+                items[#items + 1] = { exchange = exchanges[k], file = file, current = current, anchor = anchor }
                 if stop and stop.cut == k then return end
             end
             for index, branch in ipairs(branches) do
                 if branch.after_exchange == k then
                     if stop and stop.branch == index then return end
-                    subtree(branch, file, depth + 1)
+                    subtree(branch, file, depth + 1, anchor or (current and { exchange = k, line = branch.line }) or nil)
                 end
             end
         end

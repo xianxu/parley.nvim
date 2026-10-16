@@ -9,14 +9,19 @@ every later question.
 
 ## Core concepts
 
-| Concept | Meaning |
-|---|---|
-| `path_up` | the path from the topmost ancestor that links back down to the current file |
-| `linearize` | the tree in depth-first pre-order along the path, cut at the submitted exchange |
-| `io_deps` | the editor's IO for the walk: buffer-first reads and the previous-answer substitution |
-| `tree_sequence` | a request's exchanges: the linearized tree, with the current file's own input copies |
-| `_tree_sequence` | test seam for `tree_sequence` |
-| `_conversation_after_lead` | the topic request's input; it now keeps only the current file's messages |
+| Concept | Status | Meaning |
+|---|---|---|
+| `path_up` | new | the path from the topmost ancestor that links back down to the current file |
+| `linearize` | new | the tree in depth-first pre-order along the path, cut at the submitted exchange; asides off the current file carry their anchor |
+| `io_deps` | new | the editor's IO for the walk: buffer-first reads and the previous-answer substitution |
+| `tree_sequence` | new | a request's exchanges: the linearized tree, with the current file's own input copies and its tail after the cut |
+| `_tree_sequence` | new | test seam for `tree_sequence` |
+| `other_files` | new | test helper (`tests/helpers/tree_context.lua`): the text a request takes from the tree's other files |
+| `_conversation_after_lead` | modified | the topic request's input; it now keeps only the current file's messages |
+| `resolve_remote_references` | modified | walks the request's sequence, reading each file's own cache |
+| `build_ancestor_messages` | deleted | the second renderer, replaced by build_messages over the sequence |
+| `collect_ancestor_chain` | deleted | the upward-only walk, replaced by path_up and linearize |
+| `collect_ancestor_messages` | deleted | its wrapper |
 
 ## The walk (the simplest one that is correct)
 

@@ -43,15 +43,8 @@ end
 -- The context a submission of the kid's last exchange gets from other files
 -- (#233: the tree walk, which replaced the ancestor chain).
 local function tree_context(kid, parsed)
-    local sequence = chat_respond._tree_sequence(kid, parsed, #parsed.exchanges, parsed)
-    local out = {}
-    for _, item in ipairs(sequence) do
-        if not item.current then
-            out[#out + 1] = tostring(item.exchange.question and item.exchange.question.content or "")
-            out[#out + 1] = tostring(item.exchange.answer and item.exchange.answer.content or "")
-        end
-    end
-    return out
+    return require("tests.helpers.tree_context").other_files(
+        chat_respond._tree_sequence(kid, parsed, #parsed.exchanges, parsed))
 end
 local function contents(out) return table.concat(out or {}, "\n") end
 

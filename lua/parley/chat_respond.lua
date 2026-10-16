@@ -170,8 +170,11 @@ end
 -- the exchange being submitted (chat_tree). The current file's exchanges are
 -- the request's own input copies, matched by question row: a batch leg's input
 -- keeps only some of them, and the previous answer of a regenerating exchange
--- is already substituted there. Returns the sequence and the cut's position.
-local function tree_sequence(file, parsed, index, input_parsed, deps)
+-- is already substituted there. An aside hanging off a current-file exchange
+-- the input leaves out goes with it. The current file's exchanges after the cut
+-- follow it, counted by the memory window and never rendered, as they always
+-- were for a single file. Returns the sequence and the cut's position.
+local function tree_sequence(file, parsed, index, input_parsed, input_index, deps)
     local Tree = require("parley.chat_tree")
     deps = deps or Tree.io_deps()
     file = vim.fn.resolve(vim.fn.fnamemodify(file, ":p"))
@@ -180,16 +183,24 @@ local function tree_sequence(file, parsed, index, input_parsed, deps)
     for _, exchange in ipairs(input_parsed.exchanges) do
         if exchange.question then by_row[exchange.question.line_start] = exchange end
     end
+    local function kept(exchange)
+        return exchange and exchange.question and by_row[exchange.question.line_start]
+    end
     local sequence = {}
     for _, item in ipairs(items) do
         if item.current then
-            local own = item.exchange.question and by_row[item.exchange.question.line_start]
+            local own = kept(item.exchange)
             if own then sequence[#sequence + 1] = { exchange = own, file = file, current = true } end
-        else
+        elseif not item.anchor or item.anchor.exchange == 0 or kept(parsed.exchanges[item.anchor.exchange]) then
+            item.anchor_row = item.anchor and item.anchor.line
             sequence[#sequence + 1] = item
         end
     end
-    return sequence, #sequence
+    local cut = #sequence
+    for i = (input_index or #input_parsed.exchanges) + 1, #input_parsed.exchanges do
+        sequence[#sequence + 1] = { exchange = input_parsed.exchanges[i], file = file, current = true }
+    end
+    return sequence, cut
 end
 
 M._tree_sequence = tree_sequence -- test seam: the walk reads files and buffers
@@ -798,12 +809,14 @@ M.build_messages = function(opts)
     -- Single pass through all exchanges
     for idx, item in ipairs(sequence) do
         local exchange = item.exchange
+        -- The visual range is the current file's rows: an aside is in it when
+        -- its branch reference is.
+        local row = exchange.question and (item.current and exchange.question.line_start or item.anchor_row)
         local function push(message)
             messages[#messages + 1] = message
             if item.current then current_messages[message] = true end
         end
-        if exchange.question and (not item.current or exchange.question.line_start >= start_index)
-            and idx <= exchange_idx then
+        if exchange.question and (not row or row >= start_index) and idx <= exchange_idx then
             -- Preserve in full: the current question, a recent exchange, or
             -- one pinned by file references (M.preserve_exchange).
             local should_preserve = M.preserve_exchange(
@@ -1217,10 +1230,20 @@ M.resolve_remote_references = function(opts, callback)
         end
     end
 
-    for idx, exchange in ipairs(parsed_chat.exchanges) do
+    -- #233: over the request's own sequence when it has one, so a reference in
+    -- another file of the tree reads that file's cache (or is fetched).
+    local sequence = opts.sequence
+    if not sequence then
+        sequence = {}
+        for _, exchange in ipairs(parsed_chat.exchanges) do sequence[#sequence + 1] = { exchange = exchange } end
+    end
+    for idx, item in ipairs(sequence) do
         if idx > exchange_idx then
             break
         end
+        local exchange = item.exchange
+        local cache = item.file and item.file ~= chat_file and M.get_chat_remote_reference_cache(item.file)
+            or chat_cache
 
         if exchange.question and exchange.question.file_references then
             for _, file_ref in ipairs(exchange.question.file_references) do
@@ -1231,8 +1254,8 @@ M.resolve_remote_references = function(opts, callback)
                         queue_fetch(url)
                     elseif idx < exchange_idx and not seen_prior[url] then
                         seen_prior[url] = true
-                        if chat_cache[url] then
-                            resolved[url] = chat_cache[url]
+                        if cache[url] then
+                            resolved[url] = cache[url]
                         else
                             queue_fetch(url)
                         end
@@ -1566,6 +1589,7 @@ local function start_scoped_response(frame)
     entry.pending_previous_owner = pending_owner
     local latest, messages, final_payload, topic_source, topic_parent, failure_notice, completion_failure
     local message_lead, current_messages = 0, nil
+    local sequence, cut -- the request's tree, linearized to the cut (#233)
     local topic_attempted, main_finished, topic_finished = false, false, true
     if parsed.headers.topic == '?' then
         for row = 1, find_chat_header_end(frame.lines) do
@@ -1687,7 +1711,6 @@ local function start_scoped_response(frame)
             if operation.cancelled or ctx.cancelled() then resolve(); return end
             if remote_error then fail(remote_error); return end
             local ok, err = xpcall(function()
-                local sequence, cut = tree_sequence(frame.file_name, parsed, index, input_parsed)
                 messages, message_lead, current_messages = M.build_messages({parsed_chat = input_parsed,
                     start_index = frame.start_index, end_index = frame.end_index, exchange_idx = cut,
                     sequence = sequence, agent = agent,
@@ -1730,8 +1753,14 @@ local function start_scoped_response(frame)
                 plan = preparation_plan()
                 needs_agent = false
             end
+            -- #233: the tree is read once, here, and both the remote fetches and
+            -- the message build derive from this one sequence.
+            local walked, err = pcall(function()
+                sequence, cut = tree_sequence(frame.file_name, parsed, index, input_parsed, input_index)
+            end)
+            if not walked then fail('request build failed: ' .. Refusal.brief(err)); return end
             local ok, remote = pcall(M.resolve_remote_references, {parsed_chat = input_parsed, config = config,
-                chat_file = frame.file_name, exchange_idx = input_index,
+                chat_file = frame.file_name, exchange_idx = cut, sequence = sequence,
                 cancelled = function()return operation.cancelled or ctx.cancelled()end,
                 -- The fetches run in this generation's process scope (#261 M4 W4).
                 scope = require('parley.tasker').scope_key(ctx.epoch, ctx.generation),

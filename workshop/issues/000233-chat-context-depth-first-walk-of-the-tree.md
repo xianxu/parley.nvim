@@ -159,4 +159,22 @@ Before merge (a gate held by the TL, not a build step): the operator decides on 
   nested case's growth with the same 9 messages. With `chat_memory` enabled,
   the window spans the whole linearized tree, so the long cases come out
   smaller than before.
+- Close review round 1. Three Important findings, all fixed:
+  - BR-1: remote `@@url@@` references in other files went unresolved.
+    `resolve_remote_references` now walks the same sequence (the call site
+    computes it once, before the fetches), reading each item's own file's cache.
+  - BR-2: an aside outlived its anchor. `linearize` tags each aside off the
+    current file with its anchor (the exchange and the branch row). A batch
+    leg's input that drops the exchange drops the aside, and the visual range
+    applies to the branch row.
+  - BR-3: the memory window counted back from the cut. The current file's
+    exchanges after the cut now follow it in the sequence, counted by the
+    window but never rendered, as the single-file input always was.
+
+  Each fix has a test in `chat_tree_context_spec`, and a mutation removing the
+  fix fails it. Minors: the duplicated sequence-to-text loop is now
+  `tests/helpers/tree_context.lua`. The walk's latency is measured: a median of
+  11 to 16 ms (max 20 ms) over the 58 KB, three-file tree above, about 0.25 ms per
+  KB read. It runs synchronously in the build, linear in the bytes to the left
+  of the cut.
 
