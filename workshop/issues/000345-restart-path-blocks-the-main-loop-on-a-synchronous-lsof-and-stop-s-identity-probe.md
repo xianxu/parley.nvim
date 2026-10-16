@@ -1,12 +1,20 @@
 ---
 id: 000345
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '873389301284629eec9329beab4904b1c1bd6432' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '449354728e33338d51b48a0fbc1ca8a869131eee' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T01:01:31-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Restart path blocks the main loop on a synchronous lsof (and stop's identity probe)
@@ -46,7 +54,31 @@ the restart path, with the sync command kept, is one option.
 
 ## Plan
 
-- [ ]
+Decision: `stop()`'s reads move too, because they sit on the same restart path. A restart
+blocked on its identity curl (up to 2 s) is the same user-visible freeze.
+
+- [ ] One lsof seam, two drivers (ARCH-DRY): a pure `parse_listener_pids(stdout)` plus the argv,
+      shared by the existing sync `pids_on_port` and a new `pids_on_port_async(port, cb)`.
+      The async driver runs a `vim.system` callback, returns to the main loop with
+      `vim.schedule`, and degrades the same way when lsof is absent or refused (pcall:
+      vim.system raises on EPERM).
+- [ ] `M.stop_async(cb)`: kill the `_spawned` pids, then run the async identity probe
+      (`M.health_probe` + `is_cliproxy_state`, as `port_holds_cliproxy` does), then the async
+      listener read, then kill. It calls `cb(count, pids)`. The kill steps are helpers shared with
+      the sync `M.stop()`, which stays for spec teardown (10 sites) and keeps its
+      return shape.
+- [ ] `restart_managed` uses `stop_async`, and `wait_port_released`'s post-exit check uses
+      `pids_on_port_async`. `:ParleyProxy stop` uses `stop_async` and notifies from the callback.
+- [ ] Remaining sync reads are named in ## Log as justified: `port_identity` (the 401 failure branch
+      and `:ParleyProxy update`), `peers()` (once per session, documented ~80–150 ms), and
+      sync `M.stop()` (spec teardown only).
+- [ ] Test: a `tests/fixtures/fake_lsof` (bounded by `PARLEY_FAKE_LSOF_DELAY_MS`, listed in
+      the arch spec's CANNOT_BLOCK) prints `PARLEY_FAKE_LSOF_PIDS` after a 1 s delay. During a
+      restart with it, a 50 ms `vim.defer_fn` ticker must keep firing (≥ 10 ticks across the
+      read). Mutation: the sync read makes the ticker stall.
+- [ ] #340's two regressions (the stall window, the peer left on the port) pass, with
+      their stop wrappers moved to `stop_async`. Lifecycle, update and command specs and the
+      full suite pass.
 
 ## Log
 
