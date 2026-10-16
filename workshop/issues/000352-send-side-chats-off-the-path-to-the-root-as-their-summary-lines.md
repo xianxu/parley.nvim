@@ -1,13 +1,13 @@
 ---
 id: 000352
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: '2d7ee6aaf166d700c31d09eb6ceebc4e50fe1b16' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '154327c2405c06ccf570a8a425fd511a01275b1b' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T08:11:54-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "515272bf", done: "d09468a6"}
+actual_hours: 0.09
 ---
 
 # Send side chats off the path to the root as their summary lines
