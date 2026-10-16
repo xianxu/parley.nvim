@@ -27,3 +27,53 @@ describe('user line hunk transactions',function()
         assert.same(before,vim.api.nvim_buf_get_lines(buf,0,-1,false))
     end)
 end)
+
+-- #265: the one refusal policy every chat command edits through.
+describe('edit_user_lines',function()
+    local buf,warnings,debugs,saved
+    local Capacity=require('tests.helpers.user_edit_capacity')
+    before_each(function()
+        buf=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{'one','two','three'})
+        D.attach(buf,{schedule=false})
+        local logger=require('parley.logger')
+        saved={warning=logger.warning,debug=logger.debug}
+        warnings,debugs={},{}
+        logger.warning=function(m)warnings[#warnings+1]=m end
+        logger.debug=function(m)debugs[#debugs+1]=m end
+    end)
+    after_each(function()
+        local logger=require('parley.logger')
+        logger.warning,logger.debug=saved.warning,saved.debug
+        if vim.api.nvim_buf_is_valid(buf)then vim.api.nvim_buf_delete(buf,{force=true})end
+    end)
+    it('applies and says nothing when the edit is allowed',function()
+        assert.is_true(Edit.edit_user_lines('Test',buf,1,2,{'TWO'}))
+        assert.same({'one','TWO','three'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+        assert.same({},warnings)
+    end)
+    it('refuses without raising: buffer unchanged, one warning naming the command',function()
+        local held=Capacity.hold(buf)
+        local ok,why=Edit.edit_user_lines('NewQuestion',buf,1,2,{'TWO'})
+        held.release()
+        assert.is_false(ok)
+        assert.equals('capacity',why)
+        assert.same({'one','two','three'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+        assert.same({'NewQuestion — Edit not made: too many edits are pending in this chat; try again in a moment'},warnings)
+    end)
+    it('logs a quiet refusal at debug only',function()
+        local held=Capacity.hold(buf)
+        local ok=Edit.edit_user_lines('ReadRepair',buf,1,2,{'TWO'},{quiet=true})
+        held.release()
+        assert.is_false(ok)
+        assert.same({},warnings)
+        assert.equals(1,#debugs)
+        assert.is_truthy(debugs[1]:find('ReadRepair — Edit not made',1,true))
+    end)
+    it('applies again once the hold is released',function()
+        local held=Capacity.hold(buf);held.release()
+        assert.is_true(Edit.edit_user_lines('Test',buf,0,1,{'ONE'}))
+    end)
+end)
+

@@ -65,8 +65,35 @@ function M.apply_user_line_hunks(capture, before, after)
     return M.apply_user({document=capture.document,token=token}, patches)
 end
 
+--- The one way a chat command edits the user's chat (#265): replace rows
+--- [first, last) with `lines` under a user capture. A refusal leaves the buffer
+--- unchanged and reports once, naming `command`, in the words of
+--- parley.refusal; it never raises. `opts.quiet` logs at debug instead, for
+--- cosmetic edits a later event retries.
+---@param command string
+---@param buf integer
+---@param first integer # 0-based
+---@param last integer # 0-based, exclusive; negative means the end
+---@param lines string[]
+---@param opts table|nil # { quiet = true }
+---@return boolean ok
+---@return string|nil reason # the refusal token when not ok
+function M.edit_user_lines(command, buf, first, last, lines, opts)
+    local result, reason = M._replace_user_lines(buf, first, last, lines)
+    if result then return true end
+    local logger = require("parley.logger")
+    local message = require("parley.refusal").edit(command, reason)
+    if message then
+        if opts and opts.quiet then logger.debug(message) else logger.warning(message) end
+    end
+    return false, reason
+end
+
 -- Synchronous artifact commands capture the exact live range immediately.
-function M.replace_user_lines(buf, first, last, _, lines)
+-- Private (#265): commands call edit_user_lines, which owns the refusal policy;
+-- tests/arch/user_edit_policy_spec.lua refuses a direct call. Returns the
+-- apply result, or nil and the refusal token.
+function M._replace_user_lines(buf, first, last, lines)
     local count = vim.api.nvim_buf_line_count(buf)
     if last < 0 then last = count end
     local text = table.concat(lines, "\n")
@@ -89,9 +116,9 @@ function M.replace_user_lines(buf, first, last, _, lines)
         if #lines > 0 then text = text .. "\n" end
     end
     local capture, reason = M.capture_user(buf, "replace-lines", { { first = a, last = b } })
-    if not capture then error("User edit unavailable: " .. tostring(reason)) end
+    if not capture then return nil, reason end
     local result = M.apply_user(capture, { { region = 1, text = text } })
-    if result.status ~= "applied" then error("User edit refused: " .. tostring(result.reason or result.error or result.status)) end
+    if result.status ~= "applied" then return nil, result.reason or result.status end
     return result
 end
 

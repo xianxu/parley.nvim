@@ -21,6 +21,7 @@ M.PREFIX = {
     attachments = "Images not sent",
     topic = "Topic not generated",
     drill = "Drill-in stopped",
+    edit = "Edit not made",
 }
 
 -- The failure a user's own Stop carries: it is not a refusal, so no message.
@@ -400,6 +401,17 @@ end
 for outcome in pairs(require("parley.generation").OUTCOMES) do
     assert(outcome == "success" or M.TOKENS[outcome],
         "parley.refusal: no words for the generation outcome '" .. outcome .. "'")
+end
+
+--- The one warning a chat command gives when its user edit is refused
+--- (#265): the command, then the words for the reason. The buffer is unchanged.
+---@param command string # what the user ran, e.g. "NewQuestion"
+---@param reason string # buffer_edit's token: a capture reason or an apply status
+---@return string|nil message # nil when the reason is silent (a closed chat)
+function M.edit(command, reason)
+    local message = M.describe("edit", nil, reason)
+    if not message then return nil end
+    return command .. " — " .. message
 end
 
 return M

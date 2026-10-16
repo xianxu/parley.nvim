@@ -191,30 +191,25 @@ describe("entity text objects", function()
 
 	-- ARCH-ORDER: the ONE documented asymmetry between the surfaces. The
 	-- command goes through buffer_edit and inherits its refusal; the native
-	-- operator does not. Driven by withholding the document rather than by
-	-- stubbing the call, so it exercises the real refusal path.
-	it("raises instead of mutating when the document withholds the grant", function()
+	-- operator does not. Since #265 the refusal is REAL (the user-edit guard
+	-- slots held full, through the document's own seam) and the command
+	-- REPORTS it rather than raising: buffer intact, one warning.
+	it("reports instead of mutating when the document refuses the edit", function()
 		local buf = prepped(FIXTURE)
-		-- SCOPE: this asserts the COMMAND propagates a refusal and leaves the
-		-- buffer intact -- not that the document refuses correctly, which is
-		-- document_user_guards_spec's job and is already covered there.
-		--
-		-- The refusal is injected at the buffer_edit seam because the real
-		-- trigger is an in-flight generation writing the same region, and
-		-- holding an overlapping user capture does not reproduce it (the
-		-- document permits concurrent user regions). A narrower substitution
-		-- than staging a live stream, and it tests the one thing this diff
-		-- owns: that delete_entity_range does not swallow the error.
-		local edit = require("parley.buffer_edit")
-		local real = edit.replace_user_lines
-		edit.replace_user_lines = function() error("User edit refused: generation") end
+		local warned = {}
+		local real_warning = parley.logger.warning
+		parley.logger.warning = function(m) warned[#warned + 1] = tostring(m) end
+		local held = require("tests.helpers.user_edit_capacity").hold(buf)
 
 		vim.api.nvim_win_set_cursor(0, { 8, 0 })   -- "para one"; row 9 is blank
-		local ok = pcall(vim.cmd, "ParleyDeleteEntity")
-		edit.replace_user_lines = real
+		local ok, err = pcall(vim.cmd, "ParleyDeleteEntity")
+		held.release()
+		parley.logger.warning = real_warning
 
-		assert.is_false(ok, "the command must refuse, not silently corrupt the transcript")
+		assert.is_true(ok, "the command raised instead of reporting: " .. tostring(err))
 		assert.same(FIXTURE, body(buf))
+		assert.equals(1, #warned)
+		assert.is_truthy(warned[1]:find("DeleteEntity — Edit not made", 1, true), warned[1])
 	end)
 
 	it("die and cae work, as Done-when claims for every operator", function()

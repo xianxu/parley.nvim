@@ -1961,7 +1961,7 @@ local function drill_in_visual(buf)
 		table.insert(new_lines, wrapped_lines[#wrapped_lines] .. suffix)
 	end
 
-	require("parley.buffer_edit").replace_user_lines(buf, sr - 1, er, false, new_lines)
+	if not require("parley.buffer_edit").edit_user_lines("DrillIn", buf, sr - 1, er, new_lines) then return end
 
 	-- Cursor between [ and ] in the last line of wrapped text. Wrap always
 	-- ends with `[]`, so placing the cursor at the index of `]` (0-based)
@@ -2289,7 +2289,9 @@ local function drill_in_insert(buf)
 	local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1] or ""
 	local before = line:sub(1, col)
 	local after = line:sub(col + 1)
-	require("parley.buffer_edit").replace_user_lines(buf, row, row + 1, false, { before .. "🤖[]" .. after })
+	if not require("parley.buffer_edit").edit_user_lines("DrillIn", buf, row, row + 1, { before .. "🤖[]" .. after }) then
+		return false
+	end
 	-- 🤖 = 4 bytes, `[` = 1 byte → cursor between [ and ] sits at col + 5.
 	vim.api.nvim_win_set_cursor(0, { row + 1, col + 5 })
 end
@@ -2327,8 +2329,8 @@ local function drill_in_callbacks(buf)
 				-- Always insert in normal mode. Accept/reject have their
 				-- own dedicated bindings (<M-a>, <M-r>) per the review
 				-- convention; <M-q> doesn't overload to mean both.
-				drill_in_insert(buf)
-				vim.cmd("startinsert")
+				-- A refused insert leaves nothing to type into (#265).
+				if drill_in_insert(buf) ~= false then vim.cmd("startinsert") end
 			end,
 		},
 		private_note = {
@@ -2605,7 +2607,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 		local block = br.ref_block(br.format_ref_line(get_branch_prefix(), rel_path, ""),
 			cursor_pos[1] > 0 and near[1] or nil,
 			near[cursor_pos[1] > 0 and 2 or 1])
-		require("parley.buffer_edit").replace_user_lines(buf, cursor_pos[1], cursor_pos[1], false, block)
+		if not require("parley.buffer_edit").edit_user_lines("BranchRef", buf, cursor_pos[1], cursor_pos[1], block) then return end
 		M.highlight_chat_branch_refs(buf)
 
 		-- Which of the inserted lines IS the reference — the block may open with
@@ -2671,7 +2673,8 @@ local function branch_inserters(buf, abs_link, owns_file)
 		-- #214 M3: the topic names the SUBJECT (it becomes the filename slug) and
 		-- the child is seeded with the instruction, not with `<topic>?`. One
 		-- place owns that wording — three call sites would each invent their own.
-		require("parley.buffer_edit").replace_user_lines(buf, start_line - 1, start_line, false, { spliced })
+		-- Refused: no anchor, so no child either (#265).
+		if not require("parley.buffer_edit").edit_user_lines("BranchRef", buf, start_line - 1, start_line, { spliced }) then return end
 		local question = require("parley.branch_submit").seed_question("define", selected)
 		create_child_if_owned(new_chat_file, topic, question, { inline_question = true })
 		M.highlight_chat_branch_refs(buf)
@@ -3323,31 +3326,48 @@ M._slug_rename_chat = function(buf)
 	local new_basename = chat_slug.make_filename(ts, new_slug)
 	local new_path = dir .. "/" .. new_basename
 
+	-- The file: header first, the rename only once it applied (#265): a refused
+	-- header edit used to leave the file renamed on disk under a stale header.
+	-- Refused, nothing changes and the next write retries.
+	local edits = require("parley.buffer_edit")
+	local header_row, header_line
+	for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, 20, false)) do
+		if line:match("^file:") then
+			header_row, header_line = i, line
+			break
+		end
+	end
+	if header_row then
+		local applied, why = edits.edit_user_lines("SlugRename", buf, header_row - 1, header_row,
+			{ "file: " .. new_basename })
+		if not applied then
+			return nil, "header edit refused: " .. tostring(why)
+		end
+	end
+
 	-- Rename on disk
 	local ok = vim.fn.rename(file_path, new_path)
 	if ok ~= 0 then
+		if header_row then -- put the header back: the file kept its old name
+			edits.edit_user_lines("SlugRename", buf, header_row - 1, header_row, { header_line })
+		end
 		return nil, "rename failed"
 	end
 
 	-- Update all buffers pointing to old path
 	sync_moved_chat_buffers(file_path, new_path)
 
-	-- Update file: header in buffer
-	for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, 20, false)) do
-		if line:match("^file:") then
-			require("parley.buffer_edit").replace_user_lines(buf, i - 1, i, false, { "file: " .. new_basename })
-			-- Save the updated header; guard flag prevents recursive rename
-			M._in_slug_rename = true
-			local write_ok, write_err = pcall(function()
-				vim.api.nvim_buf_call(buf, function()
-					vim.cmd("silent! write!")
-				end)
+	if header_row then
+		-- Save the updated header; guard flag prevents recursive rename
+		M._in_slug_rename = true
+		local write_ok, write_err = pcall(function()
+			vim.api.nvim_buf_call(buf, function()
+				vim.cmd("silent! write!")
 			end)
-			M._in_slug_rename = false
-			if not write_ok then
-				M.logger.warning("Slug rename write failed: " .. tostring(write_err))
-			end
-			break
+		end)
+		M._in_slug_rename = false
+		if not write_ok then
+			M.logger.warning("Slug rename write failed: " .. tostring(write_err))
 		end
 	end
 
@@ -3441,8 +3461,8 @@ M.repair_reference_at_cursor = function(buf, lnum)
 	-- SHRINKING allowlist in tests/arch/buffer_mutation_spec.lua (#90 — "after
 	-- Phase 3, ONLY buffer_edit.lua remains"), so a new direct call moves that
 	-- list the wrong way. replace_line_at is exactly this operation.
-	require("parley.buffer_edit").replace_user_lines(buf, lnum - 1, lnum, false, { updated })
-	return true
+	-- Cosmetic and retried on the next CursorHold, so a refusal is quiet (#265).
+	return (require("parley.buffer_edit").edit_user_lines("ReadRepair", buf, lnum - 1, lnum, { updated }, { quiet = true }))
 end
 
 M.move_chat = function(file_name, target_dir)
@@ -3879,6 +3899,9 @@ M.move_chat_tree = function(file_name, target_dir)
 		end
 	end
 	local asset_errors = {}
+	-- References in open buffers the move could not rewrite (#265): the loop
+	-- finishes the rest, and the caller hears the count.
+	local ref_errors = {}
 
 	-- Build old_path -> new_path mapping
 	local path_map = {}  -- old_abs -> new_abs
@@ -3929,7 +3952,12 @@ M.move_chat_tree = function(file_name, target_dir)
 								local new_rel = vim.fn.fnamemodify(new_abs, ":t")
 								lines[i] = require("parley.branch_ref").format_ref_line(branch_prefix, new_rel, topic)
 								if live then
-									require("parley.buffer_edit").replace_user_lines(live_buf, i - 1, i, false, { lines[i] })
+									local applied, why = require("parley.buffer_edit").edit_user_lines(
+										"ChatMove", live_buf, i - 1, i, { lines[i] }, { quiet = true })
+									if not applied then
+										ref_errors[#ref_errors + 1] = vim.fn.fnamemodify(new_path, ":t")
+											.. ":" .. i .. " (" .. tostring(why) .. ")"
+									end
 								end
 								changed = true
 								break
@@ -3944,8 +3972,16 @@ M.move_chat_tree = function(file_name, target_dir)
 		end
 	end
 
-	if #asset_errors > 0 then
-		return nil, "moved the tree but not every assets folder: " .. table.concat(asset_errors, "; ")
+	if #asset_errors > 0 or #ref_errors > 0 then
+		local parts = {}
+		if #asset_errors > 0 then
+			parts[#parts + 1] = "not every assets folder: " .. table.concat(asset_errors, "; ")
+		end
+		if #ref_errors > 0 then
+			parts[#parts + 1] = ("%d reference(s) not rewritten in open buffers: "):format(#ref_errors)
+				.. table.concat(ref_errors, "; ")
+		end
+		return nil, "moved the tree but " .. table.concat(parts, "; and ")
 	end
 
 	-- Return the new path of the originally requested file
@@ -4111,10 +4147,12 @@ M.cmd.ChatReview = function(_params)
 	local chat_parser = require("parley.chat_parser")
 	local lines = vim.api.nvim_buf_get_lines(source_buf, 0, -1, false)
 	local header_end = chat_parser.find_header_end(lines)
-	if header_end then
-		require("parley.buffer_edit").replace_user_lines(source_buf, header_end - 1, header_end - 1, false, {
-			format_branch_ref(rel_path, "proof read"),
-		})
+	-- The review chat must exist before its name can be referenced, so a refused
+	-- back-reference cannot be undone by ordering; it is reported as exactly
+	-- that (#265). edit_user_lines already said why.
+	if header_end and not require("parley.buffer_edit").edit_user_lines("ChatReview", source_buf,
+		header_end - 1, header_end - 1, { format_branch_ref(rel_path, "proof read") }) then
+		M.logger.warning("ChatReview: review chat " .. rel_path .. " created; back-reference not added to the source")
 	end
 
 	return buf
@@ -4486,14 +4524,18 @@ M.cmd.ChatPrune = function()
 		table.insert(child_lines, l)
 	end
 
+	-- The parent edit first, the child file once it applied (#265): a refused
+	-- edit used to leave an orphan child holding a copy of the exchanges.
+	local branch_line = require("parley.branch_ref").format_ref_line(branch_prefix, rel_child, "")
+	local user_prefix = M.config.chat_user_prefix
+	if not require("parley.buffer_edit").edit_user_lines("ChatPrune", buf, prune_start - 1, prune_end,
+		{ "", branch_line, "", user_prefix, "", "" }) then
+		return
+	end
+
 	-- Write child file
 	M.helpers.prepare_dir(vim.fn.fnamemodify(new_file, ":h"))
 	vim.fn.writefile(child_lines, new_file)
-
-	-- Replace pruned lines in parent with a branch reference + fresh question starter
-	local branch_line = require("parley.branch_ref").format_ref_line(branch_prefix, rel_child, "")
-	local user_prefix = M.config.chat_user_prefix
-	require("parley.buffer_edit").replace_user_lines(buf, prune_start - 1, prune_end, false, { "", branch_line, "", user_prefix, "", "" })
 
 	-- Save parent
 	vim.cmd("write")
@@ -4614,8 +4656,6 @@ M.cmd.ExchangeCut = function(opts)
 		return
 	end
 
-	_exchange_clipboard = extracted
-	vim.fn.setreg("+", table.concat(extracted, "\n") .. "\n")
 	-- Compute the seam cleanup before publishing, so cut and cleanup share one undo entry.
 	local new_lines = {}
 	for i, line in ipairs(lines) do
@@ -4634,7 +4674,13 @@ M.cmd.ExchangeCut = function(opts)
 		and lines[#lines - suffix] == new_lines[#new_lines - suffix] do suffix = suffix + 1 end
 	local insert = {}
 	for i = prefix + 1, #new_lines - suffix do insert[#insert + 1] = new_lines[i] end
-	require("parley.buffer_edit").replace_user_lines(buf, prefix, #lines - suffix, false, insert)
+	-- The clipboard only after the cut applied (#265): a refused cut used to
+	-- leave the text in the buffer AND on the clipboard, so a paste duplicated it.
+	if not require("parley.buffer_edit").edit_user_lines("ExchangeCut", buf, prefix, #lines - suffix, insert) then
+		return
+	end
+	_exchange_clipboard = extracted
+	vim.fn.setreg("+", table.concat(extracted, "\n") .. "\n")
 
 	M.logger.info("Cut " .. #exchange_indices .. " exchange(s) (" .. #extracted .. " lines)")
 end
@@ -4673,7 +4719,7 @@ local function delete_entity_range(scope)
 		return
 	end
 
-	require("parley.buffer_edit").replace_user_lines(buf, range.first - 1, range.last, false, {})
+	if not require("parley.buffer_edit").edit_user_lines("DeleteEntity", buf, range.first - 1, range.last, {}) then return end
 	M.logger.info(("Deleted %s (%d line(s))"):format(range.kind, range.last - range.first + 1))
 end
 
@@ -4699,7 +4745,7 @@ M.cmd.ExchangePaste = function()
 		parsed_chat, ctx.cursor_line, header_end, #lines)
 
 	local to_insert = exchange_clipboard.build_paste_lines(lines, paste_after, _exchange_clipboard, #lines)
-	require("parley.buffer_edit").replace_user_lines(buf, paste_after, paste_after, false, to_insert)
+	if not require("parley.buffer_edit").edit_user_lines("ExchangePaste", buf, paste_after, paste_after, to_insert) then return end
 	M.logger.info("Pasted " .. #_exchange_clipboard .. " lines after line " .. paste_after)
 end
 
@@ -4722,16 +4768,13 @@ M.cmd.NewQuestion = function()
 	assert(plan.row, "new_question.plan returned no row")
 
 	local edits = require("parley.buffer_edit")
-	local ok, err = true, nil
+	local ok = true
 	if plan.kind == "insert" then
-		ok, err = pcall(edits.replace_user_lines, buf, plan.after, plan.after, false, plan.lines)
+		ok = edits.edit_user_lines("NewQuestion", buf, plan.after, plan.after, plan.lines)
 	elseif plan.lines then
-		ok, err = pcall(edits.replace_user_lines, buf, plan.row - 1, plan.row, false, plan.lines)
+		ok = edits.edit_user_lines("NewQuestion", buf, plan.row - 1, plan.row, plan.lines)
 	end
-	if not ok then
-		M.logger.warning("NewQuestion stopped: " .. tostring(err))
-		return
-	end
+	if not ok then return end -- edit_user_lines said why (#265)
 
 	local row = math.min(plan.row, vim.api.nvim_buf_line_count(buf))
 	-- Column 0 is deliberate: `startinsert!` IS `A`, so it lands at end-of-line

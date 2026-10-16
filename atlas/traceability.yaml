@@ -250,6 +250,8 @@ atlas:
       - tests/integration/generation_settles_spec.lua
       - tests/unit/refusal_spec.lua
       - tests/arch/refusal_vocabulary_spec.lua
+      - tests/integration/user_edit_refusal_spec.lua
+      - tests/arch/user_edit_policy_spec.lua
       - tests/integration/chat_refusal_spec.lua
       - tests/unit/chat_cancel_entry_spec.lua
       - tests/unit/previous_answer_spec.lua
