@@ -1,12 +1,20 @@
 ---
 id: 000229
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-10-15
 estimate_hours:
-card_mirror: 'bd560dddbdf6af86d508937f3aa4f90fced440f2' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '75891c1c975450ec045a1141870368554b3da2c9' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T18:29:35-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Stream display chunks are discarded silently when the pending session invalidates
@@ -79,14 +87,25 @@ touched — which is why it needs evidence rather than preference.
   already covers them), that is a valid outcome: record where the reconciliation
   happens and close, keeping the counters.
 
+## Core concepts
+
+| Entity | Kind | Status | Location | Responsibility |
+| --- | --- | --- | --- | --- |
+| `create_handler` | INTEGRATION | deleted | `lua/parley/dispatcher.lua` | The scheduled writer with the four silent early returns; no production caller since the generation runner. |
+| `stream_replace_at_line` | INTEGRATION | deleted | `lua/parley/buffer_edit.lua` | Only consumer was `create_handler`. |
+| `tasker` | INTEGRATION | modified | `lua/parley/tasker.lua` | A throwing stdout reader ends the attempt with a recorded I/O error instead of continuing past the line. |
+| `fake_cliproxy` | INTEGRATION | modified | `tests/fixtures/fake_cliproxy` | A `stream` response mode: many separate content deltas. |
+
 ## Plan
 
-- [ ] Instrument the four early returns: count + log with reason
-- [ ] Build a test that invalidates the pending extmark mid-stream and compares
-      the buffer against `qt.response`
-- [ ] Read the measurement; record what actually fires and how often
-- [ ] Choose the remedy from what step 3 shows, or close with the evidence that
-      no content is lost
+Measurement (2026-10-15, :3). The path the issue names is dead code: `D.create_handler` (the scheduled writer with the four early returns) has no production caller, and chat_pending's `before_write` is gone. Chat streaming is now tasker stdout → `dispatcher` `process_line` (`qt.response ..= content`, then handler) → `response_provider` → `generation_runner.cb.output` → the generation machine → `document.append` → `nvim_buf_set_text`. Every refusal on that path STOPS the generation with an outcome the user sees: not alive → revoked/cancelled; overflow; write stale/refused/interrupted; queue discarded with `discarded_bytes`. The one point where a drop can coexist with continued streaming is a Lua error inside the stdout reader. `tasker.call_safely` only logs it; the dispatcher's line loop keeps the unconsumed line, so the next chunk re-processes it, risking a repeated or skipped line, not counted, stream continues. Two silent STALLS (no drop, a possibly hung generation: a machine-rejected output, and a short `applied` receipt) are a different symptom and get their own issue.
+
+- [ ] Delete `D.create_handler`, `buffer_edit.stream_replace_at_line` and `create_handler_spec`. The silent early returns go with their only writer (the issue's Done-when 2, by removal).
+- [ ] tasker: a failed stdout/stderr reader callback ends the attempt with an `io_error` naming the reader, the same terminal path as the retention limit, so the generation fails visibly instead of streaming past the line. Red-first regression: a reader that throws once → the attempt stops with that error; before the fix it keeps running.
+- [ ] Oracle (Done-when 1): an integration spec drives a real chat response (real dispatcher, tasker, curl, runner, document) against `fake_cliproxy` in a new `stream` response mode (N separate content deltas). A buffer-attach hook makes the main loop busy and inserts a line above the answer on every streamed write. After completion, assert the buffer's answer text equals `qt.response` (less the deliberately stripped leading newlines) and that the inserted lines survived.
+- [ ] File the two silent-stall paths as a separate issue with the measured file:line evidence.
+- [ ] Atlas: where streamed bytes can stop and how each is accounted.
+- [ ] Verify: focused specs, then the full suite.
 
 ## Log
 
