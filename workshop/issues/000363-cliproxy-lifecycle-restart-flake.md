@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "8184a722", done: "5e84df71"}
 ---
 
 # Cliproxy credential-restart lifecycle cases intermittently time out and probe the killed port
