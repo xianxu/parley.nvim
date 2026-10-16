@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "cc38ad84", done: "aba85563"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # a later provider filter term is silently starved by the per-provider cap
@@ -206,6 +206,8 @@ orders, which located the cap. The symptom (a model "not showing up") pointed
 confidently at discovery, and the cause was two layers downstream of it.
 
 ### 2026-10-15 (:3)
+- 2026-10-15: closed — Prior evidence stands (19/77 red vs main, 77/0 green; full suite on e0c389cc, only starter_config default strings, fixed 7/0). BR-1: picker diagnoses only operator-written specs; defaults plus a typo against a catalog lacking gpt-6 and fable gives exactly the typo warning; red without the filter (56/1), green 57/0. Minors: diagnose reuses _select; docs state provider cap beside terms is rejected. Lint clean.; review verdict: SHIP
+- 2026-10-15: flow upgraded quick → full — 151 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Red against main's `cliproxy_catalog.lua` (temporary copy, restored): 19 of the 77 catalog unit cases fail. These cover the `!N` parse, the malformed rejection naming the spec, the uncapped renders (22 total; `codex:gpt-5` 6), the recommended config as exactly its 9 rows in term order, single rendering under two terms, and `diagnose`. The reported case (`codex:gpt-5,gpt-6` includes `gpt-6-astra`) passes on main, being #247's fix, and is kept as a guard. Green: 77/0.
 - Rows that pinned the hidden cap now write it (`claude!3`, `antigravity!3`, `antigravity:pro!3,flash!3`, `codex!3`), keeping their renders. The uncapped forms are pinned beside them (`claude` now 4 with haiku; `antigravity:pro,flash` 9).
