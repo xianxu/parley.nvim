@@ -21,6 +21,7 @@ M.PREFIX = {
     attachments = "Images not sent",
     topic = "Topic not generated",
     drill = "Drill-in stopped",
+    edit = "Edit not made",
 }
 
 -- The failure a user's own Stop carries: it is not a refusal, so no message.
@@ -112,6 +113,9 @@ M.TOKENS = {
     -- document/user_edits.lua), not only the ones seen so far: `applied` is the
     -- success, and these are what a caller reports (#261 M5 review round 2).
     ["stale"] = { what = "the chat changed while it was being edited", action = MOMENT },
+    -- The editor's own failure mid-apply (#265 close BR-1): its text is the detail.
+    ["error"] = { what = "the edit failed while it was being applied",
+        action = "edit the chat back if it changed, then try again" },
     ["refused"] = { what = "the edit could not be applied", action = MOMENT },
     ["interrupted"] = { what = "the chat changed while Parley was writing into it", action = MOMENT },
     ["busy"] = { what = "another edit is being applied to the chat", action = MOMENT },
@@ -239,6 +243,7 @@ M.KIND_ACTION = {
     drill = AGAIN,
     topic = AGAIN,
     attachments = AGAIN,
+    edit = MOMENT, -- a refused user edit (#265): the command can simply be run again
 }
 
 -- What a revocation means depends on why it happened.
@@ -400,6 +405,19 @@ end
 for outcome in pairs(require("parley.generation").OUTCOMES) do
     assert(outcome == "success" or M.TOKENS[outcome],
         "parley.refusal: no words for the generation outcome '" .. outcome .. "'")
+end
+
+--- The one warning a chat command gives when its user edit is refused
+--- (#265): the command, then the words for the reason. The buffer is unchanged.
+---@param command string # what the user ran, e.g. "NewQuestion"
+---@param reason string # buffer_edit's token: a capture reason or an apply status
+---@param err any|nil # the editor's own error text, when an apply errored
+---@return string|nil message # nil when the reason is silent (a closed chat)
+function M.edit(command, reason, err)
+    local detail = err ~= nil and { notice = M.brief(err) } or nil
+    local message = M.describe("edit", nil, reason, detail)
+    if not message then return nil end
+    return command .. " — " .. message
 end
 
 return M

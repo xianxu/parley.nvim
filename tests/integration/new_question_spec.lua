@@ -278,41 +278,29 @@ describe("new question chord", function()
 		vim.cmd("stopinsert")
 	end)
 
-	-- A DOUBLE at the buffer_edit seam, and labelled as one. It proves that
-	-- NewQuestion catches a refusal and reports it visibly instead of raising a
-	-- bare Lua error at the user or silently doing nothing. It does NOT prove
-	-- that a live generation produces that refusal (#263 close review, minor).
-	--
-	-- Two realer options were tried and rejected on evidence:
-	--   * a second overlapping user capture -- MEASURED to be allowed, so it
-	--     produces no refusal at all;
-	--   * a detached document -- buffer_edit.capture_user does
-	--     `document.get(buf) or document.attach(buf)`, so it silently re-attaches
-	--     and the edit goes through.
-	-- Driving a real generation needs chat_pending_spec's file-local helpers,
-	-- which are not exported; that is tracked as a follow-up rather than copied
-	-- here. See the plan's ## Revisions.
-	it("catches a refusal and reports it instead of raising or no-op'ing", function()
+	-- A REAL refusal, through the document's own seam (#265): the user-edit
+	-- guard slots are held full, so NewQuestion's capture is refused with
+	-- `capacity`. A live generation is no oracle here: #265 measured that it
+	-- does not refuse user edits at all.
+	it("reports a refusal instead of raising: buffer unchanged, one warning", function()
 		local buf = prepped(FIXTURE)
 		local before = body(buf)
 		local warned = {}
 		local real_warning = parley.logger.warning
 		parley.logger.warning = function(m) table.insert(warned, tostring(m)) end
-
-		local edits = require("parley.buffer_edit")
-		local real_capture = edits.capture_user
-		edits.capture_user = function() return nil, "response is streaming" end
+		local held = require("tests.helpers.user_edit_capacity").hold(buf)
 
 		vim.api.nvim_win_set_cursor(0, { 8, 0 })
-		local ok = pcall(parley.cmd.NewQuestion)
+		local ok, err = pcall(parley.cmd.NewQuestion)
 
-		edits.capture_user = real_capture
+		held.release()
 		parley.logger.warning = real_warning
 
-		assert.is_true(ok, "NewQuestion propagated the refusal instead of reporting it")
+		assert.is_true(ok, "NewQuestion raised instead of reporting: " .. tostring(err))
 		assert.same(before, body(buf))
-		assert.is_true(#warned > 0, "refusal was silent")
-		assert.is_truthy(table.concat(warned, "\n"):match("NewQuestion stopped"))
+		assert.same({ "NewQuestion — Edit not made: too many edits are pending in this chat; try again in a moment" },
+			warned)
+		assert.equals("n", vim.api.nvim_get_mode().mode, "a refused question must not enter insert mode")
 	end)
 
 	-- Verified by hand during the close review: with the cursor in the front
