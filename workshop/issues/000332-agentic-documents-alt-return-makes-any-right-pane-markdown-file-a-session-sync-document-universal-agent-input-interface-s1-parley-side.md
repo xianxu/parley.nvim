@@ -74,7 +74,7 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - [x] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
 - [x] Add isolated real/fake conformance and docs/traceability; verify production-door submission feedback and native edit-turn regressions.
 - [x] Add unchanged-submit suppression and explicit rapid resend with lifecycle and production-door regressions.
-- [ ] Complete the required full suite on the final implementation before close.
+- [x] Complete the required full suite on the final implementation before close.
 
 Post-close acceptance remains pending: after SHIP and the green suite/conformance, stage under the existing hub authorization for the combined operator check. Pair#573 has landed; the TL coordinates the Couch and Neovim restart. Land only after operator acceptance; clear the stage and report the merge.
 
@@ -143,6 +143,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 - 2026-10-15 — one focused unchanged-code cliproxy reproduction passes54/0/0, no survivors, log /var/folders/07/b9wcwwld4_v2w9r3hk525bm80000gn/T/parley-332-cliproxy-triage.keheOK/target.log. HEAD differs from pushed b5de7d2b only in this issue and its plan. Static repair terms can exceed the spec's8s wait (up to10s configured probes/polls plus synchronous process discovery); the exact delayed stage is unmeasured, so this supports a budget-sensitive flake, not a proven missing callback. Asked hub whether the known-open-flake rule permits one full rerun on the exact same pushed code head while another slot fixes #340 from main (receipt4dde4dcc-7995-4612-b254-0aa46af8f34f). No waiver or blind full rerun; close/stage remain pending. Fresh real/fake conformance passes at /tmp/parley332-conformance-final.log against clean Couch revision6d65c4c4ef29bcdea3ea5b45f3dfdeed41ce1154 containing the landed pair#573 merge.
 
 - 2026-10-15 — hub explicitly approves the issue-backed flake rule for #340 and one unchanged required-suite rerun on b5de7d2b (submitted receipt bd46ab72-2c41-4074-abf5-a9ebb5640096). No waiver or source change. Close and stage only after that run passes; the TL schedules combined operator acceptance.
+
+- 2026-10-15 — approved unchanged required-suite rerun PASSES on b5de7d2b4c3d336679135d016baeb58654f262aa:443/443 spec files, lint751 files0 warnings/errors, no survivors,2m39s execution after609s queue. The cliproxy lifecycle file passes32s; #340 remains open for the first-run budget-sensitive failure and its focused54-case pass. No waiver, source change, skip or blind rerun. Full log /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/b5de7d2b4c3d336679135d016baeb58654f262aa/suite.log; SHA256 49baa43d549508b7eca5f5849ba351435e46c330f3183eb92f058fcb6d6da7bc. Later commits change only this issue/plan. All pre-close verification is now complete; mandatory review, stage and operator acceptance remain pending.
 
 ## Revisions
 
