@@ -4,7 +4,6 @@ local primary_dir = vim.fn.resolve(vim.fn.tempname() .. "-parley-chat-move-prima
 local secondary_dir = vim.fn.resolve(vim.fn.tempname() .. "-parley-chat-move-secondary")
 vim.fn.mkdir(primary_dir, "p")
 vim.fn.mkdir(secondary_dir, "p")
-vim.g.parley_test_mode = true
 
 local parley = require("parley")
 parley.setup({

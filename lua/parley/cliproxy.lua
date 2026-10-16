@@ -240,8 +240,8 @@ local function data_root()
     -- here, so a root outside the isolated test env is refused rather than
     -- written: a spec that forgot _set_data_dir once rewrote the operator's
     -- real catalog. Production never sets PARLEY_TEST_MODE.
-    if vim.env.PARLEY_TEST_MODE == "1"
-        and not require("parley.test_isolation").inside(vim.env.PARLEY_TEST_ENV_ROOT, root) then
+    local isolation = require("parley.test_isolation")
+    if isolation.active() and not isolation.inside(vim.env.PARLEY_TEST_ENV_ROOT, root) then
         error(("cliproxy: refusing data root %s outside the isolated test env (PARLEY_TEST_ENV_ROOT=%s)")
             :format(root, tostring(vim.env.PARLEY_TEST_ENV_ROOT)))
     end
@@ -2145,7 +2145,7 @@ local function releases_url()
         return _releases_url_override
     end
     local env = vim.env.PARLEY_CLIPROXY_RELEASES_URL
-    if vim.env.PARLEY_TEST_MODE == "1" and env ~= nil and env ~= "" then
+    if require("parley.test_isolation").active() and env ~= nil and env ~= "" then
         return env
     end
     return RELEASES_URL

@@ -37,13 +37,10 @@ runtime plugin/plenary.vim
 " root, which Makefile.parley places outside $(CURDIR).
 set noswapfile
 execute 'set directory=' . fnameescape(empty($TMPDIR) ? '/tmp' : $TMPDIR) . '//'
-let g:parley_test_mode = v:true
-" Since #261 M5 every spec child loads this init (tests/helpers/spec_runner.lua
-" passes it to plenary), so what is set here — `g:` included — reaches specs.
-" Before that, children started without it and only the environment carried over;
-" code that must know it is under the harness still reads $PARLEY_TEST_MODE
-" (#227), which works either way. A spec that needs a different value for
-" `g:parley_test_mode` sets it itself (file_tracker_spec, sidecars.lua).
+" The harness signal (#235): one variable, one reader —
+" require('parley.test_isolation').active(). It is an environment variable so
+" every spec child inherits it however it is started (#227). A spec that needs
+" the real behavior clears it for its case (file_tracker_spec, sidecars.lua).
 let $PARLEY_TEST_MODE = '1'
 " #307: this checkout carries a `.parley` marker and specs run from it. Setup
 " detects repo mode from cwd even with an explicit chat_dir, so without this a

@@ -889,3 +889,31 @@ describe("arch: composed writefile lines are flattened (#214 M3)", function()
         assert.is_function(require("parley.helper").flatten_lines)
     end)
 end)
+
+-- #235: the test-harness signal has ONE reader, parley.test_isolation.active().
+-- A g: flag that only some specs set used to be the second, so the rest wrote
+-- the shared file_access.json; a new reader of either spelling is a finding.
+describe("arch: one reader for the test-harness signal (#235)", function()
+    local HOME = "lua/parley/test_isolation.lua"
+    local function readers(files)
+        local found = {}
+        for _, file in ipairs(files) do
+            if file ~= HOME then
+                for n, line in ipairs(vim.fn.readfile(file)) do
+                    if not line:match("^%s*%-%-") and (line:find("parley_test_mode", 1, true)
+                        or line:find("PARLEY_TEST_MODE", 1, true)) then
+                        found[#found + 1] = file .. ":" .. n .. ": " .. vim.trim(line)
+                    end
+                end
+            end
+        end
+        return found
+    end
+    it("no lua/ module reads the signal except test_isolation.active()", function()
+        local files = repo_files("git ls-files --cached --others --exclude-standard -- 'lua/*.lua'")
+        assert.same({}, readers(files), "ask require('parley.test_isolation').active()")
+        local home = table.concat(vim.fn.readfile(HOME), "\n")
+        assert.is_truthy(home:find('PARLEY_TEST_MODE == "1"', 1, true), "the one reader moved: update this guard")
+    end)
+end)
+
