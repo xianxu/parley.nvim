@@ -1,6 +1,6 @@
 ---
 id: 000334
-status: working
+status: codecomplete
 created: 2026-10-15
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.54
+tracker:
+    version: 1
+    completion:
+        token: close-e949df1d2245
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: ee73224ecf92563c10999557107616e8795edb09
+        evidence_commit: 872d916b2be5dd97c1ed5344976da6568a84d70c
 ---
 
 # Leaving a buffer while holding the operator lock flashes the red winbar three times (submit reminder)
