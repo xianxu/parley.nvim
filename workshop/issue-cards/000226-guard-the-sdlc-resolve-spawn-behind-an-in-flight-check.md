@@ -1,6 +1,6 @@
 ---
 id: 000226
-status: codecomplete
+status: done
 created: 2026-09-08
 updated: 2026-10-16
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 2f49f51bddfecf8a72586f4550fa40d0ceda761b
         evidence_commit: f0a2bf8a083a4ad8c4ebf25e6d0cdc4bfe9120cd
+        landed_commit: aa2b08067c3c3c3e2324407845acfa602b2e0c5f
 ---
 
 # Guard the sdlc resolve spawn behind an in-flight check
