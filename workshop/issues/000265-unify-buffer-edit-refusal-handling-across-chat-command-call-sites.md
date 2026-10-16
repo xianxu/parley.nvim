@@ -1,12 +1,20 @@
 ---
 id: 000265
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-16
-updated: 2026-09-16
+updated: 2026-10-16
 estimate_hours:
-card_mirror: 'ccb3984feb2ebf77217c1be2aef12eda7b7fe609' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'aa9951b1b50e2061330b8beb5df4ddeef6e971ef' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T04:02:56-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Unify buffer_edit refusal handling across chat command call sites
@@ -70,10 +78,30 @@ pcall.
 
 ## Plan
 
-- [ ] Audit all 13 `replace_user_lines` call sites; classify raise vs report.
-- [ ] Extract the shared generation fixture out of `chat_pending_spec`.
-- [ ] Implement the single refusal policy + the arch spec that enforces it.
-- [ ] Convert #263's refusal case to the real fixture.
+Audit, 2026-10-16:
+- There are 17 call sites, not 13 (14 in init.lua, comment/float.lua:43, review_send.lua:156 and :258). Every one is reached from a keymap, a command or an autocmd, and none should raise. The only programming-error guards (NewQuestion's `assert(plan.row)`, starter's asserts) are already separate.
+- Five sites can leave partial state when the edit refuses:
+  - `_slug_rename_chat`: the file is renamed on disk, but the `file:` header is not updated.
+  - `move_chat_tree`: files move, and the reference rewrite stops mid-loop.
+  - `ChatReview`: the review chat is created, but no back-reference is added.
+  - `ChatPrune`: the child file is written, and the parent is left unchanged.
+  - `ExchangeCut`: the clipboard holds a cut that did not happen.
+
+Measured, 2026-10-16 (scratch probe, `tests/helpers/respond_fixture` driving a real `chat_respond` generation with a fake transport): **a live generation does NOT make `replace_user_lines` refuse.** Edits inside the streaming answer, on the question row, on the draft row, and over the whole buffer all applied. A capture refuses only on `refused` (editor mid-operation or inside an on_lines callback), `capacity` (the 64 user-guard slots are all live), `detached`, or a bad range or anchor. An apply refuses on `stale`, `refused`, `interrupted`, `busy` or `chunkneeded`. So Done-when 3–4 cannot be met as written (see ## Revisions). The reachable, real refusal is `capacity`: a spec holding 64 real user captures through `buffer_edit.capture_user`. That is the document's own seam, not a double.
+
+- [ ] One policy in `buffer_edit`: `M.edit_user_lines(command, buf, first, last, lines, opts)` returns `true` or `false, reason`. On refusal it leaves the buffer unchanged and logs ONE warning that names the command, worded by `refusal.lua` (a new `PREFIX.edit`, plus rows for the unkeyed capture reasons). `opts.quiet` logs at debug instead, for the CursorHold read-repair and the CompleteDone requote, which are cosmetic and retried. `replace_user_lines` becomes module-private.
+- [ ] Convert all 17 sites. The 5 partial-state sites are reordered so that a refusal changes nothing, or reported honestly where it cannot:
+  - `_slug_rename_chat`: edit the header first; rename only once it applied.
+  - `move_chat_tree`: continue past a refused rewrite, collect the failures like `asset_errors`, and return `nil, err` with the count.
+  - `ChatReview`: report "review chat created; back-reference not added".
+  - `ChatPrune`: edit the parent before writing the child.
+  - `ExchangeCut`: publish the clipboard only after the cut applied.
+- [ ] Arch spec: no `replace_user_lines(` outside `buffer_edit.lua`, and no raw `pcall` around the edit API in `lua/`.
+- [ ] Shared test helper `tests/helpers/user_edit_capacity.lua`: `hold(buf)` fills the real guard slots, and `release()` frees them. Tests:
+  - the policy unit (refusal: ok=false, buffer unchanged, one warning naming the command);
+  - each partial-state site under a held capacity (nothing changes, or the honest report);
+  - NewQuestion's refusal case converted from the double to the helper, with its "this is a double" comment removed.
+- [ ] Doc-block placement check before close (lessons, #345).
 
 ## Log
 
@@ -93,3 +121,8 @@ warning should take its words from there too: add rows for `User edit
 unavailable` and `User edit refused`, rather than a second phrasebook. Its
 `capacity`, `stale` and `refused` rows already cover the document's user-edit
 guard.
+
+## Revisions
+
+- 2026-10-16: Done-when 3–4 revised by measurement. A live generation does not refuse user edits (probe above), so "prove a refusal against a buffer under a live generation" has no oracle. Revised: a shared helper puts a chat buffer under a REAL refusal (`capacity`, held through the document's own capture API), and NewQuestion's refusal case is proven against it rather than against a double. Done-when 1 is unchanged; the audit found no site that should raise, so the enumerated exception list is empty and that is stated.
+
