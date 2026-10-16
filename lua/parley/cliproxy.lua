@@ -29,6 +29,7 @@ local M = {}
 local CURL_MAX_TIME = 2      -- seconds, --max-time on every probe
 local PORT_RELEASE_MS = 2000 -- wait_port_released deadline
 local POLL_BUDGET_MS = 5000  -- poll_until_healthy deadline
+local LSOF_MAX_MS = 2000     -- the async listener read's time limit (#345)
 -- How many candidates the RECOVERY path reads, and the multiplier on the
 -- credential-read term of the repair budget (the reads are sequential).
 --
@@ -457,7 +458,10 @@ M._repair_budget_sec = {
     liveness_probe = CURL_MAX_TIME,
     auth_files = CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS,
     stop_identity_probe = CURL_MAX_TIME,
-    port_release = PORT_RELEASE_MS / 1000 + CURL_MAX_TIME,
+    stop_listener_read = LSOF_MAX_MS / 1000,
+    -- The post-exit listener read (#340) runs inside the release wait, whose
+    -- overrun is one probe — or this read, whichever is longer.
+    port_release = PORT_RELEASE_MS / 1000 + math.max(CURL_MAX_TIME, LSOF_MAX_MS / 1000),
     ensure_probe = CURL_MAX_TIME,
     poll_healthy = POLL_BUDGET_MS / 1000 + CURL_MAX_TIME,
     second_read = CURL_MAX_TIME,
@@ -472,7 +476,7 @@ local function is_cliproxy_state(state)
     return state == "healthy" or state == "needs_login" or state == "client_key_mismatch"
 end
 
-local pids_on_port -- the lsof listener read, defined with the process tools below
+local pids_on_port, pids_on_port_async -- the lsof listener reads, defined with the process tools below
 
 -- Wait (bounded) for a port to stop answering after SIGTERM. M.stop() returns
 -- immediately, and the REAL cliproxyapi shuts down gracefully — so without this
@@ -516,11 +520,12 @@ local function wait_port_released(host, port, secret, pids, cb)
             return ok ~= nil or name ~= "ESRCH" -- EPERM: it exists, just not ours
         end, pids)
         if #alive == 0 then
-            local listeners, lerr = pids_on_port(port)
-            if not lerr and #listeners == 0 then
-                return cb(true, "down", true)
-            end
-            return probe_poll()
+            return pids_on_port_async(port, function(listeners, lerr)
+                if not lerr and #listeners == 0 then
+                    return cb(true, "down", true)
+                end
+                probe_poll()
+            end)
         end
         if uv.now() >= deadline then
             return probe_poll() -- the probe at the deadline decides, as before
@@ -543,20 +548,21 @@ local start_managed -- ensure_running's spawn branch, defined with it below
 ---@param on_error fun(msg: string)
 function M.restart_managed(on_ready, on_error)
     local opts = render_opts()
-    local _, pids = M.stop()
-    wait_port_released(opts.host, opts.port, opts.secret, pids, function(released, state, exited)
-        if not released and is_cliproxy_state(state) then
-            return on_error(("cliproxy: the old proxy on port %s still answers %d s after it was told to "
-                .. "stop, so no replacement was started — try again once it has exited"):format(
-                tostring(opts.port), math.floor(PORT_RELEASE_MS / 1000)))
-        end
-        if exited and M.is_managed() then
-            -- The old process is gone, so the port is free: spawn without
-            -- ensure_running's reuse probe, which stalls on a just-closed port the
-            -- same way (#340).
-            return start_managed(nil, on_ready, on_error)
-        end
-        M.ensure_running(on_ready, on_error)
+    M.stop_async(function(_, pids)
+        wait_port_released(opts.host, opts.port, opts.secret, pids, function(released, state, exited)
+            if not released and is_cliproxy_state(state) then
+                return on_error(("cliproxy: the old proxy on port %s still answers %d s after it was told to "
+                    .. "stop, so no replacement was started — try again once it has exited"):format(
+                    tostring(opts.port), math.floor(PORT_RELEASE_MS / 1000)))
+            end
+            if exited and M.is_managed() then
+                -- The old process is gone, so the port is free: spawn without
+                -- ensure_running's reuse probe, which stalls on a just-closed port the
+                -- same way (#340).
+                return start_managed(nil, on_ready, on_error)
+            end
+            M.ensure_running(on_ready, on_error)
+        end)
     end)
 end
 
@@ -917,22 +923,53 @@ end
 -- lsof absent, or refused (vim.system RAISES on EPERM — degrade here, at the IO
 -- seam, so stop() and restart_managed never raise). lsof exits 1 when nothing
 -- matches, so its exit code is not an error.
+-- One seam, two drivers (#345): the sync read below, and pids_on_port_async
+-- for the main-loop paths, share the argv and the parse.
+local function lsof_argv(port)
+    return { _lsof_cmd, "-nP", "-iTCP:" .. port, "-sTCP:LISTEN", "-t" }
+end
+
+local function parse_listener_pids(stdout)
+    local pids = {}
+    for s in (stdout or ""):gmatch("%d+") do
+        pids[#pids + 1] = tonumber(s)
+    end
+    return pids
+end
+
 pids_on_port = function(port)
     if vim.fn.executable(_lsof_cmd) ~= 1 then
         return {}, "lsof unavailable"
     end
     local ok, res = pcall(function()
-        return vim.system({ _lsof_cmd, "-nP", "-iTCP:" .. port, "-sTCP:LISTEN", "-t" }, { text = true }):wait()
+        return vim.system(lsof_argv(port), { text = true }):wait()
     end)
     if not (ok and res) then
         return {}, "lsof unreadable"
     end
-    local pids = {}
-    for s in (res.stdout or ""):gmatch("%d+") do
-        pids[#pids + 1] = tonumber(s)
-    end
-    return pids
+    return parse_listener_pids(res.stdout)
 end
+
+-- The same read without blocking the main loop: lsof measured ~1 s under load
+-- (#345). cb(pids, err) runs on the main loop, once, on every path.
+pids_on_port_async = function(port, cb)
+    if vim.fn.executable(_lsof_cmd) ~= 1 then
+        return cb({}, "lsof unavailable")
+    end
+    local ok = pcall(vim.system, lsof_argv(port), { text = true, timeout = LSOF_MAX_MS }, function(res)
+        vim.schedule(function()
+            if res.code == 124 then -- vim.system's timeout: no answer is not "no listener"
+                return cb({}, "lsof timed out")
+            end
+            cb(parse_listener_pids(res.stdout))
+        end)
+    end)
+    if not ok then
+        cb({}, "lsof unreadable")
+    end
+end
+
+M._pids_on_port_async = function(port, cb) return pids_on_port_async(port, cb) end -- test seam
 
 -- Synchronously decide whether host:port is held by a cliproxy — same
 -- /v1/models identity as health_probe (reusing classify) — so stop() never
@@ -950,27 +987,58 @@ end
 --- is left untouched.
 ---@return number killed
 ---@return integer[] pids # what was signalled, so a restart can wait for their exit (#340)
-function M.stop()
-    local killed = {}
-    for pid in pairs(_spawned) do
-        pcall(uv.kill, pid, "sigterm")
-        killed[pid] = true
-    end
-    _spawned = {}
-    local opts = render_opts()
-    if opts.host and opts.port and port_holds_cliproxy(opts.host, opts.port, opts.secret) then
-        for _, pid in ipairs(pids_on_port(opts.port)) do
-            if not killed[pid] then
-                pcall(uv.kill, pid, "sigterm")
-                killed[pid] = true
-            end
+-- SIGTERM each pid not yet in `killed`, recording it. Shared by stop() and
+-- stop_async() (ARCH-DRY).
+local function sigterm_all(killed, pids)
+    for _, pid in ipairs(pids) do
+        if not killed[pid] then
+            pcall(uv.kill, pid, "sigterm")
+            killed[pid] = true
         end
     end
-    -- NB: `_spawned` already holds every pid this session spawned, on any port,
-    -- and the loop above kills all of them — so a proxy left on a since-changed
-    -- endpoint is covered. Proxies from EARLIER nvim sessions are not reachable
-    -- from any in-process table; that is what peers()/reap() is for.
+end
+
+-- Every pid this session spawned, on any port, so a proxy left on a
+-- since-changed endpoint is covered. Proxies from EARLIER nvim sessions are not
+-- reachable from any in-process table; that is what peers()/reap() is for.
+local function kill_spawned()
+    local killed = {}
+    sigterm_all(killed, vim.tbl_keys(_spawned))
+    _spawned = {}
+    return killed
+end
+
+function M.stop()
+    local killed = kill_spawned()
+    local opts = render_opts()
+    if opts.host and opts.port and port_holds_cliproxy(opts.host, opts.port, opts.secret) then
+        sigterm_all(killed, pids_on_port(opts.port))
+    end
     return vim.tbl_count(killed), vim.tbl_keys(killed)
+end
+
+--- stop() without blocking the main loop (#345): the identity probe and the
+--- listener read are async, so a restart never freezes the editor on them.
+--- The sync stop() stays for spec teardown.
+---@param cb fun(killed: number, pids: integer[])
+function M.stop_async(cb)
+    local killed = kill_spawned()
+    local function done()
+        cb(vim.tbl_count(killed), vim.tbl_keys(killed))
+    end
+    local opts = render_opts()
+    if not (opts.host and opts.port) then
+        return done()
+    end
+    M.health_probe(opts.host, opts.port, opts.secret, function(state)
+        if not is_cliproxy_state(state) then
+            return done()
+        end
+        pids_on_port_async(opts.port, function(pids)
+            sigterm_all(killed, pids)
+            done()
+        end)
+    end)
 end
 
 -- Does the on-disk rendered config differ from a fresh render of the current

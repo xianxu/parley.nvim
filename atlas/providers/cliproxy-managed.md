@@ -114,7 +114,11 @@ signalled (`kill(pid, 0)`), not the port (#340). Under the parallel suite, a
 probe of a just-closed port went unanswered until curl's `--max-time`. Once they
 have exited and `lsof` finds no listener left, the replacement spawns without a
 reuse probe. A port probe decides instead when no process was identified, a
-listener remains or cannot be read, or a process outlives the wait.
+listener remains or cannot be read, or a process outlives the wait. The
+restart and `:ParleyProxy stop` use `stop_async` (#345). Its identity probe
+and both listener reads are async, so the editor never blocks on them, and
+`lsof` is limited to 2 s (a timeout counts as unread). The sync `stop` remains
+for spec teardown.
 
 ## Model catalog
 

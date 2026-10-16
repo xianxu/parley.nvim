@@ -380,8 +380,10 @@ M.register_proxy_command = function(prefix)
 				vim.notify(msg, vim.log.levels.ERROR)
 			end)
 		elseif sub == "stop" then
-			local n = cliproxy.stop()
-			vim.notify("cliproxy: stopped " .. n .. " parley-spawned proxy(ies)", vim.log.levels.INFO)
+			-- Async (#345): the identity probe and lsof no longer freeze the editor.
+			cliproxy.stop_async(function(n)
+				vim.notify("cliproxy: stopped " .. n .. " parley-spawned proxy(ies)", vim.log.levels.INFO)
+			end)
 		elseif sub == "update" then
 			vim.notify("cliproxy: finding the release to install…", vim.log.levels.INFO)
 			vim.cmd("redraw") -- update blocks while it fetches: show the notice first
