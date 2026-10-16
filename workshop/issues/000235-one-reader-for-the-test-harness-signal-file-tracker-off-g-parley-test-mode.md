@@ -1,12 +1,12 @@
 ---
 id: 000235
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-10
 updated: 2026-10-16
 estimate_hours:
-card_mirror: 'e131e9dbe8aec016f75acfff232a9cb3547c4ab2' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '6f829d996467932aa85701c461bc7125f1b68ed1' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T05:22:52-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "d86ae097", done: "4b4abcd2"}
+actual_hours: 0.08
 ---
 
 # One reader for the test-harness signal: file_tracker off g:parley_test_mode
