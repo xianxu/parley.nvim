@@ -465,7 +465,7 @@ end
 -- immediately, and the REAL cliproxyapi shuts down gracefully — so without this
 -- the follow-up probe can still see the dying proxy, take ensure_running's
 -- reuse-if-healthy branch, and never spawn the replacement. The Python fake
--- dies instantly unless PARLEY_FAKE_EXIT_DELAY_MS keeps it serving, which is how
+-- dies instantly unless PARLEY_FAKE_IGNORE_SIGTERM keeps it serving, which is how
 -- the update spec reproduces this (#237).
 local function wait_port_released(host, port, secret, cb)
     -- WALL-CLOCK deadline, not a count of sleeps: each health_probe is a curl
@@ -490,7 +490,7 @@ end
 --- Stop the managed proxy, WAIT for the port to be released, then ensure a new
 --- one is running. One sequence, four callers (the management-route repair, the
 --- recovery ladder's `restart` rung, :ParleyProxy restart and update) — the wait
---- is the part that is easy to omit, and the fake's PARLEY_FAKE_EXIT_DELAY_MS
+--- is the part that is easy to omit, and the fake's PARLEY_FAKE_IGNORE_SIGTERM
 --- reproduces the graceful shutdown that makes it matter (ARCH-DRY). A
 --- cliproxyapi still answering when the wait ends is reported through on_error,
 --- never reused: ensure_running would take it for the replacement (#237 BR-8).

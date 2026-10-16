@@ -559,3 +559,9 @@ oracle, and the mutation that would make the test fail.
 
 - A diagnostic over configuration must know who wrote each entry. Shipped defaults may name things a given environment lacks (a model line an account doesn't serve), so warn only on operator-written entries, and test the defaults against an environment where they would trigger (BR-1).
 - Run the full suite on the FINAL code commit before `sdlc merge`, not on an earlier one. A review fix can trip a tree-wide guard (here superseded_comment_spec) that the focused specs never load (#230).
+
+## #343: a fake that ignores a signal is a process you now own
+
+- Replace a wall-clock race window with a state the case holds (a fake that ignores SIGTERM until released), not a longer delay.
+- Whoever makes a process unkillable by the normal path must kill it. The fixture reap only sees fixture_process spawns, and a proxy the code under test spawned is outside it. Hold the pids, SIGKILL them in the case, wait for the port to go down, and kill them again in after_each for the failure path.
+- Check for leaks while the owner is still alive. A check after nvim exits sees the watchdog's cleanup, not the spec's.

@@ -484,8 +484,9 @@ release is running" is observable end to end. Specs point lookups at the fake
 with `_set_releases_url`; `tests/minimal_init.vim` points them at a dead local
 port (`$PARLEY_CLIPROXY_RELEASES_URL`) so no spec reaches GitHub by accident;
 parley reads that variable only under `$PARLEY_TEST_MODE`, which the harness
-also exports. `PARLEY_FAKE_EXIT_DELAY_MS` keeps `fake_cliproxy` serving after
-SIGTERM, as the real binary's graceful shutdown does, and `_set_process_tools`
+also exports. `PARLEY_FAKE_IGNORE_SIGTERM` keeps `fake_cliproxy` serving through
+SIGTERM until the spec that set it SIGKILLs it, standing in for the real binary's graceful
+shutdown as a state rather than a timed window (#343), and `_set_process_tools`
 names a missing `ps` or `lsof` to reproduce a machine without one.
 `tests/fixtures/fixture_watchdog.py` makes a fixture exit when the nvim that
 started it dies. Since #220 that is unconditional and comes from
