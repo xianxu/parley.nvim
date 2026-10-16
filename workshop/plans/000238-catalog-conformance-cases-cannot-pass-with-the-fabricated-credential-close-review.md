@@ -62,3 +62,60 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"b8ea1fd2-2b77-4313-a642-fa580d3b4d7f","repository":"github.com/xianxu/parley.nvim","issue_id":"000238","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/16d134027ea8c1c2","reviewed_head":"1ce2a9b36d82343b3be5d654e8cc58ad6c169305","slot":"parley.nvim:4","requested_at":"2026-10-16T13:15:28.404729Z"},"phase":"finished","pid":78587,"started_at":"2026-10-16T13:15:28.573365Z","finished_at":"2026-10-16T13:16:04.233999Z","session_id":"419c29ba-1067-48f9-b738-9b1666950b52","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T06:17:21-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 238 — Catalog conformance cases cannot pass with the fabricated credential |
+| repo | parley.nvim |
+| issue file | workshop/issues/000238-catalog-conformance-cases-cannot-pass-with-the-fabricated-credential.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 0e6732e3f841de5d0a3efcae0649495fcbe14655..2be663329e6f2984be613a815bf7b860a705022e |
+| command | sdlc close --issue 238 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T06:17:21-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The fix window is small, contains only documentation, and does what BR-1 asked. The window has two parts. The first is a one-sentence rewording in `atlas/providers/cliproxy-managed.md:416-417`. The second is the generated close-gate ledger and close-review artifacts, plus Log entries in the issue file. There are no code or test changes, and `## Spec`, `## Revisions` and `## Done when` are untouched, so the scope has not changed. I checked the corrected sentence against the code it describes. `tests/integration/cliproxy_conformance_spec.lua:99-109` has `boot()` write the fabricated `claude-conformance@example.invalid.json` into the auth-dir on every boot. Lines 125-127 add only the fabricated `claude-api-key` config entry. So the new wording ("the proxy writes nothing to the throwaway auth-dir, nothing real is ever in it") is accurate, and the old "stays empty" was not. Nothing blocks SHIP.
+
+1. **Strengths**
+   - `atlas/providers/cliproxy-managed.md:416-417`: the sentence now makes the claim the code supports, which is that the proxy writes nothing and nothing real is in the auth-dir. It no longer claims something the spec's own `boot()` contradicts.
+   - The issue Log fixes its own record by appending a dated "Correction (close round 1)" bullet. It does not rewrite the earlier measured bullet, so the history stays honest, and the bullet says why the original measurement was wrong (a scratch setup with no OAuth file).
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor:** none new.
+   - The close-summary line at issue line 84 and the original Log bullet at line 88 still say "auth-dir stays empty". The Log is append-only history, and the correction bullet directly below supersedes them. The only living doc that made the claim, the atlas, is fixed. My sweep of `atlas`, `tests`, `lua` and `README.md` found no other instance.
+
+5. **Test coverage notes:** none needed. The change is prose only, and the behavior it describes is pinned by the existing spec code I cited above.
+
+6. **Architecture (interdiff only)**
+   - **ARCH-DRY:** pass. Nothing is duplicated.
+   - **ARCH-PURE:** pass. There is no code.
+   - **ARCH-PURPOSE:** pass. The fix covers the class, not just the cited site: both places the window made the claim (the atlas sentence and the Log bullet) are handled, and the sweep found no other living restatement.
+
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      atlas/providers/cliproxy-managed.md:416-417 now says the proxy writes nothing to the auth-dir and nothing real is in it. That matches spec boot() lines 99-109, which write the fabricated OAuth file, and lines 125-127, which add the API-key config. The Log gets an appended correction bullet, and a sweep found no other living claim.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"4bcc1345-96b8-4a79-828f-549f370b1331","repository":"github.com/xianxu/parley.nvim","issue_id":"000238","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/02b2a7ef87ded736","reviewed_head":"2be663329e6f2984be613a815bf7b860a705022e","slot":"parley.nvim:4","requested_at":"2026-10-16T13:16:48.214478Z"},"phase":"finished","pid":84752,"started_at":"2026-10-16T13:16:48.418883Z","finished_at":"2026-10-16T13:17:14.185293Z","session_id":"ffa63610-04d3-4385-a005-bf9d053176a5","outcome":"returned"}] -->

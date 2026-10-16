@@ -81,6 +81,7 @@ time (M2 Task 13). The failures reproduce on 7.1.71 as well, so they predate the
 upgrade. Details are in #237's Log and plan Revisions.
 
 ### 2026-10-16 (parley.nvim:4)
+- 2026-10-16: closed — Docs-only delta: the atlas and the Log now say the proxy writes nothing to the throwaway auth-dir and nothing real is ever in it (the spec always writes the fabricated OAuth file; "stays empty" came from a scratch setup without it). Suite evidence unchanged (green on c0854305). (fixed-then-ship); review verdict: SHIP
 - 2026-10-16: closed — Full suite green on c0854305 (sdlc-local/suite; the catalog cases are pending there, with no binary on PATH, as before); the commit after it is atlas only. Live: PARLEY_LIVE_GITHUB=1 against the latest release, cliproxy_conformance_spec 12 of 12 pass (before: 10, the two catalog cases fail). The catalog cases boot with a FABRICATED claude-api-key entry; measured on 8.0.4: the built-in Claude catalog on both routes (models/<id> plus displayName), the auth-dir stays empty, an API key never refreshes (no #197 rotation), and it works offline. The atlas cliproxy-managed.md conformance paragraph is updated.; review verdict: FIX-THEN-SHIP
 
 - Built as planned. `PARLEY_LIVE_GITHUB=1` against the latest release: 12 of 12 pass (before: 10 pass, the two catalog cases fail).
