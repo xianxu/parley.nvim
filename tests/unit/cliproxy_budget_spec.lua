@@ -28,10 +28,12 @@ describe("repair budget vs recovery backstop", function()
         for _, sec in pairs(cliproxy._repair_budget_sec) do
             single = single + sec
         end
-        local restart_only = cliproxy._repair_budget_sec.stop_identity_probe
-            + cliproxy._repair_budget_sec.port_release
-            + cliproxy._repair_budget_sec.ensure_probe
-            + cliproxy._repair_budget_sec.poll_healthy
+        local restart_only = 0
+        for _, key in ipairs(cliproxy._restart_budget_keys) do
+            local sec = cliproxy._repair_budget_sec[key]
+            assert(sec, "restart budget key " .. key .. " is not a repair budget term")
+            restart_only = restart_only + sec
+        end
         assert.is_true((single + restart_only) * 1000 > dispatcher.recovery_timeout_ms,
             "compound path now fits — either it became reachable and safe, or the "
                 .. "budget drifted; re-derive rather than deleting this test")

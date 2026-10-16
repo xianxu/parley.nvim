@@ -380,8 +380,17 @@ M.register_proxy_command = function(prefix)
 				vim.notify(msg, vim.log.levels.ERROR)
 			end)
 		elseif sub == "stop" then
-			local n = cliproxy.stop()
-			vim.notify("cliproxy: stopped " .. n .. " parley-spawned proxy(ies)", vim.log.levels.INFO)
+			-- Async (#345): the identity probe and lsof no longer freeze the editor.
+			cliproxy.stop_async(function(n, _, read_err)
+				if read_err then
+					-- A cliproxy answers on the port but could not be listed, so it
+					-- was not signalled and is still running (#345).
+					return vim.notify(("cliproxy: stopped %d parley-spawned proxy(ies); a cliproxy on the "
+						.. "managed port was NOT stopped — could not list it (%s)"):format(n, read_err),
+						vim.log.levels.WARN)
+				end
+				vim.notify("cliproxy: stopped " .. n .. " parley-spawned proxy(ies)", vim.log.levels.INFO)
+			end)
 		elseif sub == "update" then
 			vim.notify("cliproxy: finding the release to install…", vim.log.levels.INFO)
 			vim.cmd("redraw") -- update blocks while it fetches: show the notice first
@@ -403,7 +412,7 @@ M.register_proxy_command = function(prefix)
 					.. "restart nvim to pick up config edits)"):format(loaded), vim.log.levels.INFO)
 			end, function(msg)
 				vim.notify(msg, vim.log.levels.ERROR)
-			end)
+			end, { interactive = true }) -- never blocks the editor on lsof (#345)
 		elseif sub == "providers" then
 			vim.notify(
 				"cliproxy providers: " .. table.concat(require("parley.cliproxy_config").providers(), ", "),

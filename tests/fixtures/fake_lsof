@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""A stand-in for `lsof -nP -iTCP:<port> -sTCP:LISTEN -t` (#345).
+
+Sleeps PARLEY_FAKE_LSOF_DELAY_MS (bounded), then prints those pids in
+PARLEY_FAKE_LSOF_PIDS (space-separated) that are still ALIVE — a listener
+that exited no longer listens, as with the real lsof — and exits 1 when it
+prints none. Each call appends what it printed to PARLEY_FAKE_LSOF_LOG, so a
+spec can see that the slow read really ran and what it reported.
+"""
+import os
+import sys
+import time
+
+sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
+
+def alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just not ours
+
+
+time.sleep(min(int(os.environ.get("PARLEY_FAKE_LSOF_DELAY_MS") or "0"), 10000) / 1000)
+pids = [p for p in (os.environ.get("PARLEY_FAKE_LSOF_PIDS") or "").split() if alive(p)]
+log = os.environ.get("PARLEY_FAKE_LSOF_LOG")
+if log:
+    with open(log, "a") as f:
+        f.write("listed: " + " ".join(pids) + "\n")
+for pid in pids:
+    sys.stdout.write(pid + "\n")
+sys.exit(0 if pids else 1)
