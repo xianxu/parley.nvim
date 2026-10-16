@@ -1,12 +1,12 @@
 ---
 id: 000356
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '368d6697c5f9e5cda1bf5d27f38857bec06589e7' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '96b33e2c642c3faebb19dfde11e55b649d2c95be' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T11:10:23-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 0.48
 ---
 
 # Keep the cursor and view in place when the agent rewrites an open document
