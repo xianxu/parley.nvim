@@ -75,7 +75,7 @@ Steps:
 ## Revisions
 
 - 2026-10-16, TL: keep the new root rule. The old rule was a bug, and one walker means one notion of the tree; note the change in the close and the atlas.
-- 2026-10-16, build: delete-tree, move, export and the outline load through `chat_tree.disk_deps()`, not `io_deps()`. They act on the saved files, and the outline renders from disk. Two chat_move cases found this: they append the 🌿 line on disk while the root's buffer is loaded. The request context keeps `io_deps` (buffer first). A header-less file is no longer part of a tree; the old init walker listed one.
+- 2026-10-16, build: delete-tree, move, export and the outline load through `chat_tree.disk_deps()`, not `io_deps()`. They act on the saved files, and the outline renders from disk. Two chat_move cases found this: they append the 🌿 line on disk while the root's buffer is loaded. The request context keeps `io_deps` (buffer first). A readable file without a header (a legacy `# topic:` chat) loads as a leaf with no links, as the old init walker listed it. chat_finder_logic_spec's move cases found this.
 
 ## Log
 

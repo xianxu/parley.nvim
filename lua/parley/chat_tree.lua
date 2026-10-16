@@ -132,7 +132,9 @@ end
 
 --- The files' saved state: commands that act on the files themselves (delete,
 --- move, export, the outline, which renders from disk) see the tree as it is
---- on disk, not as an unsaved buffer has it.
+--- on disk, not as an unsaved buffer has it. A readable file without a front
+--- matter header (a legacy `# topic:` chat) is a leaf: still in its tree, so it
+--- can be moved and deleted, but with no links to follow.
 function M.disk_deps()
     local parley = require("parley")
     return {
@@ -141,7 +143,8 @@ function M.disk_deps()
             if vim.fn.filereadable(file) == 0 then return nil end
             local lines = vim.fn.readfile(file)
             local header_end = parley.chat_parser.find_header_end(lines)
-            return header_end and parley.parse_chat(lines, header_end) or nil
+            if not header_end then return { exchanges = {}, branches = {} } end
+            return parley.parse_chat(lines, header_end)
         end,
     }
 end
