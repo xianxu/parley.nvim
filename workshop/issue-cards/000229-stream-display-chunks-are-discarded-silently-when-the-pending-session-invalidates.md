@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.54
+actual_hours: 0.56
 tracker:
     version: 1
     completion:
-        token: close-b9e725d2def0
+        token: close-fd458f2de375
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: af12fe1db4fdeaea47cb9eefee7acd8058c82208
-        evidence_commit: 26a9a151a11782651c19685825120a68f127c20d
+        reviewed_head: 9d987af401a5af70aa599b5d5d3a76f7916c8d57
+        evidence_commit: d29e26554a0152edc34f7e420ff85f5241a7ca8e
 ---
 
 # Stream display chunks are discarded silently when the pending session invalidates
