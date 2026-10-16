@@ -1,13 +1,21 @@
 ---
 id: 000355
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: '5ad8de6417c71ed27c0d8c40529184bd05ce2a2e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '9025f459037a5494399fd355ccf3948f7ebeb70b' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T11:05:40-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # cliproxy_auth_login_spec restart-rung case flakes under load (fixed 6 s wait)
@@ -28,8 +36,17 @@ Cause, as read: the spec's `run()` waits a fixed `vim.wait(6000, …)` for the r
 
 ## Plan
 
-- [ ]
+- [x] One bound for every wait on a claimed recovery: `SETTLE_MS = dispatcher.recovery_timeout_ms`, the backstop `cliproxy_budget_spec` proves the whole repair budget fits under. It replaces the 6000, 9000 and 6000 literals in `run()`, the EXHAUSTIVE case and the seed read.
+- [x] ~~Before and after under CPU load~~: CPU load alone never reproduced it (0/18 runs on the old literals, 13–17 s each, against 39 s in the failing suite). Replaced by a deterministic slow proxy, see Revisions.
+- [x] Regression case: "settles the restart rung within the backstop when every probe is slow (#355)", with `PARLEY_FAKE_GET_DELAY_MS=1500`. It fails with `SETTLE_MS = 6000` and passes with the backstop, 5/5 runs.
 
 ## Log
 
 ### 2026-10-16
+- Why the backstop rather than a summed restart budget: the restart rung's worst case is `stop_identity_probe + port_release + ensure_probe + poll_healthy` = 2 + 4 + 2 + 7 = 15 s, and the seed read (credential_health) can itself run the whole repair. So 6 s was below the code's own worst case, not just tight. The production contract is "settles before the dispatcher's backstop", so the test waits exactly that. A passing run still settles in well under a second.
+- Scope: other cliproxy specs (lifecycle, login, dispatch, catalog) use literal waits too, on different paths, and none has flaked. Not swept here; same remedy if one does.
+- Before/after, deterministic: with every GET delayed by 1500 ms, the old spec fails the exact suite case ("takes the restart rung…", `settled` nil), and the fixed spec passes.
+
+## Revisions
+
+- 2026-10-16 Done when's "20 runs alongside a full suite" is replaced by a deterministic regression. CPU burners didn't reproduce the suite's slowdown, which comes from process and IO contention as well. The fake's existing `PARLEY_FAKE_GET_DELAY_MS` knob slows every probe instead: it lengthens the rung past 6 s but keeps it inside its budget, every run.
