@@ -237,6 +237,9 @@ Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-p
     - On main, A6 and A8 fail. With the EOF skip removed, A7 and A8 fail. With the fix, all pass.
   - S6 is paced at 1 ms per write. Unpaced, it was flaky at 1 run in 5 because the socket coalesced the body.
 
+- 2026-10-16 M1 close: SHIP, round 3. Two Minor advisories answered in f8503293: the threw branch skipping `finish_stdout` is now documented in the code and the atlas, and the plan's Task 3 file list is struck.
+- 2026-10-16 **Parked after M1** (TL, reprioritizing to universal-agent-input-interface): M1 lands on its own; M2 (the other provider profiles, fake_cliproxy) and M3 (live conformance) stay open on this issue for a later slot.
+
 ## Revisions
 
 - 2026-10-16, scope revision (TL-approved): M1 includes a production fix. The fake found a duplicate-delta defect in #229's class, the out_reader EOF flush re-decoding the line that threw. It is fixed in `dispatcher.lua`, with S7b as the regression test. The plan's "no production change expected" no longer holds for M1.
