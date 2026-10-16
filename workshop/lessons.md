@@ -670,3 +670,10 @@ oracle, and the mutation that would make the test fail.
 - A shell flag (`queued_submit`), set by a press and cleared in only one callback, outlived every other outcome: a pending rename, or a reconcile. A later unrelated lookup could then send a submit nobody pressed for. When an intent spans an asynchronous round trip, make it an event field on the pure model's transition (`retry{submit=true}` → `resubmit` effect), so every outcome decides it and unit tests cover each branch. Don't use a flag that each callback must remember to clear.
 - Read the code path before accepting an issue's premise. "Alt+Return blocks in vim.wait" was wrong: the submit was already async, and the felt bug was a press that confirmed but never sent.
 - When a change moves a deadline, every call site of the timed seam gets a slow-fake test whose delay is past the OLD default. A delay under the old value passes with the change reverted, so it pins nothing. #357 round 2 found the rename stage tested at 2 s against an old 2.5 s.
+## #334: transient window values can be cloned
+
+- Test native split creation during a temporary highlight, not only before it.
+  Neovim copies window-local options; the shared renderer must restore newly
+  copied transient frames using its exact installed-value proof.
+- Put the basename in a bounded winbar label and the full path in its one-line
+  notification; truncating a path prefix can erase the filename entirely.

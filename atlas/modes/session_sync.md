@@ -117,6 +117,17 @@ override them.
 | violated | `<owner> wrote under your lock: yours kept, theirs in .clobbered` (`changed as you started typing: …` for the race) | `ParleySessionSyncOperator` |
 | stale | `unsent edits, Alt+Return to submit` | `ParleySessionSyncStale` (orange, black bold) |
 
+Leaving a held, unsubmitted turn triggers three 150ms bright-red pulses through
+`document_band`, plus a one-line reminder naming the source file. A WinLeave
+pulses the departing physical window; a same-window buffer switch pulses its
+destination bar and names the source. Navigation is never blocked. The existing
+acquisition baseline suppresses an undone turn, even before deferred release;
+auto-save does not suppress an outstanding turn. One cancellable pulse owns each
+window, duplicate leave events coalesce, and underlying view updates remain live.
+Window/buffer replacement, source turn release/detach and user option overrides
+retire the pulse. New splits do not retain a copied red frame. The bright group
+is `ParleySessionSyncLeave` (red `#ff0000`, white bold).
+
 A completed Couch-pane submission overlays the band with `submitted to OWNER ·
 HH:MM` (DiagnosticOk), retained through saves and status probes until the next
 operator edit or observed agent write. Explicit submit failures show a bounded

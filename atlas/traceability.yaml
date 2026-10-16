@@ -790,6 +790,7 @@ atlas:
       - scripts/couch-registry-probe.lua
       - tests/fixtures/fake_couch_registry.py
     tests:
+      - tests/integration/lock_leave_reminder_spec.lua
       - tests/unit/session_sync_spec.lua
       - tests/unit/view_map_spec.lua
       - tests/unit/document_session_spec.lua

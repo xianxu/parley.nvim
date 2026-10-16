@@ -63,6 +63,11 @@ An explicit `couch-owner:` overrides the default; a business `owner:` does not
 [Agentic documents](atlas/modes/session_sync.md) use the existing turn engine:
 the first edit takes your turn before auto-save, undo back to the pre-edit
 baseline releases it, and redo takes it again. Saves never move that baseline.
+Leaving a document with an unsubmitted turn gives three short red winbar pulses
+and a file-named `unsubmitted: Alt+Return to submit` reminder. Navigation stays
+free; after a same-window file switch the destination bar names the file left
+behind. Undo back to the baseline suppresses the reminder, while auto-save does
+not count as submission.
 Quiet owners with owed deliveries are pinged after `session_sync_ping_minutes`
 (default 15); unsent edits become stale after `session_sync_stale_minutes`
 (default 5). Unknown offline membership stays editable with `Couch unavailable:
