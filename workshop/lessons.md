@@ -1,5 +1,9 @@
 # Lessons
 
+## 2026-10-16 (#350 — a "dead" branch that was live)
+
+- One trace never proves a branch unreachable. In #265 I traced a single move with a TIMESTAMPED child, saw the rewrite skipped, and filed it dead; it fires for non-timestamp children behind an explicit or sub/ path. To call code dead, enumerate what its condition depends on (here, resolve_chat_path's three return cases) and show each one fails, or write the reaching test.
+
 ## 2026-10-16 (#265 — one user-edit refusal policy)
 
 - A fake must fail the way the real dependency fails. #265's ChatPrune test faked `writefile` returning -1, but the real one RAISES (E482), so the test passed while the production rollback never ran (close BR-5). Probe the real failure first, and treat a raise and an error return from fallible IO as one failure.
