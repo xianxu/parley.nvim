@@ -1,12 +1,20 @@
 ---
 id: 000342
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: 'eed1b6f242b542ac57f1409f1fcb17126ddc6d2d' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '2635ba69559234591ae0675fe33aa1975e398037' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-15T20:29:30-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # A spec or review run outside the test harness wrote the operator's real cliproxy catalog cache
@@ -35,9 +43,26 @@ Make the write impossible rather than finding this one writer:
 - With the harness, every spec still runs; the full suite passes.
 - A catalog fetch against a fake endpoint with a non-isolated data dir refuses to write (unit or integration test), if the writer-side guard is adopted.
 
+## Core concepts
+
+| Entity | Kind | Status | Location | Responsibility |
+| --- | --- | --- | --- | --- |
+| `test_isolation` | PURE | new | `lua/parley/test_isolation.lua` | The one rule: under the harness, a path must resolve inside `PARLEY_TEST_ENV_ROOT`; `check(env)` names what is not isolated. |
+| `minimal_init` | INTEGRATION | modified | `tests/minimal_init.vim` | Refuses to run any spec, before plenary loads one, when the env is not isolated. |
+| `cliproxy` | INTEGRATION | modified | `lua/parley/cliproxy.lua` | `data_root()` refuses a root outside the isolated env in test mode, so no cache, config or binary write can reach real state. |
+| `Makefile.parley` | INTEGRATION | modified | `Makefile.parley` | Exports `PARLEY_TEST_ENV_ROOT` with the isolated env; a `goldens` target replaces the documented direct run. |
+
 ## Plan
 
-- [ ]
+Measurement (2026-10-15, :3): every `make` target that loads `tests/minimal_init.vim` (test, test-spec, perf, fixtures) exports `TEST_ENV` (an isolated HOME and XDG roots under `TEST_ENV_ROOT`). The init itself checks nothing, so a direct `nvim -u tests/minimal_init.vim -c PlenaryBustedFile …` runs every spec against the operator's real roots. That is the route behind the 19:26 write. `scripts/refresh_goldens.lua` is documented as exactly such a direct run. No spec spawns a `minimal_init` child with a cleared env (the children inherit the marker).
+
+- [ ] `parley.test_isolation` (pure): `inside(root, path)` with symlinks resolved, and `check(env)` listing HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_CACHE_HOME (and XDG_CONFIG_HOME when set) that fall outside `PARLEY_TEST_ENV_ROOT`, or the marker itself missing. Unit-tested.
+- [ ] Harness: `TEST_ENV` exports `PARLEY_TEST_ENV_ROOT`. `minimal_init.vim` runs the check first and `cquit`s with the reasons and "run it through make test-spec" when it fails, before any spec loads.
+- [ ] Writer side: in test mode (`PARLEY_TEST_MODE=1`, which only the harness init sets), cliproxy's `data_root()` errors when the root (override or stdpath) is outside the isolated env. A spec forgetting `_set_data_dir` then fails loudly instead of writing elsewhere. Production (no test mode) is unchanged.
+- [ ] `make goldens` runs `refresh_goldens.lua` under `TEST_ENV`; its usage comment points there. TOOLING.md documents that specs only run through make.
+- [ ] Regression (red first): a child nvim on `minimal_init.vim` with a non-isolated env (a scratch HOME, no marker) and a spec that would write a sentinel under its data dir. Assert a nonzero exit, the refusal message, and no sentinel file. Also the writer guard: in test mode, `data_root()` with an outside root errors.
+- [ ] Atlas test_harness: the isolation guard. Verify: the full suite.
+
 
 ## Log
 
