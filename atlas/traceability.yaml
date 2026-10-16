@@ -775,6 +775,7 @@ atlas:
   modes/session_sync:
     code:
       - lua/parley/session_sync.lua
+      - lua/parley/view_map.lua
       - lua/parley/agentic_document.lua
       - lua/parley/document_band.lua
       - lua/parley/document_session.lua
@@ -790,6 +791,7 @@ atlas:
       - tests/fixtures/fake_couch_registry.py
     tests:
       - tests/unit/session_sync_spec.lua
+      - tests/unit/view_map_spec.lua
       - tests/unit/document_session_spec.lua
       - tests/unit/document_move_plan_spec.lua
       - tests/unit/helper_io_spec.lua
