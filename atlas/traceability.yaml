@@ -788,6 +788,7 @@ atlas:
       - tests/integration/session_sync_native_spec.lua
       - tests/integration/agentic_document_spec.lua
       - tests/integration/agentic_document_owned_move_spec.lua
+      - tests/integration/agentic_document_lifetime_spec.lua
       - tests/integration/document_registry_spec.lua
       - tests/integration/document_lease_spec.lua
       - tests/integration/document_move_spec.lua

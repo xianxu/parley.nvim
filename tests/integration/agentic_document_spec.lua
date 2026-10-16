@@ -42,7 +42,9 @@ describe("agentic markdown admission", function()
             input = vim.ui.input, own_slot = require("parley.couch").own_slot,
             couch_run = require("parley.couch").run, ping_check = require("parley.session_sync").PING_CHECK_MS,
             exit = vim.env.FAKE_COUCH_EXIT, sleep = vim.env.FAKE_COUCH_SLEEP,
-            log_delay = vim.env.FAKE_COUCH_LOG_DELAY, status = vim.env.FAKE_COUCH_STATUS }
+            log_delay = vim.env.FAKE_COUCH_LOG_DELAY, status = vim.env.FAKE_COUCH_STATUS,
+            chat_dir = require("parley").config.chat_dir, chat_dirs = vim.deepcopy(require("parley").config.chat_dirs),
+            chat_roots = vim.deepcopy(require("parley").config.chat_roots) }
         vim.env.PATH = root .. "/bin:" .. vim.env.PATH
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "scope-test", "tag-test"
         vim.env.FAKE_COUCH_REGISTRY = root .. "/registry.json"
@@ -72,6 +74,9 @@ describe("agentic markdown admission", function()
         vim.env.FAKE_COUCH_EXIT, vim.env.FAKE_COUCH_SLEEP = saved.exit, saved.sleep
         vim.env.FAKE_COUCH_LOG_DELAY, vim.env.FAKE_COUCH_STATUS = saved.log_delay, saved.status
         require("parley").config.state_dir, vim.ui.input = saved.state_dir, saved.input
+        require("parley").config.chat_dir = saved.chat_dir
+        require("parley").config.chat_dirs = saved.chat_dirs
+        require("parley").config.chat_roots = saved.chat_roots
         require("parley.couch").own_slot = saved.own_slot
         require("parley.couch").run = saved.couch_run
         require("parley.session_sync").PING_CHECK_MS = saved.ping_check
@@ -709,6 +714,91 @@ describe("agentic markdown admission", function()
         assert_refused_before_move(target,old_lines,side_lines)
         held.release()
         await_submitted()
+    end)
+
+
+    local function assert_public_move_busy(target)
+        local member,member_error=document.move_membership(file)
+        assert.is_nil(member,"public membership must refuse while the existing submit intent is unresolved")
+        assert.is_true(type(member_error) == "string" and member_error ~= "")
+        local handled,moved,move_error=document.move_path(file,target)
+        assert.is_true(handled,"busy state must never choose the legacy plain-file fallback")
+        assert.is_nil(moved)
+        assert.is_true(type(move_error) == "string" and move_error ~= "")
+    end
+
+    it("public movers cannot fall through proven plain membership during held owner resolution", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        local _,side_lines=side_fixture()
+        local old_lines=vim.fn.readfile(file)
+        local held=hold_next_process_reply(function(argv) return argv[2] == "--actors" end)
+        submit()
+        await(function() return held.release ~= nil end)
+        assert.is_nil(document.identity(buf))
+        assert.is_nil(document.status(buf).operation)
+        local target=root .. "/membership-target.md"
+        assert_public_move_busy(target)
+        -- Exercise the actual shared Parley entry point as well as its seam.
+        local destination=root .. "/public-destination"
+        vim.fn.mkdir(destination,"p")
+        local p=require("parley")
+        assert(p.set_chat_dirs({root,destination},false))
+        local moved,err=p.move_chat(file,destination)
+        assert.is_nil(moved)
+        assert.is_true(type(err) == "string" and err ~= "")
+        assert_refused_before_move(target,old_lines,side_lines)
+        assert.equals(0,vim.fn.filereadable(destination .. "/ordinary.md"))
+        held.release()
+        await_submitted()
+    end)
+
+    it("public membership refuses an issued registration before the fake publishes it", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        local _,side_lines=side_fixture()
+        local old_lines=vim.fn.readfile(file)
+        local executable,delegate=root .. "/bin/couch",root .. "/bin/couch-unblocked"
+        local started,release=root .. "/register-started",root .. "/allow-register"
+        local process_uv=vim.uv or vim.loop
+        assert(process_uv.fs_rename(executable,delegate))
+        vim.fn.writefile({
+            "#!/bin/sh",
+            'if [ "$1" = "--session-sync" ] && [ "$2" = "register" ]; then',
+            '  printf "ready\\n" > ' .. vim.fn.shellescape(started .. ".tmp"),
+            '  mv ' .. vim.fn.shellescape(started .. ".tmp") .. ' ' .. vim.fn.shellescape(started),
+            '  while [ ! -f ' .. vim.fn.shellescape(release) .. ' ]; do sleep 0.01; done',
+            'fi',
+            'exec ' .. vim.fn.shellescape(delegate) .. ' "$@"',
+        },executable)
+        assert(process_uv.fs_chmod(executable,493))
+        submit()
+        await(function() return vim.fn.filereadable(started) == 1 end)
+        assert.equals("register",document.status(buf).operation.witness.operation)
+        assert.is_nil(document.identity(buf))
+        assert.equals("absent",registry_result("lookup",{file}).kind,"fixture must still be before publication")
+        local target=root .. "/membership-target.md"
+        -- Always release the real child, including the expected RED assertion.
+        local ok,err=pcall(function()
+            assert_public_move_busy(target)
+            assert_refused_before_move(target,old_lines,side_lines)
+        end)
+        vim.fn.writefile({"go"},release)
+        await_submitted()
+        assert.is_true(ok,tostring(err))
+    end)
+
+    it("public membership does not discard an uncertain pending registration merely because lookup now confirms it", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        local _,side_lines=side_fixture()
+        local old_lines=vim.fn.readfile(file)
+        vim.env.FAKE_COUCH_REGISTRY_MODE="uncertain"
+        submit()
+        await(function() return document.status(buf).phase == "pending" end)
+        assert.is_nil(document.identity(buf))
+        assert.equals("registered",registry_result("lookup",{file}).kind)
+        local target=root .. "/membership-target.md"
+        assert_public_move_busy(target)
+        assert_refused_before_move(target,old_lines,side_lines)
+        assert.equals("pending",document.status(buf).phase)
     end)
 
 end)

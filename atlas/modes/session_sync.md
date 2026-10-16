@@ -182,3 +182,16 @@ shared checked byte writer. `session_sync.lua` remains the single edit-turn,
 watch, baseline/undo, ping and rendering engine. Dispatch and keys live in
 `setup_markdown_keymaps` (`lua/parley/init.lua`). The maintainer real/fake registry
 probe is documented in [TOOLING](../../TOOLING.md).
+
+Native and public move preflight also checks the loaded coordinator before
+plain fallback: unresolved owner selection, pending admission and an active
+submit cannot be renamed past. Fresh bounded OLD membership confirms the
+plain bypass; unavailable membership blocks migration while editing stays
+available.
+
+A true buffer unload retires its async incarnation and execution lease; reopen
+confirms registration and resumes any durable forward-only move journal.
+Controlled session-sync rereads and owned rename acknowledgements mark their
+native read epoch explicitly, retaining attachment and the successful receipt.
+Raw completions during that epoch wait until read observers have reconciled;
+they cannot authorize an old captured submit against newly loaded content.

@@ -50,6 +50,7 @@ local ns_group = "ParleySessionSync"
 -- probe), pinged (the LastWrite value last pinged; false when absent),
 -- feedback (bounded submission receipt/error, cleared by operator edit or foreign reload) }
 local state = {}
+local buffer_reads, native_reads = {}, {}
 
 --- Frontmatter lines → normalized { owner, operator } for session-sync.
 --- This is the single owner accessor: couch-owner first, owner fallback.
@@ -169,6 +170,24 @@ end
 
 local function buffer_id(buf)
     return buf == 0 and vim.api.nvim_get_current_buf() or buf
+end
+
+-- A synchronous native read emits BufUnload without ending the editor's
+-- document incarnation. Keep that distinction available even inside autocmds.
+M.is_buffer_read = function(buf)
+    buf = buffer_id(buf)
+    return buffer_reads[buf] ~= nil or native_reads[buf] ~= nil
+end
+
+M.with_buffer_read = function(buf, fn)
+    buf = buffer_id(buf)
+    local previous = buffer_reads[buf]
+    buffer_reads[buf] = (previous or 0) + 1
+    local function pack(...) return { n = select("#", ...), ... } end
+    local result = pack(pcall(fn))
+    buffer_reads[buf] = previous
+    if not result[1] then error(result[2], 0) end
+    return unpack(result, 2, result.n)
 end
 
 M.is_session_sync = function(buf)
@@ -307,9 +326,11 @@ local refresh, probe
 -- A clean buffer follows the file on disk silently; the owed state is
 -- re-read at once, since a write is usually the agent's answer.
 local function reload(buf)
-	vim.api.nvim_buf_call(buf, function()
-		vim.cmd("silent edit!")
-	end)
+    M.with_buffer_read(buf, function()
+        vim.api.nvim_buf_call(buf, function()
+            vim.cmd("silent edit!")
+        end)
+    end)
 	state[buf].probed = nil
 	probe(buf)
 end
@@ -631,6 +652,12 @@ M.attach = function(buf, identity, observed)
 			end
 			if read_turn(buf) ~= "operator" then
 				vim.v.fcs_choice = vim.bo[buf].modified and "ask" or "reload"
+                if vim.v.fcs_choice == "reload" then
+                    -- FileChangedShellPost ends the synchronous native check.
+                    -- A scheduled callback can run inside that read's autocmds,
+                    -- so scheduler progress cannot prove the read has ended.
+                    native_reads[buf] = true
+                end
 				return
 			end
 			vim.v.fcs_choice = ""
@@ -646,6 +673,7 @@ M.attach = function(buf, identity, observed)
 		group = group,
 		buffer = buf,
         callback = function(event)
+            if event.event == "FileChangedShellPost" then native_reads[buf] = nil end
             if s.moving then return end
             s.loaded = disk_mtime(buf)
             if event.event ~= "BufWritePost" and s.feedback then s.feedback = nil; refresh(buf) end
@@ -675,6 +703,7 @@ end
 -- Restore only the values this attachment still owns; never release a turn.
 M.detach = function(buf)
     buf = buffer_id(buf)
+    native_reads[buf] = nil
     local s = state[buf]
     if not s then return end
     state[buf] = nil

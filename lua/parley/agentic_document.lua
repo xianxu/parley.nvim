@@ -12,6 +12,13 @@ local function state_root()
     return require("parley").config.state_dir or require("parley.config").state_dir
 end
 
+local function reseed(s, registration, receipt)
+    serial = serial + 1
+    s.incarnation = serial
+    s.model = lifecycle.new({ path = s.path, namespace = s.namespace, incarnation = serial,
+        registration = registration, receipt = receipt })
+end
+
 local function notify(message)
     vim.notify("agentic document: " .. tostring(message), vim.log.levels.WARN)
 end
@@ -47,7 +54,9 @@ local function acknowledge_owned_move(s, path, expected)
         vim.o.undoreload = -1 -- bounded by Couch's document size; preserve large-file undo too.
         local read_ok, read_err = pcall(function()
             vim.api.nvim_buf_set_name(s.buf, path)
-            vim.cmd("silent keepalt keepjumps edit")
+            require("parley.session_sync").with_buffer_read(s.buf, function()
+                vim.cmd("silent keepalt keepjumps edit")
+            end)
         end)
         vim.o.undoreload = undo
         vim.fn.winrestview(view)
@@ -71,6 +80,24 @@ local function valid(s)
         and thread and thread.scope == s.thread.scope and thread.tag == s.thread.tag
         and namespace() == s.namespace and (canonical(vim.api.nvim_buf_get_name(s.buf)) == s.path
             or (s.move and canonical(vim.api.nvim_buf_get_name(s.buf)) == s.move.new_path))
+end
+
+-- A raw completion belongs to one controller incarnation. Managed native
+-- reads retain it, but may briefly unload the buffer inside synchronous IO.
+local function completed(s, callback)
+    local incarnation = s.incarnation
+    return function(...)
+        if states[s.buf] ~= s or s.incarnation ~= incarnation then return end
+        local args = { n = select("#", ...), ... }
+        local function deliver()
+            if valid(s) and s.incarnation == incarnation then callback(unpack(args, 1, args.n)) end
+        end
+        if s.reading or require("parley.session_sync").is_buffer_read(s.buf) then
+            s.reading = true
+            s.completions = s.completions or {}
+            s.completions[#s.completions + 1] = deliver
+        else deliver() end
+    end
 end
 
 local function band(s, message, highlight)
@@ -181,7 +208,7 @@ local function execute(s, effects)
         local kind = effect.kind
         if kind == "lookup" or kind == "register" then
             local args = kind == "register" and { effect.witness.path, effect.owner } or { effect.witness.path }
-            s.request = registry.request(kind, args, effect.witness, function(result)
+            s.request = registry.request(kind, args, effect.witness, completed(s, function(result)
                 if not valid(s) then return end
                 s.request = nil
                 if kind == "register" and not effect.resume_only and s.saved_hash and hash(s.buf) ~= s.saved_hash then
@@ -194,7 +221,7 @@ local function execute(s, effects)
                     s.queued_submit = false
                     M.submit(s.buf)
                 end
-            end)
+            end))
         elseif kind == "save" then
             local ss = require("parley.session_sync")
             local ok, err
@@ -213,9 +240,9 @@ local function execute(s, effects)
         elseif kind == "move" then
             if s.move then s.move.witness = effect.witness end
         elseif kind == "rename" then
-            s.request = registry.request("rename", { effect.old_path, effect.new_path }, effect.witness, function(result)
+            s.request = registry.request("rename", { effect.old_path, effect.new_path }, effect.witness, completed(s, function(result)
                 if valid(s) then dispatch(s, { type = "reply", witness = effect.witness, result = result }) end
-            end)
+            end))
         elseif kind == "finish_move" then
             local moving = s.move
             local ok, err = require("parley.session_sync").finish_move(s.buf, moving.token, effect.registration)
@@ -227,12 +254,12 @@ local function execute(s, effects)
             require("parley.session_sync").release_if_baseline(s.buf)
             if moving.metadata_done then moving.metadata_done({ kind = "registered", registration = effect.registration }) end
         elseif kind == "send" then
-            require("parley.session_sync").send_registered(s.buf, effect.registration, function(result)
+            require("parley.session_sync").send_registered(s.buf, effect.registration, completed(s, function(result)
                 if valid(s) then
                     dispatch(s, { type = "sent", witness = effect.witness, ok = result.code == 0,
                         error = result.stderr, display_time = os.date("%H:%M") })
                 end
-            end)
+            end))
         elseif kind == "feedback" then
             show_feedback(s, effect.message, false)
         elseif kind == "band" then
@@ -266,6 +293,7 @@ end
 
 function M.attach(buf)
     if states[buf] then
+        if states[buf].reading then return true end
         if valid(states[buf]) then return true end
         M.detach(buf)
     end
@@ -311,7 +339,35 @@ function M.attach(buf)
     end
     attach_edits()
     s.group = vim.api.nvim_create_augroup("ParleyAgenticDocument" .. buf, { clear = true })
-    vim.api.nvim_create_autocmd("BufReadPost", { group = s.group, buffer = buf, callback = attach_edits })
+    vim.api.nvim_create_autocmd({ "BufReadPost", "FileChangedShellPost" }, { group = s.group, buffer = buf, callback = function()
+        if s.content ~= hash(buf) then
+            s.revision = (s.revision or 0) + 1
+            clear_feedback(s)
+            dispatch(s, { type = "invalidate_confirmation" })
+            if s.model.snapshot().operation then dispatch(s, { type = "changed" }) end
+        end
+        attach_edits()
+        if s.reading then
+            -- Resume after native IO and all read observers have reconciled.
+            vim.schedule(function()
+                if states[buf] ~= s then return end
+                s.reading = nil
+                local pending = s.completions or {}
+                s.completions = nil
+                for _, callback in ipairs(pending) do callback() end
+            end)
+        end
+    end })
+    vim.api.nvim_create_autocmd("BufUnload", { group = s.group, buffer = buf, callback = function()
+        if require("parley.session_sync").is_buffer_read(buf) then
+            s.reading = true
+            return
+        end
+        M.detach(buf)
+        vim.api.nvim_create_autocmd("BufReadPost", { buffer = buf, once = true, callback = function()
+            M.attach(buf)
+        end })
+    end })
     vim.api.nvim_create_autocmd("BufWipeout", { group = s.group, buffer = buf, callback = function() M.detach(buf) end })
     vim.api.nvim_create_autocmd("BufWinEnter", { group = s.group, buffer = buf, callback = function() M.recheck(buf) end })
     install_migration_hooks(s)
@@ -330,6 +386,7 @@ end
 
 function M.recheck(buf)
     local s = states[buf]
+    if s and s.reading then return end
     if s and not valid(s) then M.detach(buf); M.attach(buf); return end
     if s and valid(s) then
         if s.recovery_pending then recover_migration(s) else dispatch(s, { type = "open" }) end
@@ -339,7 +396,7 @@ end
 function M.submit(buf)
     if not M.attach(buf) then return false end
     local s = states[buf]
-    if not valid(s) then return true end
+    if s.reading or not valid(s) then return true end
     if s.recovery_pending then recover_migration(s); return true end
     local snapshot = s.model.snapshot()
     if snapshot.phase == "pending" then dispatch(s, { type = "retry" }); return true end
@@ -352,7 +409,7 @@ function M.submit(buf)
     if snapshot.registration then dispatch(s, { type = "submit", owner = snapshot.registration.Owner }); return true end
     if s.resolving then return true end
     s.resolving = true
-    couch.own_slot(function(_, own)
+    couch.own_slot(completed(s, function(_, own)
         s.resolving = false
         if not valid(s) or s.revision ~= revision then return end
         if not own then
@@ -361,7 +418,7 @@ function M.submit(buf)
             return
         end
         dispatch(s, { type = "submit", owner = couch.slot(own) })
-    end)
+    end))
     return true
 end
 
@@ -373,16 +430,35 @@ local function bounded_request(operation, arguments)
     return result
 end
 
+local function migration_busy(s)
+    local snapshot = s.model.snapshot()
+    local operation = snapshot.operation
+    return s.reading or s.move or s.recovery_pending or s.resolving or s.queued_submit
+        or snapshot.phase == "pending"
+        or (operation and (operation.witness.operation ~= "lookup" or operation.args.submit))
+end
+
+local function path_busy(path)
+    for _, s in pairs(states) do
+        if s.path == path and (valid(s) or s.reading) and migration_busy(s) then return true end
+    end
+    return false
+end
+
 -- Public Parley movers must reserve the identity before touching OLD. A plain
 -- document keeps the existing mover; unavailable membership refuses only the
 -- move, leaving ordinary editing available.
 function M.move_membership(path)
     if not namespace() then return false end
+    local key = canonical(path)
+    if path_busy(key) then return nil, "finish the pending document operation before moving" end
     if require("parley.chat_parser").is_chat_filename(vim.fs.basename(path)) then
         local lines = require("parley.helper").chat_lines(path)
         if lines and not require("parley").not_chat(nil, path, lines) then return false end
     end
-    local result = bounded_request("lookup", { canonical(path) })
+    local result = bounded_request("lookup", { key })
+    -- Waiting for Couch pumps editor events; a submit may have started meanwhile.
+    if path_busy(key) then return nil, "finish the pending document operation before moving" end
     if result.kind == "registered" then return true, result.registration end
     if result.kind == "absent" then
         local header = require("parley.session_sync").parse_header(vim.fn.readfile(path, "", 40))
@@ -403,7 +479,7 @@ function M.move_path(old_path, new_path)
     if not M.attach(buf) then return true, nil, "registered document could not be attached" end
     local s, ss = states[buf], require("parley.session_sync")
     local snapshot = s.model.snapshot()
-    if s.move or s.recovery_pending or (snapshot.operation and snapshot.operation.witness.operation ~= "lookup") then
+    if migration_busy(s) then
         return true, nil, "finish the pending document operation before moving"
     end
     if s.request then s.request.cancel(); s.request = nil end
@@ -415,8 +491,7 @@ function M.move_path(old_path, new_path)
         if admitted.kind ~= "registered" then return true, nil, admitted.error or "legacy registration unavailable" end
         identity = admitted.registration
     end
-    s.model = lifecycle.new({ path = s.path, namespace = s.namespace, incarnation = s.incarnation,
-        registration = identity, receipt = snapshot.receipt })
+    reseed(s, identity, snapshot.receipt)
     adopt(s, identity)
     local saved, save_error = ss.prepare_submit(buf)
     if not saved then return true, nil, save_error end
@@ -516,8 +591,7 @@ recover_migration = function(s, fresh_write)
             if not ok then return false, finish_error end
             cache({ namespace = s.namespace, path = journal.old }, nil, true)
             band(s, "")
-            s.model = lifecycle.new({ path = s.path, namespace = s.namespace, incarnation = s.incarnation,
-                registration = result.registration, receipt = s.model.snapshot().receipt })
+            reseed(s, result.registration, s.model.snapshot().receipt)
             cache(s, result.registration)
             ss.release_if_baseline(s.buf)
             return true
@@ -551,17 +625,28 @@ install_migration_hooks = function(s)
             end
             refuse("finish the pending move before another rename")
         end
+        if migration_busy(s) then
+            refuse("document operation is still in progress")
+        end
         local identity = M.identity(s.buf)
         if not identity then
             local legacy = ss.identity(s.buf)
-            if not legacy then return end -- plain rename never registers.
-            if not legacy.Owner then refuse("legacy document owner unavailable") end
-            local adopted = bounded_request("register", { s.path, legacy.Owner })
-            if adopted.kind ~= "registered" then refuse(adopted.error or "legacy admission unavailable") end
+            local result
+            if legacy then
+                if not legacy.Owner then refuse("legacy document owner unavailable") end
+                result = bounded_request("register", { s.path, legacy.Owner })
+            else
+                result = bounded_request("lookup", { s.path })
+            end
+            if result.kind ~= "registered" and result.kind ~= "absent" then
+                refuse(result.error or "document membership unavailable")
+            end
             if s.request then s.request.cancel(); s.request = nil end
-            s.model = lifecycle.new({ path = s.path, namespace = s.namespace, incarnation = s.incarnation, registration = adopted.registration })
-            adopt(s, adopted.registration)
-            identity = adopted.registration
+            -- New model witnesses must never alias a cancelled open probe.
+            reseed(s, result.registration)
+            if result.kind == "absent" then return end -- positively plain; never registers.
+            adopt(s, result.registration)
+            identity = result.registration
         end
         if s.model.snapshot().operation then refuse("document operation is still in progress") end
         local lease, lease_err = require("parley.document_lease").acquire(s.namespace, identity.ID,
