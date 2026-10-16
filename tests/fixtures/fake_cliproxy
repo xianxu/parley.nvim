@@ -539,8 +539,8 @@ def main():
             self.send_response(404)
             self.end_headers()
 
-    # PARLEY_FAKE_IGNORE_SIGTERM=1: keep serving through SIGTERM; only SIGKILL
-    # (the spec's reap) ends it. The real cliproxyapi shuts down gracefully, and
+    # PARLEY_FAKE_IGNORE_SIGTERM=1: keep serving through SIGTERM; only SIGKILL,
+    # sent by the spec that set it, ends it. The real cliproxyapi shuts down gracefully, and
     # this is how a spec observes a restart racing a proxy that has not exited
     # yet (#237) — as a state the spec holds, not a wall-clock window it races
     # under load (#343).

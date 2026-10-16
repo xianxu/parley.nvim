@@ -42,8 +42,9 @@ local function spawn_fake(args, env)
     return handle
 end
 
--- SIGKILL: the restart-race case's old proxy ignores SIGTERM
--- (PARLEY_FAKE_IGNORE_SIGTERM), so only SIGKILL ends it (#343).
+-- Teardown uses the default SIGKILL: no case here observes a graceful stop of
+-- a fixture. The restart-race case's SIGTERM-ignoring proxy is parley's own
+-- spawn, which this reap never sees; that case kills it itself (#343).
 local function reap()
     fixture_process.reap({ since = mark })
 end

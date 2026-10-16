@@ -87,3 +87,97 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"56bbd892-6165-4d06-a400-7e9124a37c14","repository":"github.com/xianxu/parley.nvim","issue_id":"000343","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/281e18471be36419","reviewed_head":"a3365ebb9598f2eb2c074fa23bd8988f8a89e852","slot":"parley.nvim:3","requested_at":"2026-10-16T06:51:23.516139Z"},"phase":"finished","pid":17971,"started_at":"2026-10-16T06:51:24.085341Z","finished_at":"2026-10-16T06:52:37.870206Z","session_id":"cb0d355e-818f-4477-a860-15d83795e288","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T23:58:08-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 343 — cliproxy_update_spec: 'old proxy outlives the restart' races the fake's 4 s exit delay under load |
+| repo | parley.nvim |
+| issue file | workshop/issues/000343-cliproxy-update-spec-old-proxy-outlives-the-restart-races-the-fake-s-4-s-exit-delay-under-load.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 30a94402e6a3978a2ce58fbf795dc3eee9389d2d..eec0403b71acd1f29ee4207627c34023e7852f7c |
+| command | sdlc close --issue 343 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-15T23:58:08-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+Checking how to run the spec so I can try the mutation, then I'll write up the verdict.
+
+Running the spec directly is blocked by the environment-isolation guard, so I'm running it through the harness instead.
+
+Passes at head. Next I'm removing the in-case kill to confirm the regression test goes red without it.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The round-1 leak is fixed and I proved it. The case now saves the old proxy's pids (`held = cliproxy.spawned_pids()`, a copy). It SIGKILLs them with `kill_held()` and then asserts that the port goes down. `after_each` also calls `kill_held()` so a failing case still cleans up. Through the harness (`PARLEY_TEST_ENV_ROOT` set, orphan gate on), `cliproxy_update_spec.lua` passes at head. With the in-case `kill_held()` removed, it fails at `:508` with "the held old proxy still answers after SIGKILL". So the fix has a regression test that goes red without it. What's left is prose. BR-1 named several places that say "the reap" ends the proxy, and most were not corrected. Comments in the spec and the fake, plus the issue's Spec and Core concepts, still give that credit to `fixture_process.reap`, which never reaches a proxy that parley started.
+
+1. **Strengths**
+   - `tests/integration/cliproxy_update_spec.lua:242-250, 492, 508-511`: the kill uses explicit pids, is guarded with `pcall`, and covers the failure path through `after_each`. The case also checks that the port is free after the kill, so a leak like this one can't come back silently. Confirmed red by mutation.
+   - `tests/fixtures/fake_cliproxy:542-548`: `SIG_IGN` makes "old proxy still alive" a state the case controls instead of a time window, which is the root-cause fix the issue asks for.
+   - `tests/helpers/fixture_process.lua:57-58`: the doc no longer names one example caller, which fixes the BR-2 nit.
+   - The sweep of `PARLEY_FAKE_EXIT_DELAY_MS` is complete across lua, tests and atlas, and the unused `threading` import was removed.
+
+2. **Critical findings**: none.
+
+3. **Important findings**
+   - **2nd finding in family `teardown-claim-unbacked-by-kill-path`.**
+     - **Rule:** any text that says what ends the SIGTERM-ignoring proxy must name the case's pid kill (`kill_held`). It must never credit "the reap": `fixture_process.reap` only signals processes started through `fixture_process.spawn`, and parley's `cliproxy.spawn` starts this one.
+     - **Instances still wrong at head:**
+       - `tests/integration/cliproxy_update_spec.lua:45-46`: the `reap()` comment gives the old proxy as the reason for SIGKILL, but `reap` never signals that proxy. The real reason is simply that nothing in this file watches a fixture shut down gracefully.
+       - `tests/fixtures/fake_cliproxy:542-543`: "only SIGKILL (the spec's reap) ends it".
+       - `atlas/providers/cliproxy-managed.md:487-488`: "until a SIGKILL reap". This is ambiguous; it should say "until the spec SIGKILLs it by pid".
+       - The issue's `## Spec`: "the spec's reap SIGKILLs it (the shared reap drops `sigterm`: its only reason was this window)".
+       - The issue's `## Core concepts` row: "(the spec's reap)".
+       - The plan item "reap uses SIGKILL" carries the same rationale.
+     - **Fix:** go through all six in one pass (grep `reap` near `IGNORE_SIGTERM`) and add a `## Revisions` entry.
+
+4. **Minor findings**: none new.
+
+5. **Test coverage notes**
+   - The mutation check is confirmed: removing the in-case `kill_held()` makes the spec fail at `:508`, and with it the spec passes in 28 s.
+   - The orphan gate reported no survivors after the run at head.
+   - The "fails both ways" clause of Done-when is covered by the log's measured red at shortened delays, and the old time window is gone.
+
+6. **Architectural notes**
+   - ARCH-DRY: pass. `kill_held` is one helper used at both sites.
+   - ARCH-PURE: pass. Only tests and fixtures change.
+   - ARCH-PURPOSE: pass on behaviour. The prose sweep above is the class the BR-1 fix left incomplete.
+   - For later work: any fake mode that resists `cliproxy.stop()` needs its own kill by pid, because the `fixture_process` seam doesn't cover processes parley starts.
+
+7. **Plan revision recommendations**
+   - Add a `## Revisions` entry saying `fixture_process.reap` never covered parley-started proxies, so the case SIGKILLs the held pids itself (BR-1).
+   - Reword the Spec sentence and the Core concepts row to say the case SIGKILLs the old proxy by pid.
+   - Give the spec's switch to SIGKILL its real reason: no case in that file watches a graceful shutdown.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The kill path exists (held pids, kill_held in the case and in after_each) and the spec goes red at :508 without it, verified by mutation. The leftover false prose is raised as a new finding in the same family.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      fixture_process.lua:57-58 no longer names a single example caller.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: teardown-claim-unbacked-by-kill-path
+    title: |
+      Comments, atlas and issue Spec still credit "the reap" with SIGKILLing the SIGTERM-ignoring proxy
+    detail: |
+      2nd in family. Rule: text naming what ends the SIGTERM-ignoring proxy must name the case's pid kill (kill_held), never fixture_process.reap, which only signals processes from fixture_process.spawn and never reaches a proxy parley spawned. Instances at head: cliproxy_update_spec.lua:45-46 (the reap() comment justifies SIGKILL by a proxy reap never signals), fake_cliproxy:542-543 "(the spec's reap)", atlas/providers/cliproxy-managed.md:487-488 "until a SIGKILL reap", the issue Spec sentence "the spec's reap SIGKILLs it (the shared reap drops sigterm: its only reason was this window)", the issue Core concepts row "(the spec's reap)", and the Plan item's rationale. Fix all six in one pass and add a Revisions entry.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"f0ddc047-1aa4-4083-b5ae-7fdaf2603bee","repository":"github.com/xianxu/parley.nvim","issue_id":"000343","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/8affff9517abc49e","reviewed_head":"eec0403b71acd1f29ee4207627c34023e7852f7c","slot":"parley.nvim:3","requested_at":"2026-10-16T06:55:34.771121Z"},"phase":"finished","pid":45773,"started_at":"2026-10-16T06:55:35.205246Z","finished_at":"2026-10-16T06:58:03.379206Z","session_id":"5a6efc96-4f51-4504-8c95-ea8f84086daf","outcome":"returned"}] -->

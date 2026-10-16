@@ -68,14 +68,15 @@ Fix: replace the wall-clock window with a state the case controls. The fake's
 `PARLEY_FAKE_EXIT_DELAY_MS` is retired for `PARLEY_FAKE_IGNORE_SIGTERM=1`: the
 old proxy ignores SIGTERM and keeps serving until it is SIGKILLed. The port wait
 then always ends with the old proxy answering, the final probe always sees
-9.9.4, and the spec's reap SIGKILLs it (the shared reap drops `sigterm`: its
-only reason was this window).
+9.9.4, and the case SIGKILLs the pids it held (`cliproxy.spawned_pids()`),
+since parley spawned that proxy and no reap reaches it. The spec's shared
+reap drops `sigterm`: its only reason was the old window.
 
 ## Core concepts
 
 | Concept | Meaning |
 |---|---|
-| `PARLEY_FAKE_IGNORE_SIGTERM` | fake_cliproxy ignores SIGTERM; only SIGKILL (the spec's reap) ends it |
+| `PARLEY_FAKE_IGNORE_SIGTERM` | fake_cliproxy ignores SIGTERM; only a SIGKILL from the case that set it ends it |
 
 ## Done when
 
@@ -87,7 +88,8 @@ only reason was this window).
 
 - [x] fake_cliproxy: `PARLEY_FAKE_IGNORE_SIGTERM` replaces `PARLEY_FAKE_EXIT_DELAY_MS`.
 - [x] cliproxy_update_spec: the case uses it; reap uses SIGKILL; comments in
-      cliproxy.lua, fixture_process.lua and fixture_reaping_spec follow.
+      cliproxy.lua, fixture_process.lua and fixture_reaping_spec follow; the case
+      SIGKILLs the proxy it held.
 - [x] Red: the old case fails at a compressed window; the new case has no window.
 - [x] Evidence: the case passes in repeated runs under a loaded machine (parallel runs).
 
@@ -110,3 +112,12 @@ only reason was this window).
   Mutation: dropping the in-case kill fails at :508 ("still answers after
   SIGKILL"). Green 40/40 in 6 concurrent runs. The Minor doc nit (reap's sigterm
   example) is fixed: the doc no longer names one caller.
+- Close review round 2, BR-3 (Important): comments in the spec's reap, the
+  fake, the atlas and this Spec still said "the reap" ends the held proxy. All
+  of them now name the case's own SIGKILL (see Revisions).
+
+## Revisions
+
+- 2026-10-15: after BR-1/BR-3, the Spec, Plan and Core concepts no longer
+  credit the reap with ending the SIGTERM-ignoring proxy. The case SIGKILLs the
+  pids it holds.
