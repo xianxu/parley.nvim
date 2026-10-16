@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "13367de4", done: "fbefdbd5"}
 ---
 
 # Alt+Return times out under load: asynchronous submit, generous deadline, unconfirmed instead of failed
