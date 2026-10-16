@@ -85,3 +85,5 @@ Measurement (2026-10-15, :3): every `make` target that loads `tests/minimal_init
   - BR-2: documented direct runs remained in `record_fixtures.lua` and `perf_chat_finder.lua`. Class sweep over `-u tests/minimal_init.vim` instructions: those two, plus minimal_init's own usage line, now point at make targets. A new `make perf-finder` covers the finder benchmark, which had none. The two June `workshop/continuation` handoff notes are archival and left as written.
 - Minor, same round: the init guard now fails closed. A require error becomes a refusal ("the isolation check could not run"). Red with the pcall removed (the unguarded child ran: 3/1), green 4/0. Minor (review-instruction follow-up in ariadne) is with the TL.
 - unit test_isolation 9/0, integration 4/0, lint clean.
+- Minor (close-review instructions in ariadne should say make test-spec): left by TL decision. The guard is the stronger enforcement: a direct run now fails before any spec with the make command to use, which no sentence in review instructions can match.
+- Full suite on f62f0404 (final code commit): exit 0, lint clean (740 files).
