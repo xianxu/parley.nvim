@@ -187,6 +187,36 @@ local function adopt(s, registration)
     cache(s, registration)
 end
 
+local function config_ms(key, default)
+    local value = (require("parley").config or {})[key]
+    return type(value) == "number" and value > 0 and value or default
+end
+
+-- #357: one submit at a time per document, from the press to its outcome. The
+-- editor never waits on it; past the deadline the band says so and offers the
+-- one action (Alt+Return), while a send already issued keeps running, since
+-- killing it cannot tell delivered from not.
+local NOT_CONFIRMED = "not confirmed: submit again"
+
+local function end_submit(s)
+    local submitting = s.submitting
+    s.submitting = nil
+    if submitting and submitting.timer then submitting.timer:stop(); submitting.timer:close() end
+end
+
+local function begin_submit(s)
+    end_submit(s)
+    local submitting = { timer = uv.new_timer() }
+    s.submitting = submitting
+    show_feedback(s, "submitting…", false)
+    local ms = config_ms("agentic_submit_timeout_ms", 15000)
+    submitting.timer:start(ms, 0, vim.schedule_wrap(function()
+        if s.submitting ~= submitting or not valid(s) then return end
+        submitting.overdue = true
+        show_feedback(s, NOT_CONFIRMED .. " · Couch did not answer within " .. math.floor(ms / 1000) .. " s", true)
+    end))
+end
+
 local function ensure_retry()
     if retry_timer then return end
     retry_timer = uv.new_timer()
@@ -210,9 +240,12 @@ local function execute(s, effects)
                 if s.model.snapshot().phase == "unknown" then ensure_retry() end
                 if s.queued_submit and not s.model.snapshot().operation then
                     s.queued_submit = false
-                    M.submit(s.buf)
+                    -- A press that only confirmed a pending registration used to
+                    -- end there, so the agent got nothing until a third press
+                    -- (#357). The replay is a fresh submit of the current bytes.
+                    if s.model.snapshot().phase ~= "pending" then M.submit(s.buf) end
                 end
-            end))
+            end), { timeout_ms = config_ms("agentic_submit_timeout_ms", 15000) })
         elseif kind == "save" then
             local ss = require("parley.session_sync")
             local ok, err
@@ -247,18 +280,29 @@ local function execute(s, effects)
         elseif kind == "send" then
             require("parley.session_sync").send_registered(s.buf, effect.registration, completed(s, function(result)
                 if valid(s) then
+                    local submitting = s.submitting
                     dispatch(s, { type = "sent", witness = effect.witness, ok = result.code == 0,
                         error = result.stderr, display_time = os.date("%H:%M") })
+                    -- A delivery the model doesn't announce (the body moved on
+                    -- meanwhile) still ends this submit: its deadline is moot.
+                    if s.submitting == submitting then end_submit(s) end
                 end
             end))
         elseif kind == "feedback" then
+            end_submit(s)
             show_feedback(s, effect.message, false)
         elseif kind == "band" then
+            if effect.message == "" then end_submit(s) end -- the document turned out plain
             if s.feedback then band(s, s.feedback.label, s.feedback.hl) else band(s, effect.message) end
             if effect.message ~= "" then ensure_retry() else s.baseline, s.outstanding = nil, false end
         elseif kind == "notify" or kind == "reconcile" then
             local message = effect.message or effect.error or "Operation outcome pending; Alt+Return retries confirmation"
-            show_feedback(s, "operation failed: " .. tostring(message), true)
+            if s.submitting then
+                end_submit(s)
+                show_feedback(s, NOT_CONFIRMED .. " · " .. tostring(message), true)
+            else
+                show_feedback(s, "operation failed: " .. tostring(message), true)
+            end
             notify(message)
         elseif kind == "cancel" then
             if s.request then s.request.cancel(); s.request = nil end
@@ -390,20 +434,38 @@ function M.submit(buf)
     if s.reading or not valid(s) then return true end
     if s.recovery_pending then recover_migration(s); return true end
     local snapshot = s.model.snapshot()
-    if snapshot.phase == "pending" then dispatch(s, { type = "retry" }); return true end
+    if snapshot.phase == "pending" then
+        -- The operator pressed again: confirm the registration, then submit the
+        -- current bytes (#357). The confirmation itself never sends the old ones.
+        s.queued_submit = true
+        begin_submit(s)
+        dispatch(s, { type = "retry" })
+        return true
+    end
     if snapshot.operation then
+        if s.submitting then
+            -- Join the submit in flight: never a second couch --send-to (#357).
+            show_feedback(s, s.submitting.overdue and "submitting… still waiting for Couch" or "submitting…", false)
+            return true
+        end
         if not snapshot.registration and snapshot.phase == "probing" and snapshot.operation.witness.operation == "lookup"
             and not snapshot.operation.args.submit then s.queued_submit = true end
         return true
     end
     local revision = s.revision
-    if snapshot.registration then dispatch(s, { type = "submit", owner = snapshot.registration.Owner }); return true end
+    if snapshot.registration then
+        begin_submit(s)
+        dispatch(s, { type = "submit", owner = snapshot.registration.Owner })
+        return true
+    end
     if s.resolving then return true end
+    begin_submit(s)
     s.resolving = true
     couch.own_slot(completed(s, function(_, own)
         s.resolving = false
-        if not valid(s) or s.revision ~= revision then return end
+        if not valid(s) or s.revision ~= revision then end_submit(s); return end
         if not own then
+            end_submit(s)
             show_feedback(s, "submit failed: cannot resolve this pane's agent", true)
             notify("cannot resolve this pane's agent; nothing submitted")
             return
@@ -704,6 +766,7 @@ end
 function M.detach(buf)
     local s = states[buf]
     if not s then return end
+    end_submit(s)
     s.model.dispatch({ type = "detach" })
     states[buf] = nil
     if s.request then s.request.cancel() end

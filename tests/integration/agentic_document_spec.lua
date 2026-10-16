@@ -173,7 +173,7 @@ describe("agentic markdown admission", function()
         assert.equals(1, vim.fn.filereadable(new .. ".lock"))
         assert.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
     end)
-    it("does not send an edited in-flight registration and confirms it without automatic resend", function()
+    it("does not send an edited in-flight registration; the next press confirms it and submits the current text (#357)", function()
         await(function() return document.status(buf).phase == "plain" end)
         vim.env.FAKE_COUCH_REGISTRY_MODE = "delay"
         submit()
@@ -185,10 +185,17 @@ describe("agentic markdown admission", function()
         await(function() return document.status(buf).phase == "pending" end)
         assert.equals(0, vim.fn.filereadable(root .. "/sent.last"))
         vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+        -- The operator's press confirms the registration and then submits: it
+        -- used to stop at the confirmation, so the agent heard nothing until a
+        -- third press (#357). What is sent is the current text, saved anew.
         submit()
-        await(function() return document.status(buf).phase == "registered" end)
-        assert.equals(0, vim.fn.filereadable(root .. "/sent.last"))
-        assert.equals(1, vim.fn.filereadable(file .. ".lock"))
+        await(function()
+            local status = document.status(buf)
+            return vim.fn.filereadable(root .. "/sent.last") == 1 and status.phase == "registered" and not status.operation
+        end)
+        assert.equals(1, #vim.fn.readfile(root .. "/sent"))
+        assert.equals("typed during registration", vim.fn.readfile(file)[5])
+        assert.is_false(vim.bo[buf].modified)
     end)
     it("confirms a newly saved couch-owner override before routing a registered submit", function()
         await(function() return document.status(buf).phase == "plain" end)
