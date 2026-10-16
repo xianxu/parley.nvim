@@ -374,6 +374,31 @@ describe("cliproxy IO lifecycle", function()
             assert.is_truthy(msg:find("could not tell who started the proxy (ps unavailable)", 1, true))
         end)
 
+        -- #340 close review: the signalled pids exiting frees the port only if
+        -- they were all that held it. Parley's own proxy is on an earlier port, a
+        -- peer cliproxy holds the managed one, and lsof cannot run — so stop()
+        -- kills only ours. The restart must not spawn past the peer.
+        it("a restart whose killed pids exit still reports a peer left on the port", function()
+            local old_port, peer_port = ready_port.free_port(), ready_port.free_port()
+            set_endpoint(old_port)
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
+            assert.is_true(run_ensure().ok)
+            local ours = cliproxy.spawned_pids()[1]
+            start_fake(peer_port, "healthy")
+            ready_port.wait_listening(peer_port)
+            set_endpoint(peer_port)
+            cliproxy._set_process_tools({ lsof = "parley-test-no-such-lsof" })
+            local outcome
+            cliproxy.restart_managed(function() outcome = { ok = true } end,
+                function(msg) outcome = { ok = false, msg = msg } end)
+            vim.wait(9000, function() return outcome ~= nil end, 20)
+            cliproxy._set_process_tools(nil)
+            assert(outcome, "restart_managed never resolved")
+            assert.is_false(outcome.ok, "spawned past a peer still on the port")
+            assert.is_truthy(outcome.msg:find("still answers", 1, true), outcome.msg)
+            assert.equals("ESRCH", select(3, uv.kill(ours, 0)), "our old proxy was not stopped")
+        end)
+
         it("errors (no hang) when the spawned binary crashes", function()
             local port = ready_port.free_port()
             set_endpoint(port)

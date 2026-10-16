@@ -68,4 +68,8 @@ Fix: wait on actual state, the exit of the processes `stop()` signalled, never a
   - Mutation: with the pids ignored (probe-only release), 3 cases fail. With the direct spawn removed, both credential_health cases fail.
   - Unchanged and green: cliproxy_update_spec ("old proxy outlives the restart" still takes the probe-at-deadline path), command, dispatch, conformance, auth_login and budget specs.
   - Coordinated with parley.nvim:3 (#343): this branch does not touch fake_cliproxy's signal handling.
+- Close round 1 advisories fixed:
+  - (1) An exit-confirmed release now also reads the port's listeners (lsof). A leftover listener, or a failed read, falls back to the probe, so a peer cliproxy on the port is still reported rather than spawned past. Test: "a restart whose killed pids exit still reports a peer left on the port" (lsof unavailable, our proxy on the old port, a peer on the managed one). Mutation: without the re-check it fails.
+  - (2) `render_or_fail` is the one place a failed render becomes a message; `start_managed(nil, …)` renders itself.
+  - The 8-parallel harness re-run: median 741 ms, max 1557 ms (the sync lsof under load). No probe was near its timeout (max 135 ms).
 

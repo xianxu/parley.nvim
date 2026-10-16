@@ -358,6 +358,17 @@ local function write_rendered_config()
     return path, opts.host, opts.port, opts.secret
 end
 
+-- write_rendered_config as a table, or nil after reporting why through
+-- on_error: the one place a failed render becomes a message (ARCH-DRY).
+local function render_or_fail(on_error)
+    local path, host, port, secret = write_rendered_config()
+    if not path then
+        on_error("cliproxy: " .. tostring(host)) -- host carries the err
+        return nil
+    end
+    return { path = path, host = host, port = port, secret = secret }
+end
+
 --------------------------------------------------------------------------------
 -- Credential health (management API) — issue #197
 --------------------------------------------------------------------------------
@@ -461,6 +472,8 @@ local function is_cliproxy_state(state)
     return state == "healthy" or state == "needs_login" or state == "client_key_mismatch"
 end
 
+local pids_on_port -- the lsof listener read, defined with the process tools below
+
 -- Wait (bounded) for a port to stop answering after SIGTERM. M.stop() returns
 -- immediately, and the REAL cliproxyapi shuts down gracefully — so without this
 -- the follow-up probe can still see the dying proxy, take ensure_running's
@@ -472,8 +485,11 @@ end
 -- exited has closed its socket. Probing the port instead measured ~2 s per probe
 -- under the parallel suite: the SYN to a just-closed port went unanswered, so
 -- "down" was learned only from curl's --max-time. Exit is polled with
--- kill(pid, 0); at the deadline one probe decides, so a proxy still answering is
--- reported exactly as before. `exited` tells the caller no probe was needed.
+-- kill(pid, 0). Their exit frees the port only if they were all that held it, so
+-- the listeners are read again (lsof); a listener left over, or a read that
+-- failed, falls back to the probe (#340 close review). At the deadline one probe
+-- decides, so a proxy still answering is reported exactly as before. `exited`
+-- tells the caller the port was seen free without a probe.
 local function wait_port_released(host, port, secret, pids, cb)
     -- WALL-CLOCK deadline, not a count of sleeps: each health_probe is a curl
     -- with --max-time 2, so counting only the defer interval would let this run
@@ -500,7 +516,11 @@ local function wait_port_released(host, port, secret, pids, cb)
             return ok ~= nil or name ~= "ESRCH" -- EPERM: it exists, just not ours
         end, pids)
         if #alive == 0 then
-            return cb(true, "down", true)
+            local listeners, lerr = pids_on_port(port)
+            if not lerr and #listeners == 0 then
+                return cb(true, "down", true)
+            end
+            return probe_poll()
         end
         if uv.now() >= deadline then
             return probe_poll() -- the probe at the deadline decides, as before
@@ -534,11 +554,7 @@ function M.restart_managed(on_ready, on_error)
             -- The old process is gone, so the port is free: spawn without
             -- ensure_running's reuse probe, which stalls on a just-closed port the
             -- same way (#340).
-            local path, host, port, secret = write_rendered_config()
-            if not path then
-                return on_error("cliproxy: " .. tostring(host)) -- host carries the err
-            end
-            return start_managed(path, host, port, secret, on_ready, on_error)
+            return start_managed(nil, on_ready, on_error)
         end
         M.ensure_running(on_ready, on_error)
     end)
@@ -792,9 +808,15 @@ local function poll_until_healthy(host, port, secret, pid, callback, on_error)
 end
 
 -- The down branch: discover (or auto-download) the binary, spawn it into the
--- rendered config at `path`, and poll until it is healthy. Shared by
--- ensure_running and an exit-confirmed restart (ARCH-DRY).
-start_managed = function(path, host, port, secret, callback, on_error)
+-- rendered config, and poll until it is healthy. Shared by ensure_running,
+-- which rendered before its reuse probe, and an exit-confirmed restart, which
+-- passes nil to render here (ARCH-DRY).
+start_managed = function(rendered, callback, on_error)
+    rendered = rendered or render_or_fail(on_error)
+    if not rendered then
+        return
+    end
+    local path, host, port, secret = rendered.path, rendered.host, rendered.port, rendered.secret
     local function spawn_and_poll(bin)
         local pid, err = M.spawn(bin, path)
         if not pid then
@@ -838,10 +860,11 @@ function M.ensure_running(callback, on_error)
         return callback()
     end
 
-    local path, host, port, secret = write_rendered_config()
-    if not path then
-        return on_error("cliproxy: " .. tostring(host)) -- host carries the err
+    local rendered = render_or_fail(on_error)
+    if not rendered then
+        return
     end
+    local host, port, secret = rendered.host, rendered.port, rendered.secret
 
     M.health_probe(host, port, secret, function(state)
         -- Surface the rotation race once per session. The flag is checked BEFORE
@@ -869,7 +892,7 @@ function M.ensure_running(callback, on_error)
             return on_error("cliproxy: port " .. port .. " is held by a non-cliproxy process")
         end
         -- down → spawn our own
-        start_managed(path, host, port, secret, callback, on_error)
+        start_managed(rendered, callback, on_error)
     end)
 end
 
@@ -894,7 +917,7 @@ end
 -- lsof absent, or refused (vim.system RAISES on EPERM — degrade here, at the IO
 -- seam, so stop() and restart_managed never raise). lsof exits 1 when nothing
 -- matches, so its exit code is not an error.
-local function pids_on_port(port)
+pids_on_port = function(port)
     if vim.fn.executable(_lsof_cmd) ~= 1 then
         return {}, "lsof unavailable"
     end
