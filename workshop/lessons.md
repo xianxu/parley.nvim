@@ -599,6 +599,9 @@ oracle, and the mutation that would make the test fail.
 
 - Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.
 
+## 2026-10-15 (#319 — canonical review export consumer)
+
+- A versioned export consumer must accept the producer's valid optional and defaulted fields. Test producer examples with unordered modes, tied ordering and omitted mode flags; never turn the current six stock records into schema constraints.
 - A successful filesystem move plus nvim_buf_set_name does not make Neovim consider NEW read: its not-edited flag blocks ordinary writes and checktime skips it. Test the next submit/auto-save, acknowledge proven unchanged NEW with a non-bang native read, and reattach native edit observers detached by that read. Never bypass the guard with an unconditional forced write.
 ## 2026-10-15 (#338 — starter tutorials under project mode)
 
@@ -661,3 +664,16 @@ oracle, and the mutation that would make the test fail.
 ## #349: deleting a local removes its readers too
 
 - Replacing `find_tree_root_file` deleted the local `root` that delete-tree's prompt still read, and the tests stubbed `confirm` without checking its text. Lint caught it in the suite. After deleting a local, run `make lint`, or grep the function for the name, before the suite; and a test that stubs a prompt asserts what the prompt says.
+
+## #357: intent that crosses an async callback belongs in the pure model
+
+- A shell flag (`queued_submit`), set by a press and cleared in only one callback, outlived every other outcome: a pending rename, or a reconcile. A later unrelated lookup could then send a submit nobody pressed for. When an intent spans an asynchronous round trip, make it an event field on the pure model's transition (`retry{submit=true}` → `resubmit` effect), so every outcome decides it and unit tests cover each branch. Don't use a flag that each callback must remember to clear.
+- Read the code path before accepting an issue's premise. "Alt+Return blocks in vim.wait" was wrong: the submit was already async, and the felt bug was a press that confirmed but never sent.
+- When a change moves a deadline, every call site of the timed seam gets a slow-fake test whose delay is past the OLD default. A delay under the old value passes with the change reverted, so it pins nothing. #357 round 2 found the rename stage tested at 2 s against an old 2.5 s.
+## #334: transient window values can be cloned
+
+- Test native split creation during a temporary highlight, not only before it.
+  Neovim copies window-local options; the shared renderer must restore newly
+  copied transient frames using its exact installed-value proof.
+- Put the basename in a bounded winbar label and the full path in its one-line
+  notification; truncating a path prefix can erase the filename entirely.

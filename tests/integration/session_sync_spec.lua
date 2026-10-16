@@ -338,6 +338,87 @@ describe("session-sync buffer", function()
         assert.is_false(exists(file .. ".lock"))
     end)
 
+    -- #356: an agent's write keeps each window on the text it showed. The body
+    -- is 30 numbered lines after the header; two windows look at it.
+    describe("cursor and view across an agent's write (#356)", function()
+        local body = {}
+        for i = 1, 30 do body[i] = ("line %02d of the body"):format(i) end
+        local function doc(extra_above, rewrite, extra_below)
+            local out = vim.deepcopy(header)
+            vim.list_extend(out, extra_above or {})
+            for i, l in ipairs(body) do out[#out + 1] = (rewrite and rewrite[i]) or l end
+            vim.list_extend(out, extra_below or {})
+            return out
+        end
+        local function two_windows()
+            open(doc())
+            local a = vim.api.nvim_get_current_win()
+            vim.cmd("split")
+            local b = vim.api.nvim_get_current_win()
+            vim.api.nvim_win_call(a, function() vim.fn.winrestview({ lnum = 20, col = 5, topline = 15 }) end)
+            vim.api.nvim_win_call(b, function() vim.fn.winrestview({ lnum = 30, col = 0, topline = 26 }) end)
+            return a, b
+        end
+        local function view(win) return vim.api.nvim_win_call(win, vim.fn.winsaveview) end
+        local function reloaded(want)
+            assert.is_true(vim.wait(2000, function()
+                return vim.deep_equal(vim.api.nvim_buf_get_lines(buf, 0, -1, false), want)
+            end), "the agent's write was not reloaded")
+        end
+        after_each(function() vim.cmd("silent! only") end)
+
+        it("an edit above shifts both windows by the lines it added", function()
+            local a, b = two_windows()
+            local new = doc({ "- one more", "- and another" })
+            vim.fn.writefile(new, file)
+            reloaded(new)
+            local va, vb = view(a), view(b)
+            assert.same({ 22, 5, 17 }, { va.lnum, va.col, va.topline })
+            assert.same({ 32, 0, 28 }, { vb.lnum, vb.col, vb.topline })
+        end)
+
+        it("a $-sticky cursor stays $-sticky across an edit above", function()
+            local a = two_windows()
+            vim.api.nvim_win_call(a, function() vim.cmd("normal! $") end)
+            assert.equals(vim.v.maxcol, view(a).curswant)
+            local new = doc({ "- one more" })
+            vim.fn.writefile(new, file)
+            reloaded(new)
+            assert.same({ 21, vim.v.maxcol }, { view(a).lnum, view(a).curswant })
+        end)
+
+        it("an edit at the cursor's line keeps the cursor on its text", function()
+            local a = two_windows()
+            -- line 20 of the doc is body line 12; the cursor sat on the "1" of "12" (col 5)
+            local new = doc(nil, { [12] = "edited: line 12 of the body" })
+            vim.fn.writefile(new, file)
+            reloaded(new)
+            local va = view(a)
+            assert.same({ 20, 13 }, { va.lnum, va.col })
+        end)
+
+        it("an edit below leaves cursor and top line exactly in place", function()
+            local a, b = two_windows()
+            local new = doc(nil, nil, { "- appended by the agent" })
+            vim.fn.writefile(new, file)
+            reloaded(new)
+            local va, vb = view(a), view(b)
+            assert.same({ 20, 5, 15 }, { va.lnum, va.col, va.topline })
+            assert.same({ 30, 0, 26 }, { vb.lnum, vb.col, vb.topline })
+        end)
+
+        it("the native :checktime reload maps the views too", function()
+            ss.POLL_MS = 60000 -- only FileChangedShell can notice it
+            local a, b = two_windows()
+            local new = doc({ "- one more" })
+            vim.fn.writefile(new, file)
+            vim.cmd("checktime")
+            reloaded(new)
+            assert.same({ 21, 16 }, { view(a).lnum, view(a).topline })
+            assert.same({ 31, 27 }, { view(b).lnum, view(b).topline })
+        end)
+    end)
+
     it("an agent write racing the first edit: the operator's text is kept, theirs in .clobbered (#315)", function()
         ss.POLL_MS = 60000               -- the watch never catches the write
         open(header)

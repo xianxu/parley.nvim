@@ -130,3 +130,16 @@ describe("session_sync.find_actor", function()
         assert.is_nil(ss.find_actor({ {}, { Binding = vim.NIL }, "junk" }, "ops:0"))
     end)
 end)
+
+describe("session_sync.has_unsubmitted", function()
+    it("uses turn ownership and acquisition content, independent of modified", function()
+        for _, turn in ipairs({ "free", "operator" }) do
+            for _, baseline in ipairs({ "old", "current" }) do
+                assert.equals(turn == "operator" and baseline ~= "current",
+                    ss.has_unsubmitted(turn, baseline, "current"))
+            end
+        end
+        assert.is_true(ss.has_unsubmitted("operator", nil, "current"))
+        assert.is_false(ss.has_unsubmitted("free", nil, "current"))
+    end)
+end)
