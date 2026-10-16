@@ -4,11 +4,18 @@
 - `chat_memory.enable`: toggle summarization (default `false`; the current chat's exchange window is retained in full when off)
 - `chat_memory.max_full_exchanges`: number of recent full exchanges to keep when enabled (default `242`)
 - `chat_memory.omit_user_text`: replacement text for summarized user messages
+- `chat_memory.side_chats`: `"summary"` (default) or `"full"`; how side chats off the path to the root are sent, whether or not `enable` is on (#352)
 
 Tree-of-chat context is not assembled separately (#233). The request's
 exchanges are the chat tree linearized in depth-first order, ancestors and
-asides included, and this window spans that whole sequence. With memory
-disabled, every exchange in it is sent in full; see [chat lifecycle](lifecycle.md).
+asides included. The window spans the path to the root: the current file and
+its ancestors. Under `side_chats = "summary"`, a side chat (an aside, or a chat
+nested under one) is off the path: each of its exchanges is sent as its `📝:`
+summary in the summarized form, or, without one, as its question alone,
+truncated to 300 characters and marked. It is outside the window and never
+pinned in full, and its `@@` references are neither fetched nor inlined. Under
+`"full"`, side chats are counted and rendered like any exchange. With memory
+disabled, every exchange on the path is sent in full; see [chat lifecycle](lifecycle.md).
 
 ## Mechanism
 - Exchanges beyond `max_full_exchanges` threshold: user message replaced with `omit_user_text`, assistant message replaced with `📝:` summary line content

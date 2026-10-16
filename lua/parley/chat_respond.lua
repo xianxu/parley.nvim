@@ -338,6 +338,51 @@ M.preserve_exchange = function(idx, exchange_idx, total, max_exchanges, has_file
     return idx == exchange_idx or idx > total - max_exchanges or has_file_refs == true
 end
 
+--- Whether side chats off the path to the root are sent as their summaries
+--- (#352). Both the message build and remote resolution read it, so a
+--- reference that is not sent is not fetched.
+--- @param config table plugin config
+--- @return boolean
+M.side_chats_summarized = function(config)
+    local memory = config and config.chat_memory
+    return not (memory and memory.side_chats == "full")
+end
+
+local SIDE_CHAT_QUESTION_CHARS = 300
+
+--- The assistant message that stands for a summarized exchange: its 📝: line.
+M.summary_message = function(exchange)
+    return { role = "assistant", content = require("parley.define").strip_definition_footnote_footer(
+        question_tags.content(exchange.summary)) }
+end
+
+--- The messages for an off-path exchange under side_chats = "summary": the
+--- summarized form memory uses (placeholder, then the 📝: line), or, without a
+--- summary, its question alone, truncated and marked, so the model knows the
+--- side discussion happened (#352).
+--- @param exchange table a parsed exchange
+--- @param question string its composed question text
+--- @param omitted string the placeholder for a summarized question
+--- @return table[] messages
+M.side_chat_messages = function(exchange, question, omitted)
+    local text = vim.trim(question)
+    if exchange.summary then
+        -- As the summarized branch: no placeholder for a blank question.
+        local messages = text:match("%S") and { { role = "user", content = omitted } } or {}
+        messages[#messages + 1] = M.summary_message(exchange)
+        return messages
+    end
+    if not text:match("%S") then return {} end
+    if vim.fn.strchars(text) > SIDE_CHAT_QUESTION_CHARS then
+        text = vim.fn.strcharpart(text, 0, SIDE_CHAT_QUESTION_CHARS) .. "…"
+    end
+    local messages = { { role = "user", content = "[A side chat question, with no summary] " .. text } }
+    if exchange.answer then
+        messages[2] = { role = "assistant", content = "[Side chat answer omitted]" }
+    end
+    return messages
+end
+
 --- Size of an asset named by its transcript-relative path, resolved against
 --- the chat file's directory; nil + reason when it cannot be stat'ed. Without
 --- a chat path every attachment becomes a visible note, never a silent drop.
@@ -814,8 +859,18 @@ M.build_messages = function(opts)
         end
     end
 
-    -- Process each exchange, determining whether to preserve or summarize
-    local total_exchanges = #sequence
+    -- Process each exchange, determining whether to preserve or summarize.
+    -- Under side_chats = "summary" an off-path item is outside the window: it
+    -- is sent as its summary, and the window counts the path's exchanges only
+    -- (#352). `rank` is an item's position among the counted ones.
+    local side_summaries = M.side_chats_summarized(opts_config)
+    local rank, total_exchanges = {}, 0
+    for idx, item in ipairs(sequence) do
+        if not (side_summaries and item.off_path) then
+            total_exchanges = total_exchanges + 1
+            rank[idx] = total_exchanges
+        end
+    end
 
     -- The messages each current-file exchange produced, by identity: a topic
     -- request reads only the current file's conversation (#233), and the tree's
@@ -832,15 +887,19 @@ M.build_messages = function(opts)
             messages[#messages + 1] = message
             if item.current then current_messages[message] = true end
         end
-        if exchange.question and (not row or row >= start_index) and idx <= exchange_idx then
+        local in_range = exchange.question and (not row or row >= start_index) and idx <= exchange_idx
+        local question_content = in_range and question_tags.compose_question(exchange.preface and exchange.preface.content,
+            define.strip_definition_footnote_footer(question_tags.content(exchange.question)))
+        if in_range and not rank[idx] then
+            local omitted = assets.omitted_text(omit_user_text, exchange.question.attachments)
+            for _, message in ipairs(M.side_chat_messages(exchange, question_content, omitted)) do push(message) end
+        elseif in_range then
             -- Preserve in full: the current question, a recent exchange, or
             -- one pinned by file references (M.preserve_exchange).
             local should_preserve = M.preserve_exchange(
-                idx, exchange_idx, total_exchanges, max_exchanges, #exchange.question.file_references > 0)
+                rank[idx], rank[exchange_idx], total_exchanges, max_exchanges, #exchange.question.file_references > 0)
             logger.debug("Exchange #" .. idx .. (should_preserve and " preserved in full" or " summarized"))
 
-            local question_content = question_tags.compose_question(exchange.preface and exchange.preface.content,
-                define.strip_definition_footnote_footer(question_tags.content(exchange.question)))
             if question_content:match("%S") then
                 if should_preserve then
                     -- Get the question content and process any file loading directives
@@ -969,7 +1028,7 @@ M.build_messages = function(opts)
                 else
                     -- Use the summary if available
                     if exchange.summary then
-                        push({ role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.summary)) })
+                        push(M.summary_message(exchange))
                     else
                         -- If no summary is available, use the full content (fallback)
                         if answer_has_tool_blocks then
@@ -1238,6 +1297,7 @@ M.resolve_remote_references = function(opts, callback)
     local queued_fetches = {}
     local urls_to_fetch = {}
     local chat_cache = M.get_chat_remote_reference_cache(chat_file)
+    local side_summaries = M.side_chats_summarized(opts_config)
 
     -- #233: a reference's cache entry is read and written under the key of the
     -- file that holds it, so a URL from another file of the tree is cached there.
@@ -1267,7 +1327,9 @@ M.resolve_remote_references = function(opts, callback)
         local file = item.current == false and item.file or chat_file
         local cache = item.current == false and M.peek_chat_remote_reference_cache(file) or chat_cache
 
-        if exchange.question and exchange.question.file_references then
+        -- A side chat sent as its summary sends no references (#352).
+        local sent = not (item.off_path and side_summaries)
+        if sent and exchange.question and exchange.question.file_references then
             for _, file_ref in ipairs(exchange.question.file_references) do
                 local url = file_ref.path
                 if helpers.is_remote_url(url) then

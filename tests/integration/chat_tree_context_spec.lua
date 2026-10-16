@@ -211,6 +211,128 @@ describe("chat context over a real chat tree (#233)", function()
         assert.is_nil(chat_respond.peek_chat_remote_reference_cache(child)[url], "saved under the child")
     end)
 
+    -- #352: side chats off the path to the root are sent as their summaries.
+    describe("side chats off the path", function()
+        local r, a, n
+        before_each(function()
+            r = write_chat("2026-10-16.14-00-00.050.md", {
+                "💬: R1", "", "🤖:[A]", "root answer [🌿:aside](2026-10-16.14-01-00.051.md)", "📝: r1 sum", "",
+                "💬: R2", "", "🤖:[A]", "root answer two", "📝: r2 sum", "",
+                "💬: R3", "",
+            })
+            a = write_chat("2026-10-16.14-01-00.051.md", {
+                "🌿: 2026-10-16.14-00-00.050.md: Root", "",
+                "💬: A1", "", "🤖:[A]", "long aside answer", "📝: aside sum", "",
+                "🌿: 2026-10-16.14-02-00.052.md: Nested", "",
+                "💬: A2", "", "🤖:[A]", "aside answer two", "📝: a2 sum", "",
+                "💬: A3", "",
+            })
+            n = write_chat("2026-10-16.14-02-00.052.md", {
+                "🌿: 2026-10-16.14-01-00.051.md: Aside", "",
+                "💬: AA1", "", "🤖:[A]", "nested answer", "📝: nested sum", "",
+            })
+        end)
+        local omitted = "[Previous messages omitted]"
+        local function has(out, text)
+            for _, content in ipairs(out) do
+                if content:find(text, 1, true) then return true end
+            end
+            return false
+        end
+
+        it("sends an aside and its nested aside as summaries to a later root question", function()
+            local out = messages_for(r, 2)
+            assert.equals("R1", out[1])
+            assert.is_truthy(out[2]:find("root answer", 1, true)) -- the path is sent in full
+            assert.same({ omitted, "aside sum", omitted, "nested sum", omitted, "a2 sum",
+                "[A side chat question, with no summary] A3", "R2" },
+                vim.list_slice(out, 3))
+        end)
+
+        it("sends the nested aside as its summary, and the on-path root in full, to the aside", function()
+            local out = messages_for(a, 3)
+            assert.same({ "R1", "A1", "A2", "A3" }, vim.tbl_filter(function(c) return c:match("^[RA]%d$") end, out))
+            assert.is_true(has(out, "root answer"))
+            assert.is_true(has(out, "long aside answer"))
+            assert.is_true(has(out, "nested sum"))
+            assert.is_false(has(out, "nested answer"))
+        end)
+
+        it("sends the whole path in full to the nested aside", function()
+            local out = messages_for(n, 1)
+            assert.is_true(has(out, "root answer"))
+            assert.is_true(has(out, "long aside answer"))
+            assert.equals("AA1", out[#out])
+        end)
+
+        it("renders side chats like any exchange under side_chats = full", function()
+            local out = messages_for(r, 2, { memory = { enable = false, side_chats = "full" } })
+            assert.is_true(has(out, "long aside answer"))
+            assert.is_true(has(out, "nested answer"))
+            assert.is_false(has(out, omitted))
+        end)
+
+        it("sends an exchange with no summary as its question alone, truncated and marked", function()
+            local long = "B1 " .. string.rep("é", 400)
+            local root = write_chat("2026-10-16.15-00-00.060.md", {
+                "💬: R1", "", "🤖:[A]", "answer", "", "🌿: 2026-10-16.15-01-00.061.md: Side", "", "💬: R2", "",
+            })
+            write_chat("2026-10-16.15-01-00.061.md", {
+                "🌿: 2026-10-16.15-00-00.060.md: Root", "", "💬: " .. long, "", "🤖:[A]", "unsummarized answer", "",
+            })
+            local out = messages_for(root, 2)
+            local marked = "[A side chat question, with no summary] "
+            assert.equals(marked .. vim.fn.strcharpart(long, 0, 300) .. "…", out[3])
+            assert.equals("[Side chat answer omitted]", out[4])
+            assert.is_false(has(out, "unsummarized answer"))
+        end)
+
+        it("sends no placeholder for a blank side-chat question, as the summarized branch", function()
+            local exchange = { question = { content = "" }, answer = { content = "x" }, summary = { content = "s" } }
+            assert.same({ { role = "assistant", content = "s" } }, chat_respond.side_chat_messages(exchange, " ", "P"))
+            assert.same({ { role = "user", content = "P" }, { role = "assistant", content = "s" } },
+                chat_respond.side_chat_messages(exchange, "q", "P"))
+        end)
+
+        it("neither fetches nor inlines a side chat's remote reference", function()
+            local url = "https://example.com/side-" .. math.random(1000000)
+            local root = write_chat("2026-10-16.16-00-00.070.md", {
+                "💬: R1", "", "🤖:[A]", "answer", "", "🌿: 2026-10-16.16-01-00.071.md: Side", "", "💬: R2", "",
+            })
+            write_chat("2026-10-16.16-01-00.071.md", {
+                "🌿: 2026-10-16.16-00-00.070.md: Root", "", "💬: read @@" .. url .. "@@", "",
+                "🤖:[A]", "read it", "📝: read sum", "",
+            })
+            local oauth = require("parley.oauth")
+            local saved, calls = oauth.fetch_content, 0
+            oauth.fetch_content = function(_, _, callback) calls = calls + 1; callback("fetched body") end
+            local parsed = parse(root)
+            local sequence, at = chat_respond._tree_sequence(root, parsed, 2, parsed, 2)
+            local resolved
+            local ok, err = pcall(function()
+                chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
+                    chat_file = root, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
+                assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10))
+            end)
+            oauth.fetch_content = saved
+            assert(ok, err)
+            assert.equals(0, calls)
+            assert.is_nil(resolved[url])
+            local out = messages_for(root, 2, { remote = resolved })
+            assert.is_false(has(out, url))
+            assert.is_true(has(out, "read sum"))
+        end)
+
+        it("counts only the path's exchanges in the memory window", function()
+            -- Three path exchanges and a window of three: all in full, though
+            -- the aside's three exchanges come before R3.
+            local out = messages_for(r, 3, { memory = { enable = true, max_full_exchanges = 3 } })
+            assert.equals("R1", out[1])
+            assert.is_true(has(out, "root answer two"))
+            assert.is_false(has(out, "long aside answer"))
+        end)
+    end)
+
     it("reads an unsaved child from its buffer", function()
         vim.cmd("edit " .. vim.fn.fnameescape(aside))
         local buf = vim.api.nvim_get_current_buf()

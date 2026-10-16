@@ -55,8 +55,9 @@ end
 --- An item from a subtree hanging off the current file carries `anchor`: the
 --- current file's exchange it hangs after (0 = before the first question) and
 --- the row of its branch reference, so a request that leaves that exchange out
---- can leave its asides out too.
---- @return table[] items: { exchange, file, current, anchor? }
+--- can leave its asides out too. Every item from a subtree is `off_path`: an
+--- aside, or a chat nested under one, rather than a file on the path (#352).
+--- @return table[] items: { exchange, file, current, anchor?, off_path? }
 function M.linearize(path, cut, deps)
     local items, seen = {}, {}
     for _, node in ipairs(path) do seen[node.file] = true end
@@ -68,15 +69,16 @@ function M.linearize(path, cut, deps)
         if seen[file] then return end
         seen[file] = true
         local parsed = deps.load(file)
-        if parsed then emit(file, parsed, false, nil, depth, anchor) end
+        if parsed then emit(file, parsed, false, nil, depth, anchor, true) end
     end
 
     -- `stop` is { branch = i } (descend at the path's branch) or { cut = n }.
-    emit = function(file, parsed, current, stop, depth, anchor)
+    emit = function(file, parsed, current, stop, depth, anchor, off_path)
         local exchanges, branches = parsed.exchanges or {}, parsed.branches or {}
         for k = 0, #exchanges do
             if k >= 1 then
-                items[#items + 1] = { exchange = exchanges[k], file = file, current = current, anchor = anchor }
+                items[#items + 1] = { exchange = exchanges[k], file = file, current = current, anchor = anchor,
+                    off_path = off_path }
                 if stop and stop.cut == k then return end
             end
             for index, branch in ipairs(branches) do
