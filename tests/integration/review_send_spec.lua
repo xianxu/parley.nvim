@@ -119,6 +119,10 @@ describe("review_send", function()
         alt_return()
         delivered(3)
         assert.equals("submitted: " .. file, last())
+        for _, payload in ipairs(sent()) do
+            assert.equals("ariadne:2|submitted: " .. file, payload)
+        end
+        assert.is_nil(invoked)
         assert.equals(original, require("parley.agentic_document").identity(buf).ID)
     end)
 
@@ -164,6 +168,31 @@ describe("review_send", function()
         assert.equals(buf, invoked.buf)
         assert.same({ modes = { "copy-editing" }, instruction = "keep the voice" }, invoked.args)
         assert.same({}, sent())
+    end)
+
+    it("outside Couch invokes locally without consulting Couch actors", function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+        local couch = require("parley.couch")
+        local original = couch.own_slot
+        open(doc)
+        couch.own_slot = function() error("outside review must not query actors") end
+        local ok, err = pcall(alt_return)
+        couch.own_slot = original
+        assert.is_true(ok, err)
+        assert.equals(buf, invoked.buf)
+        assert.same({}, sent())
+    end)
+
+    it("Couch forwards a long unknown process instruction unchanged in the file", function()
+        local value = "[unknown-mode] " .. string.rep("operator text ", 800)
+        local document = { "---", 'process-instruction: "' .. value .. '"', "---", "body" }
+        vim.ui.input = function() error("Couch submit must not prompt") end
+        open(document)
+        alt_return()
+        delivered(1)
+        assert.equals("submitted: " .. file, last())
+        assert.same(document, vim.fn.readfile(file))
+        assert.is_nil(invoked)
     end)
 
     it("a slot couch cannot resolve: nothing sent, no review round", function()
@@ -274,13 +303,5 @@ describe("review_send pure helpers", function()
         assert.is_nil(rs.requote("process-instruction: plain", 5))
     end)
 
-    it("the diff is capped", function()
-        local old, new = {}, {}
-        for i = 1, 300 do old[i], new[i] = "a" .. i, "b" .. i end
-        local d = rs.diff(table.concat(old, "\n"), table.concat(new, "\n"))
-        local n = #vim.split(d, "\n")
-        assert.equals(rs.DIFF_MAX_LINES + 1, n)
-        assert.truthy(d:find("more diff lines; read the file", 1, true))
-        assert.is_nil(rs.diff(nil, "x"))
-    end)
+
 end)

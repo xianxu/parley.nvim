@@ -103,6 +103,11 @@ end
 
 -- Submission receipts and errors share one literal, bounded label with the
 -- pre-attachment coordinator. Escape percent signs only at each UI boundary.
+-- An existing lock with no local baseline remains an outstanding turn.
+M.has_unsubmitted = function(turn, baseline, current)
+    return turn == "operator" and (not baseline or baseline ~= current)
+end
+
 M.feedback_view = require("parley.document_band").feedback_view
 
 -- Days since 1970-01-01 for a proleptic Gregorian date (no timezone involved).
@@ -308,14 +313,49 @@ end
 
 local refresh, probe
 
+-- Every window's view of `buf`, with the text it was taken against (#356).
+local function capture_views(buf)
+    local snap = { lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false), wins = {} }
+    for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+        snap.wins[win] = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+    end
+    return snap
+end
+
+-- After an external write reloaded `buf`, put each window's cursor and top line
+-- back on the text they showed, mapped through the diff (#356). Without it the
+-- reload kept line NUMBERS, so an agent's edit above moved the operator.
+local function restore_views(buf, snap)
+    local view_map = require("parley.view_map")
+    local new = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local hs = view_map.hunks(snap.lines, new)
+    for win, view in pairs(snap.wins) do
+        if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+            local pos = view_map.map(snap.lines, new, { view.lnum, view.col }, hs)
+            -- curswant is a virtual column ($-sticky as MAXCOL): kept while the
+            -- column is, re-derived from the screen when the text moved it.
+            local moved = pos[2] ~= view.col
+            view.lnum, view.col = pos[1], pos[2]
+            if moved then view.curswant = nil end
+            view.topline = view_map.map_line(snap.lines, new, view.topline, hs)
+            vim.api.nvim_win_call(win, function()
+                vim.fn.winrestview(view)
+                if moved then vim.fn.winrestview({ curswant = vim.fn.virtcol(".") - 1 }) end
+            end)
+        end
+    end
+end
+
 -- A clean buffer follows the file on disk silently; the owed state is
 -- re-read at once, since a write is usually the agent's answer.
 local function reload(buf)
+    local views = capture_views(buf)
     M.with_buffer_read(buf, function()
         vim.api.nvim_buf_call(buf, function()
             vim.cmd("silent edit!")
         end)
     end)
+    restore_views(buf, views)
 	state[buf].probed = nil
 	probe(buf)
 end
@@ -524,6 +564,7 @@ end
 local function define_highlights()
 	local groups = {
 		ParleySessionSyncFree = { link = "StatusLine" },
+		ParleySessionSyncLeave = { bg = "#ff0000", fg = "#ffffff", ctermbg = 196, ctermfg = 231, bold = true },
 		ParleySessionSyncOperator = { bg = "#870000", fg = "#ffffff", ctermbg = 88, ctermfg = 231, bold = true },
 		ParleySessionSyncStale = { bg = "#ff8700", fg = "#000000", ctermbg = 208, ctermfg = 16, bold = true },
 		ParleySessionSyncOwed = { link = "DiffChange" },
@@ -558,6 +599,16 @@ M.attach = function(buf, identity, observed)
 	vim.bo[buf].autoread = false
 	local group = vim.api.nvim_create_augroup(ns_group .. buf, { clear = true })
     s.group = group
+    local function outstanding()
+        return state[buf] == s and not s.moving and vim.api.nvim_buf_is_valid(buf)
+            and M.has_unsubmitted(read_turn(buf), s.baseline, s.content)
+    end
+    vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, { group = group, buffer = buf, callback = function()
+        if outstanding() then
+            require("parley.document_band").flash(vim.api.nvim_get_current_win(), buf, outstanding)
+        end
+    end })
+
 	-- Acquire in the edit notification, before TextChanged/InsertLeave auto-save
 	-- callbacks can clear 'modified' (#324). This buffer was identified at
 	-- attach: an edit to its YAML must not remove its protection.
@@ -642,6 +693,7 @@ M.attach = function(buf, identity, observed)
                     -- A scheduled callback can run inside that read's autocmds,
                     -- so scheduler progress cannot prove the read has ended.
                     native_reads[buf] = true
+                    s.views = capture_views(buf) -- restored at FileChangedShellPost
                 end
 				return
 			end
@@ -658,7 +710,10 @@ M.attach = function(buf, identity, observed)
 		group = group,
 		buffer = buf,
         callback = function(event)
-            if event.event == "FileChangedShellPost" then native_reads[buf] = nil end
+            if event.event == "FileChangedShellPost" then
+                native_reads[buf] = nil
+                if s.views then restore_views(buf, s.views); s.views = nil end
+            end
             if s.moving then return end
             s.loaded = disk_mtime(buf)
             if event.event ~= "BufWritePost" and s.feedback then s.feedback = nil; refresh(buf) end

@@ -599,6 +599,9 @@ oracle, and the mutation that would make the test fail.
 
 - Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.
 
+## 2026-10-15 (#319 — canonical review export consumer)
+
+- A versioned export consumer must accept the producer's valid optional and defaulted fields. Test producer examples with unordered modes, tied ordering and omitted mode flags; never turn the current six stock records into schema constraints.
 - A successful filesystem move plus nvim_buf_set_name does not make Neovim consider NEW read: its not-edited flag blocks ordinary writes and checktime skips it. Test the next submit/auto-save, acknowledge proven unchanged NEW with a non-bang native read, and reattach native edit observers detached by that read. Never bypass the guard with an unconditional forced write.
 ## 2026-10-15 (#338 — starter tutorials under project mode)
 
@@ -668,3 +671,10 @@ oracle, and the mutation that would make the test fail.
 - Optional work added to a critical callback (here, the attention record in the send completion) goes in a `pcall` with a warning, and a test makes it throw.
 - The M2 review found the same family again: the pure model pinned the stale-probe rule, but the glue's capture point (pending IDs read when the probe starts, not when it returns) had no test. An ordering rule needs a test at every layer that can break it. For each interleaving in the plan's ARCH-ORDER list, name the spec that drives production glue, not only the pure core, and mutate the glue to see it fail.
 - A scope addition I built in the same session re-derived three facts the codebase already owns: the frontmatter parser, the side-folder path, and a bounded async queue. Before writing a parser, a path rule or a concurrency loop, grep `lua/parley/` for the noun (`frontmatter`, `side_path`, `queue`) and read the owner first. When replacing a slice of a file by index, diff the function list before and after (`grep -n "^function M\."`): mine silently swallowed two functions between the anchors.
+## #334: transient window values can be cloned
+
+- Test native split creation during a temporary highlight, not only before it.
+  Neovim copies window-local options; the shared renderer must restore newly
+  copied transient frames using its exact installed-value proof.
+- Put the basename in a bounded winbar label and the full path in its one-line
+  notification; truncating a path prefix can erase the filename entirely.
