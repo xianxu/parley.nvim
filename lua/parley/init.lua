@@ -2039,7 +2039,7 @@ local function render_definition(buf, capture, phrase, result)
 	local applied = edits.apply_user_line_hunks(capture, lines, e.lines)
 	if applied.status ~= "applied" then
 		projection.set_applying(buf, false)
-		M.logger.warning("Define: edit cancelled: " .. tostring(applied.reason or applied.error or applied.status))
+		require("parley.buffer_edit").report_refusal("Define", applied.reason or applied.status, applied.error)
 		return
 	end
 
@@ -2092,7 +2092,7 @@ function M.define_visual(buf)
 	local capture, reason = require("parley.buffer_edit").capture_user(buf, "define-selection", {
 		{ first = { row = sr - 1, col = sc - 1 }, last = { row = er - 1, col = math.min(ec, #(lines[er] or "")) } },
 	})
-	if not capture then M.logger.warning("Define: " .. tostring(reason)); return end
+	if not capture then require("parley.buffer_edit").report_refusal("Define", reason); return end
 	local manifest = require("parley.skills.define")
 	local stop_selection_spinner = require("parley.selection_spinner").start(buf, er - 1, ec)
 	require("parley.skill_invoke").invoke(buf, manifest, { phrase = phrase }, {
@@ -2216,7 +2216,7 @@ local function drill_in_resolve_at_cursor_with_mode(buf, mode)
 		regions = { { first = { row = sr, col = sc }, last = { row = er, col = ec } } },
 	})
 	if not token then
-		M.logger.warning("Marker edit unavailable: " .. tostring(reason))
+		require("parley.buffer_edit").report_refusal("Marker", reason)
 		return false
 	end
 	local replacement = new_text:sub(m.byte_start, m.byte_start + inserted_len - 1)
@@ -2238,14 +2238,14 @@ local function drill_in_resolve_at_cursor_with_mode(buf, mode)
 		local resolved, stale = document.resolve_user(doc, token)
 		if not resolved then
 			document.cancel_user(doc, token)
-			M.logger.warning("Marker edit cancelled: " .. tostring(stale))
+			require("parley.buffer_edit").report_refusal("Marker", stale or "stale")
 			return
 		end
 		local first = resolved.regions[1].first
 		local result = document.apply_user(doc, token, { patches = { { region = 1, text = replacement } } })
 		if result.status ~= "applied" then
 			document.cancel_user(doc, token)
-			M.logger.warning("Marker edit cancelled: " .. tostring(result.reason or result.error or result.status))
+			require("parley.buffer_edit").report_refusal("Marker", result.reason or result.status, result.error)
 			return
 		end
 		if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
@@ -2517,7 +2517,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 		regions[#regions+1]={first={row=plan.ref_after-1,col=0},
 			last={row=plan.ref_after-1,col=#(lines[plan.ref_after] or "")}}
 		local capture,capture_error=buffer_edit.capture_user(buf,"branch-gather",regions)
-		if not capture then M.logger.warning("Branch: "..tostring(capture_error));return true end
+		if not capture then require("parley.buffer_edit").report_refusal("Branch", capture_error);return true end
 
 		-- Create the child FIRST, before touching the parent (#214 BR-63). The
 		-- write was pcall-guarded and this was not, so an unwritable chat_dir
@@ -2572,7 +2572,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 		for index=#block,1,-1 do table.insert(after,insert_at+1,block[index]) end
 		local applied=buffer_edit.apply_user_line_hunks(capture,current,after)
 		if applied.status~="applied" then
-			M.logger.warning("Branch: parent edit cancelled: "..tostring(applied.reason or applied.error or applied.status))
+			require("parley.buffer_edit").report_refusal("Branch", applied.reason or applied.status, applied.error)
 			return true
 		end
 		M.highlight_chat_branch_refs(buf)
@@ -3148,7 +3148,7 @@ M.setup_markdown_keymaps = function(buf)
 						{ first = { row = cursor_pos[1] - 1, col = 0 },
 							last = { row = cursor_pos[1] - 1, col = 0 } },
 					})
-					if not capture then M.logger.warning(tostring(reason)); return end
+					if not capture then require("parley.buffer_edit").report_refusal("InsertChatReference", reason); return end
 					M._chat_finder.insert_capture = capture
 					M._chat_finder.insert_mode = true
 					M._chat_finder.insert_buf = buf
@@ -3165,7 +3165,7 @@ M.setup_markdown_keymaps = function(buf)
 						{ first = { row = cursor_pos[1] - 1, col = cursor_pos[2] },
 							last = { row = cursor_pos[1] - 1, col = cursor_pos[2] } },
 					})
-					if not capture then M.logger.warning(tostring(reason)); return end
+					if not capture then require("parley.buffer_edit").report_refusal("InsertChatReference", reason); return end
 					M._chat_finder.insert_capture = capture
 					M._chat_finder.insert_mode = true
 					M._chat_finder.insert_buf = buf
@@ -3348,8 +3348,11 @@ M._slug_rename_chat = function(buf)
 	-- Rename on disk
 	local ok = vim.fn.rename(file_path, new_path)
 	if ok ~= 0 then
-		if header_row then -- put the header back: the file kept its old name
-			edits.edit_user_lines("SlugRename", buf, header_row - 1, header_row, { header_line })
+		if header_row and not edits.edit_user_lines("SlugRename", buf, header_row - 1, header_row, { header_line }) then
+			-- The file kept its old name but the header now names the new one: say so.
+			M.logger.warning("SlugRename: rename failed and the file: header could not be restored; it names "
+				.. new_basename .. " while the file is still " .. basename)
+			return nil, "rename failed; header not restored"
 		end
 		return nil, "rename failed"
 	end
@@ -4150,9 +4153,15 @@ M.cmd.ChatReview = function(_params)
 	-- The review chat must exist before its name can be referenced, so a refused
 	-- back-reference cannot be undone by ordering; it is reported as exactly
 	-- that (#265). edit_user_lines already said why.
-	if header_end and not require("parley.buffer_edit").edit_user_lines("ChatReview", source_buf,
-		header_end - 1, header_end - 1, { format_branch_ref(rel_path, "proof read") }) then
-		M.logger.warning("ChatReview: review chat " .. rel_path .. " created; back-reference not added to the source")
+	if header_end then
+		-- Quiet, so the user hears ONE message: the refusal, then what happened.
+		local edits = require("parley.buffer_edit")
+		local applied, why = edits.edit_user_lines("ChatReview", source_buf, header_end - 1, header_end - 1,
+			{ format_branch_ref(rel_path, "proof read") }, { quiet = true })
+		if not applied then
+			M.logger.warning((require("parley.refusal").edit("ChatReview", why) or "ChatReview")
+				.. " — review chat " .. rel_path .. " created; back-reference not added to the source")
+		end
 	end
 
 	return buf
@@ -4533,9 +4542,16 @@ M.cmd.ChatPrune = function()
 		return
 	end
 
-	-- Write child file
+	-- Write child file. If it cannot be written, put the pruned exchanges back:
+	-- the parent must never point at a child that does not exist (#265).
 	M.helpers.prepare_dir(vim.fn.fnamemodify(new_file, ":h"))
-	vim.fn.writefile(child_lines, new_file)
+	if vim.fn.writefile(child_lines, new_file) ~= 0 then
+		local restored = require("parley.buffer_edit").edit_user_lines("ChatPrune", buf, prune_start - 1,
+			prune_start + 5, vim.list_slice(lines, prune_start, prune_end))
+		M.logger.warning("ChatPrune: could not write " .. rel_child .. (restored and "; the chat is unchanged"
+			or "; the pruned exchanges could not be restored, undo (u) brings them back"))
+		return
+	end
 
 	-- Save parent
 	vim.cmd("write")
@@ -4601,7 +4617,8 @@ M.cmd.ChatPrune = function()
 				local updated=require("parley.branch_ref").format_ref_line(branch_prefix,rel_child,topic)
 				local applied=edits.apply_user(parent_capture,{{region=1,text=updated}})
 				if applied.status~="applied" then
-					M.logger.warning("Prune topic: parent reference changed; leaving it intact")
+					-- The parent's reference keeps its earlier topic (#265: in refusal's words).
+					require("parley.buffer_edit").report_refusal("PruneTopic", applied.reason or applied.status, applied.error)
 				end
 			end
 

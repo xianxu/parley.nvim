@@ -79,20 +79,33 @@ end
 ---@return boolean ok
 ---@return string|nil reason # the refusal token when not ok
 function M.edit_user_lines(command, buf, first, last, lines, opts)
-    local result, reason = M._replace_user_lines(buf, first, last, lines)
+    local result, reason, err = M._replace_user_lines(buf, first, last, lines)
     if result then return true end
+    M.report_refusal(command, reason, err, opts)
+    return false, reason
+end
+
+--- Say a user edit was refused, once, in parley.refusal's words (#265). The
+--- one place that words it: edit_user_lines calls it, and so does every command
+--- that captures and applies by hand (tests/arch/user_edit_policy_spec.lua).
+---@param command string
+---@param reason string|nil # the capture reason or apply status
+---@param err any|nil # the editor's error text, kept as the message's detail
+---@param opts table|nil # { quiet = true } logs at debug instead
+---@return string|nil message
+function M.report_refusal(command, reason, err, opts)
     local logger = require("parley.logger")
-    local message = require("parley.refusal").edit(command, reason)
+    local message = require("parley.refusal").edit(command, reason, err)
     if message then
         if opts and opts.quiet then logger.debug(message) else logger.warning(message) end
     end
-    return false, reason
+    return message
 end
 
 -- Synchronous artifact commands capture the exact live range immediately.
 -- Private (#265): commands call edit_user_lines, which owns the refusal policy;
 -- tests/arch/user_edit_policy_spec.lua refuses a direct call. Returns the
--- apply result, or nil and the refusal token.
+-- apply result, or nil, the refusal token and the editor's error text if any.
 function M._replace_user_lines(buf, first, last, lines)
     local count = vim.api.nvim_buf_line_count(buf)
     if last < 0 then last = count end
@@ -118,7 +131,7 @@ function M._replace_user_lines(buf, first, last, lines)
     local capture, reason = M.capture_user(buf, "replace-lines", { { first = a, last = b } })
     if not capture then return nil, reason end
     local result = M.apply_user(capture, { { region = 1, text = text } })
-    if result.status ~= "applied" then return nil, result.reason or result.status end
+    if result.status ~= "applied" then return nil, result.reason or result.status, result.error end
     return result
 end
 

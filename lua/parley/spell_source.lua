@@ -60,10 +60,11 @@ local function normal_edit(evidence, replacement)
 	local capture, reason = edits.capture_user(evidence.buf, "spell-correction", {
 		{ first = { row = evidence.row, col = evidence.start_col }, last = { row = evidence.row, col = evidence.end_col } },
 	})
-	if not capture then error("spell correction unavailable: " .. tostring(reason), 0) end
+	-- A refusal is reported, never raised (#265): this runs on a keystroke.
+	if not capture then return edits.report_refusal("SpellCorrection", reason) end
 	local result = edits.apply_user(capture, { { region = 1, text = replacement } })
 	if result.status ~= "applied" then
-		error("spell correction not applied: " .. tostring(result.reason or result.error or result.status), 0)
+		return edits.report_refusal("SpellCorrection", result.reason or result.status, result.error)
 	end
 	local last = math.max(0, vim.fn.match(replacement, ".$"))
 	vim.api.nvim_win_set_cursor(evidence.win, { evidence.row + 1, evidence.start_col + last })

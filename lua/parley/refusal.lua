@@ -113,6 +113,9 @@ M.TOKENS = {
     -- document/user_edits.lua), not only the ones seen so far: `applied` is the
     -- success, and these are what a caller reports (#261 M5 review round 2).
     ["stale"] = { what = "the chat changed while it was being edited", action = MOMENT },
+    -- The editor's own failure mid-apply (#265 close BR-1): its text is the detail.
+    ["error"] = { what = "the edit failed while it was being applied",
+        action = "edit the chat back if it changed, then try again" },
     ["refused"] = { what = "the edit could not be applied", action = MOMENT },
     ["interrupted"] = { what = "the chat changed while Parley was writing into it", action = MOMENT },
     ["busy"] = { what = "another edit is being applied to the chat", action = MOMENT },
@@ -408,9 +411,11 @@ end
 --- (#265): the command, then the words for the reason. The buffer is unchanged.
 ---@param command string # what the user ran, e.g. "NewQuestion"
 ---@param reason string # buffer_edit's token: a capture reason or an apply status
+---@param err any|nil # the editor's own error text, when an apply errored
 ---@return string|nil message # nil when the reason is silent (a closed chat)
-function M.edit(command, reason)
-    local message = M.describe("edit", nil, reason)
+function M.edit(command, reason, err)
+    local detail = err ~= nil and { notice = M.brief(err) } or nil
+    local message = M.describe("edit", nil, reason, detail)
     if not message then return nil end
     return command .. " — " .. message
 end

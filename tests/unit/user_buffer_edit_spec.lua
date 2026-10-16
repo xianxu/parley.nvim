@@ -71,6 +71,19 @@ describe('edit_user_lines',function()
         assert.equals(1,#debugs)
         assert.is_truthy(debugs[1]:find('ReadRepair — Edit not made',1,true))
     end)
+    -- #265 close BR-1: an apply that ERRORED (status 'error', the editor's
+    -- own failure) reaches the user with the editor's text as the detail,
+    -- not as "unexpected (error)" with nothing in the log.
+    it('keeps the editor error as the warning detail',function()
+        local real=Edit._replace_user_lines
+        Edit._replace_user_lines=function()return nil,'error','nvim_buf_set_text: buffer is not modifiable'end
+        local ok,why=Edit.edit_user_lines('ExchangePaste',buf,1,2,{'TWO'})
+        Edit._replace_user_lines=real
+        assert.is_false(ok);assert.equals('error',why)
+        assert.equals(1,#warnings)
+        assert.equals('ExchangePaste — Edit not made: the edit failed while it was being applied; edit the chat back if it changed, then try again'
+            ..' — nvim_buf_set_text: buffer is not modifiable',warnings[1])
+    end)
     it('applies again once the hold is released',function()
         local held=Capacity.hold(buf);held.release()
         assert.is_true(Edit.edit_user_lines('Test',buf,0,1,{'ONE'}))

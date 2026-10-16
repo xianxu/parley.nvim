@@ -82,6 +82,7 @@ pcall.
 | Entity | Status | Where | What |
 |---|---|---|---|
 | `edit_user_lines` | added | lua/parley/buffer_edit.lua | The one way a chat command edits the user's chat: `(command, buf, first, last, lines, opts)` returns `true`, or `false, reason`. A refusal leaves the buffer unchanged and is reported once, naming the command (`opts.quiet`: debug only). Never raises. |
+| `report_refusal` | added | lua/parley/buffer_edit.lua | `(command, reason, err, opts)`: the one place a user-edit refusal is worded and logged; `edit_user_lines` and every hand-capturing keystroke command call it (#265 close BR-2). |
 | `_replace_user_lines` | added | lua/parley/buffer_edit.lua | The raw capture-and-apply replace, private and non-raising: returns the apply result, or `nil` and the refusal token. Replaces the raising public replace. |
 | `edit` | added | lua/parley/refusal.lua | `refusal.edit(command, reason)`: the warning words, `"<command> — Edit not made: <what>; <action>"` (`PREFIX.edit`). |
 | `hold` | added | tests/helpers/user_edit_capacity.lua | Fills the editor's 64 real user-guard slots, so the next capture is refused with `capacity`; returns `{ release }`. |
@@ -151,4 +152,14 @@ guard.
   - A planted direct `_replace_user_lines` call fails the arch spec.
 - Doc-block placement: every `---` block this branch added or touched sits directly on its definition (a diff-scoped scan found none detached).
 - The new specs are routed in atlas/traceability.yaml next to refusal_vocabulary_spec. The atlas `document.md` states the policy and its quiet sites; `entity_delete.md`'s "during generation" claim is corrected.
+- Close round 1 (FIX-THEN-SHIP):
+  - BR-1: `_replace_user_lines` now returns the editor's error text, and `refusal.edit(command, reason, err)` carries it as the warning's detail. `error` (the editor failing mid-apply) has words of its own. Unit case: the warning reads "<command> — Edit not made: the edit failed while it was being applied; … — <editor error>".
+  - BR-2: fixed as a class, not just the named sites.
+    - `buffer_edit.report_refusal(command, reason, err, opts)` is the one place the refusal is worded. The keystroke commands that capture by hand now call it: Define (capture and apply), Marker (capture, stale, apply), Branch (capture and apply), PruneTopic, InsertChatReference (two init.lua sites that logged the raw reason, and chat_finder's insert, whose apply refusal was silent), InterviewTimestamp (capture, plus its silent apply), SpellCorrection (no longer raises), and PasteImage (its own lead-in, then refusal's words with the editor error).
+    - The arch spec now names every direct capture/apply caller file with its reason (11, including two the review did not list: highlighter.lua's background topic refresh and response_topic.lua's generator guards), and rejects hand-worded refusals in the keystroke files. Mutation: re-wording the interview refusal by hand fails it.
+  - Minors:
+    - ChatReview gives ONE warning: a quiet edit, then one message that leads with the refusal.
+    - A refused header restore after a failed rename is reported.
+    - ChatPrune restores the parent if the child file cannot be written (test).
+  - Measurement slip on my side: a zsh `for f in $LIST` loop ran once over the whole list (no word splitting) and printed every spec as failing; re-run with a read loop. This is the same zsh trap as in #340.
 
