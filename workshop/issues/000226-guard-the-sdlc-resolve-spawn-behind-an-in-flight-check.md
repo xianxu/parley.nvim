@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "20fd8599", done: "22a8182e"}
 ---
 
 # Guard the sdlc resolve spawn behind an in-flight check
