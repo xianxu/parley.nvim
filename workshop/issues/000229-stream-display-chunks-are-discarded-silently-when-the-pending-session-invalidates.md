@@ -1,12 +1,12 @@
 ---
 id: 000229
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-10
 updated: 2026-10-15
 estimate_hours:
-card_mirror: '75891c1c975450ec045a1141870368554b3da2c9' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '746f90cfe5cc2a68d38462976a7dcf5100e832a3' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T18:29:35-07:00
 claimant:
     operator: Xian Xu
@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.54
 ---
 
 # Stream display chunks are discarded silently when the pending session invalidates
