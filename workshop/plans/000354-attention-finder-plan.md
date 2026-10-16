@@ -72,6 +72,7 @@ All verified in the code on 2026-10-16.
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `attention_store` | `lua/parley/attention_store.lua` | new | the JSON file `state_dir/attention/attention.json`: `dir`, `path`, `parse`, `load`, `apply`, `grace_seconds` |
+| `couch.query` | `lua/parley/couch.lua` | modified | the couch CLI: `query` takes `options` for vim.system (the probe timeout) |
 | `attention` | `lua/parley/attention.lua` | new | the couch CLI, the editor, #353's seam: `record`, `parse_message_id`, `breadcrumb`, `observation`, `refresh`, `open` |
 | `release_and_send` | `lua/parley/session_sync.lua:802` | modified | records a submit |
 
@@ -224,3 +225,7 @@ All verified in the code on 2026-10-16.
   - `observe_failed` records fixed reasons ("couch status unavailable", "no Couch ledger for this file"): `couch.query` returns nil for any Code other than ok, so the Code isn't visible here.
   - `select` restores the breadcrumb, then applies `opened`.
   - The keybindings atlas paragraph is back under File history.
+- **2026-10-16, the M2 review, round 2.**
+  - BR-11 (Important, second in plan-test-strategy-drift): Task 5's typeahead and cursor-keeping now run on the real `float_picker`. A typed filter and the selected row survive a repaint that inserts another editor's newer row above the cursor, and Enter opens the chosen row; dropping the repaint's selection identity fails it. The after-close case also runs on the real picker: it is cancelled before the probe lands, and the probe still reaches the store.
+  - Class sweep of Task 5's strategy line against specs: list and live fold; select answered, waiting and missing; refused restore; `?`; the limit of 4; typeahead and cursor (real picker); the grace; after close (real picker). Each has a spec.
+  - Minor: probes are bounded by a 5 s timeout through `couch.query`'s new `options`; expiry reads as failed (`?`), never as answered.

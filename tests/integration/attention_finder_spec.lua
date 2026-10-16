@@ -194,6 +194,80 @@ describe("attention finder", function()
         assert.same({ "m2" }, vim.tbl_keys(entry.pending))
     end)
 
+    -- The real float_picker: a typed filter and the selected row survive a
+    -- repaint landing mid-typing, and Enter opens the row the operator chose.
+    it("keeps the typed filter and the selected row across a live repaint", function()
+        local alpha = submitted("qzxalpha.md", "m1")
+        now = now + 1
+        local alto = submitted("qzxalto.md", "m2")
+        now = now + 1
+        submitted("beta.md", "m3")
+        local held = {}
+        local opened
+        Attention.open({ store = { now = now }, home = root, history = {},
+            run = function(argv, cb) held[#held + 1] = function() require("parley.couch").query(argv, cb) end end,
+            on_selected = function() opened = vim.api.nvim_buf_get_name(0) end })
+        local function float(kind)
+            for _, win in ipairs(vim.api.nvim_list_wins()) do
+                local config = vim.api.nvim_win_get_config(win)
+                local buf = vim.api.nvim_win_get_buf(win)
+                if config.relative ~= "" and (vim.bo[buf].buftype == "prompt") == (kind == "prompt") then return win, buf end
+            end
+        end
+        local function results()
+            local _, buf = float("results")
+            return vim.tbl_filter(function(line) return line:match("%S") end, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        end
+        local _, prompt = float("prompt")
+        assert(prompt, "the real picker did not open")
+        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> qzx" })
+        vim.api.nvim_exec_autocmds("TextChanged", { buffer = prompt })
+        await(function() return #results() == 2 end, "typeahead did not filter to the two qzx rows")
+        -- Move to the second row (qzxalpha.md, the older submit).
+        vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<Down>", "i", false, true).callback() end)
+        -- Meanwhile another editor submits a newer matching file (a row lands
+        -- above the cursor on the next repaint) and the agent folds qzxalto.md.
+        now = now + 1
+        submitted("qzxnew.md", "m4")
+        Couch.fold(registry, alto, "m2")
+        for _, release in ipairs(held) do release() end
+        await(function() return vim.iter(results()):any(function(l) return l:find("answered", 1, true) ~= nil end) end,
+            "the fold never repainted the open picker")
+        assert.equals("> qzx", vim.api.nvim_buf_get_lines(prompt, 0, 1, false)[1])
+        assert.equals(3, #results())
+        vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<CR>", "i", false, true).callback() end)
+        await(function() return opened ~= nil end, "Enter opened nothing")
+        assert.equals(alpha, opened)
+    end)
+
+    it("with the real picker closed, a late observation still reaches the store", function()
+        local a = submitted("a.md", "m1")
+        local held, refreshed
+        Attention.open({ store = { now = now }, home = root, history = {},
+            run = function(argv, cb) held = function() require("parley.couch").query(argv, cb) end end,
+            on_refreshed = function() refreshed = true end })
+        await(function() return held ~= nil end, "the probe never started")
+        local prompt = vim.api.nvim_get_current_buf()
+        assert.equals("prompt", vim.bo[prompt].buftype)
+        vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<Esc>", "n", false, true).callback() end)
+        await(function() return not vim.api.nvim_buf_is_valid(prompt) or vim.fn.bufwinid(prompt) == -1 end,
+            "the picker never closed")
+        Couch.fold(registry, a, "m1")
+        held()
+        await(function() return refreshed end, "the late probe never finished")
+        assert.equals("answered", Model.state_of(Store.load().entries[a]))
+    end)
+
+    it("a probe that outlives its timeout reads as failed, never as answered", function()
+        local a = submitted("a.md", "m1")
+        Couch.fold(registry, a, "m1")
+        vim.env.FAKE_COUCH_REGISTRY_MODE = "delay" -- the fake sleeps 1 s
+        local picker = fake_picker()
+        open({ picker = picker, timeout_ms = 200 })
+        assert.same({ "waiting  ? a.md  ~" }, picker.rows())
+        assert.equals("couch status unavailable", Store.load().entries[a].unknown)
+    end)
+
     it("runs at most 4 probes at once", function()
         for i = 1, 9 do submitted(("f%d.md"):format(i), "m" .. i) end
         local active, peak = 0, 0

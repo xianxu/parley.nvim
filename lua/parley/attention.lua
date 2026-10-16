@@ -9,6 +9,8 @@ local Store = require("parley.attention_store")
 local Rows = require("parley.attention_rows")
 
 local PROBES = 4
+-- A probe is a short local couch run; one that hangs reads as failed.
+local PROBE_TIMEOUT_MS = 5000
 
 local M = {}
 
@@ -54,6 +56,7 @@ local function seams(options)
             return ok and history or {}
         end)(),
         limit = options.limit or PROBES,
+        timeout = options.timeout_ms or PROBE_TIMEOUT_MS,
         store = options.store,
     }
 end
@@ -107,7 +110,7 @@ function M.refresh(options, on_change, on_done)
                     if state then on_change(state) end
                     settle()
                 end)
-            end)
+            end, { timeout = seam.timeout })
         end
     end
     start()
