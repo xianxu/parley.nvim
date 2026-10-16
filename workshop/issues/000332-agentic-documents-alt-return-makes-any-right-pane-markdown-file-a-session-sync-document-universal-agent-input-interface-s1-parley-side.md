@@ -75,7 +75,9 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - [x] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
 - [x] Add isolated real/fake conformance and docs/traceability; verify production-door submission feedback and native edit-turn regressions.
 - [x] Add unchanged-submit suppression and explicit rapid resend with lifecycle and production-door regressions.
-- [x] Complete the required full suite on the final implementation before close.
+- [ ] Complete the required full suite on the final implementation before close.
+
+- [ ] Unify window rendering/restoration and verify session-versus-agentic equality across every lock, owed, admission and feedback state.
 
 Post-close acceptance remains pending: after SHIP and the green suite/conformance, stage under the existing hub authorization for the combined operator check. Pair#573 has landed; the TL coordinates the Couch and Neovim restart. Land only after operator acceptance; clear the stage and report the merge.
 
@@ -218,3 +220,7 @@ item: real-api-discovery design=0 impl=0.24
 design-buffer: 0.15
 total: 5.9075
 ```
+
+### 2026-10-15 — Operator live-check Revision: one shared renderer
+
+TL reports a free/no-lock visual mismatch on2a73063d and explicitly approves a shared renderer plus end-to-end state equality matrix (receipt d088aedd-eb9b-4750-a8ba-e226ac5f358c). Both current paths build the same winbar string; the concrete source difference is that coordinator fallback omits StatusLine winhighlight installation/restoration. Fully attached free documents already use the session renderer; pin actual comparisons before attributing a separate text difference. Add one renderer for both window options and ownership restoration, preserving state selection in session_sync/agentic_document. Cover every state and detach/handoff via real file doors, RED first; suite, ordinary re-close and restage before operator recheck. Stage remains installed and landing held.

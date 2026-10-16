@@ -35,6 +35,7 @@ This slice includes moving an existing sibling `<stem>.side/` and its parent bac
 | `run` — raw Couch process transport | INTEGRATION | `lua/parley/couch.lua` | modified |
 | `request`, `shutdown` — typed registry client and request lifetime | INTEGRATION | `lua/parley/document_registry.lua` | new |
 | `attach`, `identity`, `status`, `recheck`, `submit`, `detach`, `move_membership`, `move_path` — buffer admission and known-path cache | INTEGRATION | `lua/parley/agentic_document.lua` | new |
+| `new`, `feedback_view` — shared winbar/StatusLine renderer and ownership restoration | INTEGRATION | `lua/parley/document_band.lua` | new |
 | `not_chat` — shared transcript classification wrapper with optional supplied lines | INTEGRATION | `lua/parley/init.lua` | modified |
 | `begin`, `advance`, `pending`, `recover` — file migration and journal recovery | INTEGRATION | `lua/parley/document_move.lua` | new |
 | `acquire` — cross-editor operation lease | INTEGRATION | `lua/parley/document_lease.lua` | new |
@@ -180,7 +181,7 @@ Files: existing session-sync/review atlas, traceability, README, TOOLING and new
 - [x] Add the isolated real/fake driver. Set an absolute COUCH_ISOLATED_ROOT, scrub inherited outside storage/identity overrides, and bootstrap --adopt-store ABS_STORE --pair-data ABS_PAIR --identity-dir ABS_IDENTITY preview then --apply DIGEST, with all paths inside the root. Never fall back to the OS account singleton; refuse unsupported binaries. Follow the function strategy and require the deliberately corrupted fake to fail. Run after seam/fake changes and before close. Pair's targeted tests complement this check; they are not editor acceptance.
 - [x] Update the existing atlas and adjacent README contract, including intentional owner routing and first-submit changes; map all new model/client/coordinator/lease/move tests. The TL owns the ops project.
 - [x] Run focused lifecycle/admission/public-move regressions after the dedup Revision, with native/legacy modes/session_sync coverage already observed; lint and diff checks. Previous mapped modes/review and ui/keybindings passes remain evidence for unchanged routes.
-- [x] Push PR and run sdlc local-check run --name suite on the final implementation before close, preserving every failure and including all native, review and keybinding regressions.
+- [ ] Push PR and run sdlc local-check run --name suite on the final implementation before close, preserving every failure and including all native, review and keybinding regressions.
 Close through the mandatory fresh-context review and fix complete finding classes. Pair#573 is landed and hub staging is authorized after green verification/SHIP: run sdlc stage --build for the combined live check. Land only after operator acceptance; clear stage and report verified PR/merge.
 
 ## Operating envelope, provenance and residue
@@ -260,3 +261,12 @@ The same membership preflight covers public move_membership/move_path before the
 ### 2026-10-15 — Close round2 advisory alignment
 
 SHIP disposes BR-1/BR-2/BR-3 with no blocking findings. Correct the lease lifetime paragraph to match the implementation and atlas: descriptors close on release, but lease pathnames remain permanently allocated, without automatic GC. The4096-ID namespace bound refuses new allocations before effects. The earlier opportunistic-GC promise was not implemented and is removed explicitly here; no runtime behavior changes (ARCH-FUNERAL).
+
+### 2026-10-15 — Operator live check: shared window rendering
+
+Operator reports a styling difference with no operator lock on staged2a73063d. Source confirms two formatters: agentic_document.band updates only winbar; session_sync.render also owns winhighlight=StatusLine:state-highlight. Their winbar string templates are identical, and fully attached free documents already render through session_sync. Preserve that distinction rather than assert an unmeasured free-text difference. TL approves one shared window renderer for all lock/owed, unavailable/pending and feedback states.
+
+1. Add tests/integration/document_band_spec.lua using actual typed session and registered ordinary files, stateful fake Couch, real option reads and controlled clock/status for equal owners/times. Compare winbar AND winhighlight across free, operator, stale, violation, owed, submitted, error, unchanged and resent; cover unknown/pending fallback and detach/handoff restoration. Observe the pre-attachment styling failure first. Existing passing free states are regression coverage.
+2. Extract lua/parley/document_band.lua: new(buf) returns render(view)/clear() handle; feedback_view retains the existing bounded literal-label contract. One formatter installs both window options. Window ownership records retain the original values and ordered live handles so clearing an old handle cannot remove a newer owner, and clearing a temporary overlay restores the still-live underlying view. Changing the window's buffer retires old view ownership. Restore each option only when its installed value is still owned; invalid/closed windows and released handles are discarded. No new durable files/timers (ARCH-DRY/ARCH-FUNERAL).
+3. session_sync retains lock/state/owed selection and owns its render handle; agentic_document retains admission/feedback selection and owns its fallback handle. Both use the same rendering and conditional restoration; adopt clears fallback before transfer. Preserve existing literal messages, highlight groups, receipts, turn and baseline semantics. Remove both local formatting/restoration implementations.
+4. Add module/test to atlas traceability, run mapped native/admission/renderer checks plus lint, push and run a new required suite. Ordinary re-close covers the operator Revision; restage only after suite and review pass. The current stage remains installed until then, and landing stays held for operator acceptance.
