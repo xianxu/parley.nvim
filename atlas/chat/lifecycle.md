@@ -285,6 +285,19 @@ and does not move it while typing in Insert/Replace mode or in another window.
 Fold maintenance preserves window views independently. Explicit response overrides
 take precedence over the saved toggle and configuration default.
 
+### Advance after submit (#257)
+When a submission is admitted and its exchange has a next question (including
+the empty trailing `💬:` prompt), the cursor moves once to that question, just
+after its prefix, in the command's window. The move happens in the admission
+tick (`advance_after_submit`, `next_question_cursor` in `chat_respond.lua`), from
+a parse of the buffer as admission left it, so no edit can come between them.
+Nothing moves it later: not cancellation, failure, reload or completion. The
+streamed answer inserts above the cursor, which moves with its text, and follow
+stops because the cursor has left its last automatic position. It does not move
+when there is no next question (follow behaves as before), for an explicit
+follow override, when the window is gone or shows another buffer, for a refused
+submission, or for Resubmit All. Normal, insert and visual submissions share it.
+
 ## Resubmit All (`:ParleyChatRespondAll` / `<C-g>G`)
 Resubmits all questions from start to cursor, replacing existing answers. Stop with `<C-g>x`.
 
@@ -355,7 +368,10 @@ Recovery of a deleted chat requires your own backup or version-control copy.
 
 ## Stopping and correcting a response
 
-`:ParleyStop` (`<C-g>x`) stops a selected response generation. Normal/Insert `<M-CR>` on a
+`:ParleyStop` (`<C-g>x`) stops a selected response generation: the one under
+the cursor; otherwise, when exactly one is running in the chat, that one
+(#257, since the cursor advances past it on submit); with two or more, a picker
+asks which. Normal/Insert `<M-CR>` on a
 previous answered exchange replaces that answer; visual `<M-CR>` instead defines
 the selected term. Ready drill-in comments can turn resubmission into a follow-up
 that preserves the original answer; see [Drill-In Markers](drill_in.md).
