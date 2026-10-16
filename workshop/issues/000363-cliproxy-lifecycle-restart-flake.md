@@ -40,10 +40,10 @@ Root cause is not yet established. Determine whether the first timed-out callbac
 
 ## Plan
 
-- [ ] Consolidate #364's matching signatures and retained logs under #363.
-- [ ] Instrument the stop/exit/listener/probe boundaries and reproduce the
+- [x] Consolidate #364's matching signatures and retained logs under #363.
+- [x] Instrument the stop/exit/listener/probe boundaries and reproduce the
   ordering with controlled delay, without load or a wider deadline.
-- [ ] Correct the demonstrated root cause and add a regression that fails
+- [x] Correct the demonstrated root cause and add a regression that fails
   without it; cover both credential-restart outcomes and teardown isolation.
 - [ ] Run focused and mapped cases plus a recorded full suite, update the
   relevant atlas, close-review and land on SHIP; then resume #362.
@@ -90,3 +90,30 @@ false positive, not proof that production probed a port it killed. Tighten
 the model to an actually exited signalled process; preserve legitimate
 unidentified/still-alive probes. Final regression will delay only the first
 identity response so the fallback can answer within the unchanged budget.
+
+## Revisions
+
+### 2026-10-16 — repair the fixture's false closed-port observation
+
+The two reports are not evidence of a production restart race: deterministic
+identity delay proves stop can signal nobody, after which the fixture itself
+fabricates two delayed down readings. Restrict its stall to confirmed exited
+signalled PIDs, leaving unidentified and still-live fallback probes real. Own
+synthetic timers in a per-case scope; retire and guard late callbacks. No
+production restart code, request deadlines, assertions or await budgets change.
+The process fake gains a one-shot first-models delay, bounded at 10s and passed
+only to the original fixture process. New regressions cover no-PID identity
+timeout, still-live SIGTERM refusal, and positive closed-port/callback lifetime.
+The no-PID regression failed with the original 8s timeout; the live listener
+regression failed because artificial down hid its true still-answering state.
+Logs: /tmp/parley-363-regression-red.log and /tmp/parley-363-both-red.log.
+
+### 2026-10-16 — focused verification green
+
+All eight credential-health cases passed, including the two red regressions
+and the positive closed-port/retired-callback control. The complete lifecycle
+file passed all 66 cases with clean process census; log
+/tmp/parley-363-lifecycle-green.log. Changed Lua test lint and diff whitespace
+checks pass. No production restart code or existing timeout/assertion changed.
+Atlas documents the fixture distinction; lessons capture effect-based windows
+and owned delayed callbacks. Next: pushed-head recorded full suite, then close.
