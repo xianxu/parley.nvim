@@ -43,7 +43,7 @@ at its first Alt+Return.
 
 - A plain note in the right pane, after one Alt+Return, is locked on the next edit (red winbar), an agent write is
   refused while it's held, and the submit reaches the pane's slot.
-- A never-submitted file shows no lock or band.
+- A proven-plain, never-submitted file shows no lock or band. Unknown/unavailable membership stays editable with the prescribed uncertainty band, as approved in Revisions.
 - Headless tests with the real auto-save setup (as in #324) cover first submit, lock, rename, and an explicit
   `couch-owner:` override. Depends on the pair (Couch) S1 issue for the registry verbs.
 - A successful explicit submit keeps a winbar receipt with effective owner and local time through own saves and status refresh, until the next operator edit or agent write. Save, owner, lookup, register and send failures remain visible, including before attachment; feedback is bounded and rendered literally.
@@ -76,7 +76,7 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - [x] Add unchanged-submit suppression and explicit rapid resend with lifecycle and production-door regressions.
 - [ ] Complete the required full suite on the final implementation before close.
 
-Post-close acceptance remains pending: obtain SHIP, then after pair#573 lands and conformance passes, obtain hub staging authorization for the combined operator check. Land only after operator acceptance; clear the stage and report the merge.
+Post-close acceptance remains pending: after SHIP and the green suite/conformance, stage under the existing hub authorization for the combined operator check. Pair#573 has landed; the TL coordinates the Couch and Neovim restart. Land only after operator acceptance; clear the stage and report the merge.
 
 ## Log
 
@@ -162,6 +162,8 @@ Operator request after the #337 diversion: compare against the content at the la
 The pure document_session controller owns one bounded in-memory receipt (namespace, stable ID, effective owner, captured post-save hash and success time), confirmation and captured send identity (ARCH-PURE/ARCH-ORDER). Failed or unconfirmed delivery never advances it. A completed issued send records its captured hash even if the operator edited meanwhile, but must not install stale success feedback or release a newer turn. Identity/namespace changes invalidate receipt use; edits invalidate only the confirmation. Preserve receipt through confirmed same-ID native and owned moves; controller detach/editor restart discards it, with no new durable storage (ARCH-FUNERAL). Confirming rename must not itself arm resend.
 
 Add deterministic clock/event tests for unchanged/changed/window boundaries, effective-owner replacement, stale/failed completion and busy presses; production-door tests count complete fake deliveries, verify literal feedback and minimal payload, and cover both move routes and explicit detach/reopen behavior. Keep existing turn reconciliation, baseline and outside-Couch routes shared (ARCH-DRY); no protocol change or additional Couch verb.
+
+- 2026-10-15 — clarify the original no-band Done-when sentence as proven-plain membership, matching the already-approved unknown/unavailable band policy. Record the existing stage authorization and landed Couch dependency so acceptance does not ask for them again. No behavior change.
 
 ## Estimate
 
