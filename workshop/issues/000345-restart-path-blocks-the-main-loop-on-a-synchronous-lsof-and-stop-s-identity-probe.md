@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "15759629", done: "8e52f35c"}
 ---
 
 # Restart path blocks the main loop on a synchronous lsof (and stop's identity probe)
@@ -52,34 +53,58 @@ the restart path, with the sync command kept, is one option.
 - [ ] A test proves the main loop stays responsive during the listener read, e.g. a deferred tick fires while a slow fake lsof runs.
 - [ ] #340's regressions (the stall window, the peer left on the port) still pass, with the full suite.
 
+## Core concepts
+
+| Entity | Status | Where | What |
+|---|---|---|---|
+| `stop` | changed | lua/parley/cliproxy.lua | The sync stop: kills `_spawned`, then reaps a cliproxy on the managed port. Kept for spec teardown; its kill steps are shared with `stop_async`. |
+| `stop_async` | added | lua/parley/cliproxy.lua | The same stop with the identity probe and the listener read async; `cb(count, pids)`. Used by `restart_managed` and `:ParleyProxy stop`. |
+| `_pids_on_port_async` | added | lua/parley/cliproxy.lua | Test seam for the async listener read: lsof through a `vim.system` callback, limited to `LSOF_MAX_MS`; a timeout reports `lsof timed out`, never "no listener". |
+
 ## Plan
 
 Decision: `stop()`'s reads move too, because they sit on the same restart path. A restart
 blocked on its identity curl (up to 2 s) is the same user-visible freeze.
 
-- [ ] One lsof seam, two drivers (ARCH-DRY): a pure `parse_listener_pids(stdout)` plus the argv,
+- [x] One lsof seam, two drivers (ARCH-DRY): a pure `parse_listener_pids(stdout)` plus the argv,
       shared by the existing sync `pids_on_port` and a new `pids_on_port_async(port, cb)`.
       The async driver runs a `vim.system` callback, returns to the main loop with
       `vim.schedule`, and degrades the same way when lsof is absent or refused (pcall:
       vim.system raises on EPERM).
-- [ ] `M.stop_async(cb)`: kill the `_spawned` pids, then run the async identity probe
+- [x] `M.stop_async(cb)`: kill the `_spawned` pids, then run the async identity probe
       (`M.health_probe` + `is_cliproxy_state`, as `port_holds_cliproxy` does), then the async
       listener read, then kill. It calls `cb(count, pids)`. The kill steps are helpers shared with
       the sync `M.stop()`, which stays for spec teardown (10 sites) and keeps its
       return shape.
-- [ ] `restart_managed` uses `stop_async`, and `wait_port_released`'s post-exit check uses
+- [x] `restart_managed` uses `stop_async`, and `wait_port_released`'s post-exit check uses
       `pids_on_port_async`. `:ParleyProxy stop` uses `stop_async` and notifies from the callback.
-- [ ] Remaining sync reads are named in ## Log as justified: `port_identity` (the 401 failure branch
+- [x] Remaining sync reads are named in ## Log as justified: `port_identity` (the 401 failure branch
       and `:ParleyProxy update`), `peers()` (once per session, documented ~80–150 ms), and
       sync `M.stop()` (spec teardown only).
-- [ ] Test: a `tests/fixtures/fake_lsof` (bounded by `PARLEY_FAKE_LSOF_DELAY_MS`, listed in
+- [x] Test: a `tests/fixtures/fake_lsof` (bounded by `PARLEY_FAKE_LSOF_DELAY_MS`, listed in
       the arch spec's CANNOT_BLOCK) prints `PARLEY_FAKE_LSOF_PIDS` after a 1 s delay. During a
       restart with it, a 50 ms `vim.defer_fn` ticker must keep firing (≥ 10 ticks across the
       read). Mutation: the sync read makes the ticker stall.
-- [ ] #340's two regressions (the stall window, the peer left on the port) pass, with
+- [x] #340's two regressions (the stall window, the peer left on the port) pass, with
       their stop wrappers moved to `stop_async`. Lifecycle, update and command specs and the
       full suite pass.
 
 ## Log
 
 ### 2026-10-16
+
+### 2026-10-16
+
+- The restart path now has no main-loop lsof or curl. Remaining sync reads, each justified:
+  - `port_identity` (ps + lsof): only on the 401 failure branch of `ensure_running` and in `:ParleyProxy update`. A dispatch that already failed, or an explicit maintenance command.
+  - `peers()` (ps + lsof): once per session, behind the latch (documented ~80–150 ms).
+  - The sync `stop()`: spec teardown only; no product caller remains.
+- Found while building: `stop_async` SIGTERMs this session's own proxies before its identity probe, as `stop()` always has, so a restart of only our own proxy makes one listener read (the post-exit one). The responsiveness test therefore uses a leftover cliproxy this session did not spawn, so both reads run, and the fake lsof log asserts 2 calls.
+- Added `LSOF_MAX_MS` (2 s): an async lsof with no limit could leave a restart waiting forever. Both reads are in `_repair_budget_sec`; cliproxy_budget_spec is green.
+- Tests: the responsiveness case (50 ms ticker, max gap < 750 ms across two 1.5 s lsof reads); the lsof time limit; the stop contract run over both `stop()` and `stop_async()`. The #340 stall wrapper moved to `stop_async`; with the sync stop it would have passed without testing anything.
+- Mutation:
+  - A sync read stalls the loop for 1594 ms, failing 1 case.
+  - A probe-only release fails 4 cases.
+  - Dropping the lsof timeout fails 1 case.
+- New fixture `tests/fixtures/fake_lsof` is listed in the fixture-lifecycle CANNOT_BLOCK, and the corpus count is 14.
+
