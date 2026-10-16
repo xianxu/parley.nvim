@@ -611,6 +611,7 @@ M.attach = function(buf, identity, observed)
 			end,
 		})
 	end
+	s.attach_edits = attach_edits
 	attach_edits()
 	-- No prompt about a file changed on disk: someone else wrote it. During
 	-- disk_changed's own check, only record that; else under the operator's
@@ -961,6 +962,7 @@ M.finish_move = function(buf, token, identity)
     s.foreign, s.unkept, s.moving = nil, nil, nil
     s.probed, s.probing = nil, false
     s.content = content_hash(buf)
+    s.attach_edits() -- owned native acknowledgement may reload while moving
     refresh(buf)
     restart_idle(buf)
     return true

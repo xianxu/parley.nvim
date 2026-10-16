@@ -107,6 +107,49 @@ describe("registered ordinary Markdown through Parley move doors", function()
         end
     end
 
+    for _, door in ipairs({ "move_chat", "move_chat_tree" }) do
+        it(door .. " preserves the successful submit receipt through its controller rebuild", function()
+            assert.is_true(document.submit(buf))
+            await(function()
+                local status = document.status(buf)
+                return not status.operation and vim.fn.filereadable(root .. "/sent.last") == 1
+            end)
+            assert.equals(1, #vim.fn.readfile(root .. "/sent"))
+            local moved, err = p[door](file, destination)
+            assert.equals(destination .. "/ordinary.md", moved, tostring(err))
+            assert.is_true(document.submit(buf))
+            await(function() return not document.status(buf).operation end)
+            local bar = vim.wo[vim.fn.bufwinid(buf)].winbar
+            assert.truthy(bar:find("nothing to submit: no changes since %d%d:%d%d"), bar)
+            assert.equals(1, #vim.fn.readfile(root .. "/sent"))
+            vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "first edit after acknowledged move" })
+            assert.equals(1, vim.fn.filereadable(moved .. ".lock"), "native edit observer must survive acknowledgement")
+            vim.api.nvim_buf_call(buf, function() vim.cmd("silent write") end)
+            assert.equals("first edit after acknowledged move", vim.fn.readfile(moved)[5])
+        end)
+    end
+
+    it("keeps an edit made during native name handoff and leaves forward recovery pending", function()
+        local set_name = vim.api.nvim_buf_set_name
+        local new = destination .. "/ordinary.md"
+        vim.api.nvim_buf_set_name = function(target, path)
+            set_name(target, path)
+            if target == buf and path == new then
+                vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "operator edit during handoff" })
+            end
+        end
+        local ok, moved, err = pcall(p.move_chat, file, destination)
+        vim.api.nvim_buf_set_name = set_name
+        assert.is_true(ok, tostring(moved))
+        assert.is_nil(moved)
+        assert.truthy(err)
+        assert.equals("operator edit during handoff", vim.api.nvim_buf_get_lines(buf, 4, 5, false)[1])
+        assert.is_true(vim.bo[buf].modified)
+        assert.equals("original", vim.fn.readfile(new)[5], "non-bang acknowledgement never overwrites NEW")
+        assert.equals(1, vim.fn.filereadable(new .. ".lock"))
+        assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
+    end)
+
     it("moves an unloaded registered ordinary file through the public tree door", function()
         seed_side()
         document.detach(buf)

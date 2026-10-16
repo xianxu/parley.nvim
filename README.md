@@ -48,7 +48,9 @@ paths and settings. Existing Neovim users can use the
 In a Couch pane, the first Alt+Return in any named Markdown document saves,
 registers and submits it to the pane's agent, without changing its frontmatter.
 The winbar confirms the destination and time after submission succeeds, until
-your next edit or the agent's write; failures show an error there.
+your next edit or the agent's write; failures show an error there. Unchanged
+content shows `nothing to submit` instead of sending again. Press Alt+Return
+a second time within two seconds to resend explicitly.
 An explicit `couch-owner:` overrides the default; a business `owner:` does not
 (`owner:` remains a fallback only for legacy `type: session-sync` files).
 [Agentic documents](atlas/modes/session_sync.md) use the existing turn engine:

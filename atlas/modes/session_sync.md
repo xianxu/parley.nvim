@@ -120,6 +120,19 @@ operator edit or observed agent write. Explicit submit failures show a bounded
 literal error (DiagnosticError), including before registry attachment; this
 feedback changes neither turn ownership nor the acquisition baseline.
 
+The last confirmed successful submission also records its captured post-save
+content hash, stable document ID, namespace, effective owner and local time in
+memory. A later Alt+Return still saves/reconciles and confirms the owner first;
+unchanged content shows `nothing to submit: no changes since HH:MM` without
+sending. A second explicit idle press within two seconds sends anyway and shows
+`resent to OWNER · HH:MM`. Busy presses cannot queue a duplicate or authorize a
+resend. Changed content or ownership sends normally, and failed or uncertain
+sends never advance the receipt. An edit during an issued send keeps its newer
+turn and suppresses stale success feedback; confirmed delivery remembers only
+the issued content. Confirmed same-ID moves preserve the receipt. Detaching the
+buffer or restarting the editor forgets it; the known-path cache contains no
+submit history.
+
 An operator turn left idle for `session_sync_stale_minutes` (default 5) is stale.
 
 **The agent's side** is not parley's: the owner diffs the file against its own
@@ -132,7 +145,11 @@ effects and Couch metadata confirmation. A second editor cannot execute or
 recover that journal while the lease is held. Native `:saveas` keeps its old
 file; metadata is never renamed merely because `BufFilePost` changed the buffer
 name. NEW must have a successful write first. The existing turn engine suspends
-and resumes the same turn and acquisition baseline across the move.
+and resumes the same turn and acquisition baseline across the move. After an
+owned filesystem rename, a guarded non-bang native read acknowledges the proven
+new file to Neovim so later ordinary writes and auto-save remain valid. It keeps
+undo and view, refuses a modified handoff, and reinstalls edit callbacks before
+releasing migration protection.
 
 An existing `project.side/` beside `project.md` moves to `renamed.side/` beside
 `renamed.md`; an occupied destination refuses instead of merging or overwriting.

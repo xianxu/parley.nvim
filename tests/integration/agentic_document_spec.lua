@@ -380,4 +380,167 @@ describe("agentic markdown admission", function()
         assert.is_true(error_feedback(),"ordinary refresh must not silently clear send failure")
     end)
 
+    local function deliveries()
+        return vim.fn.filereadable(root .. "/sent") == 1 and vim.fn.readfile(root .. "/sent") or {}
+    end
+    local function settled()
+        local status = document.status(buf)
+        return status and status.phase == "registered" and not status.operation
+    end
+    local function unchanged_feedback()
+        return feedback_bar():find("nothing to submit: no changes since %d%d:%d%d") ~= nil
+    end
+
+    it("skips unchanged content, explicitly resends on a second press, and sends changed content", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        submit(); await_submitted()
+        assert.equals(1, #deliveries())
+        submit(); await(settled)
+        assert.is_true(unchanged_feedback(), feedback_bar())
+        assert.equals(1, #deliveries(), "unchanged press must not deliver")
+        submit(); await(settled)
+        assert.truthy(feedback_bar():find("resent to ops:0 · %d%d:%d%d"), feedback_bar())
+        assert.equals(2, #deliveries())
+        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "changed after receipt" })
+        vim.cmd("silent write") -- immediate auto-save does not advance the receipt
+        submit(); await(settled)
+        assert.is_true(success_feedback(), feedback_bar())
+        assert.equals(3, #deliveries())
+        for _, line in ipairs(deliveries()) do assert.equals("ops:0|submitted: " .. file, line) end
+    end)
+
+    it("does not remember a failed delivery as successfully submitted content", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        vim.env.FAKE_COUCH_EXIT = "1"
+        submit(); await(settled)
+        assert.is_true(error_feedback(), feedback_bar())
+        vim.env.FAKE_COUCH_EXIT = "0"
+        submit(); await(settled)
+        assert.is_true(success_feedback(), feedback_bar())
+        assert.equals(2, #deliveries())
+        submit(); await(settled)
+        assert.is_true(unchanged_feedback(), feedback_bar())
+        assert.equals(2, #deliveries())
+    end)
+
+    it("coalesces busy owner-confirmation presses without a delayed resend", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        submit(); await_submitted()
+        local couch = require("parley.couch")
+        local production_run, finish = couch.run, nil
+        couch.run = function(argv, callback, options)
+            return production_run(argv, function(result)
+                if argv[2] == "--session-sync" and argv[3] == "lookup" then
+                    finish = function() callback(result) end
+                else callback(result) end
+            end, options)
+        end
+        submit()
+        await(function() return finish ~= nil end)
+        submit(); submit()
+        finish()
+        await(settled)
+        assert.is_true(unchanged_feedback(), feedback_bar())
+        assert.equals(1, #deliveries())
+        assert.is_nil(document.status(buf).operation)
+    end)
+
+    it("ignores a busy background lookup press even when a resend confirmation was armed", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        submit(); await_submitted()
+        submit(); await(settled)
+        assert.is_true(unchanged_feedback(), feedback_bar())
+        local couch = require("parley.couch")
+        local production_run, finish = couch.run, nil
+        couch.run = function(argv, callback, options)
+            return production_run(argv, function(result)
+                if argv[2] == "--session-sync" and argv[3] == "lookup" then
+                    finish = function() callback(result) end
+                else callback(result) end
+            end, options)
+        end
+        document.recheck(buf)
+        await(function() return finish ~= nil end)
+        submit()
+        finish()
+        await(settled) -- registry replies are scheduled; a queued second lookup remains held by this fake
+        assert.is_nil(document.status(buf).operation, "busy press must not schedule a second lookup or resend")
+        assert.equals(1, #deliveries())
+        assert.is_true(unchanged_feedback(), feedback_bar())
+    end)
+
+    it("records the issued hash but suppresses success feedback after a later edit", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        local couch = require("parley.couch")
+        local production_run, finish = couch.run, nil
+        couch.run = function(argv, callback, options)
+            return production_run(argv, function(result)
+                if argv[1] == "couch" and argv[2] == "--send-to" then
+                    finish = function() callback(result) end
+                else callback(result) end
+            end, options)
+        end
+        submit()
+        await(function() return finish ~= nil end)
+        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "new unsent edit while delivery pending" })
+        finish(); await(settled)
+        assert.is_false(success_feedback(), feedback_bar())
+        assert.equals(1, vim.fn.filereadable(file .. ".lock"), "late delivery must not release a newer edit turn")
+        couch.run = production_run
+        submit(); await(settled)
+        assert.is_true(success_feedback(), feedback_bar())
+        assert.equals(2, #deliveries(), "the later edit still needs its own delivery")
+    end)
+
+    it("suppresses a delayed success receipt after an agent write reloads the buffer", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        local couch = require("parley.couch")
+        local production_run, finish = couch.run, nil
+        couch.run = function(argv, callback, options)
+            return production_run(argv, function(result)
+                if argv[1] == "couch" and argv[2] == "--send-to" then
+                    finish = function() callback(result) end
+                else callback(result) end
+            end, options)
+        end
+        submit()
+        await(function() return finish ~= nil end)
+        local answer = vim.fn.readfile(file)
+        answer[5] = "agent wrote before delivery callback"
+        vim.fn.writefile(answer, file)
+        vim.cmd("checktime")
+        await(function() return vim.api.nvim_buf_get_lines(buf, 4, 5, false)[1] == answer[5] end)
+        finish(); await(settled)
+        assert.is_false(success_feedback(), feedback_bar())
+        couch.run = production_run
+        submit(); await(settled)
+        assert.is_true(success_feedback(), feedback_bar())
+        assert.equals(2, #deliveries())
+    end)
+
+    it("preserves successful content receipts across confirmed native saveas", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        submit(); await_submitted()
+        local new = root .. "/receipt-renamed.md"
+        vim.cmd("saveas " .. vim.fn.fnameescape(new))
+        await(function() return document.identity(buf).File == new and settled() end)
+        submit(); await(settled)
+        assert.is_true(unchanged_feedback(), feedback_bar())
+        assert.equals(1, #deliveries())
+        submit(); await(settled)
+        assert.equals("ops:0|submitted: " .. new, deliveries()[2])
+    end)
+
+    it("forgets the in-memory submit receipt on detach and reopen", function()
+        await(function() return document.status(buf).phase == "plain" end)
+        submit(); await_submitted()
+        document.detach(buf); vim.api.nvim_buf_delete(buf, { force = true })
+        vim.cmd("edit " .. vim.fn.fnameescape(file)); buf = vim.api.nvim_get_current_buf()
+        require("parley").setup_markdown_keymaps(buf)
+        await(settled)
+        submit(); await(settled)
+        assert.is_true(success_feedback(), feedback_bar())
+        assert.equals(2, #deliveries())
+    end)
+
 end)

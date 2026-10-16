@@ -38,6 +38,10 @@ function M.classify_reply(operation, exit_code, decoded, null_sentinel)
     return { kind = "registered", registration = copy(decoded.Registration), changed = decoded.Changed }
 end
 
+local function finite(value)
+    return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+
 function M.new(context)
     local state = {
         phase = "unknown", path = context.path, namespace = context.namespace,
@@ -45,6 +49,12 @@ function M.new(context)
     }
     if valid_registration(context.registration) and context.registration.File == context.path then
         state.registration, state.phase = copy(context.registration), "registered"
+    end
+    local seeded = context.receipt
+    if type(seeded) == "table" and state.registration and seeded.namespace == state.namespace
+        and seeded.id == state.registration.ID and seeded.owner == state.registration.Owner
+        and nonempty(seeded.hash) and nonempty(seeded.display_time) then
+        state.receipt = copy(seeded)
     end
     local serial = 0
     local controller = {}
@@ -94,9 +104,38 @@ function M.new(context)
         return { { kind = "notify", message = message or "Document operation failed" } }
     end
 
-    local function send()
+    local function matches_receipt(receipt, hash)
+        return receipt and state.registration and nonempty(hash)
+            and receipt.namespace == state.namespace and receipt.id == state.registration.ID
+            and receipt.owner == state.registration.Owner and receipt.hash == hash
+    end
+
+    local function feedback(intent, message)
+        return { kind = "feedback", intent = intent, message = message }
+    end
+
+    -- A confirmation authorizes one explicit press, not a callback that happens
+    -- to arrive quickly. Its captured receipt is rechecked against saved bytes
+    -- and the effective owner after registry confirmation.
+    local function send(candidate, now)
+        candidate = candidate or {}
+        local resent = false
+        if matches_receipt(state.receipt, candidate.hash) then
+            local authorization = candidate.authorization
+            resent = matches_receipt(authorization, candidate.hash)
+                and authorization.display_time == state.receipt.display_time or false
+            if not resent then
+                state.phase = "registered"
+                if finite(now) then
+                    state.confirmation = { receipt = copy(state.receipt), armed_at = now, expires_at = now + 2000 }
+                end
+                return feedback("unchanged", "nothing to submit: no changes since " .. state.receipt.display_time)
+            end
+        end
+        state.confirmation = nil
         state.phase = "busy"
-        return issue("send", { owner = state.registration.Owner, registration = state.registration })
+        return issue("send", { owner = state.registration.Owner, registration = state.registration,
+            hash = candidate.hash, resent = resent })
     end
 
     function controller.snapshot()
@@ -105,17 +144,32 @@ function M.new(context)
 
     function controller.dispatch(event)
         if state.phase == "detached" then return {} end
+        if event.type == "invalidate_confirmation" then
+            state.confirmation = nil
+            if state.operation then state.operation.args.authorization = nil end
+            return {}
+        end
         if event.type == "detach" then
             local effects = state.operation and { { kind = "cancel", witness = copy(state.operation.witness) } } or {}
             state.generation = state.generation + 1
-            state.operation, state.phase = nil, "detached"
+            state.operation, state.phase, state.receipt, state.confirmation = nil, "detached", nil, nil
             return effects
         end
         if event.type == "changed" then
+            local changed_context = (event.path ~= nil and event.path ~= state.path)
+                or (event.namespace ~= nil and event.namespace ~= state.namespace)
+            state.confirmation = nil
+            if changed_context then state.receipt = nil end
             state.generation = state.generation + 1
             state.path = event.path or state.path
             state.namespace = event.namespace or state.namespace
             local operation = state.operation
+            if operation and operation.witness.operation == "send" and not changed_context then
+                -- The external delivery is already issued. Keep one token until
+                -- completion so its captured bytes can become knowledge, without
+                -- permitting a second send or stale success feedback.
+                return {}
+            end
             if operation and (operation.witness.operation == "register" or operation.witness.operation == "rename"
                 or operation.witness.operation == "move") then
                 -- A mutation may already have happened. Consume its outcome before
@@ -153,13 +207,20 @@ function M.new(context)
             if state.operation or state.pending then return {} end
             if not nonempty(state.path) or state.path:sub(1, 1) ~= "/" then return notify("Save the document first") end
             if not state.registration and not nonempty(event.owner) then return notify("Document owner unavailable") end
+            local confirmation = state.confirmation
+            local authorization
+            if confirmation and finite(event.now_ms) and event.now_ms >= confirmation.armed_at
+                and event.now_ms <= confirmation.expires_at then authorization = copy(confirmation.receipt) end
+            state.confirmation = nil
             state.phase = "busy"
-            return { issue("save", { owner = event.owner, previous_phase = state.registration and "registered" or "plain" }) }
+            return { issue("save", { owner = event.owner, previous_phase = state.registration and "registered" or "plain",
+                authorization = authorization }) }
         end
         if event.type == "rename" then
             if state.operation or state.pending or not state.registration then return {} end
             if not nonempty(event.new_path) or event.new_path:sub(1, 1) ~= "/" then return notify("Invalid destination") end
             if event.new_path == state.path then return {} end
+            state.confirmation = nil
             state.generation = state.generation + 1
             state.phase = "moving"
             return { issue("move", { old_path = state.path, new_path = event.new_path, registration = state.registration }) }
@@ -167,6 +228,27 @@ function M.new(context)
         if not matching(event.witness) then return {} end
         local operation = state.operation
         local kind = operation.witness.operation
+        if event.type == "sent" and kind == "send" then
+            local current = live(operation.witness)
+            state.operation, state.phase = nil, "registered"
+            -- Body edits do not retract a real delivery; context changes do not
+            -- import an old pane's receipt into a different document identity.
+            local identity = operation.args.registration
+            local same_identity = state.registration and identity
+                and identity.ID == state.registration.ID and identity.Owner == state.registration.Owner
+                and operation.witness.namespace == state.namespace and operation.witness.path == state.path
+                and operation.witness.incarnation == state.incarnation
+            if not same_identity then return {} end
+            if event.ok and nonempty(operation.args.hash) and nonempty(event.display_time) then
+                state.receipt = { namespace = state.namespace, id = identity.ID, owner = identity.Owner,
+                    hash = operation.args.hash, display_time = event.display_time }
+            end
+            if not event.ok then return notify(event.error) end
+            if not current then return {} end
+            if not nonempty(event.display_time) then return {} end
+            local intent = operation.args.resent and "resent" or "submitted"
+            return { feedback(intent, intent .. " to " .. identity.Owner .. " · " .. event.display_time) }
+        end
         if not live(operation.witness) then
             if kind == "register" or kind == "rename" or kind == "move" then
                 return pending(operation, "Document changed during mutation")
@@ -182,10 +264,11 @@ function M.new(context)
                 return notify(event.error)
             end
             state.registration = copy(operation.args.replacement)
+            state.receipt, state.confirmation = nil, nil
             if state.registration then
                 state.phase = "registered"
                 local effects = { { kind = "attach", registration = copy(state.registration), witness = copy(operation.witness) } }
-                if operation.args.submit then effects[2] = send() end
+                if operation.args.submit then effects[2] = send(operation.args, event.now_ms) end
                 return effects
             end
             state.phase = "plain"
@@ -197,12 +280,13 @@ function M.new(context)
                 state.phase = operation.args.previous_phase
                 return notify(event.error)
             end
-            if state.registration then return { issue("lookup", { submit = true }) } end
-            return { issue("register", { owner = operation.args.owner }) }
-        end
-        if event.type == "sent" and kind == "send" then
-            state.operation, state.phase = nil, "registered"
-            return event.ok and {} or notify(event.error)
+            local candidate = { hash = nonempty(event.hash) and event.hash or nil, authorization = operation.args.authorization }
+            if state.registration then
+                candidate.submit = true
+                return { issue("lookup", candidate) }
+            end
+            candidate.owner = operation.args.owner
+            return { issue("register", candidate) }
         end
         if event.type == "moved" and kind == "move" then
             if not event.ok then return pending(operation, event.error) end
@@ -224,12 +308,13 @@ function M.new(context)
                 or (valid and result.registration.ID ~= state.registration.ID)) then
                 state.phase = "busy"
                 return { issue("detach_turn", { registration = state.registration,
-                    replacement = valid and result.registration or nil, submit = operation.args.submit }) }
+                    replacement = valid and result.registration or nil, submit = operation.args.submit,
+                    hash = operation.args.hash, authorization = operation.args.authorization }) }
             end
             if valid then
                 state.registration, state.phase = copy(result.registration), "registered"
                 local effects = { { kind = "attach", registration = copy(state.registration), witness = copy(operation.witness) } }
-                if operation.args.submit then effects[2] = send() end
+                if operation.args.submit then effects[2] = send(operation.args, event.now_ms) end
                 return effects
             end
             if result.kind == "absent" and not state.registration then
@@ -249,7 +334,7 @@ function M.new(context)
                 registration = copy(state.registration), witness = copy(operation.witness) } }
         end
         local effects = { { kind = "attach", registration = copy(state.registration), witness = copy(operation.witness) } }
-        if operation.args.resume_only then state.phase = "registered" else effects[2] = send() end
+        if operation.args.resume_only then state.phase = "registered" else effects[2] = send(operation.args, event.now_ms) end
         return effects
     end
 

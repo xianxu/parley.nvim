@@ -34,6 +34,32 @@ local function hash(buf)
     return vim.fn.sha256(vim.json.encode(vim.api.nvim_buf_get_lines(buf, 0, -1, false)))
 end
 
+-- The executor has just proven NEW's original inode and bytes. A buffer-name
+-- API rename leaves Neovim's "not edited" flag set, so ordinary writes (including
+-- auto-save) would refuse NEW with E13. A non-bang native read acknowledges it;
+-- never force a write or discard an edit made during the handoff.
+local function acknowledge_owned_move(s, path, expected)
+    if vim.bo[s.buf].modified or hash(s.buf) ~= expected then return false, "buffer changed during owned move" end
+    local undo = vim.o.undoreload
+    s.owned_renaming = true
+    local ok, err = pcall(vim.api.nvim_buf_call, s.buf, function()
+        local view = vim.fn.winsaveview()
+        vim.o.undoreload = -1 -- bounded by Couch's document size; preserve large-file undo too.
+        local read_ok, read_err = pcall(function()
+            vim.api.nvim_buf_set_name(s.buf, path)
+            vim.cmd("silent keepalt keepjumps edit")
+        end)
+        vim.o.undoreload = undo
+        vim.fn.winrestview(view)
+        if not read_ok then error(read_err, 0) end
+    end)
+    vim.o.undoreload = undo
+    s.owned_renaming = nil
+    if not ok then return false, tostring(err) end
+    if hash(s.buf) ~= expected then return false, "owned move read different content" end
+    return true
+end
+
 local function mtime(path)
     local st = uv.fs_stat(path)
     return st and (st.mtime.sec .. "." .. st.mtime.nsec) or ""
@@ -175,7 +201,7 @@ local function execute(s, effects)
             if ss.is_session_sync(s.buf) then ok, err = ss.prepare_submit(s.buf)
             else ok, err = pcall(vim.api.nvim_buf_call, s.buf, function() vim.cmd("stopinsert"); vim.cmd("silent write") end) end
             if ok then s.saved_hash = hash(s.buf) end
-            dispatch(s, { type = "saved", witness = effect.witness, ok = not not ok, error = err })
+            dispatch(s, { type = "saved", witness = effect.witness, ok = not not ok, error = err, hash = s.saved_hash })
         elseif kind == "attach" then adopt(s, effect.registration)
         elseif kind == "detach_turn" then
             local ss = require("parley.session_sync")
@@ -203,12 +229,12 @@ local function execute(s, effects)
         elseif kind == "send" then
             require("parley.session_sync").send_registered(s.buf, effect.registration, function(result)
                 if valid(s) then
-                    if result.code == 0 then
-                        show_feedback(s, "submitted to " .. effect.registration.Owner .. " · " .. os.date("%H:%M"), false)
-                    end
-                    dispatch(s, { type = "sent", witness = effect.witness, ok = result.code == 0, error = result.stderr })
+                    dispatch(s, { type = "sent", witness = effect.witness, ok = result.code == 0,
+                        error = result.stderr, display_time = os.date("%H:%M") })
                 end
             end)
+        elseif kind == "feedback" then
+            show_feedback(s, effect.message, false)
         elseif kind == "band" then
             if s.feedback then band(s, s.feedback.label, s.feedback.hl) else band(s, effect.message) end
             if effect.message ~= "" then ensure_retry() else s.baseline, s.outstanding = nil, false end
@@ -223,6 +249,7 @@ local function execute(s, effects)
 end
 
 dispatch = function(s, event)
+    event.now_ms = event.now_ms or uv.hrtime() / 1000000
     execute(s, s.model.dispatch(event))
 end
 
@@ -260,7 +287,10 @@ function M.attach(buf)
                 if states[buf] ~= s then return true end
                 local previous = s.content; s.content = hash(buf)
                 if vim.bo[buf].modified then
-                    if previous ~= s.content then clear_feedback(s) end
+                    if previous ~= s.content then
+                        clear_feedback(s)
+                        dispatch(s, { type = "invalidate_confirmation" })
+                    end
                     s.revision = (s.revision or 0) + 1
                     if not M.identity(buf) then
                         s.baseline = s.baseline or previous
@@ -270,7 +300,12 @@ function M.attach(buf)
                     if phase == "busy" then dispatch(s, { type = "changed" }) end
                 end
             end,
-            on_reload = function() s.content = hash(buf); clear_feedback(s) end,
+            on_reload = function()
+                s.content = hash(buf)
+                clear_feedback(s)
+                dispatch(s, { type = "invalidate_confirmation" })
+                if s.model.snapshot().phase == "busy" then dispatch(s, { type = "changed" }) end
+            end,
             on_detach = function() s.edits_attached = false end,
         })
     end
@@ -309,7 +344,8 @@ function M.submit(buf)
     local snapshot = s.model.snapshot()
     if snapshot.phase == "pending" then dispatch(s, { type = "retry" }); return true end
     if snapshot.operation then
-        if snapshot.operation.witness.operation == "lookup" then s.queued_submit = true end
+        if not snapshot.registration and snapshot.phase == "probing" and snapshot.operation.witness.operation == "lookup"
+            and not snapshot.operation.args.submit then s.queued_submit = true end
         return true
     end
     local revision = s.revision
@@ -379,7 +415,8 @@ function M.move_path(old_path, new_path)
         if admitted.kind ~= "registered" then return true, nil, admitted.error or "legacy registration unavailable" end
         identity = admitted.registration
     end
-    s.model = lifecycle.new({ path = s.path, namespace = s.namespace, incarnation = s.incarnation, registration = identity })
+    s.model = lifecycle.new({ path = s.path, namespace = s.namespace, incarnation = s.incarnation,
+        registration = identity, receipt = snapshot.receipt })
     adopt(s, identity)
     local saved, save_error = ss.prepare_submit(buf)
     if not saved then return true, nil, save_error end
@@ -393,17 +430,15 @@ function M.move_path(old_path, new_path)
     end
     local token, token_error = ss.begin_move(buf)
     if not token then lease.release(); return true, nil, token_error end
-    local moving = { token = token, lease = lease, old_path = old_path, new_path = new_path, identity = identity }
+    local moving = { token = token, lease = lease, old_path = old_path, new_path = new_path,
+        identity = identity, content = hash(buf) }
     s.move = moving
     local operation, err = require("parley.document_move").begin(s.namespace, identity, new_path, {
         root = state_root(), lease = lease, destination_registered = false, move_document = true,
         old_lock = token.lock, new_lock = token.lock, baseline = token.baseline,
         install_new = function() return ss.install_move_lock(buf, token, new_path) end,
         document_moved = function()
-            s.owned_renaming = true
-            local ok, name_error = pcall(vim.api.nvim_buf_set_name, buf, new_path)
-            s.owned_renaming = nil
-            return ok, name_error
+            return acknowledge_owned_move(s, new_path, moving.content)
         end,
         metadata = function(_, cb)
             moving.metadata_done = cb
@@ -461,6 +496,7 @@ recover_migration = function(s, fresh_write)
     end
     s.recovering = true
     local ss, token = require("parley.session_sync"), nil
+    local content = hash(s.buf)
     local operation, err = mover.recover(s.namespace, journal.id, {
         root = state_root(), old_path = journal.old, new_path = journal.new,
         new_written = fresh_write == true,
@@ -471,9 +507,7 @@ recover_migration = function(s, fresh_write)
             return token ~= nil, restore_error
         end,
         document_moved = function()
-            s.owned_renaming = true
-            local ok, name_error = pcall(vim.api.nvim_buf_set_name, s.buf, journal.new)
-            s.owned_renaming = nil
+            local ok, name_error = acknowledge_owned_move(s, journal.new, content)
             if ok then s.path = journal.new end
             return ok, name_error
         end,
@@ -482,7 +516,8 @@ recover_migration = function(s, fresh_write)
             if not ok then return false, finish_error end
             cache({ namespace = s.namespace, path = journal.old }, nil, true)
             band(s, "")
-            s.model = lifecycle.new({ path = s.path, namespace = s.namespace, incarnation = s.incarnation, registration = result.registration })
+            s.model = lifecycle.new({ path = s.path, namespace = s.namespace, incarnation = s.incarnation,
+                registration = result.registration, receipt = s.model.snapshot().receipt })
             cache(s, result.registration)
             ss.release_if_baseline(s.buf)
             return true
