@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 1.07
+actual_hours: 2.17
 tracker:
     version: 1
     completion:
-        token: close-791ef15099d7
+        token: close-dc9e25716295
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: a3777a50afddb42c05796f811641dd8516a57c9d
-        evidence_commit: 4f94a1682f381c77a3040bc990a6b809cd1a2818
+        reviewed_head: fa84a1b5b90b93131730740e12cf2da92c7ca882
+        evidence_commit: d94f98265b9a80f04f1c3bba5af5765ce58dc366
 ---
 
 # Restart path blocks the main loop on a synchronous lsof (and stop's identity probe)
