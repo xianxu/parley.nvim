@@ -109,6 +109,7 @@ local function call_safely(label, fn, ...)
     if not ok then
         logger.error(label .. " callback failed")
     end
+    return ok
 end
 
 local function snapshot()
@@ -603,8 +604,20 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
     end
     snapshot()
 
+    -- A reader that throws has lost its place in the stream: the bytes it was
+    -- handed are gone, and the next piece would be read as if they had landed.
+    -- End the attempt with the reason instead of streaming past it (#229).
+    local failed_readers={}
+    local function read(stream,reader,err,data)
+        if failed_readers[stream] then return end
+        if call_safely(stream..' reader',reader,err,data)==false then
+            failed_readers[stream]=true
+            io_error=io_error or (stream..' reader failed')
+            pcall(M.stop_attempt,id)
+        end
+    end
     local function deliver(stream,buffer,limit,reader,err,data,collecting)
-        if not data or data == '' then call_safely(stream..' reader',reader,err,data);return end
+        if not data or data == '' then read(stream,reader,err,data);return end
         local amount=#data
         if collecting then amount=math.min(amount,limit-buffer.bytes,limits.retained_bytes-retained_bytes)end
         amount=math.max(0,amount)
@@ -612,7 +625,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
             collect(buffer,data:sub(1,amount));record.retained=record.retained+amount;retained_bytes=retained_bytes+amount
             record.state[stream..'_bytes']=buffer.bytes
         end
-        for first=1,amount,65536 do call_safely(stream..' reader',reader,err,data:sub(first,math.min(first+65535,amount)))end
+        for first=1,amount,65536 do read(stream,reader,err,data:sub(first,math.min(first+65535,amount)))end
         if amount<#data then
             io_error=io_error or (stream..' retention limit exceeded')
             record.state.output_overflow=true
@@ -628,7 +641,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
         end
         deliver('stdout',stdout_buffer,stdout_limit,out_reader,err,data,opts.collect_stdout~=false)
         if err then
-            call_safely("stdout reader EOF", out_reader, nil, nil)
+            read("stdout", out_reader, nil, nil)
         end
         if err or data == nil then
             event(record, { type = "stdout_eof" })
@@ -645,7 +658,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
         end
         deliver('stderr',stderr_buffer,stderr_limit,err_reader,err,data,true)
         if err then
-            call_safely("stderr reader EOF", err_reader, nil, nil)
+            read("stderr", err_reader, nil, nil)
         end
         if err or data == nil then
             event(record, { type = "stderr_eof" })
