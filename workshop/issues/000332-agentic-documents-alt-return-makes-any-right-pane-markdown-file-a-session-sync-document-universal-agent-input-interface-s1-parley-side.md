@@ -74,7 +74,7 @@ Durable plan: [Agentic Markdown Documents](../plans/000332-agentic-documents-pla
 - [x] Preserve document identity, side folder/backlinks and operator turn through native/Parley renames and partial failures.
 - [x] Add isolated real/fake conformance and docs/traceability; verify production-door submission feedback and native edit-turn regressions.
 - [x] Add unchanged-submit suppression and explicit rapid resend with lifecycle and production-door regressions.
-- [ ] Complete the required full suite on the final implementation before close.
+- [x] Complete the required full suite on the final implementation before close.
 
 Post-close acceptance remains pending: after SHIP and the green suite/conformance, stage under the existing hub authorization for the combined operator check. Pair#573 has landed; the TL coordinates the Couch and Neovim restart. Land only after operator acceptance; clear the stage and report the merge.
 
@@ -157,6 +157,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 - 2026-10-15 — final preflight-yield sweep reproduces two more members of BR-1: a new submit starts while native OLD lookup or public target lookup pumps events. Both require rechecking the shared busy predicate after the bounded wait, before cancelling/reseeding or taking the migration lease/effects. The tests hold real actor/owner completions and assert the original submit still completes to OLD. Superseded11b8a5d4 required-suite attempt was cancelled while still queued (PID567 command/cwd verified, exit130, no suite recipe started, owned process tree reaped); no blind rerun or foreign process was touched. The final fixed head requires its own full run.
 
 - 2026-10-15 — final post-yield candidate passes176 focused cases (34 pure lifecycle,37 admission,14 owned move,10 lifetime,64 native session-sync,17 unit session-sync), lint752 files0 warnings/errors and clean process census. Retained /tmp/parley332-rework-final2-focused.log. No protocol/real-client change since the passing isolated Couch conformance. All three review findings have a concrete disposition; ordinary close and required full suite remain pending.
+
+- 2026-10-15 — final required suite PASSES on935205a3fa6c558125c1b5acb54b5e21bd0b74fe:444/444 spec files, lint752 files0 warnings/errors, clean process census,2m41s execution after472s queue. New admission/lifetime/owned-move files pass, as do native session-sync, cliproxy lifecycle (#340), packaging VM (#336) and former #337 deadline cases. Full retained log /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/935205a3fa6c558125c1b5acb54b5e21bd0b74fe/suite.log; SHA25604c65fb7f4f1024a15eb625e3b302c15ef40ee5a2d8cdb4cf3afa59e42d2019c. No waiver or skip. The close dry run correctly refused while the suite checkbox was pending; ordinary close now has the required evidence. Staging and combined operator acceptance remain pending.
 
 ## Revisions
 
