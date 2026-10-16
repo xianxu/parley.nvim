@@ -33,7 +33,7 @@ The chat tree is walked by five copies of the same logic. There are three root-f
 | Concept | Status | Meaning |
 |---|---|---|
 | `root` | new | `chat_tree.root(file, deps)`: the first file of `path_up`; an unloadable or orphaned file is its own root |
-| `files` | new | `chat_tree.files(root, deps)`: the tree's files in depth-first pre-order, each once, depth-capped |
+| `files` | new | `chat_tree.files(root, deps)`: the tree's files in depth-first pre-order, each once, with no depth cap (see Revisions) |
 | `resolve` | new | `chat_tree.resolve(ref, dir)`: the one resolver the walker's IOs and the exporter's loader use |
 | `disk_deps` | new | `chat_tree.disk_deps()`: the walker's IO over saved files, for commands that act on files |
 | `chat_tree_files` | new | init's one call into `root` and `files` for delete-tree, move and `get_chat_tree_files` |
@@ -52,7 +52,7 @@ The chat tree is walked by five copies of the same logic. There are three root-f
 Design (quick flow: about 30 code lines added, about 90 removed):
 
 - **`chat_tree.root(file, deps)`:** the first file of `path_up`. Load the file, walk `path_up` and return `path[1].file`. A file that cannot be loaded is its own root. One link-following rule (ARCH-DRY).
-- **`chat_tree.files(root, deps)`:** the tree's files in DFS pre-order (root, then each branch in order, recursively). Each visited file is visited once, under the same depth cap as `linearize`. Returns `{ file, parsed }[]`; an unloadable file is skipped. Pure over `deps`, like `path_up` (ARCH-PURE): unit-tested with hand-built parses.
+- **`chat_tree.files(root, deps)`:** the tree's files in DFS pre-order (root, then each branch in order, recursively). Each visited file is visited once, under the same depth cap as `linearize` (removed in close round 1; see Revisions). Returns `{ file, parsed }[]`; an unloadable file is skipped. Pure over `deps`, like `path_up` (ARCH-PURE): unit-tested with hand-built parses.
 - **Consumers derive:**
   - **init** (delete-tree, chat move, `get_chat_tree_files`): `find_tree_root_file` and `collect_tree_files` are deleted; they call `root` and `files` with `io_deps()`.
   - **exporter:** `find_tree_root` and `collect_tree` are deleted. Its `deps.load` is `read_chat_file`, keeping the info object per file, so each file is still read once (the comment at the call site). Its test seams `_find_tree_root` and `_collect_tree` become thin wrappers, or `exporter_tree_spec` moves to the new seams.
