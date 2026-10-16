@@ -228,6 +228,39 @@ describe("dispatcher.query internals", function()
             assert.equals(1, #handler_calls)
             assert.equals("Final", handler_calls[1])
         end)
+
+        -- #242: found by the provider fake. A handler that throws used to leave
+        -- its line in the reader's buffer, and the EOF tasker still delivers
+        -- (#182) decoded it again: the same delta written twice.
+        local function throwing_handler()
+            return function(_, content)
+                table.insert(handler_calls, content)
+                error("consumer invalidated mid-stream")
+            end
+        end
+
+        it("A6: the line a throwing handler was given is not decoded again at EOF", function()
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, throwing_handler(), nil, nil)
+            assert.is_false(pcall(captured_out_reader, nil, 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n'))
+            captured_out_reader(nil, nil)
+            assert.same({ "Hello" }, handler_calls)
+        end)
+
+        it("A7: a partial line after the throw is not flushed at EOF", function()
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, throwing_handler(), nil, nil)
+            assert.is_false(pcall(captured_out_reader, nil, 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n'
+                .. 'data: {"choices":[{"delta":{"content":"tail"}}]}'))
+            captured_out_reader(nil, nil)
+            assert.same({ "Hello" }, handler_calls)
+        end)
+
+        it("A8: a chunk that arrives after the throw is not decoded", function()
+            dispatcher.query(nil, "openai", { model = "gpt-4", messages = {} }, throwing_handler(), nil, nil)
+            assert.is_false(pcall(captured_out_reader, nil, 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n'))
+            captured_out_reader(nil, 'data: {"choices":[{"delta":{"content":"later"}}]}\n')
+            captured_out_reader(nil, nil)
+            assert.same({ "Hello" }, handler_calls)
+        end)
     end)
 
     describe("Group B: response handling", function()
