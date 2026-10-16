@@ -46,7 +46,7 @@ Design (quick flow, about 40 code lines):
 - **Off-path is a fact of the walk (ARCH-PURE):** `chat_tree.linearize` marks every item it emits from `subtree()` as `off_path = true`. These are the asides and everything nested under them, whether they hang off the current file or off an ancestor before the path's branch. The path's files (ancestors and the current file) are never off-path. A unit case in `chat_tree_spec` pins this.
 - **One renderer (ARCH-DRY):** `build_messages` renders an off-path item through the existing summarized branch: the `omit_user_text` placeholder, then the `📝:` summary as the assistant message. No new message shape. Under `"summary"`, an off-path item:
   - is never preserved in full: neither the window nor `@@` file references pin it, so its references are not inlined;
-  - with no `📝:` summary, is skipped: it sends no placeholder and no answer. The alternatives were the full answer, which defeats the flag, or the question text alone. A long aside written without summaries then vanishes; I'd take that over sending its full transcript, but I'm flagging it for the TL;
+  - with no `📝:` summary, is sent as its question text alone (see Revisions): the question, truncated, marked as an aside with no summary, and an assistant note that the answer is omitted, so the roles still alternate;
   - does not count toward the memory window. The window counts on-path exchanges from the end of the current file, as it did for a single file plus ancestors, so an aside does not push a path exchange out of full retention.
 - **Remote resolution derives from the same rule (ARCH-PURPOSE):** `resolve_remote_references` skips off-path items under `"summary"`, so a reference that won't be sent is not fetched. Both builders read one predicate, `chat_respond.renders_full_off_path(config)` or similar, so they cannot disagree.
 - **Out of scope:** `build_messages_from_model` has no production caller, is single-file, and sees no tree.
@@ -58,9 +58,13 @@ Steps:
 - [ ] config `chat_memory.side_chats = "summary"`, with a comment in config.lua
 - [ ] build_messages: off-path summary rendering, skip when there is no summary, on-path-only window count
 - [ ] resolve_remote_references skips off-path under `"summary"`
-- [ ] tests (chat_tree_context_spec): an aside off the root seen from a later root question; a nested aside; an on-path ancestor unchanged; `"full"` keeps #233 behaviour; an off-path exchange without a summary is skipped; an off-path `@@` reference is neither fetched nor inlined; the window ignores off-path items
+- [ ] tests (chat_tree_context_spec): an aside off the root seen from a later root question; a nested aside; an on-path ancestor unchanged; `"full"` keeps #233 behaviour; an off-path exchange without a summary sends its truncated, marked question; an off-path `@@` reference is neither fetched nor inlined; the window ignores off-path items
 - [ ] atlas (chat/memory.md, chat/lifecycle.md) and the README config docs
 - [ ] re-measure #233's tree under both values, with memory off and on
+
+## Revisions
+
+- 2026-10-16, TL review of plan 3cd110c6: approved with the default `"summary"`. Decision 5 changed: an off-path exchange without a summary sends its question text alone (truncated, marked as an aside with no summary) instead of nothing. The goal is awareness that the side discussion happened; dropping it silently defeats that, and its full answer would defeat the flag.
 
 ## Log
 
