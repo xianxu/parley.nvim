@@ -78,3 +78,95 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ecaa27d9-5766-4e3b-bd21-4694b33934d8","repository":"github.com/xianxu/parley.nvim","issue_id":"000340","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/4bf9c3850f1a8162","reviewed_head":"0c2547f885692b5335c041c7f82c76114c3e3372","slot":"parley.nvim:4","requested_at":"2026-10-16T07:22:47.085008Z"},"phase":"finished","pid":15154,"started_at":"2026-10-16T07:22:47.635553Z","finished_at":"2026-10-16T07:25:31.570166Z","session_id":"3e9eb47b-31ee-45cf-b6f1-fe3201cb748a","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T00:44:11-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 340 — Credential-health persistent-404 test times out in the required suite |
+| repo | parley.nvim |
+| issue file | workshop/issues/000340-cliproxy-credential-health-timeout.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 30a94402e6a3978a2ce58fbf795dc3eee9389d2d..426c2054ab1cf82030d0e9fceb8f910afa3e2b2a |
+| command | sdlc close --issue 340 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T00:44:11-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking the BR-1/BR-2 fixes against the code; next I'll run the lifecycle spec and a revert check.
+
+Test harness needs its isolated environment; switching to `make test-spec`.
+
+I'll run the lifecycle spec with the harness's isolated env vars.
+
+57/57 green. Now reverting the BR-1 lsof re-check to confirm its regression test goes red.
+
+BR-1 regression goes red without the fix. Running the update and command specs, which share the restart path.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+**Verdict: SHIP, high confidence.** Both findings from the previous round are fixed, and I checked each against the code and by running the tests. The issue's Done-when is met. A restart now waits for the processes `stop()` signalled to exit (`uv.kill(pid, 0)`), not for a port probe that only resolved through curl's `--max-time`. `restart_managed` then calls the extracted `start_managed` without a second reuse probe. The probe at the deadline is unchanged, so the #237 "still answers" error still fires. For BR-1, an exit-confirmed release now also reads the port's listeners with `lsof`. A listener left on the port, or a failed read, falls back to the probe. When I reverted that check, the new regression test failed. For BR-2, the render-error message now comes from one helper, `render_or_fail`. In the isolated harness env these all passed: lifecycle 57/57, update 40/40, command 19/19, budget 3/3, dispatch 3/3. Nothing blocks SHIP. There is one Minor note.
+
+1. **Strengths**
+   - `lua/parley/cliproxy.lua:513-530`: the wait checks whether the processes still exist, which the code controls, instead of inferring it from the port. `EPERM` counts as alive, so a process that exists but isn't ours is not mistaken for gone. The fallbacks are written down: no pids, a listener left over, an `lsof` error, or the deadline passing all go back to the probe.
+   - `start_managed` (`cliproxy.lua:814`) is the only spawn path. `ensure_running` and the exit-confirmed restart both use it (ARCH-DRY).
+   - The regression in `tests/integration/cliproxy_lifecycle_spec.lua:808-839` reproduces the measured stall. Any probe made between stop and spawn answers "down" only after 5 s. The test then asserts that zero such probes happened, rather than just giving the case a longer timeout.
+   - The BR-1 test (`cliproxy_lifecycle_spec.lua:381`) sets up exactly the case that was flagged: a peer on the port, `lsof` unavailable, and our own pid on another port. It also confirms our old proxy was killed (ESRCH).
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - `cliproxy.lua:519`: the `pids_on_port` re-read runs synchronously on the main loop (`vim.system():wait()`). The implementer's own measurement shows the harness max rising from 917 ms to 1557 ms under load. Each restart pays this once, alongside the synchronous `lsof` and curl calls `stop()` already makes, so it is acceptable (ARCH-CONSTRAINTS).
+
+5. **Test coverage**
+   - Both previous-round fixes have regression tests:
+     - Reverting the BR-1 check (`if not lerr and #listeners == 0` changed to `if true`) turns "a restart whose killed pids exit still reports a peer left on the port" red. Restoring it makes the spec green again.
+     - The implementer's log reports that a probe-only release and removing the direct spawn each fail cases. I did not repeat those two experiments.
+   - BR-2 is a refactor that doesn't change behaviour; the existing render and spawn paths stay green.
+
+6. **Architecture**
+   - **ARCH-DRY: pass.** The spawn branch and render-error message each have one source now.
+   - **ARCH-PURE: pass.** No new business logic is mixed into IO beyond the existing shell.
+   - **ARCH-PURPOSE: pass.** Both stalls are removed, the wait probe and the reuse probe; the probe at the deadline still decides when the wait runs out.
+   - **ARCH-MOCK: pass.** Tests run against the stateful Python fake through the existing `health_probe`, `spawn` and `_set_process_tools` seams.
+   - **ARCH-CONSTRAINTS: pass, with the Minor note above.** The wall-clock `PORT_RELEASE_MS` deadline is kept, so the REPAIR BUDGET upper bound still holds.
+   - **ARCH-SECURE: pass.** pids come from our own table and from `lsof` output parsed as numbers. No credentials are newly exposed.
+   - **ARCH-ORDER: pass.** The wait doesn't treat an unconfirmed outcome as success: the process exiting plus an empty listener read confirms release; anything else falls back to the probe.
+     - A peer could bind the port between the `lsof` read and the spawn. That window is no different from the existing `ensure_running` path. `poll_until_healthy` reports a crashed spawn as an error.
+   - **ARCH-FUNERAL: pass.** The change creates no durable artifacts. The spawned processes are tracked in `_spawned` as before.
+
+7. **Plan revisions:** none. The plan's checklist, the close-round log and the atlas text (`atlas/providers/cliproxy-managed.md:112-117`) match the code. README needs no change because nothing user-facing was added.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      wait_port_released now re-reads lsof after exit and falls back to the probe on a leftover listener or failed read (cliproxy.lua:518-523); reverting it turns the new peer-on-port test red, restored green 57/57.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      render_or_fail (cliproxy.lua:363) is the single render-error site; ensure_running and start_managed(nil) both use it, and the duplicated block is gone.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: sync-io-on-main-loop-poll
+    title: |
+      exit_poll's lsof re-read is a synchronous vim.system():wait() on the main loop
+    detail: |
+      cliproxy.lua:519 blocks the editor for one lsof per restart; the implementer measured the harness max rising from 917 ms to 1557 ms under load. Acceptable as a one-time cost per restart (stop already does sync lsof and curl), but an async read would keep the UI path unblocked (ARCH-CONSTRAINTS).
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"d7a18c0c-99f1-4269-b3e3-1a6e766b3241","repository":"github.com/xianxu/parley.nvim","issue_id":"000340","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/2ad5326ee870a3ce","reviewed_head":"426c2054ab1cf82030d0e9fceb8f910afa3e2b2a","slot":"parley.nvim:4","requested_at":"2026-10-16T07:40:53.938657Z"},"phase":"finished","pid":65078,"started_at":"2026-10-16T07:40:54.209396Z","finished_at":"2026-10-16T07:44:06.219615Z","session_id":"87dae4d9-27c4-479b-ab7f-0b4257874d5d","outcome":"returned"}] -->
