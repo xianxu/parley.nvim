@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "9e1762db"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # One chat tree walker: exporter, delete-tree and outline derive from chat_tree
@@ -84,3 +84,5 @@ Steps:
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Round 1 BR-1: no depth cap in path_up, linearize or files (seen sets end cycles); 31-file chain up and down with a cycle (unit), get_chat_tree_files from the deepest of a 23-file chain on disk (integration); one shared resolver; comments; unloadable-subtree case. Full suite green on 5f72682d (sdlc-local/suite). (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 125 added lines in code files (limit 100)
