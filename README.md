@@ -85,7 +85,7 @@ their history; Back can also establish the displayed file as their root.
 See [file navigation](atlas/ui/keybindings.md#file-history-back)
 for the command and configuration.
 
-Press **Alt+u** (`:ParleyAttention`) to list every file you submitted with
+Press **Alt+Space** (`:ParleyAttention`) to list every file you submitted with
 Alt+Return, newest first: **waiting** while the agent still owes it, **answered**
 once the agent has folded the submit, and **seen**, dimmed, once you have opened
 it from the finder. New side docs the agent writes in a listed file's `.side/`

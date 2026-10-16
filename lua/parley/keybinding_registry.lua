@@ -133,7 +133,7 @@ M.entries = {
 	{
 		id = "attention",
 		config_key = "global_shortcut_attention",
-		default_key = "<M-u>",
+		default_key = "<M-Space>",
 		default_modes = { "n", "i" },
 		scope = "global",
 		desc = "Parley attention finder: Alt+Return submits, waiting, answered or seen",

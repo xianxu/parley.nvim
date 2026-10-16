@@ -316,11 +316,20 @@ describe("attention finder", function()
         assert.equals("answered", Model.state_of(Store.load().entries[a]))
     end)
 
-    it("is bound to <M-u> and :ParleyAttention", function()
-        local registry_entries = require("parley.keybinding_registry").entries
-        local entry = vim.tbl_filter(function(e) return e.id == "attention" end, registry_entries)[1]
-        assert.equals("<M-u>", entry.default_key)
-        assert.equals("<M-u>", require("parley.config").global_shortcut_attention.shortcut)
+    it("is bound to <M-Space> and :ParleyAttention", function()
+        local registry_entries = require("parley.keybinding_registry")
+        local entry = vim.tbl_filter(function(e) return e.id == "attention" end, registry_entries.entries)[1]
+        assert.equals("<M-Space>", entry.default_key)
+        assert.equals("<M-Space>", require("parley.config").global_shortcut_attention.shortcut)
+        -- The mapping itself, as setup() registers it: Alt+Space opens the finder.
+        local opened = 0
+        registry_entries.register_global({ "global" }, require("parley.config"), { attention = function() opened = opened + 1 end })
+        for _, mode in ipairs({ "n", "i" }) do
+            local mapping = vim.fn.maparg("<M-Space>", mode, false, true)
+            assert.is_function(mapping.callback, "no <M-Space> mapping in mode " .. mode)
+            mapping.callback()
+        end
+        assert.equals(2, opened)
         -- setup() makes a :Parley<Name> command of every M.cmd entry.
         assert.equals("function", type(p.cmd.Attention))
     end)

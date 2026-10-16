@@ -348,7 +348,7 @@ local config = {
 	-- File-level Back, independent of same-file cursor jumps.
 	global_shortcut_file_back = { modes = { "n", "i" }, shortcut = "<M-O>" },
 	-- The attention finder (#354): Alt+Return submits, waiting, answered or seen.
-	global_shortcut_attention = { modes = { "n", "i" }, shortcut = "<M-u>" },
+	global_shortcut_attention = { modes = { "n", "i" }, shortcut = "<M-Space>" },
 	-- local shortcuts bound to the chat buffer
 	-- (be careful to choose something which will work across specified modes)
 	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = { "<C-g><C-g>" } },
