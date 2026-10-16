@@ -5,17 +5,6 @@ local M = {}
 
 local float_picker = require("parley.float_picker")
 
---- Which configured providers advertise no models at all.
----
---- The catalog IS the signal: cliproxy registers a channel's models only once
---- that channel has a credential, so a provider contributing nothing is one you
---- are not logged into. Measured — antigravity's 13 models appeared the moment
---- its auth file landed, with no restart. That keeps the check synchronous on a
---- UI path; a credential that is loaded but DEAD still lists models, and the
---- dispatch-failure path (#197) is what diagnoses that case.
----@param models table[] # the full cached catalog
----@param providers string[] # configured `live_models.providers` entries
----@return table[] # { { provider = "antigravity" }, … }
 --- The specs the operator wrote, leaving out verbatim shipped defaults: those
 --- name model lines a given account may not have (`gpt-6`, `fable`), and a
 --- warning on every refresh for parley's own default is noise. What diagnose
@@ -28,6 +17,17 @@ function M._operator_specs(providers)
     return vim.tbl_filter(function(spec) return not shipped[spec] end, providers or {})
 end
 
+--- Which configured providers advertise no models at all.
+---
+--- The catalog IS the signal: cliproxy registers a channel's models only once
+--- that channel has a credential, so a provider contributing nothing is one you
+--- are not logged into. Measured — antigravity's 13 models appeared the moment
+--- its auth file landed, with no restart. That keeps the check synchronous on a
+--- UI path; a credential that is loaded but DEAD still lists models, and the
+--- dispatch-failure path (#197) is what diagnoses that case.
+---@param models table[] # the full cached catalog
+---@param providers string[] # configured `live_models.providers` entries
+---@return table[] # { { provider = "antigravity" }, … }
 function M._providers_without_models(models, providers)
     local cat = require("parley.cliproxy_catalog")
     local cc = require("parley.cliproxy_config")

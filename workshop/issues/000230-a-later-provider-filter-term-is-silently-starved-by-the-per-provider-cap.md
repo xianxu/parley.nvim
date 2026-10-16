@@ -220,6 +220,7 @@ confidently at discovery, and the cause was two layers downstream of it.
 - Close review round 1. BR-1 (Important): the shipped default `codex:gpt-6,gpt-5!3` made diagnose warn on every refresh for any catalog without gpt-6, and `claude:opus,sonnet,fable` does the same where fable is absent. The class is shipped defaults naming lines an account may lack. Fix: the picker diagnoses only `_operator_specs`, the configured specs that are not verbatim shipped defaults; diagnose stays pure. Regression: defaults plus an operator typo against a catalog with neither gpt-6 nor fable gives exactly the typo's warning (and asserts the fixture would have warned for the defaults). Red with the filter removed (56/1), green 57/0.
 - Minors, same round: diagnose reuses `_select` (one search, cap 1) instead of its own match loop; the parser docstring, config comment and atlas state that a provider cap beside terms is rejected. Catalog 77/0, lint clean.
 - Lesson: a pure diagnostic over config needs the provenance of each entry. A shipped default and an operator's typo look the same to it.
+- Merge local suite on 4011859e failed tests/arch/superseded_comment_spec: the round-2 Minor (an annotation block separated from `_providers_without_models` by the inserted `_operator_specs`) is enforced by an existing guard. My last full suite predated the BR-1 commit. Moved the annotations back to their function: superseded_comment 9/0, picker_items 57/0, lint clean.
 
 ## Revisions
 

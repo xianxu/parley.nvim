@@ -553,3 +553,4 @@ oracle, and the mutation that would make the test fail.
 ## 2026-10-15 (#230 — no hidden limit in live_models)
 
 - A diagnostic over configuration must know who wrote each entry. Shipped defaults may name things a given environment lacks (a model line an account doesn't serve), so warn only on operator-written entries, and test the defaults against an environment where they would trigger (BR-1).
+- Run the full suite on the FINAL code commit before `sdlc merge`, not on an earlier one. A review fix can trip a tree-wide guard (here superseded_comment_spec) that the focused specs never load (#230).
