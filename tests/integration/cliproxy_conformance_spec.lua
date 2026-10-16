@@ -13,6 +13,13 @@
 --   Claude's OAuth refresh tokens ROTATE on use — pointing a second proxy at a
 --   live auth-dir is exactly the race that caused issue #197's outage. The
 --   fabricated token makes that refresh a harmless 401.
+--
+--   The catalog cases (#238) add a FABRICATED `claude-api-key` entry: the proxy
+--   lists its static Claude catalog for an API key without calling upstream,
+--   and an API key is never refreshed, so there is nothing to rotate. The
+--   expired OAuth credential above registers no models at all (measured: both
+--   model routes empty), which is why those cases could never pass with it.
+local FABRICATED_API_KEY = "sk-ant-fabricated-conformance"
 
 local uv = vim.uv or vim.loop
 local fixture_process = require("tests.helpers.fixture_process")
@@ -86,7 +93,10 @@ describe("cliproxyapi management API conformance", function()
     -- Boot a real cliproxyapi against a THROWAWAY auth-dir holding a
     -- FABRICATED credential (see the safety note at the top). Returns
     -- port, mgmt_key.
-    local function boot(omit_management)
+    -- opts.catalog: add the fabricated API-key entry so the proxy has a
+    -- catalog to serve (#238). Only the catalog cases ask for it; the others
+    -- keep the configuration they pin.
+    local function boot(omit_management, opts)
         local auth_dir = vim.fn.tempname()
         auth_dir_path = auth_dir
         vim.fn.mkdir(auth_dir, "p")
@@ -112,6 +122,9 @@ describe("cliproxyapi management API conformance", function()
         }
         if not omit_management then
             conf["remote-management"] = { ["secret-key"] = mgmt_key, ["disable-control-panel"] = true }
+        end
+        if opts and opts.catalog then
+            conf["claude-api-key"] = { { ["api-key"] = FABRICATED_API_KEY } }
         end
         vim.fn.writefile({ vim.json.encode(conf) }, cfg_path)
 
@@ -267,7 +280,7 @@ describe("cliproxyapi management API conformance", function()
         if needs_binary() then
             return
         end
-        boot()
+        boot(false, { catalog = true })
         local ok, body, code = get("conformance", "/v1beta/models")
         assert.is_true(ok, "no response from /v1beta/models")
         assert.equals("200", code)
@@ -285,7 +298,7 @@ describe("cliproxyapi management API conformance", function()
         if needs_binary() then
             return
         end
-        boot()
+        boot(false, { catalog = true })
         local _, v1 = get("conformance", "/v1/models")
         local _, beta = get("conformance", "/v1beta/models")
         local models = require("parley.cliproxy_catalog").parse(v1, beta)

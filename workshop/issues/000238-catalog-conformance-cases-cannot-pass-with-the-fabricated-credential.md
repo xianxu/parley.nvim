@@ -1,12 +1,22 @@
 ---
 id: 000238
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-12
-updated: 2026-09-12
+updated: 2026-10-16
 estimate_hours:
-card_mirror: '3e15f3dc01bff0b08ad37ddf3c35a6fe5c16173e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '06e742e71526718f35cbb70f995e17d6dfbe1ef6' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T06:07:45-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "e23da354", done: "5c9fcb31"}
+actual_hours: 0.12
 ---
 
 # Catalog conformance cases cannot pass with the fabricated credential
@@ -50,7 +60,16 @@ Options to weigh:
 
 ## Plan
 
-- [ ]
+Measured 2026-10-16. Real binary 8.0.4 (the operator's installed copy, run read-only against a throwaway config and auth-dir in the scratchpad), and the latest release, which the spec downloads under `PARLEY_LIVE_GITHUB=1`.
+- Spec as-is: the two catalog cases fail and the other 10 real-binary cases pass. The bug reproduces.
+- Throwaway config with no provider entry: `/v1/models` is `{"data":[]}` and `/v1beta/models` is `{"models":[]}`, exactly the reported failure.
+- With a FABRICATED `claude-api-key` entry (`sk-ant-fabricated-conformance`), both routes list the proxy's static Claude catalog. `/v1beta` carries `name: "models/<id>"` and `displayName`, which is what `parse()` joins on. An API key is never refreshed, so no network call is made and no credential can rotate (the #197 hazard does not apply). A `gemini-api-key` behaves the same.
+
+This is the Spec's first option. The catalog cases observe a catalog the real binary actually serves, with nothing real in the auth-dir.
+
+- [x] `boot()` takes a `catalog` option that adds a fabricated `claude-api-key` entry; only the two catalog cases use it, so the other cases keep the config they pin.
+- [x] The SAFETY note says why the API-key entry is safe, and that the key is fabricated.
+- [x] Both catalog cases pass under `PARLEY_LIVE_GITHUB=1`; the whole spec is green.
 
 ## Log
 
@@ -61,3 +80,17 @@ Options to weigh:
 Found when #237 put a real binary in front of the conformance spec for the first
 time (M2 Task 13). The failures reproduce on 7.1.71 as well, so they predate the
 upgrade. Details are in #237's Log and plan Revisions.
+
+### 2026-10-16 (parley.nvim:4)
+- 2026-10-16: closed — Docs-only delta: the atlas and the Log now say the proxy writes nothing to the throwaway auth-dir and nothing real is ever in it (the spec always writes the fabricated OAuth file; "stays empty" came from a scratch setup without it). Suite evidence unchanged (green on c0854305). (fixed-then-ship); review verdict: SHIP
+- 2026-10-16: closed — Full suite green on c0854305 (sdlc-local/suite; the catalog cases are pending there, with no binary on PATH, as before); the commit after it is atlas only. Live: PARLEY_LIVE_GITHUB=1 against the latest release, cliproxy_conformance_spec 12 of 12 pass (before: 10, the two catalog cases fail). The catalog cases boot with a FABRICATED claude-api-key entry; measured on 8.0.4: the built-in Claude catalog on both routes (models/<id> plus displayName), the auth-dir stays empty, an API key never refreshes (no #197 rotation), and it works offline. The atlas cliproxy-managed.md conformance paragraph is updated.; review verdict: FIX-THEN-SHIP
+
+- Built as planned. `PARLEY_LIVE_GITHUB=1` against the latest release: 12 of 12 pass (before: 10 pass, the two catalog cases fail).
+- Credential safety, measured on the 8.0.4 binary with the API-key entry:
+  - the throwaway auth-dir stays EMPTY (the proxy writes nothing there);
+  - its auth auto-refresh has nothing to refresh, because an API key does not rotate;
+  - the only network activity is the binary's own model-catalog refresh from raw.githubusercontent.com, no credential involved.
+- No network dependency: with every proxy variable pointed at a dead port, the startup catalog refresh fails ("keeping current data"), and the proxy still serves its built-in catalog with `models/<id>` names and `displayName`. So the cases pass offline too.
+- Without `PARLEY_LIVE_GITHUB` and no binary on PATH (the default harness), these cases stay `pending` with their reason, unchanged.
+- Correction (close round 1): "the throwaway auth-dir stays EMPTY" above was measured on a scratch setup that had no OAuth file. The spec's `boot()` always writes the fabricated, expired OAuth credential into it. The accurate claim, now in the atlas: the proxy writes nothing to the auth-dir, and nothing real is ever in it.
+
