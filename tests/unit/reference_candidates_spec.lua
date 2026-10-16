@@ -12,6 +12,82 @@ describe("reference candidates", function()
         assert.same({}, candidates.markdown_links("[empty]() [unclosed](x"))
     end)
 
+    it("keeps wrapped Markdown spans and masks references across continuation rows", function()
+        local lines = { "é → [long #370", "  @@hidden@@ label](side.md) and #42" }
+        local got = candidates.collect(lines, { first = 1, last = 2 })
+        assert.equals(2, #got)
+        assert.equals("markdown", got[1].kind)
+        assert.equals("side.md", got[1].target)
+        assert.equals(1, got[1].row)
+        assert.equals(#"é → ", got[1].col)
+        assert.equals(2, got[1].end_row)
+        assert.equals(lines[2]:find(")", 1, true), got[1].end_col)
+        assert.equals(2, got[1].fallback_row)
+        assert.equals(lines[2]:find("side.md", 1, true) - 1, got[1].fallback_col)
+        assert.equals("[long #370\n  @@hidden@@ label](side.md)", got[1].span)
+        assert.equals("#42", got[2].target)
+    end)
+
+    it("does not complete wrapped links across blanks, fences, headings or range edges", function()
+        for _, middle in ipairs({ "", "   ", "```", "~~~", "## Next" }) do
+            local lines = { "[not closed", middle, "label](side.md)" }
+            assert.same({}, candidates.collect(lines, { first = 1, last = 3 }))
+        end
+        assert.same({}, candidates.collect({ "[not closed", "label](side.md)" }, { first = 2, last = 2 }))
+        assert.same({}, candidates.collect({ "[not closed", "still open (side.md)" }, { first = 1, last = 2 }))
+        for _, next_item in ipairs({ "1. label](side.md)", "- label](side.md)" }) do
+            assert.same({}, candidates.collect({ "[not closed", next_item }, { first = 1, last = 2 }))
+        end
+    end)
+
+    it("confines wrapped spans to transcript markers and preserves plain Markdown fences", function()
+        local patterns = require("parley.document.lexical").patterns({})
+        for _, field in ipairs({"user_prefix", "assistant_prefix", "summary_prefix", "reasoning_prefix",
+            "tool_use_prefix", "tool_result_prefix", "branch_prefix", "local_prefix"}) do
+            local lines = {"[unfinished", patterns[field] .. " label](side.md)"}
+            assert.same({}, candidates.markdown_spans(lines, {first = 1, last = 2}, {transcript = true}))
+            local got = candidates.collect(lines, {first = 1, last = 2}, {transcript = true})
+            for _, item in ipairs(got) do assert.is_not.equals("markdown", item.kind) end
+            for _, fence in ipairs({"```", "~~~"}) do
+                lines = {fence, patterns[field] .. " [long", "label](side.md)", fence}
+                assert.same({}, candidates.markdown_spans(lines, {first = 1, last = 4}, {transcript = false}))
+                assert.same({}, candidates.collect(lines, {first = 1, last = 4}, {transcript = false}))
+            end
+        end
+    end)
+
+    it("keeps wrapped labels within text paragraphs rather than neighboring Markdown blocks", function()
+        for _, boundary in ipairs({"---", "- - -", "***", "* * *", "___", "_ _ _", "===", "=", "--",
+            "> quoted", "  > quoted", "#### Heading", "###### Heading"}) do
+            local lines = {"[unfinished", boundary, "label](side.md)"}
+            assert.same({}, candidates.markdown_spans(lines, {first = 1, last = 3}), boundary)
+            assert.same({}, candidates.collect(lines, {first = 1, last = 3}), boundary)
+        end
+        for level = 1, 6 do
+            for indent = 0, 3 do
+                for _, suffix in ipairs({"", " title", "\t"}) do
+                    local boundary = string.rep(" ", indent) .. string.rep("#", level) .. suffix
+                    local lines = {"[unfinished", boundary, "label](side.md)"}
+                    assert.same({}, candidates.markdown_spans(lines, {first = 1, last = 3}), boundary)
+                    assert.same({}, candidates.collect(lines, {first = 1, last = 3}), boundary)
+                end
+            end
+        end
+        for _, continuation in ipairs({"= =", "    > text", "    #### text", "    #", "#######"}) do
+            local got = candidates.markdown_spans({"[valid", continuation, "label](side.md)"},
+                {first = 1, last = 3}, {transcript = false})
+            assert.equals(1, #got, continuation)
+        end
+        local inline = candidates.collect({"> [inline](side.md)"}, {first = 1, last = 1})
+        assert.equals(1, #inline)
+        assert.equals("side.md", inline[1].target)
+        for _, start in ipairs({"1. [valid", "- [valid", "💬: [valid"}) do
+            local got = candidates.markdown_spans({start, "   label](side.md)"}, {first = 1, last = 2})
+            assert.equals(1, #got)
+            assert.equals("side.md", got[1].target)
+        end
+    end)
+
     it("enumerates only closed nonempty @@ spans and retains legacy starts", function()
         local line = "é @@  a@b.md  @@ and @@two.md@@ then @@unterminated"
         local refs = candidates.at_references(line)

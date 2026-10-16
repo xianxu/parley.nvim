@@ -36,7 +36,13 @@ that every recursive tool round rereads those files.
 `<M-o>` (alias `<C-g>o`) opens the reference under the cursor in chat and Markdown
 buffers. It handles `src:` links, inline branch links, `🌿:` reference lines,
 `@@` references, and ordinary local Markdown links. Direct references, including
-artifact references under the cursor, take priority. With no direct reference,
+artifact references under the cursor, take priority.
+Inline Markdown link labels may wrap across lines within a paragraph: any part
+of the label or destination still opens that link. The shared scanner retains
+the complete byte span and destination row for opening and fallback; nested
+artifact/@@ spellings inside the label are not separate entity choices. Blank
+rows, headings, new list items, fences and entity range edges stop a wrapped span.
+With no direct reference,
 it looks in the enclosing entity: a heading owns its section through the next
 same-or-higher heading; anywhere in a top-level numbered item owns that whole
 multi-line item. Interior blanks belong to the item, trailing blanks do not;
@@ -93,3 +99,16 @@ literals. Operator-configured paths have a separate audited allowlist.
 - `tests/integration/entity_resolve_spec.lua` — filesystem-backed resolver and stale-result suppression.
 - `scripts/check-sdlc-resolve-conformance.py` — opt-in real/fake resolver contract check with isolated temporary repositories; run `make -k check-sdlc-conformance` whenever the runner/fake changes and before closing that work.
 - `tests/arch/untrusted_path_spec.lua`, `tests/integration/untrusted_path_spec.lua` — expansion sinks and end-to-end inert path handling.
+
+Wrapped Markdown dispatch retains its identity for unsupported destinations: the
+direct and selected paths share the Markdown-only opener and fall back at the
+URL's row/byte position. Both scans receive the document-aware navigation fence
+memo; transcript structural prefixes stop cross-boundary joins, while chat-like
+text in plain Markdown never resets a fence.
+
+Paragraph walls include thematic breaks (compact or spaced), Setext underlines,
+all six ATX heading levels, and blockquote rows. A list/chat anchor may begin a
+wrapped label but never continue a span opened in an earlier block.
+
+ATX walls include empty and nonempty headings at levels 1–6 with up to three
+leading spaces; end-of-line after the hashes is a valid heading terminator.

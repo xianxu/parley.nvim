@@ -116,7 +116,7 @@ vim.api.nvim_create_autocmd("VimLeavePre", { callback = function()
 end })
 EOF
 
-" Preserve ordinary per-file deadlines; the scoped runner extends only the
-" real 50k-row conformance corpora, including mapped make runs.
+" One runner owns completed-case progress and an absolute runtime ceiling;
+" mapped and full runs share its child bootstrap and existing corpus budgets.
 command! -nargs=1 -complete=file PlenaryBustedFile
       \ lua require('tests.helpers.spec_runner').run([[<args>]])

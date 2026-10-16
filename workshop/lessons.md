@@ -1,5 +1,11 @@
 # Lessons
 
+## 2026-10-15 (#337 — whole-file deadline flakes)
+
+- Close BR-1: native conformance that asserts a specific deadline reason must control the load/CPU inputs; at the supported cap, idle and absolute coincide. Exercise ordinary and capped inputs through the same runner seam, preserving the model’s explicit precedence.
+
+- A startup CPU-load sample cannot establish how much useful work a growing spec file contains. Keep hang detection tied to completed cases (including fixture teardown), with a separately tested absolute ceiling; arbitrary log output must never refresh it. Verify deadline state with a virtual clock and child ownership with actual process exits.
+
 ## 2026-10-14 (#329 — generated skill ignores)
 
 - Isolated reviewers may lack a declared substrate. For generator-cleanliness claims, capture the code/substrate pins, compiler exit, before/after output checksums, and clean status as measured host evidence; a prose success claim alone is insufficient (BR-1).
@@ -518,6 +524,9 @@ oracle, and the mutation that would make the test fail.
   API callers can enter several real files before yielding. Start empty-window
   histories synchronously at BufEnter/Back, excluding a fresh WinEnter clone;
   test API creation followed immediately by multiple file entries (#333 BR-2).
+- A multiline occurrence needs its full raw span and destination row, not just
+  its opening row and columns. Reserve every row of that span before scanning
+  subordinate references; otherwise wrapped labels leak artifact/@@ choices (#335).
 ## 2026-10-15 (#327 — enclosing-entity navigation)
 
 - A selected occurrence is an identity, not a cursor hint. Dispatch its kind and exact span/target; replay through a legacy nearest-reference parser can open a sibling, and even an isolated Markdown span can reinterpret an embedded @@ label when its destination is unsupported (plan PQ-1).
@@ -532,3 +541,12 @@ oracle, and the mutation that would make the test fail.
 - Match the complete shared document classifier when selecting a filesystem route; timestamp spelling alone also matches ordinary dated notes.
 - A subprocess output pathname can exist before its payload is written. Wait for exact bytes and lifecycle completion, and distinguish a per-request deadline from the budget for a multi-command editor interaction.
 - Register new state-directory readers in the corruption registry as they are introduced; reuse the shared directory and checked-write seams before the full-suite boundary.
+## 2026-10-15 (#336 — packaging VM guest confinement flake)
+
+- An interactive flow's completion is its last UI effect, not the side file it writes. A probe that drives a login must wait for the flow's own settle signal (here, the reopened model picker) and dismiss it, or the scheduled UI lands over later steps. Assert properties of the object a step created (the captured chat buffer's file), never of current focus. Prove that with a deliberate focus change before the assertion.
+- A recognized Markdown span owns its destination even when unsupported: use the same Markdown-only opener for direct and selected navigation, then fall back at the destination; never reinterpret @@ text in its label.
+- Multiline scans must receive document context. Reuse the navigation fence memo and lexical structural kinds; test every configured transcript prefix and plain Markdown fenced examples containing chat-like text.
+
+- A multiline inline scanner needs an explicit block-containment rule, not only blank/fence checks. Enumerate heading forms, thematic breaks, quotes, list/chat starts and range edges, with positive supported starts as well as negative joins.
+
+- Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.

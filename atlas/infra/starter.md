@@ -258,7 +258,10 @@ is available in ordinary plugin setup as well as the starter.
 in both entry points. Missing setup opens its logged-out provider rows; login
 returns to the same picker with the refreshed catalog. Model selection resumes
 the pending action at the original buffer and cursor. Cancellation or changed
-source cancels that action. Selected non-proxy agents retain their normal path;
+source cancels that action. A connection stays open until that returned picker
+resolves, not when the credential file appears; `starter_onboarding.is_connecting`
+reports it, and the packaged guest probe waits on it before chat dispatch (#336).
+Selected non-proxy agents retain their normal path;
 headless startup never opens dialogs. The placeholder is hidden from the picker.
 
 `cliproxy.live_models.tools` flows through the shared `live_agent_options` into
