@@ -1,13 +1,13 @@
 ---
 id: 000344
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: '37864511d850cd92030051fe041860b91dfeaecb' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '09fb1717a5a647d9fd66fc24223489dc68bd713f' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T00:15:31-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "d45ae54a"}
+actual_hours: 0.01
 ---
 
 # help-parley omits the make goldens and make perf-finder targets
