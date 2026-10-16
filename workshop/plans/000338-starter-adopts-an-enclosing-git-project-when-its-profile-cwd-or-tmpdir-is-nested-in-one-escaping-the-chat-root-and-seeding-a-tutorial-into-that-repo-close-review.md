@@ -148,3 +148,70 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"a0ce1e5e-338c-4e01-8d94-1d3a29e162ab","repository":"github.com/xianxu/parley.nvim","issue_id":"000338","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/4d99f9c643e9ef42","reviewed_head":"57a01cb7a5314ab43df667f38e7d2adab55f994a","slot":"parley.nvim:3","requested_at":"2026-10-16T00:57:52.282735Z"},"phase":"finished","pid":37408,"started_at":"2026-10-16T00:57:52.564789Z","finished_at":"2026-10-16T01:08:36.137352Z","session_id":"887339a4-b56e-470e-80e5-783b2738c49e","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-15T18:13:08-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 338 — Starter adopts an enclosing git project when its profile cwd or TMPDIR is nested in one, escaping the chat root and seeding a tutorial into that repo |
+| repo | parley.nvim |
+| issue file | workshop/issues/000338-starter-adopts-an-enclosing-git-project-when-its-profile-cwd-or-tmpdir-is-nested-in-one-escaping-the-chat-root-and-seeding-a-tutorial-into-that-repo.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 36e79af6c737cc323a957f64f128345c5a35940b..9b518f2d19e311e84bc8dbeeaee1a8c4c95d26de |
+| command | sdlc close --issue 338 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-15T18:13:08-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Still checking the BR-2 fix. Next I'll find the test runner and run the guard spec.
+
+Found a writable temp dir outside the checkout. Next I rerun the spec there, then revert the fix and run it again.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The BR-2 fix is correct, and I proved it by reverting it. `marked_scratch` in `tests/arch/scratch_placement_spec.lua:54-62` now takes the parent (`:h`) only of `tempname()`, which names a file, and passes `$HOME` to `detect_root` unchanged. The new case at `:73-81` puts a `.parley` marker directly inside a fake `$HOME`. With TMPDIR outside the checkout, the spec passes 8/0 at head. When I put `:h` back on `$HOME`, the new case fails and the other 7 still pass, so the test only goes green with the fix. I then restored the file, and the working tree was clean. The main #338 fix still holds: `starter_project_spec` passes 6/0 with TMPDIR outside the checkout.
+
+One run is not a defect but you should know about it. With the review's own TMPDIR, which sits inside this marked checkout (`.sdlc-review/tmp`), `scratch_placement_spec` fails 8/8. That is the guard working as designed: round 2 declared that setup unsupported. It is not a problem with this change.
+
+1. **Strengths**
+   - `lua/parley/starter.lua:91,183`: the profile chat directory (`options.chat_dir`) is passed into `welcome()` explicitly. The project-mode primary is saved in `primary` and restored afterwards (`:123,155`), so `parley.config.chat_dir` comes back unchanged after startup.
+   - `tests/integration/starter_project_spec.lua:29-41`: the tests check real behaviour, with no mocks. The opened buffer must be the profile's `welcome.md` and a recognized chat, every tutorial must be in the profile, and none may be in the project.
+   - `tests/arch/scratch_placement_spec.lua:54`: the guard is one function, `marked_scratch`. The real check and the self-test both call it, so the self-test exercises exactly the code that guards the suite.
+   - `atlas/infra/starter.md:253-254` is updated, and its wording matches the code.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings**
+   - `scratch_placement_spec.lua:78`: `delete(home)` runs after `marked_scratch`. If that call throws, the temp dir is left behind. It is harmless (scratch space only), and nothing needs to change.
+
+5. **Test coverage notes**
+   - The guard is checked both ways: no marker (the real-environment case) and a marker in `$HOME` (the self-test).
+   - The `tempname()` side is protected through the same function by the first `it`. No separate case puts a marker above `tempname()`. Round 2 verified that path by hand (6/1).
+
+6. **Architectural notes**
+   - ARCH-DRY: pass. The guard logic is now one shared helper.
+   - ARCH-PURE: pass. The helper takes its paths as arguments, which is why the self-test can inject a fake `$HOME`. The IO is limited to the existing `detect_root` file check.
+   - ARCH-PURPOSE: pass. The product purpose is delivered: the starter never seeds tutorials into a project the operator didn't choose. The hermetic-scratch rule is enforced once at the harness, as round 2 accepted. No new instance of the `spec-hermetic-to-marked-ancestor` family turned up.
+
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      marked_scratch passes $HOME to detect_root without :h (scratch_placement_spec.lua:60); the new case at :73 goes red (7/1) when :h on $HOME is reinstated and green (8/0) at head, with TMPDIR outside the checkout.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"129ff7b3-230f-41dd-a8ce-c988021afdba","repository":"github.com/xianxu/parley.nvim","issue_id":"000338","recipe":"small-diff-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/97873e164baa1a7c","reviewed_head":"9b518f2d19e311e84bc8dbeeaee1a8c4c95d26de","slot":"parley.nvim:3","requested_at":"2026-10-16T01:11:30.67895Z"},"phase":"finished","pid":80254,"started_at":"2026-10-16T01:11:30.822849Z","finished_at":"2026-10-16T01:13:07.784153Z","session_id":"997ba0fe-bddb-462d-a3e7-4f5a6efee9bb","outcome":"returned"}] -->

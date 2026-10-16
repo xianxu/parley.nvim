@@ -145,6 +145,77 @@ rounds:
       isolation: checkout
       reviewed: 57a01cb7a5314ab43df667f38e7d2adab55f994a
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 129ff7b3-230f-41dd-a8ce-c988021afdba
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000338"
+            recipe: small-diff-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/97873e164baa1a7c
+            reviewed_head: 9b518f2d19e311e84bc8dbeeaee1a8c4c95d26de
+            slot: parley.nvim:3
+            requested_at: "2026-10-16T01:11:30.67895Z"
+          phase: finished
+          pid: 80254
+          started_at: "2026-10-16T01:11:30.822849Z"
+          finished_at: "2026-10-16T01:13:07.784153Z"
+          session_id: 997ba0fe-bddb-462d-a3e7-4f5a6efee9bb
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 9b518f2d19e311e84bc8dbeeaee1a8c4c95d26de
+        tracker_head: 0a27a3119e5340de30aaca5a5099bcb77d5812ad
+        branch_point: 36e79af6c737cc323a957f64f128345c5a35940b
+        since: "2026-10-15T17:04:18-07:00"
+        until: "2026-10-15T18:10:52-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-15T17:04:18-07:00"
+              end: "2026-10-15T18:10:52-07:00"
+              began: "2026-10-15T17:04:18-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 996b651e-5e17-47f4-9815-33d9ff25fe0d
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 6844d2e56dd0c920683a0f3b1a7c03ba25298193ba8d10ab525afabe269c07aa
+              started: "2026-10-15T18:27:53.241Z"
+              spawned: false
+              bytes: 2002131
+              windows:
+                - start: "2026-10-15T17:04:18-07:00"
+                  end: "2026-10-15T18:10:52-07:00"
+        cuts:
+            - dispatched: "2026-10-15T17:18:45-07:00"
+              finalized: "2026-10-15T17:20:26-07:00"
+              finalizing: false
+            - dispatched: "2026-10-15T17:57:52-07:00"
+              finalized: "2026-10-15T18:08:46-07:00"
+              finalizing: true
+      "n": 3
+      timestamp: "2026-10-15T18:13:08-07:00"
+      dispatched: "2026-10-15T18:11:30-07:00"
+      agent: claude
+      dispose:
+        - id: BR-2
+          disposition: addressed
+          note: marked_scratch passes $HOME to detect_root without :h (scratch_placement_spec.lua:60); the new case at :73 goes red (7/1) when :h on $HOME is reinstated and green (8/0) at head, with TMPDIR outside the checkout.
+          round: 3
+      recipe: small-diff-review
+      isolation: checkout
+      reviewed: 9b518f2d19e311e84bc8dbeeaee1a8c4c95d26de
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#338 (boundary-review)
@@ -170,6 +241,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-2** [Minor] `spec-hermetic-to-marked-ancestor` (kind: defect) Ancestor guard checks the parent of $HOME, so a marker in $HOME itself is missed
   scratch_placement_spec.lua:59 applies :h to both paths. That is right for tempname() (a file) but skips $HOME itself (a directory). Check detect_root on $HOME directly. Only this one site in the window.
 
+## Round 3 — 2026-10-15T18:13:08-07:00 (claude) — passed
+
+### Disposed
+
+- BR-2 — addressed — marked_scratch passes $HOME to detect_root without :h (scratch_placement_spec.lua:60); the new case at :73 goes red (7/1) when :h on $HOME is reinstated and green (8/0) at head, with TMPDIR outside the checkout.
+
 ## Open findings
 
-- **BR-2** [Minor] `spec-hermetic-to-marked-ancestor` (kind: defect) Ancestor guard checks the parent of $HOME, so a marker in $HOME itself is missed
+(none — every finding has been disposed)
