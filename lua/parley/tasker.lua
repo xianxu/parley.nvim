@@ -607,7 +607,9 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
     -- A reader that throws has lost its place in the stream: the bytes it was
     -- handed are gone, and the next piece would be read as if they had landed.
     -- End the attempt with the reason instead of streaming past it (#229). Its
-    -- EOF is still delivered once, so it can release what it holds (#182).
+    -- terminal calls still arrive so it can release what it holds (#182): a read
+    -- error is one notice, (err, nil), then every stream ends with exactly one
+    -- EOF, (nil, nil).
     local failed_readers={}
     local function read(stream,reader,err,data)
         if failed_readers[stream] and data~=nil then return end

@@ -614,6 +614,22 @@ describe("tasker.run integration", function()
             assert.equals(0, #tasker._handles)
         end)
 
+        it("a read error reaches the reader as one notice, then exactly one EOF (#229)", function()
+            local runtime, state = fake_uv()
+            tasker._uv = runtime
+            local calls, terminals = {}, 0
+            run(nil, "fake", {}, function() terminals = terminals + 1 end, function(err, data)
+                calls[#calls + 1] = { err = err, data = data }
+            end, nil)
+            state.pipes[1].reader(nil, "out")
+            state.pipes[1].reader("ECONNRESET", nil)
+            state.pipes[1].reader(nil, nil) -- a late EOF after the error is ignored
+            state.pipes[2].reader(nil, nil)
+            state.on_exit(0, 0)
+            assert.is_true(vim.wait(100, function() return terminals == 1 end, 5))
+            assert.same({ { data = "out" }, { err = "ECONNRESET" }, {} }, calls)
+        end)
+
         it("cleans up and emits finished when the public terminal throws", function()
             local runtime, state = fake_uv()
             tasker._uv = runtime
