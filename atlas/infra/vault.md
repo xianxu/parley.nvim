@@ -10,7 +10,10 @@ These credential stores have different owners:
 
 - Provider API keys live in the private Lua vault and are removed from public
   setup configuration. They are resolved for provider requests, not stored in
-  a general configuration dump.
+  a general configuration dump. Each `setup{}` replaces the vault's keys (#204):
+  re-sourcing the config takes effect on the next request or proxy render, and
+  `:ParleyProxy restart` names the setup time its client key came from. Within
+  one setup the first value wins, so `api_keys` beats a `provider.secret`.
 - CLIProxyAPI account JSON lives in the explicit shared `~/.cli-proxy-api`
   directory. App profile isolation and uninstall do not remove those logins.
 - Document-provider OAuth accounts use the OS credential store: macOS `security`

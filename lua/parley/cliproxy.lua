@@ -746,6 +746,8 @@ end
 --- No-op pass-through when the feature isn't opted in.
 ---@param callback fun()
 ---@param on_error fun(msg: string)|nil
+local port_identity -- defined with the process-table reads below; used on a 401
+
 function M.ensure_running(callback, on_error)
     on_error = on_error or function() end
     if not M.is_managed() then
@@ -775,8 +777,10 @@ function M.ensure_running(callback, on_error)
             return callback() -- reuse the already-running (brew service / other nvim)
         end
         if state == "client_key_mismatch" then
-            return on_error("cliproxy: client api-key mismatch — the rendered api-keys "
-                .. "do not match the bearer parley sends (check api_keys.cliproxyapi)")
+            -- Failure branch only, so the synchronous ps+lsof read stays off the
+            -- dispatch hot path (#204).
+            local prefix = (require("parley").config or {}).cmd_prefix or "Parley"
+            return on_error(rel.mismatch_message(port_identity(port), port, prefix))
         end
         if state == "foreign" then
             return on_error("cliproxy: port " .. port .. " is held by a non-cliproxy process")
@@ -1075,8 +1079,9 @@ end
 -- command line was read, else { err = why } (cliproxy_release.running_identity).
 -- Never a guess: a read that failed is "could not tell", which update reports as
 -- such and never restarts (#237 BR-8). Synchronous ps + lsof (~80-150 ms);
--- :ParleyProxy update only, never the dispatch path.
-local function port_identity(port)
+-- :ParleyProxy update, and a dispatch that already failed with a 401 (#204) —
+-- never a dispatch that is still on its way.
+port_identity = function(port)
     local ok, id, why = pcall(function()
         local out, ps_err = ps_output()
         if not out then

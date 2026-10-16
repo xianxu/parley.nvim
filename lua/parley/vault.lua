@@ -28,6 +28,14 @@ end
 V.setup = function(opts)
 	logger.debug("vault setup started\n" .. vim.inspect(opts), true)
 
+	-- setup{} is the one authority on secrets (#204): a re-run setup must
+	-- replace what the last one loaded, or an edited key keeps rendering the
+	-- value first seen this session. First-write-wins (add_secret) still holds
+	-- WITHIN one setup, so a provider.secret never clobbers api_keys.
+	secrets = {}
+	V._obfuscated_secrets = {}
+	V.loaded_at = os.time()
+
 	V.config.curl_params = opts.curl_params or default_config.curl_params
 	V.config.state_dir = opts.state_dir or default_config.state_dir
 

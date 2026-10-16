@@ -395,7 +395,12 @@ M.register_proxy_command = function(prefix)
 			-- restart_managed waits for the old proxy to release the port; the
 			-- no-wait restart could reuse a proxy still shutting down (#237).
 			cliproxy.restart_managed(function()
-				vim.notify("cliproxy: restarted", vim.log.levels.INFO)
+				-- A restart re-renders from the vault, which only setup{} fills, so
+				-- say which setup the client key came from (#204): an edit to the
+				-- config file is invisible until setup re-runs.
+				local loaded = M.vault.loaded_at and os.date("%H:%M:%S", M.vault.loaded_at) or "?"
+				vim.notify(("cliproxy: restarted (client key from setup() at %s; re-run setup or "
+					.. "restart nvim to pick up config edits)"):format(loaded), vim.log.levels.INFO)
 			end, function(msg)
 				vim.notify(msg, vim.log.levels.ERROR)
 			end)

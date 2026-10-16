@@ -339,6 +339,9 @@ describe("cliproxy IO lifecycle", function()
             local outcome = run_ensure()
             assert.is_false(outcome.ok)
             assert.is_truthy(outcome.msg:find("api%-key"))
+            -- #204: the fake was not launched from parley's rendered config, so
+            -- the message must not blame a stale proxy alone; it names the key.
+            assert.is_truthy(outcome.msg:find("api_keys.cliproxyapi", 1, true))
         end)
 
         it("errors (no hang) when the spawned binary crashes", function()

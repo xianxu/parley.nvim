@@ -323,6 +323,34 @@ describe("vault", function()
         end)
     end)
 
+    describe("Group F: a re-run setup replaces the secrets (#204)", function()
+        local original_prepare
+        before_each(function()
+            original_prepare = helpers.prepare_dir
+            helpers.prepare_dir = function() end
+        end)
+        after_each(function()
+            helpers.prepare_dir = original_prepare
+        end)
+
+        it("F1: setup drops the previous setup's secrets, so a changed key is the one read", function()
+            vault.setup({ state_dir = "/unused" })
+            vault.resolve_secret("cliproxyapi", "parley_local") -- stores + obfuscates
+            assert.is_not_nil(vault._obfuscated_secrets.cliproxyapi)
+
+            vault.setup({ state_dir = "/unused" })
+            assert.is_nil(vault.get_secret("cliproxyapi"))
+            assert.is_nil(vault._obfuscated_secrets.cliproxyapi)
+            vault.add_secret("cliproxyapi", "parley-local")
+            assert.equals("parley-local", vault.get_secret("cliproxyapi"))
+        end)
+
+        it("F2: setup records when it loaded, for the restart notice", function()
+            vault.setup({ state_dir = "/unused" })
+            assert.is_true(math.abs(vault.loaded_at - os.time()) <= 1)
+        end)
+    end)
+
     describe("Group E: alias resolution consistency", function()
         it("E1: alias works consistently across add, get, resolve, run_with", function()
             vault.add_secret("openai", "sk-alias-test")
