@@ -326,9 +326,20 @@ M._restore_all = restore_all
 -- Branch line processing
 --------------------------------------------------------------------------------
 
+--- Escape chat text for HTML text or a double-quoted attribute value (#243).
+--- Function replacement: a `%` in a string replacement corrupts under LuaJIT.
+local HTML_ESCAPES = { ["&"] = "&amp;", ["<"] = "&lt;", [">"] = "&gt;", ['"'] = "&quot;" }
+local function escape_html(s)
+	return (s:gsub('[&<>"]', function(c) return HTML_ESCAPES[c] end))
+end
+
 --- Build a branch navigation div (shared by both HTML and markdown formats).
+--- Escapes `topic` and `href` (chat text); `arrow` is trusted HTML. Neither
+--- format escapes the result later: html restores it after the body's escape,
+--- and markdown carries it as a raw HTML block (#243).
 --- @param opts table|nil optional { markdown_safe = true } to add markdown="0" for Kramdown
 local function make_branch_div(class, arrow, topic, href, opts)
+	topic = escape_html(topic)
 	local md_attr = (opts and opts.markdown_safe) and ' markdown="0"' or ""
 	if href then
 		return '<div class="branch-nav '
@@ -336,7 +347,7 @@ local function make_branch_div(class, arrow, topic, href, opts)
 			.. '"'
 			.. md_attr
 			.. '><a href="'
-			.. href
+			.. escape_html(href)
 			.. '">'
 			.. arrow
 			.. " "
@@ -344,6 +355,11 @@ local function make_branch_div(class, arrow, topic, href, opts)
 			.. "</a></div>"
 	end
 	return '<div class="branch-nav ' .. class .. '"' .. md_attr .. ">" .. arrow .. " " .. topic .. "</div>"
+end
+
+--- Build an inline branch link; escapes like make_branch_div (#243).
+local function make_branch_anchor(href, topic)
+	return '<a href="' .. escape_html(href) .. '" class="branch-inline">' .. escape_html(topic) .. "</a>"
 end
 
 --- Process lines, replacing 🌿: branch lines with navigation links.
@@ -422,11 +438,11 @@ local function process_branch_lines(lines, parsed, format, link_map, file_dir, b
 					elseif format == "html" then
 						placeholder_count = placeholder_count + 1
 						local key = BRANCH_PLACEHOLDER.token(placeholder_count)
-						placeholders[key] = '<a href="' .. target_filename .. '" class="branch-inline">' .. link.topic .. "</a>"
+						placeholders[key] = make_branch_anchor(target_filename, link.topic)
 						replacement = key
 					elseif format == "markdown" then
 						local slug = target_filename:gsub("%.markdown$", "")
-						replacement = '<a href="{% post_url ' .. slug .. ' %}" class="branch-inline">' .. link.topic .. "</a>"
+						replacement = make_branch_anchor("{% post_url " .. slug .. " %}", link.topic)
 					else
 						replacement = link.topic
 					end

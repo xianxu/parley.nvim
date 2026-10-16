@@ -44,6 +44,34 @@ describe("Tree export", function()
 	end
 
 	describe("Group A: HTML tree export", function()
+		it("A0: escapes a branch topic in the exported page (#243)", function()
+			local root = create_chat_file("2024-03-15-root.md", [[---
+topic: Root Chat
+file: 2024-03-15-root.md
+---
+💬: Hello
+
+🤖: Hi, see [🌿:<script>alert(2)</script>](2024-03-15-child.md)
+
+🌿: 2024-03-15-child.md: <script>alert(1)</script>
+]])
+			create_chat_file("2024-03-15-child.md", [[---
+topic: Child Chat
+file: 2024-03-15-child.md
+---
+🌿: 2024-03-15-root.md: Root Chat
+
+💬: Follow up
+]])
+			vim.cmd("edit " .. root)
+			M.cmd.ExportHTML()
+			local page = table.concat(vim.fn.readfile(export_html_dir .. "/2024-03-15-root_chat.html"), "\n")
+			for _, n in ipairs({ "1", "2" }) do
+				assert.is_nil(page:find("<script>alert(" .. n .. ")", 1, true), "raw topic " .. n .. " in the page")
+				assert.is_truthy(page:find("&lt;script&gt;alert(" .. n .. ")&lt;/script&gt;", 1, true), "topic " .. n .. " missing")
+			end
+		end)
+
 		it("A1: exports all files in a tree from child", function()
 			create_chat_file("2024-03-15-root.md", [[---
 topic: Root Chat

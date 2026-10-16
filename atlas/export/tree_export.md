@@ -6,6 +6,9 @@ Triggered automatically when exported chat has `🌿:` links. Walks parent chain
 - Parent: `<- Back to: <topic>` breadcrumb at top
 - Children: `-> Branch: <topic>` inline
 - HTML uses relative `<a href>`, Markdown uses Jekyll `{% post_url %}` syntax
+- The topic and href are HTML-escaped where each link is built (`make_branch_div`,
+  `make_branch_anchor`). Neither format escapes them later: HTML restores the
+  link after the body's escape, and Markdown carries it as a raw HTML block (#243).
 
 ## Edge Cases
 Missing files get plain text labels (no link). Circular refs tracked via visited set. Dangling branches skipped with summary printed after export.
