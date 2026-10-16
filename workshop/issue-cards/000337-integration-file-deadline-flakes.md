@@ -1,6 +1,6 @@
 ---
 id: 000337
-status: codecomplete
+status: done
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 013b81fccc9f2153a1202fff33c01460106e1f15
         evidence_commit: 227eb310770fe838bf6e3b5fc9f8dd7def78f278
+        landed_commit: 894936fa886f16e92292f2e57f071e356f1db938
 ---
 
 # Flake: integration files exceed a load-dependent whole-file deadline
