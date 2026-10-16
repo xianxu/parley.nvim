@@ -57,8 +57,8 @@ e.g. flash the winbar three times.
 - [x] Add headless regressions for exact pulse count/message, free/submitted/
   undone turns, saved-but-unsubmitted turns, duplicate events, split isolation,
   navigation during a pulse and safe restoration. Map through modes/session_sync.
-- [ ] Document, run targeted and recorded full tests, coordinate a staged live
-  check, close through SDLC and land on SHIP.
+- [x] Document and run targeted and recorded full tests. Acceptance is smoke
+  testing in use, per the revision below; close and landing are SDLC-owned gates.
 
 
 ## Log
@@ -138,3 +138,13 @@ This includes the final queued-leave guard and current-main #356 integration.
 Fourteen controlled native-event regressions passed separately; production
 additions remain 87 lines. PR #276 is ready for the hub's live-check sequence.
 No stage or operator acceptance claimed; final close/landing await that check.
+
+### 2026-10-16 — acceptance revised to smoke testing in use
+
+Hub delivery 5f93392b-ae5f-4a74-9950-b0108f259300 reports the operator's
+decision to keep testing as they use the system. No separate stage or live
+check is required for this visual pulse with fourteen focused regressions.
+Authorized to run the close review and land on SHIP; smoke testing continues
+in use and any discovered issue is fixed forward. This supersedes the pending
+live-check notes above. Implementation, documentation and verification are
+complete; close review and landing remain gate-owned.
