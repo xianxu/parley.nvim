@@ -73,6 +73,8 @@ Full-flow, single close boundary. Detailed design: [breadcrumb winbar plan](../p
 - Collision regression /tmp/parley353-core-collision-red.log fails for irreducible stripped names; /tmp/parley353-core-collision-green.log passes7 breadcrumb and12 history-model cases after original-identity fallback.
 - No staging: TL reserves :0 and will sequence the live check after green review.
 
+- Final API contract adversary: a named file containing an unsupported control character returned nil without the promised reason. /tmp/parley353-snapshot-reason-red.log has44 passes/1 expected failure; the corrected cached projection preserves nil,reason and /tmp/parley353-snapshot-reason-green.log passes45 real-history cases. This is a production change after the first suite head, so final required-suite evidence will use the new head.
+
 ## Revisions
 
 ### 2026-10-16 — #354 persisted-trail coordination

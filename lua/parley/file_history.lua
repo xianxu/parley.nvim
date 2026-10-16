@@ -48,7 +48,8 @@ end
 function M.peek(win)
     local history = histories[window(win)]
     local current = history and history.entries[history.index]
-    return current and current.trail and breadcrumb.validate(current.trail) or nil
+    if not current or not current.trail then return nil, "window has no valid breadcrumb" end
+    return breadcrumb.validate(current.trail)
 end
 
 -- Snapshots contain values only; observers and callers cannot share mutable paths.
