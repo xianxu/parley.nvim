@@ -1,12 +1,12 @@
 ---
 id: 000341
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-15
 updated: 2026-10-15
 estimate_hours:
-card_mirror: 'ba78beab37e5a2d8f05b3ab607b79cdf1725f4f0' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '9ffa91446fb8a86a7981416ffac0520d6792aea9' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T19:13:39-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "e95c79f0", done: "bd766b2f"}
+actual_hours: 0.18
 ---
 
 # Generation machine rejects some output and receipt events without an outcome, possibly hanging the generation
