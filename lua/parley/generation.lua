@@ -350,13 +350,12 @@ function M.transition(handle,event)
         -- inflight and the queue stalled with no outcome (#341). An inconsistent
         -- one cannot say what landed, so it stops uncertain, crediting only the
         -- committed bytes it can vouch for.
-        if not integer(committed) or not integer(attempted) or attempted<1 or attempted>pending.bytes
-            or committed<0 or committed>attempted or (status~='applied' and status~='suspended'
-                and status~='revoked' and status~='uncertain')
+        local counted=integer(attempted) and attempted>=1 and attempted<=pending.bytes
+            and integer(committed) and committed>=0 and committed<=attempted
+        if not counted or (status~='applied' and status~='suspended' and status~='revoked' and status~='uncertain')
             or (status=='applied' and committed~=attempted) then
             status='uncertain'
-            local bounded=integer(attempted) and attempted>=1 and attempted<=pending.bytes
-            if not bounded or not integer(committed) or committed<0 or committed>attempted then committed=0 end
+            if not counted then committed=0 end
         end
         local item=pending.item;s.inflight=nil
         s.committed_bytes=s.committed_bytes+committed

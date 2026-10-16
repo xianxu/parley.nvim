@@ -73,6 +73,7 @@ Measurement (2026-10-15, :3), red tests on the production machine and runner:
 - Output after completion: unreachable from the adapter (it emits only while alive); the machine's reject stays ignorable.
 - Focused: generation unit 70/0, sequences 33/0, provider 11/0, and 17 generation/response/chat spec files all pass; lint clean.
 - Full suite on b8a98818: exit 0, lint clean (736 files).
+- Close advisory (a), folded in at the TL's SHIP: the receipt's attempted/committed validity is computed once (`counted`), used for both the uncertain decision and the credit. Same behavior: machine 70/0, sequences 33/0, provider 11/0, lint clean. (b), the untested missing-blob branch, stays as recorded: a seam only for an unreachable branch is worse than the gap (TL agreed).
 
 ## Revisions
 
