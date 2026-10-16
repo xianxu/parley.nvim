@@ -330,15 +330,48 @@ describe("cliproxy IO lifecycle", function()
             assert.is_truthy(outcome.msg:find("non%-cliproxy"))
         end)
 
-        it("errors on a client api-key mismatch", function()
+        -- #204: a 401 names its cause from who holds the port. fake_ps prints
+        -- the process table, so identity is decided by the case rather than by
+        -- the sandbox; lsof is the real one, reading the fake's real listener.
+        local FAKE_PS = vim.fn.getcwd() .. "/tests/fixtures/fake_ps"
+        local function mismatch_with(listener_command)
             local port = ready_port.free_port()
             set_endpoint(port)
-            start_fake(port, "client_key_mismatch")
+            local pid = start_fake(port, "client_key_mismatch")
             ready_port.wait_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
-            local outcome = run_ensure()
+            if listener_command then
+                local config_path = await(function(done) cliproxy.status(done) end).config_path
+                vim.env.PARLEY_FAKE_PS_ROWS = ("%d Sat Sep 12 12:00:00 2026 %s"):format(
+                    pid, listener_command(config_path))
+                cliproxy._set_process_tools({ ps = FAKE_PS })
+            else
+                cliproxy._set_process_tools({ ps = "parley-test-no-such-ps" })
+            end
+            local ok, outcome = pcall(run_ensure)
+            cliproxy._set_process_tools(nil)
+            vim.env.PARLEY_FAKE_PS_ROWS = nil
+            assert(ok, outcome)
             assert.is_false(outcome.ok)
-            assert.is_truthy(outcome.msg:find("api%-key"))
+            assert.is_truthy(outcome.msg:find("api%-key mismatch on port " .. port))
+            return outcome.msg
+        end
+
+        it("calls a 401 from parley's own proxy stale, and points at restart", function()
+            local msg = mismatch_with(function(config_path) return FAKE .. " -config " .. config_path end)
+            assert.is_truthy(msg:find("the proxy is stale", 1, true))
+            assert.is_nil(msg:find("was not started by parley", 1, true))
+        end)
+
+        it("calls a 401 from a proxy parley did not start a config problem", function()
+            local msg = mismatch_with(function() return "/opt/homebrew/bin/cliproxyapi -config /elsewhere.yaml" end)
+            assert.is_truthy(msg:find("(/opt/homebrew/bin/cliproxyapi) was not started by parley", 1, true))
+            assert.is_nil(msg:find("stale", 1, true))
+        end)
+
+        it("says it could not tell when the process table is unreadable", function()
+            local msg = mismatch_with(nil)
+            assert.is_truthy(msg:find("could not tell who started the proxy (ps unavailable)", 1, true))
         end)
 
         it("errors (no hang) when the spawned binary crashes", function()

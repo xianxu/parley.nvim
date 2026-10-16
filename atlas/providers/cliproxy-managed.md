@@ -57,7 +57,10 @@ accounts. The command surface is defined by `SUBS_HELP` in `lua/parley/init.lua`
   (`parse_version`/`compare_versions`), the parsers for GitHub's
   `releases/latest` redirect and the proxy's `X-Cpa-Version` header,
   `running_identity` (who holds the managed port), the update decision table
-  (`update_refusal`, `plan_update`), and the status text (`version_summary`).
+  (`update_refusal`, `plan_update`), the status text (`version_summary`), and
+  `mismatch_message` (#204: a 401 from parley's own proxy means a stale
+  proxy and calls for a restart; from anyone else's proxy it means that proxy's
+  api-keys, so the config has to change).
   Unit-tested, no mocks.
 - **`cliproxy.lua`** (IO): `discover_binary` (`cliproxy.binary_path` → parley's
   managed download → `cliproxyapi`/`cli-proxy-api` on PATH), `health_probe`

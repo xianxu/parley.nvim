@@ -1,5 +1,10 @@
 # Lessons
 
+## 2026-10-15 (#204 — vault reset on setup)
+
+- Resetting a store also has to cover what is derived from it. #204 reset the vault's keys on setup, but the copilot bearer cache and any in-flight resolver still carried the old key (close-review advisory). List the derived state and the async writers before claiming "takes effect".
+- An integration assertion has to tell the branches apart: a substring shared by two of three messages pins no wiring.
+
 ## 2026-10-15 (#337 — whole-file deadline flakes)
 
 - Close BR-1: native conformance that asserts a specific deadline reason must control the load/CPU inputs; at the supported cap, idle and absolute coincide. Exercise ordinary and capped inputs through the same runner seam, preserving the model’s explicit precedence.
