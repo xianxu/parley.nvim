@@ -192,4 +192,13 @@ Before merge (a gate held by the TL, not a build step): the operator decides on 
   Tests: a symlinked-dir case and a no-entry case. The old identity mutation
   fails both; the writing-lookup mutation fails the second. remote_references 50,
   helper_io 11, chat_tree_context 10, green.
+- Close review round 3, BR-8 (Important), in the file-identity family: a
+  fetch for another file's reference was saved in the current file's cache,
+  where no lookup reads it, so it was fetched on every submit. The rule now
+  applies at every read and write site: a reference's cache entry lives under
+  the key of the file that holds it, and `queue_fetch` records that file.
+  Minor: `peek` loses its raw-name fallback, which could never match a
+  resolved path. A test case shows the ancestor's reference fetched once and
+  saved under the ancestor, not the child; the old write-site mutation fails
+  it. chat_tree_context 11, and the other 8 specs above, green.
 

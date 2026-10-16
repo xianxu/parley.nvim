@@ -254,3 +254,101 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"f71b39b0-22ed-41ef-befa-8b0f2d95315f","repository":"github.com/xianxu/parley.nvim","issue_id":"000233","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/72f789953e7006da","reviewed_head":"e2ea2bb56b53eba6c413c4c7fc9b90747be3cf5d","slot":"parley.nvim:3","requested_at":"2026-10-16T11:00:39.190762Z"},"phase":"finished","pid":91668,"started_at":"2026-10-16T11:00:39.349994Z","finished_at":"2026-10-16T11:03:49.511299Z","session_id":"cd414908-5754-4bbd-97d1-aebd5540b856","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T04:09:14-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 233 — A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree |
+| repo | parley.nvim |
+| issue file | workshop/issues/000233-chat-context-depth-first-walk-of-the-tree.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 111893e128e74350964044dbe9b8007a38099149..a6f6a26ec797089da0e3196b11ecffa113474839 |
+| command | sdlc close --issue 233 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T04:09:14-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+The last commit is the round-2 fix. Let me look at it.
+
+Running the round-2 regression spec now, then reverting the fix to confirm it goes red.
+
+Tests pass at head. Now I'm reverting the round-2 fix in this disposable checkout to check the regressions fail without it.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: medium
+```
+
+The round-2 commit (`a6f6a26e`) fixes both open findings, and both fixes have regression tests. I ran `make test-spec SPEC=chat/memory` at head: every file passed, including `chat_tree_context_spec` (10/10). I then reverted `chat_respond.lua` to the round-1 version (`e2ea2bb5`) in this disposable checkout. `chat_tree_context_spec` went to 8 passed, 2 failed, including the "looks up another file's cache without creating an entry" test. I restored the file afterwards. One new Important issue blocks a clean SHIP. When a URL from another file of the tree is not in that file's cache, the fetched content is written to the current file's cache. The lookup only ever reads the other file's cache. So that URL is fetched again on every submit, and the request waits for the fetch each time. This keeps happening for good once an ancestor's cache key is lost, for example when the ancestor file is renamed or the cache is pruned.
+
+**1. Strengths**
+- `chat_cache_key` (`lua/parley/chat_respond.lua:257`) gives one key per file: `resolve(fnamemodify(:p))`. `get_chat_remote_reference_cache` moves an entry saved under the old raw name over to that key, so existing users' caches carry over.
+- Picking the cache by `item.current == false` (`chat_respond.lua:1264`) uses the walk's own label instead of comparing path strings. That removes the class of bug behind BR-6, not just the one case it reported.
+- The symlinked-dir test writes its file through a real `fs_symlink` and parses it by the link name. That avoids the `write_chat` → `resolve()` shortcut that hid BR-6 before.
+- `chat_tree.lua` keeps its IO behind `deps` (`path_up` and `linearize` are pure), and `io_deps` is the thin layer that does the reading.
+
+**2. Critical findings:** none.
+
+**3. Important findings**
+- **Fetched content for another file's URL is written where no lookup reads it** (`chat_respond.lua:1264` vs `:1338`). Lookups for other-file items read `peek(item.file)`. Every fetch result goes to `chat_cache[url]`, the current file's cache. A URL that misses in the other file's cache therefore misses on every submit and is fetched each time, adding network time to every request. There is also no test that submits twice. Fix sketch: in the lookup, fall back to the current file's cache (`peek(item.file)[url] or chat_cache[url]`). Or record which file each fetched URL belongs to and write into that file's cache. Add a test with a fake `oauth.fetch_content` that submits twice from a child whose parent cache misses, and checks the fetch runs once.
+  - This is the **2nd finding in family `canonical-file-identity`**. The rule that covers BR-6 and this one: a remote reference's cache entry is read and written under one key, the key of the file that holds the reference. The fix should apply that rule to every read and write site in `resolve_remote_references`, not just this one.
+
+**4. Minor findings**
+- `peek_chat_remote_reference_cache`'s legacy fallback (`cache.chats[chat_file]`) never matches for other-file items. `item.file` is already resolved, so the fallback looks up the same key twice. Old entries saved under a symlinked name for an ancestor are never found.
+- A failed fetch of an ancestor's URL saves an error stub in the current file's cache. Combined with the Important finding above, the current file's cache keeps growing with URLs that file never references.
+
+**5. Test coverage notes**
+- Both round-2 tests went red with the fix reverted, so the regression evidence for BR-6 and BR-7 is real.
+- The second test is a real check: `write_chat` returns resolved paths, so the old code would have created `chats[root]` under exactly the key the test asserts is absent.
+- No test covers repeated submits or a cache miss followed by a fetch for an other-file URL.
+
+**6. Architectural notes**
+- ARCH-DRY: pass.
+- ARCH-PURE: pass. The tree walk is pure behind its deps.
+- ARCH-PURPOSE: pass for the round's scope.
+- ARCH-MOCK: pass. Fetching goes through the `oauth.fetch_content` seam, which the suggested test can fake.
+- ARCH-CONSTRAINTS: flag. A repeated fetch on the submit path (the Important finding).
+- ARCH-SECURE: pass. The cache is typed when read (#261).
+- ARCH-ORDER: pass. No new state is carried between events.
+- ARCH-FUNERAL: BR-7 is fixed (lookups no longer write), but the Minor growth noted above remains.
+
+**7. Plan revision recommendations**
+- The Core concepts row for `resolve_remote_references` says it reads "each file's own cache". Add a Revisions entry saying which file's cache a fetch result goes into, so that reads and writes agree.
+
+```findings
+dispose:
+  - id: BR-6
+    disposition: addressed
+    note: |
+      chat_cache_key canonicalizes with a legacy-key move, item.current picks the cache; the symlinked-dir regression test is red with chat_respond.lua reverted to e2ea2bb5 (8 passed, 2 failed) and green at head.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      peek_chat_remote_reference_cache is read-only; the "without creating an entry" test fails with the fix reverted and passes at head.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: canonical-file-identity
+    title: |
+      A fetched remote reference from another tree file is written to the current file's cache, which no lookup reads, so it is fetched on every submit
+    detail: |
+      resolve_remote_references looks up other-file items in peek(item.file) (chat_respond.lua:1264) but writes every fetch result into chat_cache (line 1338). A URL that misses in an ancestor's cache, for example after a rename or prune, is fetched again on every submit. This is the 2nd finding in this family. The rule: a reference's cache entry is read and written under the key of the file that holds it. Apply it to every read and write site, and add a two-submit test with a fake oauth.fetch_content that checks the fetch runs once.
+  - id: new
+    severity: Minor
+    kind: defect
+    family: operating-envelope-undeclared
+    title: |
+      Failed or fetched ancestor URLs pile up in the current file's cache, and the peek legacy fallback never matches
+    detail: |
+      Error stubs and content for URLs the current file never references are saved under its key. The peek fallback looks up the already-resolved item.file again, so old entries saved under a symlinked name for an ancestor are never found.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"b95b1f8a-32be-4070-a097-46653a7f6c90","repository":"github.com/xianxu/parley.nvim","issue_id":"000233","recipe":"milestone-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/89f8b93c6b22efba","reviewed_head":"a6f6a26ec797089da0e3196b11ecffa113474839","slot":"parley.nvim:3","requested_at":"2026-10-16T11:06:38.046538Z"},"phase":"finished","pid":57070,"started_at":"2026-10-16T11:06:38.247333Z","finished_at":"2026-10-16T11:09:06.615845Z","session_id":"aac05daf-6913-4597-b797-7a06e3b5cb5c","outcome":"returned"}] -->

@@ -596,3 +596,8 @@ oracle, and the mutation that would make the test fail.
 - A lock directory made by mkdir and then an owner write, or removed by an rf delete, is visible half-made in both directions. Publish it by renaming a staging directory that already holds the record, and retire it by renaming it away before deleting it.
 - A waiter that misses a read counts it as garbage only after re-checking that the same lock (inode and device) is still there.
 - Each such re-check needs its own gate test that fails without it.
+
+## #233: when a single-file input becomes a sequence, every consumer of the old input must derive from the sequence
+
+- The close review found four consumers still reading the one file after the tree walk became the request's context: remote resolution, the batch leg's filter, the memory window's count and the topic input. Before building, list everything that reads the old input (here `input_parsed` and `exchange_idx`), and move each to the sequence in the same change.
+- A cache shared across files needs one key per file (its resolved path), and a reference is read and written under the key of the file that holds it. A lookup for another file must not create an entry.

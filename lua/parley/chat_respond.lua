@@ -272,8 +272,7 @@ end
 
 --- Read-only: another file's cache for a lookup, never creating an entry.
 M.peek_chat_remote_reference_cache = function(chat_file)
-    local cache = M.load_remote_reference_cache()
-    return cache.chats[chat_cache_key(chat_file)] or (chat_file and cache.chats[chat_file]) or {}
+    return M.load_remote_reference_cache().chats[chat_cache_key(chat_file)] or {}
 end
 
 ---@param url string
@@ -1240,9 +1239,13 @@ M.resolve_remote_references = function(opts, callback)
     local urls_to_fetch = {}
     local chat_cache = M.get_chat_remote_reference_cache(chat_file)
 
-    local function queue_fetch(url)
+    -- #233: a reference's cache entry is read and written under the key of the
+    -- file that holds it, so a URL from another file of the tree is cached there.
+    local holder = {}
+    local function queue_fetch(url, file)
         if not queued_fetches[url] then
             queued_fetches[url] = true
+            holder[url] = file
             table.insert(urls_to_fetch, url)
         end
     end
@@ -1261,7 +1264,8 @@ M.resolve_remote_references = function(opts, callback)
         local exchange = item.exchange
         -- The current file's exchanges use its own cache; another file's are
         -- looked up read-only in that file's (#233).
-        local cache = item.current == false and M.peek_chat_remote_reference_cache(item.file) or chat_cache
+        local file = item.current == false and item.file or chat_file
+        local cache = item.current == false and M.peek_chat_remote_reference_cache(file) or chat_cache
 
         if exchange.question and exchange.question.file_references then
             for _, file_ref in ipairs(exchange.question.file_references) do
@@ -1269,13 +1273,13 @@ M.resolve_remote_references = function(opts, callback)
                 if helpers.is_remote_url(url) then
                     if idx == exchange_idx and not seen_current[url] then
                         seen_current[url] = true
-                        queue_fetch(url)
+                        queue_fetch(url, chat_file)
                     elseif idx < exchange_idx and not seen_prior[url] then
                         seen_prior[url] = true
                         if cache[url] then
                             resolved[url] = cache[url]
                         else
-                            queue_fetch(url)
+                            queue_fetch(url, file)
                         end
                     end
                 end
@@ -1335,7 +1339,8 @@ M.resolve_remote_references = function(opts, callback)
                         _parley.logger.warning('Failed to fetch remote content: ' .. (err or 'unknown error'))
                     end
                     resolved[url] = cached_content
-                    chat_cache[url] = cached_content
+                    local into = holder[url] == chat_file and chat_cache or M.get_chat_remote_reference_cache(holder[url])
+                    into[url] = cached_content
                     M.save_remote_reference_cache()
                 end)
                 if not ok then failed(failure) end

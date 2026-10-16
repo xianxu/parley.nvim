@@ -195,6 +195,95 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: b95b1f8a-32be-4070-a097-46653a7f6c90
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000233"
+            recipe: milestone-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/89f8b93c6b22efba
+            reviewed_head: a6f6a26ec797089da0e3196b11ecffa113474839
+            slot: parley.nvim:3
+            requested_at: "2026-10-16T11:06:38.046538Z"
+          phase: finished
+          pid: 57070
+          started_at: "2026-10-16T11:06:38.247333Z"
+          finished_at: "2026-10-16T11:09:06.615845Z"
+          session_id: aac05daf-6913-4597-b797-7a06e3b5cb5c
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: a6f6a26ec797089da0e3196b11ecffa113474839
+        tracker_head: 2afa847cfdb56244ed1eb5741b9769511ec451e8
+        branch_point: 111893e128e74350964044dbe9b8007a38099149
+        since: "2026-10-16T03:36:06-07:00"
+        until: "2026-10-16T04:06:08-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T03:36:06-07:00"
+              end: "2026-10-16T04:06:08-07:00"
+              began: "2026-10-16T03:36:06-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 996b651e-5e17-47f4-9815-33d9ff25fe0d
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 190c81800f09db82a983cb7d485bcf852bb696ea251529c7b9e9734c4abf55f1
+              started: "2026-10-15T18:27:53.241Z"
+              spawned: false
+              bytes: 10805724
+              windows:
+                - start: "2026-10-16T03:36:06-07:00"
+                  end: "2026-10-16T04:06:08-07:00"
+        cuts:
+            - dispatched: "2026-10-16T03:51:43-07:00"
+              finalized: "2026-10-16T03:55:11-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T04:00:39-07:00"
+              finalized: "2026-10-16T04:03:54-07:00"
+              finalizing: false
+      "n": 3
+      timestamp: "2026-10-16T04:09:14-07:00"
+      dispatched: "2026-10-16T04:06:38-07:00"
+      agent: claude
+      dispose:
+        - id: BR-6
+          disposition: addressed
+          note: chat_cache_key canonicalizes with a legacy-key move, item.current picks the cache; the symlinked-dir regression test is red with chat_respond.lua reverted to e2ea2bb5 (8 passed, 2 failed) and green at head.
+          round: 3
+        - id: BR-7
+          disposition: addressed
+          note: peek_chat_remote_reference_cache is read-only; the "without creating an entry" test fails with the fix reverted and passes at head.
+          round: 3
+      findings:
+        - kind: defect
+          id: BR-8
+          severity: Important
+          title: A fetched remote reference from another tree file is written to the current file's cache, which no lookup reads, so it is fetched on every submit
+          detail: 'resolve_remote_references looks up other-file items in peek(item.file) (chat_respond.lua:1264) but writes every fetch result into chat_cache (line 1338). A URL that misses in an ancestor''s cache, for example after a rename or prune, is fetched again on every submit. This is the 2nd finding in this family. The rule: a reference''s cache entry is read and written under the key of the file that holds it. Apply it to every read and write site, and add a two-submit test with a fake oauth.fetch_content that checks the fetch runs once.'
+          family: canonical-file-identity
+          round: 3
+        - kind: defect
+          id: BR-9
+          severity: Minor
+          title: Failed or fetched ancestor URLs pile up in the current file's cache, and the peek legacy fallback never matches
+          detail: Error stubs and content for URLs the current file never references are saved under its key. The peek fallback looks up the already-resolved item.file again, so old entries saved under a symlinked name for an ancestor are never found.
+          family: operating-envelope-undeclared
+          round: 3
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#233 (boundary-review)
@@ -234,7 +323,21 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-7** [Minor] `operating-envelope-undeclared` (kind: defect) Per-item cache lookup saves an empty chats entry for every tree file, with no pruning
   This is the 2nd finding in family operating-envelope-undeclared. The rule: a lookup must not write. get_chat_remote_reference_cache creates chats[key] = {} for every item in every tree, including items with no URLs, and the next save persists those entries. Give it a read-only variant for lookups (ARCH-FUNERAL).
 
+## Round 3 — 2026-10-16T04:09:14-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-6 — addressed — chat_cache_key canonicalizes with a legacy-key move, item.current picks the cache; the symlinked-dir regression test is red with chat_respond.lua reverted to e2ea2bb5 (8 passed, 2 failed) and green at head.
+- BR-7 — addressed — peek_chat_remote_reference_cache is read-only; the "without creating an entry" test fails with the fix reverted and passes at head.
+
+### Raised
+
+- **BR-8** [Important] `canonical-file-identity` (kind: defect) A fetched remote reference from another tree file is written to the current file's cache, which no lookup reads, so it is fetched on every submit
+  resolve_remote_references looks up other-file items in peek(item.file) (chat_respond.lua:1264) but writes every fetch result into chat_cache (line 1338). A URL that misses in an ancestor's cache, for example after a rename or prune, is fetched again on every submit. This is the 2nd finding in this family. The rule: a reference's cache entry is read and written under the key of the file that holds it. Apply it to every read and write site, and add a two-submit test with a fake oauth.fetch_content that checks the fetch runs once.
+- **BR-9** [Minor] `operating-envelope-undeclared` (kind: defect) Failed or fetched ancestor URLs pile up in the current file's cache, and the peek legacy fallback never matches
+  Error stubs and content for URLs the current file never references are saved under its key. The peek fallback looks up the already-resolved item.file again, so old entries saved under a symlinked name for an ancestor are never found.
+
 ## Open findings
 
-- **BR-6** [Critical] `canonical-file-identity` (kind: defect) Remote cache lookup compares a resolved path with the unresolved buffer name, so symlinked chat dirs refetch and can overwrite cached URLs with errors
-- **BR-7** [Minor] `operating-envelope-undeclared` (kind: defect) Per-item cache lookup saves an empty chats entry for every tree file, with no pruning
+- **BR-8** [Important] `canonical-file-identity` (kind: defect) A fetched remote reference from another tree file is written to the current file's cache, which no lookup reads, so it is fetched on every submit
+- **BR-9** [Minor] `operating-envelope-undeclared` (kind: defect) Failed or fetched ancestor URLs pile up in the current file's cache, and the peek legacy fallback never matches

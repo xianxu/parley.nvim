@@ -178,6 +178,39 @@ describe("chat context over a real chat tree (#233)", function()
         end
     end)
 
+    -- Round 3: a fetch for another file's reference is saved under that file,
+    -- where the next lookup reads it, so it is fetched once.
+    it("caches an ancestor's fetched reference under the ancestor, once", function()
+        local url = "https://example.com/once-" .. math.random(1000000)
+        local parent = write_chat("2026-10-16.13-00-00.040.md", {
+            "💬: read @@" .. url .. "@@", "", "🤖:[A]", "read it", "",
+            "🌿: 2026-10-16.13-01-00.041.md: Child", "",
+        })
+        local child = write_chat("2026-10-16.13-01-00.041.md", {
+            "🌿: 2026-10-16.13-00-00.040.md: Parent", "", "💬: and then?", "",
+        })
+        local drive = require("parley.google_drive")
+        local saved, calls = drive.fetch_content, 0
+        drive.fetch_content = function(_, _, callback) calls = calls + 1; callback("fetched body") end
+        local function resolve()
+            local parsed = parse(child)
+            local sequence, at = chat_respond._tree_sequence(child, parsed, 1, parsed, 1)
+            local resolved
+            chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
+                chat_file = child, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
+            assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10))
+            return resolved
+        end
+        local ok, err = pcall(function()
+            assert.is_truthy(resolve()[url]:find("fetched body", 1, true))
+            assert.is_truthy(resolve()[url]:find("fetched body", 1, true))
+        end)
+        drive.fetch_content = saved
+        assert(ok, err)
+        assert.equals(1, calls, "the ancestor's reference was fetched again")
+        assert.is_nil(chat_respond.peek_chat_remote_reference_cache(child)[url], "saved under the child")
+    end)
+
     it("reads an unsaved child from its buffer", function()
         vim.cmd("edit " .. vim.fn.fnameescape(aside))
         local buf = vim.api.nvim_get_current_buf()
