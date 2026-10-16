@@ -204,6 +204,15 @@ Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-p
   4. A shared `sse_dialects` module that both fakes import.
   5. The live halves are built with offline proofs; the operator runs the live runs, which the TL schedules.
 - TL guidance: keep it lean (the scenario table is the product; keep the fake shell thin). M1 first, and report at its milestone close before M2.
+- 2026-10-16 M1 built:
+  - `tests/fixtures/sse_dialects.py`: the anthropic dialect, behaviour and split.
+  - `tests/fixtures/fake_provider`: a thin shell with the mode and split flags and a request log.
+  - `tests/helpers/provider_scenarios.lua` and `tests/integration/provider_anthropic_spec.lua`: S1–S7b through the real dispatcher→curl path, 8/8 passing.
+  - `tests/unit/sse_dialects_spec.lua`: decodes through the real parsers and matches `anthropic_stream.txt` event for event.
+  - `tests/regression/run_proofs.sh`: #228 and #229 reproduced on `dc548920^` and `634e33a9^`, and fixed on the branch, 6/6 passing.
+  - No production change. Two harness facts the helper absorbs:
+    - An unowned query needs `deadline_ms`, so the helper passes `tasker.deadline.stream`.
+    - A non-empty in-band error is read via `_classify_ending`, because the dispatcher logs only empty-response error notices.
 
 ## Revisions
 
