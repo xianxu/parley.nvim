@@ -1,6 +1,6 @@
 ---
 id: 000348
-status: codecomplete
+status: done
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 11e5bce23fd4ae2a7fc25b759177864e518f4db2
         evidence_commit: 2d363c15120b94cb9af5a42589458e9d17711ff2
+        landed_commit: 260cf863fc878042fb277a48edda5ba3c114ca86
 ---
 
 # starter welcome lock: a second starter can see the lock dir before its owner file and demand repair
