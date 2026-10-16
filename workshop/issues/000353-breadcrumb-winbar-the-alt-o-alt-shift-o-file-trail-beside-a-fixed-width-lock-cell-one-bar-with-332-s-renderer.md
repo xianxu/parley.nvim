@@ -87,6 +87,8 @@ After code verification: close on SHIP and report green to TL. Do not stage; :0 
 
 - Final production-head required suite passed448/448 spec files, lint749 clean, no surviving test processes on `bf196623e36642c1368ccdbc33be4ca135d0f166` (2m35s). Retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/bf196623e36642c1368ccdbc33be4ca135d0f166/suite.log`, SHA256 `c39a78cc28c7f39bc0c4298fde6716a4326d7b1fc5397c523d916606fcdbceb1`. Final overlay focused evidence passes18 native window/ownership/parity cases +6 pure composition cases;45 real-history and6 real/fake resolver conformance cases also pass. Prior failed attempts and issue-backed retry remain retained against #360/#361. Close review follows; no staging per TL.
 
+- Close initially refused before review because main had new code; merged origin/main without conflicts. Integrated production head `5ac7cd3548c3cdc11ec5d0812e6c042e2352c9e6` then passed the required full suite on its first attempt: 454/454 spec files, Total: 0 warnings / 0 errors in 760 files, no surviving processes (3m8s). Log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/5ac7cd3548c3cdc11ec5d0812e6c042e2352c9e6/suite.log`, SHA256 `435f2e463b87d493b2b7c130c6188b9d3ddc0f204cc5e4f2363a5ed8d0cc3403`. Main supplied reload cursor preservation and review/provider changes; shared session_sync merge retains both view restoration and lock/feedback projection. This integrated pass supersedes the earlier pre-merge suite for final close evidence.
+
 ## Revisions
 
 ### 2026-10-16 — #354 persisted-trail coordination
