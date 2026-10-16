@@ -1,12 +1,20 @@
 ---
 id: 000238
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-12
-updated: 2026-09-12
+updated: 2026-10-16
 estimate_hours:
-card_mirror: '3e15f3dc01bff0b08ad37ddf3c35a6fe5c16173e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'f1f4ab71a86485dd8a76527610ecb0368e9fa83a' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T06:07:45-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Catalog conformance cases cannot pass with the fabricated credential
@@ -50,7 +58,16 @@ Options to weigh:
 
 ## Plan
 
-- [ ]
+Measured 2026-10-16. Real binary 8.0.4 (the operator's installed copy, run read-only against a throwaway config and auth-dir in the scratchpad), and the latest release, which the spec downloads under `PARLEY_LIVE_GITHUB=1`.
+- Spec as-is: the two catalog cases fail and the other 10 real-binary cases pass. The bug reproduces.
+- Throwaway config with no provider entry: `/v1/models` is `{"data":[]}` and `/v1beta/models` is `{"models":[]}`, exactly the reported failure.
+- With a FABRICATED `claude-api-key` entry (`sk-ant-fabricated-conformance`), both routes list the proxy's static Claude catalog. `/v1beta` carries `name: "models/<id>"` and `displayName`, which is what `parse()` joins on. An API key is never refreshed, so no network call is made and no credential can rotate (the #197 hazard does not apply). A `gemini-api-key` behaves the same.
+
+This is the Spec's first option. The catalog cases observe a catalog the real binary actually serves, with nothing real in the auth-dir.
+
+- [ ] `boot()` takes a `catalog` option that adds a fabricated `claude-api-key` entry; only the two catalog cases use it, so the other cases keep the config they pin.
+- [ ] The SAFETY note says why the API-key entry is safe, and that the key is fabricated.
+- [ ] Both catalog cases pass under `PARLEY_LIVE_GITHUB=1`; the whole spec is green.
 
 ## Log
 
