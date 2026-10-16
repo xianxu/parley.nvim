@@ -475,11 +475,20 @@ function M.submit(buf)
     return true
 end
 
+-- The move and rename preflights must answer inline (BufFilePre decides before
+-- Neovim renames), so these block; asynchronous moves are #359. Every caller
+-- runs before anything moved, so the one recovery is running the move again
+-- (#357). The registry's own timer is set past this wait, so this one decides.
 local function bounded_request(operation, arguments)
+    local ms = config_ms("agentic_move_timeout_ms", 5000)
     local result
-    local child = registry.request(operation, arguments, {}, function(value) result = value end)
-    local ready = vim.wait(2600, function() return result ~= nil end, 10)
-    if not ready then child.cancel(); return { kind = "unavailable", error = "Couch deadline exceeded" } end
+    local child = registry.request(operation, arguments, {}, function(value) result = value end, { timeout_ms = ms + 1000 })
+    local ready = vim.wait(ms, function() return result ~= nil end, 10)
+    if not ready then
+        child.cancel()
+        return { kind = "unavailable", unconfirmed = true, error = ("move not confirmed: Couch did not answer within %d s;"
+            .. " nothing moved. Run the move again"):format(math.ceil(ms / 1000)) }
+    end
     return result
 end
 
@@ -550,6 +559,7 @@ function M.move_path(old_path, new_path)
     if not saved then return true, nil, save_error end
     local target = bounded_request("lookup", { new_path })
     if migration_busy(s) then return true, nil, "document operation started during destination confirmation" end
+    if target.unconfirmed then return true, nil, target.error end
     if target.kind ~= "absent" then return true, nil, "destination membership is occupied or unknown" end
     local lease, lease_error = require("parley.document_lease").acquire(s.namespace, identity.ID, { root = state_root() })
     if not lease then return true, nil, lease_error.message end
@@ -584,7 +594,7 @@ function M.move_path(old_path, new_path)
     moving.operation = operation
     dispatch(s, { type = "rename", new_path = new_path })
     advance_move(s)
-    local complete = vim.wait(3000, function() return s.move == nil end, 10)
+    local complete = vim.wait(config_ms("agentic_move_timeout_ms", 5000), function() return s.move == nil end, 10)
     if not complete then return true, nil, "document move pending; preserve its journal and reopen to recover" end
     return true, new_path
 end

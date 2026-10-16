@@ -51,6 +51,18 @@ Alt+Return times out under load. Operator request, relayed by the TL (ops:0) on 
 - **What times out on Alt+Return** is the registry request, at 2500 ms, with the message "Couch registry deadline exceeded; mutation outcome may be unknown". The model then goes `pending`. The next Alt+Return is a `retry` with `resume_only`, which confirms the registration but **never sends**: "Registration confirmation must never automatically resend a message". So after a timeout the agent gets nothing until a *third* press. That is the bug the operator feels.
 - **The editor-blocking waits** are `bounded_request`'s `vim.wait(2600)` ("Couch deadline exceeded") and the 3000 ms move wait. They are only on the move and rename paths: the Parley mover, `move_path`, and the `BufFilePre`/`BufFilePost` handlers. They are not on submit.
 
+**Core concepts**
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `begin_submit` | `lua/parley/agentic_document.lua` | new |
+| `end_submit` | `lua/parley/agentic_document.lua` | new |
+| `bounded_request` | `lua/parley/agentic_document.lua` | modified |
+| `agentic_submit_timeout_ms` | `lua/parley/config.lua` | new |
+| `agentic_move_timeout_ms` | `lua/parley/config.lua` | new |
+
+There is no new pure entity. The pure model (`document_session`) already refuses a second send while one is in flight, and keeps the receipt. The changes are in the shell, the integration point that owns the timers and the band. Their tests use the slow fake Couch: `FAKE_COUCH_SLEEP` for sends, and the new `FAKE_COUCH_REGISTRY_DELAY` for the registry.
+
 **The change**
 
 1. **One submit deadline.** It is configurable as `agentic_submit_timeout_ms`, default 15000, and it covers the registry stage and the send stage together. `document_registry.request` takes it as `timeout_ms`. The registry child may still be killed at the deadline, since `register` and `lookup` are idempotent (same path, same owner). **A send is never killed**, because a kill can't tell delivered from not.
@@ -81,6 +93,22 @@ Alt+Return times out under load. Operator request, relayed by the TL (ops:0) on 
 
 ### 2026-10-16
 
+- Built:
+  - `begin_submit` and `end_submit`: one submit at a time, with "submitting…", the configured deadline, and "not confirmed: submit again · <reason>". A press during a send joins it. A pending press now confirms and then submits the current bytes; the replay is skipped while still pending, so it can't loop.
+  - The registry stage takes the submit deadline.
+  - `bounded_request` uses `agentic_move_timeout_ms`, and the registry's own timer sits past it. On the deadline: "move not confirmed: Couch did not answer within N s; nothing moved. Run the move again". `move_path` returns that error for its destination lookup.
+- Existing tests changed on purpose:
+  - The "edited in-flight registration … without automatic resend" case now expects the next press to submit the current text. Its old assertion was the operator's bug.
+  - Two band cases expect "not confirmed: submit again" in place of "operation failed:" for submit failures.
+- New tests in `agentic_document_spec`, "under a slow Couch (#357)", 4 cases:
+  - a registry at 3 s submits, and the press returns in under 500 ms;
+  - a send past a 1 s deadline: not confirmed, a press joins, the late success arrives, and the identical resubmit gives "nothing to submit". Exactly one delivery;
+  - a lookup past the deadline keeps the lock, and the next press sends once;
+  - a move preflight past 500 ms returns the run-it-again error with nothing moved, and the rerun moves it.
+- Mutation checks:
+  - Without the pending-press replay, the edited-registration case fails.
+  - With the registry left at its 2500 ms default, the 3 s registry case fails.
+
 ## Revisions
 
 - 2026-10-16 Operator amendment, relayed by the TL (delivery 53e28eff), replacing Spec point 3:
@@ -88,3 +116,8 @@ Alt+Return times out under load. Operator request, relayed by the TL (ops:0) on 
   - There is no ledger check before a resend. Instead the resubmit is idempotent: an identical resubmit (same file, same content) must not deliver twice.
   - To verify: that #332's dedup receipt covers this.
   - To test: a slow fake Couch where the first submit lands after the deadline, and the resubmit is not delivered twice.
+- 2026-10-16 TL decisions on the plan:
+  - Approved: one deadline, never killing a send, and the join rule.
+  - Spec point 4: do (a). Filed (c) as #359, unclaimed. No full asynchronous rename here.
+  - Re-plan: `move_path`'s callers in init.lua (moving one chat, moving a chat tree) are synchronous chains, so (b) folds into #359. #357 does (a) only.
+  - The actions split at "before anything moved", where the action is "Run the move again", and "after", where the existing journal recovery applies.

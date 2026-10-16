@@ -60,7 +60,8 @@ def main():
         print(json.dumps({"Code": "ok", "Error": ""}))
         return 0
     if mode == "delay":
-        time.sleep(1)
+        # FAKE_COUCH_REGISTRY_DELAY (seconds, default 1): a slow registry (#357).
+        time.sleep(float(os.environ.get("FAKE_COUCH_REGISTRY_DELAY") or "1"))
     state_path = Path(os.environ["FAKE_COUCH_REGISTRY"])
     with open(str(state_path) + ".lock", "a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)

@@ -120,6 +120,24 @@ operator edit or observed agent write. Explicit submit failures show a bounded
 literal error (DiagnosticError), including before registry attachment; this
 feedback changes neither turn ownership nor the acquisition baseline.
 
+The submit never blocks the editor (#357). It shows `submitting…` until its
+outcome, under one deadline (`agentic_submit_timeout_ms`, 15 s) that covers the
+registry stage and the send together. Past the deadline, or on a registry
+failure, the band reads `not confirmed: submit again · <reason>`. That is one
+state, and Alt+Return is its one action:
+- A registry stage that timed out still holds the operator's lock, since the
+  send never started. The next press confirms the registration, then submits
+  the current bytes.
+- A send already issued is never killed, because a kill can't tell delivered
+  from not. A press while it is out joins it (`submitting… still waiting for
+  Couch`), and its late success records the receipt below, so an identical
+  resubmit sends nothing.
+
+The move and rename preflights still block, because they decide inside
+BufFilePre and BufFilePost (asynchronous moves are #359). Their deadline is
+`agentic_move_timeout_ms`, 5 s. Every one runs before anything moved, so their
+recovery is `move not confirmed: … nothing moved. Run the move again`.
+
 The last confirmed successful submission also records its captured post-save
 content hash, stable document ID, namespace, effective owner and local time in
 memory. A later Alt+Return still saves/reconciles and confirms the owner first;
