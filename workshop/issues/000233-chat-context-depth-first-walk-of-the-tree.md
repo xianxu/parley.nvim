@@ -111,7 +111,8 @@ M2 (one tree walker) is split out as #349.
 - [x] Pure `chat_tree.linearize` and `path_up`, with tests for the cases above
 - [x] Feed the linearized sequence through `build_messages`, and delete `build_ancestor_messages` / `collect_ancestor_chain`
 - [x] Integration test over real chat files with nested and inline branches and an unsaved child buffer
-- [ ] The operator's decision on full ancestors inside the memory window (below), before merge
+
+Before merge (a gate held by the TL, not a build step): the operator decides on full ancestors inside the memory window, with the request sizes in the Log.
 
 ## Log
 
