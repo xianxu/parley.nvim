@@ -1,12 +1,12 @@
 ---
 id: 000233
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-10
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '6b065a73a258e6ecfa8eb1748a7f714428910d1b' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '88f2d014370002fb87d236a0f8ee451b86ef9ba1' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T03:36:06-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 0.57
 ---
 
 # A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree
