@@ -68,6 +68,12 @@ Steps:
 
 - 2026-10-16, TL review of plan 3cd110c6: approved with the default `"summary"`. Decision 5 changed: an off-path exchange without a summary sends its question text alone (truncated, marked as an aside with no summary) instead of nothing. The goal is awareness that the side discussion happened; dropping it silently defeats that, and its full answer would defeat the flag.
 
+- 2026-10-16, close review round 1 (advisory findings):
+  - **Docs:** the README has no config section, so the docs step is the atlas plus the comment on `chat_memory.side_chats` in `config.lua`.
+  - **The omitted-answer note:** it is sent only when the off-path exchange has an answer. An unanswered side-chat question is followed by the next message, as an unanswered question is on the path.
+  - **Values:** any value other than `"full"` means `"summary"`, the default, documented in `config.lua`. Config values are not validated elsewhere in `chat_memory` either.
+  - **Blank questions:** the summary form shares `summary_message` with the summarized branch, and sends no placeholder for a blank question, as that branch does.
+
 ## Log
 
 ### 2026-10-16

@@ -287,6 +287,13 @@ describe("chat context over a real chat tree (#233)", function()
             assert.is_false(has(out, "unsummarized answer"))
         end)
 
+        it("sends no placeholder for a blank side-chat question, as the summarized branch", function()
+            local exchange = { question = { content = "" }, answer = { content = "x" }, summary = { content = "s" } }
+            assert.same({ { role = "assistant", content = "s" } }, chat_respond.side_chat_messages(exchange, " ", "P"))
+            assert.same({ { role = "user", content = "P" }, { role = "assistant", content = "s" } },
+                chat_respond.side_chat_messages(exchange, "q", "P"))
+        end)
+
         it("neither fetches nor inlines a side chat's remote reference", function()
             local url = "https://example.com/side-" .. math.random(1000000)
             local root = write_chat("2026-10-16.16-00-00.070.md", {

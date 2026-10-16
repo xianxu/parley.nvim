@@ -350,6 +350,12 @@ end
 
 local SIDE_CHAT_QUESTION_CHARS = 300
 
+--- The assistant message that stands for a summarized exchange: its 📝: line.
+M.summary_message = function(exchange)
+    return { role = "assistant", content = require("parley.define").strip_definition_footnote_footer(
+        question_tags.content(exchange.summary)) }
+end
+
 --- The messages for an off-path exchange under side_chats = "summary": the
 --- summarized form memory uses (placeholder, then the 📝: line), or, without a
 --- summary, its question alone, truncated and marked, so the model knows the
@@ -359,15 +365,13 @@ local SIDE_CHAT_QUESTION_CHARS = 300
 --- @param omitted string the placeholder for a summarized question
 --- @return table[] messages
 M.side_chat_messages = function(exchange, question, omitted)
-    local define = require("parley.define")
-    if exchange.summary then
-        return {
-            { role = "user", content = omitted },
-            { role = "assistant",
-                content = define.strip_definition_footnote_footer(question_tags.content(exchange.summary)) },
-        }
-    end
     local text = vim.trim(question)
+    if exchange.summary then
+        -- As the summarized branch: no placeholder for a blank question.
+        local messages = text:match("%S") and { { role = "user", content = omitted } } or {}
+        messages[#messages + 1] = M.summary_message(exchange)
+        return messages
+    end
     if not text:match("%S") then return {} end
     if vim.fn.strchars(text) > SIDE_CHAT_QUESTION_CHARS then
         text = vim.fn.strcharpart(text, 0, SIDE_CHAT_QUESTION_CHARS) .. "…"
@@ -1024,7 +1028,7 @@ M.build_messages = function(opts)
                 else
                     -- Use the summary if available
                     if exchange.summary then
-                        push({ role = "assistant", content = define.strip_definition_footnote_footer(question_tags.content(exchange.summary)) })
+                        push(M.summary_message(exchange))
                     else
                         -- If no summary is available, use the full content (fallback)
                         if answer_has_tool_blocks then
