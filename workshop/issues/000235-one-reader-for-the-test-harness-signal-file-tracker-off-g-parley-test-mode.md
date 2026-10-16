@@ -89,6 +89,7 @@ after that review: it turns `file_tracker`'s test-mode guards on across the
 whole suite, which deserves its own reviewed change.
 
 ### 2026-10-16 (parley.nvim:4)
+- 2026-10-16: closed — Full suite green on 3128170e (sdlc-local/suite, main merged). One reader: test_isolation.active() (PARLEY_TEST_MODE == "1"); file_tracker, cliproxy x2 and issue_tracker call it. Arch guard in single_source_sweeps_spec refuses any other lua/ reader of either spelling (seen red with a planted issue_tracker reader). g:parley_test_mode removed from minimal_init, chat_move_spec and the spell packaging probe; file_tracker_spec and sidecars.lua clear the env var instead. New spec: under the harness the tracker writes no file_access.json (seen red with the old g: reader). Atlas test_harness.md updated (stale highlighter claim removed).; review verdict: SHIP
 
 - Built with one change to the plan: the reader is `test_isolation.active()` in the existing harness-rules module (`lua/parley/test_isolation.lua`, already home to `inside`/`check`) rather than a new `harness.lua` (ARCH-DRY).
 - Seen red: a planted `vim.env.PARLEY_TEST_MODE` reader in issue_tracker.lua fails the new arch guard. With file_tracker reverted to its old `g:` reader (no longer set anywhere), the new "never writes file_access.json under the harness" spec fails.
