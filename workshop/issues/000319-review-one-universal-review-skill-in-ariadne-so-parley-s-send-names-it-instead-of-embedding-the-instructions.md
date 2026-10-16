@@ -5,8 +5,8 @@ deps: [ariadne#399, parley.nvim#332, pair#573]
 github_issue:
 created: 2026-10-13
 updated: 2026-10-15
-estimate_hours:
-card_mirror: 'a78c4e811b6661820aaf64793c69ab8bd71cf7fb' # card fields mirrored from issue-cards; edit via sdlc
+estimate_hours: 2.25
+card_mirror: '548b361743a9dbb90afe23c354d748f7c5f209cd' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-15T16:16:41-07:00
 claimant:
     operator: Xian Xu
@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: operator}
 ---
 
 # Review: one universal review skill in ariadne, so parley's send names it instead of embedding the instructions
@@ -147,3 +148,28 @@ The first full-flow plan review accepted the design and requested function-level
 test strategies. Named pure validate_manifest/render_snapshot/compare_snapshot
 and instruction.context with adversarial/mechanical guards; compressed scenario
 inventories to integration invariants. No production code changed.
+
+## Estimate
+
+Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against
+baseline-v3.1.md. Method A only; calibration is marked stale, so provisional.
+The settled plan earns the 0.2 design multiplier and 15% design buffer.
+Generator tooling maps to one greenfield single-concern module (Python stdlib
+json/hashlib/pathlib supply the implementation; no novel library needed).
+Local prompt integration is one focused Lua feature; sender deletion is one
+cross-cutting refactor. Docs and the final review are separate primitives.
+Base design selections 1.0, 2.0, 0.6, 0.1 become 0.20, 0.40, 0.12, 0.02;
+base implementation selections 0.8, 1.5, 0.5, 0.2, 0.5 are scaled once by 0.40.
+Existing mode/source and S1 patterns justify familiarity 1.0. No new API discovery.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: greenfield-go-module design=0.20 impl=0.32
+item: lua-neovim design=0.40 impl=0.60
+item: cross-cutting-refactor design=0.12 impl=0.20
+item: atlas-docs design=0.02 impl=0.08
+item: milestone-review design=0.00 impl=0.20
+design-buffer: 0.15
+total: 2.25
+```
