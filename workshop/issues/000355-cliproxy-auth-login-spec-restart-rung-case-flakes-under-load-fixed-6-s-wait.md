@@ -1,13 +1,13 @@
 ---
 id: 000355
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: '9025f459037a5494399fd355ccf3948f7ebeb70b' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd3ff35e91110357b062b3153b58c030ea6fa72c8' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T11:05:40-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "f0ee053f", done: "bcece1c0"}
+actual_hours: 0.21
 ---
 
 # cliproxy_auth_login_spec restart-rung case flakes under load (fixed 6 s wait)
