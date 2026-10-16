@@ -73,12 +73,15 @@ describe('generation runner sequences',function()
         fake.requests[1].callbacks.resolved();Runner.drain(r,100)
         assert.equals('terminal',Runner.snapshot(r).phase)
     end)
-    it('ends a generation whose provider output was refused and whose request then resolved (#341)',function()
+    it('ends with provider_failed when output is refused, keeping what landed (#341)',function()
         local doc=document();local fake=Fake.new();local r=start(doc,fake,2)
         fake:prepare();Runner.drain(r,100)
         fake:output(1,'kept');Runner.drain(r,1000)
-        assert.is_false(fake:output(1,'gap',99)) -- a refused output: the adapter stops its transport
-        fake.requests[1].callbacks.resolved();Runner.drain(r,1000)
+        -- A refused output: the production adapter reports failure, stops its
+        -- transport, then resolves (response_provider_spec pins that order).
+        local cb=fake.requests[1].callbacks
+        assert.is_false(fake:output(1,'gap',99))
+        cb.failed('provider request failed: output refused');cb.resolved();Runner.drain(r,1000)
         local state=Runner.snapshot(r)
         assert.equals('terminal',state.phase)
         assert.equals('provider_failed',state.outcome)

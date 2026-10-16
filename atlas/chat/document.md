@@ -146,6 +146,12 @@ write: `revoked` or `uncertain`. A queue dropped on stop: counted in
 `discarded_bytes`. A stream reader that throws: the attempt stops with
 `<stream> reader failed` rather than reading on past the lost bytes. The only
 uncounted change is the deliberate strip of a response's leading newlines.
+Neither side may leave a generation waiting (#341). A provider adapter that
+refuses output reports `provider_failed` before it stops the transport. The
+machine allows resolution before completion, so resolving alone ends nothing.
+A receipt naming the inflight write but inconsistent, or a write whose blob is
+gone, settles it `uncertain`, crediting only bytes the receipt can vouch for.
+Receipts for any other write are ignored.
 `stream_integrity_spec` drives the real transport against `fake_cliproxy`'s
 `stream` mode while edits above the answer and a busy loop race each write,
 and asserts the answer equals `qt.response` exactly.

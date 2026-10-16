@@ -40,7 +40,8 @@ Measure first, as #229 did. For each path, drive the production transition funct
 
 | Entity | Kind | Status | Location | Responsibility |
 | --- | --- | --- | --- | --- |
-| `generation` | PURE | modified | `lua/parley/generation.lua` | A request resolved without completing is a provider failure; an inconsistent receipt for the inflight write stops `uncertain`. |
+| `generation` | PURE | modified | `lua/parley/generation.lua` | An inconsistent receipt for the inflight write stops `uncertain`. |
+| `response_provider` | INTEGRATION | modified | `lua/parley/response_provider.lua` | Refusing output reports `provider_failed` before stopping the transport. |
 | `generation_runner` | INTEGRATION | modified | `lua/parley/generation_runner.lua` | A write whose blob is gone reports an `uncertain` receipt instead of returning silently. |
 
 ## Plan
@@ -51,13 +52,25 @@ Measurement (2026-10-15, :3), red tests on the production machine and runner:
 - Short or inconsistent receipt (case 2): `D.append` is all-or-nothing on bytes, but returns `applied` with 0 accepted when the native edit is not observed as the write (`prepared.accepted` unset). The machine rejects that receipt before clearing `inflight`, so no further write is pumped. Machine test: rejected, still inflight. A receipt for a write that is not inflight (a duplicate) is a genuinely ignorable reject.
 - Missing blob: the inflight item's blob is released only after its receipt, so `write()` finding none (`generation_runner.lua:421`) is an internal invariant violation that today returns without a receipt.
 
-- [ ] Machine: `operation_resolved` for the current request attempt that has not completed, outside stopping, acts as `provider_failed`. Staged bytes drain first, then stop `provider_failed`. Red: machine and runner tests above.
-- [ ] Machine: a `write_result` naming the inflight write but inconsistent (status, byte counts) clears inflight, accounts committed bytes and stops `uncertain`. A receipt for any other write is still rejected without effect. Red: machine test above.
-- [ ] Runner: a write whose blob is gone dispatches an `uncertain` receipt (attempted = the effect's bytes, committed 0) rather than returning silently.
-- [ ] Atlas (chat/document stream accounting): the two outcomes and the ignorable rejects.
+- [x] ~~Machine: `operation_resolved` for an incomplete attempt acts as `provider_failed`.~~ Revised (see Revisions): the adapter reports the failure instead. Red: `response_provider_spec` "reports failure when the host refuses output" saw output, refused, resolved with no failed; now failed precedes resolved. The runner sequence test pins refused output → failed → resolved → terminal `provider_failed`, with the landed bytes kept.
+- [x] Machine: a `write_result` naming the inflight write but inconsistent (status, byte counts) clears inflight, accounts committed bytes and stops `uncertain`. A receipt for any other write is still rejected without effect. Red: machine test above.
+- [x] Runner: a write whose blob is gone dispatches an `uncertain` receipt (attempted = the effect's bytes, committed 0) rather than returning silently.
+- [x] Atlas (chat/document stream accounting): the two outcomes and the ignorable rejects.
 - [ ] Verify: generation unit + sequences + stream_integrity, then the full suite.
 
 
 ## Log
 
 ### 2026-10-15
+
+### 2026-10-15 (:3)
+
+- Machine rule for resolved-without-completing reverted: the pinned permutation test ("accepts every completion, receipt and transport-resolution ordering") makes resolution before completion legal, so resolution alone cannot mean failure (ARCH-ORDER). The authority is the adapter, which knows it refused the output.
+- Receipt rule: red machine test (rejected, still inflight); now settles `uncertain`. Committed bytes are credited only when within a valid attempted count; an impossible count credits none. Two existing tests pinned the old reject-and-stall contract and were updated to the new one: "impossible receipts" and "a smaller applied editor slice" (its 11-of-10 case).
+- Missing blob: unreachable by construction. The inflight item's blob is released only on its receipt, and stop releases queued items, never the inflight one. The runner exposes no seam into its blobs. The branch now reports an `uncertain` receipt instead of returning silently, so a future broken invariant ends with an outcome.
+- Output after completion: unreachable from the adapter (it emits only while alive); the machine's reject stays ignorable.
+- Focused: generation unit 70/0, sequences 33/0, provider 11/0, and 17 generation/response/chat spec files all pass; lint clean.
+
+## Revisions
+
+- 2026-10-15: plan item 1 moved from the machine to the provider adapter. The machine allows resolution before completion (a pinned contract), so the class "a request resolves without completing or failing" is closed where the request's fate is known: the adapter reports `provider_failed` when it refuses output, before stopping the transport.
