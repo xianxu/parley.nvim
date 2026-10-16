@@ -1,13 +1,23 @@
 ---
 id: 000344
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: 'd752cf67baf5983728d1d3d226fd30ab9c0b34d1' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '09fb1717a5a647d9fd66fc24223489dc68bd713f' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T00:15:31-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "d45ae54a"}
+actual_hours: 0.01
 ---
 
 # help-parley omits the make goldens and make perf-finder targets
@@ -20,12 +30,15 @@ card_mirror: 'd752cf67baf5983728d1d3d226fd30ab9c0b34d1' # card fields mirrored f
 
 ## Done when
 
-- `make help-parley` lists `make goldens` and `make perf-finder`, each with a one-line description.
+- [x] `make help-parley` lists `make goldens` and `make perf-finder`, each with a one-line description.
 
 ## Plan
 
-- [ ]
+- [x] Add the two lines to `help-parley` in `Makefile.parley`.
 
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — make help-parley prints make perf-finder and make goldens lines; Makefile help text only, no new architectural surface (no-atlas).; review verdict: SHIP
+
+- `make help-parley` now prints `make perf-finder` after `make perf`, and `make goldens` after `make fixtures`. No spec covers the help text.
