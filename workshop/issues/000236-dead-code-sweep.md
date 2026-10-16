@@ -147,4 +147,7 @@ Row by row (base 5abad047):
   - `lua/` lines 74823 → 73980.
   - Branch diff vs main: 36 files, +142 / −1886, a net deletion of 1744 lines (counted at the change, before the commit of this log).
 - `atlas/`, README, the Makefiles and scripts/ have no reference to a deleted module, and every file traceability.yaml routes exists.
+- Close round 1 (FIX-THEN-SHIP):
+  - BR-1: `atlas/skills/skill-system.md` still described the deleted virtual provider and generator seams. My atlas scan had matched module PATHS, not the concepts the deleted code carried. The re-sweep covered `atlas/` and README by concept name: virtual provider, generators, repo_discovery, TypeDescriptor, Matcher, discovery registry, cmd_prefix field, the two config keys, the shim, the alias, the tools/version helper. That page was the only remaining instance; it now states the actual stack (plugin, then user).
+  - Minor: the empty "10. Discovery Registry" heading is gone from `atlas/index.md`, and Traceability is 10.
 

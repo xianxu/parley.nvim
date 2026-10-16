@@ -1,5 +1,9 @@
 # Lessons
 
+## 2026-10-16 (#236 — dead-code sweep)
+
+- When deleting code, sweep the docs for the CONCEPTS it carried, not just its file paths. #236 grepped atlas/ for deleted module paths and missed a page describing the "virtual provider" and "generator seams" in prose (close BR-1). List each deleted entity's names and nouns, grep those, and delete or rewrite every hit.
+
 ## 2026-10-16 (#350 — a "dead" branch that was live)
 
 - One trace never proves a branch unreachable. In #265 I traced a single move with a TIMESTAMPED child, saw the rewrite skipped, and filed it dead; it fires for non-timestamp children behind an explicit or sub/ path. To call code dead, enumerate what its condition depends on (here, resolve_chat_path's three return cases) and show each one fails, or write the reaching test.
