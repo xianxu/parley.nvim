@@ -98,3 +98,86 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"b0e41b29-678e-493a-be81-f1f494ead2f2","repository":"github.com/xianxu/parley.nvim","issue_id":"000356","recipe":"milestone-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/5e43d11734c4c356","reviewed_head":"58023dd807a67782915211579177363542b767df","slot":"parley.nvim:4","requested_at":"2026-10-16T18:46:09.443071Z"},"phase":"finished","pid":13356,"started_at":"2026-10-16T18:46:09.703271Z","finished_at":"2026-10-16T18:52:24.128449Z","session_id":"4066e585-2f16-4213-b249-86a391cc0ab7","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T15:00:20-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 356 — Keep the cursor and view in place when the agent rewrites an open document |
+| repo | parley.nvim |
+| issue file | workshop/issues/000356-keep-the-cursor-and-view-in-place-when-the-agent-rewrites-an-open-document.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | b5629600f25f46ddb659e0d5651d035f93c6eff3..63020146bab5a5db78e91856fec4382d75cc5546 |
+| command | sdlc close --issue 356 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T15:00:20-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Now a mutation check: put back the old curswant line and confirm the new test fails.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All four prior Minor findings are dealt with, and I found no Critical or Important defect in the fixes. BR-1: `restore_views` now keeps `curswant` when the mapped column hasn't changed, and works it out again with `virtcol` when it has. A new integration case covers the `$`-sticky case. I put back the old `view.curswant = pos[2]` line and that case went red; with the fix restored it passes. BR-2: the hunks are now computed once per reload with `view_map.hunks` and passed to `map` and `map_line` as an optional argument, so existing callers still work. BR-3: the test comment is corrected. BR-4: the implementer left it to a follow-up, since the original review said it was outside #356's scope. The edit to the issue file only records the close: status, log and `actual_hours`. It does not change Spec or Done-when, so the scope did not change. Running `make test-spec SPEC=modes/session_sync` on the pinned head passes every suite.
+
+**1. Strengths**
+- `lua/parley/view_map.lua:14`: `M.hunks` is now public, and `map` and `map_line` take an optional `hs` that falls back to `M.hunks(old, new)`. Existing callers keep working, which the unit specs confirm, and the reload path diffs once.
+- `lua/parley/session_sync.lua:330-339`: the original `curswant` is kept whenever the column is unchanged, which covers the common case of an edit away from the cursor, so `$`-stickiness (MAXCOL) survives. The `virtcol(".") - 1` re-derivation runs after the first `winrestview`, so it reads the cursor's final position.
+- `tests/integration/session_sync_spec.lua:380-388`: the new case would catch the bug. My revert check confirmed it fails without the fix.
+
+**2. Critical findings:** none.
+
+**3. Important findings:** none.
+
+**4. Minor findings**
+- No test covers the branch where the column moves (`virtcol` re-derivation, `session_sync.lua:337`). The new case only covers an unchanged column. Deleting the second `winrestview` is not caught by the "at the cursor's line" case, which checks only lnum and col. This is the 2nd finding in family `view-restore-fidelity`. The rule covering both: every field `restore_views` writes back (lnum, col, curswant, topline) is either carried over unchanged or derived from the mapped position. Each field should be checked on both the unchanged path and the moved path, not field by field as findings come in.
+
+**5. Test coverage notes**
+- Revert check for BR-1 done: the old line fails "a $-sticky cursor stays $-sticky across an edit above", and the fixed line passes.
+- BR-2 is a performance and DRY change with no behavior change. The existing unit and integration specs still pass.
+
+**6. Architectural notes**
+- **ARCH-DRY:** pass. The duplicate diff is gone, and the hunks are computed once and shared.
+- **ARCH-PURE:** pass. `view_map.hunks` stays pure. The `virtcol` and `winrestview` calls stay in the thin editor layer in `session_sync`.
+- **ARCH-PURPOSE:** pass. Within #356's scope, both reload paths go through the one `restore_views`. BR-4's sibling paths were already judged out of scope and were moved to a follow-up issue.
+
+**7. Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      curswant kept when the column is unchanged and re-derived via virtcol when it moved (session_sync.lua:330-339). The new $-sticky test fails with the old line put back and passes on head.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      view_map.hunks is now public; restore_views computes it once and passes hs to map and map_line, with an optional fallback so existing callers still work.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The comment at session_sync_spec.lua:392 now says the cursor is on the "1" of "12".
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Judged out of scope by the original review. The issue log records a follow-up (#358) for file_refresh and the review round's edit!. #358 is not visible in this code checkout, as the tracker head differs.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: view-restore-fidelity
+    title: |
+      No test covers the moved-column branch of restore_views (virtcol curswant re-derivation)
+    detail: |
+      2nd finding in view-restore-fidelity. Rule: every view field restore_views writes back (lnum, col, curswant, topline) is either carried over or derived from the mapped position, and each should be checked on both the unchanged and moved paths. session_sync.lua:337 (second winrestview) can be deleted without any spec going red; the at-cursor case should also assert curswant equals virtcol-1 of the new position.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"d862f487-7f64-4113-957b-5b29082c871b","repository":"github.com/xianxu/parley.nvim","issue_id":"000356","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/6f2e8b72a8946aa0","reviewed_head":"63020146bab5a5db78e91856fec4382d75cc5546","slot":"parley.nvim:4","requested_at":"2026-10-16T21:53:49.176473Z"},"phase":"finished","pid":8731,"started_at":"2026-10-16T21:53:49.378629Z","finished_at":"2026-10-16T22:00:17.786042Z","session_id":"5764ba4e-7e63-4cae-9ffe-874083e49f4c","outcome":"returned"}] -->
