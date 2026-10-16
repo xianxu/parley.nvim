@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "1a47ce32", done: "2f4161c2"}
 ---
 
 # Remove conflicting branch shortcut alias
