@@ -3722,8 +3722,8 @@ local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 end
 
 -- The chat tree containing `file_path`, as chat_tree defines it (#349): the
--- files under its root, depth-first. One walker for the request context,
--- delete-tree, move, export and the outline.
+-- files under its root, depth-first, as delete-tree, move and
+-- get_chat_tree_files act on them.
 local function chat_tree_files(file_path)
 	local Tree = require("parley.chat_tree")
 	local deps = Tree.disk_deps()

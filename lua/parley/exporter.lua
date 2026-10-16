@@ -140,7 +140,7 @@ end
 -- file's info is kept, so the export reads every file once.
 local function tree_deps(infos)
 	return {
-		resolve = function(ref, dir) return _parley.resolve_chat_path(ref, dir) end,
+		resolve = require("parley.chat_tree").resolve,
 		load = function(abs)
 			if infos[abs] == nil then infos[abs] = read_chat_file(abs) or false end
 			return infos[abs] and infos[abs].parsed or nil

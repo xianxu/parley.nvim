@@ -338,6 +338,19 @@ describe("chat context over a real chat tree (#233)", function()
         assert.same({ root, aside, nested, later }, parley.get_chat_tree_files(nested))
     end)
 
+    it("gives delete-tree and move every file of a chain deeper than 20", function()
+        local paths = {}
+        local function name(i) return ("2026-10-16.18-%02d-00.%03d.md"):format(i, 100 + i) end
+        for i = 0, 22 do
+            local body = {}
+            if i > 0 then vim.list_extend(body, { "🌿: " .. name(i - 1) .. ": Up", "" }) end
+            vim.list_extend(body, { "💬: Q" .. i, "", "🤖:[A]", "a", "" })
+            if i < 22 then vim.list_extend(body, { "🌿: " .. name(i + 1) .. ": Down", "" }) end
+            paths[#paths + 1] = write_chat(name(i), body)
+        end
+        assert.same(paths, parley.get_chat_tree_files(paths[#paths]))
+    end)
+
     it("makes an orphaned child its own tree: the parent no longer lists it", function()
         local parent = write_chat("2026-10-16.17-00-00.080.md", { "💬: P1", "", "🤖:[A]", "p", "" })
         local child = write_chat("2026-10-16.17-01-00.081.md", {

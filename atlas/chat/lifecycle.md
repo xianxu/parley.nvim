@@ -301,7 +301,7 @@ exchanges are all after it.
 
 `chat_tree.path_up` follows `parent_link` upward while each parent lists the
 child among its branches. A parent that does not link back ends the path, and
-so do a cycle or the depth cap of 20. `chat_tree.linearize` emits the path's
+so does a cycle; there is no depth cap (#349: a whole-tree command must see the whole tree). `chat_tree.linearize` emits the path's
 files with their left subtrees, under a visited set. Every file is read as the
 user sees it (`helper.chat_lines`): from its loaded buffer when one is open, else
 from the file. An exchange still being regenerated contributes its previous

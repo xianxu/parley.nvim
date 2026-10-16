@@ -33,6 +33,7 @@ The chat tree is walked by five copies of the same logic. There are three root-f
 |---|---|---|
 | `root` | new | `chat_tree.root(file, deps)`: the first file of `path_up`; an unloadable or orphaned file is its own root |
 | `files` | new | `chat_tree.files(root, deps)`: the tree's files in depth-first pre-order, each once, depth-capped |
+| `resolve` | new | `chat_tree.resolve(ref, dir)`: the one resolver the walker's IOs and the exporter's loader use |
 | `disk_deps` | new | `chat_tree.disk_deps()`: the walker's IO over saved files, for commands that act on files |
 | `chat_tree_files` | new | init's one call into `root` and `files` for delete-tree, move and `get_chat_tree_files` |
 | `find_tree_root` | modified | exporter and outline: thin wrappers over `chat_tree.root` |
@@ -76,6 +77,9 @@ Steps:
 
 - 2026-10-16, TL: keep the new root rule. The old rule was a bug, and one walker means one notion of the tree; note the change in the close and the atlas.
 - 2026-10-16, build: delete-tree, move, export and the outline load through `chat_tree.disk_deps()`, not `io_deps()`. They act on the saved files, and the outline renders from disk. Two chat_move cases found this: they append the 🌿 line on disk while the root's buffer is loaded. The request context keeps `io_deps` (buffer first). A readable file without a header (a legacy `# topic:` chat) loads as a leaf with no links, as the old init walker listed it. chat_finder_logic_spec's move cases found this.
+
+- 2026-10-16, close review round 1 (BR-1, Important): `files` capped the downward walk at 20 levels, where the old walkers had none, so delete-tree, move and export could silently act on part of a deep tree. The same is true of the upward walk: `path_up` kept the old root-finders' cap of 20, so from the deepest file of a 23-file chain the root came out two files down. Every cap in the walker belongs to this class, so all three go: `path_up`, `linearize` and `files`. The `seen` sets already end every cycle. `files` walks with an explicit stack. This is the second behaviour change: a tree deeper than 20 is now seen whole, by the request context too. Tests: a 31-file chain up (`path_up`) and down with a cycle back to the top (`files`), and `get_chat_tree_files` from the deepest file of a 23-file chain on disk.
+- Same round, minors: the resolver is `chat_tree.resolve`, shared by `io_deps`, `disk_deps` and the exporter's loader, and the header parse is one local. The `chat_tree.lua` header and the `chat_tree_files` comment now say who uses what. A unit case shows an unloadable file's subtree is skipped. Accepted as is: the sweep matches a parent link or branch path resolved in one expression. Pulling the field into a local first gets past it. The exporter reads `parent_link` for a link label, and a per-line allow list would be more fragile than the pattern.
 
 ## Log
 
