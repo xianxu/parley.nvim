@@ -164,6 +164,8 @@ Post-close acceptance remains pending: after SHIP and the green suite/conformanc
 
 - 2026-10-15 — ordinary close round2 SHIP: all three prior blocking findings addressed; no Critical/Important findings. Reviewer independently passes all13 mapped session-sync spec files, real/fake conformance and negative mutation checks. Corrected its one Minor plan/runtime traceability advisory: lease pathnames remain allocated with a4096-ID namespace cap and overflow refusal; no automatic GC is implemented. This post-close correction changes documentation only. Staging for combined operator acceptance is next; no live acceptance or landing claimed.
 
+- 2026-10-15 — sdlc stage --build succeeded on parley.nvim:0 (/Users/xianxu/workspace/parley.nvim), verified matching staged Git HEAD; Parley has no Go binary build. Worker keeps its issue branch. The staged source contains reviewed code935205a3 and post-close documentation corrections only. Waiting for the TL-coordinated combined Couch/Neovim restart and operator check using the durable plan's acceptance steps. No landing or live acceptance claimed; stage stays installed until operator feedback.
+
 ## Revisions
 
 - 2026-10-15 — record the already-approved persistent-feedback acceptance explicitly in Done when. Separate implementation verification from post-close staging/live/landing so the checklist records observed work without claiming future acceptance. The required suite is still pending; no close waiver or live acceptance is implied.
