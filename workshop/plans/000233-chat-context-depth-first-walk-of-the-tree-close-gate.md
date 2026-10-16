@@ -362,6 +362,115 @@ rounds:
       isolation: fenced
       reviewed: 73d62dcd0172cadfa810791c9cffb937ad75db57
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: ed4dee2b-7c52-4475-839d-9428285e1b70
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000233"
+            recipe: fix-review
+            round: 5
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/fe94666e8e7f83dd
+            reviewed_head: 4012c9d579f1db161cd916f6d67e7845f822b6b3
+            slot: parley.nvim:3
+            requested_at: "2026-10-16T15:07:17.344167Z"
+          phase: finished
+          pid: 77416
+          started_at: "2026-10-16T15:07:17.500099Z"
+          finished_at: "2026-10-16T15:08:37.269349Z"
+          session_id: 2f242b3e-a113-4248-8eb0-6fd7dfe5a342
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 4012c9d579f1db161cd916f6d67e7845f822b6b3
+        tracker_head: 4e3d162a34567b637305abe15dc733009f18d9c0
+        branch_point: a53472921f064c68ee2992246396794b593d01b9
+        since: "2026-10-16T03:36:06-07:00"
+        until: "2026-10-16T07:56:29-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T03:36:06-07:00"
+              end: "2026-10-16T07:56:29-07:00"
+              began: "2026-10-16T03:36:06-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 996b651e-5e17-47f4-9815-33d9ff25fe0d
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 574f3424cf9d4f069065b223f91c8fc099976af9323645984fc1235e97453a3b
+              started: "2026-10-15T18:27:53.241Z"
+              spawned: false
+              bytes: 11501851
+              windows:
+                - start: "2026-10-16T03:36:06-07:00"
+                  end: "2026-10-16T07:56:29-07:00"
+        cuts:
+            - dispatched: "2026-10-16T03:51:43-07:00"
+              finalized: "2026-10-16T03:55:11-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T04:00:39-07:00"
+              finalized: "2026-10-16T04:03:54-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T04:06:38-07:00"
+              finalized: "2026-10-16T04:09:14-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T04:11:19-07:00"
+              finalized: "2026-10-16T04:16:46-07:00"
+              finalizing: true
+      "n": 5
+      timestamp: "2026-10-16T08:08:38-07:00"
+      dispatched: "2026-10-16T08:07:17-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Disposed in an earlier round; the interdiff does not touch it, and its chat_tree_context case still passes.
+          round: 5
+        - id: BR-2
+          disposition: addressed
+          note: Disposed in an earlier round; the interdiff does not touch it.
+          round: 5
+        - id: BR-3
+          disposition: addressed
+          note: Disposed in an earlier round; the interdiff only updates the re-measured Log number.
+          round: 5
+        - id: BR-4
+          disposition: addressed
+          note: Disposed in an earlier round; the interdiff does not touch it.
+          round: 5
+        - id: BR-5
+          disposition: addressed
+          note: Disposed in an earlier round; the interdiff does not touch it.
+          round: 5
+        - id: BR-6
+          disposition: addressed
+          note: Disposed in an earlier round; the interdiff does not touch it.
+          round: 5
+        - id: BR-7
+          disposition: addressed
+          note: Disposed in an earlier round; the interdiff does not touch it.
+          round: 5
+        - id: BR-8
+          disposition: addressed
+          note: Its regression case now stubs parley.oauth.fetch_content, which chat_respond.lua:1355 calls; the case passes (calls == 1).
+          round: 5
+        - id: BR-9
+          disposition: addressed
+          note: Disposed in an earlier round; the interdiff does not touch it.
+          round: 5
+      recipe: fix-review
+      isolation: fenced
+      reviewed: 4012c9d579f1db161cd916f6d67e7845f822b6b3
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#233 (boundary-review)
@@ -421,6 +530,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - BR-8 — addressed — holder[url] routes each fetch to its holder's key (chat_respond.lua:1342); reverting that line makes the new two-submit test in chat_tree_context_spec fail, and restoring it makes it pass.
 - BR-9 — addressed — Ancestor URLs (content or error stubs) now save under the ancestor's key, and the test asserts the child's cache stays empty; the dead peek fallback is removed (chat_respond.lua:274-276).
+
+## Round 5 — 2026-10-16T08:08:38-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — Disposed in an earlier round; the interdiff does not touch it, and its chat_tree_context case still passes.
+- BR-2 — addressed — Disposed in an earlier round; the interdiff does not touch it.
+- BR-3 — addressed — Disposed in an earlier round; the interdiff only updates the re-measured Log number.
+- BR-4 — addressed — Disposed in an earlier round; the interdiff does not touch it.
+- BR-5 — addressed — Disposed in an earlier round; the interdiff does not touch it.
+- BR-6 — addressed — Disposed in an earlier round; the interdiff does not touch it.
+- BR-7 — addressed — Disposed in an earlier round; the interdiff does not touch it.
+- BR-8 — addressed — Its regression case now stubs parley.oauth.fetch_content, which chat_respond.lua:1355 calls; the case passes (calls == 1).
+- BR-9 — addressed — Disposed in an earlier round; the interdiff does not touch it.
 
 ## Open findings
 

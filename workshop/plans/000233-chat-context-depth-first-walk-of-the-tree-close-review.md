@@ -429,3 +429,93 @@ dispose:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"842e104a-bc79-4d78-b86b-3b835b8171a8","repository":"github.com/xianxu/parley.nvim","issue_id":"000233","recipe":"milestone-review","round":4,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/e4d339d87510afbd","reviewed_head":"73d62dcd0172cadfa810791c9cffb937ad75db57","slot":"parley.nvim:3","requested_at":"2026-10-16T11:11:19.749458Z"},"phase":"finished","pid":88766,"started_at":"2026-10-16T11:11:19.885818Z","finished_at":"2026-10-16T11:16:45.222782Z","session_id":"5594be4e-ab01-4efe-a4c4-166784bb2c2a","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T08:08:38-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 233 — A question asked after an <M-i> branch cannot see that branch; build chat context by depth-first walk of the tree |
+| repo | parley.nvim |
+| issue file | workshop/issues/000233-chat-context-depth-first-walk-of-the-tree.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a50166fc0d235ca21023057e8fc2813bb6f5bc45..4012c9d579f1db161cd916f6d67e7845f822b6b3 |
+| command | sdlc close --issue 233 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T08:08:38-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Consistent with sibling specs. Running the spec.
+
+Running the changed spec through the test harness to confirm the swapped stub still intercepts the fetch.
+
+Wrong key; running chat/memory.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The only code change in this window is a single line from merging main. Main's #236 removed the `parley.google_drive` shim, so the test stub at `tests/integration/chat_tree_context_spec.lua:192` now points at `parley.oauth`. That is correct. `chat_respond.lua:1230` requires `parley.oauth`, and `chat_respond.lua:1355` looks up `oauth.fetch_content` on the module table at call time, so the replaced function still catches the fetch. The test still checks what it was written to check: a reference fetched from another file in the tree is fetched once and cached under the file it came from. The two sibling specs, `chat_respond_spec.lua:660` and `tests/unit/remote_references_spec.lua:17`, already use the same `parley.oauth` target. I ran `make test-spec SPEC=chat/memory` in the isolated test environment and everything passed: chat_tree_context 11/11, including "caches an ancestor's fetched reference under the ancestor, once"; build_messages 104; chat_respond 53; chat_tree 11; ancestor_chain_rename 6; plus the other suites in that group. The rest of the diff is bookkeeping: the round-4 gate and review records, the issue's status/flow metadata, and one re-measured number in a Log table. None of it changes `## Spec`, `## Revisions` or `## Done when`, so the scope has not changed.
+
+1. **Strengths**
+   - The merge fix keeps both sides' intent: main dropped the shim, and the stub moved to the module the code actually calls rather than adding the shim back (`chat_tree_context_spec.lua:192`).
+   - The stub is restored even when an assertion fails, because the assertions run inside a `pcall` and `fetch_content` is put back before re-raising (`chat_tree_context_spec.lua:203-209`).
+   - The Log entry with the re-measured token count says which change it reflects (the BR-3 window), instead of silently replacing the old number.
+
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor:** none new in this window. (The sibling specs still name their local `google_drive` even though it holds `parley.oauth`. That code is outside this window, so I'm not raising it.)
+5. **Test coverage:** I ran the changed spec and all of the chat/memory group in the isolated environment; all green. If the stub pointed at a module the code doesn't call, the `calls == 1` assertion would catch it.
+6. **Architecture (interdiff only):**
+   - ARCH-DRY passes: the stub target now matches the sibling specs.
+   - ARCH-PURE passes: only a test changed.
+   - ARCH-PURPOSE passes: no other spec under `tests/` or `lua/` still requires the removed `parley.google_drive` module. The leftover `google_drive` config key in `config.lua` is a deliberate backward-compatibility setting from main.
+7. **Plan revisions:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Disposed in an earlier round; the interdiff does not touch it, and its chat_tree_context case still passes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Disposed in an earlier round; the interdiff does not touch it.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Disposed in an earlier round; the interdiff only updates the re-measured Log number.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Disposed in an earlier round; the interdiff does not touch it.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Disposed in an earlier round; the interdiff does not touch it.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Disposed in an earlier round; the interdiff does not touch it.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Disposed in an earlier round; the interdiff does not touch it.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Its regression case now stubs parley.oauth.fetch_content, which chat_respond.lua:1355 calls; the case passes (calls == 1).
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Disposed in an earlier round; the interdiff does not touch it.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ed4dee2b-7c52-4475-839d-9428285e1b70","repository":"github.com/xianxu/parley.nvim","issue_id":"000233","recipe":"fix-review","round":5,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/fe94666e8e7f83dd","reviewed_head":"4012c9d579f1db161cd916f6d67e7845f822b6b3","slot":"parley.nvim:3","requested_at":"2026-10-16T15:07:17.344167Z"},"phase":"finished","pid":77416,"started_at":"2026-10-16T15:07:17.500099Z","finished_at":"2026-10-16T15:08:37.269349Z","session_id":"2f242b3e-a113-4248-8eb0-6fd7dfe5a342","outcome":"returned"}] -->

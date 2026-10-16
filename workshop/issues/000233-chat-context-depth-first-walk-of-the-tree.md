@@ -128,6 +128,7 @@ Before merge (a gate held by the TL, not a build step): the operator decides on 
   own item rule, the same drift from duplicated tree code).
 
 ### 2026-10-16
+- 2026-10-16: closed — Post-merge fix only: #236 deleted the parley.google_drive shim, so the fetch-once test now stubs parley.oauth.fetch_content (the module chat_respond calls). chat_tree_context_spec 11/11; full suite green on 4012c9d5 (sdlc-local/suite). (fixed-then-ship); review verdict: SHIP
 - 2026-10-16: closed — Red: without linearize subtree descent (old behaviour) 3/4 tree-context and 4/11 chat_tree cases fail. Every review finding (BR-1/2/3, cache identity, non-writing lookup, BR-8 holder key) has a chat_tree_context_spec case that a mutation removing the fix fails. Green: chat_tree 11, chat_tree_context 11, build_messages 104, chat_respond 53, ancestor_chain_rename 6, topic_gen 11, remote_references 50, helper_io 11, arch 20 specs, luacheck clean.; review verdict: SHIP
 - 2026-10-16: flow upgraded quick → full — 274 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
