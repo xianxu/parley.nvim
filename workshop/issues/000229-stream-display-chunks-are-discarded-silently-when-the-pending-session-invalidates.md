@@ -108,7 +108,7 @@ Measurement (2026-10-15, :3). The path the issue names is dead code: `D.create_h
 - [x] Oracle (Done-when 1): an integration spec drives a real chat response (real dispatcher, tasker, curl, runner, document) against `fake_cliproxy` in a new `stream` response mode (N separate content deltas). A buffer-attach hook makes the main loop busy and inserts a line above the answer on every streamed write. After completion, assert the buffer's answer text equals `qt.response` (less the deliberately stripped leading newlines) and that the inserted lines survived.
 - [x] File the two silent-stall paths as a separate issue with the measured file:line evidence.
 - [x] Atlas: where streamed bytes can stop and how each is accounted.
-- [ ] Verify: focused specs, then the full suite.
+- [x] Verify: focused specs, then the full suite.
 
 ## Log
 
@@ -127,3 +127,4 @@ and its fix shipped, while this path is real code but unobserved. Keeping them
 together would have meant either holding a fixed issue open for a speculative
 one, or closing a Done-when row that was never met.
 - Full suite on fe577185: one failure, tasker_run_spec "contains throwing readers and still drains both streams once" (#182). It pins that a reader which threw still receives its EOF. That contract holds: EOF lets a reader release what it holds. The guard now skips only later DATA for a failed reader and still delivers EOF once. tasker_run 42/0, tasker_supervision 30/0, stream_integrity 1/0.
+- Full suite on f606daff: exit 0, lint clean (736 files).
