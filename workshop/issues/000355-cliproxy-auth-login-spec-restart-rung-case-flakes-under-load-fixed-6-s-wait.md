@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "f0ee053f", done: "bcece1c0"}
 ---
 
 # cliproxy_auth_login_spec restart-rung case flakes under load (fixed 6 s wait)
