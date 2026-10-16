@@ -1,12 +1,20 @@
 ---
 id: 000348
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '0d2fc6ba4b52b800fc6ab71850fa857b8335a638' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'ed06d115397e79375cc1ad231e0d35792cbac9d7' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T02:14:02-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # starter welcome lock: a second starter can see the lock dir before its owner file and demand repair
@@ -34,16 +42,44 @@ in the spec's hold hook.
 
 ## Spec
 
+Two windows, not one. The owner `mkdir`ed the lock and wrote `owner` afterwards,
+and cleanup's `vim.fn.delete(lock, 'rf')` removed `owner` before the
+directory. The failing case is the second window: the waiter polls every
+100 ms while the first starter is held after its owner write.
+
+The lock is now complete or absent to a waiter:
+- `take_lock` writes the owner record into an `fs_mkdtemp` staging directory and
+  `fs_rename`s it to the lock; a loser's rename fails on the non-empty lock.
+- `retire_lock` renames the lock to a unique retired name, then deletes that.
+- A waiter's missed read counts as garbage only if the same lock (inode and
+  device) is still there afterwards, since an owner can retire it between reads.
+
+## Core concepts
+
+| Concept | Meaning |
+|---|---|
+| `take_lock` | publishes the lock by renaming a staging dir that already holds the owner record |
+| `retire_lock` | renames the lock away before deleting it |
+
 ## Done when
 
-- [ ] The race is reproduced deterministically (or the suspected cause is disproved, with a measurement).
-- [ ] A live owner that has not yet written its pid is waited for, not reported as needing repair. The dead-owner and garbage-lock repair paths still raise.
-- [ ] The case passes under a loaded full suite.
+- [x] The race is reproduced deterministically (or the suspected cause is disproved, with a measurement).
+- [x] A live owner that has not yet written its pid is waited for, not reported as needing repair. The dead-owner and garbage-lock repair paths still raise.
+- [x] The case passes under a loaded full suite.
 
 ## Plan
 
-- [ ]
+- [x] `take_lock` and `retire_lock` in `lua/parley/starter.lua`; the waiter re-checks the lock's identity.
+- [x] Red first: `STARTER_OWNER_GATE` and `STARTER_RETIRE_GATE` hooks in `tests/packaging/starter_launch.lua`, and two spec cases.
+- [x] Atlas: `infra/starter.md` recovery notes.
 
 ## Log
 
 ### 2026-10-16
+
+- Taken by parley.nvim:3. Red: both gate cases failed on the old code with
+  "requires repair" at :196, deterministically. Green: starter_config_spec
+  21/21, and 21/21 in each of 6 concurrent runs. The other starter specs pass
+  (1, 4, 20, 6, 7, 7). luacheck clean. Added in self-review: the waiter re-checks
+  the lock's identity, because an owner retiring it between the waiter's reads
+  is not garbage.
