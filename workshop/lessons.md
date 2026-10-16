@@ -609,6 +609,9 @@ oracle, and the mutation that would make the test fail.
 
 - Enumerate the whole heading grammar in boundary tests: empty/nonempty text, end-of-line/space/tab terminators, levels 1–6 and indentation 0–3, with out-of-grammar positive continuations.
 
+## 2026-10-15 (#319 — canonical review export consumer)
+
+- A versioned export consumer must accept the producer's valid optional and defaulted fields. Test producer examples with unordered modes, tied ordering and omitted mode flags; never turn the current six stock records into schema constraints.
 - A successful filesystem move plus nvim_buf_set_name does not make Neovim consider NEW read: its not-edited flag blocks ordinary writes and checktime skips it. Test the next submit/auto-save, acknowledge proven unchanged NEW with a non-bang native read, and reattach native edit observers detached by that read. Never bypass the guard with an unconditional forced write.
 ## 2026-10-15 (#338 — starter tutorials under project mode)
 
@@ -652,6 +655,12 @@ oracle, and the mutation that would make the test fail.
 - A waiter that misses a read counts it as garbage only after re-checking that the same lock (inode and device) is still there.
 - Each such re-check needs its own gate test that fails without it.
 
+## #242: a reader that can throw must consume input before it processes it
+
+- If a loop processes a line and only then drops it from its buffer, a throw leaves that line in place. A later flush, such as an EOF still delivered after the failure, then decodes it again. Take the input off the buffer first, and once the reader has thrown, its own flush decodes nothing.
+- An intermittent spec failure is evidence, not noise. Loop the case (30–40 runs) and print what differs. Then make the trigger deterministic with a fake knob (here, one frame per read) before fixing, so the regression test fails every time on the old code.
+- If the plan says the table is the product, build the table as data first: rows, which providers each applies to, and a pure judge. Hand-written cases that cover the same rows are not the table, and a Core-concepts row naming a pure table must point at a pure file.
+- A test that something arrives "incrementally" depends on the timing of the IO it watches. Pace the writer (a per-write delay knob on the fake) so the reads are really separate. Loop the case before trusting it: an unpaced single-byte writer sometimes coalesced into one read.
 ## #233: when a single-file input becomes a sequence, every consumer of the old input must derive from the sequence
 
 - The close review found four consumers still reading the one file after the tree walk became the request's context: remote resolution, the batch leg's filter, the memory window's count and the topic input. Before building, list everything that reads the old input (here `input_parsed` and `exchange_idx`), and move each to the sequence in the same change.

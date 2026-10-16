@@ -1,12 +1,21 @@
 ---
 id: 000242
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-12
-updated: 2026-09-12
-estimate_hours:
-card_mirror: 'b0e1569ebd29ea3348c3419bff1d85f31f7a2d59' # card fields mirrored from issue-cards; edit via sdlc
+updated: 2026-10-16
+estimate_hours: 8.37
+card_mirror: '5b62ff3db97fe8ee4628c2772b00d30d62030af3' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T07:13:14-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: inferred}
 ---
 
 # Retrofit ARCH-MOCK to the chat providers: one stateful fake per provider at the curl seam, integration tests through it, and a live conformance check that re-records the fixtures
@@ -126,11 +135,51 @@ is not a chat provider); making the fake answer sensibly.
   real APIs and passes; without the variable it is skipped, not failed.
 - A full run leaves no `fake_provider` process behind (#220's check).
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec              design=0.60 impl=0.04
+item: api-integration         design=0.40 impl=0.60
+item: api-integration         design=0.40 impl=0.60
+item: api-integration         design=0.40 impl=0.60
+item: cross-cutting-refactor  design=0.10 impl=0.20
+item: lua-neovim              design=0.30 impl=0.60
+item: lua-neovim              design=0.30 impl=0.60
+item: lua-neovim              design=0.30 impl=0.60
+item: real-api-discovery      design=0.00 impl=0.24
+item: atlas-docs              design=0.04 impl=0.08
+item: milestone-review        design=0.10 impl=0.20
+item: milestone-review        design=0.10 impl=0.20
+item: milestone-review        design=0.10 impl=0.20
+design-buffer: 0.15
+total: 8.37
+```
+
+The items:
+- **api-integration ×3:** one per wire dialect (anthropic; the openai family; googleai): the shared dialect module, fake_provider's request-keyed behaviour and failure modes, and their fixture-backed tests.
+- **cross-cutting-refactor:** moves fake_cliproxy's chat surface onto the shared module across its 12 specs.
+- **lua-neovim ×3:** the scenario-table integration specs with the copilot token-URL seam; the standalone #228/#229 proofs on their pre-fix parents; and the gated live conformance spec with the second-call capture script.
+- **real-api-discovery ×1, not 3:** the dialect shapes come from recorded fixtures, and the live runs are operator steps.
+- **milestone-review ×3:** one per M1–M3 boundary.
+
+The approved, thorough plan earns v2's ×0.2 design discount on the implementation primitives (design 0.4 from 1–3 ×0.2 for api-integration). Each `impl=` is 40% of the v2 table's high value (1.5 → 0.6), per v3.1. The design buffer is +15% (thorough plan doc). Library check: no existing library provides SSE fakes for these wires; the repo's own fake_cliproxy is reused, which is what the cross-cutting-refactor item prices.
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only. `sdlc estimate-source` reported the calibration source stale on 2026-10-16, so the per-primitive values are provisional.*
+
 ## Plan
 
-- [ ] M1 — Anthropic dialect: fake + request-keyed behavior + split-frame mode; the six integration scenarios; the second-call fixture; #228/#229 regressions
-- [ ] M2 — OpenAI-family dialect (fold `fake_cliproxy`'s chat surface into it) and Google; the same six scenarios each
-- [ ] M3 — live conformance spec, gated; `make fixtures` documented as the re-record; release-checklist line
+Durable plan: `workshop/plans/000242-arch-mock-stateful-fake-per-chat-provider-plan.md`. It opens with the 2026-10-16 inventory and five decisions for the TL, which revise this issue's Spec:
+1. No retry exists, so HTTP errors are tested as surfaced failures and retry is filed separately.
+2. #228's regression targets the ending classification that landed.
+3. A copilot token-URL test seam.
+4. A shared `sse_dialects.py` that both fakes import, instead of folding fake_cliproxy.
+5. The live run and the second-call recording are operator steps.
+
+- [x] M1 — Anthropic dialect: shared dialect module + fake_provider (request-keyed behaviour, failure counters, frame splitter) + S1–S7 through the real dispatcher→curl path + #228/#229 regression proofs on their pre-fix parents
+- [ ] M2 — OpenAI family (openai, azure, ollama, copilot via a token-URL seam) and googleai; fake_cliproxy's chat surface on the shared module (its anthropic route answers in the anthropic dialect)
+- [ ] M3 — gated live conformance spec (`PARLEY_LIVE_PROVIDERS=1`), the second-call fixture capture, atlas + TOOLING release-checklist line
 
 ## Log
 
@@ -145,3 +194,63 @@ is not a chat provider); making the fake answer sensibly.
   and error modes (lines 342-369, 475), so the OpenAI dialect is mostly a
   rename; the direct providers have fixtures but no seam-level double; the
   per-provider `endpoint` makes the seam testable without transport changes.
+
+### 2026-10-16 (parley.nvim:4)
+- 2026-10-16: closed M1 — M1 found and fixed a production bug: the dispatcher out_reader EOF flush re-decoded the line a throwing output handler had left in its buffer, handing the same delta twice (duplicate chat text, #229 class). Fix: the line comes off the buffer before process_line, and a tagged reader_state skips the EOF flush after a throw. Stress, S7b 40-run loop: 3/40 and 4/30 duplicated before the fix; 0/40 twice after (80/80 failed the attempt correctly); frame-aligned S7b reproduced 3/3 before. Deterministic regressions dispatcher_query_spec A6-A8: on main A6 and A8 fail; with the EOF skip removed A7 and A8 fail; with the fix all pass. Review round 2 (REWORK) answered: BR-8 the scenario table is pure data (provider_scenario_table.lua: ROWS, PROFILES, mismatches; 3 unit cases), provider_scenarios_spec iterates profiles x rows, 15/15 green in 8/8 runs; BR-9 one tagged reader_state. fake_provider_spec 10/10, sse_dialects_spec 4/4, run_proofs.sh 6/6 (#228 on dc548920^, #229 on 634e33a9^ reproduced; fixed on the branch). Full suite green on 19bd7c77; rerun on 54aad52d in flight.; review verdict: SHIP
+
+- Plan approved by the TL, all five decisions as proposed:
+  1. HTTP errors are tested as surfaced failures carrying the API message; "retry transient provider errors" is filed as #351 (unclaimed).
+  2. #228's regression targets what landed, proven on `dc548920^`.
+  3. One test seam for the copilot token URL, no user config.
+  4. A shared `sse_dialects` module that both fakes import.
+  5. The live halves are built with offline proofs; the operator runs the live runs, which the TL schedules.
+- TL guidance: keep it lean (the scenario table is the product; keep the fake shell thin). M1 first, and report at its milestone close before M2.
+- 2026-10-16 M1 built:
+  - `tests/fixtures/sse_dialects.py`: the anthropic dialect, behaviour and split.
+  - `tests/fixtures/fake_provider`: a thin shell with the mode and split flags and a request log.
+  - `tests/helpers/provider_scenarios.lua` and `tests/integration/provider_scenarios_spec.lua (was provider_anthropic_spec.lua)`: S1–S7b through the real dispatcher→curl path, 8/8 passing.
+  - `tests/unit/sse_dialects_spec.lua`: decodes through the real parsers and matches `anthropic_stream.txt` event for event.
+  - `tests/regression/run_proofs.sh`: #228 and #229 reproduced on `dc548920^` and `634e33a9^`, and fixed on the branch, 6/6 passing.
+  - No production change. Two harness facts the helper absorbs:
+    - An unowned query needs `deadline_ms`, so the helper passes `tasker.deadline.stream`.
+    - ~~A non-empty in-band error is read via `_classify_ending`, because the dispatcher logs only empty-response error notices.~~ That was wrong (BR-3). The dispatcher logs a warning-level "answer is TRUNCATED … in-band — Overloaded". S3 now asserts that warning.
+- 2026-10-16 M1 review round 1, FIX-THEN-SHIP. All six findings fixed:
+  - BR-2: `tests/unit/fake_provider_spec.lua`, 10 cases. It covers the behaviour table, the split invariant, check_mode, a curl per mode, and the request-log gating.
+  - BR-3: S3 asserts the in-band warning.
+  - BR-4: S7a asserts `"Hello,"` and `streamed`.
+  - S6 now asserts the split reached the reader. Mutating it to `none` fails it, with 1015 of 1015 bytes arriving in one read.
+  - `--mode` and `--split` are validated at startup.
+  - Added the `frames` split, S4 for 429/529/500, and the thinking and no_stop rows.
+- **FINDING: a production defect, so STOP per plan Task 3.** S7b is intermittent: 3/40 and 4/30 under stress. After the handler throws, the handler gets the SAME delta again (`{"Hello,","Hello,"}`).
+  - Cause: `dispatcher.lua` out_reader's chunk loop calls `process_line` BEFORE dropping the line from `buffer`. A throw leaves the line in place. tasker still delivers the terminal EOF `(nil,nil)` (#182), and the EOF branch flushes the leftover buffer through `process_line`, so the thrown line is decoded again.
+  - This is #229's class: tasker gates data after a failure, but the reader's own EOF flush re-reads it.
+  - Reported to the TL. The TL said to fold the fix in as a scope revision.
+- 2026-10-16 **M1 found and fixed a production bug.** In `dispatcher.lua` out_reader, each line now comes off the buffer before `process_line` runs. The reader is marked as having thrown until the call returns, and once it has thrown, EOF decodes nothing more (no flush, no `finish_stdout`).
+  - Regression test: the new S7b frame-aligned case. The fake writes one frame per read (`--split frames --write-delay-ms 20`). Before the fix it duplicated `"Hello,"` 3/3; after the fix it passes.
+  - Stress, the every_byte S7b loop: before the fix, 3/40 and 4/30 duplicated; after it, 0/40 twice, and all 80 runs failed the attempt.
+  - The dispatcher, dispatcher_query, tasker and stream_integrity specs are green.
+
+- 2026-10-16 M1 review round 2 was REWORK. Both findings are fixed:
+  - BR-8: the scenario table is now data. `provider_scenario_table.lua` holds ROWS, PROFILES and a pure `mismatches` judge, with 3 unit cases. `provider_scenarios_spec.lua` loops over profiles × rows, 15 cases, green 8/8 runs.
+  - BR-9: one `reader_state` replaces the two booleans, and timing-free regression tests cover the out_reader fix:
+    - `dispatcher_query_spec` A6–A8.
+    - On main, A6 and A8 fail. With the EOF skip removed, A7 and A8 fail. With the fix, all pass.
+  - S6 is paced at 1 ms per write. Unpaced, it was flaky at 1 run in 5 because the socket coalesced the body.
+
+- 2026-10-16 M1 close: SHIP, round 3. Two Minor advisories answered in f8503293: the threw branch skipping `finish_stdout` is now documented in the code and the atlas, and the plan's Task 3 file list is struck.
+- 2026-10-16 **Parked after M1** (TL, reprioritizing to universal-agent-input-interface): M1 lands on its own; M2 (the other provider profiles, fake_cliproxy) and M3 (live conformance) stay open on this issue for a later slot.
+
+## Revisions
+
+- 2026-10-16, scope revision (TL-approved): M1 includes a production fix. The fake found a duplicate-delta defect in #229's class, the out_reader EOF flush re-decoding the line that threw. It is fixed in `dispatcher.lua`, with S7b as the regression test. The plan's "no production change expected" no longer holds for M1.
+
+- 2026-10-16, the TL-approved decisions revise the Spec (recorded at the plan-quality gate's request, PQ-3):
+  - Spec 3's "HTTP error with retry" is now "HTTP error surfaced as a failure carrying the API message, no retry"; retry is #351.
+  - #228's regression targets the ending classification that landed (in-band error, cap, missing stop reason), proven on `dc548920^`.
+  - The disconnect scenario splits into S7a (disconnect: failure surfaced, partial kept) and S7b (#229: a throwing output handler stops the attempt), proven on `634e33a9^`.
+  - googleai has no tool wire, so its tool-loop scenario does not apply.
+  - The copilot token URL gets a test seam.
+  - Both fakes share `tests/fixtures/sse_dialects.py`.
+  - The live runs are operator steps.
+  - Done-when reads accordingly: "the scenarios in the plan's table" replaces "the six scenarios"; "#228 and #229 fail on their pre-fix code" means the standalone proofs on the pre-fix parents.
+

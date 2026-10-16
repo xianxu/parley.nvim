@@ -10,6 +10,11 @@ local parley = require("parley")
 local ready_port = require("tests.helpers.ready_port")
 local fixture_process = require("tests.helpers.fixture_process")
 local cliproxy = require("parley.cliproxy")
+-- How long a claimed recovery may take to settle: the dispatcher's backstop,
+-- which cliproxy_budget_spec proves the whole repair budget fits under (#355).
+-- A shorter literal sat below the restart rung's own worst case, so it failed
+-- under load while the code was right.
+local SETTLE_MS = require("parley.dispatcher").recovery_timeout_ms
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 cliproxy._set_data_dir(vim.fn.tempname()) -- never touch the real ~/.local/share/nvim
@@ -79,7 +84,7 @@ describe("cliproxy.recover", function()
             function() out.settled = "retry" end,
             function(msg) out.settled = "give_up"; out.message = msg end)
         if out.claimed then
-            vim.wait(6000, function() return out.settled ~= nil end, 20)
+            vim.wait(SETTLE_MS, function() return out.settled ~= nil end, 20)
         end
         return out
     end
@@ -360,7 +365,7 @@ describe("cliproxy.recover", function()
                 function() settles = settles + 1 end,
                 function() settles = settles + 1 end)
             assert.is_true(claimed, action .. " did not claim")
-            vim.wait(9000, function() return settles > 0 end, 25)
+            vim.wait(SETTLE_MS, function() return settles > 0 end, 25)
             assert.equals(1, settles, ("action %s settled %d times"):format(action, settles))
         end
         ca.decide = saved_decide
@@ -392,17 +397,17 @@ describe("cliproxy.recover", function()
         assert.equals(0, stops, "the healthy path SIGTERMed the proxy — restart rung, not retry")
     end)
 
-    it("takes the restart rung when the proxy's watcher missed a write", function()
-        -- Produced the way the system produces it: the proxy loads the
-        -- credential, then the file is touched WITHOUT a content change, which
-        -- is what a missed fsnotify reload looks like — modtime advances,
-        -- updated_at does not. No fabricated timestamps.
+    -- Produced the way the system produces it: the proxy loads the credential,
+    -- then the file is touched WITHOUT a content change, which is what a missed
+    -- fsnotify reload looks like — modtime advances, updated_at does not. No
+    -- fabricated timestamps.
+    local function restart_rung()
         local store = serve()
         local path = store .. "/claude-me@example.com.json"
         -- first read: the proxy records its load time
         local seeded = false
         cliproxy.credential_health(function() seeded = true end, "claude")
-        vim.wait(6000, function() return seeded end, 20)
+        vim.wait(SETTLE_MS, function() return seeded end, 20)
         assert.is_true(seeded, "could not seed the proxy's load time")
         local stops = 0
         -- The recovery rung is a budgeted path: it stops through the sync stop
@@ -421,6 +426,20 @@ describe("cliproxy.recover", function()
 
         assert.equals("retry", out.settled) -- the restart rung still ends in a retry
         assert.equals(1, stops, "a missed watcher reload did not trigger the restart rung")
+    end
+
+    it("takes the restart rung when the proxy's watcher missed a write", restart_rung)
+
+    -- #355: every GET 1.5 s late (under curl's 2 s max-time, so each probe still
+    -- answers) puts the rung's five-odd reads past the 6 s literal the spec used
+    -- to wait, yet inside the repair budget. This failed until the waits became
+    -- SETTLE_MS; the restarted proxy inherits the delay through the environment.
+    it("settles the restart rung within the backstop when every probe is slow (#355)", function()
+        local saved = vim.env.PARLEY_FAKE_GET_DELAY_MS
+        vim.env.PARLEY_FAKE_GET_DELAY_MS = "1500"
+        local ok, err = pcall(restart_rung)
+        vim.env.PARLEY_FAKE_GET_DELAY_MS = saved
+        assert(ok, err)
     end)
 
     ----------------------------------------------------------------------------

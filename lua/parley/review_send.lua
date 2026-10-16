@@ -1,28 +1,13 @@
--- parley.review_send — <M-CR> in a markdown file (#316).
---
--- The document goes to the agent in this editor's own Couch slot, steered by
--- the `process-instruction:` frontmatter line (`[mode]` stock prompts plus
--- free text, see skills/review/instruction.lua), with what changed since the
--- last send. Outside pair there is no slot: the same instruction runs today's
--- in-editor review. A `type: session-sync` file keeps its turn semantics
--- (session_sync.submit). A file without the line is asked for it once, and
--- the answer is written into the frontmatter.
---
--- Lifecycle: the per-file send baseline lives in memory (one string per file
--- sent this session) and dies with the editor; the first send after a restart
--- says so instead of diffing. Nothing is written beside the file.
+-- Alt+Return submits Couch documents through S1's registered coordinator.
+-- Outside Couch, process-instruction selects the local inline review.
+-- This module owns no peer transport, payload builder or diff baseline.
 
-local couch = require("parley.couch")
 local frontmatter = require("parley.frontmatter")
 local instruction = require("parley.skills.review.instruction")
 
 local M = {}
 
 M.KEY = "process-instruction"
-M.DIFF_MAX_LINES = 200
-
--- Absolute path → the content at its last successful send.
-local baseline = {}
 
 local function notify(msg, level)
 	vim.notify("review: " .. msg, level or vim.log.levels.INFO)
@@ -66,75 +51,6 @@ M.placement = function(lines, value)
 	return { first = 0, last = 0, lines = { "---", line, "---" } }
 end
 
---- Unified diff of the document since the last send; nil without a baseline. PURE.
-M.diff = function(old, new)
-	if old == nil then
-		return nil
-	end
-	local diff_fn = (vim.text and vim.text.diff) or vim.diff
-	local text = diff_fn(old .. "\n", new .. "\n", { result_type = "unified", ctxlen = 2 })
-	local lines = vim.split(text, "\n", { trimempty = true })
-	if #lines > M.DIFF_MAX_LINES then
-		local cut = #lines - M.DIFF_MAX_LINES
-		lines = vim.list_slice(lines, 1, M.DIFF_MAX_LINES)
-		lines[#lines + 1] = ("… %d more diff lines; read the file"):format(cut)
-	end
-	return table.concat(lines, "\n")
-end
-
---- The message to the slot's agent. PURE.
----@param m table { path, instruction (raw line value), brief, diff (nil = first send) }
-M.message = function(m)
-	local change
-	if m.diff == nil then
-		change = "First send this session: read the whole file."
-	elseif m.diff == "" then
-		change = "No change since the last send."
-	else
-		change = "```diff\n" .. m.diff .. "\n```"
-	end
-	return table.concat({
-		"review request: " .. m.path,
-		"process-instruction: " .. m.instruction,
-		"Respond by editing the file in place (review convention: 🤖 markers).",
-		"",
-		m.brief,
-		"",
-		"## Changes since the last send (by anyone: your own edits to the file included)",
-		change,
-	}, "\n")
-end
-
--- Save, then send to the slot; the baseline moves only on a delivered send.
-local function send_to_slot(buf, slot, value, expanded)
-	local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p")
-	if vim.bo[buf].modified then
-		local ok, err = pcall(vim.api.nvim_buf_call, buf, function()
-			vim.cmd("silent write")
-		end)
-		if not ok then
-			notify("cannot save " .. path .. ": " .. tostring(err), vim.log.levels.ERROR)
-			return
-		end
-	end
-	local content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-	local msg = M.message({
-		path = path,
-		instruction = value,
-		brief = instruction.brief(expanded.modes, expanded.text),
-		diff = M.diff(baseline[path], content),
-	})
-	couch.send(slot, msg, function(obj)
-		if obj.code ~= 0 then
-			notify("send to " .. slot .. " failed, Alt+Return resends: " .. vim.trim(obj.stderr or ""),
-				vim.log.levels.ERROR)
-			return
-		end
-		baseline[path] = content
-		notify("sent to " .. slot)
-	end)
-end
-
 --- <M-CR> in a markdown buffer.
 M.submit = function(buf)
 	if require("parley.agentic_document").submit(buf) then return end
@@ -166,22 +82,11 @@ M.submit = function(buf)
 		notify(err, vim.log.levels.ERROR)
 		return
 	end
-	couch.own_slot(function(actors, own)
-		if not vim.api.nvim_buf_is_valid(buf) then
-			return
-		end
-		if actors == nil then
-			local names = {}
-			for _, m in ipairs(expanded.modes) do
-				names[#names + 1] = m.name
-			end
-			require("parley.skills.review").run_via_invoke(buf, { modes = names, instruction = expanded.text })
-		elseif not own then
-			notify("cannot resolve this slot's agent (couch --actors); nothing sent", vim.log.levels.ERROR)
-		else
-			send_to_slot(buf, couch.slot(own), value, expanded)
-		end
-	end)
+    local names = {}
+    for _, m in ipairs(expanded.modes) do
+        names[#names + 1] = m.name
+    end
+    require("parley.skills.review").run_via_invoke(buf, { modes = names, instruction = expanded.text })
 end
 
 --------------------------------------------------------------------------------

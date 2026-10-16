@@ -42,6 +42,9 @@ describe('generation scoped Stop commands',function()
     it('targets only the generation under the cursor',function()
         local a=submit('first');wait(function()return #calls==1 end)
         local b=submit('second');wait(function()return #calls==2 end)
+        -- the submit advanced the cursor to the next question (#257)
+        for i,line in ipairs(vim.api.nvim_buf_get_lines(buf,0,-1,false))do
+            if line=='💬: second'then vim.api.nvim_win_set_cursor(0,{i,0})end end
         Respond.cmd_stop()
         wait(function()return Respond.response_snapshot(b).status=='terminal'end)
         assert.is_true(calls[1].running)
@@ -64,16 +67,29 @@ describe('generation scoped Stop commands',function()
         vim.api.nvim_set_current_buf(buf);vim.api.nvim_buf_delete(other,{force=true})
     end)
     it('ignores a stale picker after selected session retirement',function()
+        -- two running, so the picker opens (one alone is stopped directly, #257)
         local a=submit('first');wait(function()return #calls==1 end)
+        submit('second');wait(function()return #calls==2 end)
         vim.api.nvim_win_set_cursor(0,{1,0})
         local old_select=vim.ui.select;local items,choose
         vim.ui.select=function(values,_,callback)items,choose=values,callback end
         Respond.cmd_stop();vim.ui.select=old_select
+        assert.equals(2,#items)
         calls[1].output(calls[1].id,'done');calls[1].complete(calls[1].id)
         wait(function()return Respond.response_snapshot(a).status=='terminal'end)
-        local b=submit('first');wait(function()return #calls==2 end)
-        choose(items[1]);assert.is_true(calls[2].running)
+        local b=submit('first');wait(function()return #calls==3 end)
+        choose(items[1]);assert.is_true(calls[3].running)
         assert.equals('running',Respond.response_snapshot(b).status)
+    end)
+    it('stops the one running response directly when the cursor is on none (#257)',function()
+        local a=submit('first');wait(function()return #calls==1 end)
+        vim.api.nvim_win_set_cursor(0,{1,0})
+        local old_select=vim.ui.select;local asked=false
+        vim.ui.select=function()asked=true end
+        Respond.cmd_stop();vim.ui.select=old_select
+        assert.is_false(asked)
+        wait(function()return Respond.response_snapshot(a).status=='terminal'end)
+        assert.is_false(calls[1].running)
     end)
     it('explicitly stops the document without global transport cancellation',function()
         local a=submit('first');wait(function()return #calls==1 end)

@@ -743,6 +743,7 @@ atlas:
 
   modes/review:
     code:
+      - scripts/sync-review-protocol.py
       - lua/parley/comment/codec.lua
       - lua/parley/comment/view.lua
       - lua/parley/comment/init.lua
@@ -755,6 +756,9 @@ atlas:
       - lua/parley/frontmatter.lua
       - lua/parley/couch.lua
     tests:
+      - tests/integration/review_protocol_bundle_spec.lua
+      - tests/integration/review_mode_load_spec.lua
+      - tests/unit/review_mode_spec.lua
       - tests/unit/review_instruction_spec.lua
       - tests/unit/frontmatter_spec.lua
       - tests/unit/couch_spec.lua
@@ -771,6 +775,7 @@ atlas:
   modes/session_sync:
     code:
       - lua/parley/session_sync.lua
+      - lua/parley/view_map.lua
       - lua/parley/agentic_document.lua
       - lua/parley/document_band.lua
       - lua/parley/document_band_model.lua
@@ -787,6 +792,7 @@ atlas:
       - tests/fixtures/fake_couch_registry.py
     tests:
       - tests/unit/session_sync_spec.lua
+      - tests/unit/view_map_spec.lua
       - tests/unit/document_session_spec.lua
       - tests/unit/document_move_plan_spec.lua
       - tests/unit/helper_io_spec.lua
@@ -902,6 +908,10 @@ atlas:
       - tests/unit/dispatcher_spec.lua
       - tests/unit/dispatcher_query_spec.lua
       - tests/unit/sse_parsing_spec.lua
+      - tests/unit/sse_dialects_spec.lua
+      - tests/unit/fake_provider_spec.lua
+      - tests/integration/provider_scenarios_spec.lua
+      - tests/unit/provider_scenario_table_spec.lua
 
   providers/openai:
     code:
