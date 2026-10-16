@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "dd48c372", done: "bf8c55b8"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Keep the cursor and view in place when the agent rewrites an open document
@@ -79,6 +79,8 @@ Quick flow. One pure mapper, plus capture and restore around the two external-wr
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — On an external-write reload (session_sync reload() via edit!, and the native FileChangedShell reload), each window showing the buffer keeps its cursor and top line on the text it showed. view_map (pure) maps positions through vim.diff index hunks: outside a hunk the line shifts by the net offset above it and keeps its column; inside a hunk it searches the new hunk for about 50 chars around the column, exact first, then the text before, then after (min 3 chars), else the hunk new start, clamped. Operator edits never pass these paths. Tests: view_map_spec 10/10 (above, at, below, insertion, deletion, refine, fallback, top line). session_sync_spec adds 4 cases with two windows through the real paths: above (both windows shift by 2, top lines too), at the cursor line (stays on its text, col 5->13), below (cursor and top line exact), and the native :checktime path. Mutations: no restore fails above, at and checktime; only the native restore removed fails checktime alone. agentic_document and session_sync specs green. The operator live check on the session file follows, via the hub.; review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 113 added lines in code files (limit 100)
 - Built. `view_map_spec` passes 10/10. The 4 new `session_sync_spec` cases pass, and so do the agentic_document and session_sync specs.
 - Mutation checks:
   - With both restores removed, the above, at-cursor and `:checktime` cases fail. The below case passes either way, since it guards the no-change baseline.
