@@ -483,8 +483,8 @@ end
 
 local pids_on_port, pids_on_port_async -- the lsof listener reads, defined with the process tools below
 
--- Wait (bounded) for a port to stop answering after SIGTERM. M.stop() returns
--- immediately, and the REAL cliproxyapi shuts down gracefully — so without this
+-- Wait (bounded) for a port to stop answering after SIGTERM. The stop (sync
+-- M.stop() or M.stop_async(), per READS) returns once it has signalled, and the REAL cliproxyapi shuts down gracefully — so without this
 -- the follow-up probe can still see the dying proxy, take ensure_running's
 -- reuse-if-healthy branch, and never spawn the replacement. The Python fake
 -- dies instantly unless PARLEY_FAKE_IGNORE_SIGTERM keeps it serving, which is how
@@ -949,10 +949,6 @@ function M._set_process_tools(tools)
     _ps_cmd, _lsof_cmd = tools.ps or "ps", tools.lsof or "lsof"
 end
 
--- PIDs listening on `port`, plus why the list cannot be trusted when it cannot:
--- lsof absent, or refused (vim.system RAISES on EPERM — degrade here, at the IO
--- seam, so stop() and restart_managed never raise). lsof exits 1 when nothing
--- matches, so its exit code is not an error.
 -- One seam, two drivers (#345): the sync read below, and pids_on_port_async
 -- for the main-loop paths, share the argv and the parse.
 local function lsof_argv(port)
@@ -967,6 +963,10 @@ local function parse_listener_pids(stdout)
     return pids
 end
 
+-- PIDs listening on `port`, plus why the list cannot be trusted when it cannot:
+-- lsof absent, or refused (vim.system RAISES on EPERM — degrade here, at the IO
+-- seam, so stop() and restart_managed never raise). lsof exits 1 when nothing
+-- matches, so its exit code is not an error.
 pids_on_port = function(port)
     if vim.fn.executable(_lsof_cmd) ~= 1 then
         return {}, "lsof unavailable"

@@ -313,3 +313,113 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"676f8dbb-ed64-49e8-9fd6-fc7a25e47a11","repository":"github.com/xianxu/parley.nvim","issue_id":"000345","recipe":"milestone-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/425de50f60fda53b","reviewed_head":"a3777a50afddb42c05796f811641dd8516a57c9d","slot":"parley.nvim:4","requested_at":"2026-10-16T09:17:17.228735Z"},"phase":"finished","pid":16716,"started_at":"2026-10-16T09:17:17.47803Z","finished_at":"2026-10-16T09:20:53.037786Z","session_id":"925103fa-19d7-490f-bb3d-029c4e1f018e","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T03:37:10-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 345 — Restart path blocks the main loop on a synchronous lsof (and stop's identity probe) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000345-restart-path-blocks-the-main-loop-on-a-synchronous-lsof-and-stop-s-identity-probe.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 0a616029f43d1a239f5a46bb3fc0b42a129dcd9a..04169ca621b7b7c6faa94adfda2bdea4eb90ced4 |
+| command | sdlc close --issue 345 |
+| reviewer | claude |
+| isolation | checkout |
+| timestamp | 2026-10-16T03:37:10-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+Reviewing the #345 diff; now running the affected specs to verify.
+
+Affected specs pass; running one mutation check (interactive reads made sync).
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The option-B change works and is well tested. `:ParleyProxy restart` and `:ParleyProxy stop` no longer block the editor on lsof or the identity curl. The budgeted paths (the in-dispatch repair at `cliproxy.lua:1769`, `update` at `:649` and the recovery rung at `:2396`) keep #340's sync reads, which is why the budget is unchanged. The affected specs pass on the pinned head: budget 3/3, lifecycle 63/63, auth_login 21/21, fixture_lifecycle arch 4/4. I ran the claimed mutation: giving the interactive restart sync reads fails 2 lifecycle cases, as the Revisions entry says, and I restored the file afterwards.
+
+One Important finding stops this from being a plain SHIP. Parts of the issue file still describe option A, which the code no longer implements: the Plan checkboxes, the Core-concepts `stop` row, and the Log's list of remaining sync reads. The rest is Minor: two prior Minors are still open, and one new error message is dropped.
+
+1. **Strengths**
+   - `READS` at `cliproxy.lua:549-558` routes every restart read through one table, and the lookup happens at call time. The difference between sync and interactive restarts is easy to read, and specs that wrap `M.stop` still observe the budgeted path.
+   - The ARCH-DRY split works: `lsof_argv` and `parse_listener_pids` are shared by both drivers, and `sigterm_all` and `kill_spawned` are shared by `stop` and `stop_async`.
+   - An lsof timeout reports `"lsof timed out"`, not an empty listener list (`cliproxy.lua:995-997`). Both `stop()` and `stop_async()` now return `read_err`, and the restart turns it into a truthful "was not stopped" message (`:577-582`). Both points are pinned by tests.
+   - `fake_lsof` only lists pids that are still alive. The responsiveness test checks both reads (`"listed: <pid>"` then `"listed: "`), so it really covers the exit-confirmed path.
+   - `_restart_budget_keys` gives the restart budget one source, and `cliproxy_budget_spec` checks that every key is a real budget term.
+
+2. **Critical:** none.
+
+3. **Important**
+   - **The issue file still describes option A** (`workshop/issues/000345-…md`). Four places disagree with the code:
+     - The Core-concepts `stop` row says "Kept for spec teardown". In fact `READS.sync.stop` calls `M.stop()` on all three budgeted product paths.
+     - The Plan item "`restart_managed` uses `stop_async`, and `wait_port_released`'s post-exit check uses `pids_on_port_async`" is ticked `[x]`. It is only true when `{ interactive = true }` is passed.
+     - The Log says "The sync `stop()`: spec teardown only; no product caller remains". That is false.
+     - The Log also says "The restart path now has no main-loop lsof or curl". Done-when #1 asks for every remaining sync read to be named and justified. The sync identity curl (`port_holds_cliproxy`, up to 2 s) and the sync lsof in `M.stop()` on the budgeted paths are justified only in the Revisions entry, not in that list.
+     - Fix: rewrite those Plan items and the `stop` row for option B, and add the budgeted-path sync reads to the "Remaining sync reads" list. The rule is that whenever a Revisions entry changes the design, every Plan, Core-concepts and Log claim that names the replaced mechanism gets swept in the same commit.
+
+4. **Minor**
+   - **`:ParleyProxy stop` drops `read_err`** (`init.lua:384`). When the probe finds a cliproxy but lsof times out or fails, the user sees "stopped 0 parley-spawned proxy(ies)" and is never told that a proxy is still running. The restart path reports this case; the stop command should too, for example with a WARN that names `read_err`.
+   - **BR-5 (still open):** see the dispositions below.
+   - **BR-4 (still open):** see the dispositions below.
+
+5. **Test coverage**
+   - Covered:
+     - Responsiveness, with a 50 ms ticker and a gap limit below half the delay.
+     - The hang guard.
+     - An lsof timeout leading to the "not stopped" message.
+     - The `stop` contract run over both drivers.
+     - #340's regressions on the sync path, with their wrappers kept on `M.stop` (correct under option B).
+   - Missing: nothing tests that `register_proxy_command`'s `restart` passes `{ interactive = true }`. Removing that argument would bring the freeze back on the user command without failing a test. Consider a command-level spec that wraps `restart_managed` and asserts on `restart_opts`.
+
+6. **Architecture**
+   - **ARCH-DRY:** pass.
+   - **ARCH-PURE:** pass. `parse_listener_pids` is pure, and the IO sits in two thin drivers.
+   - **ARCH-PURPOSE:** pass in the code; the sweep that matters is enumerating every caller of the restart. The interactive and budgeted callers are each named, but the plan text has not been swept (the Important finding above).
+   - **ARCH-MOCK:** pass. `fake_lsof` is stateful because it checks whether each pid is alive, and it sits behind the `_set_process_tools` seam that production uses too. There is no live conformance check against the real lsof's output format, which was already true before this change.
+   - **ARCH-CONSTRAINTS:** pass. The interactive path has a 10 s guard and no budget, and the budgeted paths are unchanged and were measured 8 of 8 green under load.
+   - **ARCH-SECURE:** pass, apart from the dropped `read_err` (Minor above). lsof output is parsed with a `%d+` pattern, and a timeout is never read as "no listener".
+   - **ARCH-ORDER:** flag, via BR-4. The interleaving between `stop_async` and `ensure_running` is not modelled. It is accepted in the Log and limited to the interactive commands.
+   - **ARCH-FUNERAL:** pass. The only new artifact is `PARLEY_FAKE_LSOF_LOG`, a test `tempname`. Nothing durable is created.
+
+7. **Plan revisions needed**
+   - Change the Core-concepts `stop` row to: "The sync stop: used by the budgeted restart paths (in-dispatch repair, recovery rung, update) and by spec teardown; returns `read_err`."
+   - Change the Plan item to: "`restart_managed(…, { interactive = true })` uses `stop_async` + `pids_on_port_async`; the default keeps sync `stop()` + `pids_on_port`."
+   - In the Log's "Remaining sync reads", replace the "spec teardown only" bullet with the budgeted-path sync identity curl and lsof, with the reason (lsof is over 2 s under load, and a cap pushes those paths onto the stalling probe).
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      No code change. The Log accepts the window and option B now confines it to the interactive commands, but it is still not modelled. Stays Minor.
+  - id: BR-5
+    disposition: not-addressed
+    note: |
+      At head, cliproxy.lua:951-967 still puts lsof_argv/parse_listener_pids between the "PIDs listening on `port`" doc block and pids_on_port, and the wait_port_released header (line 487) still says "M.stop() returns immediately".
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: plan-stale-after-revision
+    title: |
+      The issue's Plan, Core-concepts stop row and Log still describe option A after the option-B revision
+    detail: |
+      The Core-concepts `stop` row says "Kept for spec teardown" and the Log says "no product caller remains", yet READS.sync.stop (cliproxy.lua:551) calls M.stop() from credential_health (:1769), recovery (:2396) and update (:649). The ticked Plan item says restart_managed uses stop_async. Done-when #1's list of remaining sync reads leaves out the budgeted paths' sync identity curl and lsof. Sweep every Plan, Core-concepts and Log claim naming the replaced mechanism.
+  - id: new
+    severity: Minor
+    kind: defect
+    family: read-error-dropped-by-caller
+    title: |
+      :ParleyProxy stop ignores stop_async's read_err and reports "stopped 0"
+    detail: |
+      init.lua:384 only takes `n`. When the probe found a cliproxy but lsof timed out or failed, the proxy keeps running and the user is not told, while the restart path reports the same case. Notify a WARN that names read_err.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"2aa09c87-03de-4e7c-be03-8aab438f1937","repository":"github.com/xianxu/parley.nvim","issue_id":"000345","recipe":"milestone-review","round":4,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/0365519ebe104a7a","reviewed_head":"04169ca621b7b7c6faa94adfda2bdea4eb90ced4","slot":"parley.nvim:4","requested_at":"2026-10-16T10:34:31.205247Z"},"phase":"finished","pid":89081,"started_at":"2026-10-16T10:34:31.342914Z","finished_at":"2026-10-16T10:37:09.078519Z","session_id":"f2d84c91-b57b-4b3b-97da-babecfe8098d","outcome":"returned"}] -->

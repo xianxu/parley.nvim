@@ -252,6 +252,99 @@ rounds:
       isolation: checkout
       reviewed: a3777a50afddb42c05796f811641dd8516a57c9d
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 2aa09c87-03de-4e7c-be03-8aab438f1937
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000345"
+            recipe: milestone-review
+            round: 4
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/0365519ebe104a7a
+            reviewed_head: 04169ca621b7b7c6faa94adfda2bdea4eb90ced4
+            slot: parley.nvim:4
+            requested_at: "2026-10-16T10:34:31.205247Z"
+          phase: finished
+          pid: 89081
+          started_at: "2026-10-16T10:34:31.342914Z"
+          finished_at: "2026-10-16T10:37:09.078519Z"
+          session_id: f2d84c91-b57b-4b3b-97da-babecfe8098d
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 04169ca621b7b7c6faa94adfda2bdea4eb90ced4
+        tracker_head: beba87a73ba57765f207825f169aa72cbf406e7e
+        branch_point: 0a616029f43d1a239f5a46bb3fc0b42a129dcd9a
+        since: "2026-10-16T01:01:31-07:00"
+        until: "2026-10-16T03:17:21-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T01:01:31-07:00"
+              end: "2026-10-16T03:17:21-07:00"
+              began: "2026-10-16T01:01:31-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: 8078454cd8fcedf4757c1212405eacb400bb844c52fc9bad7adfd37c23999d29
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 5288704
+              windows:
+                - start: "2026-10-16T01:01:31-07:00"
+                  end: "2026-10-16T03:17:21-07:00"
+        cuts:
+            - dispatched: "2026-10-16T01:43:07-07:00"
+              finalized: "2026-10-16T01:46:51-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T02:03:42-07:00"
+              finalized: "2026-10-16T02:07:26-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T02:17:17-07:00"
+              finalized: "2026-10-16T02:20:57-07:00"
+              finalizing: true
+      "n": 4
+      timestamp: "2026-10-16T03:37:10-07:00"
+      dispatched: "2026-10-16T03:34:31-07:00"
+      agent: claude
+      dispose:
+        - id: BR-4
+          disposition: not-addressed
+          note: No code change. The Log accepts the window and option B now confines it to the interactive commands, but it is still not modelled. Stays Minor.
+          round: 4
+        - id: BR-5
+          disposition: not-addressed
+          note: At head, cliproxy.lua:951-967 still puts lsof_argv/parse_listener_pids between the "PIDs listening on `port`" doc block and pids_on_port, and the wait_port_released header (line 487) still says "M.stop() returns immediately".
+          round: 4
+      findings:
+        - kind: defect
+          id: BR-6
+          severity: Important
+          title: The issue's Plan, Core-concepts stop row and Log still describe option A after the option-B revision
+          detail: 'The Core-concepts `stop` row says "Kept for spec teardown" and the Log says "no product caller remains", yet READS.sync.stop (cliproxy.lua:551) calls M.stop() from credential_health (:1769), recovery (:2396) and update (:649). The ticked Plan item says restart_managed uses stop_async. Done-when #1''s list of remaining sync reads leaves out the budgeted paths'' sync identity curl and lsof. Sweep every Plan, Core-concepts and Log claim naming the replaced mechanism.'
+          family: plan-stale-after-revision
+          round: 4
+        - kind: defect
+          id: BR-7
+          severity: Minor
+          title: :ParleyProxy stop ignores stop_async's read_err and reports "stopped 0"
+          detail: init.lua:384 only takes `n`. When the probe found a cliproxy but lsof timed out or failed, the proxy keeps running and the user is not told, while the restart path reports the same case. Notify a WARN that names read_err.
+          family: read-error-dropped-by-caller
+          round: 4
+      recipe: milestone-review
+      isolation: checkout
+      reviewed: 04169ca621b7b7c6faa94adfda2bdea4eb90ced4
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#345 (boundary-review)
@@ -293,7 +386,23 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-5** [Minor] `doc-annotation-placement` (kind: defect) The pids_on_port doc block now sits above lsof_argv, separated from pids_on_port by the new helpers
   cliproxy.lua:933-938. 2nd instance in this family (after BR-2). The rule: insert a new helper above an existing doc block, never between the block and its definition. A sweep of every insertion in this diff found no other instance. Fix: move lsof_argv and parse_listener_pids above the "PIDs listening on `port`" comment. Separately, the wait_port_released header (lines 487-496) still names M.stop() where the caller is now stop_async.
 
+## Round 4 — 2026-10-16T03:37:10-07:00 (claude) — passed
+
+### Disposed
+
+- BR-4 — not-addressed — No code change. The Log accepts the window and option B now confines it to the interactive commands, but it is still not modelled. Stays Minor.
+- BR-5 — not-addressed — At head, cliproxy.lua:951-967 still puts lsof_argv/parse_listener_pids between the "PIDs listening on `port`" doc block and pids_on_port, and the wait_port_released header (line 487) still says "M.stop() returns immediately".
+
+### Raised
+
+- **BR-6** [Important] `plan-stale-after-revision` (kind: defect) The issue's Plan, Core-concepts stop row and Log still describe option A after the option-B revision
+  The Core-concepts `stop` row says "Kept for spec teardown" and the Log says "no product caller remains", yet READS.sync.stop (cliproxy.lua:551) calls M.stop() from credential_health (:1769), recovery (:2396) and update (:649). The ticked Plan item says restart_managed uses stop_async. Done-when #1's list of remaining sync reads leaves out the budgeted paths' sync identity curl and lsof. Sweep every Plan, Core-concepts and Log claim naming the replaced mechanism.
+- **BR-7** [Minor] `read-error-dropped-by-caller` (kind: defect) :ParleyProxy stop ignores stop_async's read_err and reports "stopped 0"
+  init.lua:384 only takes `n`. When the probe found a cliproxy but lsof timed out or failed, the proxy keeps running and the user is not told, while the restart path reports the same case. Notify a WARN that names read_err.
+
 ## Open findings
 
 - **BR-4** [Minor] `unmodeled-async-interleaving` (kind: defect) stop_async's async probe and lsof window lets a concurrent ensure_running's fresh proxy be found and SIGTERMed
 - **BR-5** [Minor] `doc-annotation-placement` (kind: defect) The pids_on_port doc block now sits above lsof_argv, separated from pids_on_port by the new helpers
+- **BR-6** [Important] `plan-stale-after-revision` (kind: defect) The issue's Plan, Core-concepts stop row and Log still describe option A after the option-B revision
+- **BR-7** [Minor] `read-error-dropped-by-caller` (kind: defect) :ParleyProxy stop ignores stop_async's read_err and reports "stopped 0"

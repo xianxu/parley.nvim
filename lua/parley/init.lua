@@ -381,7 +381,14 @@ M.register_proxy_command = function(prefix)
 			end)
 		elseif sub == "stop" then
 			-- Async (#345): the identity probe and lsof no longer freeze the editor.
-			cliproxy.stop_async(function(n)
+			cliproxy.stop_async(function(n, _, read_err)
+				if read_err then
+					-- A cliproxy answers on the port but could not be listed, so it
+					-- was not signalled and is still running (#345).
+					return vim.notify(("cliproxy: stopped %d parley-spawned proxy(ies); a cliproxy on the "
+						.. "managed port was NOT stopped — could not list it (%s)"):format(n, read_err),
+						vim.log.levels.WARN)
+				end
 				vim.notify("cliproxy: stopped " .. n .. " parley-spawned proxy(ies)", vim.log.levels.INFO)
 			end)
 		elseif sub == "update" then

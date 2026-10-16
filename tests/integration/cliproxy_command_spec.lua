@@ -195,6 +195,30 @@ describe(":ParleyProxy command", function()
     end)
 
     -- #237: update answers through a callback, restart waits for the port.
+    -- #345: :ParleyProxy stop is async, and says when a cliproxy on the port
+    -- could not be listed (so was NOT stopped) instead of reporting a clean stop.
+    describe("stop", function()
+        local cliproxy = require("parley.cliproxy")
+        local saved_stop_async
+        before_each(function() saved_stop_async = cliproxy.stop_async end)
+        after_each(function() cliproxy.stop_async = saved_stop_async end)
+
+        it("reports the count as INFO", function()
+            cliproxy.stop_async = function(cb) cb(2, { 11, 12 }) end
+            local msgs = capture_notify(function() vim.cmd("ParleyProxy stop") end)
+            assert.equals("cliproxy: stopped 2 parley-spawned proxy(ies)", msgs[#msgs].msg)
+            assert.equals(vim.log.levels.INFO, msgs[#msgs].level)
+        end)
+
+        it("warns, naming why, when a cliproxy on the port could not be listed", function()
+            cliproxy.stop_async = function(cb) cb(0, {}, "lsof timed out") end
+            local msgs = capture_notify(function() vim.cmd("ParleyProxy stop") end)
+            assert.equals(vim.log.levels.WARN, msgs[#msgs].level)
+            assert.is_truthy(msgs[#msgs].msg:find("was NOT stopped", 1, true), msgs[#msgs].msg)
+            assert.is_truthy(msgs[#msgs].msg:find("(lsof timed out)", 1, true), msgs[#msgs].msg)
+        end)
+    end)
+
     describe("update and restart", function()
         local cliproxy = require("parley.cliproxy")
         local saved_update, saved_restart
@@ -240,15 +264,17 @@ describe(":ParleyProxy command", function()
         end)
 
         it("restart goes through restart_managed, which waits for the old proxy", function()
-            local called = false
-            cliproxy.restart_managed = function(on_ready)
-                called = true
+            local called, restart_opts = false, nil
+            cliproxy.restart_managed = function(on_ready, _, opts)
+                called, restart_opts = true, opts
                 on_ready()
             end
             local msgs = capture_notify(function()
                 vim.cmd("ParleyProxy restart")
             end)
             assert.is_true(called)
+            -- #345 option B: the user command never blocks the editor on lsof.
+            assert.same({ interactive = true }, restart_opts)
             -- #204: the notice names the setup its client key came from, since
             -- a config edit is invisible until setup re-runs.
             assert.is_truthy(msgs[#msgs].msg:match("^cliproxy: restarted %(client key from setup%(%) at %d%d:%d%d:%d%d;"))
