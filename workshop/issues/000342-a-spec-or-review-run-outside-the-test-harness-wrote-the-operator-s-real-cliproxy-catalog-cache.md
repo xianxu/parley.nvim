@@ -71,6 +71,7 @@ Measurement (2026-10-15, :3): every `make` target that loads `tests/minimal_init
 ## Log
 
 ### 2026-10-15
+- 2026-10-15: closed — Prior evidence stands (red-first child-nvim refusal; cliproxy writer guard). Round 1 fixes: TEST_ENV pins every test_isolation.ROOTS entry incl. XDG_CONFIG_HOME, asserted by a unit case; remaining direct minimal_init runs routed through make (fixtures, new perf-finder, init usage); guard fails closed on its own load error (red without pcall 3/1, green 4/0). Ariadne review-instruction Minor left per TL: the guard fails loudly with the make command, a stronger enforcement. Full make -k test exit 0 on f62f0404, lint clean.; review verdict: SHIP
 
 ### 2026-10-15 (:3)
 
