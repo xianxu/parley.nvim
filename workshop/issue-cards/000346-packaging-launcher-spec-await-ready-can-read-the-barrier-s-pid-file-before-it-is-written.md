@@ -1,6 +1,6 @@
 ---
 id: 000346
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -14,8 +14,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.03
 tracker:
     version: 1
+    completion:
+        token: close-d3e6cfb827ba
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: c22db1af4f86c379beb39948aa8eeb2f1e46c3e0
+        evidence_commit: 303eb1d314920acec58fcd4d30939539699ad7cb
 ---
 
 # packaging_launcher_spec: await_ready can read the barrier's pid file before it is written
