@@ -1,6 +1,6 @@
 ---
 id: 000243
-status: working
+status: codecomplete
 created: 2026-09-13
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.08
+tracker:
+    version: 1
+    completion:
+        token: close-fc4296e872ac
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 005efb89b09844672572bcc97ef0600a95303bf7
+        evidence_commit: ecf1e0a563a6a3a0ed6ab96a2b360d752800aec3
 ---
 
 # HTML export: branch topic is inserted unescaped by make_branch_div
