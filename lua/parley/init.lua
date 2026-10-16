@@ -3751,7 +3751,7 @@ M.delete_chat_tree = function(buf)
 			folders[#folders + 1] = folder
 		end
 	end
-	local root_rel = vim.fn.fnamemodify(root, ":~:.")
+	local root_rel = vim.fn.fnamemodify(tree_files[1], ":~:.")
 	local msg = "Delete " .. #tree_files .. " chat file(s) in tree rooted at " .. root_rel
 		.. (#folders > 0 and (" and " .. #folders .. " assets folder(s)") or "") .. "?\n\n"
 	for _, f in ipairs(tree_files) do

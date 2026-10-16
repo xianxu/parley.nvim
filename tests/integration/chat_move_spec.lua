@@ -410,7 +410,8 @@ describe("chat move", function()
         local child_folder = seed_assets(sub, CHILD_TS)
         local notices, notify = recording_notify()
         local saved_confirm, saved_notify = vim.fn.confirm, vim.notify
-        vim.fn.confirm = function() return 1 end
+        local prompt
+        vim.fn.confirm = function(message) prompt = message; return 1 end
         vim.notify = notify
         vim.fn.setfperm(sub, "r-xr-xr-x")
         local ok, deleted, failed = pcall(parley.delete_chat_tree, buf)
@@ -419,6 +420,7 @@ describe("chat move", function()
         assert.is_true(ok, deleted)
         assert.equals(1, deleted)
         assert.same({ child_path }, failed)
+        assert.is_truthy(prompt:find("rooted at " .. vim.fn.fnamemodify(vim.fn.resolve(root_path), ":~:."), 1, true), prompt)
         assert.equals(0, vim.fn.filereadable(root_path), "the root must be deleted")
         assert.equals(0, vim.fn.isdirectory(root_folder), "the root's folder must be deleted")
         assert_untouched(child_path, child_folder)
