@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.94
+actual_hours: 0.99
 tracker:
     version: 1
     completion:
-        token: close-8ecab3bb03cd
+        token: close-717dd7e23300
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: cb9bbbb3d181b448faa66b652aae6c56272ff70f
-        evidence_commit: abf8d57a65eb87f6d50d2d8aaa11f67acbd2cacb
+        reviewed_head: a8add1b4526fd3cd95f4ec4972c034ca8cba4638
+        evidence_commit: 134d5e37fc50607c7793e8599c610ca5e280e4f1
 ---
 
 # a config change to api_keys silently does not take effect: the defaults table is replaced, and the vault pins the first secret it saw
