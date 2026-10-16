@@ -487,6 +487,37 @@ describe("goto_ref_at_cursor in-flight resolve (#226)", function()
         assert.are.same({}, notices)
     end)
 
+    it("lets the same ref pressed from another window supersede, and opens there", function()
+        on_line("see #327", 5)
+        press()
+        vim.cmd("split")
+        press()
+        assert.are.equal(2, #spawns)
+        assert.is_true(spawns[1].killed, "the first resolve was not superseded")
+        assert.are.same({}, notices)
+        resolve(spawns[1], "/a/327.md")
+        resolve(spawns[2], "/a/327.md")
+        drain()
+        vim.cmd("close")
+        assert.are.same({ "/a/327.md" }, opened)
+    end)
+
+    it("drops a family selection made after the user left the window", function()
+        local picker_open = require("parley.float_picker").open
+        local pickers = {}
+        require("parley.float_picker").open = function(o) pickers[#pickers + 1] = o end
+        on_line("see #327", 5)
+        press() -- no is_current from the caller: the default origin check
+        spawns[1].complete(vim.json.encode({ files = { { path = "/a/i.md" }, { path = "/a/p.md" } } }), 0, "")
+        drain()
+        vim.cmd("split")
+        pickers[1].on_select(pickers[1].items[1])
+        vim.cmd("close")
+        require("parley.float_picker").open = picker_open
+        assert.are.equal(1, #pickers)
+        assert.are.same({}, opened)
+    end)
+
     it("keys on the resolve kind, so a project jump is not the same question", function()
         on_line("see #327", 5)
         press()

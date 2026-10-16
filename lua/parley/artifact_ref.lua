@@ -179,6 +179,12 @@ function M.family_picker_items(files)
     return items
 end
 
+local inflight -- the one outstanding resolve: { key, handle, done } (#226)
+
+function M._reset_inflight() -- test seam
+    inflight = nil
+end
+
 -- goto_ref_at_cursor: the editor entry (thin IO shell). Reads the ref under the
 -- cursor, resolves it against the buffer's repo, and opens/pickers the result.
 -- opts.on_no_ref (optional): called when the cursor is NOT on an artifact ref —
@@ -196,19 +202,16 @@ end
 -- results and family selections are discarded; each resolve and selection is
 -- consumed once so repeated async callbacks cannot dispatch or open twice.
 -- In flight (#226): at most one resolve is outstanding, keyed on the question it
--- asks `sdlc` (ref, kind, repo cwd). A press with the same key is a no-op that
--- says so; a different key is a change of mind that kills the outstanding one
--- and supersedes it, never queues. The result dispatches only while the user is
--- still in the origin buffer and window, and the caller's opts.is_current can
--- narrow that, never widen it. No timeout: `sdlc` can be legitimately slow (it
--- may rebuild itself), and the record clears when the process exits.
+-- asks `sdlc` (ref, kind, repo cwd) AND the place its answer may land (origin
+-- buffer and window). A press with the same key is a no-op that says so; any
+-- other press is a change of mind that kills the outstanding one and supersedes
+-- it, never queues. The result dispatches only while the user is still in the
+-- origin buffer and window, and the caller's opts.is_current can narrow that,
+-- never widen it. The key holds the origin because a no-op is only right when
+-- the outstanding result would land for this press. No timeout: `sdlc` can be
+-- legitimately slow (it may rebuild itself), and the record clears when the
+-- process exits.
 -- Delegated to by parley init's M.cmd.ResolveRef* commands.
-local inflight -- { key, handle, done }
-
-function M._reset_inflight() -- test seam
-    inflight = nil
-end
-
 function M.goto_ref_at_cursor(opts)
     opts = opts or {}
     local line = vim.api.nvim_get_current_line()
@@ -227,7 +230,8 @@ function M.goto_ref_at_cursor(opts)
     local float_picker = require("parley.float_picker")
     local cwd = neighborhood.for_buf(vim.api.nvim_get_current_buf())
     local sdlc_cmd = (_parley.config and _parley.config.sdlc_cmd) or "sdlc"
-    local key = table.concat({ hit.ref, opts.kind or "", cwd or "" }, "\0")
+    local origin_buf, origin_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
+    local key = table.concat({ hit.ref, opts.kind or "", cwd or "", origin_buf, origin_win }, "\0")
     if inflight and not inflight.done then
         if inflight.key == key then
             vim.notify("parley: still resolving " .. hit.ref, vim.log.levels.INFO)
@@ -240,7 +244,6 @@ function M.goto_ref_at_cursor(opts)
     end
     local mine = { key = key, done = false }
     inflight = mine
-    local origin_buf, origin_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
     local completed, selected = false, false
     local function is_current()
         return inflight == mine

@@ -48,7 +48,7 @@ jump (`ResolveRefProject`) still have neither staleness nor in-flight dedup.
 
 Decision: the second press supersedes; it is never queued.
 - **Key:** the ref, the resolve kind and the repo cwd, which together name the
-  question asked of `sdlc`. A press with the SAME key while one is in flight is a
+  question asked of `sdlc`, plus the origin buffer and window where its answer may land. A press with the SAME key while one is in flight is a
   no-op that says `parley: still resolving <ref>`, because a second spawn would
   only answer the same question twice. A press with a DIFFERENT key is a change
   of mind: it kills the outstanding process and marks it superseded, so its
@@ -103,8 +103,19 @@ needs the supersede-vs-queue decision above.
   every later press on that ref would say "still resolving". A mutation
   dropping the release fails the new case.
 
+- Close review round 1, BR-1 (Important): the key left out the origin, so a
+  same-ref press from another window was swallowed as a duplicate, and the
+  outstanding result was then dropped as stale; nothing opened. The class: the
+  no-op must agree with the staleness check. The key now holds the origin buffer
+  and window, so the press supersedes. A mutation removing the origin from the
+  key fails the new case. Minors: the record's declaration now sits above the
+  doc block, the atlas sentence is fixed, and there is a test that the default
+  check drops a picker selection. 40/40.
+
 ## Revisions
 
 - 2026-10-16: the open Spec and the undecided Plan are replaced by the decision
   (supersede, never queue; same key is a no-op with a notice; default origin
   staleness; no timeout) and the Plan that follows from it.
+- 2026-10-16: the key gains the origin buffer and window (BR-1). Without them
+  the dedup and the staleness check disagreed.
