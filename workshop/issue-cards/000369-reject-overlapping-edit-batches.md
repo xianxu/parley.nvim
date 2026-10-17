@@ -1,8 +1,8 @@
 ---
 id: 000369
-status: codecomplete
+status: done
 created: 2026-10-16
-updated: 2026-10-16
+updated: 2026-10-17
 estimate_hours:
 github_issue:
 started: 2026-10-16T21:03:50-07:00
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 6184b45993c76622407b6a68bbdd97f7fb62bff9
         evidence_commit: 1a30b6ab4da4c00f2030eb02ae7346c7f9377b1c
+        landed_commit: eba279341ea4b0f274bd08cf5042541bbb5051db
 ---
 
 # Reject overlapping edit batches
