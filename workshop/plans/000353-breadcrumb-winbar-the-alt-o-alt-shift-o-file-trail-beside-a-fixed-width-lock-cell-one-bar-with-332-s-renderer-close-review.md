@@ -353,3 +353,56 @@ dispose:
 7. **Plan revision recommendations:** None.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ef00bddd-5707-455a-921d-4f51fef49928","repository":"github.com/xianxu/parley.nvim","issue_id":"000353","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/d52888f8a2136581","reviewed_head":"4142a92604182a9b5dfb4bbe35f88416b15f9e12","slot":"parley.nvim:2","requested_at":"2026-10-17T18:26:18.792262Z"},"phase":"finished","pid":52066,"started_at":"2026-10-17T18:26:18.938712Z","finished_at":"2026-10-17T18:30:17.508524Z","session_id":"01a14b1d-6210-71d2-8a29-be3769d5be43","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T11:57:11-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 353 — Breadcrumb winbar: the Alt+o / Alt+Shift+O file trail beside a fixed-width lock cell (one bar with #332's renderer) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000353-breadcrumb-winbar-the-alt-o-alt-shift-o-file-trail-beside-a-fixed-width-lock-cell-one-bar-with-332-s-renderer.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 37b5967e6959f8b56928e1f3776ef62dfe4486c5..9ef3f37cfa8ef724f5430b448bcdce6953579e17 |
+| command | sdlc close --issue 353 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-17T11:57:11-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The interdiff preserves both sides of all five session-sync conflict resolutions: production-deadline waits and fixed-width lock-cell assertions. No scope change or new defect was found. BR-1 through BR-5 remain disposed; this window changes none of their production fixes.
+
+```findings
+{}
+```
+
+1. **Strengths**
+   - All five resolved assertions pass against production rendering, including stale and owed states.
+   - The plan’s added revision accurately records the integration.
+   - Retained full-suite evidence matches its documented SHA-256; the tested commit differs from pinned head only in the issue log.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes:** Independently ran `session_sync_spec.lua`: 64 passed, zero failures/errors, no surviving processes. Inspected the retained integrated-suite log: 465 passing spec files and zero lint warnings/errors across 781 files. No new public or architectural surface requires README or atlas changes.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** resolutions reuse the shared `arrival_ms()` helper.
+   - **ARCH-PURE — pass:** changes remain in integration tests; no business logic enters an IO boundary.
+   - **ARCH-PURPOSE — pass:** every conflict retains both deadline and rendering intent.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"d9ff02f2-f076-47df-96e1-24a4837ce48c","repository":"github.com/xianxu/parley.nvim","issue_id":"000353","recipe":"fix-review","round":5,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/00f5b8a092292442","reviewed_head":"9ef3f37cfa8ef724f5430b448bcdce6953579e17","slot":"parley.nvim:2","requested_at":"2026-10-17T18:56:12.970134Z"},"phase":"finished","pid":69847,"started_at":"2026-10-17T18:56:13.060426Z","finished_at":"2026-10-17T18:57:11.584023Z","session_id":"01a14b38-c1e5-7391-82e7-a0b1a8ab1a80","outcome":"returned"}] -->

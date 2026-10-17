@@ -60,6 +60,8 @@ After code verification: close on SHIP and report green to TL. Do not stage; :0 
 ## Log
 
 
+
+- 2026-10-17: closed — Conflict review after main integration: all five session_sync_spec hunks retain main arrival_ms() deadlines and reviewed fixed lock-cell/feedback assertions; no production conflict or scope change. Required integrated suite passes465/465 specs and781 lint files clean,no survivors. Current code matches tested dd729500; only evidence Log added. Actuals N/A: legacy suite attempt ce659159c9d9e9a01b89a775a0981c34 lacks exact queue endpoints; excluded from calibration per ariadne#420 and TL instruction. No staging; normal merge follows finalized review. (fixed-then-ship; full suite: Full required suite on dd729500bb294e21388f031ae183fbdf0fcb77fc:465/465 specs,781 lint files clean,no survivors; retained suite.log SHA256 6ccfe5741f15f929d30e550d67690acd97255aa8785828d9bd0710751dc77313.); review verdict: SHIP
 - 2026-10-17: closed — Required suite on a781eae062b35246faad709e5c3395b914f5f2ba:462/462 specs,774 lint files clean,no survivors; suite.log SHA256 e19a36f1b8905111ed8565c977ffcc28cce8c83c2b3555aedecd9c7a5f29b256. Native and pure coverage verifies Alt+o/Back trails,lock/feedback composition,Unicode truncation,option ownership,opaque snapshots,excluded-buffer retirement/re-entry with Back retained,and split pulse/state ordering. BR1-BR5 regression evidence retained in Log. Current code matches tested head; only evidence prose added. Actuals N/A: legacy suite attempt ce659159c9d9e9a01b89a775a0981c34 lacks exact queue endpoints; excluded from calibration per ariadne#420 and TL instruction. No staging; operator smokes after normal landing.; review verdict: SHIP
 ### 2026-10-16
 

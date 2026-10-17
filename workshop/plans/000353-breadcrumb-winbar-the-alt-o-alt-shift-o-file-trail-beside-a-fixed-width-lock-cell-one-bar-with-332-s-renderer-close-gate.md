@@ -504,6 +504,35 @@ rounds:
       isolation: fenced
       reviewed: 4142a92604182a9b5dfb4bbe35f88416b15f9e12
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: d9ff02f2-f076-47df-96e1-24a4837ce48c
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000353"
+            recipe: fix-review
+            round: 5
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/00f5b8a092292442
+            reviewed_head: 9ef3f37cfa8ef724f5430b448bcdce6953579e17
+            slot: parley.nvim:2
+            requested_at: "2026-10-17T18:56:12.970134Z"
+          phase: finished
+          pid: 69847
+          started_at: "2026-10-17T18:56:13.060426Z"
+          finished_at: "2026-10-17T18:57:11.584023Z"
+          session_id: 01a14b38-c1e5-7391-82e7-a0b1a8ab1a80
+          outcome: returned
+      "n": 5
+      timestamp: "2026-10-17T11:57:12-07:00"
+      dispatched: "2026-10-17T11:56:12-07:00"
+      agent: codex
+      recipe: fix-review
+      isolation: fenced
+      reviewed: 9ef3f37cfa8ef724f5430b448bcdce6953579e17
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#353 (boundary-review)
@@ -554,6 +583,8 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 ### Disposed
 
 - BR-5 — addressed — file_history.lua:30–66 separates presentation proof from retained Back history. All six eligibility regressions pass at head and fail with the pre-fix production code restored in a disposable copy. Coverage includes all five exclusion categories, resize, re-entry, same-buffer changes, and preserved Back navigation.
+
+## Round 5 — 2026-10-17T11:57:12-07:00 (codex) — passed
 
 ## Open findings
 
