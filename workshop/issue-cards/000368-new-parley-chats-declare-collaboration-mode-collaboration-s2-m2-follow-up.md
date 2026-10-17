@@ -1,6 +1,6 @@
 ---
 id: 000368
-status: codecomplete
+status: done
 created: 2026-10-16
 updated: 2026-10-17
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: a86dd13b4ba4279424cce08e1883c998c77b08e5
         evidence_commit: e41c188494b09c9438706d31bc74d0ae5fa7a146
+        landed_commit: e3001d3b9bbcfc201626e748adae2b2ac3bb60fc
 ---
 
 # New parley chats declare collaboration-mode: collaboration (S2 M2 follow-up)
