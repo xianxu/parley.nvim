@@ -96,3 +96,98 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"988648ae-313b-4042-be57-0f9d45d37fdd","repository":"github.com/xianxu/parley.nvim","issue_id":"000361","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/ce176c11e9286153","reviewed_head":"15f3948fe88ef9ba9f1799abb9e34b555b9f5d5c","slot":"parley.nvim:4","requested_at":"2026-10-17T10:23:20.627625Z"},"phase":"finished","pid":70933,"started_at":"2026-10-17T10:23:20.832415Z","finished_at":"2026-10-17T10:26:00.296046Z","session_id":"d9d98c43-d1e0-45f6-b06b-4ddd49339a3f","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T04:29:12-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 361 — Cliproxy expired-token recovery intermittently retries instead of prompting |
+| repo | parley.nvim |
+| issue file | workshop/issues/000361-cliproxy-auth-suite-flake.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 6759ce28d37377959224580f2118f0fdac4985b5..12105c271e036569b9a917a5ca3da1c1860116ba |
+| command | sdlc close --issue 361 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-17T04:29:12-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Prior-round fixes check out on inspection: 50 call sites, the lsof guard is present, and no bare `wait_listening` is left. Next I'm running the focused specs to confirm.
+
+I'm looking for a make target that runs a single spec file, so the test environment gets set up.
+
+Old make. I'll write a small makefile in a scratch directory that includes the repo's Makefile.
+
+Raw output has ANSI color codes, so my grep missed it. Rerunning with summary lines only.
+
+All focused specs pass. One last check: put a bare `wait_listening` call back and confirm the nodiscard guard catches it.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+**Verdict: ship it.** All three findings from round 1 are fixed. I checked each one against the code at head `12105c27` and against tests I ran myself. The cause matches what the issue's Log describes. The `serve()` helper ignored the result of its readiness wait (`wait_listening`). Combined with the #360 false positive, recovery could then run against a fake proxy that wasn't listening yet. Every fixture wait now goes through one function, `require_listening`, which fails the spec by name when the fake never comes up. A dropped `wait_listening` result is now caught mechanically by the existing `nodiscard_spec`, not just by convention. Nothing blocks shipping.
+
+1. **Strengths**
+   - **The guard has real effect.** I changed `tests/helpers/fake_releases.lua` back to a bare `ready_port.wait_listening(port)`. `tests/arch/nodiscard_spec.lua` then failed ("never drops one as a bare statement unless declared"). I reverted it and the checkout is clean.
+   - **One shared helper.** `tests/helpers/ready_port.lua:139` holds `require_listening`, and `DEFAULT_LISTEN_MS` is shared so the error message reports the real timeout. Outside `ready_port.lua` and its unit spec, there are 50 `require_listening` call sites and no bare `wait_listening` calls left. The only other match is a comment and a name string in `nodiscard_spec`.
+   - **The spec-side scope is narrow on purpose.** In files under `tests/`, the arch check (`nodiscard_spec.lua:62-63`) only flags results of `---@nodiscard` functions declared in helpers. It does not flag product results that spec setup ignores deliberately.
+   - **The new regression test cleans up.** It restores `_connect` after the `pcall`, even when `serve` fails (`cliproxy_auth_login_spec.lua:151-156`). The new fake-proxy bind delay is capped at 10 s and ignores values of zero or less (`tests/fixtures/fake_cliproxy:556-561`).
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings:** none.
+
+5. **Test coverage notes**
+   - Every spec I ran passed with no failures or errors:
+
+     | Spec | Passed |
+     |---|---|
+     | ready_port | 14 |
+     | nodiscard | 2 |
+     | cliproxy_auth_login | 23 |
+     | cliproxy_catalog | 22 |
+     | fixture_reaping | 12 |
+     | cliproxy_dispatch | 3 |
+     | stream_integrity | 1 |
+     | openai_tool_loop | 3 |
+     | cliproxy_caller_teardown | 5 |
+
+   - I did not run the full suite, or the lifecycle and update specs. Their 35 call sites are mechanical one-line swaps of a call whose result was already ignored, and the arch check covers them.
+   - **BR-1's guard was checked by reading only.** The guard only matters on a machine without lsof, and this machine has lsof, so the branch can't be triggered here. Its form is identical to the existing guard in `tests/unit/ready_port_spec.lua:85`.
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass.** All 12 places that hand-wrote the wait-and-assert now use the shared helper. A repo-wide grep found no other copy.
+   - **ARCH-PURE: pass.** The diff is test-harness glue. The pure decision in `is_listening` stays reachable through the existing `_connect`, `_has_listener` and `_lsof_present` seams.
+   - **ARCH-PURPOSE: pass.** I swept the whole class: every readiness wait in the tree derives from `require_listening`, and the arch check enforces it. The Done-when clauses are met:
+     - The forced-window regression reproduces the bug.
+     - The fix is in the fixture, which is where the cause was.
+     - Real healthy-credential retry tests in `cliproxy_auth_login_spec` still pass (23/23).
+
+7. **Plan revision recommendations:** none. The plan's figure of 38 is right for that plan item. The Log entry for round 1 accounts for the other 12.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      cliproxy_auth_login_spec.lua:148-150 now returns pending when lsof is absent (same guard as ready_port_spec.lua:85); the other _connect stubs either guard or stub _lsof_present; the spec passes 23/23 at head.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Plan item and Log now say 38, which matches the listed parts (26+9+1+1+1) and the original call sites.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      All 12 sites now call require_listening; no bare or asserted wait_listening is left outside ready_port and its unit spec; the affected specs all pass.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"747aede9-29d0-49ff-8453-5084834f0d78","repository":"github.com/xianxu/parley.nvim","issue_id":"000361","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/070d05f3053a4a95","reviewed_head":"12105c271e036569b9a917a5ca3da1c1860116ba","slot":"parley.nvim:4","requested_at":"2026-10-17T11:25:44.919802Z"},"phase":"finished","pid":94646,"started_at":"2026-10-17T11:25:45.01347Z","finished_at":"2026-10-17T11:29:10.8586Z","session_id":"220b9b12-b9d0-4d30-8c25-83078094c504","outcome":"returned"}] -->

@@ -83,6 +83,82 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 747aede9-29d0-49ff-8453-5084834f0d78
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000361"
+            recipe: small-diff-review
+            round: 2
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/070d05f3053a4a95
+            reviewed_head: 12105c271e036569b9a917a5ca3da1c1860116ba
+            slot: parley.nvim:4
+            requested_at: "2026-10-17T11:25:44.919802Z"
+          phase: finished
+          pid: 94646
+          started_at: "2026-10-17T11:25:45.01347Z"
+          finished_at: "2026-10-17T11:29:10.8586Z"
+          session_id: 220b9b12-b9d0-4d30-8c25-83078094c504
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 12105c271e036569b9a917a5ca3da1c1860116ba
+        tracker_head: c584234f618d12f52e779caf2b8b3aed35c1e911
+        branch_point: 6759ce28d37377959224580f2118f0fdac4985b5
+        since: "2026-10-17T02:19:20-07:00"
+        until: "2026-10-17T03:28:22-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-17T02:19:20-07:00"
+              end: "2026-10-17T03:28:22-07:00"
+              began: "2026-10-17T02:19:20-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: 7fd684f24628d7fb3c66d01d9e01565a944365baf9c739c13a1712f10d8ed80a
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 31001120
+              windows:
+                - start: "2026-10-17T02:19:20-07:00"
+                  end: "2026-10-17T03:28:22-07:00"
+        cuts:
+            - dispatched: "2026-10-17T03:23:20-07:00"
+              finalized: "2026-10-17T03:26:01-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-17T04:29:12-07:00"
+      dispatched: "2026-10-17T04:25:44-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: cliproxy_auth_login_spec.lua:148-150 now returns pending when lsof is absent (same guard as ready_port_spec.lua:85); the other _connect stubs either guard or stub _lsof_present; the spec passes 23/23 at head.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: Plan item and Log now say 38, which matches the listed parts (26+9+1+1+1) and the original call sites.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: All 12 sites now call require_listening; no bare or asserted wait_listening is left outside ready_port and its unit spec; the affected specs all pass.
+          round: 2
+      recipe: small-diff-review
+      isolation: fenced
+      reviewed: 12105c271e036569b9a917a5ca3da1c1860116ba
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#361 (boundary-review)
@@ -101,8 +177,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Minor] `ready-wait-assert-restated` (kind: defect) 12 existing sites still hand-write assert(ready_port.wait_listening(port), msg), repeating require_listening
   ARCH-DRY. Sites: openai_tool_loop_spec:37, cliproxy_catalog_spec:22,141,155,214,350,430, fixture_reaping_spec:147, cliproxy_caller_teardown_spec:46, cliproxy_dispatch_spec:29, stream_integrity_spec:37, tests/helpers/provider_scenarios.lua:20. They are correct; converting them is optional cleanup.
 
+## Round 2 — 2026-10-17T04:29:12-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — cliproxy_auth_login_spec.lua:148-150 now returns pending when lsof is absent (same guard as ready_port_spec.lua:85); the other _connect stubs either guard or stub _lsof_present; the spec passes 23/23 at head.
+- BR-2 — addressed — Plan item and Log now say 38, which matches the listed parts (26+9+1+1+1) and the original call sites.
+- BR-3 — addressed — All 12 sites now call require_listening; no bare or asserted wait_listening is left outside ready_port and its unit spec; the affected specs all pass.
+
 ## Open findings
 
-- **BR-1** [Important] `lsof-dependent-test-guard` (kind: defect) Forced-window regression stubs _connect but lacks the lsof-absent pending guard
-- **BR-2** [Minor] `doc-count-claims` (kind: defect) Plan and Log say 37 converted calls; the listed parts and the code give 38
-- **BR-3** [Minor] `ready-wait-assert-restated` (kind: defect) 12 existing sites still hand-write assert(ready_port.wait_listening(port), msg), repeating require_listening
+(none — every finding has been disposed)
