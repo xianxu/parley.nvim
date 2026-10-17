@@ -1,6 +1,6 @@
 ---
 id: 000367
-status: codecomplete
+status: done
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 5cc88a00812ee8fc93ff67982226cbc540291717
         evidence_commit: 5f498f3ed74a0d00c0dac91e4a70da979a8a0f02
+        landed_commit: 5ed50b8b88aba4a7a530fa581f8c847dc67e101c
 ---
 
 # Attention finder: an agent rewrite of a seen or retired side doc brings it back as answered
