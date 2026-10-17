@@ -55,3 +55,5 @@ Planning only, 2026-10-17: claimed and started from current main. Read S3 design
 TL approved the durable plan and policies (receipt 6d2d8e58-b402-4f59-af38-d945acb5c1af, submitted). Waiting for ariadne#424 landing; no code or tests changed.
 
 Producer #424 landed as ariadne PR #284 at 5fa50f084f8062fafb493bec86b8207fc8f5617a, confirmed from Git and peer receipt 933d0b03-27a1-4866-9cc4-5ceec0f1d9a6. Relevant export/fixture/reference files match the planning pin. Proceeding to change-code on the approved plan.
+
+Plan-quality round 1 raised PQ-1 (authoritative transition model) and PQ-2 (function-level strategies). Revised durable plan defines a pure v2 state reducer, one journal dispatcher, and compressed adversarial test contracts. TL approved revision and operator mapping: moving/done/interrupted, one reopen recovery, forward-only witness recovery or safe pre-effect abort; changed/unknown bytes never overwritten. Rerunning change-code, no implementation yet.

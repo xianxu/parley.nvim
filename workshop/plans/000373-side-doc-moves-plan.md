@@ -88,6 +88,18 @@ Events are discriminated records: `journal_saved`, `observed` (phase, proof = be
 
 Fresh and recovered paths restore the same model and feed it adapter observations; persisted before/after witnesses let a crash after publication but before checkpoint be recognized without repeating the rename. The existing document-ID lease owns dispatcher lifetime, while no-replace and CAS own cross-document/path exclusion. No new background task outlives the operation. Test controllable event sequences against preservation, legal ordering, single-publication, and stale-event invariants; IO tests inject publication/checkpoint failures through the existing fs adapter.
 
+## Operator view
+
+The phases above stay internal. The operator sees only:
+
+| View | Meaning | Action |
+|---|---|---|
+| moving | Local move or metadata confirmation is active | Wait |
+| done | Expected identity confirmed and local cleanup complete | None |
+| interrupted | The journal is retained; a concrete reason names the missing proof | Reopen |
+
+Reopen resumes and finishes from recorded witnesses. A refusal before any effect aborts cleanly. If bytes changed or remain unknown after effects, the operation stays interrupted with the same reopen action and a concrete reason; it never overwrites those bytes. No rollback beyond pre-effect abort, no repair menu, and no exposed phase/checkpoint names. The orphan destination is an informational result, not another required action. Existing v1 journal compatibility retains its validated on-disk behavior.
+
 ## Operating envelope and residue
 
 This is an explicit user move, not a keystroke path. Retain current 4 MiB/file, 4096 entries, 512 Markdown children, 256 KiB journal and 32 pending-operation limits. Parent bytes are read once per observation/revalidation phase, not per link. Store hashes/paths/witnesses, not whole document copies, in the journal. Test limits and scale so large prose/whitespace cannot cause quadratic scans (ARCH-CONSTRAINTS).
@@ -146,3 +158,5 @@ Confirm preserving the explicit-overwrite exception safely (no orphan displaceme
 - 2026-10-17 — Producer dependency landed: ariadne PR #284, Git-verified merge 5fa50f084f8062fafb493bec86b8207fc8f5617a. Diff against planning pin 5990bf04 shows no changes under construct/local/universal-review or pkg/reviewexport/move_test.go. This merge is the implementation snapshot pin; the dependency wait is satisfied. No scope or policy change.
 
 - 2026-10-17 — Plan-quality round 1: PQ-1 required an authoritative recovery model; added the named pure v2 reducer, phase/event table, dispatcher ownership, stale-event and save-generation rules above. PQ-2 required function-level adversarial strategies; compressed checklist test inventories into named function contracts and mechanical guards. No implementation yet; request TL approval of this internal model clarification before rerunning change-code.
+
+- 2026-10-17 — TL approved PQ-1/PQ-2 revision (1d0cc2d0-52f2-4a29-be12-f6cb80656c29) and clarified operator recovery (256baa18-a8de-4113-bf8b-a071b4bad7a6): moving/done/interrupted only; reopen resumes, pre-effect refusal aborts, unknown/changed bytes remain interrupted with reason and no overwrite. No post-effect rollback or repair menu. Added the explicit mapping above.
