@@ -430,3 +430,73 @@ describe("attention finder: side docs the agent wrote", function()
         assert.is_false(Attention.is_side_doc({}))
     end)
 end)
+
+describe("attention finder: seen however the operator looks", function()
+    before_each(function()
+        root = vim.fn.resolve(vim.fn.tempname()); vim.fn.mkdir(root, "p")
+        registry = root .. "/registry.json"
+        Couch.write(root, root .. "/sent", root .. "/argv")
+        saved = { path = vim.env.PATH, registry = vim.env.FAKE_COUCH_REGISTRY, state_dir = p.config.state_dir,
+            attention = p.config.attention, clock = Attention.clock }
+        vim.env.PATH = root .. "/bin:" .. vim.env.PATH
+        vim.env.FAKE_COUCH_REGISTRY = registry
+        p.config.state_dir = root .. "/state"
+        p.config.attention = { seen_grace_minutes = 60 }
+        now = 1000
+        Attention.clock = function() return now end
+    end)
+    after_each(function()
+        pcall(vim.api.nvim_del_augroup_by_name, "ParleyAttentionViews")
+        vim.env.PATH, vim.env.FAKE_COUCH_REGISTRY = saved.path, saved.registry
+        p.config.state_dir, p.config.attention, Attention.clock = saved.state_dir, saved.attention, saved.clock
+        vim.cmd("silent! %bwipeout!")
+        vim.fn.delete(root, "rf")
+    end)
+
+    -- An answered entry for a fresh file, known to this editor's view tracking.
+    local function answered(name)
+        local path = submitted(name, "m1")
+        Couch.fold(registry, path, "m1")
+        now = now + 10
+        open({ picker = fake_picker() }) -- the probe answers it at `now`
+        assert.equals("answered", Model.state_of(Store.load().entries[path]))
+        Attention.setup()
+        return path
+    end
+
+    it("focusing a window on an answered file makes it seen", function()
+        local a = answered("a.md")
+        now = now + 1
+        vim.cmd("edit " .. vim.fn.fnameescape(a)) -- BufEnter
+        await(function() return Model.state_of(Store.load().entries[a]) == "seen" end, "the view never counted")
+        assert.equals(now, Store.load().entries[a].seen_at)
+    end)
+
+    it("moving the cursor in the current window counts, once the answer has arrived", function()
+        local a = root .. "/a.md"
+        vim.fn.writefile({ "# a", "two" }, a)
+        vim.cmd("edit " .. vim.fn.fnameescape(a))
+        local path = answered("a.md") -- answered while the file is already current
+        now = now + 1
+        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = vim.api.nvim_get_current_buf() })
+        await(function() return Model.state_of(Store.load().entries[path]) == "seen" end, "the cursor move never counted")
+    end)
+
+    it("viewing a waiting file changes nothing", function()
+        local a = submitted("a.md", "m1")
+        Attention.setup()
+        vim.cmd("edit " .. vim.fn.fnameescape(a))
+        vim.wait(100)
+        assert.equals("waiting", Model.state_of(Store.load().entries[a]))
+    end)
+
+    it("the finder leaves out the file in the current window", function()
+        local a = submitted("a.md", "m1")
+        now = now + 1
+        submitted("b.md", "m2")
+        vim.cmd("edit " .. vim.fn.fnameescape(a))
+        local picker = fake_picker()
+        open({ picker = picker })
+        assert.same({ "waiting    b.md  ~" }, picker.rows())
+    end)
+end)

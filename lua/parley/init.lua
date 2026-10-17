@@ -999,6 +999,9 @@ M.setup = function(opts)
 	end)
 	require("parley.skills.review.diag_display").set(true)
 
+	-- The attention finder (#354) counts a file as seen when the operator looks at it.
+	require("parley.attention").setup()
+
 	-- Register all global keymaps from the keybinding registry
 	kb_registry.register_global(
 		{ "global", "repo", "note", "issue", "vision", "chat" },

@@ -14,6 +14,28 @@ local PROBE_TIMEOUT_MS = 5000
 
 local M = {}
 
+-- The paths this editor last saw answered: the cheap test the view autocmds
+-- (which fire on every cursor move) run before touching the store.
+local answered = {}
+
+local function remember(state)
+    answered = {}
+    for path, entry in pairs(state and state.entries or {}) do
+        if Model.state_of(entry) == "answered" then answered[path] = true end
+    end
+end
+
+-- Every store change from this module goes through here, so `answered` follows it.
+local function apply(event, options, on_done)
+    Store.apply(event, options, function(state, err)
+        if state then remember(state) end
+        if on_done then on_done(state, err) end
+    end)
+end
+
+--- The clock for views; replaced by tests.
+M.clock = os.time
+
 --- The message ID from `couch --send-to`'s stdout, whose first line reads
 --- `<ID> <from> -> <to> <status>`; nil for anything else.
 function M.parse_message_id(stdout)
@@ -42,7 +64,7 @@ function M.record(path, breadcrumb, send_result, options, on_done)
         logger.warning("attention: no message ID in Couch's reply; the submit of " .. tostring(path) .. " is not tracked")
         return on_done(nil, "no message id")
     end
-    Store.apply({ type = "submitted", path = path, id = id, breadcrumb = breadcrumb }, options, on_done)
+    apply({ type = "submitted", path = path, id = id, breadcrumb = breadcrumb }, options, on_done)
 end
 
 -- The real seams; `open` and `refresh` take replacements for tests.
@@ -103,7 +125,7 @@ function M.refresh(options, on_change, on_done)
             probed = entry and vim.tbl_keys(entry.pending) or {}
             return seam.run({ "couch", "--session-sync", "status", "--json", path }, finish, { timeout = seam.timeout })
         end, function(data)
-            Store.apply(M.observation(path, probed, data), seam.store, function(state)
+            apply(M.observation(path, probed, data), seam.store, function(state)
                 if state then on_change(state) end
                 finished = finished + 1
                 if finished == #queue then on_done() end
@@ -152,6 +174,38 @@ function M.discover(state)
     return events
 end
 
+--- The operator looked at the current window's file: an answered entry for
+--- it becomes seen (the model counts only a view after the answer).
+function M.viewed(buf)
+    buf = buf or vim.api.nvim_get_current_buf()
+    if vim.bo[buf].buftype ~= "" then return end
+    local name = vim.api.nvim_buf_get_name(buf)
+    if name == "" then return end
+    local path = vim.fn.fnamemodify(name, ":p")
+    if not answered[path] then return end
+    answered[path] = nil
+    local at = M.clock()
+    apply({ type = "viewed", path = path, at = at }, { now = at })
+end
+
+--- Install the view autocmds once: focusing a window on a file, or moving or
+--- scrolling in it, is the operator looking at it. Loads the answered paths.
+function M.setup()
+    remember(Store.load())
+    local group = vim.api.nvim_create_augroup("ParleyAttentionViews", { clear = true })
+    vim.api.nvim_create_autocmd({ "WinEnter", "BufEnter", "CursorMoved", "CursorMovedI", "WinScrolled" }, {
+        group = group,
+        callback = function(args)
+            if args.event == "WinScrolled" then
+                -- WinScrolled names the scrolled window; it counts only while current.
+                if tonumber(args.match) ~= vim.api.nvim_get_current_win() then return end
+                return M.viewed(vim.api.nvim_get_current_buf())
+            end
+            M.viewed(args.buf)
+        end,
+    })
+end
+
 local function define_highlights()
     local groups = {
         ParleyAttentionWaiting = { link = "Normal" },
@@ -180,7 +234,7 @@ local function select(path, seam, on_done)
             logger.warning("attention: breadcrumb not restored: " .. tostring(ok and reason or restored))
         end
     end
-    Store.apply({ type = "opened", path = path }, seam.store, function() if on_done then on_done() end end)
+    apply({ type = "opened", path = path }, seam.store, function() if on_done then on_done() end end)
 end
 
 --- Open the finder: sweep, add the side docs the agent wrote, list the
@@ -191,7 +245,13 @@ function M.open(options)
     local seam = seams(options)
     local home = (options and options.home) or vim.env.HOME
     define_highlights()
-    local function items(state) return Rows.items(Model.list(state), { home = home }) end
+    -- The file in the current window is already in front of the operator.
+    local current = vim.api.nvim_buf_get_name(0)
+    current = current ~= "" and vim.fn.fnamemodify(current, ":p") or nil
+    local function items(state)
+        local shown = vim.tbl_filter(function(entry) return entry.path ~= current end, Model.list(state))
+        return Rows.items(shown, { home = home })
+    end
     local function show(state)
         local handle
         handle = seam.picker.open({
@@ -205,11 +265,11 @@ function M.open(options)
             handle.update(items(next_state), nil, selected and selected.value or nil)
         end, options and options.on_refreshed)
     end
-    Store.apply({ type = "sweep", grace = Store.grace_seconds() }, seam.store, function(swept)
+    apply({ type = "sweep", grace = Store.grace_seconds() }, seam.store, function(swept)
         local state = swept or Store.load()
         local events = M.discover(state)
         if #events == 0 then return show(state) end
-        Store.apply({ type = "batch", events = events }, seam.store, function(found)
+        apply({ type = "batch", events = events }, seam.store, function(found)
             show(found or Store.load())
         end)
     end)

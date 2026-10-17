@@ -6,7 +6,8 @@
 -- derived from its pending message IDs and its answered/seen times, never stored:
 --   waiting   some submit of the file is still owed by the agent;
 --   answered  nothing is owed, and the operator has not opened it since;
---   seen      opened from the finder after its last answer.
+--   seen      looked at after its last answer: opened from the finder, or
+--             viewed in a window (`viewed`), however the operator got there.
 -- A failed probe is never evidence of an answer: it only marks `unknown`.
 -- A side doc that left the finder is `retired`, so a later scan of its folder
 -- does not bring it back.
@@ -154,6 +155,19 @@ function handlers.opened(state, event, now)
     if not entry or M.state_of(entry) ~= "answered" then return state end
     local next_state, opened = with_entry(state, event.path)
     opened.seen_at = now
+    return next_state
+end
+
+-- The operator looked at the file at `at`, however they got there (#354: a
+-- session file is read where it is already open). It counts only after the
+-- answer arrived; a view while waiting, or before the answer, changes nothing.
+function handlers.viewed(state, event)
+    local entry = state.entries[event.path]
+    if not entry or M.state_of(entry) ~= "answered" or not entry.answered_at or event.at <= entry.answered_at then
+        return state
+    end
+    local next_state, viewed = with_entry(state, event.path)
+    viewed.seen_at = event.at
     return next_state
 end
 

@@ -281,3 +281,26 @@ describe("attention_model side docs", function()
         assert.equals("seen", state_of(state, "/a.side/1.md"))
     end)
 end)
+
+describe("attention_model viewed", function()
+    local function viewed(path, at) return { type = "viewed", path = path, at = at } end
+
+    it("an answered entry viewed after its answer is seen", function()
+        local state = run({ { viewed("/a.md", 25) } }, run(SETUPS.answered))
+        assert.equals("seen", state_of(state, "/a.md"))
+        assert.equals(25, state.entries["/a.md"].seen_at)
+    end)
+
+    it("a view before or at the answer changes nothing", function()
+        local answered = run(SETUPS.answered) -- answered at 20
+        assert.equals(answered, Model.transition(answered, viewed("/a.md", 15), 30))
+        assert.equals(answered, Model.transition(answered, viewed("/a.md", 20), 30))
+    end)
+
+    it("a view of a waiting, seen or unknown path changes nothing", function()
+        for _, setup in ipairs({ "waiting", "seen", "absent" }) do
+            local state = run(SETUPS[setup])
+            assert.equals(state, Model.transition(state, viewed("/a.md", 99), 100))
+        end
+    end)
+end)
