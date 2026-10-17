@@ -1,12 +1,12 @@
 ---
 id: 000360
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
-updated: 2026-10-16
+updated: 2026-10-17
 estimate_hours:
-card_mirror: '2e17d8bce7029614169fb6d3a0c97a76a1504810' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '55b3865f127c3f2d413aa36a90f85e75d5118f92' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T22:33:58-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "b627919e", done: "2d376e3d"}
+actual_hours: 1.17
 ---
 
 # Cliproxy catalog joins-routes case intermittently returns empty under suite load
