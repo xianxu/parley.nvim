@@ -1,12 +1,20 @@
 ---
 id: 000369
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: 'abd65a45d2aa4fed403335bbc29e590943fa7d67' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'caabf3554a3456b18b547067c00312d528dc1619' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T21:03:50-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Reject overlapping edit batches
@@ -41,7 +49,15 @@ artifact unchanged through both synchronous and asynchronous tool paths.
 
 ## Plan
 
-- [ ]
+Quick flow. Once every edit has its unique position, `skill_edits.compute_edits` sorts the edits by start and refuses the batch when an edit starts before the previous one ends, or at the same start. A same start covers identical spans and zero-length old_strings, whose order would be ambiguous. The error names both edits by their batch numbers, and the result has no content. Adjacent edits (one starts exactly where the previous ends) and disjoint edits behave as before. Both IO paths, `propose_edits.handler` (sync) and `async_builtin.file_body` (async), already return before the backup and the write when the transform fails; specs pin that for an overlapping batch.
+
+- [ ] Pure specs (tests/unit/skill_edits_spec.lua):
+  - the issue's reproducer is refused with no content (red before the fix);
+  - containment, partial overlap and identical spans are refused, in either batch order;
+  - adjacency and disjoint spans apply as before.
+- [ ] The overlap check in compute_edits.
+- [ ] Sync IO spec: an overlapping batch leaves the file unchanged and writes no backup.
+- [ ] Async IO spec: the same through execute_async on the fake tool filesystem.
 
 ## Log
 
