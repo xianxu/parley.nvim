@@ -50,6 +50,7 @@ Decide which side is wrong with a deterministic ordering: hold the rename reply 
 ## Log
 
 ### 2026-10-17
+- 2026-10-17: closed — Not a product gap: the editor adopts NEW only from the rename reply (document_session, then finish_move, then metadata_done) and shows done only after adopting. Spec race: Couch publishes before it replies; the case polled the registry, then read the buffer identity a tick early. Repro: the new FAKE_COUCH_REGISTRY_REPLY_DELAY (after publish and lock release) with _OPS=rename made the old case fail 3/3 at the identity assertion. Fix: the case holds the reply 0.5 s and awaits the adopted identity before checking the registry; 16/16 five runs in a row; the sweep found no other registry-then-identity read. Suite on b4a3befa: exit 0 in 2m26s, first attempt.; review verdict: SHIP
 
 ## Log
 
