@@ -1,13 +1,13 @@
 ---
 id: 000374
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '702eb00d5e53677666a4764fc9b721737c86e35d' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a4a4b7830b6a8cccb6e324ff704b74a9161314de' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T03:37:23-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "461e862b", done: "9a3f2a5c"}
+actual_hours: 1.30
 ---
 
 # Spec sweep: positive waits on a process or timer use the product deadline, not a 2 s literal (19 files; #370 lesson)
