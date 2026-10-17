@@ -51,7 +51,7 @@ Approved local-adapter correction: see [implementation plan](../plans/000362-rev
 
 - [x] Implement pure collaboration frontmatter/section resolution and protected chat ranges.
 - [x] Add local admission/notices and a proposal guard; test default questions, explicit collaboration/chat, invalid routing and resubmission.
-- [ ] Update the local adapter/docs and re-run full verification and close review.
+- [x] Update the local adapter/docs and re-run full verification and close review.
 
 - [x] Extend pure validation/rendering for an optional singleton at the fixed
   collaboration-modes.md path; compose round, grammar, collaboration modes.
@@ -227,6 +227,15 @@ pass (Lua and LuaJIT), including a red/green literal quoted-text control.
 Final mapped modes/review, lint, pinned-source --check and diff checks pass,
 with clean process census. Submit the corrected code head to fresh full-suite
 verification, then ask the binary's next boundary review to dispose BR-1.
+
+### 2026-10-16 — declaration-corrected full suite green
+
+3ed96ac1829348e5eda1ae2246c625273d39abec passed its first recorded full run
+in 2m9s after 2743s queue. All 456 files pass, lint and process census clean,
+no retry or waiver. Log .git/sdlc/local-checks/
+3ed96ac1829348e5eda1ae2246c625273d39abec/suite.log, SHA256 prefix c182dab6c553.
+The full run includes the 64 invocation cases and declaration admission matrix.
+Request the full boundary review to dispose the remaining BR-1 family.
 
 ## Revisions
 
