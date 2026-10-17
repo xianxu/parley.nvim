@@ -247,4 +247,57 @@ function M.project(old, new, observations)
     result.effects[#result.effects + 1] = { kind = 'rename_metadata', id = o.id, old = old, new = new }
     return result
 end
+
+-- #359: a move asks Couch nothing before it happens, except an overwrite of an
+-- existing file. Couch's own rename refuses an occupied destination, and the
+-- no-replace file rename guards NEW's bytes, so what parley already knows
+-- decides. The operator sees one of five actions: nothing, run again, reopen,
+-- forget and reopen, rename back.
+M.MOVE_TEXT = {
+    identity = "move not confirmed: Couch hasn't confirmed this document yet; nothing moved. Run the move again",
+    legacy = 'move not confirmed: registering this document first; nothing moved. Run the move again',
+    confirming = 'moving: confirming with Couch',
+    background = 'move not confirmed: finishing in the background',
+    pending = 'move pending: reopen to recover',
+}
+
+--- What a move may do without waiting. known: identity (a registration,
+--- 'plain' when positively absent, or 'unknown'), legacy (a session-sync owner
+--- or nil), new_exists, overwrite (`:saveas!`). PURE.
+function M.move_preflight(known)
+    local identity = known.identity
+    if type(identity) == 'table' then
+        if known.new_exists and known.overwrite then return { wait_destination = true } end
+        return { proceed = true }
+    end
+    if known.legacy then return { refuse = 'legacy', register = true, message = M.MOVE_TEXT.legacy } end
+    if identity == 'plain' then return { plain = true } end
+    return { refuse = 'identity', lookup = true, message = M.MOVE_TEXT.identity }
+end
+
+-- A path the shell reads back as itself, so the printed command pastes as is.
+local function shell_word(path)
+    if path:match('^[%w%./_%-~+,:@]+$') then return path end
+    return "'" .. path:gsub("'", "'\\''") .. "'"
+end
+
+--- The operator's view of a move once it began. outcome: moved (the journal's
+--- document_moved step), new_path, overdue (past the submit deadline), result
+--- (the metadata rename's reply, nil while out). PURE.
+function M.move_outcome(outcome)
+    local result = outcome.result
+    if result and result.kind == 'registered' then return { state = 'done', band = '', action = 'none' } end
+    if outcome.moved and not result then
+        if outcome.overdue then
+            return { state = 'background', band = M.MOVE_TEXT.background, action = 'none', warning = true }
+        end
+        return { state = 'confirming', band = M.MOVE_TEXT.confirming, action = 'none' }
+    end
+    if outcome.moved and result.code == 'target-conflict' then
+        local new = shell_word(outcome.new_path)
+        return { state = 'conflict', action = 'forget', band = ('move not confirmed: %s is registered to another'
+            .. ' document. Run: couch --session-sync forget %s, then reopen'):format(outcome.new_path, new) }
+    end
+    return { state = 'pending', band = M.MOVE_TEXT.pending, action = 'reopen' }
+end
 return M
