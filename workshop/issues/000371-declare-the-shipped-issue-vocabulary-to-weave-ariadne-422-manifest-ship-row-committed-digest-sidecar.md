@@ -1,13 +1,13 @@
 ---
 id: 000371
-status: working
+status: codecomplete
 deps: [ariadne#422]
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '0f7a48d1beeca906e3d480192341afc99bb3f636' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '3e0aa9768332c81200d0b693557053cc971bdde3' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T06:39:45-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "40a1e508", done: "b1238f69"}
+actual_hours: 0.34
 ---
 
 # Declare the shipped issue vocabulary to weave (ariadne#422): manifest ship row, committed digest sidecar
