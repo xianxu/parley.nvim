@@ -104,6 +104,60 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 315dee3a-1a63-451f-a7f6-4d3104d6ec13
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/4630b9b589dfe37b
+            reviewed_head: 3485d3a5300a44300b1a93219e3549b8630acc22
+            slot: parley.nvim:1
+            requested_at: "2026-10-17T18:55:37.554347Z"
+          phase: finished
+          pid: 63203
+          started_at: "2026-10-17T18:55:37.642889Z"
+          finished_at: "2026-10-17T18:57:13.930791Z"
+          session_id: 01a14b38-378e-7720-8013-ea0d87c3fbd8
+          outcome: returned
+      "n": 3
+      timestamp: "2026-10-17T11:57:17-07:00"
+      dispatched: "2026-10-17T11:55:37-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Multiline-code preservation regressions remain present and pass through both rewrite APIs.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: Snapshot-wide leaf/ancestor preflight remains implemented; all 23 exporter contracts pass.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: Complete-rewrite malformed-delimiter scale tests remain present and pass.
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: Both rewrite APIs consume shared markdown_blocks segmentation. The boundary regression passes at HEAD; restoring the pre-fix document_move_plan.lua in a disposable checkout produces 43 passes and one failure at the heading-separated live-link assertion.
+          round: 3
+      findings:
+        - kind: defect
+          id: BR-5
+          severity: Important
+          title: Atlas update appears missing for the expanded move projection contract
+          detail: lua/parley/document_move_plan.lua:284 introduces rewrite_side_references, while :366 and :438 add orphan-displacement and parent-rewrite effects. The atlas changes describe fixture export only; atlas/modes/session_sync.md:237 still describes the projection as side/backlink effects. Document the new observations, effect ordering, refusal rules and orphan_destination result, explicitly distinguishing M1 projection support from M2 runtime execution.
+          family: architecture-documentation
+          round: 3
+      boundary: M1
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#373 (boundary-review)
@@ -135,6 +189,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Critical] `markdown-code-preservation` (kind: defect) Inline-code masks cross block boundaries and leave live links pointing at the old path
   lua/parley/document_move_plan.lua:110 ends code-mask paragraphs only at blank lines or fences. Input "` unmatched\n# Heading\n[live](design.side/q.md) `\n" remains unchanged when design.md becomes spec.md, although the heading separates the backticks and the live destination must become spec.side/q.md. Both rewrite APIs fail equivalent probes across headings, thematic breaks, blockquotes, and list starts: eight failures. This is the 2nd finding in family `markdown-code-preservation`. Do NOT fix only this instance: state and enforce the block-boundary rule across the supported Markdown structures, sharing segmentation with reference_candidates.markdown_spans where appropriate, and test both APIs. ARCH-DRY and ARCH-PURPOSE.
 
+## Round 3 — 2026-10-17T11:57:17-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Multiline-code preservation regressions remain present and pass through both rewrite APIs.
+- BR-2 — addressed — Snapshot-wide leaf/ancestor preflight remains implemented; all 23 exporter contracts pass.
+- BR-3 — addressed — Complete-rewrite malformed-delimiter scale tests remain present and pass.
+- BR-4 — addressed — Both rewrite APIs consume shared markdown_blocks segmentation. The boundary regression passes at HEAD; restoring the pre-fix document_move_plan.lua in a disposable checkout produces 43 passes and one failure at the heading-separated live-link assertion.
+
+### Raised
+
+- **BR-5** [Important] `architecture-documentation` (kind: defect) Atlas update appears missing for the expanded move projection contract
+  lua/parley/document_move_plan.lua:284 introduces rewrite_side_references, while :366 and :438 add orphan-displacement and parent-rewrite effects. The atlas changes describe fixture export only; atlas/modes/session_sync.md:237 still describes the projection as side/backlink effects. Document the new observations, effect ordering, refusal rules and orphan_destination result, explicitly distinguishing M1 projection support from M2 runtime execution.
+
 ## Open findings
 
-- **BR-4** [Critical] `markdown-code-preservation` (kind: defect) Inline-code masks cross block boundaries and leave live links pointing at the old path
+- **BR-5** [Important] `architecture-documentation` (kind: defect) Atlas update appears missing for the expanded move projection contract

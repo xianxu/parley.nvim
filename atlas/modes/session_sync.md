@@ -235,12 +235,45 @@ hooks and the public Parley movers. Owned file moves journal intent before an
 atomic no-replace rename; native saveas waits for its successful write witness.
 `document_session.lua` owns the pure lifecycle; `document_registry.lua`
 uses the shared `couch.run` transport. `document_move_plan.lua` projects pure
-side/backlink effects, `document_move.lua` executes and recovers journals,
+side/backlink effects and the [S3 projection contract](#s3-pure-move-projection-373-m1), `document_move.lua` executes and recovers journals,
 `document_lease.lua` owns kernel leases, and `helper.write_file_atomic` is the
 shared checked byte writer. `session_sync.lua` remains the single edit-turn,
 watch, baseline/undo, ping and rendering engine. Dispatch and keys live in
 `setup_markdown_keymaps` (`lua/parley/init.lua`). The maintainer real/fake registry
 probe is documented in [TOOLING](../../TOOLING.md).
+
+### S3 pure move projection (#373 M1)
+
+`document_move_plan.project(OLD, NEW, observations)` describes effects from
+complete supplied observations; it performs no IO. Alongside the existing ID,
+file/write/registration and side-tree observations, optional `parent_bytes`
+enables the moving document's own reference rewrite. An occupied target side
+folder needs `new_absent_at_admission = true` and dense `orphan_candidates`:
+occupied suffixes followed by the first free suffix, at most 4096 observations.
+An existing NEW document, unknown suffix, exhausted search, escaping/duplicate
+entry or ambiguous relevant syntax cannot authorize orphan displacement.
+
+Before a successful NEW write, the result is `wait_new_write`; supplied parent
+syntax is validated before that result. Afterwards effects are ordered:
+`move_orphan` when needed, `move_side`, changed child `rewrite_parent` effects,
+moving-parent `rewrite_document`, then `rename_metadata`. The result's optional
+`orphan_destination` names `<newstem>_N.side/`; the active parent keeps its
+canonical `<newstem>.side/`. A same-side extension change needs no folder rename.
+
+`rewrite_side_references` updates the parent's links resolving inside its old
+side tree and supported block `discussions:` doc scalars, even when the source
+folder is absent. Scalar quotes/comments, fragments and unrelated bytes remain
+exact; ambiguous scalars or relevant unsupported destinations refuse without a
+partial result. Both rewrite APIs share scalar/link helpers and the reference
+scanner's `markdown_blocks` containment rules, preserving inline/fenced code.
+Other documents' incoming links are outside the supplied tree and are not
+rewritten. Shared exported before/after fixtures exercise this pure contract.
+
+These are M1 projection capabilities. The existing runtime journal still uses
+its earlier side/backlink execution contract and occupied-folder refusal; the
+v2 dispatcher, orphan execution, parent disk/buffer/baseline synchronization and
+recovery integration belong to #373 M2. Runtime and operator documentation are
+updated with that milestone, without implying these effects already execute.
 
 Native and public move preflight also checks the loaded coordinator before
 plain fallback: unresolved owner selection, pending admission and an active

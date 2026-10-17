@@ -760,3 +760,5 @@ point as well as internal helpers before calling the family complete.
 - Benchmark the complete consumer with every malformed delimiter family, not only its shared scanner. Removing one backtracking pattern left a fallback that copied and resolved each remaining suffix. Use disjoint token spans and exercise both callers.
 
 - The #373 re-review found the sibling failure after paragraph-wide masks: pairing backticks across a heading or list boundary hid live links. Share the scanner’s existing block segmentation rather than introducing a second notion of paragraph; test live rewrites across every boundary as well as preservation within a block.
+
+- A milestone that introduces pure effect vocabulary needs its atlas map at that boundary, even when its IO consumer is deferred. Document inputs, outputs, refusals and which effects do not execute yet; importing fixture documentation alone does not map the projection contract.

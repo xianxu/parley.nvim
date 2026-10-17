@@ -188,3 +188,93 @@ findings:
    Add a `## Revisions` entry defining one shared Markdown block-segmentation contract for reference scanning and inline-code masks. Enumerate supported boundaries and require preservation plus live-link rewrite tests across each boundary for both APIs.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ac49aa83-3627-4b07-8c11-2adb16760667","repository":"github.com/xianxu/parley.nvim","issue_id":"000373","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/585e79ecc387df91","reviewed_head":"c8dddf5bf201a8194f5d6bedd4b20bc344844c08","slot":"parley.nvim:1","requested_at":"2026-10-17T18:22:25.958047Z"},"phase":"finished","pid":12166,"started_at":"2026-10-17T18:22:26.058249Z","finished_at":"2026-10-17T18:24:31.875707Z","session_id":"01a14b19-d41d-7b32-b8ef-57054aa0d7f8","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T11:57:17-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 373 — side docs S3: on a name change the mover rewrites the parent's links and discussions index, suffixes an orphan .side folder, and passes ariadne's shared move fixtures |
+| repo | parley.nvim |
+| issue file | workshop/issues/000373-side-docs-s3-on-a-name-change-the-mover-rewrites-the-parent-s-links-and-discussions-index-suffixes-an-orphan-side-folder-and-passes-ariadne-s-shared-move-fixtures.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | f9a4a11cde712b47ef25d94e9debffd874e298a7..3485d3a5300a44300b1a93219e3549b8630acc22 |
+| command | sdlc milestone-close --issue 373 --milestone M1 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-17T11:57:17-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+M1’s projection and export behavior passed focused verification. BR-4 is addressed, including a negative control proving the regression test fails without the fix. One Important atlas documentation gap remains. Runtime journal/editor integration is correctly deferred to M2.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Multiline-code preservation regressions remain present and pass through both rewrite APIs.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Snapshot-wide leaf/ancestor preflight remains implemented; all 23 exporter contracts pass.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Complete-rewrite malformed-delimiter scale tests remain present and pass.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Both rewrite APIs consume shared markdown_blocks segmentation. The boundary regression passes at HEAD; restoring the pre-fix document_move_plan.lua in a disposable checkout produces 43 passes and one failure at the heading-separated live-link assertion.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: architecture-documentation
+    title: |
+      Atlas update appears missing for the expanded move projection contract
+    detail: |
+      lua/parley/document_move_plan.lua:284 introduces rewrite_side_references, while :366 and :438 add orphan-displacement and parent-rewrite effects. The atlas changes describe fixture export only; atlas/modes/session_sync.md:237 still describes the projection as side/backlink effects. Document the new observations, effect ordering, refusal rules and orphan_destination result, explicitly distinguishing M1 projection support from M2 runtime execution.
+```
+
+1. **Strengths**
+
+   - Shared block segmentation removes divergent Markdown boundary rules between scanning and code containment.
+   - Boundary tests exercise both rewrite APIs and preserve valid paragraph/list continuations.
+   - Manifest-driven fixtures compare complete output paths and bytes.
+   - Export preflight validates expected leaves and ancestors before mutation.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** Add the projection contract to the atlas as detailed above.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   Passed 44 projection cases, 20 reference cases, both shared fixture groups, 10 review-composition cases and 23 Python exporter tests. BR-4’s negative control failed as expected; restoring HEAD returned all 44 projection cases to green. Diff whitespace checks passed. The full suite was not independently rerun. Disposable checkout removed; repository unchanged.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** Both rewrite APIs share link rewriting and block segmentation.
+   - **ARCH-PURE — pass:** Projection remains deterministic; fixture IO stays in the integration loader.
+   - **ARCH-PURPOSE — pass:** BR-4 covers the enumerated boundary class across both consumers.
+   - **ARCH-MOCK — pass:** No new stateful external dependency.
+   - **ARCH-CONSTRAINTS — pass:** Bounded suffix admission and malformed-input scale tests pass.
+   - **ARCH-SECURE — pass:** Manifest validation and output preflight reject unsafe paths and file types.
+   - **ARCH-ORDER — pass for M1:** Projection orders effects; durable execution remains M2.
+   - **ARCH-FUNERAL — pass:** Snapshot ownership and explicit stale-output removal are defined.
+
+7. **Plan revision recommendation**
+
+   Add a `## Revisions` entry assigning documentation of the pure projection contract to M1; retain runtime recovery and operator documentation in M2.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"315dee3a-1a63-451f-a7f6-4d3104d6ec13","repository":"github.com/xianxu/parley.nvim","issue_id":"000373","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/4630b9b589dfe37b","reviewed_head":"3485d3a5300a44300b1a93219e3549b8630acc22","slot":"parley.nvim:1","requested_at":"2026-10-17T18:55:37.554347Z"},"phase":"finished","pid":63203,"started_at":"2026-10-17T18:55:37.642889Z","finished_at":"2026-10-17T18:57:13.930791Z","session_id":"01a14b38-378e-7720-8013-ea0d87c3fbd8","outcome":"returned"}] -->
