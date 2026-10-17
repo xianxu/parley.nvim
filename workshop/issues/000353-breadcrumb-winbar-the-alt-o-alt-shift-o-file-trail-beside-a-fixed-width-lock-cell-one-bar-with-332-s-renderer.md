@@ -1,12 +1,12 @@
 ---
 id: 000353
-status: working
+status: codecomplete
 deps: [parley.nvim#332]
 github_issue:
 created: 2026-10-16
-updated: 2026-10-16
+updated: 2026-10-17
 estimate_hours: 4.54
-card_mirror: 'ff06dcb52eb216c52dd51840577e7e21d0e50bf2' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'baf516a1f6d0c52d9c527c7ce1adaa902d240ea7' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T09:59:46-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: operator}
+actual_hours: N/A
 ---
 
 # Breadcrumb winbar: the Alt+o / Alt+Shift+O file trail beside a fixed-width lock cell (one bar with #332's renderer)
