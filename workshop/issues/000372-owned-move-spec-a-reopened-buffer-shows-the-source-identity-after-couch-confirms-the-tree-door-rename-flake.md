@@ -45,7 +45,7 @@ Decide which side is wrong with a deterministic ordering: hold the rename reply 
 - [x] Check the adoption ordering in the product (the TL's question): not a defect, see Log.
 - [x] The tree-door case holds the rename reply 0.5 s and awaits the buffer's adopted identity before checking the registry.
 - [x] Sweep the spec for the same order (registry first, then an immediate identity read).
-- [ ] Full suite, close.
+- [x] Full suite, close.
 
 ## Log
 
