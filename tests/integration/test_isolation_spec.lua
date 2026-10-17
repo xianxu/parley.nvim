@@ -112,7 +112,8 @@ describe("the allowlist environment (#365)", function()
         local function names(env)
             local result = vim.system({ repo .. "/scripts/test-env.sh", "/usr/bin/env" }, { text = true, clear_env = true,
                 env = vim.tbl_extend("force", { PATH = "/usr/bin:/bin", PARLEY_TEST_ENV_ROOT = root,
-                    CLIPROXYAPI_API_KEY = "c", COUCH_THREAD_SCOPE = "s", COUCH_THREAD_TAG = "t" }, env) }):wait(5000)
+                    CLIPROXYAPI_API_KEY = "c", COUCH_THREAD_SCOPE = "s", COUCH_THREAD_TAG = "t",
+                    PAIR_SESSION_NAME = "n", PAIR_LAUNCH_NONCE = "x" }, env) }):wait(5000)
             assert.equals(0, result.code, result.stderr)
             local found = {}
             for line in result.stdout:gmatch("[^\n]+") do found[line:match("^([^=]+)=")] = true end
@@ -121,11 +122,14 @@ describe("the allowlist environment (#365)", function()
         local plain = names({})
         assert.is_nil(plain.CLIPROXYAPI_API_KEY)
         assert.is_nil(plain.COUCH_THREAD_SCOPE)
+        assert.is_nil(plain.PAIR_SESSION_NAME or plain.PAIR_LAUNCH_NONCE)
         local conformance = names({ PARLEY_LIVE_CONFORMANCE = "1" })
         assert.is_true(conformance.CLIPROXYAPI_API_KEY)
         assert.is_nil(conformance.COUCH_THREAD_SCOPE)
         local live_couch = names({ PARLEY_LIVE_COUCH = "1" })
         assert.is_true(live_couch.COUCH_THREAD_SCOPE and live_couch.COUCH_THREAD_TAG)
+        -- #366: the CLI names its caller by these too.
+        assert.is_true(live_couch.PAIR_SESSION_NAME and live_couch.PAIR_LAUNCH_NONCE)
         assert.is_nil(live_couch.CLIPROXYAPI_API_KEY)
         vim.fn.delete(root, "rf")
     end)

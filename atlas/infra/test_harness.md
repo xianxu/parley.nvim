@@ -93,7 +93,13 @@ crosses, with three exceptions:
 - `PARLEY_LIVE_COUCH` takes the real thread, but only for
   `make check-couch-actors-live`, which runs `couch_spec` alone. `TEST_RUN`
   strips the flag for every other target, so an exported one never reaches the
-  suite, `test-spec` or the rest.
+  suite, `test-spec` or the rest. The real thread is the Couch names plus
+  `PAIR_SESSION_NAME` and `PAIR_LAUNCH_NONCE`, the caller identity the CLI
+  checks (#366). The CLI also refuses the isolated `XDG_DATA_HOME`, so the
+  live call alone gets the operator's data home through
+  `PARLEY_LIVE_COUCH_DATA_HOME`; the spec process stays isolated. When the
+  call still fails, the case goes pending with the exit code and the first
+  stderr line.
 - `make fixtures` names its API keys in `PARLEY_TEST_ENV_PASS`.
 
 The launcher also puts `tests/fixtures/sentinel-bin` first on PATH. A bare `couch` or `pair` that no
@@ -156,6 +162,15 @@ zero-byte, empty-then-filled, non-numeric, and out-of-range signals directly.
 via `PARLEY_PUBLISH_DELAY` and asserts the ready path is never observable
 incomplete — and asserts the delay was honored, so the hook cannot be deleted to
 make it pass. Neither has a race to win.
+
+Fixtures given a fixed `--port` (picked by `ready_port.free_port`) are waited on
+with `ready_port.wait_listening`, never a hand-rolled connect loop. A completed
+connect is not proof of a listener (#360): the freed number goes back to the
+kernel's ephemeral pool, a parallel spec's probe can take it as a source port,
+and two crossing probes complete a TCP simultaneous open with nothing
+listening. So `is_listening` confirms a connect with a LISTEN socket on the
+port (`lsof`, bounded, run only after a connect succeeds). `ready_port_spec`
+stages that false positive through the `_connect` seam.
 
 ## Process lifecycle
 
