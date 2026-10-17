@@ -298,6 +298,14 @@ local function execute(s, effects)
                     M.submit(s.buf)
                 end
             end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
+        elseif kind == "confirm_parent" then
+            -- #378: the parent's registration, read from Couch now rather than
+            -- from what the parent's buffer last saw.
+            s.request = registry.request("lookup", { effect.parent.path }, effect.witness, completed(s, function(result)
+                if not valid(s) then return end
+                s.request = nil
+                dispatch(s, { type = "reply", witness = effect.witness, result = result })
+            end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
         elseif kind == "save" then
             local ss = require("parley.session_sync")
             local ok, err
@@ -472,6 +480,21 @@ function M.attach(buf)
     vim.api.nvim_create_autocmd("BufWinEnter", { group = s.group, buffer = buf, callback = function() M.recheck(buf) end })
     install_migration_hooks(s)
     if not recover_migration(s) then dispatch(s, { type = "open" }) end
+    return true
+end
+
+--- #378: `buf` was opened from `parent_buf`. A side doc (a file directly in
+--- the parent's `.side/` folder, the mover's and the finder's rule) takes the
+--- parent's effective owner, which the model confirms with Couch first. With no
+--- parent identity there is nothing to inherit, and the pane's actor is never
+--- consulted. Returns whether the inheritance was asked for.
+function M.inherit(buf, parent_buf)
+    local parent = M.identity(parent_buf)
+    if not parent or buf == parent_buf or not M.attach(buf) then return false end
+    local s = states[buf]
+    if s.reading or not valid(s) then return false end
+    if vim.fs.dirname(s.path) ~= require("parley.document_move_plan").side_path(parent.File) then return false end
+    dispatch(s, { type = "inherit", parent = { path = parent.File, id = parent.ID, owner = parent.Owner } })
     return true
 end
 

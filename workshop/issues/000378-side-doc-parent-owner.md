@@ -67,7 +67,7 @@ Quick flow. The rule lives in the pure model (`document_session`), and the shell
 - ARCH-SECURE: the parent's identity is confirmed by Couch, not read from the cached buffer state.
 
 **Tests.**
-- [ ] Unit (`document_session`), as event sequences:
+- [x] Unit (`document_session`), as event sequences:
   - absent → confirm_parent → register with no send;
   - a registered child keeps its registration;
   - a stale parent (ID or Owner mismatch) and an unavailable parent lookup both refuse;
@@ -75,12 +75,12 @@ Quick flow. The rule lives in the pure model (`document_session`), and the shell
   - a hint that arrives during the attach lookup is applied;
   - an owner-conflict leads to a lookup and adoption;
   - after a refusal, a later inherit succeeds.
-- [ ] Integration (new `tests/integration/agentic_document_side_inherit_spec.lua`, using the real `OpenFileUnderCursor` and the persistent fake registry; open_buf is not stubbed):
+- [x] Integration (new `tests/integration/agentic_document_side_inherit_spec.lua`, using the real `OpenFileUnderCursor` and the persistent fake registry; open_buf is not stubbed):
   - the parent is registered to ops:0 and the pane actor is parley.nvim:1. Alt+o onto `parent.side/child.md` registers the child to ops:0, and the send count stays 0;
   - a child already registered to another owner is unchanged;
   - a non-side link registers nothing;
   - with `FAKE_COUCH_REGISTRY_MODE=malformed` nothing is registered and the band says so, and a later navigation with the fake healthy succeeds.
-- [ ] Atlas: one paragraph on side-doc ownership inheritance.
+- [x] Atlas: one paragraph on side-doc ownership inheritance.
 
 Open question for the TL: should inheritance also require the side doc's `type: side-doc` frontmatter (the attention finder's filter)? My default is folder membership only.
 
@@ -89,3 +89,7 @@ Open question for the TL: should inheritance also require the side doc's `type: 
 ### 2026-10-17
 
 Deterministic fake-only reproduction through the actual opener: register parent.md to ops:0, select pane actor parley.nvim:1, open [side](parent.side/child.md) with OpenFileUnderCursor. Navigation issued exactly couch --session-sync lookup ABS_CHILD --json. Child phase was plain, identity null, registry entry absent, send count zero. Parent registration retained Owner and RegisteredOwner ops:0. Scratch removed and process census clean. Local evidence: /tmp/parley-373-side-open-gap.log; runner /tmp/parley-373-side-open-gap.lua, invoked by make -f /tmp/parley-373-side-open-gap.mk test-373-side-open-gap. The observed argv and state above are the durable evidence; temporary paths are not required to understand the failure.
+- The TL approved the plan and answered the open question: folder membership only, so a hand-made side doc with no frontmatter still inherits. The band is short and says how to retry: "navigate again".
+- Implemented as planned. `document_session` gained the `inherit` event, the `confirm_parent` step and the inherited-register adoption. `agentic_document.inherit` and `confirm_parent` are in the shell, and `try_open_markdown_link` calls `inherit`.
+- The first draft of the integration spec called `setup_markdown_keymaps` on the parent by hand. Without `parley.setup`'s BufEnter handler, the child was attached only by `M.inherit`'s own `attach`, so the spec never exercised the real opener path. Mutation check: with the opener call removed, all 4 cases failed, including the two that should be independent of it. The spec now installs `setup_buf_handler`, so the product attaches every buffer. Re-run with the call removed, exactly the two inheriting cases fail, and with the side-folder rule removed only the non-side case fails.
+- Targeted runs pass: document_session 45, side_inherit 4, agentic_document 47, owned_move 16, lifetime 10, document_registry 7, file_history 45, nodiscard 2.

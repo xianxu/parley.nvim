@@ -218,6 +218,16 @@ unrelated bytes are preserved; missing backlinks are not invented. Escaping
 symlinks, malformed/ambiguous relevant data and changed backlink preimages
 refuse before overwrite. Side scans stop at 4096 entries / 512 Markdown files.
 
+**Side docs inherit the parent's owner (#378).** Alt+o from a registered parent
+onto a file directly in its `.side/` folder (the mover's rule; no frontmatter
+needed) registers an absent child to the parent's effective owner, never to the
+pane's actor, and sends nothing. The model confirms both halves with Couch
+first: the child is absent, and the parent still holds the registration the
+parent buffer showed. A registered child keeps its owner; if another actor
+registers the child first, the child adopts that registration. Anything
+unconfirmed registers nothing and shows `not inherited: parent owner
+unconfirmed · navigate again to retry`. Other Markdown links never inherit.
+
 Journals live in configured `state_dir`, partitioned by Couch namespace and
 stable ID, at most 32 pending journals / 256 KiB each. They record the exact tuple,
 path/content witnesses and completed effects, not document snapshots. Recovery

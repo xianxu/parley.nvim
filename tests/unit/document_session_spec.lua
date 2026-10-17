@@ -589,3 +589,103 @@ describe("document_session successful-submit receipt", function()
         assert.is_nil(reopened.snapshot().receipt)
     end)
 end)
+
+-- #378: a side doc inherits its parent's effective owner, but only when Couch
+-- confirms the child is absent and the parent still holds that registration.
+describe("document_session inherit", function()
+    before_each(load_model)
+    local parent = { path = "/p.md", id = "parent-1", owner = "ops:0" }
+    local function parent_registration(over)
+        return vim.tbl_extend("force", { ID = "parent-1", File = "/p.md", Owner = "ops:0",
+            RegisteredOwner = "ops:0", RegisteredAt = "now" }, over or {})
+    end
+    local function child_registration(owner)
+        return { ID = "child-1", File = "/old.md", Owner = owner, RegisteredOwner = owner, RegisteredAt = "now" }
+    end
+    local function kinds(effects)
+        return vim.tbl_map(function(e) return e.kind end, effects)
+    end
+    -- Drive an inherit on a plain child up to the parent confirmation.
+    local function to_confirm(s)
+        local lookup = s.dispatch({ type = "inherit", parent = parent })[1]
+        assert.equals("lookup", lookup.kind)
+        local confirm = reply(s, lookup, { kind = "absent" })[1]
+        assert.equals("confirm_parent", confirm.kind)
+        assert.same(parent, confirm.parent)
+        return confirm
+    end
+
+    it("registers an absent side child to the confirmed parent owner, sending nothing", function()
+        local s = session(); plain(s)
+        local register = reply(s, to_confirm(s), { kind = "registered", registration = parent_registration() })[1]
+        assert.equals("register", register.kind)
+        assert.equals("ops:0", register.owner)
+        assert.is_true(register.resume_only)
+        local done = reply(s, register, { kind = "registered", registration = child_registration("ops:0"), changed = true })
+        assert.same({ "attach" }, kinds(done))
+        assert.equals("ops:0", s.snapshot().registration.Owner)
+        assert.equals("registered", s.snapshot().phase)
+    end)
+
+    it("keeps an existing child registration", function()
+        local s = session(); attached(s)
+        assert.same({}, s.dispatch({ type = "inherit", parent = parent }))
+        assert.equals("ops:1", s.snapshot().registration.Owner)
+        -- and a hint that meets a registered answer adopts it, never registers
+        local fresh = session()
+        local lookup = fresh.dispatch({ type = "open" })[1]
+        assert.same({}, fresh.dispatch({ type = "inherit", parent = parent }))
+        assert.same({ "attach" }, kinds(reply(fresh, lookup, outcome("registered"))))
+        assert.equals("ops:1", fresh.snapshot().registration.Owner)
+    end)
+
+    it("applies a hint that arrives while the attach lookup is out", function()
+        local s = session()
+        local lookup = s.dispatch({ type = "open" })[1]
+        assert.same({}, s.dispatch({ type = "inherit", parent = parent }))
+        assert.same({ "confirm_parent" }, kinds(reply(s, lookup, { kind = "absent" })))
+    end)
+
+    it("refuses a stale or unconfirmed parent, then a later navigation succeeds", function()
+        for _, answer in ipairs({
+            { kind = "registered", registration = parent_registration({ ID = "other" }) },
+            { kind = "registered", registration = parent_registration({ Owner = "ops:9" }) },
+            { kind = "registered", registration = parent_registration({ File = "/elsewhere.md" }) },
+            { kind = "absent" },
+            { kind = "unavailable", error = "down" },
+        }) do
+            local s = session(); plain(s)
+            local effects = reply(s, to_confirm(s), answer)
+            assert.same({ { kind = "band", message = model.NOT_INHERITED } }, effects)
+            assert.equals("plain", s.snapshot().phase)
+            assert.is_nil(s.snapshot().registration)
+            local register = reply(s, to_confirm(s), { kind = "registered", registration = parent_registration() })[1]
+            assert.equals("register", register.kind)
+        end
+    end)
+
+    it("drops the hint when the child lookup cannot answer", function()
+        local s = session(); plain(s)
+        local lookup = s.dispatch({ type = "inherit", parent = parent })[1]
+        assert.same({ "band" }, kinds(reply(s, lookup, { kind = "unavailable", error = "down" })))
+        -- the background retry re-opens without the hint: no confirmation, no register
+        local again = s.dispatch({ type = "open" })[1]
+        assert.same({ { kind = "band", message = "" } }, reply(s, again, { kind = "absent" }))
+    end)
+
+    it("adopts whoever registered the child first when the register is refused", function()
+        local s = session(); plain(s)
+        local register = reply(s, to_confirm(s), { kind = "registered", registration = parent_registration() })[1]
+        local lookup = reply(s, register, { kind = "unavailable", code = "owner-conflict", error = "different fallback owner" })[1]
+        assert.equals("lookup", lookup.kind)
+        assert.same({ "attach" }, kinds(reply(s, lookup, { kind = "registered", registration = child_registration("ops:7") })))
+        assert.equals("ops:7", s.snapshot().registration.Owner)
+    end)
+
+    it("ignores a malformed hint and a detached document", function()
+        local s = session(); plain(s)
+        assert.same({}, s.dispatch({ type = "inherit", parent = { path = "/p.md", id = "", owner = "ops:0" } }))
+        s.dispatch({ type = "detach" })
+        assert.same({}, s.dispatch({ type = "inherit", parent = parent }))
+    end)
+end)

@@ -4943,6 +4943,9 @@ local function try_open_markdown_link(line, cursor_col, buf, open)
     target = vim.fn.simplify(target)
     if vim.fn.filereadable(target) == 1 then
         open(target)
+        -- #378: a side doc opened from a registered parent takes its owner.
+        local child = M.helpers.buffer_for(target, true)
+        if child then require("parley.agentic_document").inherit(child, buf) end
         return "opened"
     end
     M.logger.warning("Markdown link target not found: " .. target)
