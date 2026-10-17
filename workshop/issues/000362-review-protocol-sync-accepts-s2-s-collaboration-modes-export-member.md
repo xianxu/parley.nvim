@@ -295,6 +295,12 @@ edit is covered by real-tool invocation cases and gets its live check through
 operator normal use; the TL tells the operator. Proceed to close and land.
 This does not claim a live mixed edit pass.
 
+Runner detail correcting the cancellation shorthand above: Escape was attempted
+at the picker; the smoke runner ultimately recorded its 180-second mixed-round
+timeout before exiting with status 1. The retained evidence file contains that
+explicit timeout. The stage had already been cleared; the two live passes and
+the observed logged-out provider blocker are unchanged.
+
 ## Revisions
 
 ### 2026-10-16 — priority interruption
