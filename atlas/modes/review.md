@@ -181,7 +181,7 @@ Review runs in a selectable **mode** (a stage of document construction). A mode 
 a sub-markdown file `lua/parley/skills/review/modes/<name>.md` = YAML frontmatter
 (behavior flags) + a prompt body. One skill owns all modes; there is no parallel
 engine. The review skill's `source(ctx)` composes the canonical round and
-grammar in `SKILL.md`, selected mode bodies/flag values and operator instruction,
+grammar and optional collaboration modes in `SKILL.md`, selected mode bodies/flag values and operator instruction,
 then `local-adapter.md`. The adapter requires `propose_edits` for all responses.
 With no mode selected, explicit parser defaults retain marker-only review.
 A local invocation uses its supplied full snapshot; it introduces no editor
@@ -211,9 +211,41 @@ member's byte count and SHA256 before updating the fixed package snapshot.
 Add `--check` for a read-only freshness check. The plugin runs from its packaged
 files, with no sibling Ariadne checkout or runtime peer lookup required.
 `export.json` records the source manifest; generated `SKILL.md` combines the
-round and grammar. `local-adapter.md` stays Parley-owned and is appended last.
+round, grammar and the optional `collaboration-modes.md` member in that order.
+That role is a singleton in version 1; older exports without it remain valid
+and the sync CLI prints a notice that the resulting prompt lacks collaboration
+modes. The shipped snapshot includes it; package tests require its presence.
+It receives the same digest, output-preflight and freshness checks; examples
+are not exported. `local-adapter.md` stays Parley-owned and is appended last.
 The Couch file-edit adapter is excluded from local composition. The mapped
 bundle fixture tests exercise deterministic output and validation failures.
+
+### Local collaboration compatibility
+
+`review/collaboration_value.lua` decodes the collaboration-mode field's scalar,
+block/flow map and heading-list forms without a runtime YAML dependency.
+Unsupported YAML constructs and malformed values refuse visibly.
+Root frontmatter must be a closed block mapping; uniformly indented and
+quoted/escaped keys are decoded. Root flow maps, sequences, complex keys,
+tags/anchors/aliases and merge keys refuse instead of becoming absent routing.
+Unrelated nested metadata and literal blocks do not define root routing. The pure
+`review/collaboration.lua` resolver handles normalized heading names, repeated
+headings, ATX levels 1–6, fenced code, nearest named ancestors and dangling-name
+warnings. Unknown modes and cross-mode heading conflicts refuse before local
+generation; review_send also checks them before prompting for an instruction.
+
+`review.run_via_invoke` uses that plan for admission and resubmission, excluding
+chat markers. Discussion/default and collaboration answer in place; chat
+sections are skipped. Deterministic vim.notify notices report in-place routing
+and that the hub agent answers chat, including all-chat/no-marker rounds. A
+whole-document review mode can still review eligible non-chat text without
+markers. The invocation-owned validate_edits hook rejects a proposed edit that
+touches chat bytes, their boundary newlines or frontmatter before tool execution.
+Other skills preserve their existing behavior when no validator is supplied.
+
+The local adapter overrides shared discussion routing explicitly. Side-doc and
+chat answer creation, cross-file folds/actions and previous-read baselines
+remain with the agent-side skill; local review creates none of those resources.
 
 ## Journal
 

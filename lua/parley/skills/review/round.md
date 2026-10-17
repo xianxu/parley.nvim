@@ -57,20 +57,33 @@ is no settled region.
 The **edit region** is what these leave open: the whole document or only the
 markers' text (`scope`), minus the settled region (`frontier`).
 
-## 4. Section modes (reserved)
+## 4. Collaboration modes
 
-Today one resolved mode set governs the whole document. A later slice adds
-per-section modes (frontmatter `modes:`, such as a `chat` section answered one
-document per bullet); this step is where they will apply. Until then, ignore a
-`modes:` key.
+The review mode (§2, §3) says how an edit is made. A section's **collaboration
+mode** says where an ask's answer goes: an edit, a linked side doc, or an answer
+doc. [collaboration-modes.md](collaboration-modes.md) holds the modes; this
+step applies them.
+
+1. **Resolve** the frontmatter's `collaboration-mode:` (collaboration-modes.md
+   §1, and §2 with its errors table). With no key, the whole document is
+   discussion. A name listed under two modes, or a mode that is not one of the
+   three, fails the round: change nothing and report it (§6).
+2. **Give each section its mode**, by its heading (collaboration-modes.md §2).
+3. **Find the asks** by each section's mode: the ready markers of §5 in the
+   edit region, and, in a chat section, its new and changed items, whatever
+   the edit region.
+4. **Route each ask** by its section's mode (collaboration-modes.md §3).
+   Collaboration is §5 as written. Discussion and chat may create side docs and
+   fold into a parent; collaboration-modes.md §4 orders those writes.
 
 ## 5. Markers
 
 Read every 🤖 marker in the edit region (§3), outside fenced code, per the
 grammar.
 
-- **Ready:** the chain's last turn is human (`[…]`). Act on it: apply the asked
-  change to the text the marker refers to, or answer the question. A marker
+- **Ready:** the chain's last turn is human (`[…]`). Act on it as its
+  section's collaboration mode says (§4); in collaboration mode, apply the
+  asked change to the text the marker refers to, or answer the question. A marker
   with an anchor (`<X>` or `~D~`) refers to exactly that text; without one, to
   the text just before it, back to the previous paragraph, bullet or heading.
   Match the scale of the edit to the ask. The ask is carried out under the
@@ -91,5 +104,8 @@ grammar.
 
 After the adapter has written the document, reply briefly in your own pane:
 what you changed and what you left for the operator (open questions, proposals
-to accept or reject). An error (an unknown mode, a refused write) is reported
-the same way and leaves the document unchanged.
+to accept or reject), each side doc or answer doc you created, extended or
+relinked, every `collaboration-mode:` name that matches no heading, and every
+orphan side doc (collaboration-modes.md §4). An error (an unknown review or
+collaboration mode, a name under two collaboration modes, a refused write) is
+reported the same way and leaves the document unchanged.

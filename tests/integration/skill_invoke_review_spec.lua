@@ -59,6 +59,71 @@ describe("review.run_via_invoke", function()
         assert.are.equal(0, #invoke_calls)
     end)
 
+    it('notifies and skips all-chat rounds even with a selected review mode', function()
+        local old_notify, notices = vim.notify, {}
+        vim.notify = function(msg) notices[#notices + 1] = msg end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { '---', 'collaboration-mode: chat', '---', '# Inbox', '- ask' })
+        review.run_via_invoke(buf, { mode = 'copy-editing' })
+        vim.notify = old_notify
+        assert.equals(0, #invoke_calls)
+        assert.truthy(table.concat(notices, '\n'):find('hub agent answers chat', 1, true))
+    end)
+
+    it('notifies on a default no-marker round and keeps explicit collaboration in place', function()
+        local old_notify, notices = vim.notify, {}
+        vim.notify = function(msg) notices[#notices + 1] = msg end
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'plain prose' })
+        review.run_via_invoke(buf, {})
+        assert.equals(0, #invoke_calls)
+        local default_notice = table.concat(notices, '\n')
+        notices = {}
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { '---', 'collaboration-mode: collaboration', '---', '🤖[why?]' })
+        review.run_via_invoke(buf, {})
+        vim.notify = old_notify
+        assert.truthy(default_notice:find('answered in place: discussion routing needs Couch', 1, true))
+        assert.same({}, notices)
+        assert.equals(1, #invoke_calls)
+    end)
+
+    it('refuses invalid collaboration routing before generation', function()
+        for _, value in ipairs({ 'unknown', '{chat: [Notes], collaboration: [notes]}' }) do
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, { '---', 'collaboration-mode: ' .. value, '---', '🤖[why?]' })
+            review.run_via_invoke(buf, {})
+        end
+        assert.equals(0, #invoke_calls)
+    end)
+
+    for _, case in ipairs(require('tests.helpers.collaboration_declarations')) do
+        it('never admits protected or unsupported routing in ' .. case.name, function()
+            local document = { '---' }
+            for _, line in ipairs(case.header) do document[#document + 1] = line end
+            if case.closed ~= false then document[#document + 1] = '---' end
+            document[#document + 1] = 'secret 🤖[why?]'
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, document)
+            local old_notify, notices = vim.notify, {}
+            vim.notify = function(msg) notices[#notices + 1] = msg end
+            review.run_via_invoke(buf, { mode = 'copy-editing' })
+            vim.notify = old_notify
+            assert.equals(0, #invoke_calls)
+            assert.is_true(#notices > 0)
+            assert.same(document, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        end)
+    end
+
+    it('excludes chat markers from admission and resubmission', function()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            '---', 'collaboration-mode: {chat: [Inbox]}', '---', '# Notes', '🤖[edit]', '# Inbox', '🤖[chat]',
+        })
+        review.run_via_invoke(buf, {})
+        assert.equals(1, #invoke_calls)
+        assert.is_function(invoke_calls[1].opts.validate_edits)
+        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { 'edited' })
+        invoke_calls[1].opts.on_done({ ok = true })
+        assert.equals(1, #invoke_calls)
+        review.run_via_invoke(buf, {})
+        assert.equals(1, #invoke_calls)
+    end)
+
     it("does NOT invoke when the last marker is a pending agent question", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "prose 🤖{agent asks a question}" })
         review.run_via_invoke(buf, {})

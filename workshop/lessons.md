@@ -694,6 +694,22 @@ oracle, and the mutation that would make the test fail.
   callback with the case, cancel its timer at teardown and guard an already
   queued callback before it can resume production work in the next case.
 
+## 2026-10-16 (#362 — check the consumer capabilities of imported prompts)
+
+Before importing a shared protocol, trace every required IO operation through
+the receiving adapter. Text composition and matching hashes do not prove that
+an artifact-bound single-file edit tool can execute side-doc, cross-file or
+previous-read flows. Resolve unsupported routing explicitly before shipping.
+
+For synchronous parsers, test input scale as well as syntax. Per-character
+prefix copies, per-token tail copies, repeated list concatenation and unanchored
+whitespace patterns can all make an otherwise bounded grammar quadratic. Count
+copied bytes where possible and include long whitespace runs in a stall check.
+
+A parser-level benchmark does not cover its semantic resolver. Trace a finding's
+family from the user action through every newly added stage, including name
+normalization and heading extraction; pin scale through the production entry
+point as well as internal helpers before calling the family complete.
 ## 2026-10-16 (#367 — a picker query that the temp path can match)
 
 - A fuzzy picker spec's query must contain a character no temp path holds
