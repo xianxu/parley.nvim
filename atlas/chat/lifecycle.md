@@ -1,7 +1,7 @@
 # Chat Lifecycle
 
 ## Creation (`:ParleyChatNew` / `<C-g>c`)
-Creates timestamped `.md` in primary `chat_dir`. Multi-root: all roots scanned for discovery; new chats always in primary. Chats are ordinary Markdown files: save edits with `:write`, and use `:ParleyChatFinder` (`<C-g>f`) to reopen them. The app also ships three stable-name tutorial transcripts.
+Creates timestamped `.md` in primary `chat_dir`. Multi-root: all roots scanned for discovery; new chats always in primary. Chats are ordinary Markdown files: save edits with `:write`, and use `:ParleyChatFinder` (`<C-g>f`) to reopen them. The app also ships three stable-name tutorial transcripts. Both built-in chat templates declare `collaboration-mode: collaboration` for new root and child chats (answers in place); opening older chats does not add the field.
 
 ## New Question (`:ParleyNewQuestion` / `<C-g>n` / `<M-n>`)
 

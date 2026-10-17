@@ -74,6 +74,7 @@ M.code_system_prompt = "You are an AI working as a code editor.\n\n"
 M.chat_template = [[
 ---
 topic: ?
+collaboration-mode: collaboration
 file: {{filename}}
 tags:
 {{optional_headers}}
@@ -89,6 +90,7 @@ Be cautious of very long chats. Start a fresh chat by using `{{new_shortcut}}` o
 M.short_chat_template = [[
 ---
 topic: ?
+collaboration-mode: collaboration
 file: {{filename}}
 tags:
 ---
