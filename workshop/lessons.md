@@ -752,3 +752,9 @@ point as well as internal helpers before calling the family complete.
   across three subagents, each given disjoint files and the same rule. Fill in a
   prompt's placeholders before sending it: one went out with a literal
   LIST_PLACEHOLDER, and the agent rightly refused to guess.
+
+## 2026-10-17 (#373 — complete-consumer preservation and preflight)
+
+- When a scanner admits wrapped syntax, containment must cover the same span. Per-line code masks cannot protect multiline Markdown links; use exact-width backtick spans across soft breaks and test both new and existing rewrite consumers.
+- Recursive output scans cannot distinguish missing files from empty directories at expected leaves. Validate expected file and ancestor types for the whole generated snapshot before the first write; make an earlier output stale so a failure test proves absence of partial mutation.
+- Benchmark the complete consumer with every malformed delimiter family, not only its shared scanner. Removing one backtracking pattern left a fallback that copied and resolved each remaining suffix. Use disjoint token spans and exercise both callers.

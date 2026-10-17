@@ -255,6 +255,38 @@ describe('moving parent side references', function()
             .. '```md\n[q](design.side/q.md)\n```\n`[q](design.side/q.md)`\n\\[q](design.side/q.md)\n'
         assert.equals(before, projection.rewrite_side_references(before, from, to))
     end)
+    it('preserves paragraph-wide inline code in both reference rewrites', function()
+        for _, newline in ipairs({ '\n', '\r\n' }) do
+            for width = 1, 4 do
+                local tick = string.rep('`', width)
+                for _, middle in ipairs({ '[example' .. newline .. 'label]',
+                    'example' .. newline .. '[label]', '[label]' }) do
+                    local before = 'text ' .. tick .. middle .. '(design.side/q.md)' .. newline .. 'end ' .. tick .. newline
+                    assert.equals(before, projection.rewrite_side_references(before, from, to))
+                    before = 'text ' .. tick .. middle .. '(../design.md)' .. newline .. 'end ' .. tick .. newline
+                    assert.equals(before, projection.rewrite_parent(before,
+                        { old = '/repo/design.side/q.md', new = '/else/spec.side/q.md' },
+                        { old = from, new = to }))
+                end
+            end
+        end
+    end)
+    it('uses exact backtick runs and does not mask the next paragraph', function()
+        local before = '`` code ` [x](design.side/q.md)\n`` [live](design.side/q.md)\n'
+            .. '` unmatched\n\n[next](design.side/q.md)\n'
+        local after = '`` code ` [x](design.side/q.md)\n`` [live](spec.side/q.md)\n'
+            .. '` unmatched\n\n[next](spec.side/q.md)\n'
+        assert.equals(after, projection.rewrite_side_references(before, from, to))
+    end)
+    it('distinguishes escaped openers and literal code delimiters from longer runs', function()
+        local before = 'text `` code ``` [x](design.side/q.md)\n`` [live](design.side/q.md)\n'
+            .. '\\` [escaped](design.side/q.md)\n\n'
+            .. 'text ` code \\` [after](design.side/q.md)\n'
+        local after = 'text `` code ``` [x](design.side/q.md)\n`` [live](spec.side/q.md)\n'
+            .. '\\` [escaped](spec.side/q.md)\n\n'
+            .. 'text ` code \\` [after](spec.side/q.md)\n'
+        assert.equals(after, projection.rewrite_side_references(before, from, to))
+    end)
     it('refuses ambiguous relevant scalar and link syntax without a partial result', function()
         for _, front in ipairs({
             'discussions: [{doc: design.side/q.md}]',
@@ -294,6 +326,15 @@ describe('moving parent side references', function()
         local started = os.clock()
         assert.equals(bytes, projection.rewrite_side_references(bytes, from, to))
         assert.is_true(os.clock() - started < 0.25, '20KB malformed labels must not stall the move')
+    end)
+    it('bounds malformed destination openers through both complete rewrites', function()
+        local bytes = string.rep('](', 10000) .. '\n'
+        local started = os.clock()
+        assert.equals(bytes, projection.rewrite_side_references(bytes, from, to))
+        assert.equals(bytes, projection.rewrite_parent(bytes,
+            { old = '/repo/design.side/q.md', new = '/else/spec.side/q.md' },
+            { old = from, new = to }))
+        assert.is_true(os.clock() - started < 0.25, '20KB malformed destinations must not stall either rewrite')
     end)
     it('rewrites only paths resolving inside the moved side tree, including absolute and dot-relative links', function()
         local before = '[absolute](/repo/design.side/q.md#x) [dot](./design.side/q.md) [other](/other/design.side/q.md)'

@@ -79,19 +79,47 @@ local function escaped(line, pos)
     while pos > 1 and line:sub(pos - 1, pos - 1) == '\\' do count = count + 1; pos = pos - 1 end
     return count % 2 == 1
 end
-local function code_mask(line)
-    local mask, i = {}, 1
-    while i <= #line do
-        if line:sub(i, i) == '`' and not escaped(line, i) then
-            local run = line:match('^`+', i)
-            local ending = line:find(run, i + #run, true)
-            if ending then
-                for j = i, ending + #run - 1 do mask[j] = true end
-                i = ending + #run
-            else i = i + #run end
-        else i = i + 1 end
+-- Backtick spans may cross soft line breaks, but not a paragraph/fence boundary.
+-- Index the next exact-width run once; unmatched runs never rescan a suffix.
+local function code_masks(lines, in_code, first_row)
+    local masks, tokens = {}, {}
+    local function finish_paragraph()
+        local next_run, following = {}, {}
+        for i = #tokens, 1, -1 do
+            local token = tokens[i]
+            following[i] = next_run[token.width]
+            next_run[token.width] = i
+        end
+        local i = 1
+        while i <= #tokens do
+            local opening, closing = tokens[i], tokens[following[i]]
+            if closing and not escaped(lines[opening.row], opening.first) then
+                for row = opening.row, closing.row do
+                    local first = row == opening.row and opening.first or 1
+                    local last = row == closing.row and closing.last or #lines[row]
+                    for column = first, last do masks[row][column] = true end
+                end
+                i = following[i] + 1
+            else i = i + 1 end
+        end
+        tokens = {}
     end
-    return mask
+    for row = first_row, #lines do
+        local line = lines[row]
+        masks[row] = {}
+        if in_code[row] or line:match('^%s*$') then finish_paragraph()
+        else
+            local pos = 1
+            while true do
+                local first, last = line:find('`+', pos)
+                if not first then break end
+                tokens[#tokens + 1] = { row = row, first = first, last = last, width = last - first + 1 }
+                pos = last + 1
+            end
+        end
+    end
+    finish_paragraph()
+    return masks
 end
 
 -- Apply disjoint byte spans in one assembly rather than copying a large
@@ -110,7 +138,7 @@ local function apply_edits(bytes, edits)
 end
 
 local function rewrite_links(lines, positions, fm_end, target, edits)
-    local in_code, fence, width, masks, covered = {}, nil, nil, {}, {}
+    local in_code, fence, width, covered = {}, nil, nil, {}
     for row = fm_end + 1, #lines do
         local line = lines[row]
         local marker_width = structure.is_fence_delim(line, true)
@@ -120,8 +148,9 @@ local function rewrite_links(lines, positions, fm_end, target, edits)
             if not fence then fence, width = kind, marker_width
             elseif kind == fence and marker_width >= width then fence, width = nil, nil end
         end
-        masks[row], covered[row] = code_mask(line), {}
+        covered[row] = {}
     end
+    local masks = code_masks(lines, in_code, fm_end + 1)
     for _, link in ipairs(references.markdown_spans(lines, { first = fm_end + 1, last = #lines },
         { in_code = in_code, transcript = false })) do
         local row, first = link.fallback_row, link.fallback_col + 1
@@ -147,7 +176,11 @@ local function rewrite_links(lines, positions, fm_end, target, edits)
                 if not opening then break end
                 local first = opening + 2
                 if not covered[row][first] and not masks[row][opening] and not escaped(line, opening) then
-                    local value = line:sub(first):match('^([^%s)]*)') or ''
+                    -- An opening parenthesis also ends an unsupported destination.
+                    -- Token spans are disjoint, so malformed openers cannot copy
+                    -- and resolve the entire remaining line repeatedly.
+                    local stop = line:find('[%s()]', first) or (#line + 1)
+                    local value = line:sub(first, stop - 1)
                     if target(value) ~= value then return nil, 'malformed Markdown parent link' end
                 end
                 pos = first

@@ -138,13 +138,35 @@ def read_source(source):
     return render_snapshot(manifest, contents)
 
 
-def read_output(output):
+def read_output(output, expected):
     """Preflight owned paths only; local adapters and Lua files remain unowned."""
     # Inspect lexical ancestors before resolving: resolution would hide a symlink
     # and permit writes into a different tree, even when output does not exist.
     for ancestor in reversed((output.absolute(), *output.absolute().parents)):
         require(not ancestor.is_symlink(), 'unsafe output symlink: ' + str(ancestor))
         require(not ancestor.exists() or ancestor.is_dir(), 'output ancestor must be a directory: ' + str(ancestor))
+    # A recursive scan alone cannot distinguish an empty directory from a
+    # missing expected file. Validate the shape of the entire snapshot first,
+    # including missing leaves whose existing parent might instead be a file.
+    for name in sorted(expected):
+        relative = Path(name)
+        for ancestor in reversed(relative.parents):
+            if ancestor == Path('.'):
+                continue
+            path = output / ancestor
+            try:
+                mode = path.lstat().st_mode
+            except FileNotFoundError:
+                continue
+            require(not stat.S_ISLNK(mode), 'unsafe output symlink: ' + str(path))
+            require(stat.S_ISDIR(mode), 'output ancestor must be a directory: ' + str(path))
+        path = output / relative
+        try:
+            mode = path.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        require(not stat.S_ISLNK(mode), 'unsafe output symlink: ' + str(path))
+        require(stat.S_ISREG(mode), 'expected output file must be a regular file: ' + str(path))
     actual = {}
 
     def inspect(path, directory_allowed=False):
@@ -183,7 +205,7 @@ def main():
         manifest = json.loads(expected['export.json'])
         if not any(member['role'] == 'fixture' for member in manifest['members']):
             print('review protocol export: export has no move fixtures', file=sys.stderr)
-        actual = read_output(args.output)
+        actual = read_output(args.output, expected)
         differences = compare_snapshot(expected, actual)
         if args.check or differences['extra']:
             for kind, paths in differences.items():
