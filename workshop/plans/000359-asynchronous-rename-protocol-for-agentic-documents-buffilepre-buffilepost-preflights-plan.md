@@ -61,7 +61,7 @@ The integration tests use the stateful fake registry with #357's delay knobs, pl
 
 ### ARCH-FUNERAL
 
-This creates nothing durable. The journals are `document_move`'s existing family, with their existing removal: success unlinks, and recovery replays. The async identity lookup a refused move starts is an in-memory registry request, cancelled on detach.
+This creates nothing durable. The journals are `document_move`'s existing family, with their existing removal: success unlinks, and recovery replays. The async identity lookup a refused move starts is an in-memory registry request. It is not cancelled on detach; its callback is guarded, so a late reply only updates the cache or an expiring answer. At most one request per path is out, and an "absent" answer expires after `ANSWER_TTL_MS` (60 s), so neither table grows without bound (corrected at the close review).
 
 ## The state projection table
 
@@ -164,4 +164,11 @@ The rows that stay synchronous are 8 and 9, an explicit overwrite of an existing
   - Row 5 lets the operator save while Couch's rename is out, but the journal proved the move by the original inode and bytes. A save then made rows 6 and 7 unrecoverable, so `document_move.record_write` now makes each save the witness (`steps.saved_after_move`).
   - The row 6 label exceeds the band's 160-character cap for long paths, so NEW is named once ("the destination is registered to another document. Run: couch --session-sync forget NEW, then reopen"), and the notification carries the whole command.
   - The rename request gets three submit deadlines, because the registry starts its timer at enqueue.
+- **2026-10-16, close review round 1 (FIX-THEN-SHIP).**
+  - A tree move asks about every unknown document before refusing, so one rerun suffices.
+  - A background "absent" expires after 60 s instead of authorizing plain moves forever.
+  - BufFilePost's overwrite decision goes through `move_preflight` (`wait_destination`), so all three entry points use the one table.
+  - A failed `record_write` notifies.
+  - The move's state fields are documented with their order.
+  - The ARCH-FUNERAL claim above is corrected.
 

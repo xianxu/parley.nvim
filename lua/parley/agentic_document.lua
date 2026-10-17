@@ -131,6 +131,19 @@ local function clear_feedback(s)
     band(s, s.model.snapshot().phase == "unknown" and "Couch unavailable: agentic state unknown" or "")
 end
 
+-- A move's state lives on `s.move` (the `moving` table) from its reservation
+-- until Couch confirms it. The fields, in the order they can become set:
+--   token, lease, old_path, identity   reserved (BufFilePre / move_path)
+--   new_path, operation                journaled: document_move.begin
+--   witness                            the model issued the move
+--   metadata_done                      the document moved; Couch's rename is out
+--   overdue                            ...past the submit deadline (row 5)
+--   answered                           Couch replied: confirmed, or refused/lost
+--   pending_error                      advance reported pending on the spot
+--   error, journal_pending             refused before or at begin
+-- `s.move` returns to nil on confirmation, or on an abort before anything moved.
+-- move_outcome projects rows 1 and 5-7 from (moved, overdue, the reply).
+
 -- forward declaration: show_move is defined below, used by moving_metadata.
 local show_move
 
@@ -560,8 +573,19 @@ end
 -- (#359): the loaded model's registration, then the namespace cache, then the
 -- loaded model's positive absence or an earlier background answer. Anything
 -- else is unknown.
-local answered = {} -- [namespace .. "\0" .. path] = true: a background lookup said absent
+-- A background lookup's "absent" answers the rerun only for a while: past
+-- M.ANSWER_TTL_MS it is unknown again, so a registration made since (by an agent,
+-- for a file parley never loaded) is asked about, not moved past. Both tables are
+-- bounded: answers expire, and at most one request per path is out.
+M.ANSWER_TTL_MS = 60000
+local answered = {} -- [namespace .. "\0" .. path] = expiry (uv.now() ms)
 local asking = {}   -- the same key while its background request is out
+local function prune_answers()
+    local now = uv.now()
+    for slot, expiry in pairs(answered) do
+        if expiry <= now then answered[slot] = nil end
+    end
+end
 local function known_identity(ns, key)
     local loaded
     for _, s in pairs(states) do
@@ -572,7 +596,8 @@ local function known_identity(ns, key)
     local cached = cache({ namespace = ns, path = key })
     if cached then return cached, loaded end
     if loaded and loaded.model.snapshot().phase == "plain" then return "plain", loaded end
-    if not loaded and answered[ns .. "\0" .. key] then return "plain" end
+    local expiry = not loaded and answered[ns .. "\0" .. key]
+    if expiry and expiry > uv.now() then return "plain" end
     return "unknown", loaded
 end
 
@@ -593,7 +618,10 @@ local function ask_in_background(ns, key, loaded, operation, owner)
                 reseed(loaded, result.registration)
                 adopt(loaded, result.registration)
             end
-        elseif result.kind == "absent" then answered[slot] = true end
+        elseif result.kind == "absent" then
+            prune_answers()
+            answered[slot] = uv.now() + M.ANSWER_TTL_MS
+        end
     end, { timeout_ms = config_ms("agentic_submit_timeout_ms") })
 end
 
@@ -841,7 +869,9 @@ install_migration_hooks = function(s)
         -- Neovim writes it before Couch's rename could refuse. Otherwise the
         -- rename is the authority on NEW (#359).
         local overwrite = vim.fn.filereadable(moving.new_path) == 1
-        if overwrite then
+        local decision = require("parley.document_move_plan").move_preflight({ identity = moving.identity,
+            new_exists = overwrite, overwrite = overwrite })
+        if decision.wait_destination then
             local target = bounded_request("lookup", { moving.new_path })
             if target.unconfirmed then
                 -- Neovim already renamed the buffer here, so "run it again" alone
@@ -870,7 +900,12 @@ install_migration_hooks = function(s)
         -- document meanwhile must not start it again (#359).
         if s.recovery_pending then recover_migration(s, true)
         elseif s.move and s.move.operation and s.move.operation.running then
-            require("parley.document_move").record_write(s.move.operation)
+            local recorded, record_error = require("parley.document_move").record_write(s.move.operation)
+            if not recorded then
+                -- The file is saved; only the move's recovery proof is stale.
+                notify("saved, but the pending move could not record this write; a reopen may not recover it: "
+                    .. tostring(record_error))
+            end
         elseif s.move then advance_move(s) end
     end })
 end

@@ -155,6 +155,57 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
     end)
 
+    -- #359 close review: a tree asks about every unknown document before it
+    -- refuses, so one rerun moves the whole tree.
+    it("asks about every unknown document of a tree before refusing, so one rerun moves it", function()
+        local chat = source .. "/2026-09-10.14-20-03.112.md"
+        local children = { source .. "/notes-one.md", source .. "/notes-two.md" }
+        vim.fn.writefile({ "---", "topic: Tree", "file: 2026-09-10.14-20-03.112.md", "model: test-model",
+            "provider: openai", "---", "", "💬: Hello", "",
+            "🌿: " .. children[1] .. ": one", "🌿: " .. children[2] .. ": two" }, chat)
+        for _, child in ipairs(children) do
+            vim.fn.writefile({ "---", "topic: Child", "---", "", "💬: Hi" }, child)
+        end
+        local couch = require("parley.couch")
+        local production_run, looked = couch.run, {}
+        couch.run = function(argv, callback, options)
+            if argv[2] == "--session-sync" and argv[3] == "lookup" then looked[argv[4]] = true end
+            return production_run(argv, callback, options)
+        end
+        local moved, err = p.move_chat_tree(chat, destination)
+        assert.is_nil(moved)
+        assert.equals("move not confirmed: Couch hasn't confirmed this document yet; nothing moved. Run the move again", err)
+        assert.equals(1, vim.fn.filereadable(chat))
+        assert.is_true(looked[children[1]] and looked[children[2]], vim.inspect(looked))
+        await(function()
+            return document.move_membership(children[1]) == false and document.move_membership(children[2]) == false
+        end)
+        couch.run = production_run
+        moved, err = p.move_chat_tree(chat, destination)
+        assert.equals(destination .. "/2026-09-10.14-20-03.112.md", moved, tostring(err))
+        assert.equals(1, vim.fn.filereadable(destination .. "/notes-one.md"))
+        assert.equals(1, vim.fn.filereadable(destination .. "/notes-two.md"))
+    end)
+
+    -- #359 close review: a background "absent" is an answer for the rerun, not
+    -- a standing permission. Past its expiry the file is unknown again, so a
+    -- registration made since is asked about instead of moved past.
+    it("lets a background absent answer expire, then asks again", function()
+        local other = source .. "/notes-unloaded.md"
+        vim.fn.writefile({ "---", "topic: Note", "---", "", "body" }, other)
+        local ttl = document.ANSWER_TTL_MS
+        document.ANSWER_TTL_MS = 200
+        local member, err = document.move_membership(other)
+        assert.is_nil(member)
+        assert.truthy(tostring(err):find("hasn't confirmed this document yet", 1, true))
+        await(function() return document.move_membership(other) == false end)
+        vim.wait(300)
+        member, err = document.move_membership(other)
+        document.ANSWER_TTL_MS = ttl
+        assert.is_nil(member, "an expired absence must not authorize a plain move")
+        assert.truthy(tostring(err):find("hasn't confirmed this document yet", 1, true))
+    end)
+
     it("moves an unloaded registered ordinary file through the public tree door", function()
         seed_side()
         document.detach(buf)

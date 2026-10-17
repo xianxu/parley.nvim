@@ -3884,10 +3884,14 @@ M.move_chat_tree = function(file_name, target_dir)
 	-- Move all files
 	-- Prove membership for the whole set before any sibling moves. An unavailable
 	-- registry is not evidence that the existing plain-file path is safe.
+	-- Ask about every file before refusing (#359): each unknown identity starts
+	-- its background lookup now, so one rerun suffices for the whole tree.
+	local refusal
 	for _, src in ipairs(tree_files) do
 		local member, membership_error = require("parley.agentic_document").move_membership(src)
-		if member == nil then return nil, membership_error end
+		if member == nil and not refusal then refusal = membership_error end
 	end
+	if refusal then return nil, refusal end
 	for _, src in ipairs(tree_files) do
 		local handled, moved, move_error = require("parley.agentic_document").move_path(src, path_map[src])
 		if handled then

@@ -86,4 +86,9 @@ The durable plan, with the state projection table: [000359 plan](../plans/000359
   - "Submit pumped during the OLD lookup" became "asks Couch nothing inside a plain native rename".
   - Owned-move: the legacy alias `:saveas` now refuses first (row 4), and the register still gets the canonical caller path.
 - Seen once: "moves an unloaded registered ordinary file through the public tree door" failed once with no output kept, then passed 9 runs in a row. Watching for it in the suite.
+- Close review round 1, FIX-THEN-SHIP. All six findings fixed; each blocking one has a test that fails under its mutation:
+  - BR-1: the tree pre-pass asks about every file. New two-unknown-children tree test; the old early return fails it.
+  - BR-2: the background "absent" now expires (`ANSWER_TTL_MS`, 60 s). Test: past expiry the file is unknown again; dropping the expiry fails it.
+  - BR-3: BufFilePost's overwrite goes through `move_preflight.wait_destination`. Removing the branch fails row 9 and the occupied-target test.
+  - Minors: `record_write` failure notifies; the move's state is documented; the plan's ARCH-FUNERAL claim is corrected.
 
