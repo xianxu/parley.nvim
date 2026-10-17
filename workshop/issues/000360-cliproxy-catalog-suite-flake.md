@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "b627919e", done: "2d376e3d"}
 ---
 
 # Cliproxy catalog joins-routes case intermittently returns empty under suite load
