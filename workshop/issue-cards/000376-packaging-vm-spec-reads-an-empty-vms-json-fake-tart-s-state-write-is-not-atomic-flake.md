@@ -1,6 +1,6 @@
 ---
 id: 000376
-status: working
+status: codecomplete
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.18
+tracker:
+    version: 1
+    completion:
+        token: close-fbf4489b9f93
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 9a2a54c3aed9aee6d7142fb7a85d951bc5918516
+        evidence_commit: 036ccad8125ea90abbf786aee387882ddbd9c8e1
 ---
 
 # packaging_vm_spec reads an empty vms.json: fake_tart's state write is not atomic (flake)
