@@ -12,7 +12,7 @@ tags:
 4. Press Alt+Enter or Ctrl+g twice to send. `:ParleyChatRespond` also works.
 
 Press Escape to finish typing. Ctrl+g f finds chats; Ctrl+g c starts a new chat.
-Ctrl+g ? shows shortcuts. Alt+v pastes an image; Alt+t opens the outline.
+Ctrl+g ? shows shortcuts. Alt+i pastes an image; Alt+t opens the outline.
 Use `:wq` to save and quit. Your chats live in this app's own chat folder.
 
 💬: Hello! What is Parley, and how do I use it?

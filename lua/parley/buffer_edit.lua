@@ -228,7 +228,7 @@ end
 --- a branch reference is the only pointer to a child chat that exists on disk,
 --- and a private note is the user's own writing. #214 made those lines part of
 --- the answer's span (they used to truncate it), so a plain range delete started
---- destroying them: `<M-CR>` on an exchange erased the reference `<M-b>` had
+--- destroying them: `<M-CR>` on an exchange erased the reference `<M-i>` (now `<M-b>`) had
 --- just inserted into it, which is precisely where the chord puts one by design
 --- (BR-75). Verified against the pre-#214 tree, where the truncation hid this.
 ---

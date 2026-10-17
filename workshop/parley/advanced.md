@@ -60,7 +60,7 @@ The same `@@...@@` syntax can refer to a local file for context. Use a descripti
 label for an outline marker; use a real path only when you mean to reference a
 file. A heading such as `## Research notes` is another way to label a section.
 
-To make a branch, put the cursor where it belongs and press Option+i. Type and
+To make a branch, put the cursor where it belongs and press Option+b. Type and
 send your side question in the new chat. Option+t helps you return to the main
 thread. Option+o follows a branch link or an ordinary Markdown navigation link.
 
@@ -136,7 +136,7 @@ timestamp that also identifies their attachment folder.
 
 1. Copy an image to the clipboard, such as a screenshot or a diagram.
 2. In the new chat, type a question: "Explain what this diagram shows."
-3. Put the cursor in that question and press Option+v.
+3. Put the cursor in that question and press Option+i.
 4. Parley saves the image and inserts a Markdown image link into the question.
 5. Choose a model that supports images, then press Option+Enter to send.
 

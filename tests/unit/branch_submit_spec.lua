@@ -143,7 +143,7 @@ describe("branch_submit.plan_submission", function()
 end)
 
 -- #214 BR-60: the chord's claim is that it strips the way `<M-CR>` strips, so
--- both must gather with the SAME options. `<M-b>` hardcoded `bracket = true`
+-- both must gather with the SAME options. `<M-i>` (now `<M-b>`) hardcoded `bracket = true`
 -- while chat_respond read `config.mark_reference_span`, so with that option off
 -- branching injected `[…]` brackets into the parent that responding would not.
 describe("both keys gather with one set of options (#214 BR-60)", function()

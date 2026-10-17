@@ -51,7 +51,7 @@ See [Chat Parsing](parsing.md).
 **How far the `<M-CR>` parallel goes.** Both keys gather through the same
 `drill_in.chat_gather_opts`, so the marker removal and the `[…]` span marking are
 identical and follow `mark_reference_span` (they did not before #214 BR-60 —
-`<M-b>` hardcoded brackets on). The **scope** deliberately differs: `<M-b>`
+`<M-i>`, now `<M-b>`, hardcoded brackets on). The **scope** deliberately differs: `<M-b>`
 gathers every pending quote in the buffer, while `<M-CR>` with the cursor inside
 an exchange gathers only that exchange's and does not fall through to the
 whole-buffer path. Branching is a "take all of this elsewhere" gesture; responding

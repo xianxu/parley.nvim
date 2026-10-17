@@ -1,7 +1,7 @@
 -- #214 BR-1 (Critical). The n/i branch path created its child with an EMPTY
 -- topic, which silently disabled two lifecycle steps: auto-titling fires only
 -- on `headers.topic == "?"` (chat_respond.lua) and the slug rename bails on ""
--- (init.lua). Every <M-b> branch was therefore a permanently anonymous
+-- (init.lua). Every <M-i> (now <M-b>) branch was therefore a permanently anonymous
 -- <timestamp>.md whose parent ref line stayed `🌿: ….md: ` forever.
 --
 -- The plan claimed the slug "fills in afterwards". The mechanism did exist —

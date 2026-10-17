@@ -19,7 +19,7 @@
 --
 -- WHERE the reference lands (operator, 2026-09-07, revising the earlier
 -- end-of-answer rule): at the CURSOR. The branch shortcut reads as a *submission*, whose
--- effect is not local to anywhere — but `<M-b>` is the key that actually works
+-- effect is not local to anywhere — but `<M-i>` (now `<M-b>`, #377) was the key that worked
 -- in a terminal, and it reads as an *insertion*, which has to happen where you
 -- are. Relocating the line to the end of the answer made the keypress jump.
 --
