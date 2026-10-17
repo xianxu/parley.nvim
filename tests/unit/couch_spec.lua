@@ -29,15 +29,25 @@ end)
 
 -- ARCH-MOCK conformance (#316 close review): the fakes hand-write the
 -- --actors JSON; against the real couch, this editor's thread must resolve.
--- Runs only inside a pair slot with couch reachable; pending elsewhere.
+-- Live only by opt-in (#365): `make check-couch-actors-live` sets
+-- PARLEY_LIVE_COUCH, the one way the real thread reaches a spec, and runs this
+-- file alone. The suite strips the flag, so here it is pending.
+local function real_couch()
+    -- The sentinel (tests/fixtures/sentinel-bin) shadows a bare `couch`.
+    for dir in (vim.env.PATH or ""):gmatch("[^:]+") do
+        local path = dir .. "/couch"
+        if not dir:find("/tests/fixtures/sentinel-bin", 1, true) and vim.fn.executable(path) == 1 then return path end
+    end
+end
+
 describe("couch conformance (live)", function()
     it("the real --actors JSON binds this thread by Scope and Tag", function()
-        local thread = couch.thread()
-        if not thread or vim.fn.executable("couch") == 0 then
-            pending("not inside a pair slot")
+        local thread, binary = couch.thread(), real_couch()
+        if vim.env.PARLEY_LIVE_COUCH ~= "1" or not thread or not binary then
+            pending("live only: make check-couch-actors-live, inside a pair slot")
             return
         end
-        local out = vim.system({ "couch", "--actors", "--json" }, { text = true }):wait(10000)
+        local out = vim.system({ binary, "--actors", "--json" }, { text = true }):wait(10000)
         local ok, data = pcall(vim.json.decode, out.stdout or "", { luanil = { object = true, array = true } })
         if out.code ~= 0 or not ok or type(data) ~= "table" or data.Code ~= "ok" then
             pending("couch unreachable here")
