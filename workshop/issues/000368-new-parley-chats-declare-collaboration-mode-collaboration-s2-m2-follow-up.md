@@ -37,8 +37,8 @@ Past chats are not migrated (operator decision for S2).
 
 ## Plan
 
-- [ ] Add the declaration to both built-in templates shared by root and child writers (ARCH-DRY).
-- [ ] Test both writers and template variants; reopen a legacy chat and prove unchanged bytes.
+- [x] Add the declaration to both built-in templates shared by root and child writers (ARCH-DRY).
+- [x] Test both writers and template variants; reopen a legacy chat and prove unchanged bytes.
 - [ ] Run targeted and recorded full-suite checks, close review, and land.
 
 ## Log
@@ -48,3 +48,5 @@ Past chats are not migrated (operator decision for S2).
 ### 2026-10-17
 
 Claimed and started from main. Quick scope: template-only declaration, with no reader, migration, custom-template rewrite or new IO mechanism. The existing writers own file creation (ARCH-PURE/DRY); one constant frontmatter line adds bounded bytes per new chat (ARCH-CONSTRAINTS/RETENTION). No external dependency, concurrency, authority or ownership change (ARCH-MOCK/ORDER/SECURE). Root and child writers plus both built-in templates are the consumer enumeration (ARCH-PURPOSE). Plan posted to hub, proceeding under quick-flow authorization.
+
+Focused writer suite: red before implementation (two expected missing-key failures; legacy case passed), then 11/11 green after adding exactly two template lines. Both built-in template variants write the declaration in root and child files. Legacy open preserves buffer and disk lines. Logs: /tmp/parley-368-red.log and /tmp/parley-368-green.log. Diff whitespace check clean. Atlas creation map now records the default.

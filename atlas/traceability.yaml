@@ -211,6 +211,7 @@ atlas:
 
   chat/lifecycle:
     code:
+      - lua/parley/defaults.lua
       - lua/parley/previous_answer.lua
       - lua/parley/new_question.lua
       - lua/parley/chat_context.lua

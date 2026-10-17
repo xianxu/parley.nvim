@@ -39,7 +39,37 @@ local function cleanup()
 end
 
 describe("ChatNew", function()
-    after_each(cleanup)
+    local original_template = parley.config.chat_template
+    after_each(function()
+        parley.config.chat_template = original_template
+        cleanup()
+    end)
+    for _, template_name in ipairs({ "short_chat_template", "chat_template" }) do
+        it("declares collaboration in new root and child chats using " .. template_name, function()
+            parley.config.chat_template = require("parley.defaults")[template_name]
+            local root = parley.new_chat()
+            local root_path = vim.api.nvim_buf_get_name(root)
+            local child_path = tmp_dir .. "/2026-10-17.01-02-03.004_child.md"
+            parley.create_child_chat(child_path, "Child", root, "A question")
+            for _, path in ipairs({ root_path, child_path }) do
+                local fm = require("parley.frontmatter").parse(vim.fn.readfile(path))
+                assert.is_not_nil(fm)
+                assert.equals("collaboration", fm.fields["collaboration-mode"])
+            end
+        end)
+    end
+
+    it("opens a legacy chat without adding collaboration metadata", function()
+        local path = tmp_dir .. "/2026-10-16.01-02-03.004_legacy.md"
+        local original = { "---", "topic: Legacy", "file: " .. vim.fn.fnamemodify(path, ":t"),
+            "---", "", "💬: Existing question", "", "🤖: Existing answer" }
+        vim.fn.writefile(original, path)
+        local buf = parley.open_buf(path)
+        assert.is_nil(parley.not_chat(buf, path))
+        assert.same(original, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        assert.same(original, vim.fn.readfile(path))
+    end)
+
     it("creates a .md file in chat_dir", function()
         parley.cmd.ChatNew({})
         -- Give the file system a moment (ChatNew is synchronous for file creation)
