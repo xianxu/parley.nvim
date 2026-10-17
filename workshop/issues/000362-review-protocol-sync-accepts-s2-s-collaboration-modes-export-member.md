@@ -330,6 +330,17 @@ Disposable differential checks agree for 10,000 deterministic name strings and
 (/tmp/parley-362-resolver-compare.lua). Re-run mapped/real-tool tests and the
 recorded full suite before close. Prior partial live acceptance remains exact.
 
+### 2026-10-16 — integrate landed main before final recorded suite
+
+Mapped review and all 64 invocation cases passed after the complete-resolver
+fix. The recorded f6a03793 attempt (run 873031a21c660c1b5b06238df5b82d85)
+was cancelled while queued at position 10, before any tests began, so final
+verification can include the already-landed main required at publish. This is
+not a test failure or flake retry. Merge of origin/main completed automatically
+without conflicts, including README, traceability and lessons. Preserve the
+queue-only log and run a fresh recorded full suite on the integrated head;
+keep that head fixed through the run.
+
 ## Revisions
 
 ### 2026-10-16 — priority interruption

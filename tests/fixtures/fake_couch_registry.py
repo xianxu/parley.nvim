@@ -47,6 +47,27 @@ def publish(state_path, state):
     temporary.replace(state_path)
 
 
+def owe_or_fold(state_path, state, ledger, legacy, args):
+    """Test-side ledger edits (#354), never couch verbs: `--owe ID MESSAGE`
+    records a `submitted: PATH` send as owed; `--fold ID PATH` removes it."""
+    verb, message_id, subject = args[0], args[1], args[2]
+    if verb == "--owe":
+        if not subject.startswith("submitted: "):
+            return 0
+        subject = subject[len("submitted: "):]
+    path = str(Path(subject).resolve())
+    registration = state["paths"].get(path)
+    target, key = (ledger, registration["ID"]) if registration else (legacy, path)
+    status = target.get(key) or {}
+    owed = [event for event in status.get("Owed") or [] if event.get("ID") != message_id]
+    if verb == "--owe":
+        owed.append(dict(ID=message_id, Kind="delivery", At=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
+    status["Owed"] = owed
+    target[key] = status
+    publish(state_path, state)
+    return 0
+
+
 def main():
     args = sys.argv[1:]
     mode = os.environ.get("FAKE_COUCH_REGISTRY_MODE", "")
@@ -71,6 +92,8 @@ def main():
         state = json.loads(state_path.read_text()) if state_path.exists() else {"paths": {}, "moves": {}}
         ledger = state.setdefault("ledger", {})
         legacy = state.setdefault("legacy", {})
+        if args and args[0] in ("--owe", "--fold"):
+            return owe_or_fold(state_path, state, ledger, legacy, args)
         op = args[1] if len(args) > 1 else ""
         raw_status, valid_seed, seed = seeded_status()
         if op == "status":

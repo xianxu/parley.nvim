@@ -688,6 +688,9 @@ atlas:
       - lua/parley/test_isolation.lua
       - scripts/golden_fixture.lua
       - Makefile.parley
+      - scripts/test-env.sh
+      - tests/fixtures/sentinel-bin/couch
+      - tests/fixtures/sentinel-bin/pair
       - scripts/check-fresh-clone.sh
       - tests/helpers/fresh_clone_probe.lua
       - tests/minimal_init.vim
@@ -1232,6 +1235,20 @@ atlas:
       - tests/unit/super_repo_spec.lua
       - tests/unit/render_spec.lua
       - tests/unit/pure_functions_spec.lua
+
+  ui/attention_finder:
+    code:
+      - lua/parley/attention_model.lua
+      - lua/parley/attention_store.lua
+      - lua/parley/attention.lua
+      - lua/parley/attention_rows.lua
+      - lua/parley/session_sync.lua
+    tests:
+      - tests/unit/attention_model_spec.lua
+      - tests/unit/attention_store_spec.lua
+      - tests/unit/attention_rows_spec.lua
+      - tests/integration/attention_record_spec.lua
+      - tests/integration/attention_finder_spec.lua
 
   ui/outline:
     code:

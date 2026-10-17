@@ -665,6 +665,12 @@ oracle, and the mutation that would make the test fail.
 
 - Replacing `find_tree_root_file` deleted the local `root` that delete-tree's prompt still read, and the tests stubbed `confirm` without checking its text. Lint caught it in the suite. After deleting a local, run `make lint`, or grep the function for the name, before the suite; and a test that stubs a prompt asserts what the prompt says.
 
+## #354: an ordering the code depends on gets its own test
+
+- The M1 review found no test for recording a submit *before* the send callback's stale-state guard. Every spec kept the buffer alive, so moving the line below the guard stayed green. When a comment says "this must happen before X", write the test where X happens: here, the buffer is wiped while a slow send runs. Then mutate the order to see the test fail.
+- Optional work added to a critical callback (here, the attention record in the send completion) goes in a `pcall` with a warning, and a test makes it throw.
+- The M2 review found the same family again: the pure model pinned the stale-probe rule, but the glue's capture point (pending IDs read when the probe starts, not when it returns) had no test. An ordering rule needs a test at every layer that can break it. For each interleaving in the plan's ARCH-ORDER list, name the spec that drives production glue, not only the pure core, and mutate the glue to see it fail.
+- A scope addition I built in the same session re-derived three facts the codebase already owns: the frontmatter parser, the side-folder path, and a bounded async queue. Before writing a parser, a path rule or a concurrency loop, grep `lua/parley/` for the noun (`frontmatter`, `side_path`, `queue`) and read the owner first. When replacing a slice of a file by index, diff the function list before and after (`grep -n "^function M\."`): mine silently swallowed two functions between the anchors.
 ## #357: intent that crosses an async callback belongs in the pure model
 
 - A shell flag (`queued_submit`), set by a press and cleared in only one callback, outlived every other outcome: a pending rename, or a reconcile. A later unrelated lookup could then send a submit nobody pressed for. When an intent spans an asynchronous round trip, make it an event field on the pure model's transition (`retry{submit=true}` → `resubmit` effect), so every outcome decides it and unit tests cover each branch. Don't use a flag that each callback must remember to clear.
@@ -704,3 +710,15 @@ A parser-level benchmark does not cover its semantic resolver. Trace a finding's
 family from the user action through every newly added stage, including name
 normalization and heading extraction; pin scale through the production entry
 point as well as internal helpers before calling the family complete.
+## 2026-10-16 (#367 — a picker query that the temp path can match)
+
+- A fuzzy picker spec's query must contain a character no temp path holds
+  (such as `+`). Row search text often includes the absolute directory, and
+  float_picker matches a query of three characters or fewer against the whole
+  haystack. An "unusual" `qzx` matched `beta.md` through the random tempname
+  about one run in nine. The failure looked like a repaint race until the spec
+  printed the prompt and the rows on timeout. Print state on an intermittent
+  await failure before theorising.
+- When a rule moves into the pure model, keep the cost bound of the IO it
+  replaces. Let the model pick candidates from cheap stat data, then read only
+  those. The first draft read every side doc's head on every open.

@@ -63,4 +63,34 @@ function M.check(env)
     return reasons
 end
 
+--- Ambient names a spec process must never see (#365): scripts/test-env.sh
+--- starts every spec from an allowlist, so none of these crosses from the
+--- operator's session. A Couch or Pair thread would point a spec at the real
+--- registry; a terminal owner at the operator's terminal or editor.
+M.AMBIENT_PREFIXES = { "COUCH_", "PAIR_", "KITTY_", "WEZTERM_", "ALACRITTY_", "GHOSTTY_" }
+--- `NVIM` is absent on purpose: Neovim sets it in every job it starts, so a spec
+--- (plenary runs each file in a child) sees the harness's own parent. The
+--- launcher strips the operator's.
+M.AMBIENT_NAMES = { "TMUX", "TMUX_PANE", "NVIM_LISTEN_ADDRESS", "ITERM_SESSION_ID", "TERM_SESSION_ID",
+    "TERM_PROGRAM", "ZELLIJ", "ZELLIJ_SESSION_NAME", "STY", "WINDOWID" }
+
+--- The ambient names visible in `env` (a name → value table; default: this
+--- process's environment), sorted; empty means none crossed.
+---@param env table|nil
+---@return string[]
+function M.ambient(env)
+    env = env or vim.fn.environ()
+    local denied, found = {}, {}
+    for _, name in ipairs(M.AMBIENT_NAMES) do denied[name] = true end
+    for name in pairs(env) do
+        local hit = denied[name]
+        for _, prefix in ipairs(M.AMBIENT_PREFIXES) do
+            hit = hit or name:sub(1, #prefix) == prefix
+        end
+        if hit then found[#found + 1] = name end
+    end
+    table.sort(found)
+    return found
+end
+
 return M
