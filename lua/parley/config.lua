@@ -347,6 +347,10 @@ local config = {
 	default_keymaps = true,
 	-- File-level Back, independent of same-file cursor jumps.
 	global_shortcut_file_back = { modes = { "n", "i" }, shortcut = "<M-O>" },
+	-- The attention finder (#354): Alt+Return submits, waiting, answered or seen.
+	-- <C-y><Space> joins the <C-y> family; with the completion popup showing it
+	-- stays accept-then-space in Insert mode.
+	global_shortcut_attention = { modes = { "n", "i" }, shortcut = { "<M-Space>", "<C-y><Space>" } },
 	-- local shortcuts bound to the chat buffer
 	-- (be careful to choose something which will work across specified modes)
 	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = { "<C-g><C-g>" } },
@@ -635,6 +639,13 @@ local config = {
 		-- (or, without one, its question alone, truncated); "full" renders them
 		-- like any exchange. Applies whether or not `enable` is on (#352).
 		side_chats = "summary",
+	},
+
+	-- the attention finder (#354): files submitted with Alt+Return, as waiting,
+	-- answered or seen. A seen entry (opened from the finder after its answer)
+	-- leaves the finder this many minutes later.
+	attention = {
+		seen_grace_minutes = 60,
 	},
 
 	-- memory preferences: per-tag user preference profiles from chat history
