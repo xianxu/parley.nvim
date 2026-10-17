@@ -42,7 +42,7 @@ Determine why the ready fake/catalog HTTP routes can yield an empty catalog unde
 ## Plan
 
 - [x] Reproduce under parallel load with the curl exit code recorded per fetch.
-- [x] `ready_port.is_listening` confirms a completed connect with a LISTEN socket (lsof, bounded at 2 s, only after a connect succeeds).
+- [x] `ready_port.is_listening` confirms a completed connect with a LISTEN socket (lsof, hang guard 10 s after round 1, only after a connect succeeds).
 - [x] Route the four hand-copied connect polls through `ready_port.wait_listening` (ARCH-DRY).
 - [x] Deterministic unit regressions in `tests/unit/ready_port_spec.lua`; stress before/after.
 - [x] Full suite, close; atlas Fixture readiness gains the LISTEN-confirm rule.
