@@ -108,9 +108,20 @@ vim.api.nvim_create_autocmd("WinNew", { group = group, callback = function()
                 pulse.seen[created] = true
                 local top = record and record.layers[#record.layers]
                 if top and top.priority then
-                    local beneath = value_for(created, record, #record.layers - 1)
-                    install(created, { buf = record.buf, installed = record.installed },
-                        beneath.winbar and beneath or record.before)
+                    local copy = { buf = record.buf, before = record.before,
+                        installed = record.installed, layers = {} }
+                    -- Buffer-wide state owners also own this native split.
+                    -- Install that ownership before history's first repaint;
+                    -- the source window's transient pulse remains scoped there.
+                    for _, layer in ipairs(record.layers) do
+                        if not layer.priority and not layer.only_win then
+                            copy.layers[#copy.layers + 1] = layer
+                            layer.views[created] = true
+                        end
+                    end
+                    local beneath = value_for(created, copy)
+                    install(created, copy, beneath.winbar and beneath or record.before)
+                    if #copy.layers > 0 then windows[created] = copy end
                 end
             end
         end
@@ -176,7 +187,7 @@ vim.api.nvim_create_autocmd("WinResized", { group = group, callback = function()
 end })
 
 function M.new(buf, only_win, priority)
-    local owner = { views = {}, priority = priority }
+    local owner = { views = {}, priority = priority, only_win = only_win }
     local handle = {}
 
     function handle.render(view)
