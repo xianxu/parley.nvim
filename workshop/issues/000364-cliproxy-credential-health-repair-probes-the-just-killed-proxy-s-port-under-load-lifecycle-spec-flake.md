@@ -34,3 +34,11 @@ So under load the repair still probes between `stop()` and the next `spawn()`, t
 ## Log
 
 ### 2026-10-16
+
+### 2026-10-16 — consolidated into #363
+
+Duplicate of #363: both reports name the same keyless-restart timeout and
+persistent-404 post-stop probe assertion, with no cliproxy diff in either
+reporting branch. Hub instructed one investigation in delivery
+c322a428-5e9c-4da8-981f-e6cbccada6c2. Its log is retained above and cited
+in #363; all reproduction, repair, review and landing proceeds there.

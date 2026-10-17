@@ -105,4 +105,65 @@ describe('checked file tool editor completion',function()
         end)
     end
 
+    -- #358: the refresh replaces the whole buffer, which keeps only line
+    -- numbers; each window's cursor and top line follow their text instead.
+    describe('keeps every window on its text (#358)',function()
+        local function numbered(n,extra)
+            local t={};for i=1,n do t[#t+1]='line '..i end
+            for _,l in ipairs(extra or {})do t[#t+1]=l end
+            return t
+        end
+        local function bytes(lines)return table.concat(lines,'\n')..'\n'end
+        local wins
+        before_each(function()
+            vim.fn.writefile(numbered(60),path);vim.cmd('silent edit!')
+            vim.o.lines=40
+            vim.cmd('silent! only');vim.cmd('split')
+            wins=vim.fn.win_findbuf(buf);table.sort(wins)
+            vim.api.nvim_win_call(wins[1],function()vim.fn.winrestview({lnum=20,col=3,topline=15})end)
+            vim.api.nvim_win_call(wins[2],function()vim.fn.winrestview({lnum=40,col=0,topline=35})end)
+        end)
+        after_each(function()vim.cmd('silent! only')end)
+        local function view(win)return vim.api.nvim_win_call(win,vim.fn.winsaveview)end
+        for _,document in ipairs({false,true})do
+            local kind=document and 'an attached document' or 'a plain buffer'
+            it('shifts both cursors with lines added above, in '..kind,function()
+                if document then
+                    local doc=require('parley.document').attach(buf,{schedule=false})
+                    require('parley.document').drain(doc,1000)
+                end
+                local Refresh=require('parley.tools.file_refresh')
+                local new={'new a','new b','new c'};vim.list_extend(new,numbered(60))
+                local outcome=Refresh.complete(Refresh.capture(path),bytes(new))
+                assert.is_nil(outcome.reconciliation_required)
+                assert.same(new,vim.api.nvim_buf_get_lines(buf,0,-1,false))
+                local a,b=view(wins[1]),view(wins[2])
+                assert.same({23,3,18},{a.lnum,a.col,a.topline})
+                assert.same({43,0,38},{b.lnum,b.col,b.topline})
+            end)
+            it('leaves cursor and top line exact when lines are appended below, in '..kind,function()
+                if document then
+                    local doc=require('parley.document').attach(buf,{schedule=false})
+                    require('parley.document').drain(doc,1000)
+                end
+                local Refresh=require('parley.tools.file_refresh')
+                local new=numbered(60,{'tail 1','tail 2'})
+                local outcome=Refresh.complete(Refresh.capture(path),bytes(new))
+                assert.is_nil(outcome.reconciliation_required)
+                assert.same(new,vim.api.nvim_buf_get_lines(buf,0,-1,false))
+                local a,b=view(wins[1]),view(wins[2])
+                assert.same({20,3,15},{a.lnum,a.col,a.topline})
+                assert.same({40,0,35},{b.lnum,b.col,b.topline})
+            end)
+        end
+        it('leaves the views alone when the refresh is refused',function()
+            local Refresh=require('parley.tools.file_refresh')
+            local ticket=Refresh.capture(path)
+            vim.api.nvim_buf_set_lines(buf,0,0,false,{'human'})
+            local outcome=Refresh.complete(ticket,bytes(numbered(60)))
+            assert.is_true(outcome.reconciliation_required)
+            local a=view(wins[1])
+            assert.same({21,16},{a.lnum,a.topline},'Neovim\'s own adjustment for the human edit, untouched')
+        end)
+    end)
 end)

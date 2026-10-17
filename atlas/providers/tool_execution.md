@@ -317,7 +317,8 @@ and revision before IO. A confirmed write refreshes unchanged autoread buffers
 from committed bytes, without reopening the pathname. Intervening edits, ABA,
 rename, unsupported encoding or a refused Document grant preserve the buffer and
 report reconciliation required. Only an unchanged post-apply tick and exact text
-permit clearing modified state. Chat Document refresh retains the64KiB User-edit
+permit clearing modified state. A successful refresh keeps every window's cursor and top
+line on their text through `window_views` (#358). Chat Document refresh retains the64KiB User-edit
 bound; larger replacements require reconciliation.
 
 `result_evidence` preserves incomplete-output and reconciliation evidence through

@@ -629,8 +629,8 @@ M.run_via_invoke = function(buf, args, resubmit_count)
         return
     end
 
-    -- Suppress the projection watcher during the round's own :edit! reload so it
-    -- isn't mistaken for a user edit; cleared in on_done. (#133 M5)
+    -- Suppress the projection watcher during the round's own reload (skill_invoke's
+    -- whole-buffer apply_user) so it isn't mistaken for a user edit; cleared in on_done. (#133 M5)
     local projection = require("parley.skills.review.projection")
     projection.set_applying(buf, true)
 

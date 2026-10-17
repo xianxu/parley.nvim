@@ -688,6 +688,9 @@ atlas:
       - lua/parley/test_isolation.lua
       - scripts/golden_fixture.lua
       - Makefile.parley
+      - scripts/test-env.sh
+      - tests/fixtures/sentinel-bin/couch
+      - tests/fixtures/sentinel-bin/pair
       - scripts/check-fresh-clone.sh
       - tests/helpers/fresh_clone_probe.lua
       - tests/minimal_init.vim
@@ -776,6 +779,7 @@ atlas:
     code:
       - lua/parley/session_sync.lua
       - lua/parley/view_map.lua
+      - lua/parley/window_views.lua
       - lua/parley/agentic_document.lua
       - lua/parley/document_band.lua
       - lua/parley/document_session.lua
@@ -793,6 +797,7 @@ atlas:
       - tests/integration/lock_leave_reminder_spec.lua
       - tests/unit/session_sync_spec.lua
       - tests/unit/view_map_spec.lua
+      - tests/integration/window_views_spec.lua
       - tests/unit/document_session_spec.lua
       - tests/unit/document_move_plan_spec.lua
       - tests/unit/helper_io_spec.lua

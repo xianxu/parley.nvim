@@ -122,6 +122,12 @@ commands have no backstop, and a timeout counts as unread. The budgeted paths
 (the in-dispatch repair, the recovery rung, `:ParleyProxy update`) keep the sync
 reads: `lsof` measured over 2 s under load, and a cap would push them onto the
 stalling probe. A cliproxy that could not be listed is reported as not stopped.
+The lifecycle fixture's stalled-port model applies only after a signalled PID
+has exited and before replacement spawn (#363). A slow identity request that
+signals nobody, or a signalled listener still alive at the deadline, uses real
+fallback probes. The fake can delay its first `/v1/models` response with
+`PARLEY_FAKE_MODELS_DELAY_ONCE_MS`; synthetic probe callbacks are scoped to
+one case and cancelled at teardown.
 
 ## Model catalog
 
