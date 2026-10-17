@@ -76,6 +76,13 @@ describe('document move projection', function()
         o.new_written = true
         assert.is_nil(plan.project(old, new, o))
     end)
+    it('leaves the destination to Couch when it is the authority (#359)', function()
+        local o = observations(); o.destination_registered = 'authority'
+        local projected = assert(plan.project(old, new, o))
+        assert.equals('rename_metadata', projected.effects[#projected.effects].kind)
+        o.destination_registered = 'maybe'
+        assert.is_nil(plan.project(old, new, o))
+    end)
     it('refuses occupied destinations and untrustworthy observations', function()
         for _, field in ipairs({ 'target_side_exists', 'destination_registered' }) do
             local o = observations(); o[field] = true
@@ -155,5 +162,79 @@ describe('parent backlink rewriting', function()
     it('leaves code, escaped links and unrelated text byte-identical', function()
         local bytes = '```md\n[parent](../../project.md)\n```\n`[parent](../../project.md)`\n\\[parent](../../project.md)\nordinary [other](else.md)\n'
         assert.equals(bytes, plan.rewrite_parent(bytes, children, parents))
+    end)
+end)
+
+-- #359: the move needs no Couch round trip except an overwrite of an existing
+-- file. One decision from what parley already knows (rows 1-4, 8-9 of the
+-- plan's state table), and one projection of the outcome (rows 1, 5-7).
+describe('move_preflight (#359)', function()
+    local plan = require('parley.document_move_plan')
+    local registered = { ID = 'id-1', File = '/repo/a.md', Owner = 'parley.nvim:4' }
+
+    it('proceeds at once for a registered document (row 1)', function()
+        assert.same({ proceed = true }, plan.move_preflight({ identity = registered, new_exists = false }))
+    end)
+    it('proceeds without asking for a plain move onto an existing file without overwrite (begin decides)', function()
+        assert.same({ proceed = true }, plan.move_preflight({ identity = registered, new_exists = true }))
+    end)
+    it('renames a positively plain document plainly (row 2)', function()
+        assert.same({ plain = true }, plan.move_preflight({ identity = 'plain', new_exists = true, overwrite = true }))
+    end)
+    it('refuses at once, nothing moved, and starts the lookup when the identity is unknown (row 3)', function()
+        assert.same({ refuse = 'identity', lookup = true, message = plan.MOVE_TEXT.identity },
+            plan.move_preflight({ identity = 'unknown' }))
+    end)
+    it('registers a legacy session file first, refusing this move (row 4)', function()
+        assert.same({ refuse = 'legacy', register = true, message = plan.MOVE_TEXT.legacy },
+            plan.move_preflight({ identity = 'plain', legacy = 'tl' }))
+        assert.same({ refuse = 'legacy', register = true, message = plan.MOVE_TEXT.legacy },
+            plan.move_preflight({ identity = 'unknown', legacy = 'tl' }))
+    end)
+    it('asks Couch inline only for an overwrite of an existing file (rows 8-9)', function()
+        assert.same({ wait_destination = true },
+            plan.move_preflight({ identity = registered, new_exists = true, overwrite = true }))
+    end)
+    it('words the refusals as the table does', function()
+        assert.equals("move not confirmed: Couch hasn't confirmed this document yet; nothing moved. Run the move again",
+            plan.MOVE_TEXT.identity)
+        assert.equals('move not confirmed: registering this document first; nothing moved. Run the move again',
+            plan.MOVE_TEXT.legacy)
+    end)
+end)
+
+describe('move_outcome (#359)', function()
+    local plan = require('parley.document_move_plan')
+    local new_path = '/repo/archive/b.md'
+
+    it('is confirming while the metadata rename is out (row 1)', function()
+        assert.same({ state = 'confirming', band = 'moving: confirming with Couch', action = 'none' },
+            plan.move_outcome({ moved = true, new_path = new_path }))
+    end)
+    it('finishes in the background past the deadline, saving still works (row 5)', function()
+        assert.same({ state = 'background', band = 'move not confirmed: finishing in the background',
+            action = 'none', warning = true }, plan.move_outcome({ moved = true, overdue = true, new_path = new_path }))
+    end)
+    it('names the pasteable forget command for a stale registration at NEW (row 6)', function()
+        assert.same({ state = 'conflict', action = 'forget', band = 'move not confirmed: the destination is registered'
+            .. ' to another document. Run: couch --session-sync forget /repo/archive/b.md, then reopen' },
+            plan.move_outcome({ moved = true, new_path = new_path,
+                result = { kind = 'unavailable', code = 'target-conflict', error = 'destination registered' } }))
+    end)
+    it('quotes a NEW path the shell would split, so the command pastes as is', function()
+        local outcome = plan.move_outcome({ moved = true, new_path = "/repo/my notes/it's.md",
+            result = { kind = 'unavailable', code = 'target-conflict' } })
+        assert.matches([[Run: couch %-%-session%-sync forget '/repo/my notes/it'\''s%.md', then reopen$]], outcome.band)
+    end)
+    it('asks for a reopen when the reply was lost or uncertain (row 7)', function()
+        local pending = { state = 'pending', band = 'move pending: reopen to recover', action = 'reopen' }
+        assert.same(pending, plan.move_outcome({ moved = true, new_path = new_path, result = { kind = 'uncertain' } }))
+        assert.same(pending, plan.move_outcome({ moved = true, new_path = new_path,
+            result = { kind = 'unavailable', error = 'timed out' } }))
+        assert.same(pending, plan.move_outcome({ moved = false, new_path = new_path }))
+    end)
+    it('clears when Couch confirmed the rename', function()
+        assert.same({ state = 'done', band = '', action = 'none' },
+            plan.move_outcome({ moved = true, new_path = new_path, result = { kind = 'registered' } }))
     end)
 end)

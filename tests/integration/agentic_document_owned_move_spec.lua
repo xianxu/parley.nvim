@@ -117,6 +117,11 @@ describe("registered ordinary Markdown through Parley move doors", function()
             assert.equals(1, #vim.fn.readfile(root .. "/sent"))
             local moved, err = p[door](file, destination)
             assert.equals(destination .. "/ordinary.md", moved, tostring(err))
+            -- #359: the move returns once the file moved; Couch confirms after.
+            await(function()
+                local identity = document.identity(buf)
+                return identity and identity.File == moved and not document.status(buf).operation
+            end)
             assert.is_true(document.submit(buf))
             await(function() return not document.status(buf).operation end)
             local bar = vim.wo[vim.fn.bufwinid(buf)].winbar
@@ -150,6 +155,57 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
     end)
 
+    -- #359 close review: a tree asks about every unknown document before it
+    -- refuses, so one rerun moves the whole tree.
+    it("asks about every unknown document of a tree before refusing, so one rerun moves it", function()
+        local chat = source .. "/2026-09-10.14-20-03.112.md"
+        local children = { source .. "/notes-one.md", source .. "/notes-two.md" }
+        vim.fn.writefile({ "---", "topic: Tree", "file: 2026-09-10.14-20-03.112.md", "model: test-model",
+            "provider: openai", "---", "", "💬: Hello", "",
+            "🌿: " .. children[1] .. ": one", "🌿: " .. children[2] .. ": two" }, chat)
+        for _, child in ipairs(children) do
+            vim.fn.writefile({ "---", "topic: Child", "---", "", "💬: Hi" }, child)
+        end
+        local couch = require("parley.couch")
+        local production_run, looked = couch.run, {}
+        couch.run = function(argv, callback, options)
+            if argv[2] == "--session-sync" and argv[3] == "lookup" then looked[argv[4]] = true end
+            return production_run(argv, callback, options)
+        end
+        local moved, err = p.move_chat_tree(chat, destination)
+        assert.is_nil(moved)
+        assert.equals("move not confirmed: Couch hasn't confirmed this document yet; nothing moved. Run the move again", err)
+        assert.equals(1, vim.fn.filereadable(chat))
+        assert.is_true(looked[children[1]] and looked[children[2]], vim.inspect(looked))
+        await(function()
+            return document.move_membership(children[1]) == false and document.move_membership(children[2]) == false
+        end)
+        couch.run = production_run
+        moved, err = p.move_chat_tree(chat, destination)
+        assert.equals(destination .. "/2026-09-10.14-20-03.112.md", moved, tostring(err))
+        assert.equals(1, vim.fn.filereadable(destination .. "/notes-one.md"))
+        assert.equals(1, vim.fn.filereadable(destination .. "/notes-two.md"))
+    end)
+
+    -- #359 close review: a background "absent" is an answer for the rerun, not
+    -- a standing permission. Past its expiry the file is unknown again, so a
+    -- registration made since is asked about instead of moved past.
+    it("lets a background absent answer expire, then asks again", function()
+        local other = source .. "/notes-unloaded.md"
+        vim.fn.writefile({ "---", "topic: Note", "---", "", "body" }, other)
+        local ttl = document.ANSWER_TTL_MS
+        document.ANSWER_TTL_MS = 200
+        local member, err = document.move_membership(other)
+        assert.is_nil(member)
+        assert.truthy(tostring(err):find("hasn't confirmed this document yet", 1, true))
+        await(function() return document.move_membership(other) == false end)
+        vim.wait(300)
+        member, err = document.move_membership(other)
+        document.ANSWER_TTL_MS = ttl
+        assert.is_nil(member, "an expired absence must not authorize a plain move")
+        assert.truthy(tostring(err):find("hasn't confirmed this document yet", 1, true))
+    end)
+
     it("moves an unloaded registered ordinary file through the public tree door", function()
         seed_side()
         document.detach(buf)
@@ -159,8 +215,9 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals(new_path, moved, tostring(err))
         assert.equals(0, vim.fn.filereadable(file))
         assert.equals(1, vim.fn.filereadable(destination .. "/ordinary.side/child.md"))
-        local confirmed = lookup(new_path)
-        assert.equals("registered", confirmed.kind)
+        -- #359: Couch's rename lands after the move returns.
+        local confirmed
+        await(function() confirmed = lookup(new_path); return confirmed.kind == "registered" end)
         assert.equals(registration.ID, confirmed.registration.ID)
         local reopened = vim.fn.bufnr(new_path)
         assert.is_true(reopened > 0)
@@ -168,23 +225,33 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals(registration.ID, document.identity(reopened).ID)
     end)
 
-    it("refuses unavailable membership before moving OLD or its side folder and leaves editing available", function()
+    -- #359: the identity is held, so the move needs no Couch round trip and
+    -- lands even while Couch is down; the journal carries the rename (row 7),
+    -- editing stays available, and reopening recovers it once Couch is back.
+    it("moves on a held identity while Couch is unavailable; the journal carries the rename to a reopen", function()
         seed_side()
-        local original = vim.fn.readfile(file)
-        local child = vim.fn.readfile(source .. "/ordinary.side/child.md")
         vim.env.FAKE_COUCH_REGISTRY_MODE = "unsupported"
         local moved, err = p.move_chat(file, destination)
-        assert.is_nil(moved)
-        assert.is_true(type(err) == "string" and err ~= "")
-        assert.same(original, vim.fn.readfile(file))
-        assert.same(child, vim.fn.readfile(source .. "/ordinary.side/child.md"))
-        assert.equals(0, vim.fn.filereadable(destination .. "/ordinary.md"))
-        assert.equals(0, vim.fn.isdirectory(destination .. "/ordinary.side"))
-        assert.equals(file, vim.api.nvim_buf_get_name(buf))
+        local new_path = destination .. "/ordinary.md"
+        assert.equals(new_path, moved, tostring(err))
+        assert.equals(0, vim.fn.filereadable(file))
+        assert.equals(1, vim.fn.filereadable(destination .. "/ordinary.side/child.md"))
+        await(function()
+            return vim.wo[vim.fn.bufwinid(buf)].winbar:find("move pending: reopen to recover", 1, true) ~= nil
+        end)
         assert.is_true(vim.bo[buf].modifiable)
-        vim.api.nvim_buf_set_lines(buf,4,5,false,{"editable while Couch unavailable"})
+        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "editable while Couch unavailable" })
         assert.is_true(vim.bo[buf].modified)
-        assert.equals(1, vim.fn.filereadable(file .. ".lock"))
+        assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
+        vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+        vim.api.nvim_buf_call(buf, function() vim.cmd("silent write") end)
+        document.detach(buf)
+        assert.is_true(document.attach(buf))
+        await(function()
+            local identity = document.identity(buf)
+            return identity and identity.File == new_path and not document.status(buf).operation
+        end)
+        assert.equals("registered", lookup(new_path).kind)
     end)
 
     it("adopts unregistered typed OLD and its legacy owed ledger before a public move", function()
@@ -204,12 +271,19 @@ describe("registered ordinary Markdown through Parley move doors", function()
         p.setup_markdown_keymaps(buf)
         await(function() return document.status(buf).phase == "plain" end)
         assert.is_true(require("parley.session_sync").is_session_sync(buf))
+        -- #359: the move refuses at once while it registers in the background.
+        local refused, refusal = p.move_chat(file,destination)
+        assert.is_nil(refused)
+        assert.equals("move not confirmed: registering this document first; nothing moved. Run the move again", refusal)
+        assert.equals(1, vim.fn.filereadable(file))
+        await(function() return document.move_membership(file) == true end)
         local moved, err = p.move_chat(file,destination)
         local new_path = destination .. "/legacy.md"
         assert.equals(new_path,moved,tostring(err))
         assert.equals(0,vim.fn.filereadable(file))
-        local confirmed = lookup(new_path)
-        assert.equals("registered",confirmed.kind)
+        local confirmed
+        await(function() confirmed = lookup(new_path); return confirmed.kind == "registered" end)
+        await(function() return not document.status(buf).operation end)
         assert.equals(confirmed.registration.ID,document.identity(buf).ID)
         assert.equals("ops:0",confirmed.registration.Owner)
         local restored = vim.system({"couch","--session-sync","status",new_path,"--json"},{text=true}):wait(2000)
@@ -274,8 +348,14 @@ describe("registered ordinary Markdown through Parley move doors", function()
         await(function() return document.status(buf).phase == "plain" end)
         assert.equals("absent",lookup(canonical_old).kind)
         local new_path = destination .. "/alias-legacy.md"
-        vim.cmd("saveas " .. vim.fn.fnameescape(new_path))
+        -- #359: the rename refuses at once while the legacy file registers in
+        -- the background (row 4); the rerun renames the registered document.
+        local ok, err = pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(new_path))
+        assert.is_false(ok)
+        assert.truthy(tostring(err):find("registering this document first; nothing moved", 1, true), tostring(err))
+        await(function() return document.identity(buf) ~= nil end)
         assert.same({actual_caller},vim.fn.readfile(registration_argv), "legacy state adoption must receive the actual pre-move buffer path")
+        vim.cmd("saveas " .. vim.fn.fnameescape(new_path))
         await(function() local identity = document.identity(buf); return identity and identity.File == new_path end)
         local confirmed = lookup(new_path)
         assert.equals("registered",confirmed.kind)

@@ -149,13 +149,35 @@ state, and Alt+Return is its one action:
   Couch`), and its late success records the receipt below, so an identical
   resubmit sends nothing.
 
-The move and rename preflights still block, because they decide inside
-BufFilePre and BufFilePost (asynchronous moves are #359). Their deadline is
-`agentic_move_timeout_ms`, 5 s. Before anything moved, the recovery is `move
-not confirmed: … nothing moved. Run the move again`. At BufFilePost Neovim has
-already renamed the buffer, so the recovery there is `rename not confirmed: …
-rename back to OLD, then run it again`; renaming back aborts the move. A move
-whose registry rename outlasts the wait finishes through its journal.
+**Moves never wait on Couch (#359)**, except an overwrite of an existing file.
+`document_move_plan.move_preflight` decides from what parley already holds: the
+loaded model, the namespace cache, or an earlier background answer.
+- A registered document moves at once. Couch's own rename is the authority on
+  NEW, refusing an occupied destination (`destination_registered =
+  "authority"`), and the journal carries the metadata rename forward.
+- A positively plain document renames plainly.
+- An unknown identity or a legacy `type: session-sync` file refuses at once
+  with nothing moved (`move not confirmed: … Run the move again`), and asks
+  Couch in the background, so the rerun proceeds. A background "absent"
+  answer holds for `ANSWER_TTL_MS` (60 s). A rerun after that asks again, so a
+  registration made since is never moved past.
+- Neovim gives the rename hooks no `!`, so any rename onto an existing path
+  (`:saveas!`, or `:file` there) takes the bounded check below.
+- Only `:saveas!` onto an existing file asks inline, within
+  `agentic_move_timeout_ms`. Neovim writes it before Couch could refuse, and
+  past the deadline the recovery is `rename back to OLD, then run it again`.
+
+`move_outcome` projects what the band shows once the document moved:
+- `moving: confirming with Couch`;
+- past `agentic_submit_timeout_ms`, `finishing in the background` (the rename
+  itself gets three deadlines);
+- for a stale registration at NEW (`target-conflict`), the pasteable
+  `Run: couch --session-sync forget NEW, then reopen`, with the whole command
+  also in the notification;
+- for a lost reply, `move pending: reopen to recover`.
+
+Saving works meanwhile: `document_move.record_write` makes each save the
+journal's witness for NEW, so recovery stays provable.
 
 The last confirmed successful submission also records its captured post-save
 content hash, stable document ID, namespace, effective owner and local time in
@@ -222,9 +244,9 @@ probe is documented in [TOOLING](../../TOOLING.md).
 
 Native and public move preflight also checks the loaded coordinator before
 plain fallback: unresolved owner selection, pending admission and an active
-submit cannot be renamed past. Fresh bounded OLD membership confirms the
-plain bypass; unavailable membership blocks migration while editing stays
-available.
+submit cannot be renamed past. The plain bypass needs positive absence that
+parley already holds (#359). While Couch is unavailable, a held identity still
+moves, and its journal recovers the rename on reopen; editing stays available.
 
 A true buffer unload retires its async incarnation and execution lease; reopen
 confirms registration and resumes any durable forward-only move journal.

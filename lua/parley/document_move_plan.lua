@@ -190,8 +190,9 @@ function M.rewrite_parent(bytes, child_paths, parent_paths)
     return bytes
 end
 
---- observations: id, old_exists/new_exists/new_written, destination_registered,
---- side_exists/target_side_exists booleans; complete dense entries of canonical
+--- observations: id, old_exists/new_exists/new_written, side_exists/
+--- target_side_exists booleans; destination_registered false (confirmed absent)
+--- or 'authority' (Couch's rename decides, #359); complete dense entries of canonical
 --- {path,resolved,type,bytes?}. Only directory/file entries are supported.
 --- Effects execute under a lease, with the captured observations revalidated.
 function M.project(old, new, observations)
@@ -200,12 +201,14 @@ function M.project(old, new, observations)
         or type(o) ~= 'table' or type(o.id) ~= 'string' or o.id == '' or #o.id > 256
         or o.id:find('[%z\1-\31\127]') or type(o.entries) ~= 'table' then return nil, 'invalid move input' end
     for _, key in ipairs({ 'old_exists', 'new_exists', 'new_written', 'destination_registered', 'side_exists', 'target_side_exists' }) do
-        if type(o[key]) ~= 'boolean' then return nil, 'missing move observation: ' .. key end
+        if type(o[key]) ~= 'boolean' and not (key == 'destination_registered' and o[key] == 'authority') then
+            return nil, 'missing move observation: ' .. key
+        end
     end
     local source, destination = M.side_path(old), M.side_path(new)
     if contained(destination, source) or contained(new, source) then return nil, 'move target inside source side directory' end
     if source == destination and o.side_exists ~= o.target_side_exists then return nil, 'inconsistent shared side observation' end
-    if o.destination_registered or (source ~= destination and o.target_side_exists) then return nil, 'occupied move destination' end
+    if o.destination_registered == true or (source ~= destination and o.target_side_exists) then return nil, 'occupied move destination' end
     local count, markdown, seen, entries = 0, 0, {}, {}
     for index, entry in pairs(o.entries) do
         count = count + 1
@@ -246,5 +249,59 @@ function M.project(old, new, observations)
     end
     result.effects[#result.effects + 1] = { kind = 'rename_metadata', id = o.id, old = old, new = new }
     return result
+end
+
+-- #359: a move asks Couch nothing before it happens, except an overwrite of an
+-- existing file. Couch's own rename refuses an occupied destination, and the
+-- no-replace file rename guards NEW's bytes, so what parley already knows
+-- decides. The operator sees one of five actions: nothing, run again, reopen,
+-- forget and reopen, rename back.
+M.MOVE_TEXT = {
+    identity = "move not confirmed: Couch hasn't confirmed this document yet; nothing moved. Run the move again",
+    legacy = 'move not confirmed: registering this document first; nothing moved. Run the move again',
+    confirming = 'moving: confirming with Couch',
+    background = 'move not confirmed: finishing in the background',
+    pending = 'move pending: reopen to recover',
+}
+
+--- What a move may do without waiting. known: identity (a registration,
+--- 'plain' when positively absent, or 'unknown'), legacy (a session-sync owner
+--- or nil), new_exists, overwrite (`:saveas!`). PURE.
+function M.move_preflight(known)
+    local identity = known.identity
+    if type(identity) == 'table' then
+        if known.new_exists and known.overwrite then return { wait_destination = true } end
+        return { proceed = true }
+    end
+    if known.legacy then return { refuse = 'legacy', register = true, message = M.MOVE_TEXT.legacy } end
+    if identity == 'plain' then return { plain = true } end
+    return { refuse = 'identity', lookup = true, message = M.MOVE_TEXT.identity }
+end
+
+-- A path the shell reads back as itself, so the printed command pastes as is.
+local function shell_word(path)
+    if path:match('^[%w%./_%-~+,:@]+$') then return path end
+    return "'" .. path:gsub("'", "'\\''") .. "'"
+end
+
+--- The operator's view of a move once it began. outcome: moved (the journal's
+--- document_moved step), new_path, overdue (past the submit deadline), result
+--- (the metadata rename's reply, nil while out). PURE.
+function M.move_outcome(outcome)
+    local result = outcome.result
+    if result and result.kind == 'registered' then return { state = 'done', band = '', action = 'none' } end
+    if outcome.moved and not result then
+        if outcome.overdue then
+            return { state = 'background', band = M.MOVE_TEXT.background, action = 'none', warning = true }
+        end
+        return { state = 'confirming', band = M.MOVE_TEXT.confirming, action = 'none' }
+    end
+    if outcome.moved and result.code == 'target-conflict' then
+        -- NEW is named once, in the command, so the line stays short enough
+        -- for the band; the notification carries it uncut.
+        return { state = 'conflict', action = 'forget', band = ('move not confirmed: the destination is registered to'
+            .. ' another document. Run: couch --session-sync forget %s, then reopen'):format(shell_word(outcome.new_path)) }
+    end
+    return { state = 'pending', band = M.MOVE_TEXT.pending, action = 'reopen' }
 end
 return M
