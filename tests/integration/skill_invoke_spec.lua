@@ -98,6 +98,29 @@ describe("skill_invoke.invoke", function()
         remove_fixture_dir(tmpdir)
     end)
 
+    for _, target in ipairs({ 'alpha', 'secret', 'alpha\n# Chat', 'alpha\n' }) do
+        it('enforces the invocation-owned local edit permission for ' .. target, function()
+            local original = { '---', 'collaboration-mode: {chat: [Chat]}', '---', '# Notes', 'alpha', '# Chat', 'secret' }
+            vim.fn.writefile(original, path)
+            vim.cmd('edit!')
+            parley.dispatcher.query = function(_, _, _, _, on_exit)
+                tasker.set_query('qid_test', { raw_response = propose_edits_sse({
+                    { old_string = target, new_string = 'CHANGED', explain = 'test' },
+                }) })
+                vim.schedule(function() on_exit('qid_test') end)
+            end
+            skill_invoke.invoke(buf, manifest(), {}, {
+                validate_edits = require('parley.skills.review.collaboration').validate_edits,
+                on_done = function(result) done_result = result end,
+            })
+            assert.is_true(vim.wait(5000, function() return done_result ~= nil end))
+            local expected = vim.deepcopy(original)
+            if target == 'alpha' then expected[5] = 'CHANGED' end
+            assert.same(expected, vim.fn.readfile(path))
+            assert.equals(target == 'alpha', done_result.ok)
+        end)
+    end
+
     for _,denied in ipairs({'admit','finish','observation'})do
         it('obeys pure model rejection of '..denied,function()
             local Model=require('parley.skill_source_read');local transition=Model.transition

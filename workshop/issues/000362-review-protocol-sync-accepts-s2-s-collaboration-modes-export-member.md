@@ -47,10 +47,10 @@ S2 M1 (ops `universal-agent-input-interface/design.side/01-s2-section-modes.md`,
 
 ## Plan
 
-Approved local-adapter correction: see [implementation plan](../plans/000362-local-collaboration-plan.md).
+Approved local-adapter correction: see [implementation plan](../plans/000362-review-protocol-sync-accepts-s2-s-collaboration-modes-export-member-plan.md).
 
-- [ ] Implement pure collaboration frontmatter/section resolution and protected chat ranges.
-- [ ] Add local admission/notices and a proposal guard; test default questions, explicit collaboration/chat, invalid routing and resubmission.
+- [x] Implement pure collaboration frontmatter/section resolution and protected chat ranges.
+- [x] Add local admission/notices and a proposal guard; test default questions, explicit collaboration/chat, invalid routing and resubmission.
 - [ ] Update the local adapter/docs and re-run full verification and close review.
 
 - [x] Extend pure validation/rendering for an optional singleton at the fixed
@@ -156,6 +156,31 @@ explanations only, and an empty batch offers no round-summary channel.
 This needs section/frontmatter resolution and pre-generation admission, beyond
 mere snapshot composition. The design owner explicitly says to wait for the
 TL's policy decision. No implementation of this proposal has begun.
+
+### 2026-10-16 — approved local correction implemented
+
+BR-1: added pure collaboration value/section resolution, pre-generation notices
+and chat-aware admission/resubmission. Default discussion and explicit
+collaboration answer in place. All-chat rounds skip generation even with a
+selected review mode. Unknown/conflicting routing refuses before prompting or
+writing, and invalid review+routing values report both errors. Chat headings,
+content and boundary newlines plus frontmatter are protected by an
+invocation-owned proposal validator before tool effects; generated canonical
+files remain unchanged. No new IO/baseline/side-doc resources.
+
+Red evidence: /tmp/parley-362-admission-red.log has three admission failures;
+/tmp/parley-362-guard-red.log has both forbidden-chat proposals changing disk.
+Green: mapped modes/review passes, including 12 value-parser tests, five resolver
+tests and 24 local-driver cases; real asynchronous tool integration passes all
+48 cases in /tmp/parley-362-guard-final.log, including chat-only, crossing and
+newline-deletion rejection with an allowed ordinary edit control. All changed
+Lua files lint clean and pinned export --check/git diff --check pass.
+
+ARCH-PURE/DRY/PURPOSE: one routing result supplies notices, eligibility and
+permission; parser handles only this frontmatter field, using the existing
+quoted scalar/boundary helpers. No external YAML process/dependency. Readable
+canonical forms are supported; unsupported YAML shapes refuse explicitly.
+Plan uses the canonical issue-slug filename named by change-code.
 
 ## Revisions
 

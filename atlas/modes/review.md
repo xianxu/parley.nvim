@@ -220,6 +220,29 @@ are not exported. `local-adapter.md` stays Parley-owned and is appended last.
 The Couch file-edit adapter is excluded from local composition. The mapped
 bundle fixture tests exercise deterministic output and validation failures.
 
+### Local collaboration compatibility
+
+`review/collaboration_value.lua` decodes the collaboration-mode field's scalar,
+block/flow map and heading-list forms without a runtime YAML dependency.
+Unsupported YAML constructs and malformed values refuse visibly. The pure
+`review/collaboration.lua` resolver handles normalized heading names, repeated
+headings, ATX levels 1–6, fenced code, nearest named ancestors and dangling-name
+warnings. Unknown modes and cross-mode heading conflicts refuse before local
+generation; review_send also checks them before prompting for an instruction.
+
+`review.run_via_invoke` uses that plan for admission and resubmission, excluding
+chat markers. Discussion/default and collaboration answer in place; chat
+sections are skipped. Deterministic vim.notify notices report in-place routing
+and that the hub agent answers chat, including all-chat/no-marker rounds. A
+whole-document review mode can still review eligible non-chat text without
+markers. The invocation-owned validate_edits hook rejects a proposed edit that
+touches chat bytes, their boundary newlines or frontmatter before tool execution.
+Other skills preserve their existing behavior when no validator is supplied.
+
+The local adapter overrides shared discussion routing explicitly. Side-doc and
+chat answer creation, cross-file folds/actions and previous-read baselines
+remain with the agent-side skill; local review creates none of those resources.
+
 ## Journal
 
 Each review round is recorded to a Markdown sidecar beside the document,

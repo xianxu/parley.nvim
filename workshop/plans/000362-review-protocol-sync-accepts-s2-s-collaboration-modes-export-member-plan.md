@@ -34,26 +34,26 @@ ARCH-DRY/PURE: one resolver supplies notices, admission, resubmission and edit p
 
 ### Pure values and routing
 
-- [ ] Write failing unit tests in tests/unit/review_collaboration_spec.lua for absent/scalar/block/flow values, quoted names/comments, nested inheritance, levels 4–6, duplicate headings, fences, unknown/default/key modes, normalized conflicts and unmatched-name warnings.
-- [ ] Run through make test-spec SPEC=modes/review (add the test to its mapping if needed); confirm missing implementation fails.
-- [ ] Implement collaboration_value.parse(lines) and collaboration.resolve(lines), returning a plan or diagnostic. Each row maps to a mode; the result lists chat section names, discussion presence, warnings and whether any editable body exists.
-- [ ] Test proposal spans: editable only passes, chat-only and crossing replacements refuse, no-op/empty batches remain subject to existing tool validation, frontmatter edits refuse.
-- [ ] Run focused unit tests and commit.
+- [x] Write failing unit tests in tests/unit/review_collaboration_spec.lua for absent/scalar/block/flow values, quoted names/comments, nested inheritance, levels 4–6, duplicate headings, fences, unknown/default/key modes, normalized conflicts and unmatched-name warnings.
+- [x] Run through make test-spec SPEC=modes/review (add the test to its mapping if needed); confirm missing implementation fails.
+- [x] Implement collaboration_value.parse(lines) and collaboration.resolve(lines), returning a plan or diagnostic. Each row maps to a mode; the result lists chat section names, discussion presence, warnings and whether any editable body exists.
+- [x] Test proposal spans: editable only passes, chat-only and crossing replacements refuse, no-op/empty batches remain subject to existing tool validation, frontmatter edits refuse.
+- [x] Run focused unit tests and commit.
 
 ### Local driver and tool seam
 
-- [ ] Add regressions to tests/integration/review_send_spec.lua and tests/integration/skill_invoke_review_spec.lua for default questions, explicit collaboration, mixed chat/normal, all-chat and no-marker notices, malformed routing, and non-chat resubmission counting.
-- [ ] Use existing stateful fake provider/tool filesystem seams for a response attempting a forbidden chat edit; prove no write. Exercise a normal edit in the same mixed document.
-- [ ] Resolve routing at run_via_invoke before marker admission. Notify once on the user-triggered round: discussion answered in place, chat sections skipped because the hub agent answers chat, plus unmatched-name warnings. Empty/all-chat or marker-only with no eligible ready markers generates nothing.
-- [ ] Attach an optional validate_edits hook to invocation options, consulted after tool-input normalization and before tool execution. A rejected batch returns a tool error with no effects. The review caller supplies the pure snapshot validator. Other skills have no hook and preserve their behavior.
-- [ ] Filter chat markers from admission and remaining-ready counts. Keep whole-document selected review modes working on eligible sections even without markers. Direct/manual review uses the same admission, not only review_send.
-- [ ] Update the Parley-owned local adapter: local in-place collaboration interpretation overrides imported discussion routing; chat content is immutable; no cross-file actions, side docs or fabricated baseline; notices are already emitted by Parley.
-- [ ] Run mapped review tests and targeted invocation tests, then commit.
+- [x] Add regressions to tests/integration/review_send_spec.lua and tests/integration/skill_invoke_review_spec.lua for default questions, explicit collaboration, mixed chat/normal, all-chat and no-marker notices, malformed routing, and non-chat resubmission counting.
+- [x] Use existing stateful fake provider/tool filesystem seams for a response attempting a forbidden chat edit; prove no write. Exercise a normal edit in the same mixed document.
+- [x] Resolve routing at run_via_invoke before marker admission. Notify once on the user-triggered round: discussion answered in place, chat sections skipped because the hub agent answers chat, plus unmatched-name warnings. Empty/all-chat or marker-only with no eligible ready markers generates nothing.
+- [x] Attach an optional validate_edits hook to invocation options, consulted after tool-input normalization and before tool execution. A rejected batch returns a tool error with no effects. The review caller supplies the pure snapshot validator. Other skills have no hook and preserve their behavior.
+- [x] Filter chat markers from admission and remaining-ready counts. Keep whole-document selected review modes working on eligible sections even without markers. Direct/manual review uses the same admission, not only review_send.
+- [x] Update the Parley-owned local adapter: local in-place collaboration interpretation overrides imported discussion routing; chat content is immutable; no cross-file actions, side docs or fabricated baseline; notices are already emitted by Parley.
+- [x] Run mapped review tests and targeted invocation tests, then commit.
 
 ### Verification and landing
 
-- [ ] Document the local behavior and limitations in README and atlas/modes/review.md; retain BR-1/BR-2 dispositions and lessons in the issue Log.
-- [ ] Exact pinned-source --check must still pass; generated canonical files stay unchanged by the compatibility correction.
+- [x] Document the local behavior and limitations in README and atlas/modes/review.md; retain BR-1/BR-2 dispositions and lessons in the issue Log.
+- [x] Exact pinned-source --check must still pass; generated canonical files stay unchanged by the compatibility correction.
 - [ ] Push the code head and run sdlc local-check run --name suite; retain any failure and apply the issue-backed one-retry rule.
 - [ ] Run sdlc close with explicit focused/full-suite evidence. Its binary-owned full review checks the enlarged diff; no separate boundary review.
 - [ ] On SHIP run sdlc pr and sdlc merge --yes, verify the merge with Git and report to the hub. No multi-file/baseline work belongs in this issue.

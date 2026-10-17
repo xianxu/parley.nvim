@@ -586,7 +586,24 @@ M.run_via_invoke = function(buf, args, resubmit_count)
     -- the on-save quickfix), but if they're the only markers and no mode is set
     -- there's nothing to process.
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local markers = M.parse_markers(lines)
+    local collaboration = require('parley.skills.review.collaboration')
+    local routing, routing_error = collaboration.resolve(lines)
+    if not routing then
+        vim.notify('review: ' .. routing_error, vim.log.levels.ERROR)
+        return
+    end
+    if resubmit_count == 0 then
+        if routing.discussion then
+            vim.notify('review: answered in place: discussion routing needs Couch', vim.log.levels.INFO)
+        end
+        if #routing.chat > 0 then
+            vim.notify('review: chat section(s) ' .. table.concat(routing.chat, ', ')
+                .. ' skipped: the hub agent answers chat', vim.log.levels.INFO)
+        end
+        for _, warning in ipairs(routing.warnings) do vim.notify('review: ' .. warning, vim.log.levels.WARN) end
+    end
+    if not routing.editable then return end
+    local markers = collaboration.eligible(routing, M.parse_markers(lines))
     local has_mode = #M.mode_names(args) > 0
     local ready_count_before = count_ready(markers)
     if not has_mode then
@@ -636,6 +653,7 @@ M.run_via_invoke = function(buf, args, resubmit_count)
 
     require("parley.skill_invoke").invoke(buf, manifest, args, {
         manual = true,
+        validate_edits = collaboration.validate_edits,
         on_done = function(result)
             if not result or not result.ok then
                 projection.set_applying(buf, false)
@@ -684,7 +702,10 @@ M.run_via_invoke = function(buf, args, resubmit_count)
             -- one-shot — it may legitimately INSERT `{}` findings (fact-check),
             -- which is not "stuck"; a `{}`-only / non-shrinking remainder ends the
             -- round cleanly. Pending `{}` markers surface via the on-save quickfix.
-            local remaining = M.parse_markers(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+            local after_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            local after_routing = collaboration.resolve(after_lines)
+            if not after_routing then return end
+            local remaining = collaboration.eligible(after_routing, M.parse_markers(after_lines))
             if #remaining == 0 then
                 parley.logger.info("Review: all comments addressed")
                 return

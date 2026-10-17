@@ -82,6 +82,11 @@ reads the file's `process-instruction:` and changes since its last read.
 Outside Couch, the same shortcut runs Parley's inline review using the bundled
 canonical round, marker grammar, collaboration modes (when exported) and review
 modes with its local editing tool.
+Local review answers discussion (the default) and collaboration in place.
+It leaves chat sections untouched and reports that the hub agent answers chat.
+Unknown collaboration modes or conflicting heading assignments stop the round.
+Side documents, chat answer files and changes since the last read remain with
+the agent-side skill in Couch.
 
 Press **Alt+Shift+O** in Normal or Insert mode to return to the previous file
 in the current window, restoring its cursor position. Follow links with Alt+o,

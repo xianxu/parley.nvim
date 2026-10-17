@@ -90,7 +90,8 @@ end
 --- @param manifest table SkillManifest
 --- @param args table|nil completable-arg values
 --- @param opts table|nil { manual=boolean?, no_reload=boolean?, document=string?,
----   detached_progress=boolean?, on_terminal=fun(result)?, on_done=fun(result)? }
+---   detached_progress=boolean?, validate_edits=fun(snapshot, edits):string?,
+---   on_terminal=fun(result)?, on_done=fun(result)? }
 function M.invoke(buf, manifest, args, opts)
     opts = opts or {}
     local manual = opts.manual
@@ -577,6 +578,13 @@ function M.invoke(buf, manifest, args, opts)
                                 end
                             end
                         end
+                        local denied = call.name == 'propose_edits' and opts.validate_edits
+                            and opts.validate_edits(original, call.input.edits)
+                        if denied then
+                            results[i] = { is_error = true, content = denied, name = call.name }
+                            remaining = remaining - 1
+                            joined()
+                        else
                         local item={}
                         tool_producer.start(call,{epoch='skill:'..tostring(buf),generation=gen,round='1',attempt=qid},{
                             outcome=function(kind,result)
@@ -589,6 +597,7 @@ function M.invoke(buf, manifest, args, opts)
                                 if item.kind~='known' then uncertain=true end
                                 joined()
                             end})
+                        end
                         if read_state.logical then break end
                     end
                 end
