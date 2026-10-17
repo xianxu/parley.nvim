@@ -125,7 +125,7 @@ Generated fixture trees are a fixed shipped snapshot replaced by a deliberate sy
 - [x] Load every exported fixture group through manifest metadata, parse the bounded `move: OLD NEW` operation from case.md, project its before tree, and compare the complete path→bytes result to after. Run both fixtures without fixtures-specific expected strings. Include `_1` occupied → `_2` and empty-directory cases in supplemental local tests.
 - [x] Implement/test `document_move_state.initial`, `restore`, and `step` with generated reordered/duplicated/stale event sequences; preservation and legal-phase invariants are the oracle, with the single-writer architecture guard enforced when M2 connects the adapter.
 - [x] Use a temporary make target following Makefile.parley's `PREP_TEST_ENV`/`TEST_RUN`/orphan/sentinel recipe for the two pure specs; run serially. Confirm old projection fails the shared cases, then green.
-- [ ] Complete recorded full-suite verification and `sdlc milestone-close --issue 373 --milestone M1`; address findings before M2. The contract candidate and atlas updates are prepared.
+- [x] Complete recorded full-suite verification and `sdlc milestone-close --issue 373 --milestone M1`; address findings before M2. The contract candidate and atlas updates are prepared.
 
 ## M2 — Journal, editor handoff and acceptance boundary
 
