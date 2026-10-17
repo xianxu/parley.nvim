@@ -73,13 +73,18 @@ end)
 -- here so the case does not depend on winning that race.
 describe("ready_port.is_listening", function()
     local uv = vim.uv or vim.loop
-    local real_connect = ready_port._connect
+    local SEAMS = { "_connect", "_has_listener", "_run_lsof", "_lsof_present" }
+    local real = {}
+    for _, name in ipairs(SEAMS) do real[name] = ready_port[name] end
 
     after_each(function()
-        ready_port._connect = real_connect
+        for _, name in ipairs(SEAMS) do ready_port[name] = real[name] end
     end)
 
     it("rejects a connect that completed with nothing listening", function()
+        if not ready_port._lsof_present() then
+            return pending("needs lsof to confirm the listener")
+        end
         local port = ready_port.free_port()
         ready_port._connect = function() return true end
         assert.is_false(ready_port.is_listening(port))
@@ -97,11 +102,38 @@ describe("ready_port.is_listening", function()
     end)
 
     it("never runs lsof while the port still refuses", function()
-        local real_has = ready_port._has_listener
         local calls = 0
-        ready_port._has_listener = function(p) calls = calls + 1; return real_has(p) end
+        ready_port._has_listener = function(p) calls = calls + 1; return real._has_listener(p) end
         assert.is_false(ready_port.wait_listening(ready_port.free_port(), 200))
-        ready_port._has_listener = real_has
         assert.equals(0, calls)
+    end)
+
+    it("lets the connect stand alone where lsof is absent", function()
+        ready_port._connect = function() return true end
+        ready_port._has_listener = function() return nil end
+        ready_port._lsof_present = function() return false end
+        assert.is_true(ready_port.is_listening(1))
+    end)
+
+    it("treats an lsof that is present but cannot answer as unconfirmed", function()
+        ready_port._connect = function() return true end
+        ready_port._has_listener = function() return nil end
+        ready_port._lsof_present = function() return true end
+        assert.is_false(ready_port.is_listening(1))
+    end)
+
+    it("reads each lsof exit shape", function()
+        local cases = {
+            { res = { code = 0, stdout = "4242\n" }, want = true },
+            { res = { code = 0, stdout = "" }, want = false },
+            { res = { code = 1, stdout = "" }, want = false },
+            { res = { code = 124, stdout = "" }, want = nil }, -- hung past the guard
+            { res = { code = 2, stdout = "" }, want = nil },   -- lsof itself failed
+            { res = nil, want = nil },                          -- could not run
+        }
+        for i, c in ipairs(cases) do
+            ready_port._run_lsof = function() return c.res end
+            assert.equals(c.want, ready_port._has_listener(1), "case " .. i)
+        end
     end)
 end)

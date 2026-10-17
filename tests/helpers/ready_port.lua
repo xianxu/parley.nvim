@@ -95,27 +95,47 @@ function M._connect(port)
     return ok
 end
 
--- Bound on the confirming lsof: it is slow under suite load, and an answer
--- that never comes is "unconfirmed", never "listening".
-local LSOF_TIMEOUT_MS = 2000
+-- Hang guard on the confirming lsof. Generous, like cliproxy's LSOF_GUARD_MS
+-- (#345 measured lsof past 2 s under the 8-way suite): a cutoff below what a
+-- loaded lsof needs turns a fake that is up into a readiness timeout. It does
+-- not eat wait_listening's budget either: vim.wait checks its deadline only
+-- between polls, so a confirm that started always finishes with an answer.
+local LSOF_TIMEOUT_MS = 10000
 
---- Does a socket in LISTEN state hold the port? nil when lsof can't say
---- (absent, refused or too slow).
+--- Run the listener query. Replaceable so a spec can pin each exit shape.
 --- @param port number
---- @return boolean|nil
-function M._has_listener(port)
+--- @return table|nil vim.system result, nil when it could not run
+function M._run_lsof(port)
     local ok, res = pcall(function()
         return vim.system({ "lsof", "-nP", "-iTCP:" .. port, "-sTCP:LISTEN", "-t" },
             { text = true, timeout = LSOF_TIMEOUT_MS }):wait()
     end)
-    if not ok or res.code == 124 then
+    return ok and res or nil
+end
+
+--- Is lsof installed here? Replaceable for the same reason.
+--- @return boolean
+function M._lsof_present()
+    return vim.fn.executable("lsof") == 1
+end
+
+--- Does a socket in LISTEN state hold the port? nil when lsof can't say
+--- (absent, refused or hung past its guard).
+--- @param port number
+--- @return boolean|nil
+function M._has_listener(port)
+    local res = M._run_lsof(port)
+    if not res or res.code == 124 then
         return nil
     end
     if res.code == 0 then
         return (res.stdout or ""):match("%d") ~= nil
     end
     -- lsof exits 1 for "no such socket"; anything else is lsof failing.
-    return res.code == 1 and false or nil
+    if res.code == 1 then
+        return false
+    end
+    return nil
 end
 
 --- Is something accepting connections on this port right now? One attempt, no
@@ -128,7 +148,8 @@ end
 --- fetches in 240. So a connect is confirmed by a LISTEN socket on the port.
 --- The lsof runs only after a connect succeeds, so polling a port that is
 --- still refusing costs nothing extra. Where lsof is absent the connect stands
---- alone, as before.
+--- alone, as before; where it is present but cannot answer, the connect is
+--- unconfirmed.
 --- @param port number
 --- @return boolean
 function M.is_listening(port)
@@ -137,7 +158,7 @@ function M.is_listening(port)
     end
     local listener = M._has_listener(port)
     if listener == nil then
-        return vim.fn.executable("lsof") == 0
+        return not M._lsof_present()
     end
     return listener
 end
