@@ -553,6 +553,12 @@ def main():
     # under load (#343).
     if os.environ.get("PARLEY_FAKE_IGNORE_SIGTERM") == "1":
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    # PARLEY_FAKE_BIND_DELAY_MS: start serving this much later, so a spec can hold
+    # open the window between spawn and listen that a false-positive readiness
+    # probe falls into (#360, #361) instead of racing for it.
+    bind_delay_ms = int(os.environ.get("PARLEY_FAKE_BIND_DELAY_MS") or "0")
+    if bind_delay_ms > 0:
+        time.sleep(min(bind_delay_ms, 10000) / 1000.0)
     LoopbackHTTPServer(("127.0.0.1", port), Handler).serve_forever()
 
 

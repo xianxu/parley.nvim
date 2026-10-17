@@ -1,12 +1,20 @@
 ---
 id: 000361
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-16
-updated: 2026-10-16
+updated: 2026-10-17
 estimate_hours:
-card_mirror: 'd5bd45bdce69dee55b9a5a4f1e90f8de3be6f86d' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a6ec29171edf4a09a6c807922171ebab333400a3' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-17T02:19:20-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Cliproxy expired-token recovery intermittently retries instead of prompting
@@ -31,8 +39,22 @@ Determine why an expired-channel fake credential can take the retry branch under
 
 ## Plan
 
-- [ ]
+- [x] Reproduce both variants by holding the readiness window open.
+- [x] `ready_port.require_listening` fails by name; `wait_listening` is `---@nodiscard`.
+- [x] Switch the 37 calls that dropped the answer (lifecycle 26, update 9, recovery_e2e, auth_login, fake_releases).
+- [x] `nodiscard_spec` checks spec-side helper members across `tests/`.
+- [x] Forced-window regression in `cliproxy_auth_login_spec` (`PARLEY_FAKE_BIND_DELAY_MS` plus a staged connect).
+- [ ] Full suite, close.
 
 ## Log
 
 Filed under the test-economy flake rule after one failed full run and one same-head focused pass; root cause not yet established. No production fix or waiver claimed.
+
+### 2026-10-17 — root cause: the #360 readiness false positive, with the answer dropped
+
+- Same mechanism as #360. `serve()` waited with `ready_port.wait_listening`, but a crossing connect could report ready before the fake bound, and `serve()` ignored the answer anyway. `recover` then read the management API of a fake that was not listening yet.
+- Forced-window reproduction: a scratch copy of the two cases, recovering a fixed time after spawn with no readiness wait. At 0 ms there was no prompt (the line-149 variant, give_up with nothing to offer); at 40 and 80 ms it settled `retry` (the line-128 variant); from 120 ms on it passed. Both logged variants are this one window.
+- Fix: #360 (landed, 775246fb) removed the false positive. Here every caller asserts readiness. `require_listening` raises "fake never came up on port N (waited Xms)", and the 37 callers that dropped the answer use it. I checked each: every one waits for a fake it just started.
+- Guard (ARCH-DRY: the existing `nodiscard_spec`, not a second sweep): `wait_listening` is `---@nodiscard`, and the spec now reads annotations from `tests/helpers/*.lua` and checks calls across `tests/`. In spec files it enforces only helper members: specs' own setup ignores product results like `custom_prompts.set` on purpose (18 such calls), and that is a separate question. Mutation: one bare `wait_listening` put back is flagged by file and line.
+- Regression: "waits out a readiness probe that a crossing connect fooled" stages `_connect` as succeeding and has the fake bind 300 ms late (new `PARLEY_FAKE_BIND_DELAY_MS`, capped at 10 s), and must settle give_up with the claude prompt. Mutation: dropping the LISTEN confirm fails it at line 160. Unit cases: `require_listening` raises by name, and returns for a real listener.
+- Focused: ready_port 14/14, nodiscard 2/2, lifecycle 66/66, update 40/40, recovery_e2e 6/6, auth_login 23/23, fixture_lifecycle 4/4.

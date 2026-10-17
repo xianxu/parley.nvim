@@ -47,7 +47,7 @@ describe("cliproxy.recover", function()
 
     -- Start the fake with a credential store, optionally overlaying a broken
     -- state onto the claude channel, and point parley's endpoint at it.
-    local function serve(overlays)
+    local function serve(overlays, env)
         local port = ready_port.free_port()
         local store = vim.fn.tempname()
         vim.fn.mkdir(store, "p")
@@ -64,9 +64,9 @@ describe("cliproxy.recover", function()
             port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" },
             ["remote-management"] = { ["secret-key"] = cliproxy.management_key() },
         }) }, cfg_file)
-        local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file })
+        local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file }, env)
         assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
-        ready_port.wait_listening(port)
+        ready_port.require_listening(port)
         parley.dispatcher = parley.dispatcher or {}
         parley.dispatcher.providers = parley.dispatcher.providers or {}
         parley.dispatcher.providers.cliproxyapi = {
@@ -136,6 +136,29 @@ describe("cliproxy.recover", function()
         -- this is what replaced "cliproxyapi response is empty: body_bytes=215".
         assert.matches("me@example.com", out.message)
         assert.matches("expired", out.message)
+    end)
+
+    it("waits out a readiness probe that a crossing connect fooled (#360, #361)", function()
+        -- Both logged #361 variants came from recovering against a fake that
+        -- was not listening yet: 0 ms into that window loses the prompt, 40-80
+        -- ms settles retry where give_up was due (measured). Here the window is
+        -- held open (the fake binds 300 ms late) and the probe's connect is
+        -- staged to succeed, as a simultaneous open between parallel probes
+        -- does. Readiness must still wait for the real listener.
+        local real_connect = ready_port._connect
+        ready_port._connect = function() return true end
+        local ok, err = pcall(serve, { claude = { unavailable = true, status_message = "dead" } },
+            { PARLEY_FAKE_BIND_DELAY_MS = "300" })
+        ready_port._connect = real_connect
+        assert(ok, err)
+        local prompt
+        vim.ui.select = function(_items, opts, cb)
+            prompt = opts.prompt
+            cb(nil, 2)
+        end
+        local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8", attempt = 0 })
+        assert.equals("give_up", out.settled)
+        assert.is_truthy(prompt)
     end)
 
     it("prompts the claude login resolved from oauth-model-alias, not the model name", function()

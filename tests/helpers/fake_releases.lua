@@ -39,7 +39,7 @@ function M.start(mode)
     end
     local handle, _, err = fixture_process.spawn(SERVER, args)
     assert(handle, "failed to start fake_github_releases: " .. tostring(err))
-    ready_port.wait_listening(port)
+    ready_port.require_listening(port)
     local server = {
         root = root,
         port = port,
