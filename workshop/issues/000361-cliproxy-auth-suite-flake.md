@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "4ace9bce", done: "e3120362"}
 ---
 
 # Cliproxy expired-token recovery intermittently retries instead of prompting
