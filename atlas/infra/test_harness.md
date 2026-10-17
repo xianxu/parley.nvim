@@ -157,6 +157,15 @@ via `PARLEY_PUBLISH_DELAY` and asserts the ready path is never observable
 incomplete — and asserts the delay was honored, so the hook cannot be deleted to
 make it pass. Neither has a race to win.
 
+Fixtures given a fixed `--port` (picked by `ready_port.free_port`) are waited on
+with `ready_port.wait_listening`, never a hand-rolled connect loop. A completed
+connect is not proof of a listener (#360): the freed number goes back to the
+kernel's ephemeral pool, a parallel spec's probe can take it as a source port,
+and two crossing probes complete a TCP simultaneous open with nothing
+listening. So `is_listening` confirms a connect with a LISTEN socket on the
+port (`lsof`, bounded, run only after a connect succeeds). `ready_port_spec`
+stages that false positive through the `_connect` seam.
+
 ## Process lifecycle
 
 Every process a test creates has an owner and an end. The layers are placed at
