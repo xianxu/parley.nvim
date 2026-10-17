@@ -46,7 +46,7 @@ describe('installed launcher', function()
             'local uv = vim.uv or vim.loop',
             'local function pause()',
             '  vim.fn.writefile({ tostring(uv.os_getpid()) }, vim.env.TEST_READY)',
-            '  assert(vim.wait(arrival.MS, function() return vim.fn.filereadable(vim.env.TEST_PROCEED) == 1 end, 10), "barrier timed out")',
+            '  assert(vim.wait(' .. arrival.MS .. ', function() return vim.fn.filereadable(vim.env.TEST_PROCEED) == 1 end, 10), "barrier timed out")',
             'end',
             operation == 'owner' and 'local write = vim.fn.writefile; vim.fn.writefile = function(lines, path, ...)' or
                 'local link = uv.fs_link; uv.fs_link = function(...) pause(); return link(...) end',

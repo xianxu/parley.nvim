@@ -321,6 +321,21 @@ processes one 1MB mcode area (catastrophic on the old allocator, so gated).
 `PARLEY_TEST_JITSTAT=1 make test` prints each spec process's LuaJIT VM states
 and trace flushes (`tests/helpers/jit_watch.lua`), grandchildren included.
 
+### Positive waits take the arrival budget (#370, #374)
+
+A positive wait (`assert(vim.wait(…))`, `assert.is_true(…)`, `assert.truthy(…)`)
+returns the moment its outcome arrives, so its bound costs a passing run
+nothing; a short literal only turns suite load into a flake. Each one is bounded
+by `tests/helpers/arrival.lua`'s `MS` (15 s, the product's longest round-trip
+deadline), or by a product deadline the spec observes (session_sync_spec uses
+`agentic_submit_timeout_ms`). Absence checks keep short fixed waits, where the
+bound is the test's cost. A wait whose bound is the property under test keeps its
+literal with a trailing `-- bound: <reason>`. `tests/arch/arrival_budget_spec.lua`
+refuses any other literal in `tests/unit` and `tests/integration`; it reads the
+three assert forms, so a wait assigned to a local and asserted later is out of
+its reach. The cost: a broken case now takes up to 15 s to report its first
+failed wait.
+
 ### Waiting on work that converges (#293)
 
 `tests/helpers/await.lua` `until_progress(predicate, progress, stall_ms, ceiling_ms)`
