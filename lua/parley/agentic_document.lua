@@ -100,6 +100,14 @@ local function completed(s, callback)
     end
 end
 
+-- A deadline from the operator's config, else the shipped default (config.lua
+-- is the one place the numbers live).
+local function config_ms(key)
+    local value = (require("parley").config or {})[key]
+    if type(value) == "number" and value > 0 then return value end
+    return require("parley.config")[key]
+end
+
 local function band(s, message, highlight)
     if message == "" then s.renderer.clear()
     else s.renderer.render({ label = message, hl = highlight or "WarningMsg" }) end
@@ -123,9 +131,29 @@ local function clear_feedback(s)
     band(s, s.model.snapshot().phase == "unknown" and "Couch unavailable: agentic state unknown" or "")
 end
 
+-- forward declaration: show_move is defined below, used by moving_metadata.
+local show_move
+
+-- document_move's metadata step for an owned move or rename: hand the rename
+-- to the model, then show it confirming, and finishing in the background past
+-- the submit deadline (#359, rows 1 and 5).
+local function moving_metadata(s, moving)
+    return function(_, cb)
+        moving.metadata_done = cb
+        dispatch(s, { type = "moved", witness = moving.witness, ok = true })
+        if s.move ~= moving then return end
+        show_move(s, moving)
+        vim.defer_fn(function()
+            if states[s.buf] ~= s or s.move ~= moving or moving.answered then return end
+            moving.overdue = true
+            show_move(s, moving)
+        end, config_ms("agentic_submit_timeout_ms"))
+    end
+end
+
 -- What the operator sees of a move once its document moved (#359): the plan's
 -- state table, one row at a time, through the submit feedback surface.
-local function show_move(s, moving, result)
+show_move = function(s, moving, result)
     local view = require("parley.document_move_plan").move_outcome({ moved = true, new_path = moving.new_path,
         overdue = moving.overdue, result = result })
     -- session_sync holds its winbar still while it is moving, so the band
@@ -200,13 +228,6 @@ local function adopt(s, registration)
     cache(s, registration)
 end
 
--- A deadline from the operator's config, else the shipped default (config.lua
--- is the one place the numbers live).
-local function config_ms(key)
-    local value = (require("parley").config or {})[key]
-    if type(value) == "number" and value > 0 then return value end
-    return require("parley.config")[key]
-end
 
 -- #357: one submit at a time per document, from the press to its outcome. The
 -- editor never waits on it; past the deadline the band says so and offers the
@@ -567,6 +588,11 @@ local function ask_in_background(ns, key, loaded, operation, owner)
         if result.kind == "registered" then
             answered[slot] = nil
             cache({ namespace = ns, path = key }, result.registration)
+            -- A loaded buffer adopts it, so its rename's rerun sees the identity.
+            if loaded and states[loaded.buf] == loaded and valid(loaded) and not loaded.model.snapshot().operation then
+                reseed(loaded, result.registration)
+                adopt(loaded, result.registration)
+            end
         elseif result.kind == "absent" then answered[slot] = true end
     end, { timeout_ms = config_ms("agentic_submit_timeout_ms") })
 end
@@ -634,17 +660,7 @@ function M.move_path(old_path, new_path)
         document_moved = function()
             return acknowledge_owned_move(s, new_path, moving.content)
         end,
-        metadata = function(_, cb)
-            moving.metadata_done = cb
-            dispatch(s, { type = "moved", witness = moving.witness, ok = true })
-            if s.move ~= moving then return end
-            show_move(s, moving)
-            vim.defer_fn(function()
-                if states[s.buf] ~= s or s.move ~= moving or moving.answered then return end
-                moving.overdue = true
-                show_move(s, moving)
-            end, config_ms("agentic_submit_timeout_ms"))
-        end,
+        metadata = moving_metadata(s, moving),
     })
     if not operation then
         moving.error, moving.journal_pending = err.message, err.kind == "pending"
@@ -765,24 +781,24 @@ install_migration_hooks = function(s)
         end
         local identity = M.identity(s.buf)
         if not identity then
+            -- #359: no wait. What parley knows decides, and a refusal leaves
+            -- the name unchanged while the answer is fetched in the background.
+            local known = known_identity(s.namespace, s.path)
             local legacy = ss.identity(s.buf)
-            local result
-            if legacy then
-                if not legacy.Owner then refuse("legacy document owner unavailable") end
-                result = bounded_request("register", { s.path, legacy.Owner })
-            else
-                result = bounded_request("lookup", { s.path })
-            end
-            if migration_busy(s) then refuse("document operation started during membership confirmation") end
-            if result.kind ~= "registered" and result.kind ~= "absent" then
-                refuse(result.error or "document membership unavailable")
+            if legacy and not legacy.Owner then refuse("legacy document owner unavailable") end
+            local decision = require("parley.document_move_plan").move_preflight({
+                identity = known, legacy = legacy and legacy.Owner })
+            if decision.plain then return end -- positively plain; never registers.
+            if decision.refuse then
+                ask_in_background(s.namespace, s.path, s, decision.register and "register" or "lookup",
+                    legacy and legacy.Owner)
+                refuse(decision.message)
             end
             if s.request then s.request.cancel(); s.request = nil end
             -- New model witnesses must never alias a cancelled open probe.
-            reseed(s, result.registration)
-            if result.kind == "absent" then return end -- positively plain; never registers.
-            adopt(s, result.registration)
-            identity = result.registration
+            reseed(s, known)
+            adopt(s, known)
+            identity = known
         end
         if s.model.snapshot().operation then refuse("document operation is still in progress") end
         local lease, lease_err = require("parley.document_lease").acquire(s.namespace, identity.ID,
@@ -821,23 +837,26 @@ install_migration_hooks = function(s)
             ss.release_if_baseline(s.buf)
             return
         end
-        local target = bounded_request("lookup", { moving.new_path })
-        if target.unconfirmed then
-            -- Neovim already renamed the buffer here, so "run it again" alone
-            -- would not do: renaming back aborts this move (cancel_attempt).
-            moving.error = ("rename not confirmed: Couch did not answer within %d s;"
-                .. " rename back to %s, then run it again"):format(math.ceil(config_ms("agentic_move_timeout_ms") / 1000), moving.old_path)
-            refuse(moving.error)
+        -- Only an overwrite of an existing file asks Couch first (rows 8, 9):
+        -- Neovim writes it before Couch's rename could refuse. Otherwise the
+        -- rename is the authority on NEW (#359).
+        local overwrite = vim.fn.filereadable(moving.new_path) == 1
+        if overwrite then
+            local target = bounded_request("lookup", { moving.new_path })
+            if target.unconfirmed then
+                -- Neovim already renamed the buffer here, so "run it again" alone
+                -- would not do: renaming back aborts this move (cancel_attempt).
+                moving.error = ("rename not confirmed: Couch did not answer within %d s;"
+                    .. " rename back to %s, then run it again"):format(math.ceil(config_ms("agentic_move_timeout_ms") / 1000), moving.old_path)
+                refuse(moving.error)
+            end
+            if target.kind ~= "absent" then moving.error = "destination membership is occupied or unknown"; refuse(moving.error) end
         end
-        if target.kind ~= "absent" then moving.error = "destination membership is occupied or unknown"; refuse(moving.error) end
         local operation, err = require("parley.document_move").begin(s.namespace, moving.identity, moving.new_path, {
-            root = state_root(), lease = moving.lease, destination_registered = false,
+            root = state_root(), lease = moving.lease, destination_registered = overwrite and false or "authority",
             old_lock = moving.token.lock, new_lock = moving.token.lock, baseline = moving.token.baseline,
             install_new = function() return ss.install_move_lock(s.buf, moving.token, moving.new_path) end,
-            metadata = function(_, cb)
-                moving.metadata_done = cb
-                dispatch(s, { type = "moved", witness = moving.witness, ok = true })
-            end,
+            metadata = moving_metadata(s, moving),
         })
         if not operation then moving.error, moving.journal_pending = err.message, err.kind == "pending"; refuse(moving.error) end
         moving.operation = operation

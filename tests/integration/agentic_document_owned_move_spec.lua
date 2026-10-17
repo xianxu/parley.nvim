@@ -297,8 +297,14 @@ describe("registered ordinary Markdown through Parley move doors", function()
         await(function() return document.status(buf).phase == "plain" end)
         assert.equals("absent",lookup(canonical_old).kind)
         local new_path = destination .. "/alias-legacy.md"
-        vim.cmd("saveas " .. vim.fn.fnameescape(new_path))
+        -- #359: the rename refuses at once while the legacy file registers in
+        -- the background (row 4); the rerun renames the registered document.
+        local ok, err = pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(new_path))
+        assert.is_false(ok)
+        assert.truthy(tostring(err):find("registering this document first; nothing moved", 1, true), tostring(err))
+        await(function() return document.identity(buf) ~= nil end)
         assert.same({actual_caller},vim.fn.readfile(registration_argv), "legacy state adoption must receive the actual pre-move buffer path")
+        vim.cmd("saveas " .. vim.fn.fnameescape(new_path))
         await(function() local identity = document.identity(buf); return identity and identity.File == new_path end)
         local confirmed = lookup(new_path)
         assert.equals("registered",confirmed.kind)

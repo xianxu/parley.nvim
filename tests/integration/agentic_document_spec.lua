@@ -193,40 +193,52 @@ describe("agentic markdown admission", function()
             await(function() return document.move_membership(file) == false end)
         end)
 
-        it("a :saveas whose destination check times out says to rename back, and that recovers", function()
+        -- #359: only an overwrite of an existing file asks Couch first; Neovim
+        -- writes it before Couch's rename could refuse (rows 8, 9).
+        it("a :saveas! onto an existing file whose check times out says to rename back, and that recovers (row 9)", function()
             with_timeouts(15000, 500)
             registered()
-            local target = root .. "/renamed.md"
+            local target = root .. "/existing.md"
+            vim.fn.writefile({ "someone else's file" }, target)
             vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
-            local ok, err = pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target))
+            local ok, err = pcall(vim.cmd, "saveas! " .. vim.fn.fnameescape(target))
             assert.is_false(ok)
             assert.truthy(tostring(err):find("rename not confirmed: Couch did not answer within 1 s; rename back to "
                 .. file .. ", then run it again", 1, true), tostring(err))
-            assert.equals(0, vim.fn.filereadable(target))
+            assert.same({ "someone else's file" }, vim.fn.readfile(target))
             vim.env.FAKE_COUCH_REGISTRY_MODE = nil
             assert.is_true(pcall(vim.cmd, "file " .. vim.fn.fnameescape(file)))
             assert.equals(file, document.identity(buf).File)
             config.agentic_move_timeout_ms = 5000
-            assert.is_true(pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target)))
+            assert.is_true(pcall(vim.cmd, "saveas! " .. vim.fn.fnameescape(target)))
             await(function()
                 local identity = document.identity(buf)
                 return identity and identity.File == vim.fn.resolve(target) and not document.status(buf).operation
             end)
         end)
 
-        it("an unregistered document's :saveas preflight times out before anything moved", function()
+        it("a registered :saveas onto an absent file returns at once and lands (row 1)", function()
+            with_timeouts(15000, 500)
+            registered()
+            local target = root .. "/renamed.md"
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            local started = vim.uv.hrtime()
+            assert.is_true(pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target)))
+            assert.is_true((vim.uv.hrtime() - started) / 1e6 < 500, "the rename waited on Couch")
+            await(function()
+                local identity = document.identity(buf)
+                return identity and identity.File == vim.fn.resolve(target) and not document.status(buf).operation
+            end)
+        end)
+
+        it("a plain document's :saveas asks Couch nothing, however slow it is (row 2)", function()
             with_timeouts(15000, 500)
             await(function() return document.status(buf).phase == "plain" end)
             local target = root .. "/plain-renamed.md"
             vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
-            local ok, err = pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target))
-            assert.is_false(ok)
-            assert.truthy(tostring(err):find("move not confirmed: Couch did not answer within 1 s; nothing moved."
-                .. " Run the move again", 1, true), tostring(err))
-            assert.equals(0, vim.fn.filereadable(target))
-            vim.env.FAKE_COUCH_REGISTRY_MODE = nil
-            config.agentic_move_timeout_ms = 5000
+            local started = vim.uv.hrtime()
             assert.is_true(pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target)))
+            assert.is_true((vim.uv.hrtime() - started) / 1e6 < 500, "the plain rename waited on Couch")
             assert.equals(1, vim.fn.filereadable(target))
         end)
 
@@ -859,7 +871,9 @@ describe("agentic markdown admission", function()
         held.release()
     end)
 
-    it("permits an explicitly confirmed absent plain native rename without registering either path", function()
+    -- #359: an identity parley does not know yet refuses the rename at once,
+    -- nothing renamed, and asks in the background; the rerun renames plainly.
+    it("refuses a native rename while the identity is unknown, then renames plainly once Couch answers (row 3)", function()
         await(function() return document.status(buf).phase == "plain" end)
         document.detach(buf)
         local held=hold_next_process_reply(function(argv)
@@ -868,15 +882,20 @@ describe("agentic markdown admission", function()
         document.attach(buf)
         await(function() return held.release ~= nil end)
         local target=root .. "/membership-target.md"
+        local ok, err = pcall(vim.cmd, "saveas " .. vim.fn.fnameescape(target))
+        assert.is_false(ok)
+        assert.truthy(tostring(err):find("move not confirmed: Couch hasn't confirmed this document yet; nothing moved", 1, true), tostring(err))
+        assert.equals(file, vim.api.nvim_buf_get_name(buf))
+        assert.equals(0, vim.fn.filereadable(target))
+        held.release()
+        await(function() return document.status(buf).phase == "plain" end)
         vim.cmd("saveas " .. vim.fn.fnameescape(target))
-        assert.is_true(held.count >= 2,"plain rename must have fresh positive absence before effects")
         assert.equals(1,vim.fn.filereadable(file))
         assert.equals(1,vim.fn.filereadable(target))
         assert.equals("absent",registry_result("lookup",{file}).kind)
         assert.equals("absent",registry_result("lookup",{target}).kind)
         assert.equals(0,vim.fn.filereadable(file .. ".lock"))
         assert.equals(0,vim.fn.filereadable(target .. ".lock"))
-        held.release()
     end)
 
     it("cannot bypass an issued registration by native renaming before its completion", function()
@@ -1012,41 +1031,21 @@ describe("agentic markdown admission", function()
     end)
 
 
-    it("rechecks submit activity started while native OLD membership confirmation pumps events", function()
+    -- #359: the rename hooks never wait on Couch, so no submit can start inside
+    -- one: a plain rename asks Couch nothing at all.
+    it("asks Couch nothing inside a plain native rename", function()
         await(function() return document.status(buf).phase == "plain" end)
-        local _,side_lines=side_fixture()
-        local old_lines=vim.fn.readfile(file)
         local couch=require("parley.couch")
-        local production_run=couch.run
-        local triggered,release_actor=false,nil
+        local production_run, asked = couch.run, {}
         couch.run=function(argv,callback,options)
-            if argv[2] == "--session-sync" and argv[3] == "lookup" and argv[4] == file and not triggered then
-                triggered=true
-                return production_run(argv,function(result)
-                    -- This arrives inside BufFilePre's bounded vim.wait. The
-                    -- initial guard saw idle, but the genuine explicit submit
-                    -- now owns unresolved actor selection before lookup returns.
-                    document.submit(buf)
-                    callback(result)
-                end,options)
-            end
-            if argv[2] == "--actors" then
-                return production_run(argv,function(result)
-                    release_actor=function() release_actor=nil; callback(result) end
-                end,options)
-            end
+            if argv[2] == "--session-sync" then asked[#asked + 1] = argv[3] .. " " .. tostring(argv[4]) end
             return production_run(argv,callback,options)
         end
         local target=root .. "/membership-target.md"
-        local ok=pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target))
-        await(function() return release_actor ~= nil end)
-        assert.is_true(triggered,"fixture must start submit during the actual fresh OLD lookup")
-        assert.is_false(ok,"a new unresolved submit must be rechecked after the bounded membership lookup")
-        assert_refused_before_move(target,old_lines,side_lines)
-        assert.is_nil(document.identity(buf))
-        assert.is_nil(document.status(buf).operation)
-        release_actor()
-        await_submitted()
+        local ok, err = pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target))
+        couch.run=production_run
+        assert.is_true(ok, tostring(err))
+        assert.same({}, vim.tbl_filter(function(call) return call:find("^lookup " .. vim.pesc(file)) or call:find("^register ") end, asked))
     end)
 
 

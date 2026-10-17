@@ -75,4 +75,15 @@ The durable plan, with the state projection table: [000359 plan](../plans/000359
   - #357's three move cases became rows 1, 5, 3, 4 and 6.
   - The destination-race test became "never looks up the destination".
   - Owned-move: the receipt and unloaded-door cases now wait for Couch's confirmation after the move returns. "Refuses unavailable membership" became row 7: a held identity moves while Couch is down, and the journal recovers on reopen. The legacy case now refuses first (row 4).
+- Task 3 is built: the rename hooks stop waiting.
+  - `BufFilePre` decides by `move_preflight` over `known_identity`. It refuses rows 3 and 4 at once, with the name unchanged, and asks in the background. A background register for a loaded buffer adopts its result, so the rerun sees the identity.
+  - `BufFilePost` asks Couch only when NEW already exists, which is the `:saveas!` overwrite (rows 8 and 9, #357's bounded wait kept). Otherwise it begins with `destination_registered = "authority"` and the shared `moving_metadata` hook: confirming, then background.
+- Rewritten agentic_document_spec cases, all intended:
+  - #357's `:saveas` timeout became row 9: a `:saveas!` onto an existing file says to rename back.
+  - New: a registered `:saveas` to an absent file returns in under 500 ms (row 1).
+  - The unregistered `:saveas` timeout became row 2: a plain rename asks Couch nothing.
+  - "Confirmed-absent plain native rename" became row 3: it refuses while the open lookup is held, then renames plainly.
+  - "Submit pumped during the OLD lookup" became "asks Couch nothing inside a plain native rename".
+  - Owned-move: the legacy alias `:saveas` now refuses first (row 4), and the register still gets the canonical caller path.
+- Seen once: "moves an unloaded registered ordinary file through the public tree door" failed once with no output kept, then passed 9 runs in a row. Watching for it in the suite.
 
