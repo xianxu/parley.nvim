@@ -95,6 +95,8 @@ After code verification: close on SHIP and report green to TL. Do not stage; :0 
 
 - The sole allowed unchanged full-suite retry also completed all454 files: 452pass, catalog and auth failed,760 lint clean,no survivors (4m16s after55s queue). Log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/220afa677e351fcb53a792c7553029a5.log`, SHA256 `7576e666c8badab1fffee47cacf5369530e3f793b097b1133091f37837de37c6`. Lifecycle #363 passed on this attempt. Catalog matches #360 (joins-routes returns empty at line75). Auth is an additional variant in the #361 spec: oauth-model-alias Claude login prompt missing at line149, rather than the earlier expired-token retry case; shared cause is not asserted. This is a second unrelated flake on the same head, so no further retry or close finalization. Report the verification blocker to TL for disposition/flake dispatch; retain unstaged branch and all three review fixes.
 
+- 2026-10-16 22:24 PDT: TL explicitly authorized one additional unchanged full-suite run, issue-backed by #360/#361/#363 (submitted receipt f3fdd54b-5146-40b6-b8d1-d177d5dd26ab). If green, re-close and continue; if another filed flake fails, stop and tell TL, who is dispatching the flake work. Restart audit found no existing sdlc/make runner in this checkout; the previous two runs had completed before Couch's22:22 restart, so this is the authorized additional attempt, not recovery of a killed run. Production source stays aa8a3408fd3338402eb949a7c275335bd9c9966f.
+
 ## Revisions
 
 ### 2026-10-16 — #354 persisted-trail coordination
