@@ -225,12 +225,15 @@ pane's actor, and sends nothing. The model confirms both halves with Couch
 first: the child is absent, and the parent still holds the registration the
 parent buffer showed. A registered child keeps its owner; if another actor
 registers the child first, the child adopts that registration. Anything
-unconfirmed registers nothing: a parent Couch no longer confirms shows `not
-inherited: parent owner unconfirmed · navigate again to retry`, and a child
-lookup Couch cannot answer shows the usual `Couch unavailable` band. A parent
-with no registration offers nothing to inherit. Other Markdown links never
-inherit. An Alt+Return pressed while inheritance is under way waits for it, then
-submits once.
+unconfirmed registers nothing: a parent Couch no longer confirms (stale, gone,
+unavailable) shows `not inherited · reopen from parent to retry, or Alt+Return
+here`, and a child lookup Couch cannot answer shows the usual `Couch
+unavailable` band. A parent with no registration offers nothing to inherit.
+Other Markdown links never inherit. An Alt+Return pressed while inheritance is
+under way is authorized only by it: a registration means one submit to that
+owner, anything else drops the press (the model's `drop_queued`), so it is never
+re-aimed at the pane's actor. Pressing again on the plain doc is the deliberate
+fallback.
 
 Journals live in configured `state_dir`, partitioned by Couch namespace and
 stable ID, at most 32 pending journals / 256 KiB each. They record the exact tuple,

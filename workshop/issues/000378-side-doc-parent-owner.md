@@ -100,3 +100,14 @@ Deterministic fake-only reproduction through the actual opener: register parent.
   - BR-2 (Important): an integration case for a parent with no registration. Alt+o leaves the side child absent, with 0 sends.
   - BR-3 (Minor): the atlas now says exactly which band each refusal shows, that a parent with no registration offers nothing, and that a press during inheritance waits. The adoption comment now covers any refused or lost register, not only owner-conflict.
   - Targeted runs pass: side_inherit 7, document_session 45, agentic_document 47, owned_move 16, lifetime 10.
+
+## Revisions
+
+- 2026-10-17, close review round 2 (BR-4). After round 1, a press queued during inheritance flushed as an ordinary plain-doc submit once a refusal left no operation. That re-aimed it at the pane's actor, and the reviewer reproduced it with a stale parent and with an unavailable one. This was the third change to the queued-press handling, so it went to the hub instead of becoming another increment. The hub approved this rule:
+  - A press queued during inheritance is authorized only by the inheritance.
+  - A registration (inherited, or adopted after a refused register) means one submit to that owner.
+  - Every ending without one emits `drop_queued` from the pure model: parent stale, gone or unavailable, child lookup unavailable, or a refused register whose re-lookup finds nothing. The result is 0 sends and no registration.
+  - The band names the retry first and then the deliberate fallback: `not inherited · reopen from parent to retry, or Alt+Return here`. The hub's example wording was cut off by the 80-column band before the retry, so it was shortened to fit.
+- The round-1 integration case that asserted a pane-actor submit is flipped. A stale-parent case (re-registered to ops:9) is added, and both assert 0 sends, no registration and the band. Mutation check: with the shell ignoring `drop_queued`, both fail with "submitted to parley.nvim:1".
+- Minor: the new spec is now mapped in `atlas/traceability.yaml` under modes/session_sync.
+- Targeted runs pass: document_session 46, side_inherit 8, agentic_document 47, lifetime 10, single_source_sweeps 28.

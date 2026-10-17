@@ -40,8 +40,10 @@ function M.classify_reply(operation, exit_code, decoded, null_sentinel)
     return { kind = "registered", registration = copy(decoded.Registration), changed = decoded.Changed }
 end
 
--- #378: the one band a side doc shows when it could not take its parent's owner.
-M.NOT_INHERITED = "not inherited: parent owner unconfirmed · navigate again to retry"
+-- #378: the band a side doc shows when it could not take its parent's owner.
+-- The retry comes first: a side doc of a hub-owned parent usually wants the hub.
+-- Short enough for an 80-column band, which cuts longer text at its end.
+M.NOT_INHERITED = "not inherited · reopen from parent to retry, or Alt+Return here"
 
 local function finite(value)
     return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
@@ -333,7 +335,7 @@ function M.new(context)
                 return { issue("register", { owner = parent.owner, resume_only = true, inherited = true }) }
             end
             state.phase = "plain"
-            return { { kind = "band", message = M.NOT_INHERITED } }
+            return { { kind = "band", message = M.NOT_INHERITED }, { kind = "drop_queued" } }
         end
         local valid = result.kind == "registered" and valid_registration(result.registration)
         if valid then
@@ -346,6 +348,9 @@ function M.new(context)
             state.operation = nil
             local inherit = operation.args.inherit or state.inherit
             state.inherit = nil
+            -- A press queued during inheritance is authorized only by the
+            -- inheritance: one ending without a registration drops it.
+            local inheriting = inherit ~= nil or operation.args.inherited
             if state.registration and (result.kind == "absent"
                 or (valid and result.registration.ID ~= state.registration.ID)) then
                 state.phase = "busy"
@@ -365,17 +370,21 @@ function M.new(context)
                     return { issue("confirm_parent", { parent = inherit }) }
                 end
                 state.phase = "plain"
+                if inheriting then return { { kind = "band", message = M.NOT_INHERITED }, { kind = "drop_queued" } } end
                 return { { kind = "band", message = "" } }
             end
             state.phase = stable_phase()
             if operation.args.submit then return notify(result.error or "Registered owner could not be confirmed") end
-            return state.registration and {} or { { kind = "band", message = "Couch unavailable: agentic state unknown" } }
+            if state.registration then return {} end
+            local unknown = { { kind = "band", message = "Couch unavailable: agentic state unknown" } }
+            if inheriting then unknown[2] = { kind = "drop_queued" } end
+            return unknown
         end
         if not valid and operation.args.inherited and result.kind == "unavailable" then
             -- Refused or lost (another owner registered it first, or the deadline
             -- passed): a fresh lookup says what is there, and that is adopted.
             state.operation, state.phase = nil, "probing"
-            return { issue("lookup") }
+            return { issue("lookup", { inherited = true }) }
         end
         if not valid then return pending(operation, result.error, result.code) end
         state.operation, state.pending = nil, nil

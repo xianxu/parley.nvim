@@ -302,6 +302,10 @@ local function execute(s, effects)
                     M.submit(s.buf)
                 end
             end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
+        elseif kind == "drop_queued" then
+            -- #378: inheritance ended without a registration; the press it held
+            -- is not re-aimed at the pane's actor.
+            s.queued_submit = false
         elseif kind == "save" then
             local ss = require("parley.session_sync")
             local ok, err

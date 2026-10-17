@@ -155,16 +155,33 @@ describe("side docs inherit the parent's owner (#378)", function()
             assert.equals("ops:0", lookup(side).registration.Owner)
         end)
 
-        it("submits once, pressed during the child lookup, when the parent can no longer be confirmed", function()
+        -- Anything else drops the press: the inheritance never authorized a
+        -- submit as the pane's actor, and the band offers that as a deliberate
+        -- second press instead.
+        local function forget_parent()
             local forgotten
             require("parley.document_registry").request("forget", { parent }, {}, function(value) forgotten = value end)
             await(function() return forgotten ~= nil end)
-            local child = follow(2)
-            document.submit(child)
-            -- The parent is gone, so nothing is inherited; the press itself is the
-            -- operator's explicit submit, and it goes through as one.
-            await(function() return sends() == 1 and settled(child) end, "the queued press was dropped")
-            assert.equals("parley.nvim:1", document.identity(child).Owner)
-        end)
+        end
+        local function dropped(child)
+            await(function() return settled(child) end)
+            vim.wait(600) -- a dropped press must stay dropped, not arrive late
+            assert.equals(0, sends())
+            assert.is_nil(document.identity(child))
+            assert.equals("absent", lookup(side).kind)
+            local winbar = vim.wo[vim.fn.bufwinid(child)].winbar
+            assert.truthy(winbar:find(require("parley.document_session").NOT_INHERITED, 1, true), winbar)
+        end
+        for _, case in ipairs({
+            { name = "the parent was forgotten", setup = forget_parent },
+            { name = "the parent changed owner", setup = function() forget_parent(); register(parent, "ops:9") end },
+        }) do
+            it("drops the press, sending nothing, when " .. case.name, function()
+                case.setup()
+                local child = follow(2)
+                document.submit(child)
+                dropped(child)
+            end)
+        end
     end)
 end)

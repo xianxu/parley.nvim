@@ -656,7 +656,7 @@ describe("document_session inherit", function()
         }) do
             local s = session(); plain(s)
             local effects = reply(s, to_confirm(s), answer)
-            assert.same({ { kind = "band", message = model.NOT_INHERITED } }, effects)
+            assert.same({ { kind = "band", message = model.NOT_INHERITED }, { kind = "drop_queued" } }, effects)
             assert.equals("plain", s.snapshot().phase)
             assert.is_nil(s.snapshot().registration)
             local register = reply(s, to_confirm(s), { kind = "registered", registration = parent_registration() })[1]
@@ -667,7 +667,7 @@ describe("document_session inherit", function()
     it("drops the hint when the child lookup cannot answer", function()
         local s = session(); plain(s)
         local lookup = s.dispatch({ type = "inherit", parent = parent })[1]
-        assert.same({ "band" }, kinds(reply(s, lookup, { kind = "unavailable", error = "down" })))
+        assert.same({ "band", "drop_queued" }, kinds(reply(s, lookup, { kind = "unavailable", error = "down" })))
         -- the background retry re-opens without the hint: no confirmation, no register
         local again = s.dispatch({ type = "open" })[1]
         assert.same({ { kind = "band", message = "" } }, reply(s, again, { kind = "absent" }))
@@ -680,6 +680,20 @@ describe("document_session inherit", function()
         assert.equals("lookup", lookup.kind)
         assert.same({ "attach" }, kinds(reply(s, lookup, { kind = "registered", registration = child_registration("ops:7") })))
         assert.equals("ops:7", s.snapshot().registration.Owner)
+    end)
+
+    -- A press queued during inheritance is authorized only by the inheritance:
+    -- every ending without a registration drops it, and only those do.
+    it("drops the queued press on every inheritance ending without a registration", function()
+        local s = session(); plain(s)
+        local register = reply(s, to_confirm(s), { kind = "registered", registration = parent_registration() })[1]
+        local lookup = reply(s, register, { kind = "unavailable", code = "owner-conflict" })[1]
+        assert.same({ { kind = "band", message = model.NOT_INHERITED }, { kind = "drop_queued" } },
+            reply(s, lookup, { kind = "absent" }))
+        -- an ordinary lookup, outside inheritance, never drops a press
+        local plain_doc = session()
+        assert.same({ { kind = "band", message = "" } }, reply(plain_doc, plain_doc.dispatch({ type = "open" })[1], { kind = "absent" }))
+        assert.same({ "band" }, kinds(reply(plain_doc, plain_doc.dispatch({ type = "open" })[1], { kind = "unavailable" })))
     end)
 
     it("ignores a malformed hint and a detached document", function()
