@@ -1,6 +1,6 @@
 ---
 id: 000359
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -14,6 +14,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 5.04
+tracker:
+    version: 1
+    completion:
+        token: close-ea37c339a4e6
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: aae97db73b9403cb42264d9f7e39a5e40d877513
+        evidence_commit: 0dcbb1b4116dd59b1632ca8973a414a6a10a9139
 ---
 
 # Asynchronous rename protocol for agentic documents (BufFilePre/BufFilePost preflights)
