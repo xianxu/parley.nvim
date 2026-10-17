@@ -84,6 +84,7 @@
 /construct/generated/vocabulary/finding.json
 /construct/generated/vocabulary/fleet-policy.json
 /construct/generated/vocabulary/issue.json
+/construct/generated/vocabulary/issue.json.weave-sha256
 /construct/generated/vocabulary/pensive.json
 /construct/generated/vocabulary/project.json
 /construct/generated/vocabulary/verdict.json
@@ -140,6 +141,10 @@ bin/
 !/construct/generated/vocabulary/
 /construct/generated/vocabulary/*
 !/construct/generated/vocabulary/issue.json
+# Its weave digest sidecar ships beside it (#371, ariadne#422): a cold checkout
+# (CI, a fresh clone) has no ownership inventory, and the committed digest is how
+# weave tells its own output from a hand edit there.
+!/construct/generated/vocabulary/issue.json.weave-sha256
 
 # parley writes these beside a doc when applying review edits; they are
 # scratch, and #205 saw an untracked one nearly swept into a milestone commit.
