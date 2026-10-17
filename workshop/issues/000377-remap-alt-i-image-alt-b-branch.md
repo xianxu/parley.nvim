@@ -51,6 +51,7 @@ Pair's draft nvim puts "attach an image" on Alt+i. In parley, Alt+i creates a su
 ## Log
 
 ### 2026-10-17
+- 2026-10-17: closed — Defaults resolve paste_image to <M-i>, branch_ref to <M-b> + <C-g>i; <M-v> unbound (paste_image_spec asserts it in n/i). Round-1 BR-1: all tutorial/starter prose re-swept with PCRE across spellings and fixed; new keybinding_agreement case ties every tutorial Alt/Option letter to a bound key under the starter options and checks the attach / linked-chat lines name the action key; 3 mutation checks (old keys restored) each fail it by file:line. BR-2 history notes restored with (now <M-b>); BR-3 <M-b> absent under default_keymaps=false. Full suite green on 131c684c.; review verdict: FIX-THEN-SHIP
 
 - Conflict check, run before any change and reported to the hub. The TL approved `<M-v>` being dropped.
   - parley: `<M-b>` was unbound in every mode and buffer type, and `<C-g>b` (prune) is a separate chord.
@@ -65,3 +66,6 @@ Pair's draft nvim puts "attach an image" on Alt+i. In parley, Alt+i creates a su
   - Added a spec in `keybinding_agreement_spec`, resolved under the starter options because the tutorials ship with the app. Every Alt/Option letter the tutorials name must be bound. When the text after a key says "attach" or "linked chat", the key must be paste_image's or branch_ref's. Mutation checks: restoring `option+i` (branch) in basics, Alt+v in the starter README, or `option+v` in advanced each fails it by name.
   - BR-2 (Minor): the rewrites that state history now keep `<M-i>` with "(now `<M-b>`)": drill_in.lua, buffer_edit.lua, branch_submit.lua, inline_branch_links.md, drill_in.md, branch_child_spec, branch_submit_spec.
   - BR-3 (Minor): the default_keymaps=false case now also asserts that `<M-b>` is absent.
+- Close review round 2: FIX-THEN-SHIP. The three round-1 findings are fixed, and the round raised two new Minors in families it had already seen. Both were fixed as classes.
+  - history-notes-rewritten: the reviewer's grep (`<M-b>` near did, was, used to, before, hardcod, were) turned up `init.lua:2472`, the only line left that wasn't already "(now `<M-b>`)" or present tense. It now reads `<M-i>` (now `<M-b>`).
+  - key-remap-doc-sweep: the tutorial spec also reads README.md and `workshop/parley/*.md`, which covers every file that teaches keys in prose. It is green. Mutation checks: Alt+v put back in README:183 or welcome.md:15 fails it by name.

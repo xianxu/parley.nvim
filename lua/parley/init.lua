@@ -2469,7 +2469,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 	--- `<M-CR>`'s output would have appeared.
 	---
 	--- Returns false when there is nothing to submit — an empty transcript, or a
-	--- cursor outside every exchange — and the caller then does what `<M-b>` did
+	--- cursor outside every exchange — and the caller then does what `<M-i>` (now `<M-b>`) did
 	--- before M3: insert a bare reference and open the child. That fallback is
 	--- deliberate. "Make me a side chat from here" is a real affordance M1
 	--- shipped, and generalising the chord must not delete it; the chord should

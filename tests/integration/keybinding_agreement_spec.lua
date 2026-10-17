@@ -682,7 +682,10 @@ describe("published shortcut reference agrees with bindings (#206, #214 BR-61)",
             for _, k in ipairs(keys) do bound[canon(k)] = true end
         end
         local files = vim.fn.glob("packaging/tutorials/*.md", false, true)
-        files[#files + 1] = "packaging/starter-config/README.md"
+        -- Every file that teaches keys in prose: the README and the in-repo
+        -- tutorial copies too, not only what the app packages.
+        vim.list_extend(files, vim.fn.glob("workshop/parley/*.md", false, true))
+        vim.list_extend(files, { "packaging/starter-config/README.md", "README.md" })
         -- `option+i` → <M-i>, Alt+Shift+O → <M-O>; Alt+Enter and the like are
         -- not letters and are skipped. Each key comes with the text after it.
         local function alt_keys(line)
