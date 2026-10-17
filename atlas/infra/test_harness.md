@@ -326,14 +326,18 @@ and trace flushes (`tests/helpers/jit_watch.lua`), grandchildren included.
 A positive wait returns the moment its outcome arrives, so its bound costs a
 passing run nothing; a short literal only turns suite load into a flake. Every
 `vim.wait(<literal>, <predicate>)` in `tests/unit` and `tests/integration` is
-bounded by `tests/helpers/arrival.lua`'s `MS` (15 s, the product's longest
-round-trip deadline) or a product deadline the spec observes (session_sync_spec
-uses `agentic_submit_timeout_ms`), or it says why not on the line that opens it:
+bounded by `tests/helpers/arrival.lua`'s `MS` (the product's Couch submit
+deadline, `agentic_submit_timeout_ms`, read from config: 15 s) or a named product
+deadline (a constant ending in `_MS`; session_sync_spec reads
+`agentic_submit_timeout_ms` itself), or it says why not on the line that opens it:
 `-- absence:` (the spec expects the predicate to stay false), `-- drain:`
 (best-effort teardown), or `-- bound:` (the bound is the property under test). A
 plain sleep (`vim.wait(N)` or a `return false` predicate) needs nothing.
-`tests/arch/arrival_budget_spec.lua` enforces it for every form, whether the
-wait is asserted, bare, or assigned. Code that a spec writes for a child Neovim
+`tests/arch/arrival_budget_spec.lua` reads the line that opens each wait,
+whether it is asserted, bare, or assigned. It allows a bound only when it derives
+from `arrival` or names an `_MS` deadline, so a literal behind a parameter or an
+`ms or 3000` default is refused as well. It cannot follow a literal passed into a
+helper's parameter from a call site. Code that a spec writes for a child Neovim
 takes the budget by value, since the child has no `arrival` in scope. The cost:
 a broken case now takes up to 15 s to report its first failed wait.
 

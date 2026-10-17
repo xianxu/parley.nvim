@@ -1,14 +1,16 @@
 -- #374 (the #370 lesson): a positive wait returns the moment its outcome
 -- arrives, so a short literal bound only turns machine load into a flake. Every
--- `vim.wait(<literal>, <predicate>)` in the suite's specs is therefore either
--- bounded by tests/helpers/arrival.lua's MS (or a product deadline the spec
--- observes), or carries a trailing reason on its own line:
+-- `vim.wait(<bound>, <predicate>)` in the suite's specs is therefore either
+-- bounded by tests/helpers/arrival.lua's MS or a named product deadline (a
+-- constant ending in _MS), or carries a trailing reason on its own line:
 --   -- absence: <reason>  the spec expects the predicate to stay false here
 --   -- drain: <reason>    best-effort teardown; nothing is asserted on it
 --   -- bound: <reason>    the bound itself is the property under test
 -- A plain sleep (`vim.wait(N)`, or a `return false` predicate) needs no reason.
 -- Whatever form the wait takes (asserted, bare, or assigned to a local), the
--- rule reads the line that opens it.
+-- rule reads the line that opens it. It allows bounds rather than denying
+-- literals, so a literal behind a parameter or an `ms or 3000` default is
+-- refused too (#374 close review BR-5).
 local arch = require("tests.arch.arch_helper")
 
 local SCOPE = { "tests/unit/*_spec.lua", "tests/integration/*_spec.lua" } -- git pathspec: * crosses /
@@ -27,6 +29,11 @@ local function scan(visit)
     end
 end
 
+-- arrival.MS (or a multiple, or the spec's arrival_ms()), or a named deadline.
+local function derived(bound)
+    return bound:find("arrival", 1, true) ~= nil or bound:match("^[%w_.]*%u[%u%d_]*_MS[%s%d+*]*$") ~= nil
+end
+
 local function reasoned(line)
     for _, pattern in ipairs(REASON) do
         if line:find(pattern) then return true end
@@ -43,10 +50,10 @@ describe("arch: predicate waits use the arrival budget or say why not (#374)", f
         assert.is_true(count >= 400, "found only " .. count .. " predicate waits")
     end)
 
-    it("bounds none of them with an unexplained literal", function()
+    it("bounds each by the budget, a named deadline, or a stated reason", function()
         local literal = {}
         scan(function(file, n, line, bound)
-            if bound:match("^[%d_]+$") and not reasoned(line) then
+            if not derived(bound) and not reasoned(line) then
                 literal[#literal + 1] = ("%s:%d: %s"):format(file, n, vim.trim(line))
             end
         end)

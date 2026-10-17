@@ -30,12 +30,12 @@ local function orphan(argv, env)
     return pid
 end
 
---- Fail unless `pid` exits within `ms`; always reap it, so a FAILING assertion
---- here cannot itself leak the process it is complaining about.
-local function dies_within(pid, ms, what)
-    local died = vim.wait(ms, function() return gone(pid) end, 100)
+--- Fail unless `pid` exits within the arrival budget; always reap it, so a
+--- FAILING assertion here cannot itself leak the process it is complaining about.
+local function dies(pid, what)
+    local died = vim.wait(arrival.MS, function() return gone(pid) end, 100)
     pcall(function() uv.kill(pid, "sigkill") end)
-    assert.is_true(died, what .. " (pid " .. pid .. ") outlived its parent by " .. ms .. "ms")
+    assert.is_true(died, what .. " (pid " .. pid .. ") outlived its parent by " .. arrival.MS .. "ms")
 end
 
 describe("#220 a harness process exits when its parent is gone", function()
@@ -43,7 +43,7 @@ describe("#220 a harness process exits when its parent is gone", function()
         local pid = orphan({ "nvim", "-n", "--headless", "--noplugin",
             "-u", ROOT .. "/tests/minimal_init.vim",
             "-c", "lua vim.wait(60000, function() return false end, 100)" })
-        dies_within(pid, 6000, "an orphaned harness Neovim")
+        dies(pid, "an orphaned harness Neovim")
     end)
 
     it("removes its query directory from the watchdog callback without following links", function()
@@ -60,7 +60,7 @@ describe("#220 a harness process exits when its parent is gone", function()
         local pid = orphan({ "nvim", "-n", "--headless", "--noplugin",
             "-u", ROOT .. "/tests/minimal_init.vim", "-c", command }, { TMPDIR = scratch })
         local published = vim.wait(arrival.MS, function() return vim.fn.filereadable(ready) == 1 end, 20)
-        dies_within(pid, 6000, "an orphaned harness with request bodies")
+        dies(pid, "an orphaned harness with request bodies")
         local query_dir = published and vim.fn.readfile(ready)[1]
         local removed = query_dir and vim.fn.isdirectory(query_dir) == 0
         local kept = vim.fn.filereadable(external) == 1
@@ -75,7 +75,7 @@ describe("#220 a harness process exits when its parent is gone", function()
         local port = require("tests.helpers.ready_port").free_port()
         local pid = orphan({ ROOT .. "/tests/fixtures/fake_cliproxy",
             "--port", tostring(port) })
-        dies_within(pid, 6000, "an orphaned fake_cliproxy")
+        dies(pid, "an orphaned fake_cliproxy")
     end)
 
     it("the fake_github_releases fixture does", function()
@@ -84,7 +84,7 @@ describe("#220 a harness process exits when its parent is gone", function()
         vim.fn.mkdir(root, "p")
         local pid = orphan({ ROOT .. "/tests/fixtures/fake_github_releases",
             "--port", tostring(port), "--root", root })
-        dies_within(pid, 6000, "an orphaned fake_github_releases")
+        dies(pid, "an orphaned fake_github_releases")
     end)
 
     it("the fake_sse_server fixture does, even with no request to answer", function()
@@ -92,7 +92,7 @@ describe("#220 a harness process exits when its parent is gone", function()
         -- making its request used to leave it waiting forever.
         local pid = orphan({ ROOT .. "/tests/fixtures/fake_sse_server",
             "normal", vim.fn.tempname() })
-        dies_within(pid, 6000, "an orphaned fake_sse_server")
+        dies(pid, "an orphaned fake_sse_server")
     end)
 
     it("the fake_cliproxy login path does, though it never binds a port", function()
@@ -100,13 +100,13 @@ describe("#220 a harness process exits when its parent is gone", function()
         -- cannot cover it: run_login calls the watchdog itself.
         local pid = orphan({ ROOT .. "/tests/fixtures/fake_cliproxy", "-claude-login" },
             { PARLEY_FAKE_LOGIN_MODE = "hangs" })
-        dies_within(pid, 6000, "an orphaned fake_cliproxy login")
+        dies(pid, "an orphaned fake_cliproxy login")
     end)
 
     it("the fake_sips slow mode does, though it never binds a port", function()
         local pid = orphan({ ROOT .. "/tests/fixtures/fake_sips",
             "--out", vim.fn.tempname() }, { PARLEY_FAKE_SIPS = "slow" })
-        dies_within(pid, 6000, "an orphaned fake_sips")
+        dies(pid, "an orphaned fake_sips")
     end)
 end)
 
