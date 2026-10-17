@@ -1,13 +1,13 @@
 ---
 id: 000370
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '06765a03f0f34f789c5e41b991de07afd8a400e5' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '33ea629171dc99b7b6250ed25ba39d89619c0578' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T02:49:00-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "55321af3", done: "848e1784"}
+actual_hours: 0.09
 ---
 
 # session_sync M-CR submit spec misses the couch argv within 2 s under suite load (flake)
