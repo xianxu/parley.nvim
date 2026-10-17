@@ -90,7 +90,8 @@ end
 --- @param manifest table SkillManifest
 --- @param args table|nil completable-arg values
 --- @param opts table|nil { manual=boolean?, no_reload=boolean?, document=string?,
----   detached_progress=boolean?, on_terminal=fun(result)?, on_done=fun(result)? }
+---   detached_progress=boolean?, validate_edits=fun(snapshot, edits):string?,
+---   on_terminal=fun(result)?, on_done=fun(result)? }
 function M.invoke(buf, manifest, args, opts)
     opts = opts or {}
     local manual = opts.manual
@@ -458,9 +459,11 @@ function M.invoke(buf, manifest, args, opts)
                     local errors = {}
                     assert(#calls<=32,'skill tool call capacity')
                     local seen={}
+                    local proposal_count = 0
                     for _,call in ipairs(calls)do
                         assert(require('parley.tools.types').validate_call(call),'invalid skill tool call')
                         assert(not seen[call.id],'duplicate skill tool call');seen[call.id]=true
+                        if call.name == 'propose_edits' then proposal_count = proposal_count + 1 end
                     end
                     local function finish_tools()
                         if read_state.logical or _gen[buf]~=gen then return end
@@ -577,6 +580,16 @@ function M.invoke(buf, manifest, args, opts)
                                 end
                             end
                         end
+                        local denied
+                        if call.name == 'propose_edits' and opts.validate_edits then
+                            denied = proposal_count > 1 and 'guarded local review requires one proposal batch'
+                                or opts.validate_edits(original, call.input.edits)
+                        end
+                        if denied then
+                            results[i] = { is_error = true, content = denied, name = call.name }
+                            remaining = remaining - 1
+                            joined()
+                        else
                         local item={}
                         tool_producer.start(call,{epoch='skill:'..tostring(buf),generation=gen,round='1',attempt=qid},{
                             outcome=function(kind,result)
@@ -589,6 +602,7 @@ function M.invoke(buf, manifest, args, opts)
                                 if item.kind~='known' then uncertain=true end
                                 joined()
                             end})
+                        end
                         if read_state.logical then break end
                     end
                 end

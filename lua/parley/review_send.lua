@@ -63,8 +63,10 @@ M.submit = function(buf)
 		return
 	end
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local routing, routing_error = require('parley.skills.review.collaboration').resolve(lines)
 	local value = M.instruction_value(lines)
 	if value == nil then
+		if not routing then notify(routing_error, vim.log.levels.ERROR); return end
 		vim.ui.input({ prompt = M.KEY .. ": " }, function(answer)
 			if not answer or vim.trim(answer) == "" or not vim.api.nvim_buf_is_valid(buf) then
 				return
@@ -78,8 +80,11 @@ M.submit = function(buf)
 		return
 	end
 	local expanded, err = instruction.expand(value, modes())
-	if not expanded then
-		notify(err, vim.log.levels.ERROR)
+	if not expanded or not routing then
+		local errors = {}
+		if err then errors[#errors + 1] = err end
+		if routing_error then errors[#errors + 1] = routing_error end
+		notify(table.concat(errors, '; '), vim.log.levels.ERROR)
 		return
 	end
     local names = {}

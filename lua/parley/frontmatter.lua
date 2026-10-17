@@ -41,16 +41,18 @@ M.needs_quote = function(s)
 		or s:match("%s$") ~= nil
 end
 
---- The leading quoted scalar of `s` ("…" with backslash escapes, '…' with
---- ''), quotes included; nil when `s` does not start with a closed one.
+--- The quoted scalar at `start` (default 1) of `s` ("…" with backslash escapes, '…' with
+--- ''), quotes included; nil when no closed scalar starts there.
 ---@param s string
+---@param start? integer byte offset
 ---@return string|nil
-M.quoted_span = function(s)
-	local q = s:sub(1, 1)
+M.quoted_span = function(s, start)
+	start = start or 1
+	local q = s:sub(start, start)
 	if q ~= '"' and q ~= "'" then
 		return nil
 	end
-	local i = 2
+	local i = start + 1
 	while i <= #s do
 		local c = s:sub(i, i)
 		if q == '"' and c == "\\" then
@@ -59,13 +61,22 @@ M.quoted_span = function(s)
 			if q == "'" and s:sub(i + 1, i + 1) == "'" then
 				i = i + 2
 			else
-				return s:sub(1, i)
+				return s:sub(start, i)
 			end
 		else
 			i = i + 1
 		end
 	end
 	return nil
+end
+
+-- Anchored edge scans avoid backtracking across long interior whitespace runs.
+local function rtrim(s)
+	local last = #s
+	while last > 0 and s:sub(last, last):match("%s") do
+		last = last - 1
+	end
+	return s:sub(1, last)
 end
 
 --- Parse the frontmatter at the top of `lines`.
@@ -81,14 +92,16 @@ M.parse = function(lines)
 			fm.close = i
 			return fm
 		end
-		local key, value = lines[i]:match("^([%w_][%w_-]*):%s*(.-)%s*$")
+		local key, value = lines[i]:match("^([%w_][%w_-]*):%s*(.*)$")
 		if key then
+			value = rtrim(value)
 			key = key:lower()
 			fm.raw[key] = value
 			fm.lnum[key] = i
 			-- A quoted scalar ends at its closing quote (a comment may follow).
 			local span = M.quoted_span(value)
-			local plain = span and M.unquote(span) or (value:gsub("%s+#.*$", ""))
+			local comment = not span and value:find("%s#")
+			local plain = span and M.unquote(span) or (comment and rtrim(value:sub(1, comment - 1)) or value)
 			fm.fields[key] = plain ~= "" and plain or nil
 		end
 	end
