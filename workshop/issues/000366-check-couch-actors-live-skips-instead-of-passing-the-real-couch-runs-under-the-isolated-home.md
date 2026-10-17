@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "79f1365d", done: "ee4c97ec"}
 ---
 
 # check-couch-actors-live skips instead of passing: the real couch runs under the isolated HOME
