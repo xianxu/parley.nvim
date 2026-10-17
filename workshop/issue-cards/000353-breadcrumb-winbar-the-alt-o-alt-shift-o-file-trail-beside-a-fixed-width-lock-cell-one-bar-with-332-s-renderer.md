@@ -17,10 +17,10 @@ actual_hours: N/A
 tracker:
     version: 1
     completion:
-        token: close-9c42e463acae
+        token: close-4f488f4a775b
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 4142a92604182a9b5dfb4bbe35f88416b15f9e12
-        evidence_commit: f0e0bce60129614d786d7038ac1bf083a880e7a0
+        reviewed_head: 9ef3f37cfa8ef724f5430b448bcdce6953579e17
+        evidence_commit: ceacb5f632058c1989aa7da879543393bfe18ece
 ---
 
 # Breadcrumb winbar: the Alt+o / Alt+Shift+O file trail beside a fixed-width lock cell (one bar with #332's renderer)
