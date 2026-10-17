@@ -6,7 +6,7 @@ github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '2399ed8d1e9b4c24a17f2a23cee09c277bcda846' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '173ae3254b97c71551130b3de5ebeeed609361a6' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T19:46:30-07:00
 claimant:
     operator: Xian Xu
@@ -16,7 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
-actual_hours: 0.27
+actual_hours: 0.30
 ---
 
 # Attention finder: an agent rewrite of a seen or retired side doc brings it back as answered
