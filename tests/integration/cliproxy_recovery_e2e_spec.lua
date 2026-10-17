@@ -3,6 +3,7 @@
 -- reads. Every earlier spec exercised one link; the M1 review's top coverage
 -- gap was that nothing joined them.
 
+local arrival = require("tests.helpers.arrival")
 local uv = vim.uv or vim.loop
 local parley = require("parley")
 local ready_port = require("tests.helpers.ready_port")
@@ -78,7 +79,7 @@ describe("cliproxy recovery end to end", function()
                 out.notice = chat_respond._failure_notice(failure)
                 out.done = true
             end, UNOWNED)
-        vim.wait(20000, function() return out.done end, 25)
+        vim.wait(2 * arrival.MS, function() return out.done end, 25)
         return out
     end
 
@@ -191,7 +192,7 @@ describe("cliproxy recovery end to end", function()
             nil, nil, nil,
             function(_qid, failure) out.failure = failure; out.done = true end, UNOWNED)
 
-        vim.wait(20000, function() return out.done end, 25)
+        vim.wait(2 * arrival.MS, function() return out.done end, 25)
 
         assert.is_false(prompted, "a self-repairable failure prompted the operator")
         -- The Done-when is "repaired AND the query retried", so absence of a
@@ -219,7 +220,7 @@ describe("cliproxy recovery end to end", function()
         dispatcher.query(nil, "openai", { model = "gpt-4", messages = {}, stream = false },
             function() end, nil, nil, nil, nil, nil,
             function(_qid, failure) out.failure = failure; out.done = true end, UNOWNED)
-        vim.wait(15000, function() return out.done end, 25)
+        vim.wait(arrival.MS, function() return out.done end, 25)
         assert.is_truthy(out.failure)
         assert.is_nil(out.failure.message) -- no diagnosis: nothing claimed it
         assert.is_truthy(port)

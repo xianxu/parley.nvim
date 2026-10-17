@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local controller = require('parley.spell_blink')
 local Fake = require('tests.helpers.fake_blink')
 local buf, fake
@@ -5,7 +6,7 @@ local function local_map(mode, key)
     return vim.api.nvim_buf_call(buf, function() return vim.fn.maparg(key, mode, false, true) end)
 end
 local function wait_menu()
-    assert.is_true(vim.wait(600, function() return fake.visible end, 5), 'spelling menu did not open')
+    assert.is_true(vim.wait(arrival.MS, function() return fake.visible end, 5), 'spelling menu did not open')
 end
 local function attach(opts)
     controller.attach(buf, vim.tbl_extend('force', { blink = true, debounce_ms = 10, max_suggest = 9 }, opts or {}), fake)
@@ -127,7 +128,7 @@ describe('Blink spell controller', function()
         assert.equals(0, fake.shows)
         fake.ready, fake.defer = true, true
         vim.api.nvim_exec_autocmds('BufEnter', { buffer = buf })
-        assert.is_true(vim.wait(500, function() return #fake.pending > 0 end, 5))
+        assert.is_true(vim.wait(arrival.MS, function() return #fake.pending > 0 end, 5))
         controller.detach(buf)
         fake.deliver()
         assert.is_false(fake.visible)

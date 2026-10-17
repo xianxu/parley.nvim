@@ -8,6 +8,7 @@
 -- An earlier version of this file stubbed refresh_state, so deleting the restore
 -- block entirely left the suite green. These call the production path.
 
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 
 -- A real setup: refresh_state drives the interview timer and the note-root
@@ -246,7 +247,7 @@ describe("agent_picker._select", function()
         local real_cmd = vim.cmd
         vim.cmd = function(c) table.insert(ran, c) end
         ap._select(plugin, { kind = "login", provider = "antigravity" })
-        vim.wait(200, function() return #ran > 0 end)
+        vim.wait(arrival.MS, function() return #ran > 0 end)
         vim.cmd = real_cmd
         assert.same({ "ParleyProxy login antigravity" }, ran)
         assert.same({}, calls.refresh)

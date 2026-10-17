@@ -38,7 +38,7 @@ local function payload(suffix)
 end
 
 local function assert_not_executed(marker, what)
-    vim.wait(50, function() return vim.fn.filereadable(marker) == 1 end)
+    vim.wait(50, function() return vim.fn.filereadable(marker) == 1 end) -- absence: the marker file must never appear
     assert.equals(0, vim.fn.filereadable(marker), what .. " executed a shell command")
 end
 

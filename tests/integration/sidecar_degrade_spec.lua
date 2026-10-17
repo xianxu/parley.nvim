@@ -4,6 +4,7 @@
 -- its wrongly typed bodies — its reader is run, and a chat is submitted through
 -- the command, whose wrapper refreshes state first. The state directory made
 -- unwritable must not block a submission either.
+local arrival = require("tests.helpers.arrival")
 local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-sidecar-degrade-" .. os.time()
 local parley = require("parley")
 parley.setup({
@@ -51,7 +52,7 @@ describe("sidecars under the state directory degrade", function()
         -- cache file rather than what exercise() already loaded.
         parley._remote_reference_cache = nil
         vim.cmd("ParleyChatRespond")
-        assert.is_true(vim.wait(5000, function() return #calls > 0 end, 1),
+        assert.is_true(vim.wait(arrival.MS, function() return #calls > 0 end, 1),
             "the submission did not reach the provider")
     end
 

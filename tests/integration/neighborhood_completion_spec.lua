@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 local neighborhood = require("parley.neighborhood")
 
@@ -203,7 +204,7 @@ describe("neighborhood completion", function()
         local buf, path = make_chat()
 
         parley.prep_chat(buf, path)
-        vim.wait(100, function()
+        vim.wait(arrival.MS, function()
             return captured ~= nil
         end)
 
@@ -231,7 +232,7 @@ describe("neighborhood completion", function()
         }
         local buf, path = make_chat()
         parley.prep_chat(buf, path)
-        assert.is_true(vim.wait(500, function() return captured ~= nil end))
+        assert.is_true(vim.wait(arrival.MS, function() return captured ~= nil end))
         local blink = require('parley.spell_blink')
         blink.attach(buf, { blink = true }, require('tests.helpers.fake_blink').new())
         neighborhood.attach_cmp_completion(buf)
@@ -254,7 +255,7 @@ describe("neighborhood completion", function()
 
         local buf, path = make_chat()
         parley.prep_chat(buf, path)
-        vim.wait(100, function() return captured ~= nil end)
+        vim.wait(arrival.MS, function() return captured ~= nil end)
         assert.is_not_nil(captured)
 
         -- A host config clobbers the buffer-local cmp config after attach
@@ -266,7 +267,7 @@ describe("neighborhood completion", function()
         local registers_before = register_count
         captured = nil
         vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
-        vim.wait(100, function() return captured ~= nil end)
+        vim.wait(arrival.MS, function() return captured ~= nil end)
         assert.is_not_nil(captured)
         assert.same({ "parley_path", "buffer" },
             { captured.sources[1].name, captured.sources[2].name })

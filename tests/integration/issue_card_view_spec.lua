@@ -1,5 +1,6 @@
 -- #309: a tracker card with no details in this checkout opens as a read-only
 -- scratch view (real git through the tracker fixture, real buffers).
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 parley.setup({
     chat_dir = vim.fn.tempname() .. "-issue-card-view-spec",
@@ -14,7 +15,7 @@ local issues = require("parley.issues")
 local fixture = require("tests.helpers.tracker_repo")
 
 local function wait_for(predicate, what)
-    assert(vim.wait(10000, predicate, 10), "timed out waiting for " .. what)
+    assert(vim.wait(arrival.MS, predicate, 10), "timed out waiting for " .. what)
 end
 
 local function lines(buf)

@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local git_markdown_source = require("parley.git_markdown_source")
 local failure_kind = require("parley.finder_scan").FAILURE_KIND
 
@@ -5,7 +6,7 @@ local uv = vim.uv or vim.loop
 local fixture = vim.fn.getcwd() .. "/tests/fixtures/fake_git_file_list"
 
 local function wait_for(predicate)
-    assert(vim.wait(3000, predicate, 10), "timed out waiting for Git file list")
+    assert(vim.wait(arrival.MS, predicate, 10), "timed out waiting for Git file list")
 end
 
 describe("Git Markdown source process protocol", function()

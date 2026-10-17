@@ -3,6 +3,7 @@
 -- The <M-v> paste flow (#231) end-to-end through the config seam: the
 -- fixture stands in for osascript. One case per row of the plan's ordering
 -- table (State and ordering), plus the key's registry resolution.
+local arrival = require("tests.helpers.arrival")
 local root = vim.fn.tempname() .. "-parley-paste"
 vim.fn.mkdir(root, "p")
 local repo = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
@@ -39,7 +40,7 @@ local function chat_lines()
 end
 
 local function wait_for(pred, ms)
-    return vim.wait(ms or 3000, pred, 20)
+    return vim.wait(ms or arrival.MS, pred, 20)
 end
 
 local function line_count(buf)

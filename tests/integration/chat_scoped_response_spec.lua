@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local parley=require('parley')
 local Respond=require('parley.chat_respond')
 local D=require('parley.document')
@@ -6,7 +7,7 @@ vim.fn.mkdir(root,'p')
 parley.setup({chat_dir=root,state_dir=root..'/state',providers={},api_keys={},
     default_agent='ScopedFixture',agents={{name='Choose a model',disable=true},
         {name='ScopedFixture',provider='openai',model={model='fixture'},system_prompt='Fixture',tools={}}}})
-local function wait(predicate)assert.is_true(vim.wait(5000,predicate,1),'response did not settle')end
+local function wait(predicate)assert.is_true(vim.wait(arrival.MS,predicate,1),'response did not settle')end
 local function text(buf)return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n')end
 local function row(buf,wanted)
     for i,line in ipairs(vim.api.nvim_buf_get_lines(buf,0,-1,false))do if line==wanted then return i-1 end end

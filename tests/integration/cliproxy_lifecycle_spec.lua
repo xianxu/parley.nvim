@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local ready_port = require("tests.helpers.ready_port")
 -- Integration tests for lua/parley/cliproxy.lua (issue #131).
 -- Exercises the IO seam against a process-level fake (tests/fixtures/fake_cliproxy),
@@ -211,7 +212,7 @@ describe("cliproxy IO lifecycle", function()
             end, function(msg)
                 outcome = { ok = false, msg = msg }
             end)
-            vim.wait(9000, function()
+            vim.wait(arrival.MS, function()
                 return outcome ~= nil
             end, 20)
             assert(outcome, "ensure_running never resolved (hang!)")
@@ -290,7 +291,7 @@ describe("cliproxy IO lifecycle", function()
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             local done
             cliproxy.ensure_running(function() done = true end, function() done = true end)
-            vim.wait(9000, function() return done ~= nil end, 20)
+            vim.wait(arrival.MS, function() return done ~= nil end, 20)
             local path = cliproxy._config_path()
             local stat = uv.fs_stat(path)
             assert.is_truthy(stat)
@@ -405,7 +406,7 @@ describe("cliproxy IO lifecycle", function()
             vim.defer_fn(tick, 50)
             cliproxy.restart_managed(function() outcome = { ok = true } end,
                 function(msg) outcome = { ok = false, msg = msg } end, { interactive = true })
-            vim.wait(15000, function() return outcome ~= nil end, 10)
+            vim.wait(arrival.MS, function() return outcome ~= nil end, 10)
             running = false
             cliproxy._set_process_tools(nil)
             vim.env.PARLEY_FAKE_LSOF_DELAY_MS, vim.env.PARLEY_FAKE_LSOF_PIDS = nil, nil
@@ -455,7 +456,7 @@ describe("cliproxy IO lifecycle", function()
             local outcome
             cliproxy.restart_managed(function() outcome = { ok = true } end,
                 function(msg) outcome = { ok = false, msg = msg } end, { interactive = true })
-            vim.wait(15000, function() return outcome ~= nil end, 20)
+            vim.wait(arrival.MS, function() return outcome ~= nil end, 20)
             cliproxy._set_lsof_guard_ms(nil)
             cliproxy._set_process_tools(nil)
             vim.env.PARLEY_FAKE_LSOF_DELAY_MS, vim.env.PARLEY_FAKE_LSOF_PIDS = nil, nil
@@ -484,7 +485,7 @@ describe("cliproxy IO lifecycle", function()
             local outcome
             cliproxy.restart_managed(function() outcome = { ok = true } end,
                 function(msg) outcome = { ok = false, msg = msg } end)
-            vim.wait(9000, function() return outcome ~= nil end, 20)
+            vim.wait(arrival.MS, function() return outcome ~= nil end, 20)
             cliproxy._set_process_tools(nil)
             assert(outcome, "restart_managed never resolved")
             assert.is_false(outcome.ok, "spawned past a peer still on the port")
@@ -615,7 +616,7 @@ describe("cliproxy IO lifecycle", function()
                 -- cold-start to spawn one
                 local outcome
                 cliproxy.ensure_running(function() outcome = true end, function() outcome = false end)
-                vim.wait(9000, function() return outcome ~= nil end, 20)
+                vim.wait(arrival.MS, function() return outcome ~= nil end, 20)
                 assert.is_true(outcome)
                 assert.is_truthy(#cliproxy.spawned_pids() >= 1)
                 local killed = stop()
@@ -660,7 +661,7 @@ describe("cliproxy IO lifecycle", function()
             -- render the config once (so drift can be evaluated)
             local done
             cliproxy.ensure_running(function() done = true end, function() done = true end)
-            vim.wait(9000, function() return done ~= nil end, 20)
+            vim.wait(arrival.MS, function() return done ~= nil end, 20)
 
             local info = await(function(cb)
                 cliproxy.status(cb)
@@ -981,7 +982,7 @@ describe("cliproxy IO lifecycle", function()
             local pid = start_keyless(port, write_store())
             local n = cliproxy.stop()
             assert.equals(1, n)
-            assert.is_true(vim.wait(3000, function()
+            assert.is_true(vim.wait(arrival.MS, function()
                 local ok, _, name = uv.kill(pid, 0)
                 return ok == nil and name == "ESRCH"
             end, 10))
@@ -1244,7 +1245,7 @@ describe("cliproxy IO lifecycle", function()
             for _ = 1, 3 do
                 local done = false
                 cliproxy.ensure_running(function() done = true end, function() done = true end)
-                vim.wait(9000, function() return done end, 20)
+                vim.wait(arrival.MS, function() return done end, 20)
             end
             cliproxy.peers = saved_peers
 
@@ -1318,7 +1319,7 @@ describe("cliproxy IO lifecycle", function()
 
             -- uv.kill(pid, 0) is a liveness syscall, not a process spawn, so it
             -- works where reading the process table does not.
-            local gone = vim.wait(3000, function()
+            local gone = vim.wait(arrival.MS, function()
                 return not pcall(uv.kill, stray, 0) or uv.kill(stray, 0) ~= 0
             end, 100)
             assert.is_true(gone, "a parley-spawned proxy on an old port survived stop()")

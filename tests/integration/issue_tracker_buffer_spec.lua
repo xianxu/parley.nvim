@@ -1,5 +1,6 @@
 -- #308: an opened details file shows the tracker's values in amber where its
 -- card_mirror is stale (real git, real buffer, real autocmds).
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 parley.setup({
     chat_dir = vim.fn.tempname() .. "-issue-tracker-buffer-spec",
@@ -60,7 +61,7 @@ describe("issue tracker buffer annotations", function()
     it("annotates the stale status line and clears it once the mirror agrees", function()
         vim.cmd.edit(vim.fn.fnameescape(repos.reader .. "/workshop/issues/000001-alpha.md"))
         local buf = vim.api.nvim_get_current_buf()
-        assert(vim.wait(10000, function() return #marks(buf) > 0 end, 10), "no tracker annotation appeared")
+        assert(vim.wait(arrival.MS, function() return #marks(buf) > 0 end, 10), "no tracker annotation appeared")
         assert.same({ { row = 2, text = "← tracker: wontfix", group = "ParleyIssueTracker" } }, marks(buf))
 
         vim.api.nvim_buf_set_lines(buf, 2, 3, false, { "status: wontfix" })
@@ -71,14 +72,14 @@ describe("issue tracker buffer annotations", function()
     it("repaints when a peer moves the card and the buffer is entered again", function()
         vim.cmd.edit(vim.fn.fnameescape(repos.reader .. "/workshop/issues/000001-alpha.md"))
         local buf = vim.api.nvim_get_current_buf()
-        assert(vim.wait(10000, function() return #marks(buf) > 0 end, 10))
-        assert(vim.wait(10000, function()
+        assert(vim.wait(arrival.MS, function() return #marks(buf) > 0 end, 10))
+        assert(vim.wait(arrival.MS, function()
             return not issue_tracker._busy_for_tests(repos.reader)
         end, 10), "the initial background fetch never settled")
 
         fixture.write_card(repos.writer, "000001-alpha.md", { status = "done", title = "Alpha" })
         vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
-        assert(vim.wait(10000, function()
+        assert(vim.wait(arrival.MS, function()
             local m = marks(buf)
             return m[1] and m[1].text == "← tracker: done"
         end, 10), "the fetched card never repainted the buffer")
@@ -89,10 +90,10 @@ describe("issue tracker buffer annotations", function()
         local home = repos.reader .. "/workshop/issues/"
         vim.cmd.edit(vim.fn.fnameescape(home .. "000001-alpha.md"))
         local alpha = vim.api.nvim_get_current_buf()
-        assert(vim.wait(10000, function() return #marks(alpha) > 0 end, 10))
+        assert(vim.wait(arrival.MS, function() return #marks(alpha) > 0 end, 10))
         vim.cmd.edit(vim.fn.fnameescape(home .. "000002-beta.md"))
         local beta = vim.api.nvim_get_current_buf()
-        assert(vim.wait(10000, function()
+        assert(vim.wait(arrival.MS, function()
             return not issue_tracker._busy_for_tests(repos.reader)
         end, 10))
         assert.same({}, marks(beta))
@@ -101,7 +102,7 @@ describe("issue tracker buffer annotations", function()
         fixture.write_card(repos.writer, "000002-beta.md", { status = "working", title = "Beta" })
         fixture.git(repos.reader, { "fetch", "-q", "origin", "issue-tracker" })
         vim.cmd.buffer(alpha)
-        assert(vim.wait(10000, function()
+        assert(vim.wait(arrival.MS, function()
             local m = marks(beta)
             return m[1] and m[1].text == "← tracker: working"
         end, 10), "the hidden buffer never heard of the move")
@@ -116,7 +117,7 @@ describe("issue tracker buffer annotations", function()
         fixture.git(repos.reader, { "fetch", "-q", "origin", "issue-tracker" })
         vim.cmd.edit(vim.fn.fnameescape(repos.reader .. "/workshop/issues/000002-beta.md"))
         local buf = vim.api.nvim_get_current_buf()
-        assert(vim.wait(10000, function() return virtual_lines(buf) ~= nil end, 10), "no virtual lines appeared")
+        assert(vim.wait(arrival.MS, function() return virtual_lines(buf) ~= nil end, 10), "no virtual lines appeared")
         local group = "ParleyIssueTracker"
         assert.same({
             row = 8, -- the closing `---`

@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local parley=require('parley')
 local Respond=require('parley.chat_respond')
 local Tasker=require('parley.tasker')
@@ -5,7 +6,7 @@ local Producer=require('parley.tools.producer')
 local Registry=require('parley.tools')
 local Vault=require('parley.vault')
 local FakeProcess=require('tests.helpers.fake_process')
-local function wait(fn)assert.is_true(vim.wait(5000,fn,1),'public async response did not advance')end
+local function wait(fn)assert.is_true(vim.wait(arrival.MS,fn,1),'public async response did not advance')end
 local function buffer_text(buf)return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n')end
 local function is_provider(process)
     for _,arg in ipairs(process.args)do if arg=='--write-out'then return true end end

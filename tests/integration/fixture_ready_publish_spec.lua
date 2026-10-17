@@ -11,6 +11,7 @@
 -- open for a fixed span instead of hoping to win a microsecond race. The delay
 -- is also asserted, so the hook cannot be deleted to make the spec pass.
 
+local arrival = require("tests.helpers.arrival")
 local fixture_process = require("tests.helpers.fixture_process")
 local uv = vim.uv or vim.loop
 
@@ -24,7 +25,7 @@ describe("fake SSE server readiness publish", function()
         if handle and not handle:is_closing() then
             pcall(handle.kill, handle, "sigterm")
         end
-        vim.wait(1000, function() return exited == nil or exited() end, 10)
+        vim.wait(1000, function() return exited == nil or exited() end, 10) -- drain: after_each reap of the killed fixture
     end)
 
     it("never exposes the ready path in an incomplete state", function()
@@ -42,7 +43,7 @@ describe("fake SSE server readiness publish", function()
 
         -- Sample the ready path continuously across the whole publish window.
         local incomplete, absent_samples, published_ns = {}, 0, nil
-        vim.wait(10000, function()
+        vim.wait(arrival.MS, function()
             if vim.fn.filereadable(ready_file) ~= 1 then
                 absent_samples = absent_samples + 1
                 return false

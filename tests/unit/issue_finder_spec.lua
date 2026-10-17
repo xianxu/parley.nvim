@@ -8,6 +8,7 @@
 -- The cycle is 2-state (`issues → history`, `% 2`), partitioned by the
 -- `archived` flag: view 0 shows workshop/issues/, view 1 shows the archive.
 
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 parley.setup({
     chat_dir = vim.fn.tempname() .. "-issue-finder-spec",
@@ -313,7 +314,7 @@ describe("IssueFinder asynchronous discovery", function()
         local initial = float_line_containing("scanning…")
 
         assert.is_not_nil(initial)
-        assert(vim.wait(1000, function()
+        assert(vim.wait(arrival.MS, function()
             local current = float_line_containing("scanning…")
             return sentinel and current ~= nil and current ~= initial
         end, 10), "Issue spinner did not tick while acquisition was pending")
@@ -322,7 +323,7 @@ describe("IssueFinder asynchronous discovery", function()
             "x",
             true
         )
-        assert(vim.wait(500, function() return cancel_count == 1 end, 10))
+        assert(vim.wait(arrival.MS, function() return cancel_count == 1 end, 10))
     end)
 
     it("cancels loading acquisition before the view mapping reopens Issue", function()
@@ -343,10 +344,10 @@ describe("IssueFinder asynchronous discovery", function()
         issue_finder.open()
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Tab>", true, false, true), "x", true)
 
-        assert(vim.wait(1000, function() return cancel_count == 1 and scan_count == 2 end, 10))
+        assert(vim.wait(arrival.MS, function() return cancel_count == 1 and scan_count == 2 end, 10))
         assert.equals(1, scan_count - cancel_count)
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true)
-        assert(vim.wait(500, function() return cancel_count == 2 end, 10))
+        assert(vim.wait(arrival.MS, function() return cancel_count == 2 end, 10))
     end)
 
     it("reads and parses an issue through the real asynchronous disk source", function()
@@ -365,7 +366,7 @@ describe("IssueFinder asynchronous discovery", function()
 
         issue_finder.open()
 
-        assert(vim.wait(1000, function() return #updates == 1 end, 10))
+        assert(vim.wait(arrival.MS, function() return #updates == 1 end, 10))
         assert.equals(1, #updates[1].items)
         assert.equals(path, updates[1].items[1].value)
         assert.truthy(updates[1].items[1].display:find("Real disk issue", 1, true))

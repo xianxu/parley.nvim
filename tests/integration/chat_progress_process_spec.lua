@@ -1,5 +1,6 @@
 -- Native response presentation across real dispatcher/tasker lifecycle events.
 -- The stateful process seam drives pipes and exit separately; no network is used.
+local arrival = require("tests.helpers.arrival")
 local parley=require('parley')
 local Respond=require('parley.chat_respond')
 local Process=require('tests.helpers.fake_process')
@@ -16,7 +17,7 @@ local function marks(buf)
     local ns=vim.api.nvim_get_namespaces().parley_chat_pending
     return ns and vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{details=true}) or {}
 end
-local function wait(predicate)assert.is_true(vim.wait(3000,predicate,1),'response lifecycle did not settle')end
+local function wait(predicate)assert.is_true(vim.wait(arrival.MS,predicate,1),'response lifecycle did not settle')end
 local function status(p,code)
     for i,arg in ipairs(p.args)do if arg=='--write-out'then
         p:emit('stderr',p.args[i+1]:match('%%{stderr}(.-)%%{http_code}')..tostring(code or 200)..'\n');return

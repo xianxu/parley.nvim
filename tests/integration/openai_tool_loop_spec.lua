@@ -13,6 +13,7 @@
 -- notably the class the plan gate caught, where messages reached the wire
 -- untranslated.
 
+local arrival = require("tests.helpers.arrival")
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 local dispatcher = require("parley.dispatcher")
@@ -113,7 +114,7 @@ describe("openai tool loop against a stateful fake (#198)", function()
                 results[#results+1]={response=query.response,calls=vim.deepcopy(calls)}
             end,
         }))
-        assert.is_true(vim.wait(15000,function()return Session.snapshot(session).status=="terminal"end,5),
+        assert.is_true(vim.wait(arrival.MS,function()return Session.snapshot(session).status=="terminal"end,5),
             vim.inspect(Session.snapshot(session)))
         assert.equals("success",Session.snapshot(session).generation.outcome)
         return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),"\n"),continuations,results

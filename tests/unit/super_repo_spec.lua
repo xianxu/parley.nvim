@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 local super_repo = require("parley.super_repo")
 local issues_mod = require("parley.issues")
@@ -632,7 +633,7 @@ describe("super_repo.toggle", function()
 			_state = {},
 		})
 
-		assert.is_true(vim.wait(1000, function() return captured_config ~= nil end, 20))
+		assert.is_true(vim.wait(arrival.MS, function() return captured_config ~= nil end, 20))
 		local components = captured_config.sections.lualine_c
 		assert.is_function(components[1][1])
 		assert.equal("", components[1][1]())
