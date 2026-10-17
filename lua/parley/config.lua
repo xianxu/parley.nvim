@@ -499,8 +499,9 @@ local config = {
 	-- Every other asynchronous registry request (the open-time lookup, a
 	-- move's rename) uses the same deadline.
 	agentic_submit_timeout_ms = 15000,
-	-- #357: the move and rename preflights block the editor while they ask
-	-- Couch (they run inside BufFilePre/BufFilePost), so this one stays modest.
+	-- #357, #359: the one move that still asks Couch inline, a :saveas! onto an
+	-- existing file (BufFilePost decides before Neovim writes), so it stays
+	-- modest. Every other move asks nothing first.
 	agentic_move_timeout_ms = 5000,
 	-- Agent for document review. NIL by default (#215): it used to name
 	-- "Claude-Sonnet", which is absent from the shipped roster — and since

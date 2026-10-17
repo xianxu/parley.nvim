@@ -253,6 +253,7 @@ local function validate(journal, namespace, id, path)
         or type(journal.protection) ~= 'table' or type(journal.steps.metadata) ~= 'boolean'
         or (journal.document_move ~= nil and type(journal.document_move) ~= 'boolean')
         or (journal.steps.document_moved ~= nil and type(journal.steps.document_moved) ~= 'boolean')
+        or (journal.steps.saved_after_move ~= nil and type(journal.steps.saved_after_move) ~= 'boolean')
         or (journal.old_witness ~= false and not valid_witness(journal.old_witness, 'file'))
         or (journal.side_witness ~= false and not valid_witness(journal.side_witness, 'directory'))
         or (journal.new_witness ~= false and (not valid_witness(journal.new_witness, 'file')
@@ -261,8 +262,13 @@ local function validate(journal, namespace, id, path)
     if journal.document_move then
         if not journal.old_witness then return nil, 'owned migration requires an OLD witness' end
         if journal.steps.document_moved then
-            if not journal.new_witness or journal.new_witness.hash ~= journal.old_hash
-                or not same_inode(journal.new_witness, journal.old_witness) then return nil, 'invalid owned document checkpoint' end
+            -- The moved bytes, unless the operator saved since (#359): then the
+            -- recorded save is the witness.
+            if not journal.new_witness or (not journal.steps.saved_after_move
+                and (journal.new_witness.hash ~= journal.old_hash
+                    or not same_inode(journal.new_witness, journal.old_witness))) then
+                return nil, 'invalid owned document checkpoint'
+            end
         elseif journal.new_witness or journal.steps.side_moved or journal.steps.metadata then
             return nil, 'owned effects precede document checkpoint'
         end
@@ -339,7 +345,13 @@ function M.begin(namespace, registration, new_path, options)
         if not existing then return refuse('pending', existing_err) end
         return refuse('pending', 'recover the existing exact migration tuple first')
     end
-    if options.destination_registered ~= false then return refuse('unavailable', 'destination registration must be confirmed absent') end
+    -- #359: false is confirmed absent; 'authority' leaves it to Couch's rename,
+    -- which refuses an occupied destination after the file moved (the journal
+    -- then stays pending, and recovery replays the rename).
+    local destination = options.destination_registered
+    if destination ~= false and destination ~= 'authority' then
+        return refuse('unavailable', 'destination registration must be confirmed absent or left to Couch')
+    end
     local old = registration.File
     if not canonical(fs, old) or not canonical(fs, new_path) then return refuse('unavailable', 'migration paths are not canonical') end
     local old_stat, new_stat = fs.fs_lstat(old), fs.fs_lstat(new_path)
@@ -355,7 +367,7 @@ function M.begin(namespace, registration, new_path, options)
     if not entries then return refuse('unavailable', scan_err) end
     local projected, project_err = projection.project(old, new_path, {
         id = registration.ID, old_exists = old_stat ~= nil, new_exists = new_stat ~= nil, new_written = false,
-        destination_registered = false, side_exists = source_stat ~= nil, target_side_exists = target_stat ~= nil, entries = entries,
+        destination_registered = destination, side_exists = source_stat ~= nil, target_side_exists = target_stat ~= nil, entries = entries,
     })
     if not projected then return refuse('unavailable', project_err) end
     local token = hash(tostring(uv.hrtime()) .. ':' .. tostring(vim.fn.getpid()) .. ':' .. registration.ID)
@@ -432,6 +444,9 @@ end
 local function advance_document(operation)
     local fs, journal = operation.fs, operation.journal
     local from, to = fs.fs_lstat(journal.old), fs.fs_lstat(journal.new)
+    -- #359: once the document moved, the operator may save it before Couch
+    -- confirms; record_write keeps the latest of those writes as the witness.
+    local moved_before = journal.steps.document_moved and journal.new_witness
     if from then
         if journal.steps.document_moved or to or not same_inode(from, journal.old_witness) then
             return nil, 'owned document rename cannot be proven'
@@ -446,27 +461,50 @@ local function advance_document(operation)
         end
         local renamed, rename_err = rename_noreplace(fs, journal.old, journal.new)
         if not renamed then return nil, rename_err end
-    elseif not same_inode(to, journal.old_witness) then
+    elseif not moved_before and not same_inode(to, journal.old_witness) then
         return nil, 'owned document rename has no matching inode witness'
     end
-    -- A crash may have published the rename before the journal checkpoint. Only
-    -- OLD absence plus the original inode AND bytes proves that exact effect.
     local bytes, err, opened = read(fs, journal.new)
-    if fs.fs_lstat(journal.old) or not bytes or hash(bytes) ~= journal.old_hash
-        or not same_inode(opened, journal.old_witness) then
-        return nil, err or 'owned document rename result is uncertain'
+    if moved_before then
+        if fs.fs_lstat(journal.old) or not bytes or hash(bytes) ~= journal.new_witness.hash then
+            return nil, err or 'NEW changed since its last recorded write'
+        end
+    else
+        -- A crash may have published the rename before the journal checkpoint. Only
+        -- OLD absence plus the original inode AND bytes proves that exact effect.
+        if fs.fs_lstat(journal.old) or not bytes or hash(bytes) ~= journal.old_hash
+            or not same_inode(opened, journal.old_witness) then
+            return nil, err or 'owned document rename result is uncertain'
+        end
+        journal.new_witness = witness(opened)
+        journal.new_witness.hash = hash(bytes)
+        journal.steps.document_moved = true
+        local saved, save_err = persist(operation)
+        if not saved then return nil, save_err end
     end
-    journal.new_witness = witness(opened)
-    journal.new_witness.hash = hash(bytes)
-    journal.steps.document_moved = true
-    local saved, save_err = persist(operation)
-    if not saved then return nil, save_err end
     if not operation.document_notified then
         local named, name_err = hook(operation, 'document_moved')
         if not named then return nil, name_err or 'owned buffer name handoff is pending' end
         operation.document_notified = true
     end
     return true
+end
+
+--- The operator saved the moved document while its metadata rename was still
+--- out (#359): make that write the journal's witness for NEW, so a recovery
+--- after a refused or lost rename proves the move against the bytes they saved.
+--- Only for an owned move whose document already moved.
+function M.record_write(operation)
+    local journal = operation and operation.journal
+    if not journal or not journal.document_move or not journal.steps.document_moved or operation.released then
+        return nil, 'no moved document to record'
+    end
+    local bytes, err, opened = read(operation.fs, journal.new)
+    if not bytes then return nil, err end
+    journal.new_witness = witness(opened)
+    journal.new_witness.hash = hash(bytes)
+    journal.steps.saved_after_move = true
+    return persist(operation)
 end
 
 function M.advance(operation, callback)
