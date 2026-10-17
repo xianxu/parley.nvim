@@ -45,7 +45,7 @@ Determine why an expired-channel fake credential can take the retry branch under
 - [x] Switch the 37 calls that dropped the answer (lifecycle 26, update 9, recovery_e2e, auth_login, fake_releases).
 - [x] `nodiscard_spec` checks spec-side helper members across `tests/`.
 - [x] Forced-window regression in `cliproxy_auth_login_spec` (`PARLEY_FAKE_BIND_DELAY_MS` plus a staged connect).
-- [ ] Full suite, close.
+- [x] Full suite, close.
 
 ## Log
 
