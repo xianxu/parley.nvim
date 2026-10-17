@@ -52,3 +52,14 @@ The durable plan, with the state projection table: [000359 plan](../plans/000359
 ## Log
 
 ### 2026-10-16
+
+### 2026-10-16 (build notes, before code)
+- The code is now unblocked: #357 landed (PR #277) and main is merged in. `change-code` inferred the quick flow. If the diff leaves the shell, the close review upgrades itself.
+- Mechanics found while reading the code:
+  - **The registry reply drops the Couch code.** `document_session.classify_reply` maps a non-ok reply, `target-conflict` included, to `{kind = "unavailable", error = Error}`. Row 6 needs the code, so `classify_reply` must carry `code = decoded.Code` on unavailable results.
+  - **The rename reply path.** The model's `moved` event issues `rename`. An invalid rename reply becomes `pending(operation, error)`, which emits a `reconcile` effect and never calls `moving.metadata_done`, so the journal stays pending and `s.move` stays set. Rows 5 to 7 render from there.
+  - **Where W3 lives.** `M.move_path` blocks on `vim.wait(agentic_move_timeout_ms, s.move == nil)` after `advance_move`. Done means returning once `journal.steps.document_moved` holds.
+  - **Where W2 lives.** `M.move_path` asks `bounded_request("lookup", {new_path})`, and so does `BufFilePost` today.
+  - **The identity cache.** It is synchronous: `cache(s)` reads `known.json` under a lease. `M.identity(buf)` is the loaded model's registration.
+  - **`begin`'s guard.** `document_move.begin` refuses `destination_registered ~= false` at line 342 and passes `false` to `project`.
+
