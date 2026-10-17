@@ -471,7 +471,7 @@ describe("dispatcher.query internals", function()
             captured_terminal(0, 0, "", status_stderr("200"), nil)
 
             -- Need to wait for vim.schedule to execute
-            vim.wait(100, function()
+            vim.wait(arrival.MS, function()
                 return #callback_calls > 0
             end, 10)
 
@@ -896,7 +896,7 @@ describe("dispatcher.query internals", function()
             captured_out_reader(nil, body)
             captured_out_reader(nil, nil)
             local ok, err = pcall(captured_terminal, 0, 0, body, status_stderr("200"), nil)
-            local completed = vim.wait(100, function()
+            local completed = vim.wait(arrival.MS, function()
                 return callback_calls == 1 and #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {}) == 0
             end, 5)
 

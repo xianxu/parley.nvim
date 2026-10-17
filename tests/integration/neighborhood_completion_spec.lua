@@ -204,7 +204,7 @@ describe("neighborhood completion", function()
         local buf, path = make_chat()
 
         parley.prep_chat(buf, path)
-        vim.wait(100, function()
+        vim.wait(arrival.MS, function()
             return captured ~= nil
         end)
 
@@ -255,7 +255,7 @@ describe("neighborhood completion", function()
 
         local buf, path = make_chat()
         parley.prep_chat(buf, path)
-        vim.wait(100, function() return captured ~= nil end)
+        vim.wait(arrival.MS, function() return captured ~= nil end)
         assert.is_not_nil(captured)
 
         -- A host config clobbers the buffer-local cmp config after attach
@@ -267,7 +267,7 @@ describe("neighborhood completion", function()
         local registers_before = register_count
         captured = nil
         vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
-        vim.wait(100, function() return captured ~= nil end)
+        vim.wait(arrival.MS, function() return captured ~= nil end)
         assert.is_not_nil(captured)
         assert.same({ "parley_path", "buffer" },
             { captured.sources[1].name, captured.sources[2].name })

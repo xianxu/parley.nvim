@@ -14,7 +14,7 @@ describe('bounded process supervision',function()
     end
     after_each(function()
         for _,p in pairs(processes.processes)do p:finish()end
-        vim.wait(100,function()return #T._handles==0 end,1)
+        vim.wait(100,function()return #T._handles==0 end,1) -- drain: teardown best effort; T._reset follows
         T._reset();T._uv=nil;T._clock=nil
     end)
     -- #261 M3: a generation's processes lead their own group, so a stop can kill

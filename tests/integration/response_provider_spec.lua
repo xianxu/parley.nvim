@@ -38,7 +38,7 @@ describe('production response provider adapter',function()
     after_each(function()
         Providers.get=old_get
         for _,process in pairs(processes.processes)do status(process,'200');process:finish()end
-        vim.wait(100,function()return #Tasker._handles==0 end,1)
+        vim.wait(100,function()return #Tasker._handles==0 end,1) -- drain: after_each settle of finished fakes before Tasker._reset
         Vault.get_secret,Vault.run_with_secret=old_secret,old_vault;Tasker._reset();Tasker._uv=nil
     end)
     it('provides the request/cancel adapter',function()assert.is_true(ok,tostring(Provider))end)

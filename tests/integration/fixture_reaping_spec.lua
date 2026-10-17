@@ -59,7 +59,7 @@ describe("#220 a harness process exits when its parent is gone", function()
             .. "vim.wait(60000, function() return false end, 100)"
         local pid = orphan({ "nvim", "-n", "--headless", "--noplugin",
             "-u", ROOT .. "/tests/minimal_init.vim", "-c", command }, { TMPDIR = scratch })
-        local published = vim.wait(3000, function() return vim.fn.filereadable(ready) == 1 end, 20)
+        local published = vim.wait(arrival.MS, function() return vim.fn.filereadable(ready) == 1 end, 20)
         dies_within(pid, 6000, "an orphaned harness with request bodies")
         local query_dir = published and vim.fn.readfile(ready)[1]
         local removed = query_dir and vim.fn.isdirectory(query_dir) == 0

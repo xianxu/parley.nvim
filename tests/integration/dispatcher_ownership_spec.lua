@@ -37,7 +37,7 @@ describe("dispatcher transport ownership", function()
             status(process, "200")
             process:finish()
         end
-        vim.wait(100, function() return #tasker._handles == 0 end, 5)
+        vim.wait(100, function() return #tasker._handles == 0 end, 5) -- drain: teardown settle; tasker._reset() follows
         vault.get_secret, vault.run_with_secret = old_secret, old_with_secret
         tasker._reset()
         tasker._uv = nil

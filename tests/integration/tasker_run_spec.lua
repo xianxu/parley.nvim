@@ -48,7 +48,7 @@ describe("tasker.run integration", function()
             )
 
             -- Wait for process to complete
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -75,7 +75,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -101,7 +101,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -130,7 +130,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -159,7 +159,7 @@ describe("tasker.run integration", function()
                 end
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -187,7 +187,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -212,7 +212,7 @@ describe("tasker.run integration", function()
             )
 
             -- Check that handle was added (before process exits)
-            vim.wait(100, function()
+            vim.wait(arrival.MS, function()
                 return #tasker._handles > initial_count
             end, 10)
 
@@ -220,7 +220,7 @@ describe("tasker.run integration", function()
                 "Handle should be added to _handles")
 
             -- Wait for completion
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
         end)
@@ -240,7 +240,7 @@ describe("tasker.run integration", function()
             )
 
             -- Wait for process to complete
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -265,7 +265,7 @@ describe("tasker.run integration", function()
             )
 
             -- Check handle has correct buffer
-            vim.wait(100, function()
+            vim.wait(arrival.MS, function()
                 for _, h in ipairs(tasker._handles) do
                     if h.buf == test_buf then
                         return true
@@ -285,7 +285,7 @@ describe("tasker.run integration", function()
             assert.is_true(found_buf, "Handle should track buffer number")
 
             -- Wait for cleanup
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -331,7 +331,7 @@ describe("tasker.run integration", function()
                 "Second process should not start when buffer is busy")
 
             -- Wait for first process to complete
-            vim.wait(2000, function()
+            vim.wait(arrival.MS, function()
                 return first_exit
             end, 10)
 
@@ -355,7 +355,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return first_exit
             end, 10)
 
@@ -373,7 +373,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return second_exit
             end, 10)
 
@@ -402,7 +402,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -430,7 +430,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -460,7 +460,7 @@ describe("tasker.run integration", function()
             assert.is_true(success, "Should not error during cleanup")
 
             -- Wait for process to complete
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return #tasker._handles == 0
             end, 10)
         end)
@@ -479,7 +479,7 @@ describe("tasker.run integration", function()
             )
 
             -- Wait for process to complete (we can't check callback, but handles should clear)
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return #tasker._handles == 0
             end, 10)
 
@@ -502,7 +502,7 @@ describe("tasker.run integration", function()
                 nil  -- nil err_reader
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -673,7 +673,7 @@ describe("tasker.run integration", function()
             state.pipes[1].reader(nil, nil)
             state.pipes[2].reader(nil, nil)
             state.on_exit(0, 0)
-            local completed = vim.wait(100, function() return #tasker._handles == 0 end, 5)
+            local completed = vim.wait(arrival.MS, function() return #tasker._handles == 0 end, 5)
             logger.error = original_error
 
             assert.is_true(completed)
@@ -824,7 +824,7 @@ describe("tasker.run integration", function()
             assert.is_true(tasker.is_busy(11, true))
             state.pipes[1].reader(nil, nil)
             state.pipes[2].reader(nil, nil)
-            vim.wait(100, function() return not tasker.is_busy(11, true) end, 5)
+            vim.wait(arrival.MS, function() return not tasker.is_busy(11, true) end, 5)
             assert.is_false(tasker.is_busy(11, true))
         end)
         it("releases admission before callback launches retry with reused PID", function()
@@ -862,7 +862,7 @@ describe("tasker.run integration", function()
             assert.is_true(tasker.is_busy(11,true))
             assert.equals(0,done)
             state.processes[4242]:finish()
-            vim.wait(100,function() return done==1 end,5)
+            vim.wait(arrival.MS,function() return done==1 end,5)
             assert.equals(1,done)
             assert.equals(1,#tasker._handles)
             assert.equals(4243,tasker._handles[1].pid)
@@ -882,7 +882,7 @@ describe("tasker.run integration", function()
             assert.is_not_nil(tasker.get_query("q"))
             state.processes[4242]:emit("stdout",nil)
             state.processes[4242]:emit("stderr",nil)
-            vim.wait(100,function() return #tasker._handles==0 end,5)
+            vim.wait(arrival.MS,function() return #tasker._handles==0 end,5)
             tasker.cleanup_old_queries(0,-1)
             assert.is_nil(tasker.get_query("q"))
         end)

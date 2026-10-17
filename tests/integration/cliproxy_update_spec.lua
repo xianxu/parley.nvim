@@ -448,7 +448,7 @@ describe(":ParleyProxy update", function()
         end)
         -- Wait for the first update's restart BEFORE any assertion: returning
         -- early would leave its spawn in flight past after_each (PQ-5).
-        vim.wait(25000, function()
+        vim.wait(2 * arrival.MS, function()
             return first ~= nil
         end, 20)
         assert.same({ ok = false, msg = "an update is already running" }, second)
@@ -615,10 +615,10 @@ describe("status version", function()
             calls = calls + 1
             info = i
         end)
-        vim.wait(8000, function()
+        vim.wait(arrival.MS, function()
             return info ~= nil
         end, 20)
-        vim.wait(300, function()
+        vim.wait(300, function() -- absence: plain sleep; a second callback must not land
             return false
         end) -- a second callback would land here
         assert.equals(1, calls)
@@ -637,10 +637,10 @@ describe("status version", function()
             calls = calls + 1
             info = i
         end)
-        vim.wait(8000, function()
+        vim.wait(arrival.MS, function()
             return info ~= nil
         end, 20)
-        vim.wait(300, function()
+        vim.wait(300, function() -- absence: plain sleep; a second callback must not land
             return false
         end) -- a second callback would land here
         assert.equals(1, calls)

@@ -814,7 +814,7 @@ describe("chat_respond_all", function()
         parley.chat_respond_all()
 
         -- Wait for both callbacks to complete
-        vim.wait(500, function() return all_completed end, 10)
+        vim.wait(arrival.MS, function() return all_completed end, 10)
 
         -- Should have called dispatcher twice (once for each question)
         assert.equals(2, call_count, "Dispatcher should be called once per exchange")
@@ -869,7 +869,7 @@ describe("chat_respond_all", function()
         end
 
         parley.chat_respond_all()
-        vim.wait(500, function() return all_completed end, 10)
+        vim.wait(arrival.MS, function() return all_completed end, 10)
 
         assert.equals(2, call_count, "Dispatcher should still run once per exchange")
         assert.same({ "https://example.com/one.txt" }, fetch_calls)

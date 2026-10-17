@@ -66,7 +66,7 @@ describe('captured response onboarding',function()
         Respond.cancel_responses(buf)
         wait(function()return Respond.response_snapshot(session).status=='terminal'end)
         parley._state.agent='SelectedFixture';ready();ready=nil
-        vim.wait(50,function()return #calls>0 end,5)
+        vim.wait(50,function()return #calls>0 end,5) -- absence: a pick after Stop must start no request
         assert.equals(0,#calls,'a pick after Stop started a request')
     end)
     -- #261 M4 W12: a completion that refuses to start is a failed finalize, and

@@ -125,7 +125,7 @@ describe('generation scoped Stop commands',function()
             tool_calls={{index=0,id='test-call',type='function',
                 ['function']={name='unknown_fixture_tool',arguments='{}'}}}}}}})..'\n\n'
         calls[1].complete(calls[1].id)
-        local settled=vim.wait(5000,function()return Respond.response_snapshot(a).generation.phase=='paused'end,1)
+        local settled=vim.wait(arrival.MS,function()return Respond.response_snapshot(a).generation.phase=='paused'end,1)
         assert.is_true(settled,vim.inspect(Respond.response_snapshot(a)))
         return a
     end

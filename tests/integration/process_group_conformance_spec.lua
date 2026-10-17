@@ -16,7 +16,7 @@ describe("process groups, live", function()
     before_each(function() T._reset(); T._uv = nil end)
     after_each(function()
         T.leave()
-        vim.wait(3000, function() return T.stats().active == 0 end, 10)
+        vim.wait(3000, function() return T.stats().active == 0 end, 10) -- drain: teardown settle; T._reset() follows
         T._reset()
     end)
     local function sh(script, scope, on_out)

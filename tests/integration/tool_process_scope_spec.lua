@@ -54,7 +54,7 @@ describe('native captured subprocess authority',function()
         local result,done
         producer.start({id='scope',name=name,input=input},{epoch=1,generation=1,attempt=1,round=1},
             {outcome=function(_,v)result=v end,resolved=function()done=true end})
-        local finished=vim.wait(10000,function()return done end,1)
+        local finished=vim.wait(arrival.MS,function()return done end,1)
         Tasker.run=native
         producer.close();assert.is_true(finished,'production subprocess did not settle')
         if before_spawn then assert.is_true(intercepted,'controlled replacement must run before native spawn')end

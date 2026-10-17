@@ -69,7 +69,7 @@ describe("cliproxy login", function()
         assert.is_function(cancel.callback)
         assert.is_nil(all_notices():find('oauth/authorize', 1, true))
         cancel.callback()
-        vim.wait(2000, function() return count > 1 end, 25)
+        vim.wait(2000, function() return count > 1 end, 25) -- absence: a cancelled login must settle only once
         assert.equals(1, count)
     end)
 
@@ -165,13 +165,13 @@ describe("cliproxy login", function()
             settles = settles + 1
             settled_at = #notices
         end)
-        vim.wait(8000, function() return settles > 0 end, 25)
+        vim.wait(arrival.MS, function() return settles > 0 end, 25)
         assert.equals(1, settles)
         assert.matches("exited 3", all_notices())
 
         -- Nothing further may be said, however long the abandoned watch runs.
         local after = #notices
-        vim.wait(3000, function() return #notices > after end, 100)
+        vim.wait(3000, function() return #notices > after end, 100) -- absence: the abandoned watcher must stay silent
         assert.equals(after, #notices, "the abandoned watcher notified after settling")
         assert.is_nil(all_notices():find("did not complete", 1, true))
         assert.is_truthy(settled_at)
@@ -188,7 +188,7 @@ describe("cliproxy login", function()
             settles = settles + 1
             result = ok
         end, 1500)
-        vim.wait(12000, function() return settles > 0 end, 25)
+        vim.wait(arrival.MS, function() return settles > 0 end, 25)
 
         assert.equals(1, settles)
         assert.is_false(result)
@@ -197,7 +197,7 @@ describe("cliproxy login", function()
 
         -- and it stays settled: no second word from the abandoned job
         local after = #notices
-        vim.wait(2000, function() return #notices > after end, 100)
+        vim.wait(2000, function() return #notices > after end, 100) -- absence: the abandoned job must not speak again
         assert.equals(after, #notices)
     end)
 
@@ -213,7 +213,7 @@ describe("cliproxy login", function()
             settles = settles + 1
             result = ok
         end, 1500)
-        vim.wait(12000, function() return settles > 0 end, 25)
+        vim.wait(arrival.MS, function() return settles > 0 end, 25)
         assert.equals(1, settles, "an unreadable auth-dir entry stranded the login watch")
         assert.is_boolean(result)
     end)

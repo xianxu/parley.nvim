@@ -197,7 +197,7 @@ describe("skill_invoke.invoke", function()
             end
             skill_invoke.invoke(buf,manifest(),{},{on_done=function(r)done_result=r end})
             FS.new=native_new
-            local reached=vim.wait(5000,function()return rejected end,1)
+            local reached=vim.wait(arrival.MS,function()return rejected end,1)
             Model.transition=transition
             assert.is_true(reached)
             if denied=='admit' then
@@ -374,7 +374,7 @@ describe("skill_invoke.invoke", function()
         parley.logger.warning=function(message)
             if message:find('source read cleanup unresolved',1,true)then diagnostics=diagnostics+1 end
         end
-        local observed=vim.wait(1000,function()return diagnostics==1 end,1)
+        local observed=vim.wait(1000,function()return diagnostics==1 end,1) -- bound: hrtime is faked past the cleanup deadline; the poll must notice promptly
         vim.uv.hrtime=clock;parley.logger.warning=warning
         assert.is_true(observed)
         local count=polls;vim.wait(30,function()return false end,1)
@@ -411,7 +411,7 @@ describe("skill_invoke.invoke", function()
         assert.is_true(D.user_guard_stats(doc).live>0)
         local clock=vim.uv.hrtime;local now=clock()+6000000000
         vim.uv.hrtime=function()return now end
-        local observed=vim.wait(1000,function()return done_result~=nil end,1)
+        local observed=vim.wait(1000,function()return done_result~=nil end,1) -- bound: hrtime is faked past the logical deadline; the poll must notice promptly
         vim.uv.hrtime=clock;progress.stop=stop
         assert.is_true(observed)
         assert.equals(1,deliveries);assert.is_true(stopped>0)
@@ -458,7 +458,7 @@ describe("skill_invoke.invoke", function()
             manual = true,
             on_done = function(r) done_result = r end,
         })
-        vim.wait(2000, function() return done_result ~= nil end)
+        vim.wait(arrival.MS, function() return done_result ~= nil end)
 
         assert.is_not_nil(done_result, "on_done never ran")
         assert.is_true(done_result.ok)
@@ -543,7 +543,7 @@ describe("skill_invoke.invoke", function()
             vim.schedule(function() on_exit("qid_str") end)
         end
         skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
-        vim.wait(2000, function() return done_result ~= nil end)
+        vim.wait(arrival.MS, function() return done_result ~= nil end)
         assert.is_not_nil(done_result, "on_done never ran (renderer likely crashed)")
         assert.is_true(done_result.ok)
         assert.are.equal("ALPHA beta", table.concat(vim.fn.readfile(path), "\n"))
@@ -563,7 +563,7 @@ describe("skill_invoke.invoke", function()
             vim.schedule(function() on_exit("qid_err") end)
         end
         skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
-        vim.wait(2000, function() return done_result ~= nil end)
+        vim.wait(arrival.MS, function() return done_result ~= nil end)
         assert.is_not_nil(done_result)
         assert.is_false(done_result.ok)
         assert.are.equal(0, done_result.applied)
@@ -582,7 +582,7 @@ describe("skill_invoke.invoke", function()
         -- The now-superseded query completes late → its on_exit must no-op.
         tasker.set_query("qid_stale", { raw_response = "" })
         held_exit("qid_stale")
-        vim.wait(200, function() return done_result ~= nil end)
+        vim.wait(200, function() return done_result ~= nil end) -- absence: a cancelled query must not run on_done
         assert.is_nil(done_result, "a cancelled query's late on_exit must not run on_done")
     end)
 
@@ -601,7 +601,7 @@ describe("skill_invoke.invoke", function()
         skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
         assert.is_true(progress.is_active(), "bar shows while the query runs")
         held_exit("qid_p")
-        vim.wait(2000, function() return done_result ~= nil end)
+        vim.wait(arrival.MS, function() return done_result ~= nil end)
         assert.is_false(progress.is_active(), "bar stops when the query completes")
     end)
 
@@ -610,7 +610,7 @@ describe("skill_invoke.invoke", function()
         local query_called = false
         parley.dispatcher.query = function() query_called = true end
         skill_invoke.invoke(buf, manifest(), {}, { on_done = function(r) done_result = r end })
-        vim.wait(500, function() return done_result ~= nil end)
+        vim.wait(arrival.MS, function() return done_result ~= nil end)
         assert.is_not_nil(done_result)
         assert.is_false(done_result.ok)
         assert.is_false(query_called, "must not query without an agent")
@@ -623,7 +623,7 @@ describe("skill_invoke.invoke", function()
         parley.dispatcher.query = function() query_called = true end
         local m = manifest({ source = function() error("style file not found") end })
         skill_invoke.invoke(buf, m, {}, { on_done = function(r) done_result = r end })
-        vim.wait(500, function() return done_result ~= nil end)
+        vim.wait(arrival.MS, function() return done_result ~= nil end)
         assert.is_not_nil(done_result, "on_done must run even when source throws")
         assert.is_false(done_result.ok)
         assert.is_truthy((done_result.msg or ""):find("source", 1, true))
@@ -656,7 +656,7 @@ describe("skill_invoke.invoke", function()
             elevated = {},
             force_tool = "read_file",
         }), {}, { on_done = function(r) done_result = r end })
-        vim.wait(2000, function() return done_result ~= nil end)
+        vim.wait(arrival.MS, function() return done_result ~= nil end)
 
         assert.is_not_nil(done_result)
         assert.is_true(done_result.ok)
@@ -695,7 +695,7 @@ describe("skill_invoke.invoke", function()
             elevated = {},
             force_tool = "read_file",
         }), {}, { on_done = function(r) done_result = r end })
-        vim.wait(2000, function() return done_result ~= nil end)
+        vim.wait(arrival.MS, function() return done_result ~= nil end)
 
         assert.is_not_nil(done_result)
         assert.is_true(done_result.ok)

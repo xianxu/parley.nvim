@@ -9,7 +9,7 @@ describe('asynchronous builtins',function()
     before_each(function()T._reset();T._uv,processes=Fake.new()end)
     after_each(function()
         for _,p in pairs(processes.processes)do p:finish()end
-        vim.wait(100,function()return T.stats().active==0 end,1);T._reset();T._uv=nil
+        vim.wait(100,function()return T.stats().active==0 end,1);T._reset();T._uv=nil -- drain: teardown settle; T._reset() follows
     end)
     it('registers all eleven executable builtins with asynchronous capability',function()
         for _,name in ipairs({'read_file','write_file','edit_file','propose_edits','grep','ack','find','ls',

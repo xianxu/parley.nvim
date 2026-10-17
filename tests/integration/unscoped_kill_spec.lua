@@ -19,7 +19,7 @@ describe("a killed unscoped process is a failure", function()
     end)
     after_each(function()
         for _, p in pairs(processes.processes) do p:finish() end
-        vim.wait(100, function() return T.stats().active == 0 end, 1)
+        vim.wait(100, function() return T.stats().active == 0 end, 1) -- drain: after_each settle of finished fakes before T._reset
         T._reset(); T._uv = nil
         for name, module in pairs(fresh) do package.loaded[name] = module end
     end)
@@ -254,7 +254,7 @@ describe("every content-fetch spawn runs in the scope it is handed", function()
     end)
     after_each(function()
         for _, p in pairs(processes.processes) do p:finish() end
-        vim.wait(100, function() return T.stats().active == 0 end, 1)
+        vim.wait(100, function() return T.stats().active == 0 end, 1) -- drain: after_each settle of finished fakes before T._reset
         T._reset(); T._uv = nil
         if fresh then package.loaded["parley.oauth"] = fresh end
     end)
@@ -360,7 +360,7 @@ describe("every content-fetch spawn runs in the scope it is handed", function()
                 local detached = processes.spawn_options[i].detached == true
                 assert.equals(expected, detached, row.name .. ": spawn " .. i .. (expected and " is not scoped" or " is scoped"))
                 local step = row.steps and row.steps[i]
-                if step then step(latest(), o); vim.wait(200, function() return processes.spawn_calls > i end, 5) end
+                if step then step(latest(), o); vim.wait(arrival.MS, function() return processes.spawn_calls > i end, 5) end
             end
         end)
     end

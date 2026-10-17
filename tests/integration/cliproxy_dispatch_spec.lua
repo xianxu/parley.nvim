@@ -9,6 +9,7 @@
 -- proving the spec's central invariant: a failed managed proxy fails the
 -- dispatch fast (never hangs) and a healthy one lets the query proceed.
 
+local arrival = require("tests.helpers.arrival")
 local uv = vim.uv or vim.loop
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
@@ -83,7 +84,7 @@ describe("managed cliproxy dispatch (e2e)", function()
         start_fake(port, "foreign")
         parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
         local outcome = dispatch(port)
-        vim.wait(9000, function() return outcome.aborted or ran_query end, 20)
+        vim.wait(arrival.MS, function() return outcome.aborted or ran_query end, 20)
         assert.is_true(outcome.aborted)   -- on_abort fired (fast-fail)
         assert.is_false(ran_query)        -- the query never launched
         assert.is_truthy(outcome.msg:find("non%-cliproxy"))
@@ -94,7 +95,7 @@ describe("managed cliproxy dispatch (e2e)", function()
         start_fake(port, "healthy")
         parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
         local outcome = dispatch(port)
-        vim.wait(9000, function() return outcome.aborted or ran_query end, 20)
+        vim.wait(arrival.MS, function() return outcome.aborted or ran_query end, 20)
         assert.is_true(ran_query)         -- query() launched
         assert.is_false(outcome.aborted)  -- no abort
     end)
@@ -105,7 +106,7 @@ describe("managed cliproxy dispatch (e2e)", function()
         parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
         -- nothing listening → ensure_running spawns the fake, then proceeds
         local o1 = dispatch(port)
-        vim.wait(9000, function() return o1.aborted or ran_query end, 20)
+        vim.wait(arrival.MS, function() return o1.aborted or ran_query end, 20)
         assert.is_true(ran_query)
         assert.is_false(o1.aborted)
         assert.is_truthy(#cliproxy.spawned_pids() >= 1)
@@ -114,7 +115,7 @@ describe("managed cliproxy dispatch (e2e)", function()
         assert.equals(0, #cliproxy.spawned_pids())
         ran_query = false
         local o2 = dispatch(port)
-        vim.wait(9000, function() return o2.aborted or ran_query end, 20)
+        vim.wait(arrival.MS, function() return o2.aborted or ran_query end, 20)
         assert.is_true(ran_query)
         assert.is_truthy(#cliproxy.spawned_pids() >= 1) -- re-spawned, no manual start
         vim.env.PARLEY_FAKE_MODE = nil

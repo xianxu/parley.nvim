@@ -112,7 +112,7 @@ describe("dispatcher request-transport cache", function()
                 pcall(process.handle.kill, process.handle, "sigterm")
             end
         end
-        local reaped = vim.wait(500, function()
+        local reaped = vim.wait(500, function() -- bound: SIGTERM grace window before the SIGKILL escalation below
             for _, process in ipairs(processes) do
                 if not process.exited() then return false end
             end
@@ -124,7 +124,7 @@ describe("dispatcher request-transport cache", function()
                     pcall(process.handle.kill, process.handle, "sigkill")
                 end
             end
-            reaped = vim.wait(500, function()
+            reaped = vim.wait(arrival.MS, function()
                 for _, process in ipairs(processes) do
                     if not process.exited() then return false end
                 end

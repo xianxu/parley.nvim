@@ -84,7 +84,7 @@ describe("cliproxy on_abort teardown per caller", function()
             { topicA = { "s1" }, topicB = { "s2" } },
             function(prefs) done = prefs end
         )
-        vim.wait(9000, function() return done ~= nil end, 20)
+        vim.wait(arrival.MS, function() return done ~= nil end, 20)
         parley.get_agent = saved_get_agent
 
         assert.is_truthy(done) -- callback fired → on_abort → process_next past BOTH tags
@@ -142,7 +142,7 @@ describe("cliproxy on_abort teardown per caller", function()
         end
         local Respond = require("parley.chat_respond")
         local started, response = pcall(Respond.respond, { range = 0 })
-        local settled = started and response and vim.wait(1000, function()
+        local settled = started and response and vim.wait(arrival.MS, function()
             return Respond.response_snapshot(response).status == "terminal"
         end, 10)
         parley.dispatcher.query = saved_query
@@ -194,7 +194,7 @@ describe("cliproxy on_abort teardown per caller", function()
         end
 
         pcall(function() skill_invoke.invoke(buf, manifest, {}, {}) end)
-        vim.wait(300, function() return not skill_invoke.is_in_flight(buf) end, 10)
+        vim.wait(arrival.MS, function() return not skill_invoke.is_in_flight(buf) end, 10)
 
         parley.get_agent = saved_get_agent
         parley.dispatcher.query = saved_query

@@ -280,7 +280,7 @@ describe("a stopped response never holds a slot", function()
     after_each(function()
         Respond.cancel_responses(buf)
         for _, p in pairs(processes.processes) do p.ignores = {}; p:finish() end
-        vim.wait(200, function() return Tasker.stats().active == 0 end, 5)
+        vim.wait(200, function() return Tasker.stats().active == 0 end, 5) -- drain: teardown best effort; Tasker._reset follows
         Vault.get_secret, Vault.run_with_secret = old_secret, old_run
         Tasker._reset(); Tasker._uv = nil; Tasker._clock = nil
         if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end

@@ -140,7 +140,7 @@ describe("define: skill_invoke read-only seams (#161)", function()
             no_reload = true,
             on_done = function(r) done_result = r end,
         })
-        vim.wait(2000, function() return done_result ~= nil end)
+        vim.wait(arrival.MS, function() return done_result ~= nil end)
 
         assert.is_not_nil(done_result, "on_done never ran")
         -- File on disk is unchanged (the draft was NOT persisted).
@@ -157,7 +157,7 @@ describe("define: skill_invoke read-only seams (#161)", function()
             no_reload = true,
             on_done = function(r) done_result = r end,
         })
-        vim.wait(2000, function() return done_result ~= nil end)
+        vim.wait(arrival.MS, function() return done_result ~= nil end)
         assert.is_not_nil(captured_payload, "query never ran")
         local dump = vim.inspect(captured_payload.messages)
         assert.is_true(dump:find("SENTINEL CONTEXT", 1, true) ~= nil,
@@ -270,7 +270,7 @@ describe("define: transcript agent reaches the cascade (#215)", function()
     local function invoke_and_capture()
         require("parley.skill_invoke").invoke(buf, require("parley.skills.define"),
             { phrase = "x" }, { document = "doc", no_reload = true, detached_progress = false })
-        vim.wait(500, function() return captured_deps ~= nil end)
+        vim.wait(arrival.MS, function() return captured_deps ~= nil end)
         if not captured_deps then return nil end
         local cur = captured_deps.current_agent
         assert.are.equal("function", type(cur), "current_agent must reach the cascade lazily")
@@ -301,7 +301,7 @@ describe("define: transcript agent reaches the cascade (#215)", function()
             parley.get_agent = function() error("boom: agent registry unavailable") end
             require("parley.skill_invoke").invoke(buf, require("parley.skills.define"),
                 { phrase = "x" }, { document = "doc", no_reload = true, detached_progress = false })
-            vim.wait(500, function() return captured_deps ~= nil end)
+            vim.wait(arrival.MS, function() return captured_deps ~= nil end)
             -- the tier is a thunk; the failure happens when the cascade pulls it
             if captured_deps and type(captured_deps.current_agent) == "function" then
                 captured_deps.current_agent()
@@ -321,7 +321,7 @@ describe("define: transcript agent reaches the cascade (#215)", function()
         local seen = capture_warnings(function()
             require("parley.skill_invoke").invoke(buf, require("parley.skills.define"),
                 { phrase = "x" }, { document = "doc", no_reload = true, detached_progress = false })
-            vim.wait(500, function() return captured_deps ~= nil end)
+            vim.wait(arrival.MS, function() return captured_deps ~= nil end)
             -- drive the real on_dropped the shell injected
             assert.is_truthy(captured_deps and captured_deps.on_dropped,
                 "shell must inject on_dropped so an explicit setting is never silently overridden")
@@ -477,7 +477,7 @@ describe("define_visual + render_definition (#161)", function()
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })
         require("parley").define_visual(buf)
-        vim.wait(2000, function()
+        vim.wait(arrival.MS, function()
             return #vim.diagnostic.get(buf, { namespace = ns }) > 0
         end)
         -- Footnote reference written into the line (the undo anchor)
@@ -757,7 +757,7 @@ describe("define_visual + render_definition (#161)", function()
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })
         require("parley").define_visual(buf)
-        vim.wait(2000, function()
+        vim.wait(arrival.MS, function()
             return #vim.diagnostic.get(buf, { namespace = ns }) > 0
         end)
         vim.api.nvim_set_current_win(prior_win)
@@ -774,7 +774,7 @@ describe("define_visual + render_definition (#161)", function()
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })
         require("parley").define_visual(buf)
-        vim.wait(2000, function()
+        vim.wait(arrival.MS, function()
             return vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1] == "here is ASIN[^asin] in context"
         end)
 
@@ -788,7 +788,7 @@ describe("define_visual + render_definition (#161)", function()
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })
         require("parley").define_visual(buf)
-        vim.wait(2000, function()
+        vim.wait(arrival.MS, function()
             local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
             return table.concat(lines, "\n"):find("%[%^asin%]: Updated definition%.") ~= nil
         end)
@@ -806,7 +806,7 @@ describe("define_visual + render_definition (#161)", function()
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })
         require("parley").define_visual(buf)
-        vim.wait(2000, function()
+        vim.wait(arrival.MS, function()
             return #vim.diagnostic.get(buf, { namespace = ns }) > 0
         end)
         assert.are.equal("here is ASIN[^asin] in context",

@@ -43,14 +43,23 @@ Rule (the #370 lesson): a positive wait, one that returns on arrival, is bounded
 
 - [x] tests/helpers/arrival.lua: one shared arrival budget, MS = 15000, the product's longest round-trip deadline (agentic_submit_timeout_ms). session_sync_spec keeps its product deadline.
 - [x] Mechanical rewrite: every positive wait's literal bound in tests/unit and tests/integration becomes arrival.MS. That is 275 sites in 93 files; the one 30 s wait (stream_integrity) becomes 2 * arrival.MS. The two waits assigned to a local first (session_sync_native, document_presentation_reentrant) are converted by hand. The second passes the budget into its child Neovim.
-- [x] '-- bound: <reason>' marker: reviewed the candidates whose case names suggest timing ("before", "immediate", "native timers run"). Each checks its property after the wait, so none needed the marker.
+- [x] (superseded by the round-2 entry below) '-- bound: <reason>' marker: reviewed the candidates whose case names suggest timing ("before", "immediate", "native timers run"). Each checks its property after the wait, so none needed the marker.
 - [x] tests/arch/arrival_budget_spec.lua: refuses a bare literal in the three assert forms, with a floor of 250 found. Mutation check: one literal reintroduced in outline_spec fails it, and the same line with '-- bound: probe' passes.
 - [x] atlas/infra/test_harness.md: the rule, the marker and the arch test's reach.
-- [x] Full suite green: sdlc local-check on 236db111 (3m54s).
+- [x] Full suite green, round 1: sdlc local-check on 236db111 (3m54s).
+- [x] Round 2 (close review REWORK): the round-1 sweep and arch test saw only the one-line assert form. That left 185 bare and local-assigned predicate waits with literals in 43 files, among them define_spec's and skill_invoke_spec's 2 s waits. Round 1's "only two local-assigned waits" claim was wrong. Each site was classified by reading what follows it:
+  - 158 positive, now on arrival.MS; the waits over 15 s take 2 * arrival.MS;
+  - 11 absence checks, which keep their literal and are marked '-- absence:';
+  - 11 teardown drains, marked '-- drain:';
+  - 3 bounds that are the property, marked '-- bound:' (skill_invoke 377 and 414 fake hrtime; query_cache 115 is the SIGTERM grace before SIGKILL).
+  The review named cliproxy_login 72 and 200 as positive. They are absence checks: the next line asserts the count did not grow.
+- [x] The arch test now reads every `vim.wait(<literal>, <predicate>)` whatever its form, needs a reason marker on any kept literal, and has a floor of 400. Mutation check: a bare, unasserted `vim.wait(500, pred)` in outline_spec fails it.
+- [ ] Full suite green, round 2.
 
 ## Revisions
 
 - 2026-10-17: scope widened from the 2000 ms literals in 19 files to every literal positive wait (about 275 sites; 93 files as measured), so that the arch test can refuse new literals. Approved by the hub. Out of scope: tests/packaging and tests/perf, which run outside the suite, and cliproxy_conformance's assigned 20 s live wait.
+- 2026-10-17, round 2: the assert-form sweep missed the bare and local-assigned positive waits. Both were swept as well, and the arch test was widened to every predicate wait, with absence/drain/bound reasons. The round-1 count, "275 sites in 93 files", covered the assert form only. cliproxy_conformance's 20 s waits are now 2 * arrival.MS too.
 
 ## Log
 
