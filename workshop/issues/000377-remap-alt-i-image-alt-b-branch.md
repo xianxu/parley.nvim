@@ -51,6 +51,7 @@ Pair's draft nvim puts "attach an image" on Alt+i. In parley, Alt+i creates a su
 ## Log
 
 ### 2026-10-17
+- 2026-10-17: closed — Round-2 Minors fixed as classes: init.lua:2472 history note now <M-i> (now <M-b>), the only hit of the reviewer sweep grep; tutorial spec now reads README.md and workshop/parley/*.md too, green, and Alt+v restored in README:183 or welcome.md:15 fails it by file:line (mutation-checked). keybinding_agreement 36/36. (fixed-then-ship); review verdict: SHIP
 - 2026-10-17: closed — Defaults resolve paste_image to <M-i>, branch_ref to <M-b> + <C-g>i; <M-v> unbound (paste_image_spec asserts it in n/i). Round-1 BR-1: all tutorial/starter prose re-swept with PCRE across spellings and fixed; new keybinding_agreement case ties every tutorial Alt/Option letter to a bound key under the starter options and checks the attach / linked-chat lines name the action key; 3 mutation checks (old keys restored) each fail it by file:line. BR-2 history notes restored with (now <M-b>); BR-3 <M-b> absent under default_keymaps=false. Full suite green on 131c684c.; review verdict: FIX-THEN-SHIP
 
 - Conflict check, run before any change and reported to the hub. The TL approved `<M-v>` being dropped.
