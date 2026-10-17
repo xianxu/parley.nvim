@@ -88,3 +88,87 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"315fc00c-3bd6-4d17-9cdf-0019733e54cc","repository":"github.com/xianxu/parley.nvim","issue_id":"000360","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/bbce154f729b785d","reviewed_head":"139ef2b9570dc37907fe167492022c627091c527","slot":"parley.nvim:4","requested_at":"2026-10-17T07:58:08.194916Z"},"phase":"finished","pid":97771,"started_at":"2026-10-17T07:58:08.30167Z","finished_at":"2026-10-17T08:01:44.194036Z","session_id":"98c87d59-c137-4c32-afa6-b3e450fe4734","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T01:46:27-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 360 — Cliproxy catalog joins-routes case intermittently returns empty under suite load |
+| repo | parley.nvim |
+| issue file | workshop/issues/000360-cliproxy-catalog-suite-flake.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | f7808490a40dfed64017cb6b183e042c80fa8bf0..5d00733614cc0c18ca1135f4549b3e5440cb1b09 |
+| command | sdlc close --issue 360 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-17T01:46:27-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking how to run the unit spec, then I'll verify the vim.wait budget claim.
+
+Running the unit spec in a scratch test env.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All three round-1 findings are fixed, and I checked each against the code rather than the commit message. In the scratch checkout `tests/unit/ready_port_spec.lua` passes 12/12. I then put back the old `res.code == 1 and false or nil` line, and the exit-shape table failed on case 3; after restoring it the tree was clean. The BR-1 fix depends on a claim about `vim.wait`: that a check which runs past the timeout and returns true still counts as true. I tested it with `nvim --headless`: `vim.wait(100, cb)`, where `cb` blocks for 400 ms and then returns true, returned `true` after 411 ms. So the 10 s lsof guard does not use up `wait_listening`'s 5 s budget whenever lsof eventually answers. What stays bounded but slow is a hung lsof (exit 124): one readiness wait can then take up to about 10 s before it fails. That is a real hang, not a fake that is up. The only thing left is one stale line in the plan, which is Minor and doesn't block.
+
+1. **Strengths**
+   - `tests/helpers/ready_port.lua:131-138`: `is_listening` runs the connect first, then checks for a LISTEN socket. lsof only runs after a connect succeeds, and the "never runs lsof while the port still refuses" case pins that.
+   - The seams `_connect`, `_run_lsof`, `_lsof_present` and `_has_listener` let every mode be tested without IO: lsof absent, lsof present but silent, and all six exit shapes (`ready_port_spec.lua:111-138`). The table caught a real Lua `and/or` bug.
+   - ARCH-DRY sweep is complete: the four hand-copied connect polls now call `ready_port.wait_listening`. A grep for `:connect("127` across `tests/` and `lua/` finds only the product's `cliproxy.lua:1450` callback probe. The issue Log explains why that one was left alone.
+   - `after_each` now restores all four seams from one `SEAMS` list (`ready_port_spec.lua:76-82`), so the whole family is covered, not just the case that was reported.
+   - The atlas was updated in the same range (`atlas/infra/test_harness.md:160-167`).
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - The issue's `## Plan` item 2 still says "bounded at 2 s", but the code is now 10 s (`ready_port.lua:104`). The Log entries are historical and fine to leave. The atlas only says "bounded", so it is correct. This is the only stale claim in the window.
+
+5. **Test coverage**
+   - Both modes of the "lsof absent or unanswering" rule are exercised: absent means the connect stands, present but silent means unconfirmed.
+   - The rejects case skips itself as pending when lsof is missing.
+   - The guard's size has no unit test. That's acceptable: it is a constant, and the property it relies on (`vim.wait` honouring a late true) is Neovim behaviour I checked directly.
+
+6. **Architecture**
+   - ARCH-DRY: pass.
+   - ARCH-PURE: pass. The IO (connect, lsof, `executable`) sits behind small replaceable seams, and the decision logic in `_has_listener` and `is_listening` is tested with stubs.
+   - ARCH-PURPOSE: pass. All the fixed-port readiness waits go through the helper, and the one product-side probe left out is excluded with a stated reason.
+
+7. **Plan revisions:** change Plan item 2 to "bounded by a 10 s hang guard (matching cliproxy `LSOF_GUARD_MS`)".
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Guard raised to 10 s, matching cliproxy LSOF_GUARD_MS. Headless test: vim.wait(100) with a callback that blocks 400 ms then returns true gives true, so a slow but answering lsof does not use up the budget.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      New cases cover lsof absent, lsof present but silent, and exit codes 0, 1, 124, 2 and nil. Putting back the old exit-1 line fails case 3 (spec line 136).
+  - id: BR-3
+    disposition: addressed
+    note: |
+      after_each restores all four seams from the SEAMS list (ready_port_spec.lua:76-82). The inline restore is gone.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: doc-claim-drifts-from-code
+    title: |
+      Issue Plan item 2 still says the lsof confirm is bounded at 2 s, but the code uses 10 s
+    detail: |
+      The Plan checklist in workshop/issues/000360 says "bounded at 2 s"; ready_port.lua:104 sets LSOF_TIMEOUT_MS = 10000. Other places in the window: the atlas says only "bounded" (correct), the code comments say 10 s (correct), and the 2026-10-16 Log entry is historical (leave it). Fix: update the Plan line.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"bfb6ca48-48cf-498c-83fe-c44a2edaa3ee","repository":"github.com/xianxu/parley.nvim","issue_id":"000360","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/934231eb1ee0e91e","reviewed_head":"5d00733614cc0c18ca1135f4549b3e5440cb1b09","slot":"parley.nvim:4","requested_at":"2026-10-17T08:42:00.957491Z"},"phase":"finished","pid":38800,"started_at":"2026-10-17T08:42:01.172451Z","finished_at":"2026-10-17T08:46:27.418282Z","session_id":"0a118491-dd53-4ccb-8266-a4b673081247","outcome":"returned"}] -->
