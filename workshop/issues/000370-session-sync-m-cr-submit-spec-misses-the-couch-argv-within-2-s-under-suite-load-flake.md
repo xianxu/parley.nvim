@@ -52,5 +52,6 @@ Root cause: fixture timing, not ordering. A traced focused run (couch.run wrappe
 ### 2026-10-16
 
 ### 2026-10-17
+- 2026-10-17: closed — Regression "<M-CR> waits out a slow couch send" (fake send sleeps 2.5 s) failed on the 2 s literal and passes on the arrival bound. Focused session_sync_spec 64/64; with the bound set back to 2000, only the regression fails. luacheck clean. Traced run: one couch --send-to started 15 ms after the key, nothing queued (no ordering bug). Test-only fix; no new architectural surface, so no atlas change.; review verdict: SHIP
 
 - Not swept: 19 other spec files carry `assert.is_true(vim.wait(2000, ...))`. Some may wait on processes; named for the hub to file.
