@@ -1,12 +1,12 @@
 ---
 id: 000362
-status: working
+status: codecomplete
 deps: [parley.nvim#319]
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '35486bcfe2e859798f929c26a758c60996822909' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '936e91e088c593c0f9ebffaa1206994c317a5f95' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T16:04:39-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 6.98
 ---
 
 # Review-protocol sync accepts S2's collaboration-modes export member
