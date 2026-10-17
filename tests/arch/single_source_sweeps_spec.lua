@@ -110,17 +110,18 @@ end
 -- cells name specs (#261 M5 close: BR-89). Rows count while the table's header
 -- carries the Status column the writing-plans skill specifies; anything but a
 -- row or a separator ends the region. Returns the number of such tables and
--- their row lines. A quick-flow issue has no table at all (#375).
+-- their data rows, whatever a row's first cell holds (a quick-flow table may
+-- name concepts in prose, #330). A quick-flow issue may have no table (#375).
+-- Both directions of the sweep read the tables through this one definition.
 local function concept_rows(body)
     local tables, rows, in_concepts = 0, {}, false
     for line in body:gmatch("[^\n]+") do
-        if in_concepts and line:match("^| `") then rows[#rows + 1] = line end
-        -- A separator row matches "^|" too, and carries no Status cell, so it
-        -- simply leaves the region as it is.
         if line:match("^|") then
             if line:match("|%s*Status%s*|") then
                 in_concepts = true
                 tables = tables + 1
+            elseif in_concepts and not line:match("^|[%s%-:|]+$") then
+                rows[#rows + 1] = line -- a separator row is not data
             end
         elseif vim.trim(line) ~= "" then
             in_concepts = false
@@ -168,15 +169,17 @@ describe("arch: single-source sweeps stay swept", function()
         -- claims. Searching the whole document let a name mentioned anywhere —
         -- a Revisions entry, a commit recipe, a code block — satisfy a guard
         -- about table rows.
-        local table_rows = {}
+        local table_rows, tables = {}, 0
         for _, doc in ipairs(docs) do
-            local whole = read(doc)
-            local section = whole:match("## Core concepts(.-)\n## ") or ""
-            for line in section:gmatch("[^\n]+") do
-                if line:match("^| ") then
-                    table_rows[#table_rows + 1] = line
-                end
-            end
+            local found, lines = concept_rows(read(doc))
+            tables = tables + found
+            vim.list_extend(table_rows, lines)
+        end
+        if tables == 0 then
+            -- A quick-flow issue carries no Core-concepts table, so there is
+            -- nothing to name its additions in (#375).
+            pending("issue #" .. id .. " has no Core-concepts table (quick flow)")
+            return
         end
         local plan_body = table.concat(table_rows, "\n")
 
@@ -311,6 +314,10 @@ describe("arch: single-source sweeps stay swept", function()
             pending("not on an issue branch")
             return
         end
+        if #docs == 0 then
+            pending("no plan or issue document for " .. id)
+            return
+        end
         local missing = {}
         local survived = {}
         local rows, tables = 0, 0
@@ -318,6 +325,8 @@ describe("arch: single-source sweeps stay swept", function()
             if doc ~= "" then
                 local found, lines = concept_rows(read(doc))
                 tables, rows = tables + found, rows + #lines
+                -- Only a row that names its concept in code carries a symbol.
+                lines = vim.tbl_filter(function(line) return line:match("^| `") ~= nil end, lines)
                 for _, line in ipairs(lines) do
                     -- A `deleted` row names a symbol that by definition no
                     -- longer exists — that is the whole content of the row.
@@ -389,7 +398,7 @@ describe("arch: single-source sweeps stay swept", function()
 
     -- #375: a quick-flow issue has no Core-concepts table; the case above is
     -- then pending, while an emptied table (a header and no rows) still fails.
-    it("concept_rows tells a body without a table from an emptied one", function()
+    it("concept_rows tells a body without a table from an emptied one, and keeps prose rows", function()
         local quick = "## Spec\n\n| Field | Value |\n|---|---|\n| `name` | x |\n\n## Plan\n- [ ] do it\n"
         local found, rows = concept_rows(quick)
         assert.equals(0, found)
@@ -398,10 +407,12 @@ describe("arch: single-source sweeps stay swept", function()
         found, rows = concept_rows(emptied)
         assert.equals(1, found)
         assert.same({}, rows)
-        local full = "| Name | Lives in | Status |\n|---|---|---|\n| `Thing` | `lua/x.lua` | new |\nprose\n| `stray` |\n"
+        local full = "| Name | Lives in | Status |\n|---|---|---|\n| `Thing` | `lua/x.lua` | new |\n"
+            .. "| Lock baseline | session_sync | modified |\nprose\n| `stray` |\n"
         found, rows = concept_rows(full)
         assert.equals(1, found)
-        assert.same({ "| `Thing` | `lua/x.lua` | new |" }, rows)
+        -- A prose-named row is data too (#330); prose ends the table.
+        assert.same({ "| `Thing` | `lua/x.lua` | new |", "| Lock baseline | session_sync | modified |" }, rows)
     end)
 
     it("the definition matcher accepts every real definition form", function()

@@ -48,3 +48,12 @@ When the current issue's docs carry no Core-concepts table (a quick-flow issue),
 ## Log
 
 ### 2026-10-17
+
+### 2026-10-17
+
+- Close review round 1, FIX-THEN-SHIP:
+  - BR-1: `concept_rows` dropped Status-table rows that do not start with a backtick, so #330 and #331 (quick flow, prose-named rows) read as "emptied". The sibling code-to-table case used a second table definition (the `## Core concepts` section scan), which failed on any quick-flow branch that adds an export. `concept_rows` now returns every data row. The plan-to-code case filters for backtick rows itself, and the sibling reads tables through `concept_rows` and goes pending with no table.
+  - BR-2: no docs at all now gets its own pending reason.
+  - Checked on real docs, with the parser ported to Python: #330 gives 1 table / 2 rows, #331 1/1, 000209's plan 2/9, 000354's plan 2/6.
+  - Focused: 28/0, with both directions pending on this branch.
+- Unrelated flake on the first direct `make -k test`, on head c6708d6f rather than 48513d91 as #376's text says: packaging_vm_spec read an empty vms.json. Filed as #376 with the retained log. The unchanged sdlc local-check rerun on c6708d6f is green (3m33s).
