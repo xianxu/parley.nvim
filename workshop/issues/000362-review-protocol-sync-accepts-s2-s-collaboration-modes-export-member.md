@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "fe73b135", done: "65097529"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Review-protocol sync accepts S2's collaboration-modes export member
@@ -69,6 +69,8 @@ Approved local-adapter correction: see [implementation plan](../plans/000362-rev
 - Filed by parley.nvim:4 as S2's design owner, from ariadne:2's question on the export member. It depends on #319 landing (the sync lives there) and on ariadne's M1 export.
 
 ### 2026-10-16 — initial plan
+- 2026-10-16: closed — BR-3 complete resolve-path sweep: parser, flat reader, name trim/normalization, balanced annotations, fences, ATX/closing hashes. Resolver scaling regressions red to green; 20 KB heading 3.755 s to 0.000097 s; 30 pure cases, 16 Python contracts, mapped review and 64 real invocation cases passed; pinned-source --check, lint and diff clean. Integrated recorded suite 95639f28: 461 files passed, 773 lint-clean, exit 0 in 2m24s, log sha256 0f301da12b61. Prior exact staged partial accepted by TL 855c7c6f: all-chat/refusal live passed; mixed notices correct, edit blocked by logged-out providers and runner timeout; mixed live edit checked in operator normal use. Stage cleared. No finding-cap waiver used. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 537 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 Dispatched by ops:0 in delivery 44a5640b-6633-4b68-8a4b-dee8c13e7a32.
 Quick plan posted to the hub (70229a8f-43ec-4ee3-80ff-8af4ef1b884f,

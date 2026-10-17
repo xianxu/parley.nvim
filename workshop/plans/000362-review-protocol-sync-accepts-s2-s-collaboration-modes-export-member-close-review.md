@@ -365,3 +365,84 @@ Done-when: current — it covers optional export composition, old-export notices
    Add a `## Revisions` entry extending BR-3’s bounded-work rule to **complete routing admission**, explicitly enumerating parser scans, heading extraction, closing-hash removal, and name normalization. Require resolver-level scaling coverage before marking the family complete.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"80b24dbe-71d9-4da3-bf5c-bcde1c017d0e","repository":"github.com/xianxu/parley.nvim","issue_id":"000362","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/d756f455484f1e33","reviewed_head":"4e50304904ca03049b21675361ae8a62c053f1d8","slot":"parley.nvim:1","requested_at":"2026-10-17T04:41:30.256322Z"},"phase":"finished","pid":8276,"started_at":"2026-10-17T04:41:30.35248Z","finished_at":"2026-10-17T04:43:19.684208Z","session_id":"01a1482a-3edb-73e3-b76c-700d5706fd37","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T23:00:42-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 362 — Review-protocol sync accepts S2's collaboration-modes export member |
+| repo | parley.nvim |
+| issue file | workshop/issues/000362-review-protocol-sync-accepts-s2-s-collaboration-modes-export-member.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 3e055bc1e3c11defa75743c020f2698204fb7bcc..8be9bfde97b0618704bcdd4c035550c30bea6791 |
+| command | sdlc close --issue 362 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-16T23:00:42-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies the revised contract. BR-3 is now regression-proven across production routing, packaged protocol bytes match the pinned producer, and focused tests pass. No new blocking findings.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The local adapter override and invocation-owned protection remain effective; review and skill-system suites pass, including protected-chat and unsupported-declaration cases.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Done when explicitly requires old-v1 sync and --check success with notices; the corresponding real-CLI regression passes.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      ARCH-CONSTRAINTS / ARCH-PURPOSE: bounded scans now cover complete routing admission. The resolver regressions at tests/unit/review_collaboration_spec.lua:76 and :88 fail with the previous-round resolver at 3.10/6.37 CPU seconds and pass at HEAD at 0.004/0.001 seconds. The production 5/10/20 KB heading and assignment paths also remain below 0.002 seconds.
+```
+
+Done-when: current — covers export composition, backward compatibility notices, local routing, protected chat content and invalid-routing refusal.
+
+1. **Strengths**
+
+   - Export validation retains strict roles, paths, digests and output ownership.
+   - One pure resolver supplies admission, notices, marker eligibility and edit permission.
+   - Permission checks precede tool effects.
+   - README and atlas document the local behavior and limitations.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - Both mapped suites passed: `modes/review` and `skills/skill-system`; process census clean.
+   - All 16 Python export tests passed.
+   - Two resolver scaling regressions failed with the previous-round implementation and passed at HEAD.
+   - Nine packaged members plus `export.json` match producer `1db0ec0`; reconstructed pinned-source `--check` passed.
+   - Range whitespace check passed; checkout unchanged. Full suite was not independently rerun.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared routing and composition owners.
+   - **ARCH-PURE — pass:** declared pure entities exist and run without application IO.
+   - **ARCH-PURPOSE — pass:** export consumers derive from the snapshot; BR-3’s complete admission sweep is delivered.
+   - **ARCH-MOCK — pass:** integration uses injected provider and filesystem seams.
+   - **ARCH-CONSTRAINTS — pass:** representative scaling tests detect the former stalls.
+   - **ARCH-SECURE — pass:** unsupported declarations refuse visibly; permissions precede writes.
+   - **ARCH-ORDER — pass:** guards preserve existing completion supervision and reject multiple proposal batches.
+   - **ARCH-FUNERAL — pass:** fixed package ownership; no new accumulating runtime artifact family.
+
+7. **Plan revision recommendations:** None; the complete-resolver revision matches the implementation.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"6c12ed95-2031-44cb-956e-af5c0538ebd1","repository":"github.com/xianxu/parley.nvim","issue_id":"000362","recipe":"milestone-review","round":5,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/1d8df91334122d7c","reviewed_head":"8be9bfde97b0618704bcdd4c035550c30bea6791","slot":"parley.nvim:1","requested_at":"2026-10-17T05:58:36.49782Z"},"phase":"finished","pid":84970,"started_at":"2026-10-17T05:58:36.592257Z","finished_at":"2026-10-17T06:00:41.910969Z","session_id":"01a14870-d61a-75a0-872e-eda2614c18d0","outcome":"returned"}] -->
