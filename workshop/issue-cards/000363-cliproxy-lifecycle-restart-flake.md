@@ -1,6 +1,6 @@
 ---
 id: 000363
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 1.31
+tracker:
+    version: 1
+    completion:
+        token: close-523503245223
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 2d1479cccec4cfd37e62736564ab3a3654b77dc5
+        evidence_commit: e7b402d837c3a368ff784b3a28a7cfa31dc8baa7
 ---
 
 # Cliproxy credential-restart lifecycle cases intermittently time out and probe the killed port
