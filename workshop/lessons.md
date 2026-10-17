@@ -687,10 +687,10 @@ oracle, and the mutation that would make the test fail.
 - An await failure does not cancel the operation. Own every synthetic delayed
   callback with the case, cancel its timer at teardown and guard an already
   queued callback before it can resume production work in the next case.
-# Prompt imports need a consumer capability check (#362)
+
+## 2026-10-16 (#362 — check the consumer capabilities of imported prompts)
 
 Before importing a shared protocol, trace every required IO operation through
 the receiving adapter. Text composition and matching hashes do not prove that
 an artifact-bound single-file edit tool can execute side-doc, cross-file or
 previous-read flows. Resolve unsupported routing explicitly before shipping.
-
