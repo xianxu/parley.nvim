@@ -327,6 +327,132 @@ describe("session-sync native edits", function()
         assert.is_true(vim.wait(arrival.MS, function() return not exists() end), "move must preserve acquisition baseline")
     end)
 
+    local function rewritten_move(held)
+        make_plain()
+        open(false, false, true, true)
+        return exec([[
+            local destination, held = ...
+            local ss = require("parley.session_sync")
+            local function hash() return vim.fn.sha256(vim.json.encode(vim.api.nvim_buf_get_lines(0,0,-1,false))) end
+            _G.sync_original = vim.api.nvim_buf_get_lines(0,0,-1,false)
+            if held then vim.api.nvim_buf_set_lines(0,7,8,false,{"unsent operator edit"}) end
+            local before = hash()
+            assert(ss.acquire_observed(0, {baseline=held and vim.fn.sha256(vim.json.encode(sync_original)) or before,
+                outstanding=true}))
+            _G.sync_token = assert(ss.begin_move(0))
+            assert(ss.install_move_lock(0, sync_token, destination))
+            vim.cmd("saveas " .. vim.fn.fnameescape(destination))
+            _G.sync_before = before
+            local lines = vim.fn.readfile(destination)
+            lines[7] = "## Mechanically rewritten parent"
+            vim.fn.writefile(lines, destination)
+            ss.with_buffer_read(0, function() vim.cmd("silent edit") end)
+            return {before=before, after=hash(), baseline=sync_token.baseline}
+        ]], root .. "/synchronized.md", held)
+    end
+
+    it("synchronizes a mechanical move rewrite and releases only its transformed baseline", function()
+        local proof = rewritten_move(false)
+        local destination = root .. "/synchronized.md"
+        local protection = exec([[
+            local ss = require("parley.session_sync")
+            assert(type(ss.synchronize_move) == "function", "missing move synchronization API")
+            local ok, protection = ss.synchronize_move(0, sync_token, sync_before)
+            assert(ok, protection)
+            assert(sync_token.baseline == protection.baseline)
+            return protection
+        ]])
+        assert.equals(proof.after, protection.baseline)
+        assert.equals(protection.old_lock, protection.new_lock)
+        assert.is_not_nil(vim.uv.fs_stat(file .. ".lock"), "synchronization must keep migration protection")
+        exec([[
+            local destination = ...
+            local ss = require("parley.session_sync")
+            local identity = ss.identity(0); identity.File = destination
+            assert(ss.finish_move(0, sync_token, identity))
+            assert(ss.release_if_baseline(0))
+        ]], destination)
+        assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))
+        file = destination
+        keys("x")
+        locked() -- native read must not detach the next edit observer.
+    end)
+
+    it("preserves an outstanding operator baseline through mechanical move synchronization", function()
+        local proof = rewritten_move(true)
+        local destination = root .. "/synchronized.md"
+        local baseline = exec([[
+            local ss = require("parley.session_sync")
+            assert(type(ss.synchronize_move) == "function", "missing move synchronization API")
+            local ok, protection = ss.synchronize_move(0, sync_token, sync_before)
+            assert(ok, protection)
+            local identity = ss.identity(0); identity.File = ...
+            assert(ss.finish_move(0, sync_token, identity))
+            assert(not ss.release_if_baseline(0))
+            return protection.baseline
+        ]], destination)
+        assert.equals(proof.baseline, baseline)
+        file = destination
+        assert.is_true(exists())
+        exec("vim.api.nvim_buf_set_lines(0,0,-1,false,sync_original)")
+        assert.is_true(vim.wait(arrival.MS, function() return not exists() end), "original acquisition baseline must still release")
+    end)
+
+    it("refuses stale synchronization token, path, protection and modified buffers without changing baseline", function()
+        local proof = rewritten_move(false)
+        local destination = root .. "/synchronized.md"
+        local baseline = exec([[
+            local destination = ...
+            local ss = require("parley.session_sync")
+            assert(type(ss.synchronize_move) == "function", "missing move synchronization API")
+            local function refused(token, before)
+                local ok, message = ss.synchronize_move(0, token, before)
+                assert(ok == false and type(message) == "string")
+                assert(sync_token.baseline == sync_before, "refusal changed acquisition proof")
+            end
+            refused({}, sync_before)
+            refused(sync_token, false)
+            vim.api.nvim_buf_set_name(0, destination .. ".wrong")
+            refused(sync_token, sync_before)
+            vim.api.nvim_buf_set_name(0, destination)
+            vim.fn.writefile({"foreign protection"}, destination .. ".lock")
+            refused(sync_token, sync_before)
+            local lock = assert(io.open(destination .. ".lock", "wb")); assert(lock:write(sync_token.lock)); lock:close()
+            vim.bo.modified = true
+            refused(sync_token, sync_before)
+            vim.bo.modified = false
+            local ok, protection = ss.synchronize_move(0, sync_token, sync_before)
+            assert(ok, protection)
+            return protection.baseline
+        ]], destination)
+        assert.equals(proof.after, baseline)
+    end)
+
+    for _, known_baseline in ipairs({false, true}) do
+        it("synchronizes restored protection with known baseline=" .. tostring(known_baseline), function()
+            local proof = rewritten_move(false)
+            local destination = root .. "/synchronized.md"
+            local absent = exec([[
+                local destination, known_baseline, after = ...
+                local ss = require("parley.session_sync")
+                local identity = ss.identity(0)
+                local protection = {old_lock=sync_token.lock,new_lock=sync_token.lock,
+                    baseline=known_baseline and after or nil}
+                ss.detach(0)
+                local restored = assert(ss.restore_move(0, identity, destination, protection))
+                assert(type(ss.synchronize_move) == "function", "missing move synchronization API")
+                local ok, next_protection = ss.synchronize_move(0, restored, after)
+                assert(ok, next_protection)
+                identity.File = destination
+                assert(ss.finish_move(0, restored, identity))
+                assert(ss.release_if_baseline(0) == known_baseline)
+                return next_protection.baseline == nil
+            ]], destination, known_baseline, proof.after)
+            assert.equals(not known_baseline, absent)
+            assert.equals(not known_baseline, vim.uv.fs_stat(destination .. ".lock") ~= nil)
+        end)
+    end
+
     it("aborts a no-effect move when the buffer name aliases its canonical registry path", function()
         make_plain()
         local alias = root .. "/alias.md"

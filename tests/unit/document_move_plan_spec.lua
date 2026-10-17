@@ -239,6 +239,27 @@ describe('move_outcome (#359)', function()
     end)
 end)
 
+describe('forward-only v2 move view', function()
+    local projection = require('parley.document_move_plan')
+    it('exposes only moving/wait, done/none and interrupted/reopen', function()
+        for _, overdue in ipairs({ false, true }) do
+            local view = projection.move_outcome({ forward_only = true, moved = true, overdue = overdue })
+            assert.equals('moving', view.state); assert.equals('wait', view.action)
+        end
+        local done = projection.move_outcome({ forward_only = true, moved = true, result = { kind = 'registered' } })
+        assert.equals('done', done.state); assert.equals('none', done.action)
+        for _, result in ipairs({ { kind = 'unavailable', error = 'owner unavailable' },
+            { kind = 'uncertain', code = 'target-conflict', error = 'destination occupied' },
+            { kind = 'pending', error = 'parent bytes changed' } }) do
+            local view = projection.move_outcome({ forward_only = true, moved = true, result = result })
+            assert.equals('interrupted', view.state); assert.equals('reopen', view.action)
+            assert.truthy(view.band:find('reopen', 1, true))
+            assert.truthy(view.band:find(result.error, 1, true))
+            assert.falsy(view.band:find('forget', 1, true))
+        end
+    end)
+end)
+
 
 describe('moving parent side references', function()
     local projection = require('parley.document_move_plan')
@@ -387,6 +408,14 @@ describe('moving parent side references', function()
         assert.is_nil(projection.project(old, new, o))
         o.orphan_candidates = {}; for i = 1, 4097 do o.orphan_candidates[i] = true end
         assert.is_nil(projection.project(old, new, o))
+    end)
+    it('exposes the validated orphan suffix before NEW is written without authorizing effects', function()
+        local o = observations()
+        o.target_side_exists, o.new_absent_at_admission = true, true
+        o.orphan_candidates, o.new_exists, o.new_written = { true, false }, false, false
+        local result = assert(projection.project(old, new, o))
+        assert.equals('/repo/archive/renamed_2.side', result.orphan_destination)
+        assert.same({ { kind = 'wait_new_write', path = new } }, result.effects)
     end)
     it('refuses ambiguous index syntax even before the native NEW write', function()
         local o = observations(); o.new_written = false; o.new_exists = false

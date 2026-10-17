@@ -141,7 +141,7 @@ describe('durable leased document migration', function()
             end,
         }))
         local journal = vim.json.decode(read(operation.journal_path))
-        assert.is_true(journal.document_move); assert.is_false(journal.steps.document_moved)
+        assert.is_true(journal.document_move); assert.equals('prepared', journal.state.phase)
         local summaries = assert(move().pending('ns', { root = root .. '/state' }))
         assert.is_true(summaries[1].document_move)
         assert.equals('registered', advance(operation).kind)
@@ -163,7 +163,7 @@ describe('durable leased document migration', function()
         assert.equals('pending', advance(operation).kind)
         assert.is_nil(uv.fs_lstat(old)); assert.equals('parent\n', read(new))
         local journal = vim.json.decode(read(operation.journal_path))
-        assert.is_false(journal.steps.document_moved); assert.is_false(journal.new_witness)
+        assert.equals('document', journal.state.phase); assert.is_false(journal.new_witness)
         operation.release()
         local named = 0
         local result = assert(recover({ document_moved = function()
@@ -194,7 +194,7 @@ describe('durable leased document migration', function()
         assert.is_nil(uv.fs_lstat(old)); assert.equals('parent\n', read(new))
         assert.is_truthy(uv.fs_stat(operation.journal_path), 'the journal stays for recovery')
         local journal = vim.json.decode(read(operation.journal_path))
-        assert.is_true(journal.steps.document_moved); assert.is_false(journal.steps.metadata)
+        assert.equals('metadata', journal.state.phase); assert.is_true(move().document_ready(operation))
     end)
 
     -- #359: the operator may save the moved document before Couch confirms. A
@@ -206,7 +206,7 @@ describe('durable leased document migration', function()
                 metadata = function() end, -- the rename never answers: the reply was lost
             }))
             move().advance(operation, function() end)
-            assert.is_true(vim.json.decode(read(operation.journal_path)).steps.document_moved)
+            assert.is_true(move().document_ready(operation))
             write(new, 'parent\nsaved by the operator\n')
             if recorded then assert.is_true(move().record_write(operation)) end
             operation.release()
@@ -288,6 +288,9 @@ describe('durable leased document migration', function()
         local operation = assert(begin({ metadata = function(_, cb) cb({ kind = 'unavailable' }) end }))
         write(new, 'parent\n'); assert.equals('pending', advance(operation).kind); operation.release()
         local original = vim.json.decode(read(operation.journal_path))
+        original.version, original.state, original.parent, original.captured, original.orphan = 1, nil, nil, nil, nil
+        table.remove(original.temps)
+        original.steps = { document_moved = false, side_moved = true, rewritten = { ['child.md'] = true }, metadata = false }
         for _, field in ipairs({ 'document_move', 'document_moved' }) do
             local journal = vim.deepcopy(original)
             if field == 'document_move' then journal.document_move = 'invalid'
@@ -393,7 +396,7 @@ describe('durable leased document migration', function()
     it('rejects unconfirmed targets, side collisions and escaping symlinks before journaling', function()
         local op, err = begin({ destination_registered = true }); assert.is_nil(op); assert.is_truthy(err)
         op, err = move().begin('ns', registration(old), new, { root = root .. '/state' }); assert.is_nil(op); assert.is_truthy(err)
-        vim.fn.mkdir(root .. '/new.side', 'p'); assert.is_nil(begin()); vim.fn.delete(root .. '/new.side', 'd')
+        write(new, 'existing destination'); vim.fn.mkdir(root .. '/new.side', 'p'); assert.is_nil(begin()); vim.fn.delete(root .. '/new.side', 'd'); assert(uv.fs_unlink(new))
         assert(uv.fs_symlink(old, side .. '/escape.md')); assert.is_nil(begin())
     end)
 
@@ -486,4 +489,257 @@ describe('durable leased document migration', function()
         local result, err = recover(); assert.is_nil(result); assert.equals('pending', err.kind)
         assert.equals('KEEP', read(unowned)); assert.is_truthy(uv.fs_stat(operation.journal_path))
     end)
+    it('displaces an admitted orphan once and rewrites parent references before editor acknowledgement', function()
+        local before = '---\r\ndiscussions:\r\n  - doc: "old.side/child.md" # keep\r\n---\r\n[child](old.side/child.md)\r\n'
+        write(old, before); write(root .. '/new.side/orphan.md', 'orphan\0bytes')
+        local inode = assert(uv.fs_stat(root .. '/new.side')).ino
+        local synced = 0
+        local operation, err = begin({ move_document = true, parent_rewritten = function(op, proof)
+            synced = synced + 1
+            assert.equals(new, proof.path); assert.equals(vim.fn.sha256(before), proof.before_hash)
+            assert.equals(vim.fn.sha256(read(new)), proof.after_hash)
+            assert.equals(proof.after_hash, proof.current_hash)
+            assert.is_false(move().document_ready(op))
+            return true
+        end })
+        assert(operation, err and err.error)
+        assert.equals(2, operation.journal.version); assert.is_nil(operation.journal.steps)
+        assert.equals('registered', advance(operation).kind)
+        assert.equals(1, synced)
+        assert.equals(inode, assert(uv.fs_stat(root .. '/new_1.side')).ino)
+        assert.equals('orphan\0bytes', read(root .. '/new_1.side/orphan.md'))
+        assert.equals(before:gsub('old.side/', 'new.side/'), read(new))
+        assert.equals(root .. '/new_1.side', operation.orphan_destination)
+    end)
+
+    it('captures native NEW raw bytes rather than predicting save serialization', function()
+        local operation = assert(begin({ parent_bytes = '[draft](old.side/child.md)\n' }))
+        write(new, '\239\187\191[draft](old.side/child.md)\r\n')
+        assert.equals('registered', advance(operation).kind)
+        assert.equals('\239\187\191[draft](new.side/child.md)\r\n', read(new))
+    end)
+
+    it('does not adopt saves before the parent editor generation is synchronized', function()
+        local operation = assert(begin({ move_document = true, parent_rewritten = function() return nil, 'modified buffer' end }))
+        assert.equals('pending', advance(operation).kind)
+        assert.is_false(move().document_ready(operation))
+        write(new, 'operator changed it\n')
+        assert.is_nil(move().record_write(operation))
+        assert.equals('operator changed it\n', read(new))
+    end)
+
+    it('recovers orphan publication without choosing another suffix', function()
+        write(root .. '/new.side/orphan.md', 'keep')
+        local fs = setmetatable({}, { __index = uv })
+        fs.fs_rename_noreplace = function(from, to)
+            local ok, err = uv.fs_rename(from, to)
+            if from == root .. '/new.side' and ok then return nil, 'published before checkpoint' end
+            return ok, err
+        end
+        local operation = assert(begin({ fs = fs, move_document = true }))
+        assert.equals('pending', advance(operation).kind); operation.release()
+        assert.equals('registered', assert(recover()).kind)
+        assert.equals('keep', read(root .. '/new_1.side/orphan.md'))
+        assert.is_nil(uv.fs_lstat(root .. '/new_2.side'))
+    end)
+
+    it('refuses a raced orphan suffix without replacing either folder', function()
+        write(root .. '/new.side/orphan.md', 'keep')
+        local operation = assert(begin({ move_document = true }))
+        write(root .. '/new_1.side/foreign.md', 'foreign')
+        assert.equals('pending', advance(operation).kind)
+        assert.equals('keep', read(root .. '/new.side/orphan.md'))
+        assert.equals('foreign', read(root .. '/new_1.side/foreign.md'))
+        assert.equals('parent\n', read(old))
+    end)
+
+    it('refuses malformed actual native bytes before displacing its admitted orphan', function()
+        write(root .. '/new.side/orphan.md', 'keep')
+        local operation = assert(begin({ parent_bytes = 'draft\n' }))
+        write(new, '---\ndiscussions: *ambiguous\n---\n')
+        assert.equals('pending', advance(operation).kind)
+        assert.equals('keep', read(root .. '/new.side/orphan.md'))
+        assert.is_nil(uv.fs_lstat(root .. '/new_1.side'))
+        assert.is_truthy(uv.fs_lstat(side))
+    end)
+
+    it('rejects forged orphan paths before touching unrelated bytes', function()
+        write(root .. '/new.side/orphan.md', 'keep')
+        local operation = assert(begin({ move_document = true })); operation.release()
+        local journal = vim.json.decode(read(operation.journal_path))
+        journal.orphan.path = root .. '/unrelated.side'
+        write(operation.journal_path, vim.json.encode(journal))
+        local result, err = recover()
+        assert.is_nil(result); assert.equals('pending', err.kind)
+        assert.equals('keep', read(root .. '/new.side/orphan.md'))
+        assert.equals('parent\n', read(old))
+    end)
+
+    it('recovers parent rewrite publication without applying it twice', function()
+        write(old, '[child](old.side/child.md)\n')
+        local fs = setmetatable({}, { __index = uv })
+        fs.fs_rename = function(from, to)
+            local ok, err = uv.fs_rename(from, to)
+            if to == new and from:match('%.tmp$') and ok then return nil, 'parent published before checkpoint' end
+            return ok, err
+        end
+        local operation = assert(begin({ move_document = true, fs = fs }))
+        assert.equals('pending', advance(operation).kind)
+        assert.equals('[child](new.side/child.md)\n', read(new))
+        operation.release()
+        local result = assert(recover())
+        assert.equals('registered', result.kind, result.error)
+        assert.equals('[child](new.side/child.md)\n', read(new))
+    end)
+
+    it('accepts the outstanding metadata reply after a synchronized operator save', function()
+        local reply
+        local operation = assert(begin({ move_document = true, metadata = function(_, cb) reply = cb end }))
+        local result; move().advance(operation, function(value) result = value end)
+        assert.is_true(move().document_ready(operation)); assert.is_function(reply)
+        write(new, 'saved while metadata pending\n')
+        assert.is_true(move().record_write(operation))
+        reply({ kind = 'registered', registration = registration(new) })
+        assert.equals('registered', result.kind, result.error)
+        assert.equals('saved while metadata pending\n', read(new))
+    end)
+
+    it('rechecks raw NEW after editor acknowledgement before adopting protection or metadata', function()
+        local metadata = 0
+        local operation = assert(begin({ move_document = true, baseline = 'baseline',
+            parent_rewritten = function(op)
+                write(new, 'foreign editor-autocmd write\n')
+                return true, { old_lock = op.old_lock, new_lock = op.new_lock, baseline = 'new-baseline' }
+            end,
+            metadata = function(op, cb) metadata = metadata + 1; cb({ kind = 'registered', registration = registration(op.new) }) end,
+        }))
+        assert.equals('pending', advance(operation).kind)
+        assert.equals(0, metadata); assert.equals('baseline', operation.journal.protection.baseline)
+        assert.equals('editor', operation.journal.state.phase)
+        assert.equals('foreign editor-autocmd write\n', read(new))
+    end)
+
+    it('persists the pre-rewrite editor hash and reuses it after interrupted editor synchronization', function()
+        write(old, '[child](old.side/child.md)\n')
+        local editor_hash = vim.fn.sha256(vim.json.encode({ '[child](old.side/child.md)' }))
+        local operation = assert(begin({ move_document = true, editor_snapshot = function() return editor_hash end,
+            parent_rewritten = function() return nil, 'editor interrupted' end }))
+        assert.equals('pending', advance(operation).kind)
+        assert.equals(editor_hash, operation.journal.parent.editor_before_hash)
+        operation.release()
+        local seen
+        local result = assert(recover({ editor_snapshot = function() error('must not recapture') end,
+            parent_rewritten = function(_, proof) seen = proof.before_editor_hash; return true end }))
+        assert.equals('registered', result.kind, result.error); assert.equals(editor_hash, seen)
+    end)
+
+    it('preserves orphan contents whose name matches a future active-tree temporary', function()
+        write(root .. '/new.side/orphan.md', 'keep')
+        local operation = assert(begin({ move_document = true }))
+        local temporary = operation.journal.temps[2]
+        write(temporary, 'opaque orphan content, never owned by this operation')
+        assert.equals('registered', advance(operation).kind)
+        local displaced = root .. '/new_1.side/' .. vim.fn.fnamemodify(temporary, ':t')
+        assert.equals('opaque orphan content, never owned by this operation', read(displaced))
+    end)
+
+    for _, kind in ipairs({ 'journal', 'parent' }) do
+        it('preserves foreign bytes at a ' .. kind .. ' temporary instead of claiming cleanup ownership', function()
+            write(old, '[child](old.side/child.md)\n')
+            local operation = assert(begin({ move_document = true }))
+            local temporary = kind == 'journal' and operation.journal.temps[1] or operation.journal.temps[#operation.journal.temps]
+            write(temporary, 'foreign temporary bytes')
+            local result = advance(operation)
+            assert.equals('pending', result.kind)
+            assert.equals('foreign temporary bytes', read(temporary))
+            operation.release()
+            local recovered, recovery_err = recover()
+            assert.equals('pending', (recovered or recovery_err).kind)
+            assert.equals('foreign temporary bytes', read(temporary))
+        end)
+    end
+
+    it('consumes only the exactly reconstructed unpublished journal checkpoint after reobserving publication', function()
+        write(root .. '/new.side/orphan.md', 'keep')
+        local fs = setmetatable({}, { __index = uv })
+        local published, candidate = false, nil
+        fs.fs_rename_noreplace = function(from, to)
+            local ok, err = uv.fs_rename(from, to)
+            if from == root .. '/new.side' and ok then published = true end
+            return ok, err
+        end
+        fs.fs_rename = function(from, to)
+            if published and to:match('%.json$') then candidate = read(from); return nil, 'checkpoint interrupted' end
+            return uv.fs_rename(from, to)
+        end
+        local operation = assert(begin({ move_document = true, fs = fs }))
+        assert.equals('pending', advance(operation).kind); assert.is_string(candidate)
+        local temporary = operation.journal.temps[1]
+        operation.release(); write(temporary, candidate)
+        assert.equals('registered', assert(recover()).kind)
+        assert.equals('keep', read(root .. '/new_1.side/orphan.md'))
+        assert.is_nil(uv.fs_lstat(temporary)); assert.is_nil(uv.fs_lstat(root .. '/new_2.side'))
+    end)
+
+    it('retains confirmed effective registration across an interrupted local finish', function()
+        local effective = registration(new); effective.Owner = 'new-effective-owner'
+        local operation = assert(begin({ move_document = true,
+            metadata = function(_, cb) cb({ kind = 'registered', registration = effective, changed = true }) end,
+            finish = function() return nil, 'local finish interrupted' end,
+        }))
+        assert.equals('pending', advance(operation).kind); operation.release()
+        local finished
+        local result = assert(recover({ finish = function(_, reply) finished = reply.registration; return true end }))
+        assert.equals('registered', result.kind)
+        assert.equals('new-effective-owner', finished.Owner)
+        assert.same(effective, result.registration)
+    end)
+
+    it('revalidates raw NEW before completing an outstanding metadata reply', function()
+        local reply, finished = nil, 0
+        local operation = assert(begin({ move_document = true,
+            metadata = function(_, cb) reply = cb end,
+            finish = function() finished = finished + 1; return true end,
+        }))
+        local result; move().advance(operation, function(value) result = value end)
+        assert.is_function(reply); write(new, 'unrecorded foreign NEW while metadata pending\n')
+        reply({ kind = 'registered', registration = registration(new) })
+        assert.is_not_nil(result); assert.equals('pending', result.kind)
+        assert.equals(0, finished)
+        assert.equals('unrecorded foreign NEW while metadata pending\n', read(new))
+        assert.is_truthy(uv.fs_lstat(operation.journal_path))
+    end)
+
+    it('refuses bounded reducer allocation without throwing or retaining its lease', function()
+        vim.fn.delete(side, 'rf')
+        local deep = side
+        for _ = 1, 4 do deep = deep .. '/' .. string.rep('d', 90) end
+        for n = 1, 512 do
+            write(deep .. '/' .. string.format('%03d-', n) .. string.rep('x', 70) .. '.md', '[up](' .. old .. ')')
+        end
+        local safe, operation, err = pcall(begin, { move_document = true })
+        assert.is_true(safe, 'allocation refusal must return normally')
+        assert.is_nil(operation); assert.equals('limit', err.kind)
+        local lease, lease_err = require('parley.document_lease').acquire('ns', 'stable-id', { root = root .. '/state' })
+        assert(lease, lease_err and lease_err.error); assert.is_true(lease.release())
+        assert.equals('parent\n', read(old)); assert.is_nil(uv.fs_lstat(new))
+    end)
+
+    for _, before in ipairs({ 'parent\n', '[child](old.side/child.md)\n' }) do
+        it('refuses a same-byte replacement of the current parent inode before ' .. (before:find('old.side', 1, true) and 'rewriting' or 'adopting a no-op'), function()
+            write(old, before)
+            local metadata = 0
+            local operation = assert(begin({ move_document = true,
+                document_moved = function()
+                    assert(uv.fs_rename(new, root .. '/captured-new.md'))
+                    write(new, before)
+                    return true
+                end,
+                metadata = function(op, cb) metadata = metadata + 1; cb({ kind = 'registered', registration = registration(op.new) }) end,
+            }))
+            assert.equals('pending', advance(operation).kind)
+            assert.equals(0, metadata); assert.equals(before, read(new))
+        end)
+    end
+
 end)

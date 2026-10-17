@@ -980,6 +980,38 @@ M.install_move_lock = function(buf, token, new_path)
     return true
 end
 
+-- A guarded native reread has acknowledged the journal's parent rewrite.
+-- Keep migration suspended until metadata confirms, while translating only a
+-- baseline equal to the pre-rewrite editor content (never an outstanding edit).
+M.synchronize_move = function(buf, token, expected_before_content_hash)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    local moving = s and s.moving
+    if not moving or moving.token ~= token then return false, "stale move token" end
+    if type(expected_before_content_hash) ~= "string" or expected_before_content_hash == "" then
+        return false, "invalid move content proof"
+    end
+    if not vim.api.nvim_buf_is_loaded(buf) or vim.bo[buf].modified then
+        return false, "move buffer is unloaded or modified"
+    end
+    local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p")
+    path = vim.uv.fs_realpath(path) or path
+    if not moving.new_path or path ~= moving.new_path then return false, "move buffer path changed" end
+    if lock_bytes(moving.new_path .. ".lock") ~= moving.new_lock then
+        return false, "destination protection changed"
+    end
+    local observed = vim.uv.fs_stat(moving.new_path)
+    if not observed or observed.type ~= "file" then return false, "move destination is unavailable" end
+    local content = content_hash(buf)
+    local baseline = s.baseline
+    if baseline == expected_before_content_hash then baseline = content end
+    s.baseline, moving.baseline, token.baseline = baseline, baseline, baseline
+    s.loaded = observed.mtime.sec .. "." .. observed.mtime.nsec
+    s.content = content
+    s.attach_edits()
+    return true, { old_lock = moving.lock, new_lock = moving.new_lock, baseline = baseline }
+end
+
 M.finish_move = function(buf, token, identity)
     buf = buffer_id(buf)
     local s = state[buf]

@@ -41,11 +41,11 @@ local function hash(buf)
     return vim.fn.sha256(vim.json.encode(vim.api.nvim_buf_get_lines(buf, 0, -1, false)))
 end
 
--- The executor has just proven NEW's original inode and bytes. A buffer-name
+-- The executor has just proven NEW's bytes under the document lease. A buffer-name
 -- API rename leaves Neovim's "not edited" flag set, so ordinary writes (including
 -- auto-save) would refuse NEW with E13. A non-bang native read acknowledges it;
 -- never force a write or discard an edit made during the handoff.
-local function acknowledge_owned_move(s, path, expected)
+local function read_moved_document(s, path, expected, after)
     if vim.bo[s.buf].modified or hash(s.buf) ~= expected then return false, "buffer changed during owned move" end
     local undo = vim.o.undoreload
     s.owned_renaming = true
@@ -65,8 +65,19 @@ local function acknowledge_owned_move(s, path, expected)
     vim.o.undoreload = undo
     s.owned_renaming = nil
     if not ok then return false, tostring(err) end
-    if hash(s.buf) ~= expected then return false, "owned move read different content" end
+    if after and hash(s.buf) ~= after then
+        -- The native read may clear 'modified' after a BufReadPost edit. Keep
+        -- the differing text visibly unsaved so a later reopen cannot discard it.
+        vim.bo[s.buf].modified = true
+        return false, "move read different or modified content"
+    end
+    if vim.bo[s.buf].modified then
+        return false, "move read different or modified content"
+    end
     return true
+end
+local function acknowledge_owned_move(s, path, expected)
+    return read_moved_document(s, path, expected, expected)
 end
 
 local function mtime(path)
@@ -80,6 +91,44 @@ local function valid(s)
         and thread and thread.scope == s.thread.scope and thread.tag == s.thread.tag
         and namespace() == s.namespace and (canonical(vim.api.nvim_buf_get_name(s.buf)) == s.path
             or (s.move and canonical(vim.api.nvim_buf_get_name(s.buf)) == s.move.new_path))
+end
+
+-- The IO dispatcher owns raw-byte witnesses. This boundary owns editor-content
+-- hashes and refuses a changed buffer before the guarded native reread.
+local function editor_snapshot(s, moving)
+    return function()
+        if states[s.buf] ~= s or not vim.api.nvim_buf_is_loaded(s.buf) or vim.bo[s.buf].modified
+            or not moving.content or hash(s.buf) ~= moving.content then
+            return nil, "buffer changed before document move"
+        end
+        return moving.content
+    end
+end
+local function parent_rewritten(s, moving)
+    return function(operation, proof)
+        if states[s.buf] ~= s or not vim.api.nvim_buf_is_loaded(s.buf)
+            or not s.recovering and s.move ~= moving or type(proof) ~= "table"
+            or proof.path ~= moving.new_path or canonical(vim.api.nvim_buf_get_name(s.buf)) ~= proof.path then
+            return false, "document move editor incarnation changed"
+        end
+        local before = moving.content
+        if not before then return false, "document move lacks an editor preimage" end
+        -- BufReadPost edits can end with 'modified' cleared by the native read.
+        -- Derive the expected editor postimage from the same pure rewrite used
+        -- for disk bytes, keeping line-ending/encoding normalization in Neovim.
+        local projected, projection_error = require("parley.document_move_plan").rewrite_side_references(
+            table.concat(vim.api.nvim_buf_get_lines(s.buf, 0, -1, false), "\n"), operation.old, operation.new)
+        if not projected then return false, projection_error end
+        local expected = vim.fn.sha256(vim.json.encode(vim.split(projected, "\n", { plain = true })))
+        local read, read_error = read_moved_document(s, proof.path, before, expected)
+        if not read then return false, read_error end
+        local baseline_before = proof.before_editor_hash or before
+        local synced, protection = require("parley.session_sync").synchronize_move(s.buf, moving.token, baseline_before)
+        if not synced then return false, protection end
+        s.loaded, s.content = mtime(proof.path), hash(s.buf)
+        moving.content = s.content
+        return true, protection
+    end
 end
 
 -- A raw completion belongs to one controller incarnation. Managed native
@@ -167,12 +216,13 @@ end
 -- What the operator sees of a move once its document moved (#359): the plan's
 -- state table, one row at a time, through the submit feedback surface.
 show_move = function(s, moving, result)
+    local version = moving.version or moving.operation and moving.operation.journal.version
     local view = require("parley.document_move_plan").move_outcome({ moved = true, new_path = moving.new_path,
-        overdue = moving.overdue, result = result })
+        overdue = moving.overdue, result = result, forward_only = version == 2 })
     -- session_sync holds its winbar still while it is moving, so the band
     -- carries the move, styled as submit feedback is.
     if view.band == "" then band(s, ""); return view end
-    local styled = require("parley.session_sync").feedback_view(view.band, view.action ~= "none")
+    local styled = require("parley.session_sync").feedback_view(view.band, view.action ~= "none" and view.action ~= "wait")
     band(s, styled.label, view.warning and "WarningMsg" or styled.hl)
     return view
 end
@@ -435,7 +485,10 @@ function M.attach(buf)
     attach_edits()
     s.group = vim.api.nvim_create_augroup("ParleyAgenticDocument" .. buf, { clear = true })
     vim.api.nvim_create_autocmd({ "BufReadPost", "FileChangedShellPost" }, { group = s.group, buffer = buf, callback = function()
-        if s.content ~= hash(buf) then
+        -- A guarded mechanical move read checks its editor preimage and the IO
+        -- dispatcher rechecks the raw postimage. It must not stale its own move
+        -- witness; other rereads still invalidate an outstanding mutation.
+        if s.content ~= hash(buf) and not s.owned_renaming then
             s.revision = (s.revision or 0) + 1
             clear_feedback(s)
             dispatch(s, { type = "invalidate_confirmation" })
@@ -688,6 +741,8 @@ function M.move_path(old_path, new_path)
         document_moved = function()
             return acknowledge_owned_move(s, new_path, moving.content)
         end,
+        editor_snapshot = editor_snapshot(s, moving),
+        parent_rewritten = parent_rewritten(s, moving),
         metadata = moving_metadata(s, moving),
     })
     if not operation then
@@ -704,7 +759,7 @@ function M.move_path(old_path, new_path)
     -- Couch's metadata rename is still out, and the journal carries it (#359).
     -- A failed name handoff also leaves the journal pending, after the file
     -- itself moved: that is no success either.
-    if not operation.journal.steps.document_moved or moving.pending_error then
+    if not require("parley.document_move").document_ready(operation) or moving.pending_error then
         return true, nil, moving.error or "document move pending; preserve its journal and reopen to recover"
     end
     return true, new_path
@@ -713,8 +768,13 @@ end
 advance_move = function(s)
     local moving = s.move
     if not moving or not moving.operation or not moving.witness then return end
+    moving.content = moving.content or hash(s.buf)
     require("parley.document_move").advance(moving.operation, function(result)
         if states[s.buf] ~= s then return end
+        if result.orphan_destination and not moving.orphan_notified then
+            moving.orphan_notified = true
+            notify("Retained side documents at " .. result.orphan_destination)
+        end
         if result.kind == "registered" then
             moving.answered = true
             if moving.new_path then show_move(s, moving, result) end
@@ -722,6 +782,7 @@ advance_move = function(s)
         else
             moving.pending_error = result.error or "document move pending"
             notify(result.error or "Migration is pending; preserve the journal for recovery")
+            if moving.operation.journal.version == 2 then show_move(s, moving, result) end
             if s.model.snapshot().operation and s.model.snapshot().operation.witness.operation == "move" then
                 dispatch(s, { type = "moved", witness = moving.witness, ok = false, error = result.error })
             end
@@ -751,6 +812,7 @@ recover_migration = function(s, fresh_write)
     s.recovering = true
     local ss, token = require("parley.session_sync"), nil
     local content = hash(s.buf)
+    local moving = { new_path = journal.new, content = content, version = journal.version }
     local operation, err = mover.recover(s.namespace, journal.id, {
         root = state_root(), old_path = journal.old, new_path = journal.new,
         new_written = fresh_write == true,
@@ -758,13 +820,16 @@ recover_migration = function(s, fresh_write)
             if token then return true end
             local restore_error
             token, restore_error = ss.restore_move(s.buf, journal.registration, journal.new, journal.protection)
+            moving.token = token
             return token ~= nil, restore_error
         end,
         document_moved = function()
-            local ok, name_error = acknowledge_owned_move(s, journal.new, content)
-            if ok then s.path = journal.new end
+            local ok, name_error = read_moved_document(s, journal.new, moving.content)
+            if ok then s.path = journal.new; moving.content = hash(s.buf) end
             return ok, name_error
         end,
+        editor_snapshot = editor_snapshot(s, moving),
+        parent_rewritten = parent_rewritten(s, moving),
         finish = function(_, result)
             local ok, finish_error = ss.finish_move(s.buf, token, result.registration)
             if not ok then return false, finish_error end
@@ -779,16 +844,22 @@ recover_migration = function(s, fresh_write)
         if states[s.buf] ~= s then return end
         s.recovering = false
         if result.kind == "registered" then
+            if result.orphan_destination then notify("Retained side documents at " .. result.orphan_destination) end
             s.move, s.recovery_pending = nil, nil
         else
             if s.move and s.move.operation then s.move.operation.release(); s.move = nil end
-            band(s, "Pending document move: " .. tostring(result.error))
+            if journal.version == 2 then show_move(s, moving, result)
+            else band(s, "Pending document move: " .. tostring(result.error)) end
         end
     end)
     if not operation then
         s.recovering = false
-        band(s, "Pending document move: " .. err.message)
-    elseif s.recovery_pending then s.move = { operation = operation, new_path = journal.new, token = token } end
+        if journal.version == 2 then show_move(s, moving, { kind = "pending", error = err.message })
+        else band(s, "Pending document move: " .. err.message) end
+    elseif s.recovery_pending then
+        moving.operation, moving.token = operation, token
+        s.move = moving
+    end
     return true
 end
 
@@ -884,11 +955,30 @@ install_migration_hooks = function(s)
         end
         local operation, err = require("parley.document_move").begin(s.namespace, moving.identity, moving.new_path, {
             root = state_root(), lease = moving.lease, destination_registered = overwrite and false or "authority",
+            parent_bytes = table.concat(vim.api.nvim_buf_get_lines(s.buf, 0, -1, false), "\n"),
             old_lock = moving.token.lock, new_lock = moving.token.lock, baseline = moving.token.baseline,
             install_new = function() return ss.install_move_lock(s.buf, moving.token, moving.new_path) end,
+            editor_snapshot = editor_snapshot(s, moving),
+            parent_rewritten = parent_rewritten(s, moving),
             metadata = moving_metadata(s, moving),
         })
-        if not operation then moving.error, moving.journal_pending = err.message, err.kind == "pending"; refuse(moving.error) end
+        if not operation then
+            moving.error, moving.journal_pending = err.message, err.kind == "pending"
+            if not moving.journal_pending then
+                -- A refused admission has changed no file bytes or destination
+                -- protection. Abort that local name change with the same token.
+                s.owned_renaming = true
+                local named, name_error = pcall(vim.api.nvim_buf_set_name, s.buf, moving.old_path)
+                s.owned_renaming = nil
+                if named then
+                    local aborted, abort_error = ss.abort_move(s.buf, moving.token)
+                    if aborted then
+                        moving.lease.release(); s.move = nil; ss.release_if_baseline(s.buf)
+                    else moving.error = moving.error .. "; " .. tostring(abort_error) end
+                else moving.error = moving.error .. "; " .. tostring(name_error) end
+            end
+            refuse(moving.error)
+        end
         moving.operation = operation
         dispatch(s, { type = "rename", new_path = moving.new_path })
     end })

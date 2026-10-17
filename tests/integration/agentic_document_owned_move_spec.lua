@@ -18,6 +18,16 @@ describe("registered ordinary Markdown through Parley move doors", function()
         vim.fn.writefile({ "---", "parent: '" .. file .. "'", "---", "[up](" .. file .. "#question)", "unrelated bytes" },
             source .. "/ordinary.side/child.md")
     end
+    local function s3_parent()
+        seed_side()
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+            "---", "owner: business-team", "discussions:", "  - doc: 'ordinary.side/child.md' # retain",
+            "---", "# Question", "original", "[side](ordinary.side/child.md#question)",
+        })
+        assert.is_true(document.submit(buf))
+        await(function() return not document.status(buf).operation and vim.fn.filereadable(file .. ".lock") == 0 end)
+        return vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    end
     before_each(function()
         root = vim.fn.resolve(vim.fn.tempname())
         source, destination = root .. "/source", root .. "/destination"
@@ -73,6 +83,140 @@ describe("registered ordinary Markdown through Parley move doors", function()
         for name, value in pairs(saved.config) do p.config[name] = value or nil end
         vim.g.parley_test_mode = saved.test_mode
         vim.fn.delete(root, "rf")
+    end)
+
+    it("renames side references in disk and the loaded buffer before releasing a synthetic turn", function()
+        local before = s3_parent()
+        local target = destination .. "/spec.md"
+        local called, handled, moved, err = pcall(document.move_path, file, target)
+        assert.is_true(called, tostring(handled))
+        assert.is_true(handled)
+        assert.equals(target, moved, tostring(err))
+        await(function() return document.identity(buf).File == target and not document.status(buf).operation end)
+        local expected = {}
+        for index, line in ipairs(before) do expected[index] = line:gsub("ordinary%.side", "spec.side") end
+        assert.same(expected, vim.fn.readfile(target))
+        assert.same(expected, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        assert.equals(0, vim.fn.filereadable(target .. ".lock"), "mechanical references do not invent an operator turn")
+        vim.api.nvim_buf_set_lines(buf, 6, 7, false, { "edit after rewrite" })
+        assert.equals(1, vim.fn.filereadable(target .. ".lock"), "read must retain native edit observers")
+        vim.api.nvim_buf_call(buf, function() vim.cmd("silent write") end)
+        assert.equals("edit after rewrite", vim.fn.readfile(target)[7])
+    end)
+
+    it("recovers the mechanical baseline after the editor checkpoint cannot publish", function()
+        s3_parent()
+        local target = destination .. "/spec.md"
+        local mover = require("parley.document_move")
+        local begin, injected = mover.begin, false
+        mover.begin = function(namespace, identity, path, options)
+            options.fs = setmetatable({ fs_rename = function(from, to)
+                if not injected and from:find(".json", 1, true) and vim.fn.filereadable(from) == 1 then
+                    local ok, record = pcall(vim.json.decode, table.concat(vim.fn.readfile(from), "\n"))
+                    if ok and record.state and record.state.phase == "metadata" then
+                        injected = true
+                        return nil, "injected editor checkpoint failure"
+                    end
+                end
+                return uv.fs_rename(from, to)
+            end }, { __index = uv })
+            return begin(namespace, identity, path, options)
+        end
+        local ok, handled, moved, err = pcall(document.move_path, file, target)
+        mover.begin = begin
+        assert.is_true(ok, tostring(handled)); assert.is_true(handled)
+        assert.is_true(injected, "fault must intercept the editor-synced checkpoint")
+        assert.is_nil(moved); assert.is_truthy(err)
+        assert.same(vim.fn.readfile(target), vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        local journal_path = vim.fn.glob(root .. "/state/document-moves/*/*.json")
+        assert.is_not.equals("", journal_path)
+        local journal = vim.json.decode(table.concat(vim.fn.readfile(journal_path), "\n"))
+        assert.equals("editor", journal.state.phase)
+        assert.is_string(journal.parent.editor_before_hash)
+        document.detach(buf)
+        assert.is_true(document.attach(buf))
+        await(function()
+            local identity = document.identity(buf)
+            return identity and identity.File == target and not document.status(buf).operation
+        end)
+        assert.equals(registration.ID, document.identity(buf).ID)
+        assert.equals(0, vim.fn.filereadable(target .. ".lock"), "recovery must not invent an operator turn")
+        assert.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
+    end)
+
+    it("preserves an operator edit made during the rewritten parent read", function()
+        s3_parent()
+        local target = destination .. "/spec.md"
+        local edited = false
+        local autocmd = vim.api.nvim_create_autocmd("BufReadPost", { buffer = buf, callback = function()
+            if vim.fn.filereadable(target) == 1
+                and table.concat(vim.fn.readfile(target), "\n"):find("spec.side", 1, true) then
+                edited = true
+                vim.api.nvim_buf_set_lines(buf, 6, 7, false, { "operator edit during parent read" })
+            end
+        end })
+        local ok, handled, moved, err = pcall(document.move_path, file, target)
+        vim.api.nvim_del_autocmd(autocmd)
+        assert.is_true(ok, tostring(handled)); assert.is_true(handled)
+        assert.is_true(edited, "the real rewritten parent read must cross the autocmd")
+        assert.is_nil(moved); assert.is_truthy(err)
+        assert.equals("operator edit during parent read", vim.api.nvim_buf_get_lines(buf, 6, 7, false)[1])
+        assert.is_true(vim.bo[buf].modified)
+        assert.equals("original", vim.fn.readfile(target)[7])
+        assert.equals("absent", lookup(target).kind, "editor refusal precedes registry rename")
+        assert.equals(1, vim.fn.filereadable(target .. ".lock"))
+        assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
+    end)
+
+    it("uses unsaved native saveas content and preserves an admitted orphan", function()
+        local before = s3_parent()
+        local target = destination .. "/spec.md"
+        vim.fn.mkdir(destination .. "/spec.side", "p")
+        vim.fn.writefile({ "orphan bytes" }, destination .. "/spec.side/older.md")
+        vim.api.nvim_buf_set_lines(buf, 6, 7, false, { "unsaved native content" })
+        local ok, err = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("saveas " .. vim.fn.fnameescape(target)) end)
+        assert.is_true(ok, tostring(err))
+        await(function() return document.identity(buf).File == target and not document.status(buf).operation end)
+        local expected = {}
+        for index, line in ipairs(before) do expected[index] = line:gsub("ordinary%.side", "spec.side") end
+        expected[7] = "unsaved native content"
+        assert.same(before, vim.fn.readfile(file), "native saveas retains OLD's saved preimage")
+        assert.same(expected, vim.fn.readfile(target))
+        assert.same(expected, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        assert.same({ "orphan bytes" }, vim.fn.readfile(destination .. "/spec_1.side/older.md"))
+        assert.equals(1, vim.fn.filereadable(target .. ".lock"), "unsent edit keeps its acquisition baseline")
+        assert.is_truthy(vim.fn.readfile(destination .. "/spec.side/child.md")[2]:find("../spec.md", 1, true))
+    end)
+
+    it("records a later save against synchronized references while metadata is delayed", function()
+        s3_parent()
+        vim.env.FAKE_COUCH_REGISTRY_REPLY_DELAY_OPS, vim.env.FAKE_COUCH_REGISTRY_REPLY_DELAY = "rename", "0.8"
+        local target = destination .. "/spec.md"
+        local called, handled, moved, err = pcall(document.move_path, file, target)
+        assert.is_true(called, tostring(handled)); assert.is_true(handled); assert.equals(target, moved, tostring(err))
+        assert.truthy(vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1]:find("spec.side", 1, true))
+        vim.api.nvim_buf_set_lines(buf, 6, 7, false, { "saved during confirmation" })
+        vim.api.nvim_buf_call(buf, function() vim.cmd("silent write") end)
+        await(function() return document.identity(buf).File == target and not document.status(buf).operation end)
+        assert.equals("saved during confirmation", vim.fn.readfile(target)[7])
+        assert.equals(1, vim.fn.filereadable(target .. ".lock"))
+        assert.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
+    end)
+
+    it("aborts ambiguous native parent syntax before any filesystem move or write", function()
+        s3_parent()
+        vim.api.nvim_buf_set_lines(buf, 2, 4, false, { "discussions: *ambiguous" })
+        local before = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local target = destination .. "/spec.md"
+        local ok = pcall(vim.api.nvim_buf_call, buf, function() vim.cmd("saveas " .. vim.fn.fnameescape(target)) end)
+        assert.is_false(ok)
+        assert.equals(file, uv.fs_realpath(vim.api.nvim_buf_get_name(buf)))
+        assert.same(before, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        assert.is_true(vim.bo[buf].modified)
+        assert.equals(0, vim.fn.filereadable(target))
+        assert.equals(1, vim.fn.isdirectory(source .. "/ordinary.side"))
+        assert.equals(0, vim.fn.filereadable(target .. ".lock"))
+        assert.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
     end)
 
     for _, door in ipairs({ "move_chat", "move_chat_tree" }) do
@@ -250,7 +394,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals(0, vim.fn.filereadable(file))
         assert.equals(1, vim.fn.filereadable(destination .. "/ordinary.side/child.md"))
         await(function()
-            return vim.wo[vim.fn.bufwinid(buf)].winbar:find("move pending: reopen to recover", 1, true) ~= nil
+            return vim.wo[vim.fn.bufwinid(buf)].winbar:find("move interrupted: reopen to finish", 1, true) ~= nil
         end)
         assert.is_true(vim.bo[buf].modifiable)
         vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "editable while Couch unavailable" })

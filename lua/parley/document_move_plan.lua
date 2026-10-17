@@ -409,7 +409,7 @@ function M.project(old, new, observations)
         parent_after, err = M.rewrite_side_references(o.parent_bytes, old, new)
         if not parent_after then return nil, err end
     end
-    local result = { old = old, new = new, id = o.id, effects = {} }
+    local result = { old = old, new = new, id = o.id, effects = {}, orphan_destination = orphan }
     if not o.new_written then
         result.effects[1] = { kind = 'wait_new_write', path = new }
         return result
@@ -483,6 +483,15 @@ end
 function M.move_outcome(outcome)
     local result = outcome.result
     if result and result.kind == 'registered' then return { state = 'done', band = '', action = 'none' } end
+    if outcome.forward_only then
+        if outcome.moved and not result then
+            return { state = 'moving', band = M.MOVE_TEXT.confirming, action = 'wait' }
+        end
+        local reason = result and (result.error or result.code)
+        if type(reason) ~= 'string' or reason == '' then reason = 'move could not be confirmed' end
+        return { state = 'interrupted', action = 'reopen', warning = true,
+            band = 'move interrupted: reopen to finish; ' .. reason }
+    end
     if outcome.moved and not result then
         if outcome.overdue then
             return { state = 'background', band = M.MOVE_TEXT.background, action = 'none', warning = true }

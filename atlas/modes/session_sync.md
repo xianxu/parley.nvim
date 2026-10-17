@@ -167,17 +167,21 @@ loaded model, the namespace cache, or an earlier background answer.
   `agentic_move_timeout_ms`. Neovim writes it before Couch could refuse, and
   past the deadline the recovery is `rename back to OLD, then run it again`.
 
-`move_outcome` projects what the band shows once the document moved:
-- `moving: confirming with Couch`;
-- past `agentic_submit_timeout_ms`, `finishing in the background` (the rename
-  itself gets three deadlines);
-- for a stale registration at NEW (`target-conflict`), the pasteable
-  `Run: couch --session-sync forget NEW, then reopen`, with the whole command
-  also in the notification;
-- for a lost reply, `move pending: reopen to recover`.
+`move_outcome` maps new v2 moves to three operator states:
+- moving: `moving: confirming with Couch`; wait for confirmation;
+- done: the move band clears; no action;
+- interrupted: `move interrupted: reopen to finish; REASON`; reopen is the
+  recovery action. Internal journal phases are never shown as choices.
 
-Saving works meanwhile: `document_move.record_write` makes each save the
-journal's witness for NEW, so recovery stays provable.
+Reopening rechecks filesystem and editor witnesses and resumes the same intent.
+A refusal before any effect aborts cleanly. After an effect, changed or unknown
+bytes keep the move interrupted with its concrete reason; nothing is rolled
+back or overwritten to force progress. Older v1 journals remain readable and
+retain their earlier feedback while being recovered.
+
+After the parent rewrite is acknowledged, `document_move.record_write` makes
+each later save the journal's witness for NEW, including saves while metadata
+confirmation is delayed. A save cannot restore the old parent references.
 
 The last confirmed successful submission also records its captured post-save
 content hash, stable document ID, namespace, effective owner and local time in
@@ -211,21 +215,32 @@ undo and view, refuses a modified handoff, and reinstalls edit callbacks before
 releasing migration protection.
 
 An existing `project.side/` beside `project.md` moves to `renamed.side/` beside
-`renamed.md`; an occupied destination refuses instead of merging or overwriting.
-Only existing `parent:` frontmatter and body Markdown links resolving to the old
-parent are rewritten, relative to each moved child. Quoting, fragments and
-unrelated bytes are preserved; missing backlinks are not invented. Escaping
-symlinks, malformed/ambiguous relevant data and changed backlink preimages
-refuse before overwrite. Side scans stop at 4096 entries / 512 Markdown files.
+`renamed.md`. If NEW was absent when admitted, an occupied target side folder is
+an orphan: it moves without replacement to the first free `renamed_N.side/`
+(up to 4096 candidates checked before effects). The notification names that
+retained folder; it adds no recovery choice. An overwrite of an existing NEW
+never authorizes orphan displacement.
+
+The moving parent's Markdown links into its side tree and block `discussions:`
+entries are rewritten. Existing side-doc `parent:` fields and backlinks to the
+old parent are rewritten relative to each moved child. Nested side docs retain
+their own parent relationship, and incoming links from other documents stay
+unchanged. Quoting, comments, fragments and unrelated bytes are preserved;
+missing backlinks are not invented. Escaping symlinks, malformed/ambiguous
+relevant data and changed preimages refuse before overwrite. Side scans stop
+at 4096 entries / 512 Markdown files.
 
 Journals live in configured `state_dir`, partitioned by Couch namespace and
 stable ID, at most 32 pending journals / 256 KiB each. They record the exact tuple,
-path/content witnesses and completed effects, not document snapshots. Recovery
-rechecks those witnesses under the same lease and resumes the same tuple; an
-unprovable partial effect stays pending for concrete recovery instead of
-rolling files back or overwriting new data. Metadata-only Couch rename must
-confirm the same ID and destination, returning the current effective owner; an idempotent replay succeeds. Only
-then is the matching OLD lock removed and the completed journal deleted.
+path/content witnesses and completed effects, not document snapshots. The
+single existing journal now writes v2 records; v1 records remain readable.
+`document_move_state.lua` is the pure transition authority, and one dispatcher
+in `document_move.lua` owns v2 checkpoint replacement for fresh moves and
+recovery. Recovery rechecks witnesses under the same lease and resumes the
+same tuple; an unprovable partial effect stays interrupted for reopening.
+Metadata-only Couch rename must confirm the same ID and destination, returning
+the current effective owner; an idempotent replay succeeds. Only then is the
+matching OLD lock removed and the completed journal deleted.
 Unresolved journals are never aged out. Lease files are bounded to 4096 IDs per
 namespace and remain allocated; deleting a live lease pathname would split
 execution ownership. There is no automatic lease-file garbage collection.
@@ -235,14 +250,15 @@ hooks and the public Parley movers. Owned file moves journal intent before an
 atomic no-replace rename; native saveas waits for its successful write witness.
 `document_session.lua` owns the pure lifecycle; `document_registry.lua`
 uses the shared `couch.run` transport. `document_move_plan.lua` projects pure
-side/backlink effects and the [S3 projection contract](#s3-pure-move-projection-373-m1), `document_move.lua` executes and recovers journals,
-`document_lease.lua` owns kernel leases, and `helper.write_file_atomic` is the
-shared checked byte writer. `session_sync.lua` remains the single edit-turn,
-watch, baseline/undo, ping and rendering engine. Dispatch and keys live in
-`setup_markdown_keymaps` (`lua/parley/init.lua`). The maintainer real/fake registry
+side/backlink effects and the [S3 projection contract](#s3-move-projection-and-execution-373).
+`document_move.lua` dispatches and recovers the journal through the pure
+`document_move_state.lua` reducer; `document_lease.lua` owns kernel leases, and
+`helper.write_file_atomic` is the shared checked byte writer. `session_sync.lua`
+remains the single edit-turn, watch, baseline/undo, ping and rendering engine.
+Dispatch and keys live in `setup_markdown_keymaps` (`lua/parley/init.lua`). The maintainer real/fake registry
 probe is documented in [TOOLING](../../TOOLING.md).
 
-### S3 pure move projection (#373 M1)
+### S3 move projection and execution (#373)
 
 `document_move_plan.project(OLD, NEW, observations)` describes effects from
 complete supplied observations; it performs no IO. Alongside the existing ID,
@@ -269,11 +285,26 @@ scanner's `markdown_blocks` containment rules, preserving inline/fenced code.
 Other documents' incoming links are outside the supplied tree and are not
 rewritten. Shared exported before/after fixtures exercise this pure contract.
 
-These are M1 projection capabilities. The existing runtime journal still uses
-its earlier side/backlink execution contract and occupied-folder refusal; the
-v2 dispatcher, orphan execution, parent disk/buffer/baseline synchronization and
-recovery integration belong to #373 M2. Runtime and operator documentation are
-updated with that milestone, without implying these effects already execute.
+The v2 dispatcher executes this projection under the existing lease. Parent
+disk references are rewritten before metadata confirmation; the coordinator
+acknowledges that content through a guarded native reread, then calls
+`session_sync.synchronize_move(buf, token, expected_before_content_hash)`.
+That API checks the move token, loaded/unmodified buffer, destination and lock;
+it refreshes the observed content/mtime and translates only a baseline equal to
+the pre-rewrite editor content. An outstanding operator baseline stays intact.
+A changed buffer or protection witness interrupts the move instead of replacing
+an operator edit. Editor acknowledgement and its protection witness are
+checkpointed before the registry rename can proceed.
+
+`tests/integration/document_move_shared_spec.lua` discovers every exported move
+fixture from the manifest and checks both the pure projection and real disk
+execution through the persistent fake Couch registry against the complete
+exported after tree. `document_move_state_spec.lua` covers reducer transitions;
+`document_move_owner_spec.lua` guards the dispatcher's sole checkpoint ownership.
+`session_sync_native_spec.lua` checks synchronization tokens, lock witnesses and
+baseline translation. `agentic_document_owned_move_spec.lua` covers public
+moves, native saveas, editor-read races, recovery and later saves during delayed
+confirmation.
 
 Native and public move preflight also checks the loaded coordinator before
 plain fallback: unresolved owner selection, pending admission and an active
