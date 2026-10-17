@@ -1,6 +1,6 @@
 ---
 id: 000362
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 6.98
+tracker:
+    version: 1
+    completion:
+        token: close-310b594e5597
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 8be9bfde97b0618704bcdd4c035550c30bea6791
+        evidence_commit: bf4bf6058ed9f56ba737ce8c8e30909b084288e0
 ---
 
 # Review-protocol sync accepts S2's collaboration-modes export member
