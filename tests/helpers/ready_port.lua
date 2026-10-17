@@ -77,11 +77,12 @@ function M.free_port()
     return port
 end
 
---- Is something accepting connections on this port right now? One attempt, no
---- polling — the negative predicate a dormancy assertion needs.
+--- One TCP connect to the port; true when the handshake completed. Not proof
+--- of a listener on its own (see is_listening). Replaceable so a spec can
+--- stage the false positive without winning a kernel race.
 --- @param port number
 --- @return boolean
-function M.is_listening(port)
+function M._connect(port)
     local uv = vim.uv or vim.loop
     local ok, done = false, false
     local c = uv.new_tcp()
@@ -92,6 +93,53 @@ function M.is_listening(port)
     end)
     vim.wait(500, function() return done end)
     return ok
+end
+
+-- Bound on the confirming lsof: it is slow under suite load, and an answer
+-- that never comes is "unconfirmed", never "listening".
+local LSOF_TIMEOUT_MS = 2000
+
+--- Does a socket in LISTEN state hold the port? nil when lsof can't say
+--- (absent, refused or too slow).
+--- @param port number
+--- @return boolean|nil
+function M._has_listener(port)
+    local ok, res = pcall(function()
+        return vim.system({ "lsof", "-nP", "-iTCP:" .. port, "-sTCP:LISTEN", "-t" },
+            { text = true, timeout = LSOF_TIMEOUT_MS }):wait()
+    end)
+    if not ok or res.code == 124 then
+        return nil
+    end
+    if res.code == 0 then
+        return (res.stdout or ""):match("%d") ~= nil
+    end
+    -- lsof exits 1 for "no such socket"; anything else is lsof failing.
+    return res.code == 1 and false or nil
+end
+
+--- Is something accepting connections on this port right now? One attempt, no
+--- polling — the negative predicate a dormancy assertion needs.
+---
+--- A completed connect is not enough (#360): free_port hands the number back to
+--- the kernel's shared ephemeral pool, a parallel spec's probe can take it as
+--- its SOURCE port, and two probes aimed at each other's freed ports complete a
+--- TCP simultaneous open with nothing listening — measured as 6 refused first
+--- fetches in 240. So a connect is confirmed by a LISTEN socket on the port.
+--- The lsof runs only after a connect succeeds, so polling a port that is
+--- still refusing costs nothing extra. Where lsof is absent the connect stands
+--- alone, as before.
+--- @param port number
+--- @return boolean
+function M.is_listening(port)
+    if not M._connect(port) then
+        return false
+    end
+    local listener = M._has_listener(port)
+    if listener == nil then
+        return vim.fn.executable("lsof") == 0
+    end
+    return listener
 end
 
 --- Poll until something is listening on `port`, so probes don't race startup.
