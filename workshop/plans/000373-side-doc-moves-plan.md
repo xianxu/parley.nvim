@@ -117,3 +117,5 @@ Confirm preserving the explicit-overwrite exception safely (no orphan displaceme
 ## Revisions
 
 - 2026-10-17 — TL approved both milestones and all three policies (receipt 6d2d8e58-b402-4f59-af38-d945acb5c1af): bounded suffix search before effects, orphan classification only from pre-admission absent NEW, quoted/comment-preserving discussions scalars with refusal on ambiguity. This resolves the approval questions above; YAML is authoritative and disagreement refuses, matching #424. Implementation still waits for #424 to land.
+
+- 2026-10-17 — Producer dependency landed: ariadne PR #284, Git-verified merge 5fa50f084f8062fafb493bec86b8207fc8f5617a. Diff against planning pin 5990bf04 shows no changes under construct/local/universal-review or pkg/reviewexport/move_test.go. This merge is the implementation snapshot pin; the dependency wait is satisfied. No scope or policy change.

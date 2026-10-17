@@ -53,3 +53,5 @@ Durable plan: [000373-side-doc-moves-plan.md](../plans/000373-side-doc-moves-pla
 Planning only, 2026-10-17: claimed and started from current main. Read S3 design section 6 and producer #424 at 5990bf04a5d7cebb58dcf279b19e142ae3f2fe5f; producer confirms unlanded/no PR, fixture role in export v2. Existing mover owns leases/no-replace renames, conservative byte rewrites and forward recovery; new parent rewrite must synchronize loaded buffer and NEW witness before later saves. Read-only explorer confirmed these seams. No implementation or generated snapshot changes; code waits for landed producer and approved full-flow plan.
 
 TL approved the durable plan and policies (receipt 6d2d8e58-b402-4f59-af38-d945acb5c1af, submitted). Waiting for ariadne#424 landing; no code or tests changed.
+
+Producer #424 landed as ariadne PR #284 at 5fa50f084f8062fafb493bec86b8207fc8f5617a, confirmed from Git and peer receipt 933d0b03-27a1-4866-9cc4-5ceec0f1d9a6. Relevant export/fixture/reference files match the planning pin. Proceeding to change-code on the approved plan.
