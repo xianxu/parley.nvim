@@ -489,6 +489,15 @@ local config = {
 	-- minutes holding the lock.
 	session_sync_stale_minutes = 5,
 	session_sync_ping_minutes = 15,
+	-- #357: how long an Alt+Return submit (the registry stage and the send
+	-- together) may take before it shows "not confirmed: submit again". The
+	-- editor never waits for it; a busy machine's couch CLI can take seconds.
+	-- Every other asynchronous registry request (the open-time lookup, a
+	-- move's rename) uses the same deadline.
+	agentic_submit_timeout_ms = 15000,
+	-- #357: the move and rename preflights block the editor while they ask
+	-- Couch (they run inside BufFilePre/BufFilePost), so this one stays modest.
+	agentic_move_timeout_ms = 5000,
 	-- Agent for document review. NIL by default (#215): it used to name
 	-- "Claude-Sonnet", which is absent from the shipped roster — and since
 	-- get_agent never returns nil, that did not fall through, it silently

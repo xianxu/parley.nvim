@@ -194,6 +194,10 @@ function M.new(context)
             -- Registration confirmation must never automatically resend a message.
             local args = copy(previous.args)
             args.resume_only = true
+            -- The operator pressed Alt+Return again (#357): once a pending
+            -- registration is confirmed, submit afresh, saving the current bytes.
+            -- The confirmation itself still sends nothing stale.
+            args.resubmit = (event.submit and operation == "register") or nil
             local witness = copy(previous.witness)
             witness.generation = state.generation
             return { issue(operation, args, witness) }
@@ -334,7 +338,10 @@ function M.new(context)
                 registration = copy(state.registration), witness = copy(operation.witness) } }
         end
         local effects = { { kind = "attach", registration = copy(state.registration), witness = copy(operation.witness) } }
-        if operation.args.resume_only then state.phase = "registered" else effects[2] = send(operation.args, event.now_ms) end
+        if operation.args.resume_only then
+            state.phase = "registered"
+            if operation.args.resubmit then effects[2] = { kind = "resubmit", witness = copy(operation.witness) } end
+        else effects[2] = send(operation.args, event.now_ms) end
         return effects
     end
 
