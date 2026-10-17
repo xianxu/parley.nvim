@@ -302,6 +302,9 @@ def main():
     # PARLEY_FAKE_GET_DELAY_MS: answer every GET this much later, so a spec can
     # make the health and version legs of a status join land last.
     get_delay_ms = int(os.environ.get("PARLEY_FAKE_GET_DELAY_MS") or "0")
+    # Delay only the first identity response: a timed-out stop probe must not
+    # turn subsequent observations of this still-running proxy into a stall.
+    models_delay = {"once_ms": min(int(os.environ.get("PARLEY_FAKE_MODELS_DELAY_ONCE_MS") or "0"), 10000)}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_a):
@@ -506,6 +509,10 @@ def main():
                 self._json(200, {"files": read_auth_store(auth_store)})
                 return
             if self.path.startswith("/v1/models"):
+                delay = models_delay["once_ms"]
+                models_delay["once_ms"] = 0
+                if delay > 0:
+                    time.sleep(delay / 1000.0)
                 if mode == "client_key_mismatch":
                     self._json(401, {"error": "unauthorized"})
                 elif mode == "foreign":
