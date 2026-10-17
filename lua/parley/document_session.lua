@@ -372,7 +372,8 @@ function M.new(context)
             return state.registration and {} or { { kind = "band", message = "Couch unavailable: agentic state unknown" } }
         end
         if not valid and operation.args.inherited and result.kind == "unavailable" then
-            -- Refused (another owner registered it first): adopt what is there.
+            -- Refused or lost (another owner registered it first, or the deadline
+            -- passed): a fresh lookup says what is there, and that is adopted.
             state.operation, state.phase = nil, "probing"
             return { issue("lookup") }
         end

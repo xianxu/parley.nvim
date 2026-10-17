@@ -24,9 +24,9 @@ describe("side docs inherit the parent's owner (#378)", function()
     local function sends()
         return vim.fn.filereadable(root .. "/sent") == 1 and #vim.fn.readfile(root .. "/sent") or 0
     end
-    -- Put the cursor on `line` of the parent and press the buffer's Alt+o.
-    local function follow(line)
-        vim.api.nvim_set_current_buf(buf)
+    -- Put the cursor on `line` of the parent (or `from`) and press its Alt+o.
+    local function follow(line, from)
+        vim.api.nvim_set_current_buf(from or buf)
         vim.api.nvim_win_set_cursor(0, { line, 2 })
         local mapping = vim.fn.maparg("<M-o>", "n", false, true)
         assert.equals(1, mapping.buffer)
@@ -48,13 +48,15 @@ describe("side docs inherit the parent's owner (#378)", function()
         p, document = require("parley"), require("parley.agentic_document")
         saved = { env = {}, state_dir = p.config.state_dir }
         for _, name in ipairs({ "PATH", "COUCH_THREAD_SCOPE", "COUCH_THREAD_TAG", "FAKE_COUCH_REGISTRY",
-            "FAKE_COUCH_REGISTRY_MODE", "FAKE_COUCH_ACTORS", "FAKE_COUCH_EXIT", "FAKE_COUCH_SLEEP", "FAKE_COUCH_STATUS" }) do
+            "FAKE_COUCH_REGISTRY_MODE", "FAKE_COUCH_ACTORS", "FAKE_COUCH_EXIT", "FAKE_COUCH_SLEEP", "FAKE_COUCH_STATUS",
+            "FAKE_COUCH_REGISTRY_DELAY", "FAKE_COUCH_REGISTRY_DELAY_OPS" }) do
             saved.env[name] = vim.env[name] or false
         end
         vim.env.PATH = root .. "/bin:" .. vim.env.PATH
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "side-inherit", "pane"
         vim.env.FAKE_COUCH_REGISTRY, vim.env.FAKE_COUCH_REGISTRY_MODE = root .. "/registry.json", nil
         vim.env.FAKE_COUCH_EXIT, vim.env.FAKE_COUCH_SLEEP, vim.env.FAKE_COUCH_STATUS = "0", nil, nil
+        vim.env.FAKE_COUCH_REGISTRY_DELAY, vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = nil, nil
         vim.env.FAKE_COUCH_ACTORS = vim.json.encode({ Code = "ok", Actors = {
             { Binding = { Slot = "parley.nvim:1", Scope = "side-inherit", Tag = "pane" } },
         } })
@@ -117,5 +119,52 @@ describe("side docs inherit the parent's owner (#378)", function()
         await(function() return document.identity(child) ~= nil end, "the later navigation did not inherit")
         assert.equals("ops:0", lookup(side).registration.Owner)
         assert.equals(0, sends())
+    end)
+
+    it("offers nothing to inherit from a parent with no registration", function()
+        local loose = root .. "/loose.md"
+        vim.fn.mkdir(root .. "/loose.side", "p")
+        vim.fn.writefile({ "# Loose", "[side](loose.side/child.md)" }, loose)
+        vim.fn.writefile({ "# Side of an unregistered parent" }, root .. "/loose.side/child.md")
+        vim.cmd("edit " .. vim.fn.fnameescape(loose))
+        local from = vim.api.nvim_get_current_buf()
+        await(function() return document.status(from) and document.status(from).phase == "plain" end)
+        local child = follow(2, from)
+        await(function() return settled(child) end)
+        assert.is_nil(document.identity(child))
+        assert.equals("absent", lookup(root .. "/loose.side/child.md").kind)
+        assert.equals(0, sends())
+    end)
+
+    -- The review's repro: Alt+Return lands while the inheritance is still out.
+    -- It must wait for it and submit once, never be dropped.
+    describe("an Alt+Return pressed during inheritance", function()
+        before_each(function()
+            vim.env.FAKE_COUCH_REGISTRY_DELAY, vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "0.4", "lookup"
+        end)
+
+        it("submits once, to the inherited owner, when pressed at the parent check", function()
+            local child = follow(2)
+            await(function()
+                local op = document.status(child) and document.status(child).operation
+                return op and op.witness.operation == "confirm_parent"
+            end, "inheritance never reached the parent check")
+            document.submit(child)
+            await(function() return sends() == 1 and settled(child) end, "the queued press was dropped")
+            assert.equals("ops:0", document.identity(child).Owner)
+            assert.equals("ops:0", lookup(side).registration.Owner)
+        end)
+
+        it("submits once, pressed during the child lookup, when the parent can no longer be confirmed", function()
+            local forgotten
+            require("parley.document_registry").request("forget", { parent }, {}, function(value) forgotten = value end)
+            await(function() return forgotten ~= nil end)
+            local child = follow(2)
+            document.submit(child)
+            -- The parent is gone, so nothing is inherited; the press itself is the
+            -- operator's explicit submit, and it goes through as one.
+            await(function() return sends() == 1 and settled(child) end, "the queued press was dropped")
+            assert.equals("parley.nvim:1", document.identity(child).Owner)
+        end)
     end)
 end)

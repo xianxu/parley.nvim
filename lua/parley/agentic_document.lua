@@ -282,9 +282,13 @@ local function execute(s, effects)
     for _, effect in ipairs(effects) do
         if not valid(s) then return end
         local kind = effect.kind
-        if kind == "lookup" or kind == "register" then
-            local args = kind == "register" and { effect.witness.path, effect.owner } or { effect.witness.path }
-            s.request = registry.request(kind, args, effect.witness, completed(s, function(result)
+        if kind == "lookup" or kind == "register" or kind == "confirm_parent" then
+            -- confirm_parent (#378) is a lookup of the parent, read from Couch now
+            -- rather than from what the parent's buffer last saw. It shares this
+            -- tail, so a press queued during inheritance is flushed when it ends.
+            local args = kind == "register" and { effect.witness.path, effect.owner }
+                or { kind == "confirm_parent" and effect.parent.path or effect.witness.path }
+            s.request = registry.request(kind == "confirm_parent" and "lookup" or kind, args, effect.witness, completed(s, function(result)
                 if not valid(s) then return end
                 s.request = nil
                 if kind == "register" and not effect.resume_only and s.saved_hash and hash(s.buf) ~= s.saved_hash then
@@ -297,14 +301,6 @@ local function execute(s, effects)
                     s.queued_submit = false
                     M.submit(s.buf)
                 end
-            end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
-        elseif kind == "confirm_parent" then
-            -- #378: the parent's registration, read from Couch now rather than
-            -- from what the parent's buffer last saw.
-            s.request = registry.request("lookup", { effect.parent.path }, effect.witness, completed(s, function(result)
-                if not valid(s) then return end
-                s.request = nil
-                dispatch(s, { type = "reply", witness = effect.witness, result = result })
             end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
         elseif kind == "save" then
             local ss = require("parley.session_sync")
@@ -537,8 +533,12 @@ function M.submit(buf)
             show_feedback(s, s.submitting.overdue and "submitting… still waiting for Couch" or "submitting…", false)
             return true
         end
-        if not snapshot.registration and snapshot.phase == "probing" and snapshot.operation.witness.operation == "lookup"
-            and not snapshot.operation.args.submit then s.queued_submit = true end
+        -- A press during the attach lookup, or during any step of a side doc's
+        -- inheritance (#378), waits for it and then submits once.
+        local op = snapshot.operation
+        local admitting = (op.witness.operation == "lookup" and not op.args.submit)
+            or op.witness.operation == "confirm_parent" or (op.witness.operation == "register" and op.args.inherited)
+        if not snapshot.registration and admitting then s.queued_submit = true end
         return true
     end
     local revision = s.revision
