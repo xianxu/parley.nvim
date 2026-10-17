@@ -1,8 +1,8 @@
 ---
 id: 000360
-status: working
+status: codecomplete
 created: 2026-10-16
-updated: 2026-10-16
+updated: 2026-10-17
 estimate_hours:
 github_issue:
 started: 2026-10-16T22:33:58-07:00
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 1.17
+tracker:
+    version: 1
+    completion:
+        token: close-d35b043cfad5
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 5d00733614cc0c18ca1135f4549b3e5440cb1b09
+        evidence_commit: 9f1dc6357b7c6a00d5dde02747b6e5d700149712
 ---
 
 # Cliproxy catalog joins-routes case intermittently returns empty under suite load
