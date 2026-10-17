@@ -90,3 +90,76 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"134ba49c-74b9-480b-bdbf-94b8d84d7285","repository":"github.com/xianxu/parley.nvim","issue_id":"000367","recipe":"milestone-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/f6fe7c940e57552e","reviewed_head":"108f5a7f689d16d3c2e9e999867538e577c3eba6","slot":"parley.nvim:3","requested_at":"2026-10-17T03:03:59.805117Z"},"phase":"finished","pid":29345,"started_at":"2026-10-17T03:03:59.947547Z","finished_at":"2026-10-17T03:06:15.351266Z","session_id":"6239d6a9-7714-47b3-8529-24ca2a17842c","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T20:12:51-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 367 — Attention finder: an agent rewrite of a seen or retired side doc brings it back as answered |
+| repo | parley.nvim |
+| issue file | workshop/issues/000367-attention-finder-an-agent-rewrite-of-a-seen-or-retired-side-doc-brings-it-back-as-answered.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | b549f4bca896d50bb1cab8547103fd9b8f3ca351..5cc88a00812ee8fc93ff67982226cbc540291717 |
+| command | sdlc close --issue 367 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T20:12:51-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Only the last file shows; let me capture all totals.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This window holds the fixes for the three Minor findings from the close review, and they hold up. All five mapped spec files pass at the pinned head: 26, 12, 40, 6 and 17 tests, with 0 failures and 0 errors. I tried two mutations in the disposable checkout. Removing `prune_saved` from `handlers.saved` turns the updated model spec red. So does dropping the nanosecond comparison. That means both behavior fixes have a regression test that fails without them. BR-1 and BR-3 are fully fixed. BR-2 is mostly fixed: the sort is now correct and the cap covers every entry and retired path. One part remains: saves of side-folder files that are neither entries nor retired can still be dropped once there are more than 512 kept saves. That is Minor and does not block. The issue file only changes status and frontmatter (status, `flow`, `actual_hours`) and adds Log lines that record the fixes, so this is not a scope change. Nothing blocks SHIP.
+
+**1. Strengths**
+- **Prune on every save.** `lua/parley/attention_model.lua:222` puts the bound on the writer itself, which is the class BR-1 named, rather than only narrowing the input.
+- **Sort by seconds, then nanoseconds.** `mtime_order` (`attention_model.lua:177-180`) compares seconds and nanoseconds as separate numbers. The new spec `tests/unit/attention_model_spec.lua:388-393` pins the case where 9 is older than 10, which the old float sort got wrong.
+- **Upgrade effect documented.** `atlas/ui/attention_finder.md:27` says that a store from before #367 has no `saved` map, so the first open after upgrading reads operator edits as agent writes once.
+- **Atlas matches the code.** `atlas/ui/attention_finder.md:21` now says `*.md` only, pruned on every save, at most 512, newest first, which is what the code does.
+
+**2. Critical findings:** none.
+
+**3. Important findings:** none.
+
+**4. Minor findings**
+- BR-2 is only partly fixed (see the dispositions). Saves of side-folder files that are neither entries nor retired still don't fit under the cap. The code comment at `attention_model.lua:183-184` says the cap covers "entries and retired paths together", so it admits the gap, but the atlas Limits don't mention it.
+
+**5. Test coverage notes**
+- Prune on save: covered. Mutating it fails `attention_model_spec` "keeps only the saves … on every save".
+- Nanosecond ordering: covered. Mutating it fails the same spec.
+- The `*.md` narrowing in `M.saved` (`attention.lua:187`) has no test. Reverting it to `[^/]+$` keeps every spec green. Prune-on-save already bounds the map, so this is only a small optimization and not worth a finding.
+
+**6. Architectural notes**
+- **ARCH-DRY: pass.** `prune_saved` is shared by `sweep` and `saved`, and the time ordering lives in one helper.
+- **ARCH-PURE: pass.** The new logic is in the pure model. The glue change is a single pattern.
+- **ARCH-PURPOSE: pass, apart from the partial BR-2 disposition.** The writer-bound class is fixed at the writer, not only at the cited site.
+
+**7. Plan revision recommendations**
+- If the side-folder residue stays, add a line to the atlas Limits (or a `## Revisions` entry): beyond 512 kept saves, the oldest operator-created side doc can show up as discovered.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      handlers.saved now calls prune_saved (attention_model.lua:222) and M.saved is narrowed to .side/*.md; removing the prune turns attention_model_spec red.
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      Ordering is fixed and tested (it fails red without the nsec compare), and the cap now covers entries plus retired paths (2 x LIMIT). Saves of side-folder files that are neither entries nor retired can still be dropped once there are more than 512 kept saves, which makes an operator-created doc read as agent-written; the atlas Limits do not say so. Minor, non-blocking.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      atlas/ui/attention_finder.md:27 Limits now states the one-time effect of a pre-367 store having no saved map; prose-only, and the referent (store parse defaulting saved to empty) matches.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"6621d81c-f50a-413b-8e33-78047f1585dc","repository":"github.com/xianxu/parley.nvim","issue_id":"000367","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/b2c5fe78ea00152e","reviewed_head":"5cc88a00812ee8fc93ff67982226cbc540291717","slot":"parley.nvim:3","requested_at":"2026-10-17T03:09:07.991063Z"},"phase":"finished","pid":30624,"started_at":"2026-10-17T03:09:08.519259Z","finished_at":"2026-10-17T03:12:50.665096Z","session_id":"cf9c304b-66d3-4658-83e7-0981f259b6dd","outcome":"returned"}] -->
