@@ -3694,11 +3694,18 @@ M._parse_branch_ref = function(line)
 	return require("parley.reference_candidates").branch_ref(line, get_branch_prefix())
 end
 
+-- Scope a confirmed follow to the actual opener, including preferred/reused splits.
+local function follow_file(path, from_finder)
+    local history = require("parley.file_history")
+    return history.follow(history.origin(0), function() M.open_buf(path, from_finder) end, path)
+end
+
 -- Try to open an inline branch link [🌿:text](file) under the cursor.
 -- Returns true if a link was found (and handled), false otherwise.
 --- Try to open an inline `[🌿:anchor](file)` link under the cursor.
 ---@return "opened"|"failed"|nil # nil when the cursor is not inside one
-local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
+local function try_open_inline_branch_link(current_line, cursor_col, parent_buf, open)
+    open = open or follow_file
 	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 	local chat_parser = require("parley.chat_parser")
 	local inline_links = chat_parser.extract_inline_branch_links(current_line, branch_prefix)
@@ -3709,7 +3716,7 @@ local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 			local current_dir = vim.fn.fnamemodify(referring, ":p:h")
 			local expanded = resolve_chat_path(link.path, current_dir)
 			if vim.fn.filereadable(expanded) == 1 then
-				M.open_buf(expanded)
+				open(expanded)
 				return "opened"
 			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
 				-- Same wording, same owner (#214 M3): this built `what is "X"`
@@ -3720,7 +3727,7 @@ local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 				M.create_child_chat(expanded, topic, parent_buf,
 					link.topic ~= "" and br_submit.seed_question("define", link.topic) or nil,
 					{ inline_question = true })
-				M.open_buf(expanded)
+				open(expanded)
 				return "opened"
 			else
 				M.logger.warning("Chat file not found: " .. expanded)
@@ -4834,7 +4841,8 @@ end
 -- Shared by both chat-buffer and markdown-buffer <C-g>o handlers.
 --- Open a `🌿:` reference line.
 ---@return "opened"|"failed"|nil # nil when the line is not a 🌿: reference
-local function open_branch_ref(current_line, buf)
+local function open_branch_ref(current_line, buf, open)
+    open = open or follow_file
 	local parsed = M._parse_branch_ref(current_line)
 	if parsed == nil then
 		return nil
@@ -4845,7 +4853,7 @@ local function open_branch_ref(current_line, buf)
 	local expanded = resolve_chat_path(parsed.path, current_dir)
 
 	if vim.fn.filereadable(expanded) == 1 then
-		M.open_buf(expanded)
+		open(expanded)
 		return "opened"
 	end
 
@@ -4875,7 +4883,7 @@ local function open_branch_ref(current_line, buf)
 		end
 
 		vim.fn.writefile(file_lines, chat_file)
-		M.open_buf(chat_file)
+		open(chat_file)
 		return "opened"
 	end
 
@@ -4902,7 +4910,8 @@ end
 
 --- Try to open a src: markdown link under cursor_col (0-indexed).
 ---@return "opened"|"failed"|nil # nil when there is no src: link here
-local try_open_src_link = function(line, cursor_col, buf)
+local try_open_src_link = function(line, cursor_col, buf, open)
+    open = open or follow_file
 	local link = issues_mod.parse_md_link_at_cursor(line, cursor_col + 1)
 	if not link then return nil end
 	local src_path = issues_mod.parse_src_url(link.url)
@@ -4915,7 +4924,7 @@ local try_open_src_link = function(line, cursor_col, buf)
 	end
 	abs_path = vim.fn.simplify(abs_path)
 	if vim.fn.filereadable(abs_path) == 1 or vim.fn.isdirectory(abs_path) == 1 then
-		M.open_buf(abs_path)
+		open(abs_path)
 		return "opened"
 	end
 	M.logger.warning("src: link target not found: " .. abs_path)
@@ -4924,7 +4933,8 @@ end
 
 -- Ordinary local Markdown links use the source buffer's directory, including
 -- when the cursor is on their label. Keep URL schemes in the existing fallback.
-local function try_open_markdown_link(line, cursor_col, buf)
+local function try_open_markdown_link(line, cursor_col, buf, open)
+    open = open or follow_file
     local link = issues_mod.parse_md_link_at_cursor(line, cursor_col + 1)
     if not link or link.url:match("^%a[%w+%.%-]*:") or link.url:sub(1, 2) == "//" then return nil end
     local base = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p:h")
@@ -4932,16 +4942,16 @@ local function try_open_markdown_link(line, cursor_col, buf)
     if not target then return nil end
     target = vim.fn.simplify(target)
     if vim.fn.filereadable(target) == 1 then
-        M.open_buf(target)
+        open(target)
         return "opened"
     end
     M.logger.warning("Markdown link target not found: " .. target)
     return "failed"
 end
 
-local function open_markdown_reference(line, cursor_col, buf)
-	return try_open_src_link(line, cursor_col, buf) or try_open_inline_branch_link(line, cursor_col, buf)
-		or try_open_markdown_link(line, cursor_col, buf)
+local function open_markdown_reference(line, cursor_col, buf, open)
+	return try_open_src_link(line, cursor_col, buf, open) or try_open_inline_branch_link(line, cursor_col, buf, open)
+		or try_open_markdown_link(line, cursor_col, buf, open)
 end
 
 --- Open whatever reference sits under the cursor.
@@ -4967,15 +4977,16 @@ end
 ---@param cursor_col integer # 0-indexed
 ---@param is_chat boolean # directory references open in netrw only when true
 ---@return "opened"|"none"|"failed"
-local function open_reference_under_cursor(buf, current_line, cursor_col, is_chat)
+local function open_reference_under_cursor(buf, current_line, cursor_col, is_chat, open)
+    open = open or follow_file
 	if not current_line then
 		return "none"
 	end
 
 	-- Link forms that carry their own target. Each reports its own failure, so
 	-- a non-nil answer is terminal either way.
-	local handled = open_markdown_reference(current_line, cursor_col, buf)
-		or open_branch_ref(current_line, buf)
+	local handled = open_markdown_reference(current_line, cursor_col, buf, open)
+		or open_branch_ref(current_line, buf, open)
 	if handled then
 		return handled
 	end
@@ -5049,7 +5060,7 @@ local function open_reference_under_cursor(buf, current_line, cursor_col, is_cha
 
 	if vim.fn.filereadable(expanded_path) == 1 then
 		M.logger.info("Opening file: " .. expanded_path)
-		M.open_buf(expanded_path)
+		open(expanded_path)
 		return "opened"
 	end
 
@@ -5062,7 +5073,7 @@ local function open_reference_under_cursor(buf, current_line, cursor_col, is_cha
 		local template = M.get_default_template(M.get_agent(), expanded_path)
 		template = template:gsub("{{topic}}", function() return topic end)
 		vim.fn.writefile(vim.split(template, "\n"), expanded_path)
-		M.open_buf(expanded_path)
+		open(expanded_path)
 		return "opened"
 	end
 
@@ -5101,6 +5112,12 @@ M.cmd.OpenFileUnderCursor = function()
 		return
 	end
 
+    local history = require("parley.file_history")
+    local follow_origin = history.origin(win)
+    local function followed_open(path, from_finder)
+        return history.follow(follow_origin, function() M.open_buf(path, from_finder) end, path)
+    end
+
 	local origin = {buf = buf, win = win, tick = vim.api.nvim_buf_get_changedtick(buf), generation = generation}
 	local function current_origin()
 		if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf)
@@ -5131,7 +5148,8 @@ M.cmd.OpenFileUnderCursor = function()
 	local function fallback(item)
 		if in_insert_mode then vim.cmd("stopinsert") end
 		if item then vim.api.nvim_win_set_cursor(win, {item.fallback_row or item.row, item.fallback_col}) end
-		local ok, err = pcall(M.cmd.ResolveRefOrGotoFile, item and {is_current = is_current} or nil)
+		local ok, err = pcall(M.cmd.ResolveRefOrGotoFile, {is_current = is_current, open = followed_open,
+            follow = function(open) return history.follow(follow_origin, open) end})
 		if item then restore_cursor() end
 		if not ok then error(err) end
 	end
@@ -5150,8 +5168,8 @@ M.cmd.OpenFileUnderCursor = function()
 			and (cursor[1] > item.row or cursor[2] >= item.col)
 			and (cursor[1] < item.end_row or cursor[2] < item.end_col) then direct = item; break end
 	end
-	local outcome = direct and (open_markdown_reference(direct.span, 0, buf) or "none")
-		or open_reference_under_cursor(buf, current_line, cursor[2], is_chat)
+	local outcome = direct and (open_markdown_reference(direct.span, 0, buf, followed_open) or "none")
+		or open_reference_under_cursor(buf, current_line, cursor[2], is_chat, followed_open)
 	if outcome ~= "none" then restore_insert(); return end
 	if direct then fallback(direct); return end
 	local artifact_ref = require("parley.artifact_ref")
@@ -5168,11 +5186,11 @@ M.cmd.OpenFileUnderCursor = function()
 			or lines[item.row]:sub(item.col + 1, item.end_col))
 		local result
 		if item.kind == "markdown" then
-			result = open_markdown_reference(span, 0, buf) or "none"
+			result = open_markdown_reference(span, 0, buf, followed_open) or "none"
 		elseif item.kind == "branch" then
-			result = open_branch_ref(span, buf)
+			result = open_branch_ref(span, buf, followed_open)
 		else
-			result = open_reference_under_cursor(buf, span, 0, is_chat)
+			result = open_reference_under_cursor(buf, span, 0, is_chat, followed_open)
 		end
 		restore_cursor()
 		if result == "none" then fallback(item) else restore_insert() end
@@ -5277,7 +5295,10 @@ M.cmd.IssueGoto = function() issues_mod.cmd_issue_goto() end
 -- plain paths.
 M.cmd.ResolveRefOrGotoFile = function(opts)
 	opts = opts or {}
-	opts.on_no_ref = function() vim.cmd("normal! gf") end
+	opts.on_no_ref = function()
+        local open = function() vim.cmd("normal! gf") end
+        if opts.follow then opts.follow(open) else open() end
+    end
 	require("parley.artifact_ref").goto_ref_at_cursor(opts)
 end
 

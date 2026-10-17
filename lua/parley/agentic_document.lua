@@ -159,7 +159,12 @@ end
 
 local function band(s, message, highlight)
     if message == "" then s.renderer.clear()
-    else s.renderer.render({ label = message, hl = highlight or "WarningMsg" }) end
+    else
+        local plain = s.model.snapshot().phase == "plain"
+        s.renderer.render({ overlay = true, state = plain and "plain" or "unknown",
+            hl = plain and "WinBar" or "WarningMsg",
+            feedback = { label = message, hl = highlight or "WarningMsg" } })
+    end
 end
 
 local function show_feedback(s, message, is_error)

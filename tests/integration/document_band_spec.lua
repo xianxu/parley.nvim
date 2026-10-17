@@ -10,9 +10,20 @@ describe("shared document bands", function()
     local function observe(item)
         return { winbar = vim.wo[item.win].winbar, winhighlight = vim.wo[item.win].winhighlight }
     end
-    local function expect_view(item, label, highlight)
-        assert.same({ winbar = "%#" .. highlight .. "# " .. label:gsub("%%", "%%%%") .. "%=",
-            winhighlight = "StatusLine:" .. highlight }, observe(item))
+    local function expect_view(item, label, highlight, cell_override, base_override)
+        local cell, detail, base = "free     ", label, highlight
+        if label == "free: editing takes your turn" then detail = ""
+        elseif label == "your turn, Alt+Return to submit" then cell, detail = "yours ●  ", ""
+        elseif label == "unsent edits, Alt+Return to submit" then cell, detail = "stale    ", ""
+        elseif highlight == "ParleySessionSyncOperator" then cell = "stale    "
+        elseif highlight == "ParleySessionSyncOwed" then cell = "agent…   "
+        elseif highlight == "WarningMsg" then cell = "unknown  "
+        end
+        if highlight == "DiagnosticError" or highlight == "DiagnosticOk" then base = "ParleySessionSyncFree" end
+        cell, base = cell_override or cell, base_override or base
+        local bar = "%#" .. base .. "#" .. cell
+        if detail ~= "" then bar = bar .. " %#" .. highlight .. "#" .. detail:gsub("%%", "%%%%") end
+        assert.same({ winbar = bar .. "%=", winhighlight = "StatusLine:" .. base }, observe(item))
     end
     local function open(name, typed)
         local path = root .. "/" .. name .. ".md"
@@ -54,6 +65,7 @@ describe("shared document bands", function()
         p, ss, document = require("parley"), require("parley.session_sync"), require("parley.agentic_document")
         saved.state_dir, saved.shortcut = p.config.state_dir, p.config.review_shortcut_next
         saved.date = os.date
+        saved.columns = vim.o.columns; vim.o.columns = 500
         saved.stale, saved.poll, saved.ping = p.config.session_sync_stale_minutes, ss.POLL_MS, ss.PING_CHECK_MS
         p.config.state_dir = root .. "/state"
         p.config.review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" }
@@ -66,6 +78,7 @@ describe("shared document bands", function()
         end
         require("parley.document_registry").shutdown()
         rawset(os, "date", saved.date)
+        vim.o.columns = saved.columns
         vim.cmd("silent only")
         for _, key in ipairs(env_keys) do vim.env[key] = saved.env[key] end
         p.config.state_dir, p.config.review_shortcut_next = saved.state_dir, saved.shortcut
@@ -73,11 +86,16 @@ describe("shared document bands", function()
         vim.fn.delete(root, "rf")
     end)
 
-    it("renders unknown membership identically for both file kinds", function()
+    it("renders a shared unknown fallback and preserves an attached session lock when present", function()
         vim.env.FAKE_COUCH_REGISTRY_MODE = "unsupported"
         local typed = open("typed-unknown", true)
         p.setup_markdown_keymaps(typed.buf)
         await(function() return document.status(typed.buf).phase == "unknown" end)
+        assert.equals("StatusLine:ParleySessionSyncFree", vim.wo[typed.win].winhighlight)
+        assert.truthy(vim.wo[typed.win].winbar:find("Couch unavailable: agentic state unknown", 1, true))
+        -- Membership uncertainty cannot replace an already attached lock view.
+        -- Once that owner detaches, the same fallback is used by either kind.
+        ss.detach(typed.buf)
         expect_view(typed, "Couch unavailable: agentic state unknown", "WarningMsg")
         local typed_view = observe(typed)
         local ordinary = open("unknown")
@@ -87,7 +105,7 @@ describe("shared document bands", function()
         assert.same(typed_view, observe(ordinary))
     end)
 
-    it("renders a pre-attachment submit error identically to attached session feedback", function()
+    it("shares error text while retaining proven-plain and attached lock knowledge", function()
         local typed = open("typed", true); ss.attach(typed.buf)
         local ordinary = open("unresolved")
         p.setup_markdown_keymaps(ordinary.buf)
@@ -97,8 +115,8 @@ describe("shared document bands", function()
         local message = "submit failed: cannot resolve this pane's agent"
         await(function() return vim.wo[ordinary.win].winbar:find(message, 1, true) ~= nil end)
         assert.is_true(ss.set_submission_feedback(typed.buf, message, true))
-        assert.same(observe(typed), observe(ordinary))
-        expect_view(ordinary, message, "DiagnosticError")
+        expect_view(typed, message, "DiagnosticError")
+        expect_view(ordinary, message, "DiagnosticError", "         ", "WinBar")
     end)
 
     local function pair()
@@ -113,7 +131,8 @@ describe("shared document bands", function()
         expect_view(ordinary, label, highlight)
     end
     local function feedback_label(item)
-        return vim.wo[item.win].winbar:match("^%%#[^#]+# (.*)%%=$")
+        local label = vim.wo[item.win].winbar:match(".*%%#[^#]+#(.*)%%=$")
+        return label and label:gsub("%%%%", "%%")
     end
     local function compare_feedback(typed, ordinary, fragment, is_error)
         await(function()
@@ -123,7 +142,8 @@ describe("shared document bands", function()
         end)
         local label = feedback_label(ordinary)
         assert.is_true(ss.set_submission_feedback(typed.buf, label, is_error))
-        equivalent(typed, ordinary, label, is_error and "DiagnosticError" or "DiagnosticOk")
+        expect_view(typed, label, is_error and "DiagnosticError" or "DiagnosticOk")
+        expect_view(ordinary, label, is_error and "DiagnosticError" or "DiagnosticOk", "unknown  ", "WarningMsg")
         return label
     end
 
@@ -135,13 +155,13 @@ describe("shared document bands", function()
             vim.api.nvim_buf_set_lines(item.buf, -1, -1, false, { "operator edit" })
         end
         await(function()
-            return vim.wo[typed.win].winbar:find("your turn", 1, true) ~= nil
-                and vim.wo[ordinary.win].winbar:find("your turn", 1, true) ~= nil
+            return vim.wo[typed.win].winbar:find("yours ●", 1, true) ~= nil
+                and vim.wo[ordinary.win].winbar:find("yours ●", 1, true) ~= nil
         end)
         equivalent(typed, ordinary, "your turn, Alt+Return to submit", "ParleySessionSyncOperator")
         await(function()
-            return vim.wo[typed.win].winbar:find("unsent edits", 1, true) ~= nil
-                and vim.wo[ordinary.win].winbar:find("unsent edits", 1, true) ~= nil
+            return vim.wo[typed.win].winbar:find("stale", 1, true) ~= nil
+                and vim.wo[ordinary.win].winbar:find("stale", 1, true) ~= nil
         end)
         equivalent(typed, ordinary, "unsent edits, Alt+Return to submit", "ParleySessionSyncStale")
         for _, item in ipairs({ typed, ordinary }) do
@@ -243,7 +263,10 @@ describe("shared document bands", function()
         p.setup_markdown_keymaps(ordinary.buf)
         local label = "Pending document move: open " .. destination .. " to recover"
         await(function() return feedback_label(ordinary) == label end)
-        expect_view(ordinary, label, "WarningMsg")
+        assert.is_truthy(ss.identity(ordinary.buf), "known pending document retains its attachment")
+        assert.equals("StatusLine:ParleySessionSyncOperator", vim.wo[ordinary.win].winhighlight)
+        assert.truthy(vim.wo[ordinary.win].winbar:find("yours", 1, true))
+        assert.is_nil(vim.wo[ordinary.win].winbar:find("unknown", 1, true))
     end)
 
     it("restores original options after unknown-to-registered handoff and detach", function()
@@ -263,23 +286,238 @@ describe("shared document bands", function()
         expect_view(unrelated, "free: editing takes your turn", "ParleySessionSyncFree")
     end)
 
+    it("keeps matching trails and lock cells for actual session and registered file states", function()
+        vim.fn.mkdir(root .. "/typed", "p"); vim.fn.mkdir(root .. "/ordinary", "p")
+        local typed = open("typed/question", true); ss.attach(typed.buf)
+        local ordinary = open("ordinary/question"); register(ordinary); admit(ordinary)
+        local history = require("parley.file_history")
+        history.setup()
+        local base = root .. "/2026-10-16-root.md"; vim.fn.writefile({ "root" }, base)
+        for _, item in ipairs({ typed, ordinary }) do
+            assert.is_true(history.restore(item.win, { version = 1, paths = { base, item.path }, omitted = 0 }))
+        end
+        assert.same(observe(typed), observe(ordinary))
+        assert.truthy(vim.wo[ordinary.win].winbar:find("root › question", 1, true))
+        for _, item in ipairs({ typed, ordinary }) do
+            vim.api.nvim_buf_set_lines(item.buf, -1, -1, false, { "unsubmitted" })
+            assert.is_true(ss.set_submission_feedback(item.buf, "submit failed: busy", true))
+        end
+        assert.same(observe(typed), observe(ordinary))
+        for _, item in ipairs({ typed, ordinary }) do
+            assert.equals("StatusLine:ParleySessionSyncOperator", vim.wo[item.win].winhighlight)
+            assert.truthy(vim.wo[item.win].winbar:find("yours ●", 1, true))
+            assert.truthy(vim.wo[item.win].winbar:find("submit failed: busy", 1, true))
+            assert.truthy(vim.wo[item.win].winbar:find("root › question", 1, true))
+        end
+    end)
+
+    it("composes independent trails in two windows showing the same attached buffer", function()
+        local item = open("same-window-buffer", true); ss.attach(item.buf)
+        local history = require("parley.file_history"); history.setup()
+        local first = item.win
+        vim.cmd("vsplit")
+        local second = vim.api.nvim_get_current_win()
+        local a, b = root .. "/first.md", root .. "/second.md"
+        vim.fn.writefile({ "a" }, a); vim.fn.writefile({ "b" }, b)
+        assert.is_true(history.restore(first, { version = 1, paths = { a, item.path }, omitted = 0 }))
+        assert.is_true(history.restore(second, { version = 1, paths = { b, item.path }, omitted = 0 }))
+        assert.is_true(ss.set_submission_feedback(item.buf, "submitted to ops:0 · 14:23", false))
+        assert.truthy(vim.wo[first].winbar:find("first › same-window-buffer", 1, true))
+        assert.truthy(vim.wo[second].winbar:find("second › same-window-buffer", 1, true))
+        for _, win in ipairs({ first, second }) do
+            assert.truthy(vim.wo[win].winbar:find("submitted to ops:0", 1, true))
+            assert.equals("StatusLine:ParleySessionSyncFree", vim.wo[win].winhighlight)
+        end
+        vim.api.nvim_win_set_width(second, 24)
+        vim.api.nvim_exec_autocmds("WinResized", {})
+        local rendered = vim.api.nvim_eval_statusline(vim.wo[second].winbar,
+            { winid = second, use_winbar = true, maxwidth = 1000 }).str
+        assert.is_true(vim.fn.strdisplaywidth(vim.trim(rendered)) <= 24)
+        assert.truthy(vim.wo[first].winbar:find("first › same-window-buffer", 1, true))
+    end)
+
     local function renderer(item)
         local ok, module = pcall(require, "parley.document_band")
         assert.is_true(ok, "shared renderer module must load")
         return module.new(item.buf)
     end
-    local free = { label = "free: editing takes your turn", hl = "ParleySessionSyncFree" }
-    local failure = { label = "submit failed: 50% unavailable", hl = "DiagnosticError" }
+    local free = { state = "free", label = "free: editing takes your turn", hl = "ParleySessionSyncFree" }
+    local failure = { state = "free", label = "submit failed: 50% unavailable", hl = "ParleySessionSyncFree",
+        feedback = { label = "submit failed: 50% unavailable", hl = "DiagnosticError" } }
+
+    it("keeps a combining accent attached to the retained leaf at narrow adapter widths", function()
+        local item = open("éééé")
+        local history = require("parley.file_history"); history.setup()
+        local ancestor = root .. "/root.md"
+        vim.fn.writefile({ "root" }, ancestor)
+        vim.cmd("vsplit")
+        assert.is_true(history.restore(item.win, { version = 1, paths = { ancestor, item.path }, omitted = 0 }))
+        local owner = renderer(item)
+        owner.render(free)
+        vim.api.nvim_win_set_width(item.win, 12)
+        require("parley.document_band").refresh(item.win)
+        assert.equals("%#ParleySessionSyncFree#free      …é%=", vim.wo[item.win].winbar)
+        owner.render({ state = "free", hl = "ParleySessionSyncFree",
+            feedback = { label = "éééé", hl = "DiagnosticError" } })
+        assert.equals("%#ParleySessionSyncFree#free      %#DiagnosticError#é…%=", vim.wo[item.win].winbar)
+        owner.clear()
+    end)
+
+    for _, excluded in ipairs({ "unnamed", "nofile", "uri", "directory", "floating" }) do
+        it("retires excluded " .. excluded .. " presentation through resize and preserves Back on re-entry", function()
+            local item = open("eligible")
+            local history, band = require("parley.file_history"), require("parley.document_band")
+            history.setup()
+            local ancestor = root .. "/ancestor.md"
+            vim.fn.writefile({ "ancestor" }, ancestor)
+            local trail = { version = 1, paths = { ancestor, item.path }, omitted = 0 }
+            assert.is_true(history.restore(item.win, trail))
+            assert.truthy(vim.wo[item.win].winbar:find("ancestor › eligible", 1, true))
+            local scratch, float
+            if excluded == "floating" then
+                float = vim.api.nvim_open_win(item.buf, true,
+                    { relative = "editor", row = 1, col = 1, width = 40, height = 4 })
+            else
+                scratch = vim.api.nvim_create_buf(true, false)
+                if excluded == "nofile" then vim.bo[scratch].buftype = "nofile"
+                elseif excluded == "uri" then vim.api.nvim_buf_set_name(scratch, "test://excluded")
+                elseif excluded == "directory" then vim.api.nvim_buf_set_name(scratch, root)
+                end
+                vim.api.nvim_win_set_buf(item.win, scratch)
+            end
+            local win = float or item.win
+            assert.is_nil(history.peek(win))
+            assert.is_nil(history.snapshot(win))
+            for _ = 1, 2 do
+                vim.api.nvim_exec_autocmds("WinResized", {})
+                band.refresh(win)
+                assert.is_nil(vim.wo[win].winbar:find("ancestor › eligible", 1, true))
+            end
+            if float then vim.api.nvim_win_close(float, true)
+            else vim.api.nvim_win_set_buf(item.win, item.buf) end
+            band.refresh(item.win)
+            assert.same(trail, history.snapshot(item.win))
+            assert.truthy(vim.wo[item.win].winbar:find("ancestor › eligible", 1, true))
+            assert.is_true(history.back())
+            assert.equals(ancestor, vim.api.nvim_buf_get_name(0))
+            if scratch then vim.api.nvim_buf_delete(scratch, { force = true }) end
+        end)
+    end
+
+    it("rejects a same-buffer type or name change before the next observation", function()
+        local item = open("same-buffer-eligibility")
+        local history, band = require("parley.file_history"), require("parley.document_band")
+        history.setup()
+        local ancestor = root .. "/ancestor.md"
+        vim.fn.writefile({ "ancestor" }, ancestor)
+        assert.is_true(history.restore(item.win, { version = 1, paths = { ancestor, item.path }, omitted = 0 }))
+        vim.bo[item.buf].buftype = "nofile"
+        band.refresh(item.win)
+        assert.is_nil(history.peek(item.win))
+        assert.is_nil(vim.wo[item.win].winbar:find("ancestor ›", 1, true))
+        vim.bo[item.buf].buftype = ""
+        assert.truthy(history.snapshot(item.win))
+        vim.api.nvim_buf_set_name(item.buf, "test://renamed")
+        band.refresh(item.win)
+        assert.is_nil(history.peek(item.win))
+        assert.is_nil(vim.wo[item.win].winbar:find("ancestor ›", 1, true))
+        vim.api.nvim_buf_set_name(item.buf, item.path)
+        assert.truthy(history.snapshot(item.win))
+        assert.is_true(history.back())
+        assert.equals(ancestor, vim.api.nvim_buf_get_name(0))
+    end)
+
+    it("retires never-installed plain roots without poisoning later renders or cleanup", function()
+        local item = open("never-installed")
+        local owner = renderer(item)
+        local original = observe(item)
+        owner.render({ state = "plain", hl = "WinBar" })
+        assert.same(original, observe(item))
+        owner.clear()
+        owner.render({ state = "plain", hl = "WinBar" })
+        local other = open("after-plain-root")
+        vim.api.nvim_win_set_buf(item.win, other.buf)
+        owner.clear()
+        vim.api.nvim_win_set_buf(item.win, item.buf)
+        owner.render(free)
+        expect_view(item, free.label, free.hl)
+        owner.clear()
+        assert.same(original, observe(item))
+    end)
+
+    for _, kind in ipairs({ "breadcrumb-only", "state-owned" }) do
+        for _, overridden in ipairs({ "winbar", "winhighlight", "both" }) do
+            it("preserves " .. overridden .. " overrides through resize, refresh and cleanup for " .. kind, function()
+                local item = open("override-" .. kind .. "-" .. overridden)
+                local history, band = require("parley.file_history"), require("parley.document_band")
+                history.setup()
+                local ancestor = root .. "/ancestor.md"
+                vim.fn.writefile({ "ancestor" }, ancestor)
+                assert.is_true(history.restore(item.win, { version = 1, paths = { ancestor, item.path }, omitted = 0 }))
+                local owner = renderer(item)
+                if kind == "state-owned" then owner.render(free) end
+                local custom = { winbar = "operator custom bar", winhighlight = "StatusLine:IncSearch" }
+                local expected = { winbar = "original", winhighlight = "StatusLine:Search" }
+                for _, option in ipairs({ "winbar", "winhighlight" }) do
+                    if overridden == option or overridden == "both" then
+                        vim.wo[item.win][option] = custom[option]
+                        expected[option] = custom[option]
+                    end
+                end
+                for _ = 1, 2 do
+                    vim.api.nvim_exec_autocmds("WinResized", {})
+                    band.refresh(item.win)
+                    if kind == "state-owned" then owner.render(failure) end
+                    for _, option in ipairs({ "winbar", "winhighlight" }) do
+                        if overridden == option or overridden == "both" then
+                            assert.equals(custom[option], vim.wo[item.win][option])
+                        else
+                            assert.is_true(vim.wo[item.win][option] ~= expected[option], "unclaimed override must not disable owned option")
+                        end
+                    end
+                end
+                owner.clear()
+                assert.is_true(history.restore(item.win, { version = 1, paths = { item.path }, omitted = 0 }))
+                band.refresh(item.win)
+                assert.same(expected, observe(item))
+            end)
+        end
+    end
 
     it("restores a still-live session layer after temporary coordinator feedback clears", function()
         local item = open("layered")
         local session, coordinator = renderer(item), renderer(item)
         session.render(free)
         coordinator.render(failure)
-        expect_view(item, failure.label, failure.hl)
+        expect_view(item, failure.label, "DiagnosticError")
         coordinator.clear()
         expect_view(item, free.label, free.hl)
         session.clear()
+        assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(item))
+    end)
+
+    it("keeps a pending overlay above refreshed lock state without hiding the lock cell", function()
+        local item = open("overlay-held", true); ss.attach(item.buf)
+        vim.api.nvim_buf_set_lines(item.buf, -1, -1, false, { "unsent" })
+        local overlay = renderer(item)
+        overlay.render({ overlay = true, state = "unknown", hl = "WarningMsg",
+            feedback = { label = "Pending document move", hl = "WarningMsg" } })
+        assert.truthy(vim.wo[item.win].winbar:find("yours ●", 1, true))
+        assert.truthy(vim.wo[item.win].winbar:find("Pending document move", 1, true))
+        assert.equals("StatusLine:ParleySessionSyncOperator", vim.wo[item.win].winhighlight)
+        assert.is_true(ss.set_submission_feedback(item.buf, "new state receipt", false))
+        assert.truthy(vim.wo[item.win].winbar:find("Pending document move", 1, true))
+        assert.truthy(vim.wo[item.win].winbar:find("yours ●", 1, true))
+        overlay.clear()
+        assert.truthy(vim.wo[item.win].winbar:find("new state receipt", 1, true))
+        assert.truthy(vim.wo[item.win].winbar:find("yours ●", 1, true))
+        assert.equals("StatusLine:ParleySessionSyncOperator", vim.wo[item.win].winhighlight)
+        overlay.render({ overlay = true, state = "unknown", hl = "WarningMsg",
+            feedback = { label = "Pending document move", hl = "WarningMsg" } })
+        ss.detach(item.buf)
+        assert.equals("StatusLine:WarningMsg", vim.wo[item.win].winhighlight)
+        assert.truthy(vim.wo[item.win].winbar:find("unknown", 1, true))
+        overlay.clear()
         assert.same({ winbar = "original", winhighlight = "StatusLine:Search" }, observe(item))
     end)
 

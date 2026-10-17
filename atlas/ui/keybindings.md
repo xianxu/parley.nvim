@@ -392,3 +392,6 @@ Help describes configured actions; it does not inspect arbitrary later
 `vim.keymap.set` overrides from user config or other plugins.
 
 The branch shortcut description now says it creates and opens a sub-chat.
+
+
+Alt+o records a [breadcrumb trail](breadcrumb.md) after the file actually opens. Alt+Shift+O restores its parent visit and cursor; native file Back across other opens remains available. Ordinary opens start a new breadcrumb root.

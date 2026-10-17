@@ -46,7 +46,7 @@ describe("entity navigation with the sdlc executable", function()
     end
 
     before_each(function()
-        dir = vim.fn.tempname() .. "-entity-resolve"
+        dir = vim.fn.resolve(vim.fn.tempname()) .. "-entity-resolve"
         state = dir .. "/fake-state"
         vim.fn.mkdir(state, "p")
         saved = { config = parley.config, select = vim.ui.select, cwd = vim.fn.getcwd(),
@@ -105,7 +105,7 @@ describe("entity navigation with the sdlc executable", function()
     it("opens only the chosen artifact occurrence beside an @@ destination", function()
         local target, other = write("artifact.md"), write("other.md")
         seed({ ["#327"] = { files = { { path = target } } }, ["#999"] = { files = { { path = other } } } })
-        origin({ "1. question", "See @@" .. other .. "@@ and #327 and #999" })
+        local _, _, source = origin({ "1. question", "See @@" .. other .. "@@ and #327 and #999" })
         parley.cmd.OpenFileUnderCursor()
         assert.is_not_nil(picker)
         assert.equals(3, #picker.items)
@@ -113,6 +113,7 @@ describe("entity navigation with the sdlc executable", function()
         assert.equals("#327", picker.items[2].target)
         picker.callback(picker.items[2], 2)
         wait_for(function() return same_path(target) end, "selected artifact did not open")
+        assert.same({ source, target }, require("parley.file_history").snapshot(0).paths)
         assert.same({ { "resolve", "--json", "#327" } }, requests())
     end)
 
@@ -155,6 +156,9 @@ describe("entity navigation with the sdlc executable", function()
             assert.is_true(same_path(path))
             assert.equals(active, vim.api.nvim_get_current_win())
             assert.equals(buf, vim.api.nvim_win_get_buf(win))
+            local unrelated = write("unrelated.md")
+            vim.cmd("edit " .. vim.fn.fnameescape(unrelated))
+            assert.same({ unrelated }, require("parley.file_history").snapshot(0).paths)
             assert.same({ { "resolve", "--json", "#327" } }, requests())
         end)
     end

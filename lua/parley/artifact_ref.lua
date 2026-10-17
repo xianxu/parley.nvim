@@ -198,6 +198,8 @@ end
 -- a fake `sdlc` instead of replacing run_resolve wholesale (#225 BR-3). Without
 -- it, production and test flows did not share a boundary — the seam existed but
 -- no caller could reach it, which is the shape ARCH-MOCK asks you to avoid.
+-- opts.open (optional): accepted file opener, called only after live/once guards.
+-- Alt+o supplies its invocation-scoped breadcrumb follow boundary here.
 -- opts.is_current (optional): caller-owned live validity check. Stale scheduled
 -- results and family selections are discarded; each resolve and selection is
 -- consumed once so repeated async callbacks cannot dispatch or open twice.
@@ -257,7 +259,7 @@ function M.goto_ref_at_cursor(opts)
         end
         selected = true
         if is_current() then
-            _parley.open_buf(path, true)
+            if opts.open then opts.open(path, true) else _parley.open_buf(path, true) end
         end
     end
     local ok, handle = pcall(M.run_resolve, hit.ref, { cwd = cwd, sdlc_cmd = sdlc_cmd, kind = opts.kind }, function(files, err)

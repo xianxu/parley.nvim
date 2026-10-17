@@ -534,19 +534,7 @@ end
 -- instead of duplicating the math (ARCH-DRY).
 M.compute_layout = compute_layout
 
-local function display_text_units(text)
-    local units = {}
-    local count = vim.fn.strchars(text, true)
-    for index = 0, count - 1 do
-        table.insert(units, vim.fn.strcharpart(text, index, 1, true))
-    end
-    return units
-end
-
-local DISPLAY_TEXT_OPS = {
-    units = display_text_units,
-    width = vim.fn.strdisplaywidth,
-}
+local DISPLAY_TEXT_OPS = require("parley.display_text")
 
 -- Truncate a display string to fit within max_w display columns, appending "…".
 local function truncate(text, max_w)
