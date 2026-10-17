@@ -1,6 +1,6 @@
 ---
 id: 000365
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -14,6 +14,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.95
+tracker:
+    version: 1
+    completion:
+        token: close-23d65da0c10d
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 2999bfba8d35a68d1436e301cc63b61e76ed2f65
+        evidence_commit: 0676b17ad605bde0270e880dbebfb1233c736286
 ---
 
 # Tests inherit the slot's live Couch environment and query the real registry (chat_move_spec failed when Couch flapped)
