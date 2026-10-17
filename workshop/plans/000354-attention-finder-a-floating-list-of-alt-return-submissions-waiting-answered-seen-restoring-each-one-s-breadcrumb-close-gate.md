@@ -858,6 +858,160 @@ rounds:
       isolation: fenced
       reviewed: 4fdadd497d3754c4d572a44ed7dc60dc658d1732
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 8a05cd77-a1c8-4685-8430-ec5a04bf294d
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000354"
+            recipe: milestone-review
+            round: 8
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/fbb274b6cf23063f
+            reviewed_head: 57c581887b9cb89eec44d9e4c2e004128982750a
+            slot: parley.nvim:3
+            requested_at: "2026-10-17T01:51:26.069088Z"
+          phase: finished
+          pid: 94254
+          started_at: "2026-10-17T01:51:26.367893Z"
+          finished_at: "2026-10-17T01:56:24.566937Z"
+          session_id: d2e4210c-5763-4cae-bcc9-584ee42c47de
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 57c581887b9cb89eec44d9e4c2e004128982750a
+        tracker_head: 6620a8d2594fbf8fe1d98f2e5dcb5b2e68f6df4e
+        branch_point: d455f7ebc1a684063ccbfc3e904cc9adf1ff49cd
+        since: "2026-10-16T11:20:37-07:00"
+        until: "2026-10-16T18:50:42-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T11:20:37-07:00"
+              end: "2026-10-16T18:50:42-07:00"
+              began: "2026-10-16T11:20:37-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 63beb7f6-5e18-48e9-8bae-6484d78ced70
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 7696a8cfa19da19757e068a8b13a0ded1ba171623a9a7a3b76c87db5fcd12ca8
+              started: "2026-10-16T21:36:34.222Z"
+              spawned: false
+              bytes: 588762
+              windows:
+                - start: "2026-10-16T21:36:34.222Z"
+                  end: "2026-10-16T18:50:42-07:00"
+            - harness: claude
+              id: 90c11d14-54c6-4cef-b441-ee83b536d8ed
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: a0b2f35f930689737acaefc211508db7e9ff6e5f9c31efd1fa2555694d341cbc
+              started: "2026-10-16T21:41:15.716Z"
+              spawned: false
+              bytes: 364033
+              windows:
+                - start: "2026-10-16T21:41:15.716Z"
+                  end: "2026-10-16T18:50:42-07:00"
+            - harness: claude
+              id: 983bc5e5-6019-4a70-8c51-b5201568013a
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 8907360015289702272f2f19a536a07201c34e4122278f54a205ee9b6d0daced
+              started: "2026-10-16T21:40:54.825Z"
+              spawned: false
+              bytes: 509772
+              windows:
+                - start: "2026-10-16T21:40:54.825Z"
+                  end: "2026-10-16T18:50:42-07:00"
+            - harness: claude
+              id: 996b651e-5e17-47f4-9815-33d9ff25fe0d
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 06b9de5035041494275e3431d1bbd6cd5de1499c6f5df437d6e8195be79c645c
+              started: "2026-10-15T18:27:53.241Z"
+              spawned: false
+              bytes: 18684318
+              windows:
+                - start: "2026-10-16T11:20:37-07:00"
+                  end: "2026-10-16T18:50:42-07:00"
+            - harness: claude
+              id: af54b6ac-7b02-4fb4-8a7c-8ff23f227998
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: a364eb1c98acced3eb731b4929001c967ef685d6feb342a2e39bce102ff7dc66
+              started: "2026-10-16T21:39:24.567Z"
+              spawned: false
+              bytes: 537706
+              windows:
+                - start: "2026-10-16T21:39:24.567Z"
+                  end: "2026-10-16T18:50:42-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 55.30478333333333
+        cuts:
+            - boundary: M1
+              dispatched: "2026-10-16T15:01:45-07:00"
+              finalized: "2026-10-16T15:05:02-07:00"
+              finalizing: false
+            - boundary: M1
+              dispatched: "2026-10-16T15:16:17-07:00"
+              finalized: "2026-10-16T15:18:45-07:00"
+              finalizing: true
+            - boundary: M2
+              dispatched: "2026-10-16T15:26:05-07:00"
+              finalized: "2026-10-16T15:28:34-07:00"
+              finalizing: false
+            - boundary: M2
+              dispatched: "2026-10-16T15:31:01-07:00"
+              finalized: "2026-10-16T15:33:54-07:00"
+              finalizing: false
+            - boundary: M2
+              dispatched: "2026-10-16T15:53:28-07:00"
+              finalized: "2026-10-16T15:57:38-07:00"
+              finalizing: false
+            - boundary: M2
+              dispatched: "2026-10-16T16:08:06-07:00"
+              finalized: "2026-10-16T16:10:32-07:00"
+              finalizing: true
+      "n": 8
+      timestamp: "2026-10-16T18:56:25-07:00"
+      dispatched: "2026-10-16T18:51:26-07:00"
+      agent: claude
+      dispose:
+        - id: BR-6
+          disposition: addressed
+          note: Plan Task 6 (plan line 219) now includes README.md, and README.md:95-103 documents Alt+Space, Ctrl+Y Space, :ParleyAttention and attention.seen_grace_minutes.
+          round: 8
+        - id: BR-7
+          disposition: not-addressed
+          note: No conformance script covers the --send-to receipt line, and the atlas (attention_finder.md:22,41) does not say this is unchecked. Plan line 98 still points only at the operator's smoke check.
+          round: 8
+        - id: BR-16
+          disposition: addressed
+          note: attention.lua:93 treats anything but a table as a failure. Reverting it to `if not data` fails "a probe that raises as it starts reads as couch unavailable" (verified in the checkout, then restored).
+          round: 8
+      findings:
+        - kind: defect
+          id: BR-17
+          severity: Minor
+          title: 'The #367 deferral of side-doc resurfacing is cited but not in the tracker'
+          detail: 'atlas/ui/attention_finder.md:17 and the issue Log say bringing back a seen or retired side doc on an agent rewrite is #367, but no 000367-* issue exists in workshop/issues or workshop/history at head. File #367 before closing, so the deferred behaviour is tracked.'
+          family: deferred-work-untracked
+          round: 8
+        - kind: defect
+          id: BR-18
+          severity: Minor
+          title: The WinEnter and WinScrolled view triggers and the current-window scroll guard have no spec
+          detail: 'attention.lua:197-206 handles WinScrolled by checking tonumber(args.match) against the current window, but the specs fire only BufEnter and CursorMoved. Add one spec: scrolling a non-current window on an answered file leaves it answered, and scrolling it while it is current makes it seen.'
+          family: trigger-branch-untested
+          round: 8
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 57c581887b9cb89eec44d9e4c2e004128982750a
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#354 (boundary-review)
@@ -958,8 +1112,23 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-16** [Minor] `adopted-owner-contract-unchecked` (kind: defect) A probe whose start raises is recorded as "no Couch ledger for this file"
   async_operation_queue calls finish("filesystem operation raised") when job.start throws (e.g. vim.system ENOENT with no couch on PATH). attention.lua passes that string to M.observation as data; indexing a string's .Status gives nil, so the entry records an invented reason instead of "couch status unavailable". Treat non-table data as nil before observation, and add a spec where run throws.
 
+## Round 8 — 2026-10-16T18:56:25-07:00 (claude) — passed
+
+### Disposed
+
+- BR-6 — addressed — Plan Task 6 (plan line 219) now includes README.md, and README.md:95-103 documents Alt+Space, Ctrl+Y Space, :ParleyAttention and attention.seen_grace_minutes.
+- BR-7 — not-addressed — No conformance script covers the --send-to receipt line, and the atlas (attention_finder.md:22,41) does not say this is unchecked. Plan line 98 still points only at the operator's smoke check.
+- BR-16 — addressed — attention.lua:93 treats anything but a table as a failure. Reverting it to `if not data` fails "a probe that raises as it starts reads as couch unavailable" (verified in the checkout, then restored).
+
+### Raised
+
+- **BR-17** [Minor] `deferred-work-untracked` (kind: defect) The #367 deferral of side-doc resurfacing is cited but not in the tracker
+  atlas/ui/attention_finder.md:17 and the issue Log say bringing back a seen or retired side doc on an agent rewrite is #367, but no 000367-* issue exists in workshop/issues or workshop/history at head. File #367 before closing, so the deferred behaviour is tracked.
+- **BR-18** [Minor] `trigger-branch-untested` (kind: defect) The WinEnter and WinScrolled view triggers and the current-window scroll guard have no spec
+  attention.lua:197-206 handles WinScrolled by checking tonumber(args.match) against the current window, but the specs fire only BufEnter and CursorMoved. Add one spec: scrolling a non-current window on an answered file leaves it answered, and scrolling it while it is current makes it seen.
+
 ## Open findings
 
-- **BR-6** [Minor] `docs-gate-plan-gap` (kind: defect) Plan Task 6 omits a README update for the finder's chord, command and attention.seen_grace_minutes
 - **BR-7** [Minor] `fake-conformance-gap` (kind: defect) No conformance check pins the couch --send-to receipt line that parse_message_id depends on
-- **BR-16** [Minor] `adopted-owner-contract-unchecked` (kind: defect) A probe whose start raises is recorded as "no Couch ledger for this file"
+- **BR-17** [Minor] `deferred-work-untracked` (kind: defect) The #367 deferral of side-doc resurfacing is cited but not in the tracker
+- **BR-18** [Minor] `trigger-branch-untested` (kind: defect) The WinEnter and WinScrolled view triggers and the current-window scroll guard have no spec
