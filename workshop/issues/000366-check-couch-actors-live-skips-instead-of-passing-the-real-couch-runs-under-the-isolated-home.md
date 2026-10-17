@@ -1,12 +1,12 @@
 ---
 id: 000366
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-17
 estimate_hours:
-card_mirror: '382e4895025cc37a3b6923d15014f6a71a799113' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '118aa01a9461e7cd35dba57d812a134b950a4769' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T23:59:12-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "79f1365d", done: "ee4c97ec"}
+actual_hours: 0.29
 ---
 
 # check-couch-actors-live skips instead of passing: the real couch runs under the isolated HOME
