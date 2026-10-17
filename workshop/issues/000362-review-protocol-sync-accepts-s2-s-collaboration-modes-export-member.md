@@ -38,7 +38,20 @@ S2 M1 (ops `universal-agent-input-interface/design.side/01-s2-section-modes.md`,
   pass `--check`, with each command reporting that the synced prompt has no
   collaboration modes.
 
+- Local discussion/default and collaboration answer in place; chat sections stay
+  byte-for-byte untouched, with deterministic pre-generation notices saying the
+  hub agent answers chat, including all-chat/no-marker rounds.
+- Unknown collaboration modes and conflicting normalized heading assignments
+  refuse without generation or writes. Scalar, flow/block mapping and heading
+  inheritance follow the canonical collaboration contract.
+
 ## Plan
+
+Approved local-adapter correction: see [implementation plan](../plans/000362-local-collaboration-plan.md).
+
+- [ ] Implement pure collaboration frontmatter/section resolution and protected chat ranges.
+- [ ] Add local admission/notices and a proposal guard; test default questions, explicit collaboration/chat, invalid routing and resubmission.
+- [ ] Update the local adapter/docs and re-run full verification and close review.
 
 - [x] Extend pure validation/rendering for an optional singleton at the fixed
   collaboration-modes.md path; compose round, grammar, collaboration modes.
@@ -172,3 +185,14 @@ Append the old-v1 success/notice requirement to Done when, matching the
 already-recorded compatibility revision and existing real-CLI regression.
 BR-1's local adapter capability mismatch remains pending the hub's scope
 decision; no runtime policy has changed.
+
+### 2026-10-16 — approved local adapter scope (BR-1)
+
+TL approval 48f954d0-eae8-4c8b-a091-94086c6551a0 folds the narrowed local policy
+into #362: discussion (including the default) and collaboration answer in place;
+chat sections are left untouched and a deterministic notice says the hub agent
+answers chat. Unknown modes and conflicting headings refuse. Chat answer docs,
+side-doc creation, multi-file IO and previous-read baselines stay with the
+agent-side skill. Parley resolves frontmatter/sections before generation and
+protects chat bytes at its tool-execution seam; no model-authored notice or
+new reply channel. The durable plan records this approved implementation.
