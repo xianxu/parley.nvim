@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "9789166a", done: "edfe67b7"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Attention finder: an agent rewrite of a seen or retired side doc brings it back as answered
@@ -68,6 +68,8 @@ flow: {kind: quick, provenance: inferred, spec: "9789166a", done: "edfe67b7"}
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Attention specs green: model 40, store 17, rows 6, record 12, finder 26, plus 38; lint clean. Model specs cover: an agent rewrite after seen is answered; the operator save is not (same second, different nsec, is the agent); writes at or before seen, or to waiting or answered entries, change nothing; a retired doc comes back on a later agent write, not an operator save; an operator-created side doc is not listed; saved is pruned and capped. A store spec with two module instances shows one editor save read as the operators in another (TL check). An integration spec through attention.open covers a real :w (seen stays), an agent rewrite (answered), retire, then rewrite (answered, un-retired). Mutations: not recording saves, ignoring saved, and never un-retiring each fail their specs. Folded-in fix of the #354 repaint spec flake (the qzx query matched via the temp dir; root cause shown with _fuzzy_score), six clean runs after. The full suite runs as sdlc-local/suite on 108f5a7f.; review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 135 added lines in code files (limit 100)
 - 2026-10-16: TL approved the plan. TL check: the operator runs more than one parley Neovim. `saved` lives in the shared store file, so one editor's save reads as the operator's in another; a store spec covers this with two module instances.
 - 2026-10-16: `discover` first read every side doc's head on each open. Now `Model.scan` picks candidates from stat data, and only those have their frontmatter read, the pre-#367 bound.
 - 2026-10-16: folded-in flake fix (#354's spec, on main). "keeps the typed filter and the selected row across a live repaint" failed about one run in nine: "typeahead did not filter to the two qzx rows". Printing on timeout showed the prompt "> qzx" with all three rows. A query of three characters or fewer matches the whole search text, which includes the random temp directory, so `beta.md` matched. The spec now uses `q+` (no temp path holds `+`). Shown deterministically: `_fuzzy_score("qzx", "beta.md /tmp/nvim.u/aqbzcx/0")` = 21, `"q+"` = nil. Six clean runs after the fix.
