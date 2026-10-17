@@ -24,6 +24,7 @@ Every file submitted with Alt+Return that Couch accepted, and every new side doc
   - An edit made outside this editor, or in a Neovim without parley, counts as an agent write.
   - mtimes are compared at whole seconds against `seen_at`, so an agent write in the same second as the operator's view is missed.
   - Only the `.side/` folders of current entries are scanned: a side doc whose parent has also left comes back with the parent's next submit.
+  - Past 512 kept saves the oldest is dropped, and that file then reads as agent-written on its next scan.
   - A store written before #367 has no `saved` map: a seen or retired side doc the operator had edited reads as agent-written once, on the first open after the upgrade.
 - Cost on open: the sweep write, then a synchronous scan of at most 256 `.side/` folders (a stat per file, and 40 head lines for each file the rule picks), then one batch write, before the rows render.
 
