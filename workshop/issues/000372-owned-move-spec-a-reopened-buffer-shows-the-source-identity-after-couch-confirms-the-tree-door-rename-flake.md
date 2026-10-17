@@ -1,13 +1,21 @@
 ---
 id: 000372
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'fdbdaf50961a75001417cf63ed50508b1fb6ed94' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '3a91db7b54c6da18395639611e8df244a5c26988' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-17T05:19:56-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # owned-move spec: a reopened buffer shows the source identity after Couch confirms the tree-door rename (flake)
@@ -32,8 +40,23 @@ Decide which side is wrong with a deterministic ordering: hold the rename reply 
 
 ## Plan
 
-- [ ]
+- [x] Fake: `FAKE_COUCH_REGISTRY_REPLY_DELAY` (+ `_OPS`), applied after the change is published and the lock released.
+- [x] Check the adoption ordering in the product (the TL's question): not a defect, see Log.
+- [x] The tree-door case holds the rename reply 0.5 s and awaits the buffer's adopted identity before checking the registry.
+- [x] Sweep the spec for the same order (registry first, then an immediate identity read).
+- [ ] Full suite, close.
 
 ## Log
 
 ### 2026-10-17
+
+## Log
+
+### 2026-10-17 — a spec ordering race, not a product adoption gap
+
+- Product order (the TL's question, checked first): the buffer adopts NEW only from the rename reply. `document_session` sets `state.registration` from `result.registration` and emits `finish_move`, which moves `s.path`, re-caches and then calls `metadata_done`, the only path to the "moved" band. So the editor never reports confirmation before it adopts. Until the reply arrives, the rename operation is in flight, the band says "moving: confirming with Couch", and the journal holds the step. The old `File` there is the editor's honest view, not a stale claim.
+- Spec order: Couch is a separate process that publishes the rename before its reply travels. The case polled the registry (`lookup(new_path)`) and then read `document.identity` at once, so whenever the registry won the race by more than a tick, line 224 saw the source path.
+- Deterministic reproduction: the new `FAKE_COUCH_REGISTRY_REPLY_DELAY=1` with `_OPS=rename` publishes and releases the lock, then holds the reply. The original case then failed 3/3 at the identity assertion. The fake used to print its reply while holding the state lock, which would also have blocked the spec's own lookups; the delay sits after the lock.
+- Fix: the case keeps a 0.5 s reply delay, so it always crosses the window, and awaits the buffer's identity adopting NEW (the editor's confirmation) before checking the registry. 16/16, five runs in a row.
+- Sweep: the other cases in the spec already await `identity.File == new_path` or wait for `status(buf).operation` to clear first. The legacy-move case compares only the ID, which a rename doesn't change. No other site reads the identity right after a registry await.
+- The suite on #361's heads hit this in 3 of 5 runs (d59f6407 attempt 1, 12105c27 attempt 1, and #361's merge on cfcbd279), so it blocked every parley landing.

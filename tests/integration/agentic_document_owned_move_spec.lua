@@ -30,7 +30,8 @@ describe("registered ordinary Markdown through Parley move doors", function()
         p, document = require("parley"), require("parley.agentic_document")
         saved = { env = {}, config = {}, test_mode = previous_test_mode }
         for _, name in ipairs({ "PATH", "COUCH_THREAD_SCOPE", "COUCH_THREAD_TAG", "COUCH_ISOLATED_ROOT",
-            "FAKE_COUCH_REGISTRY", "FAKE_COUCH_REGISTRY_MODE", "FAKE_COUCH_ACTORS", "FAKE_COUCH_EXIT", "FAKE_COUCH_SLEEP", "FAKE_COUCH_STATUS" }) do
+            "FAKE_COUCH_REGISTRY", "FAKE_COUCH_REGISTRY_MODE", "FAKE_COUCH_ACTORS", "FAKE_COUCH_EXIT", "FAKE_COUCH_SLEEP", "FAKE_COUCH_STATUS",
+            "FAKE_COUCH_REGISTRY_REPLY_DELAY", "FAKE_COUCH_REGISTRY_REPLY_DELAY_OPS" }) do
             saved.env[name] = vim.env[name] or false
         end
         for _, name in ipairs({ "chat_dir", "chat_dirs", "chat_roots", "state_dir", "review_shortcut_next" }) do
@@ -208,6 +209,12 @@ describe("registered ordinary Markdown through Parley move doors", function()
 
     it("moves an unloaded registered ordinary file through the public tree door", function()
         seed_side()
+        -- #372: Couch publishes the rename before its reply reaches the editor,
+        -- so the registry can say "registered at NEW" while the buffer still
+        -- holds the old identity, with the rename operation in flight. The
+        -- reply is held back here so the case always crosses that window,
+        -- instead of reading the buffer whenever the race left it.
+        vim.env.FAKE_COUCH_REGISTRY_REPLY_DELAY, vim.env.FAKE_COUCH_REGISTRY_REPLY_DELAY_OPS = "0.5", "rename"
         document.detach(buf)
         vim.api.nvim_buf_delete(buf, {force=true})
         local moved, err = p.move_chat_tree(file, destination)
@@ -215,14 +222,19 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals(new_path, moved, tostring(err))
         assert.equals(0, vim.fn.filereadable(file))
         assert.equals(1, vim.fn.filereadable(destination .. "/ordinary.side/child.md"))
-        -- #359: Couch's rename lands after the move returns.
-        local confirmed
-        await(function() confirmed = lookup(new_path); return confirmed.kind == "registered" end)
-        assert.equals(registration.ID, confirmed.registration.ID)
+        -- #359: Couch's rename lands after the move returns. The editor's own
+        -- confirmation is the buffer adopting NEW from the rename reply; the
+        -- registry is a separate process and leads it by that reply (#372).
         local reopened = vim.fn.bufnr(new_path)
         assert.is_true(reopened > 0)
-        assert.equals(new_path, document.identity(reopened).File)
+        await(function()
+            local identity = document.identity(reopened)
+            return identity ~= nil and identity.File == new_path
+        end)
         assert.equals(registration.ID, document.identity(reopened).ID)
+        local confirmed = lookup(new_path)
+        assert.equals("registered", confirmed.kind)
+        assert.equals(registration.ID, confirmed.registration.ID)
     end)
 
     -- #359: the identity is held, so the move needs no Couch round trip and
