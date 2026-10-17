@@ -89,6 +89,35 @@ describe("attention_store", function()
         assert.same({}, warnings)
     end)
 
+    -- #367: the operator runs more than one parley Neovim; a save in one must
+    -- read as the operator's in another. Each handle is its own module instance.
+    it("an operator save recorded by one editor's store handle is seen by another's", function()
+        local function handle()
+            package.loaded["parley.attention_store"] = nil
+            local fresh = require("parley.attention_store")
+            package.loaded["parley.attention_store"] = Store
+            return fresh
+        end
+        local here, there = handle(), handle()
+        assert.are_not.equal(here, there)
+        local done = false
+        here.apply({ type = "submitted", path = "/a.md", id = "m1" }, { now = 10 }, function()
+            here.apply({ type = "saved", path = "/a.side/s.md", mtime = "20.5" }, { now = 20 }, function() done = true end)
+        end)
+        assert(vim.wait(2000, function() return done end, 5), "apply never finished")
+        local state = there.load()
+        assert.same({ ["/a.side/s.md"] = "20.5" }, state.saved)
+        local file = { path = "/a.side/s.md", parent = "/a.md", mtime_sec = 20, mtime_id = "20.5" }
+        assert.same({}, Model.scan(state, { file }))
+        assert.same({}, warnings)
+    end)
+
+    it("drops a wrongly typed save with one warning", function()
+        local state = Store.parse({ version = 1, entries = {}, saved = { ["/a.side/s.md"] = 20, ["/a.side/t.md"] = "21.0" } }, "x")
+        assert.same({ ["/a.side/t.md"] = "21.0" }, state.saved)
+        assert.equals(1, #warnings)
+    end)
+
     it("reads a missing or unparseable file as empty", function()
         assert.same(Model.empty(), Store.load())
         vim.fn.mkdir(Store.dir(), "p")

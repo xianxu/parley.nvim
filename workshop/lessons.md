@@ -693,3 +693,16 @@ oracle, and the mutation that would make the test fail.
 - An await failure does not cancel the operation. Own every synthetic delayed
   callback with the case, cancel its timer at teardown and guard an already
   queued callback before it can resume production work in the next case.
+
+## 2026-10-16 (#367 — a picker query that the temp path can match)
+
+- A fuzzy picker spec's query must contain a character no temp path holds
+  (such as `+`). Row search text often includes the absolute directory, and
+  float_picker matches a query of three characters or fewer against the whole
+  haystack. An "unusual" `qzx` matched `beta.md` through the random tempname
+  about one run in nine. The failure looked like a repaint race until the spec
+  printed the prompt and the rows on timeout. Print state on an intermittent
+  await failure before theorising.
+- When a rule moves into the pure model, keep the cost bound of the IO it
+  replaces. Let the model pick candidates from cheap stat data, then read only
+  those. The first draft read every side doc's head on every open.

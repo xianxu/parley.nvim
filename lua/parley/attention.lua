@@ -144,34 +144,50 @@ end
 -- Enough lines for a frontmatter block; one that runs longer is not read as a side doc.
 local SIDE_HEAD_LINES = 40
 
---- `discovered` events for the side docs the agent wrote: every `*.md` with
---- frontmatter `type: side-doc` in the `.side/` folder of an entry already
---- in the finder, written after that entry entered it, and neither an entry
---- nor retired. Side docs are entries too, so nesting is found on the next scan.
+-- A file's mtime as the "sec.nsec" the store's `saved` map records.
+local function mtime_id(stat)
+    return stat.mtime.sec .. "." .. stat.mtime.nsec
+end
+
+--- The events for the side docs the agent wrote (attention_model.scan owns
+--- the rule): every `*.md` with frontmatter `type: side-doc` in the `.side/`
+--- folder of an entry already in the finder. Only the files the rule picks by
+--- their mtimes have their frontmatter read. Side docs are entries too, so
+--- nesting is found on the next scan.
 function M.discover(state)
     local uv = vim.uv or vim.loop
-    local events, seen = {}, {}
+    local files = {}
     for _, entry in pairs(state.entries) do
         local folder = require("parley.document_move_plan").side_path(entry.path)
-        local since = entry.kind == "side" and entry.submitted_at or (entry.recorded_at or entry.submitted_at)
         local scan = uv.fs_scandir(folder)
         while scan do
             local name, kind = uv.fs_scandir_next(scan)
             if not name then break end
             local path = folder .. "/" .. name
             local stat = (kind == "file" or kind == "link") and name:match("%.md$") and uv.fs_stat(path)
-            if stat and stat.type == "file" and stat.mtime.sec > since and not seen[path]
-                and not state.entries[path] and not state.retired[path] then
-                local ok, head = pcall(vim.fn.readfile, path, "", SIDE_HEAD_LINES)
-                if ok and M.is_side_doc(head) then
-                    seen[path] = true
-                    events[#events + 1] = { type = "discovered", path = path, parent = entry.path, at = stat.mtime.sec }
-                end
+            if stat and stat.type == "file" then
+                files[#files + 1] = { path = path, parent = entry.path, mtime_sec = stat.mtime.sec, mtime_id = mtime_id(stat) }
             end
         end
     end
-    table.sort(events, function(x, y) return x.path < y.path end)
-    return events
+    table.sort(files, function(x, y) return x.path < y.path end)
+    return vim.tbl_filter(function(event)
+        local ok, head = pcall(vim.fn.readfile, event.path, "", SIDE_HEAD_LINES)
+        return ok and M.is_side_doc(head)
+    end, Model.scan(state, files))
+end
+
+--- The operator's editor wrote `buf`'s file: when it is a `*.md` in a `.side/`
+--- folder, record its new mtime, so a scan does not take the save for the agent's.
+function M.saved(buf)
+    if vim.bo[buf].buftype ~= "" then return end
+    local name = vim.api.nvim_buf_get_name(buf)
+    if name == "" then return end
+    local path = vim.fn.fnamemodify(name, ":p")
+    if not path:match("%.side/[^/]+%.md$") then return end
+    local stat = (vim.uv or vim.loop).fs_stat(path)
+    if not stat then return end
+    apply({ type = "saved", path = path, mtime = mtime_id(stat) }, { now = M.clock() })
 end
 
 --- The operator looked at the current window's file: an answered entry for
@@ -189,7 +205,8 @@ function M.viewed(buf)
 end
 
 --- Install the view autocmds once: focusing a window on a file, or moving or
---- scrolling in it, is the operator looking at it. Loads the answered paths.
+--- scrolling in it, is the operator looking at it; saving a side doc is the
+--- operator's write, not the agent's. Loads the answered paths.
 function M.setup()
     remember(Store.load())
     local group = vim.api.nvim_create_augroup("ParleyAttentionViews", { clear = true })
@@ -203,6 +220,10 @@ function M.setup()
             end
             M.viewed(args.buf)
         end,
+    })
+    vim.api.nvim_create_autocmd("BufWritePost", {
+        group = group,
+        callback = function(args) M.saved(args.buf) end,
     })
 end
 

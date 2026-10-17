@@ -197,9 +197,9 @@ describe("attention finder", function()
     -- The real float_picker: a typed filter and the selected row survive a
     -- repaint landing mid-typing, and Enter opens the row the operator chose.
     it("keeps the typed filter and the selected row across a live repaint", function()
-        local alpha = submitted("qzxalpha.md", "m1")
+        local alpha = submitted("q+alpha.md", "m1")
         now = now + 1
-        local alto = submitted("qzxalto.md", "m2")
+        local alto = submitted("q+alto.md", "m2")
         now = now + 1
         submitted("beta.md", "m3")
         local held = {}
@@ -220,20 +220,21 @@ describe("attention finder", function()
         end
         local _, prompt = float("prompt")
         assert(prompt, "the real picker did not open")
-        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> qzx" })
+        -- `+` is in no temp path, so the query cannot match a row by its directory.
+        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> q+" })
         vim.api.nvim_exec_autocmds("TextChanged", { buffer = prompt })
-        await(function() return #results() == 2 end, "typeahead did not filter to the two qzx rows")
-        -- Move to the second row (qzxalpha.md, the older submit).
+        await(function() return #results() == 2 end, "typeahead did not filter to the two q+ rows")
+        -- Move to the second row (q+alpha.md, the older submit).
         vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<Down>", "i", false, true).callback() end)
         -- Meanwhile another editor submits a newer matching file (a row lands
-        -- above the cursor on the next repaint) and the agent folds qzxalto.md.
+        -- above the cursor on the next repaint) and the agent folds q+alto.md.
         now = now + 1
-        submitted("qzxnew.md", "m4")
+        submitted("q+new.md", "m4")
         Couch.fold(registry, alto, "m2")
         for _, release in ipairs(held) do release() end
         await(function() return vim.iter(results()):any(function(l) return l:find("answered", 1, true) ~= nil end) end,
             "the fold never repainted the open picker")
-        assert.equals("> qzx", vim.api.nvim_buf_get_lines(prompt, 0, 1, false)[1])
+        assert.equals("> q+", vim.api.nvim_buf_get_lines(prompt, 0, 1, false)[1])
         assert.equals(3, #results())
         vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<CR>", "i", false, true).callback() end)
         await(function() return opened ~= nil end, "Enter opened nothing")
@@ -417,6 +418,45 @@ describe("attention finder: side docs the agent wrote", function()
         open({ picker = picker })
         assert.is_truthy(Store.load().entries[nested])
         assert.equals(doc, Store.load().entries[nested].parent)
+    end)
+
+    it("an agent rewrite brings a seen or retired side doc back; the operator's own save does not (#367)", function()
+        local clock = Attention.clock
+        Attention.clock = function() return now end
+        local a = submitted("a.md", "m1")
+        local doc = side(a, "01-answer.md", DOC, 2000)
+        now = 2100
+        open({ picker = fake_picker() })
+        apply({ type = "opened", path = doc })
+        -- The operator edits and saves the seen side doc in this editor.
+        Attention.setup()
+        vim.cmd("edit " .. vim.fn.fnameescape(doc))
+        vim.api.nvim_buf_set_lines(0, -1, -1, false, { "my note" })
+        vim.cmd("silent write")
+        await(function() return Store.load().saved[doc] ~= nil end, "the save was never recorded")
+        vim.cmd("enew")
+        local picker = fake_picker()
+        open({ picker = picker })
+        assert.same({ "seen     ↳ 01-answer.md  ~/a.side", "waiting    a.md  ~" }, picker.rows())
+        -- The agent rewrites it: answered again.
+        side(a, "01-answer.md", DOC, 3000)
+        picker = fake_picker()
+        open({ picker = picker })
+        assert.same({ "answered ↳ 01-answer.md  ~/a.side", "waiting    a.md  ~" }, picker.rows())
+        -- Seen, then past the grace: retired; a later agent write brings it back.
+        now = 3100
+        apply({ type = "opened", path = doc })
+        now = now + 3600
+        open({ picker = fake_picker() })
+        assert.is_truthy(Store.load().retired[doc])
+        side(a, "01-answer.md", DOC, now + 10)
+        picker = fake_picker()
+        open({ picker = picker })
+        assert.same({ "answered ↳ 01-answer.md  ~/a.side", "waiting    a.md  ~" }, picker.rows())
+        assert.is_nil(Store.load().retired[doc])
+        Attention.clock = clock
+        pcall(vim.api.nvim_del_augroup_by_name, "ParleyAttentionViews")
+        vim.cmd("silent! %bwipeout!")
     end)
 
     it("reads the side-doc type from frontmatter only", function()
