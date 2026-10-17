@@ -1,6 +1,6 @@
 ---
 id: 000370
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-17
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.09
+tracker:
+    version: 1
+    completion:
+        token: close-720425fb5e4e
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: d0d574ff658a3cf5a0f513957cd91564857f72dd
+        evidence_commit: 8c3f8e03bbfadfdfc17d0fc4f7ff3d467ab983d0
 ---
 
 # session_sync M-CR submit spec misses the couch argv within 2 s under suite load (flake)
