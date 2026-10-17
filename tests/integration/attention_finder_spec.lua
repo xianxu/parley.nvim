@@ -482,6 +482,39 @@ describe("attention finder: seen however the operator looks", function()
         await(function() return Model.state_of(Store.load().entries[path]) == "seen" end, "the cursor move never counted")
     end)
 
+    -- An answered file shown in a window that is not current, put there
+    -- without firing the view autocmds; returns that window.
+    local function beside(path)
+        vim.cmd("noautocmd vsplit " .. vim.fn.fnameescape(path))
+        local win = vim.api.nvim_get_current_win()
+        vim.cmd("noautocmd wincmd p")
+        return win
+    end
+
+    it("a scroll counts for the current window only, not one beside it", function()
+        local a = root .. "/a.md"
+        vim.fn.writefile({ "# a" }, a)
+        vim.cmd("edit " .. vim.fn.fnameescape(a))
+        local path = answered("a.md") -- answered while the file is already current
+        now = now + 1
+        local other = root .. "/other.md"
+        vim.fn.writefile({ "# other" }, other)
+        local win = beside(other)
+        vim.api.nvim_exec_autocmds("WinScrolled", { pattern = tostring(win) })
+        vim.wait(100)
+        assert.equals("answered", Model.state_of(Store.load().entries[path]))
+        vim.api.nvim_exec_autocmds("WinScrolled", { pattern = tostring(vim.api.nvim_get_current_win()) })
+        await(function() return Model.state_of(Store.load().entries[path]) == "seen" end, "the scroll never counted")
+    end)
+
+    it("entering a window that already shows an answered file makes it seen", function()
+        local a = answered("a.md")
+        now = now + 1
+        local win = beside(a)
+        vim.api.nvim_set_current_win(win) -- WinEnter
+        await(function() return Model.state_of(Store.load().entries[a]) == "seen" end, "the window enter never counted")
+    end)
+
     it("viewing a waiting file changes nothing", function()
         local a = submitted("a.md", "m1")
         Attention.setup()

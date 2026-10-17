@@ -1417,7 +1417,7 @@ function M.register_global(scopes, config, callbacks)
 							else
 								wrapped = cb
 							end
-							if mode == "i" and entry.pum_passthrough and key:sub(1, 5) == "<C-y>" then
+							if mode == "i" and entry.pum_passthrough and key:sub(1, 5):lower() == "<c-y>" then
 								local action = wrapped
 								wrapped = function()
 									if vim.fn.pumvisible() == 1 then
