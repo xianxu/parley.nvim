@@ -46,6 +46,7 @@ Past chats are not migrated (operator decision for S2).
 ### 2026-10-16
 
 ### 2026-10-17
+- 2026-10-17: closed — Both built-in templates create root and child chats with collaboration-mode: collaboration; legacy opening preserves buffer and disk lines. Focused writer suite 11/11; lint 773 files clean; recorded full suite ba48a3d6 exit 0 in 3m33s, log sha256 9e64beea81dc, clean census. TL accepted smoke through normal use, no staging.; review verdict: SHIP
 
 Claimed and started from main. Quick scope: template-only declaration, with no reader, migration, custom-template rewrite or new IO mechanism. The existing writers own file creation (ARCH-PURE/DRY); one constant frontmatter line adds bounded bytes per new chat (ARCH-CONSTRAINTS/RETENTION). No external dependency, concurrency, authority or ownership change (ARCH-MOCK/ORDER/SECURE). Root and child writers plus both built-in templates are the consumer enumeration (ARCH-PURPOSE). Plan posted to hub, proceeding under quick-flow authorization.
 
