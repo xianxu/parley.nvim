@@ -93,7 +93,13 @@ crosses, with three exceptions:
 - `PARLEY_LIVE_COUCH` takes the real thread, but only for
   `make check-couch-actors-live`, which runs `couch_spec` alone. `TEST_RUN`
   strips the flag for every other target, so an exported one never reaches the
-  suite, `test-spec` or the rest.
+  suite, `test-spec` or the rest. The real thread is the Couch names plus
+  `PAIR_SESSION_NAME` and `PAIR_LAUNCH_NONCE`, the caller identity the CLI
+  checks (#366). The CLI also refuses the isolated `XDG_DATA_HOME`, so the
+  live call alone gets the operator's data home through
+  `PARLEY_LIVE_COUCH_DATA_HOME`; the spec process stays isolated. When the
+  call still fails, the case goes pending with the exit code and the first
+  stderr line.
 - `make fixtures` names its API keys in `PARLEY_TEST_ENV_PASS`.
 
 The launcher also puts `tests/fixtures/sentinel-bin` first on PATH. A bare `couch` or `pair` that no
