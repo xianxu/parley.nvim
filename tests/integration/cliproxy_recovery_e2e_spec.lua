@@ -42,7 +42,7 @@ describe("cliproxy recovery end to end", function()
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file },
             { PARLEY_FAKE_ERROR_MODE = error_mode })
         assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
-        ready_port.wait_listening(port)
+        ready_port.require_listening(port)
 
         dispatcher.providers.cliproxyapi = {
             endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),

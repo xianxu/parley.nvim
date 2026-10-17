@@ -38,9 +38,17 @@ local function module_of(file)
     return (file:gsub("^lua/", ""):gsub("%.lua$", ""):gsub("/init$", ""):gsub("/", "."))
 end
 
+-- Spec helpers are in the corpus too (#361): ready_port.wait_listening's dropped
+-- answer turned "the fake never came up" into a misleading product assertion.
+-- Specs are checked only for helper members: a spec's own setup may ignore a
+-- product result on purpose, and that is a separate question from this one.
+local DECLARING = { "lua/**/*.lua", "tests/helpers/*.lua" }
+local CALLING = { "lua/**/*.lua", "tests/**/*.lua" }
+local function is_spec_side(file) return file:match("^tests/") ~= nil end
+
 local function annotated()
     local out = {}
-    for _, file in ipairs(arch.worktree_files({ "lua/**/*.lua" })) do
+    for _, file in ipairs(arch.worktree_files(DECLARING)) do
         local lines = vim.fn.readfile(file)
         for i, line in ipairs(lines) do
             if line:match("^%s*%-%-%-%s*@nodiscard") then
@@ -60,14 +68,14 @@ describe("arch: a did-it-happen result is consumed", function()
 
     it("finds the annotated functions", function()
         for _, required in ipairs({ "parley.helper.table_to_file", "parley.custom_prompts.set",
-            "parley.document.set_previous_answer" }) do
+            "parley.document.set_previous_answer", "tests.helpers.ready_port.wait_listening" }) do
             assert.is_not_nil(marked[required], required .. " is not marked ---@nodiscard")
         end
     end)
 
     it("never drops one as a bare statement unless declared", function()
         local offenders, seen = {}, {}
-        for _, file in ipairs(arch.worktree_files({ "lua/**/*.lua" })) do
+        for _, file in ipairs(arch.worktree_files(CALLING)) do
             local lines = vim.fn.readfile(file)
             local alias = { M = module_of(file) }
             for _, line in ipairs(lines) do
@@ -88,7 +96,8 @@ describe("arch: a did-it-happen result is consumed", function()
                         local req, rname = body:match("^%s*require%(%s*[\"']([%w_.]+)[\"']%s*%)%.([%w_]+)%s*[(,)]")
                         local mod = req or (prefix and (alias[prefix] or INJECTED[prefix]))
                         name = rname or name
-                        if mod and marked[mod .. "." .. name] then
+                        local member = mod and marked[mod .. "." .. name]
+                        if member and (not is_spec_side(file) or is_spec_side(member)) then
                             local callee = (req and ("require('" .. req .. "')") or prefix) .. "." .. name
                             local key = file .. "|" .. callee
                             seen[key] = (seen[key] or 0) + 1

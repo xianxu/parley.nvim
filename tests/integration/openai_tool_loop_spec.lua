@@ -35,7 +35,7 @@ local function start_fake(port, response_mode, env)
     local handle, _, err, pid = fixture_process.spawn(FAKE,
         { "--port", tostring(port), "--response-mode", response_mode }, env)
     assert(handle, "spawn fake: " .. tostring(err))
-    assert(ready_port.wait_listening(port), "fake did not come up on port " .. port)
+    ready_port.require_listening(port)
     return pid
 end
 

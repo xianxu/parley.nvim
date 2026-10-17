@@ -163,14 +163,31 @@ function M.is_listening(port)
     return listener
 end
 
+local DEFAULT_LISTEN_MS = 5000
+
 --- Poll until something is listening on `port`, so probes don't race startup.
+--- A caller that drops the answer turns "the fake never came up" into whatever
+--- the product does against a dead port (#361: a missing login prompt, or a
+--- retry where give_up was due), so the result must be consumed; a caller that
+--- only needs the fake up uses require_listening.
 --- @param port number
 --- @param timeout_ms number|nil
 --- @return boolean listening
+---@nodiscard
 function M.wait_listening(port, timeout_ms)
-    return vim.wait(timeout_ms or 5000, function()
+    return vim.wait(timeout_ms or DEFAULT_LISTEN_MS, function()
         return M.is_listening(port)
     end, 50) or false
+end
+
+--- wait_listening, or fail the spec here, by name.
+--- @param port number
+--- @param timeout_ms number|nil
+function M.require_listening(port, timeout_ms)
+    if not M.wait_listening(port, timeout_ms) then
+        error(("fake never came up on port %d (waited %dms)"):format(port,
+            timeout_ms or DEFAULT_LISTEN_MS), 2)
+    end
 end
 
 return M
