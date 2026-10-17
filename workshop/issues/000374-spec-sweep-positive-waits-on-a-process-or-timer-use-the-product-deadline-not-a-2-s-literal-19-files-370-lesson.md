@@ -54,7 +54,7 @@ Rule (the #370 lesson): a positive wait, one that returns on arrival, is bounded
   - 3 bounds that are the property, marked '-- bound:' (skill_invoke 377 and 414 fake hrtime; query_cache 115 is the SIGTERM grace before SIGKILL).
   The review named cliproxy_login 72 and 200 as positive. They are absence checks: the next line asserts the count did not grow.
 - [x] The arch test now reads every `vim.wait(<literal>, <predicate>)` whatever its form, needs a reason marker on any kept literal, and has a floor of 400. Mutation check: a bare, unasserted `vim.wait(500, pred)` in outline_spec fails it.
-- [ ] Full suite green, round 2.
+- [x] Full suite green, round 2: sdlc local-check on 40763f03 (4m5s, vs 3m54s before; no passing-run slowdown).
 
 ## Revisions
 
