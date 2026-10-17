@@ -85,6 +85,7 @@ describe("entity navigation native input", function()
                     or [[return vim.api.nvim_get_mode().mode == "n"]])
                 assert.same({ "# Answer", "The destination is a real file." },
                     exec([[return vim.api.nvim_buf_get_lines(0, 0, -1, false)]]))
+                assert.same({ source, target }, exec([[return require("parley.file_history").snapshot(0).paths]]))
                 assert.same(lines, vim.fn.readfile(source))
             end)
         end
@@ -108,6 +109,7 @@ describe("entity navigation native input", function()
             assert.equals(source, exec([[return vim.api.nvim_buf_get_name(0)]]))
             assert.same({ 1, 0 }, exec([[return vim.api.nvim_win_get_cursor(0)]]))
             assert.same(lines, exec([[return vim.api.nvim_buf_get_lines(0, 0, -1, false)]]))
+            assert.same({ source }, exec([[return require("parley.file_history").snapshot(0).paths]]))
         end)
     end
 end)

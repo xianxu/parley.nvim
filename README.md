@@ -191,3 +191,6 @@ JPEGs within the maximum edge. `assets.shrink` and `assets.shrink_cmd` retain
 their configured behavior; the paste notice reports any retained original.
 Deleting a link leaves its asset on disk. The Markdown file's owner handles
 sidecar moves and sweeps unreferenced assets (the TL for session and QA files).
+
+
+The document winbar combines a fixed-width edit-lock indicator with the current window's Alt+o file trail. Alt+Shift+O restores earlier file visits and their trails. Submission feedback remains visible beside the lock; long trails shorten in the middle to fit the window. See [breadcrumb behavior and snapshots](atlas/ui/breadcrumb.md).

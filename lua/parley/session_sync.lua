@@ -488,7 +488,10 @@ refresh = function(buf)
 	end
 	s.minutes = owed_minutes(buf)
 	start_watch(buf)
-	render(buf, s.feedback or M.view(turn, s, owner_of(buf)))
+	local view = M.view(turn, s, owner_of(buf))
+    view.unsent = s.baseline ~= nil and content_hash(buf) ~= s.baseline
+    view.feedback = s.feedback
+    render(buf, view)
 end
 
 -- Completion belongs to the coordinator; this engine retains its receipt
