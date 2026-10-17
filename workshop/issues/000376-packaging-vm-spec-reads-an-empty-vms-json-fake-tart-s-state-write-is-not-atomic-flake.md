@@ -1,13 +1,23 @@
 ---
 id: 000376
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '8777ee4608fee868869f9f75787e469ef55e94eb' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'f6e7b2290587450e148fee7ef80a3353108e71d8' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-17T07:18:15-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "bc9b0b22", done: "ff519f53"}
+actual_hours: 0.18
 ---
 
 # packaging_vm_spec reads an empty vms.json: fake_tart's state write is not atomic (flake)
@@ -33,8 +43,17 @@ The fake's state write is atomic: write a temporary file in the same directory, 
 
 ## Plan
 
-- [ ]
+Measured cause: scripts/test-parley-vm.py starts `tart run` detached (`subprocess.Popen`, `start_new_session`) and then polls the guest with `tart exec`, so fake_tart calls overlap. Each call read, changed and rewrote vms.json unlocked, using `write_text`, which truncates and then writes. That gives a torn read (the observed empty JSON) and lost updates. The fake's `exec` also succeeded on a VM that was not running, unlike real tart, so under load `boot` could return before the detached `run` had recorded the VM.
+
+- [x] Regression first: "boot waits for a slow detached run before it reports ready", with `FAKE_TART_RUN_DELAY=1.5`. Red before the fix: `boot` returned 0 with the VM not running.
+- [x] fake_tart holds one exclusive `flock` (vms.lock) over each read-modify-write and writes through a temp file plus `os.replace`. `exec` on a VM that is not running exits 1, as real tart does.
+- [x] packaging_vm_spec 18/18 on three runs. With the `exec` check removed, the regression fails. fixture_lifecycle_spec 4/4. luacheck clean.
+- [x] Close review BR-1: Done-when clause 2 asked for a deterministic regression for the atomic write. A spec seam, `FAKE_TART_HOLD`, holds a call with its new state staged but unpublished, under the lock, until the spec releases it. Two specs use it:
+  - "a reader never sees a torn state file": the spec reads during the hold and gets the complete old state. Red under a mutation to the old truncate-then-write.
+  - "a call overlapping another loses neither update": a second clone during the hold waits, and both land. Red with the `flock` removed.
+  - packaging_vm_spec 20/20, and the arrival arch test is green.
 
 ## Log
 
 ### 2026-10-17
+- 2026-10-17: closed — BR-1 addressed: deterministic regressions via the FAKE_TART_HOLD seam. "a reader never sees a torn state file" fails under a mutation to the old truncate-then-write; "a call overlapping another loses neither update" fails with the flock removed. "boot waits for a slow detached run before it reports ready" was red before the fix (boot returned 0, VM not running) and fails with the exec-needs-running check removed. packaging_vm_spec 20/20; arrival arch test and fixture_lifecycle green; luacheck clean. sdlc merge runs the full suite on this head. Test-fixture-only change.; review verdict: SHIP
