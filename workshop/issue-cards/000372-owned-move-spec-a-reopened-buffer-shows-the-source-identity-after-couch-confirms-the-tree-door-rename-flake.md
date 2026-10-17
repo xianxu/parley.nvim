@@ -1,6 +1,6 @@
 ---
 id: 000372
-status: working
+status: codecomplete
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.32
+tracker:
+    version: 1
+    completion:
+        token: close-a9ae085e09bd
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 88acb8bd3ffde461022b14314f9dda8e0f9ccac2
+        evidence_commit: 51004a5fe3f48b46e862071f354b60eb831aa77a
 ---
 
 # owned-move spec: a reopened buffer shows the source identity after Couch confirms the tree-door rename (flake)
