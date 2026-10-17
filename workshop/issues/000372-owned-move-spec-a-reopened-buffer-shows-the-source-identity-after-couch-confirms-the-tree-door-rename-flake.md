@@ -1,13 +1,13 @@
 ---
 id: 000372
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '3a91db7b54c6da18395639611e8df244a5c26988' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '45d3ad53a731705e126c83fc186dcf350b7c63a5' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T05:19:56-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "7ff47f0f", done: "c59f7fa3"}
+actual_hours: 0.32
 ---
 
 # owned-move spec: a reopened buffer shows the source identity after Couch confirms the tree-door rename (flake)
