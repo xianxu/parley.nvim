@@ -36,6 +36,7 @@ Pure transitions receive canonical paths/cursor values from integration. Sequenc
 | `snapshot`, `restore`, `origin`, `follow`, `peek` (history controller) | lua/parley/file_history.lua | modified | native visits, cursors, windows |
 | Successful follow boundary | lua/parley/init.lua; lua/parley/artifact_ref.lua | modified | sync local opens, native gf, async resolution/pickers |
 | `refresh`, `new` (shared renderer) | lua/parley/document_band.lua | modified | winbar/winhighlight ownership and width |
+| `units` (editor display-text adapter) | lua/parley/display_text.lua | extracted | Neovim base-plus-combining text units shared by document band and picker |
 | Lock/feedback view selection | lua/parley/session_sync.lua; lua/parley/agentic_document.lua | modified | existing lock, baseline, membership and receipts |
 
 Use real temporary files and windows for navigation. Artifact resolution keeps the existing production runner/stateful fake; Couch tests reuse tests/fixtures/fake_couch through production document_registry transport. No new binary/service dependency or production state store.
@@ -166,3 +167,7 @@ Close-time checkboxes cover executable work and final-suite evidence. Review is 
 ### 2026-10-16 — Close review ownership and protected-width corrections
 
 BR-1/BR-2 require an explicit ownership lifecycle: a record may be prepared without installed options; such records retire without restoration. After installation, each option is owned only while its current value equals the last installed proof. Refresh, resize, layer handoff and cleanup may update only those owned options; observing a user override relinquishes that option for the record's lifetime. Test plain render→clear→leave→re-render, and the independent winbar/winhighlight/both override matrix for breadcrumb-only and state-owned views across repeated resize, explicit refresh, state updates and cleanup (ARCH-ORDER). BR-3 requires shortening the protected root and final two segments before removing the immediate parent; test narrow/wide budgets, Unicode widths and duplicate-label context (ARCH-PURPOSE). These correct approved behavior without changing the snapshot/restore API or adding durable state.
+
+### 2026-10-16 — Combining-safe display-unit adapter
+
+BR-4 identifies an adapter contract gap: codepoint splitting differs from Neovim's base-plus-combining display units. Extract the existing float-picker `display_text_units` semantics into `parley.display_text.units`, retaining `width` as the supplied Neovim measurement. Both runtime text-operation providers (document_band and float_picker) and their real-editor unit adapters derive from it, while pure layout models still accept injected operations. Pin exact 12-column production winbar output (`…é`, never an accent on the ellipsis), plus direct multiple-accent/wide/ASCII/empty adapter vectors. Existing generated width tests remain, but exact units/output—not just valid UTF-8—are the integrity oracle (ARCH-DRY, ARCH-PURPOSE). No navigation or snapshot API changes.

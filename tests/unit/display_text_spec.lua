@@ -1,0 +1,16 @@
+describe("display text units", function()
+    local function ops()
+        local ok, value = pcall(require, "parley.display_text")
+        assert.is_true(ok, "shared display-unit adapter must exist")
+        return value
+    end
+    it("preserves base characters with all attached combining marks", function()
+        assert.same({ "é", "ä́", "界", "%", "b" }, ops().units("éä́界%b"))
+    end)
+    it("preserves ASCII and empty input with Neovim display widths", function()
+        assert.same({}, ops().units(""))
+        assert.same({ "a", "b", "c" }, ops().units("abc"))
+        assert.equals(1, ops().width("é"))
+        assert.equals(2, ops().width("界"))
+    end)
+end)

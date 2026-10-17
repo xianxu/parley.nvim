@@ -1,11 +1,4 @@
-local ops = {
-    width = vim.fn.strdisplaywidth,
-    units = function(text)
-        local units = {}
-        for i = 0, vim.fn.strchars(text) - 1 do units[#units + 1] = vim.fn.strcharpart(text, i, 1) end
-        return units
-    end,
-}
+local ops = require("parley.display_text")
 local function compose(view, paths, width)
     local ok, model = pcall(require, "parley.document_band_model")
     assert.is_true(ok, "shared composition model must exist")

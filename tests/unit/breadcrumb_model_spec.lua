@@ -4,21 +4,7 @@ local function trail(paths, omitted)
     return { version = 1, paths = paths, omitted = omitted or 0 }
 end
 
-local ops = {
-    units = function(text)
-        local result = {}
-        for _, code in ipairs(vim.fn.str2list(text, true)) do
-            local char = vim.fn.nr2char(code)
-            if vim.fn.strdisplaywidth(char) == 0 and #result > 0 then
-                result[#result] = result[#result] .. char
-            else
-                result[#result + 1] = char
-            end
-        end
-        return result
-    end,
-    width = vim.fn.strdisplaywidth,
-}
+local ops = require("parley.display_text")
 
 describe("breadcrumb_model", function()
     it("transitions roots and follows immutably, retaining same-file trails", function()
@@ -116,6 +102,11 @@ describe("breadcrumb_model", function()
         assert.are.equal("a/… › … › b/… › leaf", model.project(trail({
             "/a/same.md", "/extra-long-middle", "/b/same.md", "/leaf",
         }), 20, ops))
+    end)
+
+    it("retains complete base-plus-combining units when shortening either end", function()
+        assert.equals("…é", model.project(trail({ "/root", "/éééé" }), 2, ops))
+        assert.equals("éé… › leaf", model.project(trail({ "/éééé", "/leaf" }), 10, ops))
     end)
 
     it("obeys generated display budgets without splitting Unicode units", function()

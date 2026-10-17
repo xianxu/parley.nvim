@@ -97,3 +97,94 @@ findings:
    Add a `## Revisions` entry defining never-installed versus installed renderer records, per-option override preservation across repaint, and shortening protected breadcrumb segments before removing them. Name the three regression sequences above explicitly.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"a06ca659-ff8e-4b07-b086-0ceeb0aa0668","repository":"github.com/xianxu/parley.nvim","issue_id":"000353","recipe":"milestone-review","round":1,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/a2d870833d0ea36d","reviewed_head":"38ddd35b4e21b84e3e65a836210bf04508a7ab70","slot":"parley.nvim:2","requested_at":"2026-10-16T22:20:43.483905Z"},"phase":"finished","pid":86178,"started_at":"2026-10-16T22:20:43.628485Z","finished_at":"2026-10-16T22:24:43.347588Z","session_id":"01a146cd-a2b1-7ab2-842f-a24b3edd345b","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T23:43:05-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 353 — Breadcrumb winbar: the Alt+o / Alt+Shift+O file trail beside a fixed-width lock cell (one bar with #332's renderer) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000353-breadcrumb-winbar-the-alt-o-alt-shift-o-file-trail-beside-a-fixed-width-lock-cell-one-bar-with-332-s-renderer.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 800e0d3e0ce074eb79f69c3de246822cfd893cd0..f72a806cef695f5b7fcf3bfde1b682553ec812fd |
+| command | sdlc close --issue 353 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-16T23:43:05-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+All three prior findings are addressed, with regression tests confirmed to fail against the pre-fix modules. Navigation, ownership restoration, and documentation are substantially complete. One remaining Unicode rendering defect should be fixed before shipping.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      document_band.lua:56 safely handles records without installed proofs. The never-installed plain-root regression passes at head and fails with the pre-fix renderer.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      document_band.lua:56 preserves ownership independently for each option across refresh and cleanup. All six breadcrumb/state-owner override cases pass at head and fail with the pre-fix renderer.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      breadcrumb_model.lua:123 allocates shortened protected labels before dropping ancestry. Parent, oversized-leaf and Unicode/context regressions pass at head and fail with the pre-fix model.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: display-unit-integrity
+    title: |
+      Breadcrumb shortening separates combining marks from their base characters
+    detail: |
+      lua/parley/document_band.lua:8-10 supplies individual codepoints as display units. With a 12-column window and trail /root → /éééé, the production renderer emits …́, attaching the leaf's accent to the ellipsis, although …é fits. Preserve base-plus-combining sequences using the semantics already implemented at float_picker.lua:537-542, preferably through a shared helper, and add a production-adapter regression asserting the exact shortened label. ARCH-PURPOSE, ARCH-DRY.
+```
+
+1. **Strengths**
+
+   The centralized installation helper preserves independent window-option overrides. Follow navigation commits against the actual destination and rebuilds coherent Back history. Snapshot validation distinguishes missing ancestors from uncertain filesystem failures. README, atlas, and traceability updates cover the new surface.
+
+2. **Critical findings**
+
+   None.
+
+3. **Important findings**
+
+   The combining-character defect above originates at [document_band.lua:8](/Users/xianxu/Library/Caches/sdlc/review-checkouts/3f396b5b647cdb4c/lua/parley/document_band.lua:8). The existing float-picker implementation provides a concrete consolidation path.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   Sequential runs passed `ui/keybindings` (430 cases), `modes/session_sync` (431 cases), and `ui/breadcrumb` (6 cases). Changed-source lint and range whitespace checks passed. Counterfactual module substitution verified regression sensitivity for BR-1–BR-3.
+
+   The generated Unicode assertions currently check width and UTF-8 validity; they do not detect detached combining marks. The full suite and operator live check were not independently rerun.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — flag:** consolidate display-unit handling as described above.
+   - **ARCH-PURE — pass:** transition and composition models remain separate from editor/filesystem adapters.
+   - **ARCH-PURPOSE — flag:** combining-character shortening remains incomplete.
+   - **ARCH-MOCK — pass:** existing stateful resolver/Couch seams are retained.
+   - **ARCH-CONSTRAINTS — pass:** repaint uses cached trails; bounds and width budgets have coverage.
+   - **ARCH-SECURE — pass:** snapshot validation and statusline escaping protect the introduced boundaries.
+   - **ARCH-ORDER — pass:** confirmed follow commits and per-option installation proofs have meaningful regression coverage.
+   - **ARCH-FUNERAL — pass:** window/buffer cleanup paths exist; no new durable store or background process is introduced.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry documenting combining-safe display units shared with existing rendering code, plus an exact-output adapter regression at narrow widths. Retain the existing Unicode contract.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"48a5ab1c-53d6-40b8-aa6a-0bf2a0c16545","repository":"github.com/xianxu/parley.nvim","issue_id":"000353","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/3f396b5b647cdb4c","reviewed_head":"f72a806cef695f5b7fcf3bfde1b682553ec812fd","slot":"parley.nvim:2","requested_at":"2026-10-17T06:37:59.078843Z"},"phase":"finished","pid":30523,"started_at":"2026-10-17T06:37:59.317192Z","finished_at":"2026-10-17T06:43:04.925164Z","session_id":"01a14894-e4d5-75e2-bb62-3459d351cd31","outcome":"returned"}] -->

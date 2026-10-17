@@ -344,6 +344,24 @@ describe("shared document bands", function()
     local failure = { state = "free", label = "submit failed: 50% unavailable", hl = "ParleySessionSyncFree",
         feedback = { label = "submit failed: 50% unavailable", hl = "DiagnosticError" } }
 
+    it("keeps a combining accent attached to the retained leaf at narrow adapter widths", function()
+        local item = open("éééé")
+        local history = require("parley.file_history"); history.setup()
+        local ancestor = root .. "/root.md"
+        vim.fn.writefile({ "root" }, ancestor)
+        vim.cmd("vsplit")
+        assert.is_true(history.restore(item.win, { version = 1, paths = { ancestor, item.path }, omitted = 0 }))
+        local owner = renderer(item)
+        owner.render(free)
+        vim.api.nvim_win_set_width(item.win, 12)
+        require("parley.document_band").refresh(item.win)
+        assert.equals("%#ParleySessionSyncFree#free      …é%=", vim.wo[item.win].winbar)
+        owner.render({ state = "free", hl = "ParleySessionSyncFree",
+            feedback = { label = "éééé", hl = "DiagnosticError" } })
+        assert.equals("%#ParleySessionSyncFree#free      %#DiagnosticError#é…%=", vim.wo[item.win].winbar)
+        owner.clear()
+    end)
+
     it("retires never-installed plain roots without poisoning later renders or cleanup", function()
         local item = open("never-installed")
         local owner = renderer(item)

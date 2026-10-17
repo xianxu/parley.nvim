@@ -21,4 +21,5 @@ Values and histories are bounded to 200 paths/visits and 1 MiB per exported trai
 - `breadcrumb_model.lua`: pure transitions, validation and display projection.
 - `file_history_model.lua` / `file_history.lua`: visit/cursor ownership, atomic ancestry installation and native navigation.
 - `document_band_model.lua` / `document_band.lua`: pure composition and shared window option ownership/restoration.
+- `display_text.lua`: Neovim display-unit adapter shared with the float picker; truncation retains each base character with its composing marks.
 - `make -k test-spec SPEC=ui/breadcrumb`, `ui/keybindings`, `context/file_references` and `modes/session_sync` cover the model and native/fake-backed integration.

@@ -680,3 +680,5 @@ oracle, and the mutation that would make the test fail.
 - A renderer record can exist before anything was installed. Exercise plain/no-output views through the adapter, then clear, leave and re-render; pure composition tests cannot catch poisoned adapter cleanup.
 - Resize and state refresh must check the same per-option ownership proof as detach. If a window option differs from the last installed value, relinquish that option for the record's lifetime; do not recapture the override as our own proof. Test independent winbar/winhighlight overrides across repaint and cleanup.
 - When a width policy protects root and the final two segments, shorten those labels before dropping a protected segment. Include an oversized leaf: a leaf-only fast path must not bypass a combination that still fits.
+
+- A Unicode shortening oracle must assert whole base-plus-combining units and exact production output. Valid UTF-8 and a display-width bound still admit an accent attached to an inserted ellipsis. Use the shared Neovim skipcc adapter in runtime consumers and test the narrow adapter boundary, not only a friendlier unit-test text splitter.

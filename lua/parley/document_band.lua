@@ -5,11 +5,7 @@ local M = {}
 local windows, cached = {}, {}
 local options = { "winbar", "winhighlight" }
 local composition = require("parley.document_band_model")
-local text_ops = { width = vim.fn.strdisplaywidth, units = function(text)
-    local units = {}
-    for i = 0, vim.fn.strchars(text) - 1 do units[#units + 1] = vim.fn.strcharpart(text, i, 1) end
-    return units
-end }
+local text_ops = require("parley.display_text")
 
 local function trail_for(win)
     local history = package.loaded["parley.file_history"]

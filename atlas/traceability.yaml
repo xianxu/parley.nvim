@@ -1242,6 +1242,7 @@ atlas:
 
   ui/pickers:
     code:
+      - lua/parley/display_text.lua
       - lua/parley/chat_dirs.lua
       - lua/parley/chat_finder.lua
       - lua/parley/chat_finder_records.lua
@@ -1368,9 +1369,11 @@ atlas:
 
   ui/breadcrumb:
     code:
+      - lua/parley/display_text.lua
       - lua/parley/document_band_model.lua
       - lua/parley/document_band.lua
       - lua/parley/breadcrumb_model.lua
       - lua/parley/file_history.lua
     tests:
+      - tests/unit/display_text_spec.lua
       - tests/unit/document_band_model_spec.lua
