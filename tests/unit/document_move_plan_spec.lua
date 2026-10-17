@@ -216,7 +216,7 @@ describe('move_outcome (#359)', function()
             action = 'none', warning = true }, plan.move_outcome({ moved = true, overdue = true, new_path = new_path }))
     end)
     it('names the pasteable forget command for a stale registration at NEW (row 6)', function()
-        assert.same({ state = 'conflict', action = 'forget', band = 'move not confirmed: /repo/archive/b.md is registered'
+        assert.same({ state = 'conflict', action = 'forget', band = 'move not confirmed: the destination is registered'
             .. ' to another document. Run: couch --session-sync forget /repo/archive/b.md, then reopen' },
             plan.move_outcome({ moved = true, new_path = new_path,
                 result = { kind = 'unavailable', code = 'target-conflict', error = 'destination registered' } }))

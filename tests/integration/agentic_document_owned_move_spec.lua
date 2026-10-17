@@ -117,6 +117,11 @@ describe("registered ordinary Markdown through Parley move doors", function()
             assert.equals(1, #vim.fn.readfile(root .. "/sent"))
             local moved, err = p[door](file, destination)
             assert.equals(destination .. "/ordinary.md", moved, tostring(err))
+            -- #359: the move returns once the file moved; Couch confirms after.
+            await(function()
+                local identity = document.identity(buf)
+                return identity and identity.File == moved and not document.status(buf).operation
+            end)
             assert.is_true(document.submit(buf))
             await(function() return not document.status(buf).operation end)
             local bar = vim.wo[vim.fn.bufwinid(buf)].winbar
@@ -159,8 +164,9 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals(new_path, moved, tostring(err))
         assert.equals(0, vim.fn.filereadable(file))
         assert.equals(1, vim.fn.filereadable(destination .. "/ordinary.side/child.md"))
-        local confirmed = lookup(new_path)
-        assert.equals("registered", confirmed.kind)
+        -- #359: Couch's rename lands after the move returns.
+        local confirmed
+        await(function() confirmed = lookup(new_path); return confirmed.kind == "registered" end)
         assert.equals(registration.ID, confirmed.registration.ID)
         local reopened = vim.fn.bufnr(new_path)
         assert.is_true(reopened > 0)
@@ -168,23 +174,33 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals(registration.ID, document.identity(reopened).ID)
     end)
 
-    it("refuses unavailable membership before moving OLD or its side folder and leaves editing available", function()
+    -- #359: the identity is held, so the move needs no Couch round trip and
+    -- lands even while Couch is down; the journal carries the rename (row 7),
+    -- editing stays available, and reopening recovers it once Couch is back.
+    it("moves on a held identity while Couch is unavailable; the journal carries the rename to a reopen", function()
         seed_side()
-        local original = vim.fn.readfile(file)
-        local child = vim.fn.readfile(source .. "/ordinary.side/child.md")
         vim.env.FAKE_COUCH_REGISTRY_MODE = "unsupported"
         local moved, err = p.move_chat(file, destination)
-        assert.is_nil(moved)
-        assert.is_true(type(err) == "string" and err ~= "")
-        assert.same(original, vim.fn.readfile(file))
-        assert.same(child, vim.fn.readfile(source .. "/ordinary.side/child.md"))
-        assert.equals(0, vim.fn.filereadable(destination .. "/ordinary.md"))
-        assert.equals(0, vim.fn.isdirectory(destination .. "/ordinary.side"))
-        assert.equals(file, vim.api.nvim_buf_get_name(buf))
+        local new_path = destination .. "/ordinary.md"
+        assert.equals(new_path, moved, tostring(err))
+        assert.equals(0, vim.fn.filereadable(file))
+        assert.equals(1, vim.fn.filereadable(destination .. "/ordinary.side/child.md"))
+        await(function()
+            return vim.wo[vim.fn.bufwinid(buf)].winbar:find("move pending: reopen to recover", 1, true) ~= nil
+        end)
         assert.is_true(vim.bo[buf].modifiable)
-        vim.api.nvim_buf_set_lines(buf,4,5,false,{"editable while Couch unavailable"})
+        vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "editable while Couch unavailable" })
         assert.is_true(vim.bo[buf].modified)
-        assert.equals(1, vim.fn.filereadable(file .. ".lock"))
+        assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
+        vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+        vim.api.nvim_buf_call(buf, function() vim.cmd("silent write") end)
+        document.detach(buf)
+        assert.is_true(document.attach(buf))
+        await(function()
+            local identity = document.identity(buf)
+            return identity and identity.File == new_path and not document.status(buf).operation
+        end)
+        assert.equals("registered", lookup(new_path).kind)
     end)
 
     it("adopts unregistered typed OLD and its legacy owed ledger before a public move", function()
@@ -204,12 +220,19 @@ describe("registered ordinary Markdown through Parley move doors", function()
         p.setup_markdown_keymaps(buf)
         await(function() return document.status(buf).phase == "plain" end)
         assert.is_true(require("parley.session_sync").is_session_sync(buf))
+        -- #359: the move refuses at once while it registers in the background.
+        local refused, refusal = p.move_chat(file,destination)
+        assert.is_nil(refused)
+        assert.equals("move not confirmed: registering this document first; nothing moved. Run the move again", refusal)
+        assert.equals(1, vim.fn.filereadable(file))
+        await(function() return document.move_membership(file) == true end)
         local moved, err = p.move_chat(file,destination)
         local new_path = destination .. "/legacy.md"
         assert.equals(new_path,moved,tostring(err))
         assert.equals(0,vim.fn.filereadable(file))
-        local confirmed = lookup(new_path)
-        assert.equals("registered",confirmed.kind)
+        local confirmed
+        await(function() confirmed = lookup(new_path); return confirmed.kind == "registered" end)
+        await(function() return not document.status(buf).operation end)
         assert.equals(confirmed.registration.ID,document.identity(buf).ID)
         assert.equals("ops:0",confirmed.registration.Owner)
         local restored = vim.system({"couch","--session-sync","status",new_path,"--json"},{text=true}):wait(2000)

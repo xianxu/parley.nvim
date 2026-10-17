@@ -62,4 +62,17 @@ The durable plan, with the state projection table: [000359 plan](../plans/000359
   - **Where W2 lives.** `M.move_path` asks `bounded_request("lookup", {new_path})`, and so does `BufFilePost` today.
   - **The identity cache.** It is synchronous: `cache(s)` reads `known.json` under a lease. `M.identity(buf)` is the loaded model's registration.
   - **`begin`'s guard.** `document_move.begin` refuses `destination_registered ~= false` at line 342 and passes `false` to `project`.
+- Task 2 is built: the movers no longer wait on Couch.
+  - `move_membership` decides by `move_preflight`. For identity it checks, in order: the loaded model's registration, the namespace cache, the loaded model's positive absence, then an in-memory answer from an earlier background lookup.
+  - An unknown identity or a legacy document refuses at once and asks in the background: a lookup, or a register that caches its registration.
+  - `move_path` has no destination lookup (`destination_registered = "authority"`) and no completion wait. It returns once `steps.document_moved` holds and `advance` reported no pending handoff on the spot.
+- Found while building, fixed and tested:
+  - **Saves during the rename.** Row 5 lets the operator save while the rename is out, but the journal proved the move by the original inode and bytes, so a save then made rows 6 and 7 unrecoverable. Added `document_move.record_write`, called from BufWritePost while the operation runs. It sets `steps.saved_after_move`, and validation and recovery then prove the move against the recorded save. Tested both ways in `document_move_spec`; removing the call fails the owned-move "Couch unavailable" case.
+  - **The rename's request timeout.** The band warns at the submit deadline; the rename request itself gets 3x, because the registry starts its timer at enqueue.
+  - **Where the outcome shows.** session_sync holds its winbar still while it is moving, so the outcome renders through the agentic band, styled by `feedback_view`.
+  - **Row 6's wording.** The label is capped at 160 characters, so NEW is named once ("the destination is registered to another document. Run: couch --session-sync forget NEW, then reopen"), and the notification carries the whole command uncut.
+- Changed tests, all behaviour changes the design intends:
+  - #357's three move cases became rows 1, 5, 3, 4 and 6.
+  - The destination-race test became "never looks up the destination".
+  - Owned-move: the receipt and unloaded-door cases now wait for Couch's confirmation after the move returns. "Refuses unavailable membership" became row 7: a held identity moves while Couch is down, and the journal recovers on reopen. The legacy case now refuses first (row 4).
 

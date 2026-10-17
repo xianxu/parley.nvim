@@ -92,13 +92,15 @@ function M.new(context)
             and witness.incarnation == state.incarnation and witness.generation == state.generation
     end
 
-    local function pending(operation, message)
+    -- code: Couch's refusal code, when it gave one (a move names a
+    -- target-conflict, #359).
+    local function pending(operation, message, code)
         state.pending = copy(operation)
         state.operation = nil
         state.phase = "pending"
         local effect = copy(operation.args)
         effect.kind, effect.operation = "reconcile", operation.witness.operation
-        effect.witness, effect.error = copy(operation.witness), message
+        effect.witness, effect.error, effect.code = copy(operation.witness), message, code
         return { effect }
     end
 
@@ -331,7 +333,7 @@ function M.new(context)
             if operation.args.submit then return notify(result.error or "Registered owner could not be confirmed") end
             return state.registration and {} or { { kind = "band", message = "Couch unavailable: agentic state unknown" } }
         end
-        if not valid then return pending(operation, result.error) end
+        if not valid then return pending(operation, result.error, result.code) end
         state.operation, state.pending = nil, nil
         state.registration = copy(result.registration)
         if kind == "rename" then

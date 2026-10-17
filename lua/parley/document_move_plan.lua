@@ -297,9 +297,10 @@ function M.move_outcome(outcome)
         return { state = 'confirming', band = M.MOVE_TEXT.confirming, action = 'none' }
     end
     if outcome.moved and result.code == 'target-conflict' then
-        local new = shell_word(outcome.new_path)
-        return { state = 'conflict', action = 'forget', band = ('move not confirmed: %s is registered to another'
-            .. ' document. Run: couch --session-sync forget %s, then reopen'):format(outcome.new_path, new) }
+        -- NEW is named once, in the command, so the line stays short enough
+        -- for the band; the notification carries it uncut.
+        return { state = 'conflict', action = 'forget', band = ('move not confirmed: the destination is registered to'
+            .. ' another document. Run: couch --session-sync forget %s, then reopen'):format(shell_word(outcome.new_path)) }
     end
     return { state = 'pending', band = M.MOVE_TEXT.pending, action = 'reopen' }
 end

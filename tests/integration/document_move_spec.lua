@@ -196,6 +196,32 @@ describe('durable leased document migration', function()
         assert.is_true(journal.steps.document_moved); assert.is_false(journal.steps.metadata)
     end)
 
+    -- #359: the operator may save the moved document before Couch confirms. A
+    -- recorded write keeps recovery provable; an unrecorded one does not.
+    for _, recorded in ipairs({ true, false }) do
+        it('recovers a move whose NEW was saved after the move ' .. (recorded and 'and recorded' or 'without a record'), function()
+            local operation = assert(begin({ move_document = true, destination_registered = 'authority',
+                document_moved = function() return true end,
+                metadata = function() end, -- the rename never answers: the reply was lost
+            }))
+            move().advance(operation, function() end)
+            assert.is_true(vim.json.decode(read(operation.journal_path)).steps.document_moved)
+            write(new, 'parent\nsaved by the operator\n')
+            if recorded then assert.is_true(move().record_write(operation)) end
+            operation.release()
+            local result, recover_err = recover({ old_path = old, new_path = new, move_document = true,
+                document_moved = function() return true end })
+            assert.is_not_nil(result, vim.inspect(recover_err))
+            if recorded then
+                assert.equals('registered', result.kind, tostring(result.error))
+                assert.equals('parent\nsaved by the operator\n', read(new))
+            else
+                assert.equals('pending', result.kind)
+                assert.matches('NEW changed since its last recorded write', result.error, 1, true)
+            end
+        end)
+    end
+
     it('refuses an occupied owned destination before creating a journal', function()
         write(new, 'foreign destination\n')
         local operation, err = begin({ move_document = true })
