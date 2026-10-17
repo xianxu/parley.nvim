@@ -1,5 +1,15 @@
 # Lessons
 
+## 2026-10-16 (#353 — displayed ancestry and native history)
+
+- A displayed trail and Back entries must commit together in the actual landing window, including reused splits. Reconstruct through one pure transition; changing only the label can send Back into an unrelated file.
+- Repeated paths are visits with distinct cursor provenance. When a bounded trail drops interior entries, keep cursor positions by retained visit index rather than matching path text.
+- Stripping date prefixes can erase the last distinguishing component of filenames in the same directory. Test that collision and fall back to original identity after parent suffixes are exhausted.
+
+## 2026-10-16 (#332 — shared stage ownership)
+
+- A stage can be replaced by another worker before the original item lands. Inspect the current staged commit before clearing it; clear only the stage owned by the completed item. A newer stage belongs to its worker even when the earlier task authorized cleanup.
+
 ## 2026-10-15 (#332 — document admission and lifetime)
 
 - Window-local options have per-buffer cached values. Test A→B→A with distinct originals: restoring at BufWinLeave alone can be too late for Neovim’s cache. Keep the original/installed proof per live pair until entry/wipe/close, consume before recapturing a baseline, and never restore into a different buffer.
@@ -665,6 +675,13 @@ oracle, and the mutation that would make the test fail.
 
 - Replacing `find_tree_root_file` deleted the local `root` that delete-tree's prompt still read, and the tests stubbed `confirm` without checking its text. Lint caught it in the suite. After deleting a local, run `make lint`, or grep the function for the name, before the suite; and a test that stubs a prompt asserts what the prompt says.
 
+## #353: rendering ownership is per option and survives every repaint
+
+- A renderer record can exist before anything was installed. Exercise plain/no-output views through the adapter, then clear, leave and re-render; pure composition tests cannot catch poisoned adapter cleanup.
+- Resize and state refresh must check the same per-option ownership proof as detach. If a window option differs from the last installed value, relinquish that option for the record's lifetime; do not recapture the override as our own proof. Test independent winbar/winhighlight overrides across repaint and cleanup.
+- When a width policy protects root and the final two segments, shorten those labels before dropping a protected segment. Include an oversized leaf: a leaf-only fast path must not bypass a combination that still fits.
+
+- A Unicode shortening oracle must assert whole base-plus-combining units and exact production output. Valid UTF-8 and a display-width bound still admit an accent attached to an inserted ellipsis. Use the shared Neovim skipcc adapter in runtime consumers and test the narrow adapter boundary, not only a friendlier unit-test text splitter.
 ## #354: an ordering the code depends on gets its own test
 
 - The M1 review found no test for recording a submit *before* the send callback's stale-state guard. Every spec kept the buffer alive, so moving the line below the guard stayed green. When a comment says "this must happen before X", write the test where X happens: here, the buffer is wiped while a slow send runs. Then mutate the order to see the test fail.

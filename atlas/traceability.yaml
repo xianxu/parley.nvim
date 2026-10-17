@@ -787,6 +787,7 @@ atlas:
       - lua/parley/window_views.lua
       - lua/parley/agentic_document.lua
       - lua/parley/document_band.lua
+      - lua/parley/document_band_model.lua
       - lua/parley/document_session.lua
       - lua/parley/document_registry.lua
       - lua/parley/document_move_plan.lua
@@ -812,6 +813,7 @@ atlas:
       - tests/integration/agentic_document_owned_move_spec.lua
       - tests/integration/agentic_document_lifetime_spec.lua
       - tests/integration/document_band_spec.lua
+      - tests/unit/document_band_model_spec.lua
       - tests/integration/document_registry_spec.lua
       - tests/integration/document_lease_spec.lua
       - tests/integration/document_move_spec.lua
@@ -1265,6 +1267,7 @@ atlas:
 
   ui/pickers:
     code:
+      - lua/parley/display_text.lua
       - lua/parley/chat_dirs.lua
       - lua/parley/chat_finder.lua
       - lua/parley/chat_finder_records.lua
@@ -1337,6 +1340,7 @@ atlas:
       - lua/parley/skills/review/init.lua
     tests:
       - tests/unit/file_history_model_spec.lua
+      - tests/unit/breadcrumb_model_spec.lua
       - tests/integration/file_history_spec.lua
       - tests/unit/new_question_spec.lua
       - tests/integration/new_question_spec.lua
@@ -1387,3 +1391,14 @@ atlas:
       # edit to skills/skill-system.md runs them via `make test-changed`.
       - tests/integration/define_spec.lua
 
+
+  ui/breadcrumb:
+    code:
+      - lua/parley/display_text.lua
+      - lua/parley/document_band_model.lua
+      - lua/parley/document_band.lua
+      - lua/parley/breadcrumb_model.lua
+      - lua/parley/file_history.lua
+    tests:
+      - tests/unit/display_text_spec.lua
+      - tests/unit/document_band_model_spec.lua

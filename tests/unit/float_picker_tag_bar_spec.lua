@@ -3,19 +3,8 @@ local facet_bar_layout = require("parley.facet_bar_layout")
 local logger = require("parley.logger")
 local compute_layout = float_picker.compute_layout
 
-local function display_text_units(text)
-    local units = {}
-    local count = vim.fn.strchars(text, true)
-    for index = 0, count - 1 do
-        table.insert(units, vim.fn.strcharpart(text, index, 1, true))
-    end
-    return units
-end
-
-local text_ops = {
-    units = display_text_units,
-    width = vim.fn.strdisplaywidth,
-}
+local text_ops = require("parley.display_text")
+local display_text_units = text_ops.units
 
 local function close_floats()
     for _, win in ipairs(vim.api.nvim_list_wins()) do
