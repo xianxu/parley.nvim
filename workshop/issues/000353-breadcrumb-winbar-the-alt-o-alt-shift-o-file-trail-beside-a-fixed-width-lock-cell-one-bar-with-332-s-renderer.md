@@ -97,6 +97,8 @@ After code verification: close on SHIP and report green to TL. Do not stage; :0 
 
 - 2026-10-16 22:24 PDT: TL explicitly authorized one additional unchanged full-suite run, issue-backed by #360/#361/#363 (submitted receipt f3fdd54b-5146-40b6-b8d1-d177d5dd26ab). If green, re-close and continue; if another filed flake fails, stop and tell TL, who is dispatching the flake work. Restart audit found no existing sdlc/make runner in this checkout; the previous two runs had completed before Couch's22:22 restart, so this is the authorized additional attempt, not recovery of a killed run. Production source stays aa8a3408fd3338402eb949a7c275335bd9c9966f.
 
+- The TL-authorized additional run passed on `833370703bf6c0d1a29e17e0f12dfc570b2fe210`: 454/454 spec files, Total: 0 warnings / 0 errors in 760 files, no surviving processes. Retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/833370703bf6c0d1a29e17e0f12dfc570b2fe210/suite.log`, SHA256 `ad74c70b20c3a16db5d3f0155618faca6a77223a0b65c508e0f0d898036c1679`; runner reported1m58s execution. Production source/tests match aa8a3408; only issue Log differs. Earlier failures remain retained against #360/#361/#363; no waiver. TL's wrapper handoff request now takes priority before the next long wait: report this green suite and pause for same-conversation relaunch, then re-close against the three fixed review families. Unstaged pending TL's live sequencing.
+
 ## Revisions
 
 ### 2026-10-16 — #354 persisted-trail coordination
