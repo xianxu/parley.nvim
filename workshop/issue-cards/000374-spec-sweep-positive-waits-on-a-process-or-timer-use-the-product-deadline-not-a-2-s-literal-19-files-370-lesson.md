@@ -1,6 +1,6 @@
 ---
 id: 000374
-status: codecomplete
+status: done
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 354e4d8e2e5f3c8870fbf6e828b5bf554d304b4a
         evidence_commit: e6beb2c58bff604fab43325c932c012569c080c6
+        landed_commit: 813254869a1bc56098ebd2eb558ecf7bb1dc7553
 ---
 
 # Spec sweep: positive waits on a process or timer use the product deadline, not a 2 s literal (19 files; #370 lesson)
