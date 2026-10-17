@@ -113,3 +113,7 @@ Generated fixture trees are a fixed shipped snapshot replaced by a deliberate sy
 ## Approval questions for TL
 
 Confirm preserving the explicit-overwrite exception safely (no orphan displacement without pre-admission absent NEW), the 4096 suffix-probe bound, and the supported index syntax/refusal policy. These are the only proposed details beyond the operator's existing move contract. Code waits for both approval and #424 landing.
+
+## Revisions
+
+- 2026-10-17 — TL approved both milestones and all three policies (receipt 6d2d8e58-b402-4f59-af38-d945acb5c1af): bounded suffix search before effects, orphan classification only from pre-admission absent NEW, quoted/comment-preserving discussions scalars with refusal on ambiguity. This resolves the approval questions above; YAML is authoritative and disagreement refuses, matching #424. Implementation still waits for #424 to land.
