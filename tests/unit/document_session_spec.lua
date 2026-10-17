@@ -39,6 +39,11 @@ describe("document_session.classify_reply", function()
         end
         assert.equals("unavailable", model.classify_reply("lookup", 0, { Code = "ok" }, nil).kind)
     end)
+    it("keeps Couch's refusal code, so a move can name a target-conflict (#359)", function()
+        local refused = model.classify_reply("rename", 1, { Code = "target-conflict", Error = "destination registered" }, null)
+        assert.same({ kind = "unavailable", code = "target-conflict", error = "destination registered" }, refused)
+        assert.is_nil(model.classify_reply("rename", 0, "not a table", null).code)
+    end)
     it("validates every registration field and mutation Changed", function()
         for _, op in ipairs({ "lookup", "register", "rename" }) do
             assert.equals("registered", model.classify_reply(op, 0,
