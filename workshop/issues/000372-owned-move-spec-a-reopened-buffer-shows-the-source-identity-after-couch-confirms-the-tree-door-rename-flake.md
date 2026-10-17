@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "7ff47f0f", done: "c59f7fa3"}
 ---
 
 # owned-move spec: a reopened buffer shows the source identity after Couch confirms the tree-door rename (flake)
