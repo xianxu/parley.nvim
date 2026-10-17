@@ -150,6 +150,17 @@ function M.refresh(win)
     win = (not win or win == 0) and vim.api.nvim_get_current_win() or win
     if not vim.api.nvim_win_is_valid(win) then return end
     local buf, record = vim.api.nvim_win_get_buf(win), windows[win]
+    if not require("parley.helper").is_editing_window(win) then
+        if record then retire(win, record) end
+        -- API floats can copy a source window's installed pixels. Only undo
+        -- options whose exact installation proof still matches that copy.
+        for source, original in pairs(windows) do
+            if source ~= win and original.buf == buf then
+                install(win, { buf = buf, installed = original.installed }, original.before)
+            end
+        end
+        return
+    end
     if record and record.buf ~= buf then retire(win, record, true); record = nil end
     local trail = trail_for(win)
     if not record and (not trail or #trail.paths < 2) then return end

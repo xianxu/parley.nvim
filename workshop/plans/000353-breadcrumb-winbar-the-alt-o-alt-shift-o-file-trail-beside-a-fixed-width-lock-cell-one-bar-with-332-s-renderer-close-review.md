@@ -188,3 +188,99 @@ findings:
    Add a `## Revisions` entry documenting combining-safe display units shared with existing rendering code, plus an exact-output adapter regression at narrow widths. Retain the existing Unicode contract.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"48a5ab1c-53d6-40b8-aa6a-0bf2a0c16545","repository":"github.com/xianxu/parley.nvim","issue_id":"000353","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/3f396b5b647cdb4c","reviewed_head":"f72a806cef695f5b7fcf3bfde1b682553ec812fd","slot":"parley.nvim:2","requested_at":"2026-10-17T06:37:59.078843Z"},"phase":"finished","pid":30523,"started_at":"2026-10-17T06:37:59.317192Z","finished_at":"2026-10-17T06:43:04.925164Z","session_id":"01a14894-e4d5-75e2-bb62-3459d351cd31","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T01:48:57-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 353 — Breadcrumb winbar: the Alt+o / Alt+Shift+O file trail beside a fixed-width lock cell (one bar with #332's renderer) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000353-breadcrumb-winbar-the-alt-o-alt-shift-o-file-trail-beside-a-fixed-width-lock-cell-one-bar-with-332-s-renderer.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c2e73edc308183b36c24156b60d42d1622d6cfbc..3bf1e5f792ad26348d2f1bedae0eeeeb1a39f780 |
+| command | sdlc close --issue 353 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-17T01:48:57-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-4 is addressed with a regression that fails under the old implementation. The breadcrumb, history, composition, and reminder changes otherwise passed focused verification. One blocking lifecycle defect remains: switching to an excluded buffer redraws the previous file’s breadcrumb.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Prepared-record retirement remains guarded; the native plain-root lifecycle regression passes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Per-option installation proofs preserve overrides; all six native override cases pass.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Protected-label shortening retains ancestors before fallback; oversized-leaf and Unicode regressions pass.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Both text-operation providers consume display_text.units. The native regression passes at head; restoring document_band's old codepoint splitter in the disposable checkout makes it fail with …́ instead of …é.
+findings:
+  - id: new
+    severity: Critical
+    kind: defect
+    family: renderer-ownership-state
+    title: |
+      Excluded buffers inherit the previous file's breadcrumb
+    detail: |
+      lua/parley/document_band.lua:11-13 consumes file_history.peek without checking whether its cached visit describes the displayed buffer. file_history.lua:30-44 leaves that visit unchanged when observation rejects a buffer, so BufWinEnter refresh installs the old trail again. Native probes reproduced this for unnamed, nofile, URI-named, and directory buffers: snapshot correctly returns nil, but the winbar still displays a › b. This is the 2nd finding in family renderer-ownership-state. State and enforce the rule that a trail is presentable only for its current eligible file; sweep every observation-rejection category, preserve native Back history, and test retirement/re-entry and resize sequences. ARCH-ORDER, ARCH-PURPOSE.
+```
+
+1. **Strengths**
+
+   - Shared combining-safe units remove the adapter duplication and fix the exact production output.
+   - Snapshot restoration validates before installation and rebuilds usable Back history.
+   - Native tests exercise independent option ownership and controlled reminder timing.
+   - README, atlas, and traceability updates cover the new surface.
+
+2. **Critical findings**
+
+   - The finding above blocks shipping. Separate retained navigation history from current presentation eligibility; an excluded buffer must retire the breadcrumb without discarding Back history.
+
+3. **Important findings**
+
+   None.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   All 133 existing cases across eight focused files passed. BR-4’s mutation check failed as expected. Four additional excluded-buffer probes failed with stale breadcrumbs. An initial `src:` test failure disappeared when fixtures were placed outside the repository’s Git ancestry. Disposable files were removed; the reviewed checkout remains unchanged.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared display adapter and renderer.
+   - **ARCH-PURE — pass:** model logic accepts injected display operations.
+   - **ARCH-PURPOSE — flag:** current-file presentation fails for excluded buffers.
+   - **ARCH-MOCK — pass:** existing stateful Couch seam remains exercised.
+   - **ARCH-CONSTRAINTS — pass:** bounded trail values; paint adds no filesystem or network work.
+   - **ARCH-SECURE — pass:** snapshot validation and literal statusline escaping remain intact.
+   - **ARCH-ORDER — flag:** rejected observations leave retained history eligible for rendering.
+   - **ARCH-FUNERAL — pass:** window/cache cleanup and finite pulse cancellation remain present.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry defining eligible-file versus excluded-buffer presentation transitions. Enumerate unnamed, special-buftype, URI, directory, and non-editing windows; require retirement, resize, and return-to-file tests while preserving Back history.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"c1f11024-3e06-407b-b31a-d7a690fc2700","repository":"github.com/xianxu/parley.nvim","issue_id":"000353","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/31368fcca9b2d9fe","reviewed_head":"3bf1e5f792ad26348d2f1bedae0eeeeb1a39f780","slot":"parley.nvim:2","requested_at":"2026-10-17T08:46:06.657522Z"},"phase":"finished","pid":39043,"started_at":"2026-10-17T08:46:06.760726Z","finished_at":"2026-10-17T08:48:51.985051Z","session_id":"01a1490a-30c6-7920-aed6-e8864a8853e3","outcome":"returned"}] -->

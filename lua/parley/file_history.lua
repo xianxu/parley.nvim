@@ -3,7 +3,7 @@ local M = {}
 local model = require("parley.file_history_model")
 local helpers = require("parley.helper")
 local breadcrumb = require("parley.breadcrumb_model")
-local histories, restoring, generations = {}, {}, {}
+local histories, restoring, generations, presented = {}, {}, {}, {}
 local origins = setmetatable({}, { __mode = "k" })
 local departing_window
 
@@ -28,7 +28,11 @@ local function observation(win)
 end
 
 local function observe(win, kind)
-    local entry = not restoring[win] and observation(win)
+    if restoring[win] then return nil end
+    local entry = observation(win)
+    local previous = presented[win]
+    presented[win] = entry and { buf = vim.api.nvim_win_get_buf(win),
+        name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win)) } or nil
     if entry then
         local history = histories[win]
         local current = history and history.entries[history.index]
@@ -39,14 +43,24 @@ local function observe(win, kind)
             generations[win] = (generations[win] or 0) + 1
         end
         histories[win] = model.transition(history, entry)
-        if kind == "visit" and changed then repaint(win) end
+        if kind == "visit" and (changed or not vim.deep_equal(previous, presented[win])) then repaint(win) end
+    elseif previous then
+        repaint(win)
     end
     return entry
 end
 
--- Painting reads only the already committed value, without observing the editor.
+-- Painting uses the committed observation proof, never filesystem observation.
+-- Retained Back history alone is not evidence about the displayed buffer.
 function M.peek(win)
-    local history = histories[window(win)]
+    win = window(win)
+    local proof = presented[win]
+    if not proof or not helpers.is_editing_window(win)
+        or vim.api.nvim_win_get_buf(win) ~= proof.buf or vim.bo[proof.buf].buftype ~= ""
+        or vim.api.nvim_buf_get_name(proof.buf) ~= proof.name then
+        return nil, "window does not display its observed file"
+    end
+    local history = histories[win]
     local current = history and history.entries[history.index]
     if not current or not current.trail then return nil, "window has no valid breadcrumb" end
     return breadcrumb.validate(current.trail)
@@ -186,7 +200,7 @@ function M.setup()
     end })
     vim.api.nvim_create_autocmd("WinClosed", { group = group, callback = function(ev)
         local win = tonumber(ev.match)
-        histories[win], restoring[win], generations[win] = nil, nil, nil
+        histories[win], restoring[win], generations[win], presented[win] = nil, nil, nil, nil
         if departing_window == win then departing_window = nil end
     end })
     for _, win in ipairs(vim.api.nvim_list_wins()) do observe(win, "visit") end

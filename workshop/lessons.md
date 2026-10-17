@@ -723,3 +723,7 @@ oracle, and the mutation that would make the test fail.
 - When a rule moves into the pure model, keep the cost bound of the IO it
   replaces. Let the model pick candidates from cheap stat data, then read only
   those. The first draft read every side doc's head on every open.
+
+## 2026-10-17 (#353 — retained navigation is not presentation evidence)
+
+- A rejected observation must revoke presentation eligibility even when history is deliberately retained for Back. Bind cached paint to the observed eligible buffer/name; test every rejection category across resize and re-entry. Window creation can copy installed pixels without copying ownership, so retire proven copies in non-editing windows too.

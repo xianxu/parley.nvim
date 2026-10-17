@@ -14,7 +14,7 @@ An ordinary file change (`:edit`, native `gf`, a finder) starts a new root; root
 
 `restore(win, value)` installs the trail and matching Back entries AFTER the caller opens the selected file. It returns `true`, or `false, reason`. It opens no files. Its last canonical path must match the actual opened file; malformed/unsupported/oversized values refuse before mutation. Genuinely missing ancestors are removed; uncertain filesystem failures refuse rather than claim absence. The surviving leaf alone becomes a root. The current cursor stays; unknown ancestor cursors start at row 1/column 0. On refusal a finder can keep the file it just opened as its ordinary root.
 
-Values and histories are bounded to 200 paths/visits and 1 MiB per exported trail. Overflow retains the root and newest suffix with an omitted-count marker. There is no persistent trail store or background process. `peek(win)` is an internal cached detached read for paint; it does no filesystem observation.
+Values and histories are bounded to 200 paths/visits and 1 MiB per exported trail. Overflow retains the root and newest suffix with an omitted-count marker. There is no persistent trail store or background process. `peek(win)` is an internal cached detached read for paint; it does no filesystem observation. A presentation proof binds it to the observed eligible buffer/name in an editing window. Unnamed, special-buftype, URI, directory and non-editing windows retire the trail while preserving native Back history. Eligible re-entry restores presentation; copied float options unwind only while the installation proof matches.
 
 ## Code and tests
 

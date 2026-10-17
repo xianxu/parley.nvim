@@ -362,6 +362,70 @@ describe("shared document bands", function()
         owner.clear()
     end)
 
+    for _, excluded in ipairs({ "unnamed", "nofile", "uri", "directory", "floating" }) do
+        it("retires excluded " .. excluded .. " presentation through resize and preserves Back on re-entry", function()
+            local item = open("eligible")
+            local history, band = require("parley.file_history"), require("parley.document_band")
+            history.setup()
+            local ancestor = root .. "/ancestor.md"
+            vim.fn.writefile({ "ancestor" }, ancestor)
+            local trail = { version = 1, paths = { ancestor, item.path }, omitted = 0 }
+            assert.is_true(history.restore(item.win, trail))
+            assert.truthy(vim.wo[item.win].winbar:find("ancestor › eligible", 1, true))
+            local scratch, float
+            if excluded == "floating" then
+                float = vim.api.nvim_open_win(item.buf, true,
+                    { relative = "editor", row = 1, col = 1, width = 40, height = 4 })
+            else
+                scratch = vim.api.nvim_create_buf(true, false)
+                if excluded == "nofile" then vim.bo[scratch].buftype = "nofile"
+                elseif excluded == "uri" then vim.api.nvim_buf_set_name(scratch, "test://excluded")
+                elseif excluded == "directory" then vim.api.nvim_buf_set_name(scratch, root)
+                end
+                vim.api.nvim_win_set_buf(item.win, scratch)
+            end
+            local win = float or item.win
+            assert.is_nil(history.peek(win))
+            assert.is_nil(history.snapshot(win))
+            for _ = 1, 2 do
+                vim.api.nvim_exec_autocmds("WinResized", {})
+                band.refresh(win)
+                assert.is_nil(vim.wo[win].winbar:find("ancestor › eligible", 1, true))
+            end
+            if float then vim.api.nvim_win_close(float, true)
+            else vim.api.nvim_win_set_buf(item.win, item.buf) end
+            band.refresh(item.win)
+            assert.same(trail, history.snapshot(item.win))
+            assert.truthy(vim.wo[item.win].winbar:find("ancestor › eligible", 1, true))
+            assert.is_true(history.back())
+            assert.equals(ancestor, vim.api.nvim_buf_get_name(0))
+            if scratch then vim.api.nvim_buf_delete(scratch, { force = true }) end
+        end)
+    end
+
+    it("rejects a same-buffer type or name change before the next observation", function()
+        local item = open("same-buffer-eligibility")
+        local history, band = require("parley.file_history"), require("parley.document_band")
+        history.setup()
+        local ancestor = root .. "/ancestor.md"
+        vim.fn.writefile({ "ancestor" }, ancestor)
+        assert.is_true(history.restore(item.win, { version = 1, paths = { ancestor, item.path }, omitted = 0 }))
+        vim.bo[item.buf].buftype = "nofile"
+        band.refresh(item.win)
+        assert.is_nil(history.peek(item.win))
+        assert.is_nil(vim.wo[item.win].winbar:find("ancestor ›", 1, true))
+        vim.bo[item.buf].buftype = ""
+        assert.truthy(history.snapshot(item.win))
+        vim.api.nvim_buf_set_name(item.buf, "test://renamed")
+        band.refresh(item.win)
+        assert.is_nil(history.peek(item.win))
+        assert.is_nil(vim.wo[item.win].winbar:find("ancestor ›", 1, true))
+        vim.api.nvim_buf_set_name(item.buf, item.path)
+        assert.truthy(history.snapshot(item.win))
+        assert.is_true(history.back())
+        assert.equals(ancestor, vim.api.nvim_buf_get_name(0))
+    end)
+
     it("retires never-installed plain roots without poisoning later renders or cleanup", function()
         local item = open("never-installed")
         local owner = renderer(item)
