@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "55321af3", done: "848e1784"}
 ---
 
 # session_sync M-CR submit spec misses the couch argv within 2 s under suite load (flake)
