@@ -180,6 +180,22 @@ describe('durable leased document migration', function()
         assert.is_nil(uv.fs_lstat(old)); assert.equals('parent\n', read(new))
     end)
 
+    -- #359: Couch's rename refuses an occupied destination, so a move may leave
+    -- the check to it: the file moves at once and a conflict keeps the journal.
+    it('journals a destination left to Couch, and keeps it pending on target-conflict', function()
+        local operation = assert(begin({ move_document = true, destination_registered = 'authority',
+            document_moved = function() return true end,
+            metadata = function(_, cb) cb({ kind = 'unavailable', code = 'target-conflict', error = 'destination registered' }) end,
+        }))
+        local result = advance(operation)
+        assert.equals('pending', result.kind)
+        assert.equals('destination registered', result.error)
+        assert.is_nil(uv.fs_lstat(old)); assert.equals('parent\n', read(new))
+        assert.is_truthy(uv.fs_stat(operation.journal_path), 'the journal stays for recovery')
+        local journal = vim.json.decode(read(operation.journal_path))
+        assert.is_true(journal.steps.document_moved); assert.is_false(journal.steps.metadata)
+    end)
+
     it('refuses an occupied owned destination before creating a journal', function()
         write(new, 'foreign destination\n')
         local operation, err = begin({ move_document = true })

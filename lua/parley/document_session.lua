@@ -23,7 +23,9 @@ end
 function M.classify_reply(operation, exit_code, decoded, null_sentinel)
     local mutation = operation == "register" or operation == "rename"
     local error_text = type(decoded) == "table" and type(decoded.Error) == "string" and decoded.Error or nil
-    local unavailable = { kind = "unavailable", error = error_text or "Invalid registry response" }
+    -- The refusal's code travels with it: a move names a target-conflict (#359).
+    local code = type(decoded) == "table" and type(decoded.Code) == "string" and decoded.Code ~= "ok" and decoded.Code or nil
+    local unavailable = { kind = "unavailable", code = code, error = error_text or "Invalid registry response" }
     if operation ~= "lookup" and not mutation then return unavailable end
     if type(decoded) ~= "table" then return unavailable end
     if mutation and decoded.Code == "registry-uncertain" then

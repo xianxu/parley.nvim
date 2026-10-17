@@ -76,6 +76,13 @@ describe('document move projection', function()
         o.new_written = true
         assert.is_nil(plan.project(old, new, o))
     end)
+    it('leaves the destination to Couch when it is the authority (#359)', function()
+        local o = observations(); o.destination_registered = 'authority'
+        local projected = assert(plan.project(old, new, o))
+        assert.equals('rename_metadata', projected.effects[#projected.effects].kind)
+        o.destination_registered = 'maybe'
+        assert.is_nil(plan.project(old, new, o))
+    end)
     it('refuses occupied destinations and untrustworthy observations', function()
         for _, field in ipairs({ 'target_side_exists', 'destination_registered' }) do
             local o = observations(); o[field] = true

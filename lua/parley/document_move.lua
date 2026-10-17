@@ -339,7 +339,13 @@ function M.begin(namespace, registration, new_path, options)
         if not existing then return refuse('pending', existing_err) end
         return refuse('pending', 'recover the existing exact migration tuple first')
     end
-    if options.destination_registered ~= false then return refuse('unavailable', 'destination registration must be confirmed absent') end
+    -- #359: false is confirmed absent; 'authority' leaves it to Couch's rename,
+    -- which refuses an occupied destination after the file moved (the journal
+    -- then stays pending, and recovery replays the rename).
+    local destination = options.destination_registered
+    if destination ~= false and destination ~= 'authority' then
+        return refuse('unavailable', 'destination registration must be confirmed absent or left to Couch')
+    end
     local old = registration.File
     if not canonical(fs, old) or not canonical(fs, new_path) then return refuse('unavailable', 'migration paths are not canonical') end
     local old_stat, new_stat = fs.fs_lstat(old), fs.fs_lstat(new_path)
@@ -355,7 +361,7 @@ function M.begin(namespace, registration, new_path, options)
     if not entries then return refuse('unavailable', scan_err) end
     local projected, project_err = projection.project(old, new_path, {
         id = registration.ID, old_exists = old_stat ~= nil, new_exists = new_stat ~= nil, new_written = false,
-        destination_registered = false, side_exists = source_stat ~= nil, target_side_exists = target_stat ~= nil, entries = entries,
+        destination_registered = destination, side_exists = source_stat ~= nil, target_side_exists = target_stat ~= nil, entries = entries,
     })
     if not projected then return refuse('unavailable', project_err) end
     local token = hash(tostring(uv.hrtime()) .. ':' .. tostring(vim.fn.getpid()) .. ':' .. registration.ID)

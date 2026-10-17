@@ -190,8 +190,9 @@ function M.rewrite_parent(bytes, child_paths, parent_paths)
     return bytes
 end
 
---- observations: id, old_exists/new_exists/new_written, destination_registered,
---- side_exists/target_side_exists booleans; complete dense entries of canonical
+--- observations: id, old_exists/new_exists/new_written, side_exists/
+--- target_side_exists booleans; destination_registered false (confirmed absent)
+--- or 'authority' (Couch's rename decides, #359); complete dense entries of canonical
 --- {path,resolved,type,bytes?}. Only directory/file entries are supported.
 --- Effects execute under a lease, with the captured observations revalidated.
 function M.project(old, new, observations)
@@ -200,12 +201,14 @@ function M.project(old, new, observations)
         or type(o) ~= 'table' or type(o.id) ~= 'string' or o.id == '' or #o.id > 256
         or o.id:find('[%z\1-\31\127]') or type(o.entries) ~= 'table' then return nil, 'invalid move input' end
     for _, key in ipairs({ 'old_exists', 'new_exists', 'new_written', 'destination_registered', 'side_exists', 'target_side_exists' }) do
-        if type(o[key]) ~= 'boolean' then return nil, 'missing move observation: ' .. key end
+        if type(o[key]) ~= 'boolean' and not (key == 'destination_registered' and o[key] == 'authority') then
+            return nil, 'missing move observation: ' .. key
+        end
     end
     local source, destination = M.side_path(old), M.side_path(new)
     if contained(destination, source) or contained(new, source) then return nil, 'move target inside source side directory' end
     if source == destination and o.side_exists ~= o.target_side_exists then return nil, 'inconsistent shared side observation' end
-    if o.destination_registered or (source ~= destination and o.target_side_exists) then return nil, 'occupied move destination' end
+    if o.destination_registered == true or (source ~= destination and o.target_side_exists) then return nil, 'occupied move destination' end
     local count, markdown, seen, entries = 0, 0, {}, {}
     for index, entry in pairs(o.entries) do
         count = count + 1
