@@ -1,0 +1,39 @@
+---
+id: 000365
+status: open
+deps: []
+github_issue:
+created: 2026-10-16
+updated: 2026-10-16
+estimate_hours:
+severity: high
+card_mirror: '87f92852d4e468fd95bd42a81e2b86ca7cb97f1a' # card fields mirrored from issue-cards; edit via sdlc
+---
+
+# Tests inherit the slot's live Couch environment and query the real registry (chat_move_spec failed when Couch flapped)
+
+## Problem
+
+The test suite inherits the running slot's live Couch environment: `COUCH_THREAD_SCOPE`, `COUCH_THREAD_TAG`, `COUCH_STORE_DIR` and `COUCH_ISOLATED_ROOT`. `couch.thread()` then returns a real thread, `agentic_document`'s `namespace()` is non-nil, and every spec that moves or opens a markdown file without its own fake asks the REAL `couch --session-sync` registry. Only `tests/helpers/sidecars.lua` scrubs these variables, and only around its own cases.
+
+Seen on 2026-10-16: `sdlc local-check run --name suite` on #358's 7ff97e39 failed three `chat_move_spec` cases at `:206`, with `move_chat_tree` returning "Invalid registry response". The non-timestamped child goes through `move_membership`'s registry lookup, and the live `couch` was flapping then (the CLI was briefly "command not found"). The spec passes alone, and on main the failure depends only on Couch's health. Log: `~/workspace/parley.nvim/.git/sdlc/test-stats/failed/c4be4a46c8f79f0408c42b10abcd1ed2.log`.
+
+This is worse than a flake. A spec that moves a document the live registry knows can mutate it, by rename or register, and results depend on the operator's real registry state.
+
+## Spec
+
+- The test harness clears the Couch thread and store variables before any spec runs, for example in `tests/minimal_init.lua` or the runner's environment. A spec that wants Couch sets up the fake explicitly, as the agentic and session-sync specs already do.
+- An arch-style guard proves no spec reaches the real `couch` binary. For example, PATH is pinned so that a bare `couch` resolves to a refusing stub unless a fake is installed.
+
+## Done when
+
+- With the slot's real `COUCH_THREAD_*` exported and the real `couch` unavailable, the full suite is green. `chat_move_spec` no longer depends on Couch.
+- A test fails if a spec's process inherits `COUCH_THREAD_SCOPE` or `COUCH_THREAD_TAG`.
+
+## Plan
+
+- [ ]
+
+## Log
+
+### 2026-10-16
