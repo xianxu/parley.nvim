@@ -262,6 +262,39 @@ reaped the other run as a leak (logs /tmp/parley-362-scan-final-mapped.log and
 /tmp/parley-362-scan-invoke.log). This is a harness scheduling error, not a
 passing test result or a product flake. Re-run those commands serially.
 
+### 2026-10-16 — BR-3 final verification and staged live check
+
+Serial verification passed: mapped modes/review (including 20 parser scale cases
+and shared frontmatter cases), 64 real invocation/tool cases, 16 Python export
+contracts, pinned-source --check, changed-file lint and git diff --check. The
+serial logs are /tmp/parley-362-scan-serial-mapped.log and
+/tmp/parley-362-scan-serial-invoke.log; the earlier overlapping attempts above
+remain retained as scheduling failures, not product flakes.
+
+Recorded full suite on 665ad29c90aa2ca769351a572e51f9a81e88afec: exit 0,
+456/456 files, 764 files lint-clean, no surviving test processes. Queued 3951 s,
+ran 2m9s, first full attempt on this code head; log SHA256 prefix 110eed3af072.
+Log: /Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/665ad29c90aa2ca769351a572e51f9a81e88afec/suite.log.
+
+TL authorized staging in delivery b66293d4-85fd-4053-bdca-0d9d3d608153.
+sdlc stage --build put that exact head on parley.nvim:0 (Lua plugin; no Go
+binaries to build). A fresh interactive Neovim used the operator's actual
+/Users/xianxu/.config/nvim config and the staged plugin, outside Couch, via the
+actual Alt+Return mapping and temporary files. All-chat passed live: skipped
+notice, zero provider queries and unchanged bytes. Unknown mode passed live:
+visible refusal, zero queries and unchanged bytes. Mixed discussion/chat
+showed both correct notices, then the real managed model picker listed Claude
+and Codex logged out; its edit round could not run. Cancelled that picker and
+exited the temporary Neovim. No credential change. Cleared the stage immediately;
+:0 is back on main. Evidence: /var/folders/07/b9wcwwld4_v2w9r3hk525bm80000gn/T/parley-362-live.GCLFlK/evidence.txt;
+partial result and picker were observed directly in the interactive terminal.
+
+Report 6973183b-df43-438d-bbcf-43a44cee72d2 is submitted. TL accepted this exact
+partial live result in delivery 855c7c6f-26c4-4325-be62-983c1309da68: the mixed
+edit is covered by real-tool invocation cases and gets its live check through
+operator normal use; the TL tells the operator. Proceed to close and land.
+This does not claim a live mixed edit pass.
+
 ## Revisions
 
 ### 2026-10-16 — priority interruption
