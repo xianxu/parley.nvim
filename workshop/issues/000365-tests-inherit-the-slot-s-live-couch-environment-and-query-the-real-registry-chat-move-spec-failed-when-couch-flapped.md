@@ -52,7 +52,7 @@ Quick flow. The shape follows pair#617, as the TL asked: an allowlist environmen
 - [x] The sentinel `couch` and `pair` record each call (cwd and argv) to `$PARLEY_TEST_ENV_ROOT/sentinel.log`, then refuse with exit 97. A spec's fake wins because the spec prepends its own bin. `PREP_TEST_ENV` empties the log, and every target fails afterwards if it isn't empty: proof that no spec reached the real CLI, and so the real registry socket.
 - [x] `test_isolation.ambient(env)` lists every visible `COUCH_*`, `PAIR_*` and terminal-owner name (TMUX, NVIM, KITTY_*, WEZTERM_*, ITERM_SESSION_ID, TERM_SESSION_ID, ZELLIJ, …). Pure, with unit tests.
 - [x] Guard, `tests/integration/test_isolation_spec.lua`: the spec process's own environment has no ambient names, in particular no `COUCH_THREAD_SCOPE` or `COUCH_THREAD_TAG`; a bare `couch` resolves to the sentinel; calling it refuses and logs (to a log of the case's own). A launcher case runs `test-env.sh` with a polluted environment and checks the child's environment is exactly the allowlist.
-- [ ] The suite is green with the slot's live `COUCH_THREAD_*` exported. `chat_move_spec` now runs plain, because no thread is visible.
+- [x] The suite is green with the slot's live `COUCH_THREAD_*` exported. `chat_move_spec` now runs plain, because no thread is visible.
 - [x] The atlas `infra/test_harness.md` gets the allowlist, the sentinel, and why.
 
 ## Log
@@ -62,4 +62,4 @@ Quick flow. The shape follows pair#617, as the TL asked: an allowlist environmen
 - `couch_spec`'s "couch conformance (live)" case now runs pending under the harness, since no thread is visible. That is by design: a live check must not ride on the operator's ambient thread.
 - Mutation check: letting the launcher pass `COUCH_THREAD_SCOPE` fails both the in-process guard and the exact-allowlist case.
 - An extra guard: no `nvim` launch in `Makefile.parley` bypasses the launcher. There are 7 launches: RUN_SPEC, test-spec, test-changed, perf, perf-finder, goldens, fixtures.
-
+- Full suite green on e7a42fb4 (`sdlc-local/suite`), run from this slot with the live `COUCH_THREAD_SCOPE`/`TAG` exported. The sentinel log stayed empty. The run before it failed only `fixture_lifecycle_spec`, which wanted the new sentinels declared as fixtures that cannot block; fixed in e7a42fb4.
