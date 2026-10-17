@@ -1,13 +1,13 @@
 ---
 id: 000365
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: high
-card_mirror: '18df816a847a78a77c8f710b82a61ed12d3a4817' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '89f8e3d86eca3260a50be828335d294bfee24501' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T17:17:24-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.95
 ---
 
 # Tests inherit the slot's live Couch environment and query the real registry (chat_move_spec failed when Couch flapped)
