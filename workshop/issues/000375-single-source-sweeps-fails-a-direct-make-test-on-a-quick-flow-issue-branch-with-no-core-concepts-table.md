@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "cb30f25a", done: "3a08a598"}
 ---
 
 # single_source_sweeps fails a direct make test on a quick-flow issue branch with no Core-concepts table
