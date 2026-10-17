@@ -151,7 +151,50 @@ function M.new(context)
         return copy(state)
     end
 
+    local step
+
+    -- An operation that may hold an Alt+Return pressed before the document's
+    -- owner is known: the attach lookup, and every step of an inheritance.
+    local function admits(operation)
+        if not operation then return false end
+        local kind, args = operation.witness.operation, operation.args
+        return (kind == "lookup" and not args.submit) or kind == "confirm_parent"
+            or (kind == "register" and args.inherited == true)
+    end
+    local function inheriting(operation)
+        local args = operation and operation.args or {}
+        return state.inherit ~= nil or args.inherit ~= nil or args.inherited == true
+            or (operation ~= nil and operation.witness.operation == "confirm_parent")
+    end
+
+    -- #378: the model owns the queued press. Every dispatch settles it here, so
+    -- once the operation holding it ends, by any event, exactly one of
+    -- flush_queued or drop_queued is emitted. It flushes into a registration, or
+    -- into the plain-doc submit when no inheritance was involved; an inheritance
+    -- that ends any other way (refused, unavailable, cancelled, pending,
+    -- detached) drops it, so it is never re-aimed at the pane's actor.
     function controller.dispatch(event)
+        if event.type == "queue_submit" then
+            if not state.queued and not state.registration and admits(state.operation) then
+                state.queued = { inheriting = inheriting(state.operation) }
+            end
+            return {}
+        end
+        local effects = step(event)
+        local queued = state.queued
+        if not queued then return effects end
+        if admits(state.operation) then
+            queued.inheriting = queued.inheriting or inheriting(state.operation)
+            return effects
+        end
+        state.queued = nil
+        local release = (state.phase == "registered" and state.registration ~= nil)
+            or (not queued.inheriting and (state.phase == "plain" or state.phase == "unknown"))
+        effects[#effects + 1] = { kind = release and "flush_queued" or "drop_queued" }
+        return effects
+    end
+
+    step = function(event)
         if state.phase == "detached" then return {} end
         if event.type == "invalidate_confirmation" then
             state.confirmation = nil
@@ -335,7 +378,7 @@ function M.new(context)
                 return { issue("register", { owner = parent.owner, resume_only = true, inherited = true }) }
             end
             state.phase = "plain"
-            return { { kind = "band", message = M.NOT_INHERITED }, { kind = "drop_queued" } }
+            return { { kind = "band", message = M.NOT_INHERITED } }
         end
         local valid = result.kind == "registered" and valid_registration(result.registration)
         if valid then
@@ -348,9 +391,6 @@ function M.new(context)
             state.operation = nil
             local inherit = operation.args.inherit or state.inherit
             state.inherit = nil
-            -- A press queued during inheritance is authorized only by the
-            -- inheritance: one ending without a registration drops it.
-            local inheriting = inherit ~= nil or operation.args.inherited
             if state.registration and (result.kind == "absent"
                 or (valid and result.registration.ID ~= state.registration.ID)) then
                 state.phase = "busy"
@@ -370,15 +410,12 @@ function M.new(context)
                     return { issue("confirm_parent", { parent = inherit }) }
                 end
                 state.phase = "plain"
-                if inheriting then return { { kind = "band", message = M.NOT_INHERITED }, { kind = "drop_queued" } } end
+                if operation.args.inherited then return { { kind = "band", message = M.NOT_INHERITED } } end
                 return { { kind = "band", message = "" } }
             end
             state.phase = stable_phase()
             if operation.args.submit then return notify(result.error or "Registered owner could not be confirmed") end
-            if state.registration then return {} end
-            local unknown = { { kind = "band", message = "Couch unavailable: agentic state unknown" } }
-            if inheriting then unknown[2] = { kind = "drop_queued" } end
-            return unknown
+            return state.registration and {} or { { kind = "band", message = "Couch unavailable: agentic state unknown" } }
         end
         if not valid and operation.args.inherited and result.kind == "unavailable" then
             -- Refused or lost (another owner registered it first, or the deadline

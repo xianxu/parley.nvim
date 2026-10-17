@@ -656,7 +656,7 @@ describe("document_session inherit", function()
         }) do
             local s = session(); plain(s)
             local effects = reply(s, to_confirm(s), answer)
-            assert.same({ { kind = "band", message = model.NOT_INHERITED }, { kind = "drop_queued" } }, effects)
+            assert.same({ { kind = "band", message = model.NOT_INHERITED } }, effects)
             assert.equals("plain", s.snapshot().phase)
             assert.is_nil(s.snapshot().registration)
             local register = reply(s, to_confirm(s), { kind = "registered", registration = parent_registration() })[1]
@@ -667,7 +667,7 @@ describe("document_session inherit", function()
     it("drops the hint when the child lookup cannot answer", function()
         local s = session(); plain(s)
         local lookup = s.dispatch({ type = "inherit", parent = parent })[1]
-        assert.same({ "band", "drop_queued" }, kinds(reply(s, lookup, { kind = "unavailable", error = "down" })))
+        assert.same({ "band" }, kinds(reply(s, lookup, { kind = "unavailable", error = "down" })))
         -- the background retry re-opens without the hint: no confirmation, no register
         local again = s.dispatch({ type = "open" })[1]
         assert.same({ { kind = "band", message = "" } }, reply(s, again, { kind = "absent" }))
@@ -682,18 +682,88 @@ describe("document_session inherit", function()
         assert.equals("ops:7", s.snapshot().registration.Owner)
     end)
 
-    -- A press queued during inheritance is authorized only by the inheritance:
-    -- every ending without a registration drops it, and only those do.
-    it("drops the queued press on every inheritance ending without a registration", function()
-        local s = session(); plain(s)
-        local register = reply(s, to_confirm(s), { kind = "registered", registration = parent_registration() })[1]
-        local lookup = reply(s, register, { kind = "unavailable", code = "owner-conflict" })[1]
-        assert.same({ { kind = "band", message = model.NOT_INHERITED }, { kind = "drop_queued" } },
-            reply(s, lookup, { kind = "absent" }))
-        -- an ordinary lookup, outside inheritance, never drops a press
-        local plain_doc = session()
-        assert.same({ { kind = "band", message = "" } }, reply(plain_doc, plain_doc.dispatch({ type = "open" })[1], { kind = "absent" }))
-        assert.same({ "band" }, kinds(reply(plain_doc, plain_doc.dispatch({ type = "open" })[1], { kind = "unavailable" })))
+    -- The hub's guard (#378): a press queued while the owner is unknown is
+    -- settled exactly once, by every way the operation holding it can end. It
+    -- flushes into a registration, or into the plain-doc submit when no
+    -- inheritance was involved; any other inheritance ending drops it. A new
+    -- ending added later lands in this walk or leaks visibly.
+    it("settles a queued press exactly once on every ending", function()
+        local absent, down = { kind = "absent" }, { kind = "unavailable", error = "down" }
+        local parent_ok = { kind = "registered", registration = parent_registration() }
+        local function child_ok(owner) return { kind = "registered", registration = child_registration(owner) } end
+        local function op(s) return s.snapshot().operation end
+        local function answer(s, result) return reply(s, { witness = op(s).witness }, result) end
+        -- Each start reaches an operation that holds the press.
+        local starts = {
+            attach = function(s) s.dispatch({ type = "open" }) end,
+            inherit = function(s) plain(s); s.dispatch({ type = "inherit", parent = parent }) end,
+            stashed = function(s) s.dispatch({ type = "open" }); s.dispatch({ type = "inherit", parent = parent }) end,
+            confirm = function(s) plain(s); to_confirm(s) end,
+            register = function(s) plain(s); answer(s, to_confirm(s) and parent_ok) end,
+            relookup = function(s)
+                plain(s); answer(s, to_confirm(s) and parent_ok)
+                answer(s, { kind = "unavailable", code = "owner-conflict" })
+            end,
+        }
+        local endings = {
+            { "attach", "registered", function(s) answer(s, outcome("registered")) end, "flush_queued" },
+            { "attach", "absent", function(s) answer(s, absent) end, "flush_queued" },
+            { "attach", "unavailable", function(s) answer(s, down) end, "flush_queued" },
+            { "attach", "changed", function(s) s.dispatch({ type = "changed" }) end, "flush_queued" },
+            { "attach", "detach", function(s) s.dispatch({ type = "detach" }) end, "drop_queued" },
+            { "inherit", "child registered", function(s) answer(s, child_ok("ops:7")) end, "flush_queued" },
+            { "inherit", "unavailable", function(s) answer(s, down) end, "drop_queued" },
+            { "inherit", "changed", function(s) s.dispatch({ type = "changed" }) end, "drop_queued" },
+            { "inherit", "detach", function(s) s.dispatch({ type = "detach" }) end, "drop_queued" },
+            { "stashed", "refused parent", function(s) answer(s, absent); answer(s, absent) end, "drop_queued" },
+            { "stashed", "inherited", function(s)
+                answer(s, absent); answer(s, parent_ok); answer(s, child_ok("ops:0"))
+            end, "flush_queued" },
+            { "confirm", "stale parent", function(s) answer(s, { kind = "registered",
+                registration = parent_registration({ Owner = "ops:9" }) }) end, "drop_queued" },
+            { "confirm", "parent absent", function(s) answer(s, absent) end, "drop_queued" },
+            { "confirm", "parent unavailable", function(s) answer(s, down) end, "drop_queued" },
+            { "confirm", "changed", function(s) s.dispatch({ type = "changed" }) end, "drop_queued" },
+            { "confirm", "detach", function(s) s.dispatch({ type = "detach" }) end, "drop_queued" },
+            { "register", "inherited", function(s) answer(s, child_ok("ops:0")) end, "flush_queued" },
+            { "register", "uncertain", function(s) answer(s, { kind = "uncertain", error = "lost" }) end, "drop_queued" },
+            -- A mutation that outlives a change goes pending: the next press is
+            -- the explicit retry, so the held one drops.
+            { "register", "changed, then answered", function(s)
+                s.dispatch({ type = "changed" }); answer(s, child_ok("ops:0"))
+            end, "drop_queued" },
+            { "relookup", "adopted", function(s) answer(s, child_ok("ops:7")) end, "flush_queued" },
+            { "relookup", "absent", function(s) answer(s, absent) end, "drop_queued" },
+            { "relookup", "unavailable", function(s) answer(s, down) end, "drop_queued" },
+        }
+        for _, case in ipairs(endings) do
+            local start, name, finish, expected = case[1], case[2], case[3], case[4]
+            local label = start .. " → " .. name
+            local s = session()
+            starts[start](s)
+            assert.is_not_nil(op(s), label .. ": the start left nothing in flight")
+            local decisions = {}
+            local dispatch = s.dispatch
+            s.dispatch = function(event)
+                local effects = dispatch(event)
+                for _, e in ipairs(effects) do
+                    if e.kind == "flush_queued" or e.kind == "drop_queued" then decisions[#decisions + 1] = e.kind end
+                end
+                return effects
+            end
+            s.dispatch({ type = "queue_submit" })
+            assert.truthy(s.snapshot().queued, label .. ": the press was not held")
+            -- A reply with a stale witness ends nothing and decides nothing.
+            reply(s, { witness = { token = -1 } }, absent)
+            assert.same({}, decisions, label .. ": a stale reply settled the press")
+            finish(s)
+            assert.same({ expected }, decisions, label)
+            assert.is_nil(s.snapshot().queued, label .. ": the press is still held")
+            -- and nothing after the ending settles it a second time
+            s.dispatch({ type = "open" })
+            s.dispatch({ type = "changed" })
+            assert.same({ expected }, decisions, label .. ": settled twice")
+        end
     end)
 
     it("ignores a malformed hint and a detached document", function()

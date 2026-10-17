@@ -172,6 +172,28 @@ describe("side docs inherit the parent's owner (#378)", function()
             local winbar = vim.wo[vim.fn.bufwinid(child)].winbar
             assert.truthy(winbar:find(require("parley.document_session").NOT_INHERITED, 1, true), winbar)
         end
+        -- BR-6: a file reload during inheritance must never deliver the held
+        -- press. For an ordinary side doc the reload unloads the buffer, so the
+        -- ending is a detach, and the model must drop there (a flush would send
+        -- to the pane's actor). The `changed` ending is walked in
+        -- document_session_spec's settle table.
+        it("never delivers the press after the file reloads during inheritance", function()
+            local autoread = vim.o.autoread
+            vim.o.autoread = true
+            local child = follow(2)
+            document.submit(child)
+            assert.truthy(document.status(child).queued, "the press was not held")
+            vim.fn.writefile({ "# Edited outside the editor" }, side)
+            vim.uv.fs_utime(side, os.time() + 5, os.time() + 5)
+            vim.api.nvim_buf_call(child, function() vim.cmd("checktime") end)
+            vim.o.autoread = autoread
+            await(function() return not document.status(child).queued end, "the reload left the press held")
+            await(function() return settled(child) end)
+            vim.wait(1500) -- the retry lookup must not deliver it later either
+            assert.equals(0, sends())
+            assert.is_nil(document.identity(child))
+        end)
+
         for _, case in ipairs({
             { name = "the parent was forgotten", setup = forget_parent },
             { name = "the parent changed owner", setup = function() forget_parent(); register(parent, "ops:9") end },

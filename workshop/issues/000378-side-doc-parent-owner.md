@@ -111,3 +111,12 @@ Deterministic fake-only reproduction through the actual opener: register parent.
 - The round-1 integration case that asserted a pane-actor submit is flipped. A stale-parent case (re-registered to ops:9) is added, and both assert 0 sends, no registration and the band. Mutation check: with the shell ignoring `drop_queued`, both fail with "submitted to parley.nvim:1".
 - Minor: the new spec is now mapped in `atlas/traceability.yaml` under modes/session_sync.
 - Targeted runs pass: document_session 46, side_inherit 8, agentic_document 47, lifetime 10, single_source_sweeps 28.
+- 2026-10-17, close review round 3 (BR-6, the third finding in family effect-executor-shared-tail). The queued press still leaked when inheritance ended through `changed` or a stale witness, because the shell inferred the flush from `operation == nil`. Under the third-delta rule I stopped and re-planned; the hub approved the structural fix.
+  - The pure model owns the held press. `queue_submit` asks it to hold one, and only for an operation that `admits` it: the attach lookup, `confirm_parent`, an inherited register, or its re-lookup.
+  - Every dispatch settles the press in one place. When the holding operation ends, by any event, the model emits exactly one `flush_queued` (into a registration, or into the plain-doc submit when no inheritance was involved) or `drop_queued` (any other inheritance ending, pending, or detach).
+  - The shell submits only on `flush_queued`. `migration_busy` reads `snapshot.queued`, and the tail flush and `s.queued_submit` are gone.
+  - The hub's table test (`settles a queued press exactly once on every ending`) walks 22 endings across 6 starting operations. Each case asserts one decision of the expected kind, that a stale-witness reply decides nothing, and that no second decision follows.
+    - Mutation check: an always-flushing release fails it (attach → detach).
+    - Writing it showed that a register outliving a `changed` goes pending, and the approved rule makes that a drop.
+  - The new integration case reloads the file during inheritance with a press held: 0 sends and no registration. For an ordinary side doc the reload unloads the buffer, so this exercises the detach ending; the always-flush mutation fails it along with the two refusal cases. The `changed` ending is covered by the unit table.
+- Targeted runs pass: document_session 46, side_inherit 9, agentic_document 47, owned_move 16, lifetime 10, session_sync 64.

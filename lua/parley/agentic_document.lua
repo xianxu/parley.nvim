@@ -284,8 +284,7 @@ local function execute(s, effects)
         local kind = effect.kind
         if kind == "lookup" or kind == "register" or kind == "confirm_parent" then
             -- confirm_parent (#378) is a lookup of the parent, read from Couch now
-            -- rather than from what the parent's buffer last saw. It shares this
-            -- tail, so a press queued during inheritance is flushed when it ends.
+            -- rather than from what the parent's buffer last saw.
             local args = kind == "register" and { effect.witness.path, effect.owner }
                 or { kind == "confirm_parent" and effect.parent.path or effect.witness.path }
             s.request = registry.request(kind == "confirm_parent" and "lookup" or kind, args, effect.witness, completed(s, function(result)
@@ -297,15 +296,10 @@ local function execute(s, effects)
                 if kind == "lookup" and result.kind == "absent" then cache(s, nil, true) end
                 dispatch(s, { type = "reply", witness = effect.witness, result = result })
                 if s.model.snapshot().phase == "unknown" then ensure_retry() end
-                if s.queued_submit and not s.model.snapshot().operation then
-                    s.queued_submit = false
-                    M.submit(s.buf)
-                end
             end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
-        elseif kind == "drop_queued" then
-            -- #378: inheritance ended without a registration; the press it held
-            -- is not re-aimed at the pane's actor.
-            s.queued_submit = false
+        elseif kind == "flush_queued" then
+            -- #378: the model released a press it held; drop_queued needs nothing.
+            M.submit(s.buf)
         elseif kind == "save" then
             local ss = require("parley.session_sync")
             local ok, err
@@ -537,12 +531,8 @@ function M.submit(buf)
             show_feedback(s, s.submitting.overdue and "submitting… still waiting for Couch" or "submitting…", false)
             return true
         end
-        -- A press during the attach lookup, or during any step of a side doc's
-        -- inheritance (#378), waits for it and then submits once.
-        local op = snapshot.operation
-        local admitting = (op.witness.operation == "lookup" and not op.args.submit)
-            or op.witness.operation == "confirm_parent" or (op.witness.operation == "register" and op.args.inherited)
-        if not snapshot.registration and admitting then s.queued_submit = true end
+        -- The model decides whether this operation may hold the press (#378).
+        dispatch(s, { type = "queue_submit" })
         return true
     end
     local revision = s.revision
@@ -589,7 +579,7 @@ end
 local function migration_busy(s)
     local snapshot = s.model.snapshot()
     local operation = snapshot.operation
-    return s.reading or s.move or s.recovery_pending or s.resolving or s.queued_submit
+    return s.reading or s.move or s.recovery_pending or s.resolving or snapshot.queued
         or snapshot.phase == "pending"
         or (operation and (operation.witness.operation ~= "lookup" or operation.args.submit))
 end
