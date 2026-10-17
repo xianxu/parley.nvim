@@ -85,11 +85,18 @@ Pinning HOME and XDG wasn't enough. A spec still inherited the slot's live
 REAL `couch` registry, and could mutate it. Every nvim in `Makefile.parley` now
 starts through `scripts/test-env.sh` (`TEST_RUN`), which runs `env -i` and copies
 only a fixed list: PATH, the pinned roots, TMPDIR, the harness's own knobs,
-locale, and `PARLEY_LIVE_*` opt-ins. `SHELL=/bin/sh` is set explicitly. No
-`COUCH_*`, `PAIR_*`, terminal owner or credential crosses; `make fixtures` alone
-names its API keys in `PARLEY_TEST_ENV_PASS`. The launcher also puts
+locale, and `PARLEY_LIVE_*` opt-ins. `SHELL=/bin/sh` is set explicitly. It
+removes every other name with `env -u NAME`, so a kept credential's value never
+reaches an argument list. No `COUCH_*`, `PAIR_*`, terminal owner or credential
+crosses, with three exceptions:
+- Each live flag carries only its own check's names: `PARLEY_LIVE_CONFORMANCE`
+  takes `CLIPROXYAPI_API_KEY`, and `PARLEY_LIVE_CLIPBOARD` takes the display.
+- `PARLEY_LIVE_COUCH` takes the real thread, but only for
+  `make check-couch-actors-live`, which runs `couch_spec` alone. The suite's
+  runner strips the flag.
+- `make fixtures` names its API keys in `PARLEY_TEST_ENV_PASS`. The launcher also puts
 `tests/fixtures/sentinel-bin` first on PATH. A bare `couch` or `pair` that no
-fake shadows records the call in `$(TEST_ENV_ROOT)/sentinel.log` and exits 97,
+fake shadows records the call in the target's own `$(TEST_ENV_ROOT)/sentinel-<target>.log` and exits 97,
 and every target fails afterwards on a non-empty log (`SENTINEL_CHECK`, beside
 the orphan gate). That's the proof no spec reached the real CLI or its registry
 socket. A spec that wants Couch installs a fake bin ahead of the sentinel.

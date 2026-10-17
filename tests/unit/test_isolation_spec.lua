@@ -108,3 +108,28 @@ describe("every harness nvim starts through the allowlist launcher", function()
         assert.same({}, bare)
     end)
 end)
+
+-- #365 close review: every target that runs specs checks the sentinel after
+-- them, and the launcher never puts a value on an argument list (only names).
+describe("the sentinel gate and the launcher's argv", function()
+    it("runs SENTINEL_CHECK in every target that runs the orphan gate", function()
+        local orphans, sentinel = 0, 0
+        for _, l in ipairs(vim.fn.readfile("Makefile.parley")) do
+            if l:find("$(ORPHANS) --phase after", 1, true) then orphans = orphans + 1 end
+            if l:find("$(SENTINEL_CHECK) || rc=1", 1, true) then sentinel = sentinel + 1 end
+        end
+        assert.is_true(orphans >= 9, "the scan is stale: " .. orphans)
+        assert.equals(orphans, sentinel)
+    end)
+    it("builds no NAME=value argument except PATH, SHELL and the sentinel log", function()
+        local built = {}
+        for _, l in ipairs(vim.fn.readfile("scripts/test-env.sh")) do
+            if not l:match("^%s*#") then
+                for name in l:gmatch('"([A-Z_][A-Z0-9_]*)=%$') do built[#built + 1] = name end
+            end
+        end
+        table.sort(built)
+        assert.same({ "PARLEY_TEST_SENTINEL_LOG", "PATH" }, built)
+        assert.is_nil(table.concat(vim.fn.readfile("scripts/test-env.sh"), "\n"):find('eval "value=', 1, true))
+    end)
+end)

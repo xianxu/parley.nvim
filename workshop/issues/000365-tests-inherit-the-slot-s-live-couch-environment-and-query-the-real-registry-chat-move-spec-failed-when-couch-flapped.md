@@ -63,3 +63,14 @@ Quick flow. The shape follows pair#617, as the TL asked: an allowlist environmen
 - Mutation check: letting the launcher pass `COUCH_THREAD_SCOPE` fails both the in-process guard and the exact-allowlist case.
 - An extra guard: no `nvim` launch in `Makefile.parley` bypasses the launcher. There are 7 launches: RUN_SPEC, test-spec, test-changed, perf, perf-finder, goldens, fixtures.
 - Full suite green on e7a42fb4 (`sdlc-local/suite`), run from this slot with the live `COUCH_THREAD_SCOPE`/`TAG` exported. The sentinel log stayed empty. The run before it failed only `fixture_lifecycle_spec`, which wanted the new sentinels declared as fixtures that cannot block; fixed in e7a42fb4.
+- Close review round 1, FIX-THEN-SHIP. All five findings fixed:
+  - BR-1: each `PARLEY_LIVE_*` flag carries its check's names, for example CLIPROXYAPI_API_KEY for conformance and the display for the clipboard.
+  - BR-2: names are removed with `env -u`, so no value reaches argv. A static test pins that the only built assignments are PATH and the sentinel log.
+  - BR-3: `make check-couch-actors-live` runs couch_spec alone with `PARLEY_LIVE_COUCH`. The case calls the real binary past the sentinel, and RUN_SPEC strips the flag. In this sandbox the socket is unreachable, so the case stays pending; it got past the gate.
+  - Minor: a test pins one SENTINEL_CHECK per orphan gate (mutation: dropping one fails it).
+  - Minor: the sentinel log is per target (`sentinel-$@.log`).
+
+## Revisions
+
+- **2026-10-16, close review round 1.** The launcher removes names with `env -u` instead of rebuilding the environment from `env -i NAME=value`, so values stay out of argv. Live opt-ins carry their own names. The live `--actors` check moves to its own target. The sentinel log is per target.
+

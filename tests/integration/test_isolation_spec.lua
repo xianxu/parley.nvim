@@ -106,6 +106,30 @@ describe("the allowlist environment (#365)", function()
         vim.fn.delete(root, "rf")
     end)
 
+    it("lets each live flag carry only its own check's names", function()
+        local root = vim.fn.tempname()
+        vim.fn.mkdir(root, "p")
+        local function names(env)
+            local result = vim.system({ repo .. "/scripts/test-env.sh", "/usr/bin/env" }, { text = true, clear_env = true,
+                env = vim.tbl_extend("force", { PATH = "/usr/bin:/bin", PARLEY_TEST_ENV_ROOT = root,
+                    CLIPROXYAPI_API_KEY = "c", COUCH_THREAD_SCOPE = "s", COUCH_THREAD_TAG = "t" }, env) }):wait(5000)
+            assert.equals(0, result.code, result.stderr)
+            local found = {}
+            for line in result.stdout:gmatch("[^\n]+") do found[line:match("^([^=]+)=")] = true end
+            return found
+        end
+        local plain = names({})
+        assert.is_nil(plain.CLIPROXYAPI_API_KEY)
+        assert.is_nil(plain.COUCH_THREAD_SCOPE)
+        local conformance = names({ PARLEY_LIVE_CONFORMANCE = "1" })
+        assert.is_true(conformance.CLIPROXYAPI_API_KEY)
+        assert.is_nil(conformance.COUCH_THREAD_SCOPE)
+        local live_couch = names({ PARLEY_LIVE_COUCH = "1" })
+        assert.is_true(live_couch.COUCH_THREAD_SCOPE and live_couch.COUCH_THREAD_TAG)
+        assert.is_nil(live_couch.CLIPROXYAPI_API_KEY)
+        vim.fn.delete(root, "rf")
+    end)
+
     it("passes a credential only when the target names it in PARLEY_TEST_ENV_PASS", function()
         local root = vim.fn.tempname()
         vim.fn.mkdir(root, "p")
