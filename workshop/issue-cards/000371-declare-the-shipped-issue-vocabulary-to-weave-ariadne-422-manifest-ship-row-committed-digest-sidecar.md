@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.34
+actual_hours: 0.35
 tracker:
     version: 1
     completion:
-        token: close-7db5a0207386
+        token: close-f566d802ba77
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: e546f1ae4c8dc2eaf0b379804422a7b640cea9b2
-        evidence_commit: b7d546084dfed25ed89b2a003c2c857844f30084
+        reviewed_head: 1016075b4fc4e299a093513f3963a19f5f8d89e2
+        evidence_commit: 9676af6056fa6e025d3fed65d36d17dbd4bc6bbf
 ---
 
 # Declare the shipped issue vocabulary to weave (ariadne#422): manifest ship row, committed digest sidecar
