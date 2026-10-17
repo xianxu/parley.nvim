@@ -10,11 +10,11 @@
 
 ## Core concepts
 
-| Name | Lives in | Status |
-|------|----------|--------|
-| Collaboration routing | lua/parley/skills/review/collaboration.lua | new |
-| Collaboration frontmatter value | lua/parley/skills/review/collaboration_value.lua | new |
-| Local proposal permission | lua/parley/skills/review/collaboration.lua | new |
+| Name | Kind | Lives in | Status |
+|------|------|----------|--------|
+| Collaboration routing | PURE | lua/parley/skills/review/collaboration.lua | new |
+| Collaboration frontmatter value | PURE | lua/parley/skills/review/collaboration_value.lua | new |
+| Local proposal permission | PURE | lua/parley/skills/review/collaboration.lua | new |
 
 The value parser handles the canonical scalar, block/flow mapping and heading-list forms, including quoting and comments. It is deliberately scoped to this field: malformed or unsupported input refuses visibly instead of silently defaulting. Duplicate mapping keys refuse. No external decoder is needed. Existing flat frontmatter parsing supplies the leading block boundary.
 
@@ -22,11 +22,11 @@ Routing normalizes names by lowercase, whitespace collapse and dropping one trai
 
 The proposal validator resolves the exact invocation snapshot and checks each unique old_string span against protected bytes. Reject the whole call before execution on any overlap, including a replacement spanning both editable and chat content. The validator is invocation-owned, never a model input. Refusals preserve the whole document; ordinary tool validation still owns missing/nonunique old strings.
 
-| Name | Lives in | Status | Wraps |
-|------|----------|--------|-------|
-| Local review admission | lua/parley/skills/review/init.lua | modified | buffer snapshot, vim.notify, marker readiness |
-| Proposal validation hook | lua/parley/skill_invoke.lua | modified | decoded propose_edits call before tool execution |
-| Local compatibility instructions | lua/parley/skills/review/local-adapter.md | modified | canonical prompt to local tool capabilities |
+| Name | Kind | Lives in | Status | Wraps |
+|------|------|----------|--------|-------|
+| Local review admission | INTEGRATION | lua/parley/skills/review/init.lua | modified | buffer snapshot, vim.notify, marker readiness |
+| Proposal validation hook | INTEGRATION | lua/parley/skill_invoke.lua | modified | decoded propose_edits call before tool execution |
+| Local compatibility instructions | INTEGRATION | lua/parley/skills/review/local-adapter.md | modified | canonical prompt to local tool capabilities |
 
 ARCH-DRY/PURE: one resolver supplies notices, admission, resubmission and edit permission; no second mode parser or prompt builder. ARCH-PURPOSE: verify the protocol's operations against the artifact-bound tool. Chat content remains a single protected resource for the lifetime of one invocation, rather than checking the model's intent. The existing tool filesystem lane and snapshot continue to own file effects. No process, persistent state, baseline or side-doc lifecycle is introduced.
 
@@ -67,3 +67,14 @@ and one proposal batch: overlapping edits shift original offsets, and repeated
 calls can match text created by a prior call. Reject these before any proposal
 write; regressions include real tool IO and a disposable earlier validator.
 This is the same invocation-owned permission, with no new product routing.
+
+### 2026-10-16 — absent versus unsupported routing declarations
+
+Only a recognizable root block mapping with no routing key may default.
+Decode uniformly indented and quoted/escaped root routing keys. Reject root
+flow mappings, sequences, explicit/complex keys, tags/aliases/anchors and merge
+keys rather than silently discarding potential routing. Nested unrelated keys
+are not declarations. Add this representation matrix to parser, admission and
+real-write tests; keep canonical field value forms. Re-run focused/full
+verification and the binary boundary review. The previous policy and no-IO
+boundary remain unchanged.

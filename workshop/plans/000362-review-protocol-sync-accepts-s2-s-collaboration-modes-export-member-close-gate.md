@@ -89,6 +89,101 @@ rounds:
       recipe: small-diff-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 4adbe885-05fc-4eea-906b-65301257cfb7
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000362"
+            recipe: milestone-review
+            round: 2
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/7f95cbb77a770a55
+            reviewed_head: 5789ac0f26392fb45a8c9121f323b3ddbc980da5
+            slot: parley.nvim:1
+            requested_at: "2026-10-17T02:26:03.487465Z"
+          phase: finished
+          pid: 34637
+          started_at: "2026-10-17T02:26:03.592884Z"
+          finished_at: "2026-10-17T02:28:12.455932Z"
+          session_id: 01a147ae-3e2c-77b3-8503-bec981baaf24
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 5789ac0f26392fb45a8c9121f323b3ddbc980da5
+        tracker_head: cd510dea6c4cbba24ac0713db0b22403fad138ad
+        branch_point: 75c795b448fbe7fdd8c38785f2c7c64001ef91c4
+        since: "2026-10-16T16:04:39-07:00"
+        until: "2026-10-16T19:25:47-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T16:04:39-07:00"
+              end: "2026-10-16T19:25:47-07:00"
+              began: "2026-10-16T16:04:39-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 9be85226135a22aa1db168c0a036d5602a681f206da53b25c4dc5dfbc2e9956f
+              started: "2026-10-14T05:35:58.09Z"
+              spawned: false
+              bytes: 29867225
+              windows:
+                - start: "2026-10-16T16:04:39-07:00"
+                  end: "2026-10-16T19:25:47-07:00"
+            - harness: codex
+              id: 01a146f9-ac61-7822-bc08-cf9d7136b471
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 5d6d82af37c5a841eed73228ff16cf3920b542368a2670b4bc05a436fe3c8a5a
+              started: "2026-10-16T23:08:50.276Z"
+              spawned: true
+              bytes: 569640
+              windows:
+                - start: "2026-10-16T23:08:50.276Z"
+                  end: "2026-10-16T19:25:47-07:00"
+            - harness: codex
+              id: 01a1478c-d17c-7823-9d2b-ffd0b50bb137
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 48644a4bd898c99f9e4215cbacd3f384979caae54edab9b4603222d1cddd6cb5
+              started: "2026-10-17T01:49:33.55Z"
+              spawned: true
+              bytes: 709976
+              windows:
+                - start: "2026-10-17T01:49:33.55Z"
+                  end: "2026-10-16T19:25:47-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 0.042216666666666666
+        cuts:
+            - dispatched: "2026-10-16T18:11:06-07:00"
+              finalized: "2026-10-16T18:12:54-07:00"
+              finalizing: false
+      "n": 2
+      timestamp: "2026-10-16T19:28:14-07:00"
+      dispatched: "2026-10-16T19:26:03-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: not-addressed
+          note: 'The local-adapter override and reachable admission/proposal guards correct the original mismatch for recognized declarations; removing those fixes produces regression failures. However, collaboration_value.lua:128-173 recognizes only column-zero field lines. Frontmatter containing either `  collaboration-mode: chat` or `{collaboration-mode: chat}` returns no value and no error. Direct execution confirms resolve marks the body editable discussion and validate_edits permits replacing its text. Thus the promised chat protection remains incomplete. For family prompt-adapter-capability-contract, state and enforce the general rule: distinguish genuinely absent routing from unsupported or malformed declarations; decode supported representations and visibly refuse unsupported ones. Enumerate declaration representations and add parser, admission, and real-write regression coverage. ARCH-PURPOSE, ARCH-SECURE.'
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: The pinned issue diff adds Done-when lines 37-39 requiring old-v1 sync and --check success, with a notice from each command. This matches scripts/sync-review-protocol.py:156-158 and test_old_v1_cli_reports_absent_collaboration_modes at tests/unit/review_protocol_export_test.py:296-305, which exercises both commands and passed. This is a prose-only acceptance correction.
+          round: 2
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#362 (boundary-review)
@@ -106,7 +201,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-2** [Important] `acceptance-contract-coverage` (kind: defect) Done-when omits the newly required old-export notice
   workshop/issues/000362-review-protocol-sync-accepts-s2-s-collaboration-modes-export-member.md:33-36 only requires tests and synchronization for an export containing collaboration modes. The revision at lines 133-135 adds a required notice when the member is absent, implemented in scripts/sync-review-protocol.py:156-158. The entire uncovered acceptance family is old-v1 success plus the notice during normal sync and --check; tests/unit/review_protocol_export_test.py:296-305 already exercises both. Update Done-when to require those outcomes explicitly.
 
+## Round 2 — 2026-10-16T19:28:14-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — not-addressed — The local-adapter override and reachable admission/proposal guards correct the original mismatch for recognized declarations; removing those fixes produces regression failures. However, collaboration_value.lua:128-173 recognizes only column-zero field lines. Frontmatter containing either `  collaboration-mode: chat` or `{collaboration-mode: chat}` returns no value and no error. Direct execution confirms resolve marks the body editable discussion and validate_edits permits replacing its text. Thus the promised chat protection remains incomplete. For family prompt-adapter-capability-contract, state and enforce the general rule: distinguish genuinely absent routing from unsupported or malformed declarations; decode supported representations and visibly refuse unsupported ones. Enumerate declaration representations and add parser, admission, and real-write regression coverage. ARCH-PURPOSE, ARCH-SECURE.
+- BR-2 — addressed — The pinned issue diff adds Done-when lines 37-39 requiring old-v1 sync and --check success, with a notice from each command. This matches scripts/sync-review-protocol.py:156-158 and test_old_v1_cli_reports_absent_collaboration_modes at tests/unit/review_protocol_export_test.py:296-305, which exercises both commands and passed. This is a prose-only acceptance correction.
+
 ## Open findings
 
 - **BR-1** [Critical] `prompt-adapter-capability-contract` (kind: defect) The imported collaboration contract requires operations the local adapter cannot perform
-- **BR-2** [Important] `acceptance-contract-coverage` (kind: defect) Done-when omits the newly required old-export notice

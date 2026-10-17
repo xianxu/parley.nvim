@@ -49,9 +49,9 @@ S2 M1 (ops `universal-agent-input-interface/design.side/01-s2-section-modes.md`,
 
 Approved local-adapter correction: see [implementation plan](../plans/000362-review-protocol-sync-accepts-s2-s-collaboration-modes-export-member-plan.md).
 
-- [x] Implement pure collaboration frontmatter/section resolution and protected chat ranges.
+- [ ] Implement pure collaboration frontmatter/section resolution and protected chat ranges.
 - [x] Add local admission/notices and a proposal guard; test default questions, explicit collaboration/chat, invalid routing and resubmission.
-- [x] Update the local adapter/docs and re-run full verification and close review.
+- [ ] Update the local adapter/docs and re-run full verification and close review.
 
 - [x] Extend pure validation/rendering for an optional singleton at the fixed
   collaboration-modes.md path; compose round, grammar, collaboration modes.
@@ -248,3 +248,17 @@ side-doc creation, multi-file IO and previous-read baselines stay with the
 agent-side skill. Parley resolves frontmatter/sections before generation and
 protects chat bytes at its tool-execution seam; no model-authored notice or
 new reply channel. The durable plan records this approved implementation.
+
+### 2026-10-16 — BR-1 declaration recognition completion
+
+The full reviewer independently verified local policy/permission regressions
+and disposed BR-2, but reproduced root declaration forms silently becoming
+absent routing. Refine the existing unsupported-input rule: only a genuinely
+absent collaboration-mode in a recognizable root block mapping defaults to
+discussion. Decode uniform root indentation and quoted/escaped root keys;
+visibly refuse unsupported root flow maps, sequences, explicit/complex keys,
+root tags/aliases/anchors and merge keys, including multiline forms. Nested
+collaboration-mode under an unrelated field is not root routing. Keep all
+canonical scalar/block/flow field values. Cover the declaration matrix in
+pure parsing, local admission and real tool effects. This fixes the existing
+chat-protection invariant, adding no routing mode, IO or baseline.
