@@ -115,6 +115,8 @@ After code verification: close on SHIP and report green to TL. Do not stage; :0 
 
 - Final band replay `/tmp/parley353-eligibility-band-final.log` passes32/32 after the split-ownership fix, zero failures/errors, no survivors. Native reminder18/18 and retained-history45/45 evidence above remains applicable; full required suite is next on the pushed fix head.
 
+- 2026-10-17 post-BR5 required suite passed on `a781eae062b35246faad709e5c3395b914f5f2ba`:462/462 spec files,774 lint files with zero warnings/errors, no surviving test processes. Retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/a781eae062b35246faad709e5c3395b914f5f2ba/suite.log`, SHA256 `e19a36f1b8905111ed8565c977ffcc28cce8c83c2b3555aedecd9c7a5f29b256`. TL observed the green status and directed re-close then normal-gated landing without staging (submitted receipt3496528e-e3b1-43d7-87bf-4caa9a58a4d3). BR5 rejection-category tests, Back retention and native split reminder ordering are included in this run. A subsequent evidence-only Log commit preserves this result before re-close; long review waits are handed back to the hub.
+
 ## Revisions
 
 ### 2026-10-16 — #354 persisted-trail coordination
