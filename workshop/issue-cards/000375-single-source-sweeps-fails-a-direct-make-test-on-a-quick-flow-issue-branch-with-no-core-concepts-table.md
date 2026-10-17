@@ -1,6 +1,6 @@
 ---
 id: 000375
-status: working
+status: codecomplete
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.57
+tracker:
+    version: 1
+    completion:
+        token: close-618c109da165
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 847a807c5ffd5ede0730be6f61e19484927db9db
+        evidence_commit: 624e8586c111dc1654ebc5e2d88da2abdc73371a
 ---
 
 # single_source_sweeps fails a direct make test on a quick-flow issue branch with no Core-concepts table
