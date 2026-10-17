@@ -772,3 +772,8 @@ point as well as internal helpers before calling the family complete.
   across three subagents, each given disjoint files and the same rule. Fill in a
   prompt's placeholders before sending it: one went out with a literal
   LIST_PLACEHOLDER, and the agent rightly refused to guess.
+- A key remap (#377) has to sweep every spelling users read, not just `<M-x>`:
+  `option+i`, `Option+i`, Alt+i and ⌥i in tutorials, READMEs and in-repo
+  copies. `git grep -E` has no `\b`, so a pattern that relies on it quietly
+  matches nothing; use `git grep -P`. Tutorial prose is now checked against the
+  registry in `keybinding_agreement_spec`.
