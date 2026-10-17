@@ -66,4 +66,11 @@ else:
     sys.exit(2)
 staged = root / ('vms.json.%d' % os.getpid())
 staged.write_text(json.dumps(state))
+# A spec seam: hold the lock, the new state staged and unpublished, until the
+# named file exists, so a spec can overlap a second call or read meanwhile.
+hold = os.getenv('FAKE_TART_HOLD')
+if hold:
+    pathlib.Path(hold + '.held').touch()
+    while not os.path.exists(hold):
+        time.sleep(0.01)
 os.replace(staged, statefile)

@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local repository = vim.fn.getcwd()
 describe('disposable packaging VM ownership', function()
     local root
@@ -140,6 +141,44 @@ describe('disposable packaging VM ownership', function()
         assert.equals('running', state()[manifest.vm])
         assert.equals(0, run('cleanup').code)
     end)
+    -- #376: overlapping fake calls. One call is held with its new state staged
+    -- but unpublished (FAKE_TART_HOLD); meanwhile the spec reads and a second
+    -- call runs.
+    describe('overlapping tart calls', function()
+        local function fake(args, extra)
+            local env = {PATH = vim.env.PATH, FAKE_TART_STATE = root .. '/fake'}
+            for key, value in pairs(extra or {}) do env[key] = value end
+            return vim.system(vim.list_extend({repository .. '/tests/fixtures/fake_tart'}, args),
+                {text = true, clear_env = true, env = env})
+        end
+        local function held(hold)
+            assert.is_true(vim.wait(arrival.MS, function() return vim.uv.fs_stat(hold .. '.held') ~= nil end, 10))
+        end
+        before_each(function() assert.equals(0, fake({'list'}):wait(arrival.MS).code) end)
+
+        it('a reader never sees a torn state file', function()
+            local hold = root .. '/hold'
+            local first = fake({'clone', 'image', 'a'}, {FAKE_TART_HOLD = hold})
+            held(hold)
+            assert.same({['tools-test'] = 'running'}, state())
+            vim.fn.writefile({}, hold)
+            assert.equals(0, first:wait(arrival.MS).code)
+            assert.same({['tools-test'] = 'running', a = 'stopped'}, state())
+        end)
+
+        it('a call overlapping another loses neither update', function()
+            local hold = root .. '/hold'
+            local first = fake({'clone', 'image', 'a'}, {FAKE_TART_HOLD = hold})
+            held(hold)
+            local second = fake({'clone', 'image', 'b'})
+            vim.wait(200) -- absence: the second call must wait for the held one
+            vim.fn.writefile({}, hold)
+            assert.equals(0, first:wait(arrival.MS).code)
+            assert.equals(0, second:wait(arrival.MS).code)
+            assert.same({['tools-test'] = 'running', a = 'stopped', b = 'stopped'}, state())
+        end)
+    end)
+
     it('resumes authenticated live evidence without treating pending auth as success', function()
         assert.equals(75, run('prepare').code)
         assert.equals(0, run('fake', {FAKE_TART_PROBE_STATUS = 'fake_verified'}).code)

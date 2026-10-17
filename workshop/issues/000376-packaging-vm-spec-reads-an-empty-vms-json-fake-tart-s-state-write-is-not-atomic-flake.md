@@ -47,7 +47,10 @@ Measured cause: scripts/test-parley-vm.py starts `tart run` detached (`subproces
 - [x] Regression first: "boot waits for a slow detached run before it reports ready", with `FAKE_TART_RUN_DELAY=1.5`. Red before the fix: `boot` returned 0 with the VM not running.
 - [x] fake_tart holds one exclusive `flock` (vms.lock) over each read-modify-write and writes through a temp file plus `os.replace`. `exec` on a VM that is not running exits 1, as real tart does.
 - [x] packaging_vm_spec 18/18 on three runs. With the `exec` check removed, the regression fails. fixture_lifecycle_spec 4/4. luacheck clean.
-- [x] Not pinned deterministically: the lock and the atomic replace. They are correct by construction; a race test for them would itself be timing-dependent.
+- [x] Close review BR-1: Done-when clause 2 asked for a deterministic regression for the atomic write. A spec seam, `FAKE_TART_HOLD`, holds a call with its new state staged but unpublished, under the lock, until the spec releases it. Two specs use it:
+  - "a reader never sees a torn state file": the spec reads during the hold and gets the complete old state. Red under a mutation to the old truncate-then-write.
+  - "a call overlapping another loses neither update": a second clone during the hold waits, and both land. Red with the `flock` removed.
+  - packaging_vm_spec 20/20, and the arrival arch test is green.
 
 ## Log
 
