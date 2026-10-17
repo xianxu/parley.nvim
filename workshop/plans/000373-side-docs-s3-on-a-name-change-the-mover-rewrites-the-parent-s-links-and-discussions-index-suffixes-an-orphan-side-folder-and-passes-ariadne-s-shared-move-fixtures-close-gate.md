@@ -158,6 +158,57 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 03bad37a-66c1-45bd-beab-76164b8f931d
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 4
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/32eb3c4dd265a4e8
+            reviewed_head: 2d1b280e0fdf980aa904c41476d795db59cbd948
+            slot: parley.nvim:1
+            requested_at: "2026-10-17T18:59:11.141652Z"
+          phase: finished
+          pid: 95463
+          started_at: "2026-10-17T18:59:11.235995Z"
+          finished_at: "2026-10-17T19:00:09.436209Z"
+          session_id: 01a14b3b-79e5-7683-9cfa-468659429bca
+          outcome: returned
+      "n": 4
+      timestamp: "2026-10-17T12:00:09-07:00"
+      dispatched: "2026-10-17T11:59:11-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Retained disposition; paragraph-wide inline-code preservation regressions pass through both rewrite APIs.
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: Retained disposition; expected-file and ancestor preflight regressions pass and verify no mutation on refusal.
+          round: 4
+        - id: BR-3
+          disposition: addressed
+          note: Retained disposition; malformed destination scale regressions pass through both complete rewrites.
+          round: 4
+        - id: BR-4
+          disposition: addressed
+          note: Retained disposition; both scanners consume markdown_blocks, and boundary-preservation regressions pass.
+          round: 4
+        - id: BR-5
+          disposition: addressed
+          note: atlas/modes/session_sync.md:245–276 now documents observations, ordered effects, refusal rules, orphan_destination, and the M1/M2 distinction; these match document_move_plan.lua:284–444 and the existing runtime call at document_move.lua:368.
+          round: 4
+      boundary: M1
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 2d1b280e0fdf980aa904c41476d795db59cbd948
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#373 (boundary-review)
@@ -203,6 +254,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-5** [Important] `architecture-documentation` (kind: defect) Atlas update appears missing for the expanded move projection contract
   lua/parley/document_move_plan.lua:284 introduces rewrite_side_references, while :366 and :438 add orphan-displacement and parent-rewrite effects. The atlas changes describe fixture export only; atlas/modes/session_sync.md:237 still describes the projection as side/backlink effects. Document the new observations, effect ordering, refusal rules and orphan_destination result, explicitly distinguishing M1 projection support from M2 runtime execution.
 
+## Round 4 — 2026-10-17T12:00:09-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Retained disposition; paragraph-wide inline-code preservation regressions pass through both rewrite APIs.
+- BR-2 — addressed — Retained disposition; expected-file and ancestor preflight regressions pass and verify no mutation on refusal.
+- BR-3 — addressed — Retained disposition; malformed destination scale regressions pass through both complete rewrites.
+- BR-4 — addressed — Retained disposition; both scanners consume markdown_blocks, and boundary-preservation regressions pass.
+- BR-5 — addressed — atlas/modes/session_sync.md:245–276 now documents observations, ordered effects, refusal rules, orphan_destination, and the M1/M2 distinction; these match document_move_plan.lua:284–444 and the existing runtime call at document_move.lua:368.
+
 ## Open findings
 
-- **BR-5** [Important] `architecture-documentation` (kind: defect) Atlas update appears missing for the expanded move projection contract
+(none — every finding has been disposed)

@@ -278,3 +278,86 @@ findings:
    Add a `## Revisions` entry assigning documentation of the pure projection contract to M1; retain runtime recovery and operator documentation in M2.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"315dee3a-1a63-451f-a7f6-4d3104d6ec13","repository":"github.com/xianxu/parley.nvim","issue_id":"000373","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/4630b9b589dfe37b","reviewed_head":"3485d3a5300a44300b1a93219e3549b8630acc22","slot":"parley.nvim:1","requested_at":"2026-10-17T18:55:37.554347Z"},"phase":"finished","pid":63203,"started_at":"2026-10-17T18:55:37.642889Z","finished_at":"2026-10-17T18:57:13.930791Z","session_id":"01a14b38-378e-7720-8013-ea0d87c3fbd8","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T12:00:09-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 373 — side docs S3: on a name change the mover rewrites the parent's links and discussions index, suffixes an orphan .side folder, and passes ariadne's shared move fixtures |
+| repo | parley.nvim |
+| issue file | workshop/issues/000373-side-docs-s3-on-a-name-change-the-mover-rewrites-the-parent-s-links-and-discussions-index-suffixes-an-orphan-side-folder-and-passes-ariadne-s-shared-move-fixtures.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | f9a4a11cde712b47ef25d94e9debffd874e298a7..2d1b280e0fdf980aa904c41476d795db59cbd948 |
+| command | sdlc milestone-close --issue 373 --milestone M1 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-17T12:00:09-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned M1 range satisfies the revised export-and-projection boundary. BR-5’s atlas correction matches the implementation and clearly separates projection capabilities from M2 runtime execution. No new blocking findings.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Retained disposition; paragraph-wide inline-code preservation regressions pass through both rewrite APIs.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Retained disposition; expected-file and ancestor preflight regressions pass and verify no mutation on refusal.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Retained disposition; malformed destination scale regressions pass through both complete rewrites.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Retained disposition; both scanners consume markdown_blocks, and boundary-preservation regressions pass.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      atlas/modes/session_sync.md:245–276 now documents observations, ordered effects, refusal rules, orphan_destination, and the M1/M2 distinction; these match document_move_plan.lua:284–444 and the existing runtime call at document_move.lua:368.
+```
+
+1. **Strengths**
+
+   - Manifest-driven fixtures compare complete resulting paths and bytes against both exported after-trees.
+   - Shared `markdown_blocks` rules prevent preservation and occurrence scanning from maintaining separate boundary definitions.
+   - Export preflight validates expected file shapes before writes; tests check preservation of existing output on refusal.
+   - Atlas documentation accurately states that orphan execution and parent synchronization remain M2 work.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None remaining.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   Independently passed 44 projection cases, 20 reference cases, one shared-fixture case covering both exported trees, 10 review-loading cases, and 23 Python exporter tests. Whitespace checks passed; test process cleanup and sentinel checks passed. The checkout remains clean. I did not rerun the full suite.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — Pass:** shared path, scalar, edit, and block helpers.
+   - **ARCH-PURE — Pass:** projection logic remains free of IO; fixture loading is classified as integration.
+   - **ARCH-PURPOSE — Pass:** M1 delivers export and projection scope under the explicit sequencing revision.
+   - **ARCH-MOCK — Pass:** no new external runtime dependency or bypass of existing seams.
+   - **ARCH-CONSTRAINTS — Pass:** bounded observations and malformed-input scale tests cover the changed synchronous scanning.
+   - **ARCH-SECURE — Pass:** manifest validation and output preflight reject unsafe paths and file shapes.
+   - **ARCH-ORDER — Pass:** projection effect ordering is explicit; durable v2 transitions remain assigned to M2.
+   - **ARCH-FUNERAL — Pass:** generated snapshots have explicit stale-output handling; orphan displacement preserves existing content.
+
+7. **Plan revision recommendations:** None required. Existing revisions explain the M2 reducer deferral and integration-test placement.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"03bad37a-66c1-45bd-beab-76164b8f931d","repository":"github.com/xianxu/parley.nvim","issue_id":"000373","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/32eb3c4dd265a4e8","reviewed_head":"2d1b280e0fdf980aa904c41476d795db59cbd948","slot":"parley.nvim:1","requested_at":"2026-10-17T18:59:11.141652Z"},"phase":"finished","pid":95463,"started_at":"2026-10-17T18:59:11.235995Z","finished_at":"2026-10-17T19:00:09.436209Z","session_id":"01a14b3b-79e5-7683-9cfa-468659429bca","outcome":"returned"}] -->
