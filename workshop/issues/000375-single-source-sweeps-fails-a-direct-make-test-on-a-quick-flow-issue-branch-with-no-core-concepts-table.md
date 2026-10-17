@@ -48,6 +48,7 @@ When the current issue's docs carry no Core-concepts table (a quick-flow issue),
 ## Log
 
 ### 2026-10-17
+- 2026-10-17: closed — Round 2 for BR-1/BR-2: concept_rows returns every Status-table data row; the plan-to-code case filters backtick rows itself; the code-to-table case reads tables through concept_rows and is pending with no table; no docs has its own reason. Real docs: #330 1 table/2 rows, #331 1/1, 000209 plan 2/9, 000354 plan 2/6. Focused single_source_sweeps 28/0 with both directions pending on this quick-flow branch; luacheck clean. Earlier: direct make -k test on c6708d6f had single_source_sweeps PASS and one unrelated flake (packaging_vm empty vms.json, filed #376, retained log); unchanged sdlc local-check rerun on c6708d6f green (3m33s). sdlc merge reruns the suite on this head. Test-only change.; review verdict: SHIP
 
 ### 2026-10-17
 
