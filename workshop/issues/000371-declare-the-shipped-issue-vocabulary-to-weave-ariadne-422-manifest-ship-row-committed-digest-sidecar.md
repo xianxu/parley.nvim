@@ -1,13 +1,21 @@
 ---
 id: 000371
-status: open
+status: working
 deps: [ariadne#422]
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'bf2eece3a278182c90588a6e42fd60dce2d66691' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '0f7a48d1beeca906e3d480192341afc99bb3f636' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-17T06:39:45-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Declare the shipped issue vocabulary to weave (ariadne#422): manifest ship row, committed digest sidecar

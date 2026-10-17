@@ -22,6 +22,15 @@
 # parley-only.
 internal  prose AGENTS.local.md
 
+# ── Shipped generated outputs (#371, ariadne#422) ─────────────────────────────
+# parley commits its issue vocabulary on purpose (#208): users install the plugin
+# from GitHub through a plugin manager and never run weave, so the plugin reads
+# construct/generated/vocabulary/issue.json from the installed tree. The `ship`
+# row has weave write its digest sidecar (issue.json.weave-sha256, committed
+# beside it), so a cold checkout regenerates the file after an ariadne
+# vocabulary change instead of refusing it, and a hand edit is still refused.
+internal ship construct/generated/vocabulary/issue.json
+
 # ── Skills ────────────────────────────────────────────────────────────────────
 # parley declares NO `skill` rows. The adapted (superpowers-*) and shared local
 # (xx-*) skills are inherited from ariadne via the `skill construct/local` /
