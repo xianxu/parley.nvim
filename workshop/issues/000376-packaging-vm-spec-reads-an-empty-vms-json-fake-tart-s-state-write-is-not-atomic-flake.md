@@ -55,3 +55,4 @@ Measured cause: scripts/test-parley-vm.py starts `tart run` detached (`subproces
 ## Log
 
 ### 2026-10-17
+- 2026-10-17: closed — BR-1 addressed: deterministic regressions via the FAKE_TART_HOLD seam. "a reader never sees a torn state file" fails under a mutation to the old truncate-then-write; "a call overlapping another loses neither update" fails with the flock removed. "boot waits for a slow detached run before it reports ready" was red before the fix (boot returned 0, VM not running) and fails with the exec-needs-running check removed. packaging_vm_spec 20/20; arrival arch test and fixture_lifecycle green; luacheck clean. sdlc merge runs the full suite on this head. Test-fixture-only change.; review verdict: SHIP
