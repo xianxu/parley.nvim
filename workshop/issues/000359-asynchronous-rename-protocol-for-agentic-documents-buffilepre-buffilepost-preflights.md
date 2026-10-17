@@ -41,13 +41,13 @@ Let the rename proceed without waiting, and reconcile the registry afterwards. T
 
 ## Plan
 
-The durable plan, with the state projection table: [000359 plan](../plans/000359-asynchronous-rename-protocol-for-agentic-documents-buffilepre-buffilepost-preflights-plan.md). It is waiting for the TL's review, and its code waits for #357 to land.
+The durable plan, with the state projection table: [000359 plan](../plans/000359-asynchronous-rename-protocol-for-agentic-documents-buffilepre-buffilepost-preflights-plan.md). The TL approved it on 2026-10-16, and it was built after #357 landed.
 
-- [ ] Task 1: `move_preflight` and `move_outcome` (pure)
-- [ ] Task 2: the movers stop waiting
-- [ ] Task 3: `BufFilePre` and `BufFilePost` stop waiting, except for an overwrite
-- [ ] Task 4: `document_move.begin` and `project` accept a destination left to Couch
-- [ ] Task 5: atlas, README, close
+- [x] Task 1: `move_preflight` and `move_outcome` (pure)
+- [x] Task 2: the movers stop waiting
+- [x] Task 3: `BufFilePre` and `BufFilePost` stop waiting, except for an overwrite
+- [x] Task 4: `document_move.begin` and `project` accept a destination left to Couch
+- [x] Task 5: atlas, README, close
 
 ## Log
 

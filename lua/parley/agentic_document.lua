@@ -523,11 +523,11 @@ function M.submit(buf)
     return true
 end
 
--- The move and rename preflights must answer inline (BufFilePre decides before
--- Neovim renames), so these block; asynchronous moves are #359. Before anything
--- moved the one recovery is running the move again (#357); BufFilePost, where
--- the buffer is already renamed, says to rename back first. The registry's own
--- timer is set past this wait, so this one decides.
+-- The one inline Couch question a move still asks (#359): BufFilePost's check of
+-- an existing NEW before a :saveas! overwrite, since Neovim writes it before
+-- Couch could refuse. The buffer is already renamed there, so its recovery
+-- says to rename back first. The registry's own timer is set past this wait,
+-- so this one decides.
 local function bounded_request(operation, arguments)
     local ms = config_ms("agentic_move_timeout_ms")
     local result

@@ -95,57 +95,57 @@ The rows that stay synchronous are 8 and 9, an explicit overwrite of an existing
 
 **Files:** Modify `lua/parley/document_move_plan.lua` and `tests/unit/document_move_plan_spec.lua`.
 
-- [ ] Write failing tests, one per row of the table: rows 1–4 and 8–9 for `move_preflight`, rows 5–7 for `move_outcome`. Include a test that `move_outcome`'s band texts and actions match the table verbatim.
-- [ ] Run `make test-spec SPEC=tests/unit/document_move_plan_spec.lua`. Expected: FAIL (functions missing).
-- [ ] Implement both functions as table-driven code with no IO.
-- [ ] Run the spec. Expected: PASS.
-- [ ] Commit.
+- [x] Write failing tests, one per row of the table: rows 1–4 and 8–9 for `move_preflight`, rows 5–7 for `move_outcome`. Include a test that `move_outcome`'s band texts and actions match the table verbatim.
+- [x] Run `make test-spec SPEC=tests/unit/document_move_plan_spec.lua`. Expected: FAIL (functions missing).
+- [x] Implement both functions as table-driven code with no IO.
+- [x] Run the spec. Expected: PASS.
+- [x] Commit.
 
 ### Task 2: the movers stop waiting (W1, W2, W3 in `move_membership` and `move_path`)
 
 **Files:** Modify `lua/parley/agentic_document.lua` and `tests/integration/agentic_document_spec.lua`.
 
-- [ ] Write failing tests, all with a slow registry (`FAKE_COUCH_REGISTRY_DELAY=3`, past both deadlines):
+- [x] Write failing tests, all with a slow registry (`FAKE_COUCH_REGISTRY_DELAY=3`, past both deadlines):
   - A registered document's `move_path` returns `new_path` in under 500 ms, the file at NEW. The band clears once the 3 s rename lands. (Rows 1 and 5.)
   - A document whose identity is unknown, because the open-time lookup is held: `move_path` returns row 3's error in under 500 ms, and nothing moved. The rerun after the lookup lands moves it.
   - A legacy session file: row 4, then the rerun moves it.
   - A stale registration at NEW (register NEW, then delete its file): the move lands on disk, and the band shows row 6, its text naming the literal NEW path in the runnable `couch --session-sync forget NEW` command. After `forget NEW` and a reopen, the journal finishes.
-- [ ] Run them. Expected: FAIL (today's code blocks, or returns #357's run-it-again text after the wait).
-- [ ] Implement:
+- [x] Run them. Expected: FAIL (today's code blocks, or returns #357's run-it-again text after the wait).
+- [x] Implement:
   - `move_membership` decides by `move_preflight` with no wait. A refusal starts the async lookup or register and returns at once.
   - `move_path` drops its destination lookup. After `advance_move` it returns when `document_moved` holds, and renders `move_outcome` into the band on the async result.
-- [ ] Run them. Expected: PASS. Run the whole of `agentic_document_spec`: #357's move cases change from "waits, then run it again" to "refuses at once". Update them, and record each change in the Log.
-- [ ] Commit.
+- [x] Run them. Expected: PASS. Run the whole of `agentic_document_spec`: #357's move cases change from "waits, then run it again" to "refuses at once". Update them, and record each change in the Log.
+- [x] Commit.
 
 ### Task 3: `BufFilePre` and `BufFilePost` stop waiting, except for an overwrite
 
 **Files:** Modify `lua/parley/agentic_document.lua` and `tests/integration/agentic_document_spec.lua`.
 
-- [ ] Write failing tests, all under a slow registry:
+- [x] Write failing tests, all under a slow registry:
   - `:saveas NEW` (NEW absent) of a registered document completes in under 500 ms and lands as row 1.
   - `:file NEW` of an unknown-identity document refuses at once with row 3, and the buffer keeps its name.
   - `:saveas! EXISTING`, where EXISTING is registered to another document, is still refused before anything is written. The other file is unchanged (row 9, today's test kept).
   - `:saveas! EXISTING`, where EXISTING is plain, succeeds within the move deadline (row 8).
-- [ ] Run them. Expected: FAIL.
-- [ ] Implement:
+- [x] Run them. Expected: FAIL.
+- [x] Implement:
   - `BufFilePre` decides by `move_preflight`. It refuses at once for rows 3 and 4, and has no `bounded_request` except where NEW exists. Neovim gives `BufFilePre` no NEW name, so it reads NEW in `BufFilePost` and decides the overwrite there.
   - `BufFilePost` calls `bounded_request` only for `new_exists`, which is `:saveas!` onto an existing file. Otherwise it begins the journal with the destination left to Couch.
-- [ ] Run them. Expected: PASS. Then run the agentic, owned_move, lifetime, band and session_sync specs.
-- [ ] Commit.
+- [x] Run them. Expected: PASS. Then run the agentic, owned_move, lifetime, band and session_sync specs.
+- [x] Commit.
 
 ### Task 4: `document_move.begin` accepts a destination left to Couch
 
 **Files:** Modify `lua/parley/document_move.lua`, `lua/parley/document_move_plan.lua` (`project`'s `destination_registered` observation, line 208), `tests/integration/document_move_spec.lua`, `tests/unit/document_move_plan_spec.lua`.
 
-- [ ] Write failing tests:
+- [x] Write failing tests:
   - `begin` with `destination_registered = "authority"` (new) journals the move, and a `target-conflict` metadata reply leaves the journal pending with the conflict as its error. Today `begin` refuses unless the destination is confirmed absent.
   - `project` with `"authority"` treats the registry as undecided rather than occupied. The side-directory check stays as it is.
-- [ ] Implement: `destination_registered` accepts `false` (confirmed absent, as today) or `"authority"` (Couch's rename decides), in both `begin` and `project`. Recovery is unchanged: replaying the rename after a `forget` succeeds.
-- [ ] Run the journal and move specs, then commit.
+- [x] Implement: `destination_registered` accepts `false` (confirmed absent, as today) or `"authority"` (Couch's rename decides), in both `begin` and `project`. Recovery is unchanged: replaying the rename after a `forget` succeeds.
+- [x] Run the journal and move specs, then commit.
 
 ### Task 5: atlas, README, close
 
-- [ ] Rewrite the move paragraph of `atlas/modes/session_sync.md`: the state projection table in short, and that only an overwrite waits. Rewrite the README's move sentence to match.
+- [x] Rewrite the move paragraph of `atlas/modes/session_sync.md`: the state projection table in short, and that only an overwrite waits. Rewrite the README's move sentence to match.
 - [ ] Run the full suite: `sdlc local-check run --name suite`.
 - [ ] Close the issue with `sdlc close`.
 
@@ -160,3 +160,8 @@ The rows that stay synchronous are 8 and 9, an explicit overwrite of an existing
   - (1) Row 2's residual risk is accepted: it equals today's external `mv`, and the background recheck catches it.
   - (2) There is no automatic forget. The change is that row 6's message shows the exact, pasteable command with the literal NEW path (`Run: couch --session-sync forget <NEW>, then reopen`), so the operator needs no agent. The row 6 test asserts that text.
   - The operator's actions reduce to five: nothing, run again, reopen, forget and reopen, rename back.
+- **2026-10-16, build.** Two additions the plan did not foresee, both needed for the approved rows:
+  - Row 5 lets the operator save while Couch's rename is out, but the journal proved the move by the original inode and bytes. A save then made rows 6 and 7 unrecoverable, so `document_move.record_write` now makes each save the witness (`steps.saved_after_move`).
+  - The row 6 label exceeds the band's 160-character cap for long paths, so NEW is named once ("the destination is registered to another document. Run: couch --session-sync forget NEW, then reopen"), and the notification carries the whole command.
+  - The rename request gets three submit deadlines, because the registry starts its timer at enqueue.
+
