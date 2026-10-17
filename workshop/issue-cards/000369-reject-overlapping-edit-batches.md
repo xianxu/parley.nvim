@@ -1,6 +1,6 @@
 ---
 id: 000369
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.04
+tracker:
+    version: 1
+    completion:
+        token: close-7b67c36d6ec5
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: be2bcad41a9e7bc27fa907b933c7e4993dd862aa
+        evidence_commit: 50e5d4a5e4992ea2030eab8dbd1907e0512ed412
 ---
 
 # Reject overlapping edit batches
