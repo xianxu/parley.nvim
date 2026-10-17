@@ -1,0 +1,19 @@
+---
+id: 000365
+status: open
+created: 2026-10-16
+updated: 2026-10-16
+estimate_hours:
+github_issue:
+severity: high
+---
+
+# Tests inherit the slot's live Couch environment and query the real registry (chat_move_spec failed when Couch flapped)
+
+## Problem
+
+The test suite inherits the running slot's live Couch environment: `COUCH_THREAD_SCOPE`, `COUCH_THREAD_TAG`, `COUCH_STORE_DIR` and `COUCH_ISOLATED_ROOT`. `couch.thread()` then returns a real thread, `agentic_document`'s `namespace()` is non-nil, and every spec that moves or opens a markdown file without its own fake asks the REAL `couch --session-sync` registry. Only `tests/helpers/sidecars.lua` scrubs these variables, and only around its own cases.
+
+Seen on 2026-10-16: `sdlc local-check run --name suite` on #358's 7ff97e39 failed three `chat_move_spec` cases at `:206`, with `move_chat_tree` returning "Invalid registry response". The non-timestamped child goes through `move_membership`'s registry lookup, and the live `couch` was flapping then (the CLI was briefly "command not found"). The spec passes alone, and on main the failure depends only on Couch's health. Log: `~/workspace/parley.nvim/.git/sdlc/test-stats/failed/c4be4a46c8f79f0408c42b10abcd1ed2.log`.
+
+This is worse than a flake. A spec that moves a document the live registry knows can mutate it, by rename or register, and results depend on the operator's real registry state.
