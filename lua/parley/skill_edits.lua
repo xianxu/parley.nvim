@@ -1,8 +1,8 @@
 -- parley.skill_edits — the single source of the batch-edit transform.
 --
 -- PURE: validate + apply a list of {old_string, new_string, explain} edits to a
--- content string. The propose_edits tool handler (IO wrapper) is its one
--- caller (ARCH-DRY).
+-- content string. Its one caller is tools/file_transform, which both
+-- propose_edits paths (the sync handler and the async builtin) go through (ARCH-DRY).
 
 local M = {}
 
@@ -57,10 +57,12 @@ function M.compute_edits(content, edits)
     for i = 2, #positioned do
         local before, edit = positioned[i - 1], positioned[i]
         if edit.pos == before.pos or edit.pos < before.pos + #before.old_string then
-            local first, second = math.min(before.index, edit.index), math.max(before.index, edit.index)
+            local first, second = before, edit
+            if first.index > second.index then first, second = second, first end
             return {
                 ok = false,
-                msg = ("edits #%d and #%d overlap: %s"):format(first, second, edit.old_string:sub(1, 60)),
+                msg = ("edits #%d (%s) and #%d (%s) overlap"):format(first.index, first.old_string:sub(1, 60),
+                    second.index, second.old_string:sub(1, 60)),
                 applied = {},
             }
         end

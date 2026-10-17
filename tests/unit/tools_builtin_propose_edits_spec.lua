@@ -121,7 +121,7 @@ describe("propose_edits inline backup", function()
             { old_string = "pha", new_string = "", explain = "e" },
         } })
         assert.is_true(result.is_error)
-        assert.matches("edits #1 and #2 overlap", result.content)
+        assert.matches("edits #1 (alpha) and #2 (pha) overlap", result.content, 1, true)
         assert.are.equal(0, vim.fn.filereadable(path .. ".parley-backup.1"))
         assert.are.equal("alpha\n# Chat\nsecret", read(path))
         vim.fn.delete(path)

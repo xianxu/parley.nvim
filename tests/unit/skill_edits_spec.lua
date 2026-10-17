@@ -75,7 +75,7 @@ describe("skill_edits.compute_edits overlapping spans", function()
 
     it("refuses the #369 reproducer instead of consuming the next heading", function()
         local res = refused("alpha\n# Chat\nsecret", { edit("alpha", "x"), edit("pha", "") })
-        assert.matches("edits #1 and #2 overlap", res.msg)
+        assert.equals("edits #1 (alpha) and #2 (pha) overlap", res.msg)
     end)
 
     -- Strategy: each overlap shape in both batch orders; the message names the
@@ -89,13 +89,15 @@ describe("skill_edits.compute_edits overlapping spans", function()
     for _, shape in ipairs(shapes) do
         it("refuses " .. shape[1] .. " in either order", function()
             refused(shape[2], { edit(shape[3], "X"), edit(shape[4], "Y") })
-            refused(shape[2], { edit(shape[4], "Y"), edit(shape[3], "X") })
+            local res = refused(shape[2], { edit(shape[4], "Y"), edit(shape[3], "X") })
+            -- Each snippet sits beside its own batch number, whichever comes first in the file.
+            assert.equals(("edits #1 (%s) and #2 (%s) overlap"):format(shape[4], shape[3]), res.msg)
         end)
     end
 
     it("names the overlapping pair among other edits", function()
         local res = refused("one two three", { edit("one", "1"), edit("three", "3"), edit("hree", "") })
-        assert.matches("edits #2 and #3 overlap", res.msg)
+        assert.equals("edits #2 (three) and #3 (hree) overlap", res.msg)
     end)
 
     it("still applies adjacent and disjoint spans", function()
