@@ -3,6 +3,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import random
 import subprocess
@@ -52,6 +53,122 @@ class ExportTest(unittest.TestCase):
         self.content[path] = data
         return path
 
+    def add_move_fixtures(self):
+        self.manifest['version'] = 2
+        for suffix in ('case.md', 'before/nested/old.md', 'after/nested/new.md'):
+            path = 'examples/move-test/' + suffix
+            data = ('FIXTURE ONLY: ' + suffix + '\n').encode()
+            self.manifest['members'].append(dict(role='fixture', name='move-test', path=path,
+                bytes=len(data), sha256=hashlib.sha256(data).hexdigest()))
+            self.content[path] = data
+
+    def test_v2_fixture_snapshot_and_provenance_exclude_fixture_prose_from_prompt(self):
+        self.add_move_fixtures()
+        snapshot = self.api.render_snapshot(self.manifest, self.content)
+        self.assertIn(b'version 2;', snapshot['SKILL.md'])
+        for member in self.manifest['members']:
+            if member['role'] == 'fixture':
+                self.assertEqual(self.content[member['path']], snapshot[member['path']])
+                self.assertNotIn(self.content[member['path']].strip(), snapshot['SKILL.md'])
+        self.assertEqual(set('modes/' + name + '.md' for name in NAMES),
+                         {path for path in snapshot if path.startswith('modes/')})
+
+    def test_fixture_version_names_and_exact_path_shapes(self):
+        self.add_move_fixtures()
+        self.api.validate_manifest(self.manifest)
+        mutations = [{'version': 1}, {'name': 'Other'}, {'name': '../bad'}, {'name': 'wrong'},
+            {'path': 'examples/move-test/other.md'}, {'path': 'examples/move-test/before'},
+            {'path': 'examples/move-test/after/'}, {'path': 'examples/move-test/case.md/extra'},
+            {'path': 'examples/move-test/before/../escape'}, {'path': 'examples/move-test//case.md'},
+            {'path': 'examples/move-test/before/./x'}, {'name': True},
+            *({'path': 'examples/move-test/before/a' + chr(code) + '.md'}
+              for code in (1, 9, 10, 13, 31, 127))]
+        for changes in mutations:
+            mutant = copy.deepcopy(self.manifest)
+            if 'version' in changes:
+                mutant.update(changes)
+            else:
+                mutant['members'][-1].update(changes)
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                self.api.validate_manifest(mutant)
+        mutant = copy.deepcopy(self.manifest)
+        mutant['members'].append(copy.deepcopy(mutant['members'][-1]))
+        with self.assertRaises(ValueError):
+            self.api.validate_manifest(mutant)
+
+    def test_fixture_corruption_refuses_before_any_output(self):
+        self.add_move_fixtures()
+        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+            base = Path(tmp).resolve()
+            source = self.make_source(base)
+            output = base / 'bundle'
+            for member in self.manifest['members']:
+                if member['role'] != 'fixture':
+                    continue
+                path = source / member['path']
+                original = path.read_bytes()
+                for data in (original[:-1], bytes([original[0] ^ 1]) + original[1:]):
+                    path.write_bytes(data)
+                    result = self.cli(source, output)
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn('mismatch: ' + member['path'], result.stderr)
+                    self.assertFalse(output.exists())
+                path.write_bytes(original)
+
+    def test_recursive_fixture_output_preflight_and_stale_refusal(self):
+        self.add_move_fixtures()
+        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+            base = Path(tmp).resolve()
+            source = self.make_source(base)
+            output = base / 'bundle'
+            result = self.cli(source, output)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(0, self.cli(source, output, True).returncode)
+            stale = output / 'examples/move-test/before/nested/stale.md'
+            stale.write_text('stale')
+            before = self.tree(output)
+            for check in (True, False):
+                result = self.cli(source, output, check)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn('extra: examples/move-test/before/nested/stale.md', result.stderr)
+                self.assertEqual(before, self.tree(output))
+            stale.unlink()
+            (output / 'round.md').write_text('would change')
+            victim = base / 'victim'
+            victim.mkdir()
+            for unsafe in ('examples/linked', 'examples/move-test/before/nested/linked', 'modes/linked'):
+                path = output / unsafe
+                path.symlink_to(victim, target_is_directory=True)
+                result = self.cli(source, output)
+                self.assertIn('unsafe output symlink', result.stderr)
+                self.assertEqual('would change', (output / 'round.md').read_text())
+                path.unlink()
+            fifo = output / 'examples/move-test/before/pipe'
+            os.mkfifo(fifo)
+            result = self.cli(source, output)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('special file', result.stderr)
+            self.assertEqual('would change', (output / 'round.md').read_text())
+
+    def test_output_ancestor_symlink_refuses_missing_and_existing_destinations(self):
+        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+            base = Path(tmp).resolve()
+            source = self.make_source(base)
+            real = base / 'real'
+            real.mkdir()
+            alias = base / 'alias'
+            alias.symlink_to(real, target_is_directory=True)
+            for check in (False, True):
+                result = self.cli(source, alias / 'new/bundle', check)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn('unsafe output symlink', result.stderr)
+                self.assertEqual([], list(real.iterdir()))
+            (real / 'bundle').mkdir()
+            result = self.cli(source, alias / 'bundle')
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('unsafe output symlink', result.stderr)
+            self.assertEqual([], list((real / 'bundle').iterdir()))
+
     def test_collaboration_modes_snapshot_follows_grammar_regardless_of_manifest_order(self):
         path = self.add_collaboration_modes()
         self.manifest['members'].reverse()
@@ -76,7 +193,7 @@ class ExportTest(unittest.TestCase):
     def test_collaboration_modes_cli_sync_and_check_track_owned_output(self):
         path = self.add_collaboration_modes()
         with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
-            base = Path(tmp)
+            base = Path(tmp).resolve()
             source = self.make_source(base)
             (source / 'examples').mkdir()
             (source / 'examples/private.md').write_text('not exported')
@@ -108,7 +225,7 @@ class ExportTest(unittest.TestCase):
     def test_collaboration_modes_corruption_and_output_symlinks_refuse_before_writes(self):
         path = self.add_collaboration_modes()
         with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
-            base = Path(tmp)
+            base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
             for data in (b'truncated', bytes([self.content[path][0] ^ 1]) + self.content[path][1:]):
@@ -132,7 +249,7 @@ class ExportTest(unittest.TestCase):
     def test_manifest_rejects_seeded_type_and_contract_mutations(self):
         self.api.validate_manifest(self.manifest)
         mutations = []
-        for key, bad in [('schema', 'other'), ('version', True), ('version', 2), ('members', {})]:
+        for key, bad in [('schema', 'other'), ('version', True), ('version', 3), ('members', {})]:
             mutant = copy.deepcopy(self.manifest)
             mutant[key] = bad
             mutations.append(mutant)
@@ -247,7 +364,7 @@ class ExportTest(unittest.TestCase):
         source.mkdir(parents=True)
         for path, data in self.content.items():
             destination = source / path
-            destination.parent.mkdir(exist_ok=True)
+            destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(data)
         grammar = source.parent / 'fix/review-convention.md'
         grammar.parent.mkdir()
@@ -267,7 +384,7 @@ class ExportTest(unittest.TestCase):
 
     def test_real_cli_check_never_writes_and_sync_preserves_local_files(self):
         with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
-            base = Path(tmp)
+            base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
             self.assertNotEqual(0, self.cli(source, output, True).returncode)
@@ -295,18 +412,19 @@ class ExportTest(unittest.TestCase):
 
     def test_old_v1_cli_reports_absent_collaboration_modes(self):
         with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
-            base = Path(tmp)
+            base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
             for check in (False, True):
                 result = self.cli(source, output, check)
                 self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn('export has no move fixtures', result.stderr)
                 self.assertIn('export has no collaboration-modes member; '
                               'the synced prompt has no collaboration modes', result.stderr)
 
     def test_cli_refuses_corrupt_source_and_unsafe_output_without_writes(self):
         with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
-            base = Path(tmp)
+            base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
             (source / 'adapters/file-edit.md').write_text('corrupt excluded adapter')
@@ -326,7 +444,7 @@ class ExportTest(unittest.TestCase):
 
     def test_cli_requires_canonical_resolved_grammar_and_preserves_existing_output(self):
         with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
-            base = Path(tmp)
+            base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
             self.assertEqual(0, self.cli(source, output).returncode)
@@ -351,6 +469,14 @@ class ExportTest(unittest.TestCase):
         self.api.validate_manifest(manifest)
         self.assertEqual(['collaboration-modes.md'],
                          [m['path'] for m in manifest['members'] if m['role'] == 'collaboration-modes'])
+        self.assertEqual(2, manifest['version'])
+        cases = {m['name'] for m in manifest['members'] if m['role'] == 'fixture'}
+        self.assertEqual({'move-rename', 'move-orphan'}, cases)
+        for case in cases:
+            paths = {m['path'] for m in manifest['members'] if m['role'] == 'fixture' and m['name'] == case}
+            self.assertIn(f'examples/{case}/case.md', paths)
+            for stage in ('before', 'after'):
+                self.assertTrue(any(p.startswith(f'examples/{case}/{stage}/') for p in paths))
         for member in manifest['members']:
             if member['role'] != 'adapter':
                 data = (output / member['path']).read_bytes()

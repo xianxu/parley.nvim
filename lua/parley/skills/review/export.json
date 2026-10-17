@@ -1,6 +1,6 @@
 {
   "schema": "ariadne/universal-review-export",
-  "version": 1,
+  "version": 2,
   "members": [
     {
       "role": "round",
@@ -18,8 +18,8 @@
     {
       "role": "collaboration-modes",
       "path": "collaboration-modes.md",
-      "bytes": 20746,
-      "sha256": "2ccd78b5c8834f42d9551c78b66c5aba9f2d83847a40436a373345f6a7ae64f3"
+      "bytes": 26647,
+      "sha256": "acc57418a1a07bdacb4de35287d916549a11eda93b09e980059c42210b67ce1a"
     },
     {
       "role": "adapter",
@@ -93,6 +93,118 @@
       "frontier": "off",
       "bytes": 500,
       "sha256": "1dd5a41723a959bbea5701edfaffa9bd246d3782f9f32f5d3724fe481d19faed"
+    },
+    {
+      "role": "fixture",
+      "name": "move-orphan",
+      "path": "examples/move-orphan/after/spec.md",
+      "bytes": 194,
+      "sha256": "8f22b0af9dcf5b54bc62b24dd60bc949878a596782cc69af9ffeef62f8956c50"
+    },
+    {
+      "role": "fixture",
+      "name": "move-orphan",
+      "path": "examples/move-orphan/after/spec.side/01-why-per-file.md",
+      "bytes": 310,
+      "sha256": "c8b9d0155b94ef56616d6adde838b81b1dddf288b3ab861001f5b1e83a647745"
+    },
+    {
+      "role": "fixture",
+      "name": "move-orphan",
+      "path": "examples/move-orphan/after/spec.side/02-sections.md",
+      "bytes": 276,
+      "sha256": "c518617d33dfcc99f4ba29a2c4deb8b88b4d8dbd90d368e5953e6daec1606688"
+    },
+    {
+      "role": "fixture",
+      "name": "move-orphan",
+      "path": "examples/move-orphan/after/spec_1.side/01-older.md",
+      "bytes": 214,
+      "sha256": "770931c5aa0d5e08e3ca98e8c0856fd4b49003e4d16cba087ca4a9d4df3a5e90"
+    },
+    {
+      "role": "fixture",
+      "name": "move-orphan",
+      "path": "examples/move-orphan/before/design.md",
+      "bytes": 198,
+      "sha256": "ce2b61d77f75d0039d3901f3f78a44a560ad42aa3d556d4096e3a1b8e0bdab11"
+    },
+    {
+      "role": "fixture",
+      "name": "move-orphan",
+      "path": "examples/move-orphan/before/design.side/01-why-per-file.md",
+      "bytes": 314,
+      "sha256": "4735e298ccb24fb8b1eb7fe15b5e5b119d1f822f5410005caf7d1a6774231ec8"
+    },
+    {
+      "role": "fixture",
+      "name": "move-orphan",
+      "path": "examples/move-orphan/before/design.side/02-sections.md",
+      "bytes": 276,
+      "sha256": "c518617d33dfcc99f4ba29a2c4deb8b88b4d8dbd90d368e5953e6daec1606688"
+    },
+    {
+      "role": "fixture",
+      "name": "move-orphan",
+      "path": "examples/move-orphan/before/spec.side/01-older.md",
+      "bytes": 214,
+      "sha256": "770931c5aa0d5e08e3ca98e8c0856fd4b49003e4d16cba087ca4a9d4df3a5e90"
+    },
+    {
+      "role": "fixture",
+      "name": "move-orphan",
+      "path": "examples/move-orphan/case.md",
+      "bytes": 728,
+      "sha256": "e5bd2b67494a86bebaec5fbc4333395f6224a6040c66ddaf13dbeef34775b928"
+    },
+    {
+      "role": "fixture",
+      "name": "move-rename",
+      "path": "examples/move-rename/after/spec.md",
+      "bytes": 194,
+      "sha256": "8f22b0af9dcf5b54bc62b24dd60bc949878a596782cc69af9ffeef62f8956c50"
+    },
+    {
+      "role": "fixture",
+      "name": "move-rename",
+      "path": "examples/move-rename/after/spec.side/01-why-per-file.md",
+      "bytes": 310,
+      "sha256": "c8b9d0155b94ef56616d6adde838b81b1dddf288b3ab861001f5b1e83a647745"
+    },
+    {
+      "role": "fixture",
+      "name": "move-rename",
+      "path": "examples/move-rename/after/spec.side/02-sections.md",
+      "bytes": 276,
+      "sha256": "c518617d33dfcc99f4ba29a2c4deb8b88b4d8dbd90d368e5953e6daec1606688"
+    },
+    {
+      "role": "fixture",
+      "name": "move-rename",
+      "path": "examples/move-rename/before/design.md",
+      "bytes": 198,
+      "sha256": "ce2b61d77f75d0039d3901f3f78a44a560ad42aa3d556d4096e3a1b8e0bdab11"
+    },
+    {
+      "role": "fixture",
+      "name": "move-rename",
+      "path": "examples/move-rename/before/design.side/01-why-per-file.md",
+      "bytes": 314,
+      "sha256": "4735e298ccb24fb8b1eb7fe15b5e5b119d1f822f5410005caf7d1a6774231ec8"
+    },
+    {
+      "role": "fixture",
+      "name": "move-rename",
+      "path": "examples/move-rename/before/design.side/02-sections.md",
+      "bytes": 276,
+      "sha256": "c518617d33dfcc99f4ba29a2c4deb8b88b4d8dbd90d368e5953e6daec1606688"
+    },
+    {
+      "role": "fixture",
+      "name": "move-rename",
+      "path": "examples/move-rename/case.md",
+      "bytes": 670,
+      "sha256": "5795c10c41d81aa3f391263b7f611d7522c20d787dc12c1e743e499afb33c437"
     }
   ]
 }

@@ -4,12 +4,34 @@ local M = {}
 
 -- Preserve issues.lua's existing Markdown dialect and 1-based inclusive spans.
 function M.markdown_links(line)
-    local links, pos = {}, 1
+    local links, pos, url_end = {}, 1, nil
     while line do
-        local s, e, text, url = line:find("%[([^%]%z]*)%]%(([^)%z\n]+)%)", pos)
-        if not s then break end
-        links[#links + 1] = { text = text, url = url, start_col = s, end_col = e }
-        pos = e + 1
+        local first = line:find("[", pos, true)
+        if not first then break end
+        local closing = line:find("[%]%z]", first + 1)
+        if not closing then break end
+        -- All openings before this barrier share the same first label closing.
+        pos = closing + 1
+        if line:byte(closing) == 93 and line:byte(closing + 1) == 40 then
+            local url_start = closing + 2
+            -- Failed destinations may contain another opening whose label wraps
+            -- across the failing newline. Search those openings too, retaining
+            -- the next URL delimiter so repeated failures never rescan a suffix.
+            if not url_end or url_start > url_end then
+                url_end = line:find("[)%z\n]", url_start)
+            end
+            if not url_end then break end
+            if line:byte(url_end) == 41 and url_end > url_start then
+                links[#links + 1] = {
+                    text = line:sub(first + 1, closing - 1),
+                    url = line:sub(url_start, url_end - 1),
+                    start_col = first, end_col = url_end,
+                }
+                pos = url_end + 1
+            else
+                pos = url_start
+            end
+        end
     end
     return links
 end

@@ -215,8 +215,13 @@ round, grammar and the optional `collaboration-modes.md` member in that order.
 That role is a singleton in version 1; older exports without it remain valid
 and the sync CLI prints a notice that the resulting prompt lacks collaboration
 modes. The shipped snapshot includes it; package tests require its presence.
-It receives the same digest, output-preflight and freshness checks; examples
-are not exported. `local-adapter.md` stays Parley-owned and is appended last.
+Version 2 also exports the canonical move fixtures as `fixture` members under
+`examples/<case>/`; the sync snapshots and hashes those trees but excludes them
+from prompt composition and mode discovery. Version 1 remains accepted with a
+notice that move fixtures are absent. The shipped snapshot requires both move
+cases, and the mover's projection checks load their before/after bytes through
+the manifest. Recursive generated-output preflight rejects symlinks and special
+files; stale files are reported for explicit removal. `local-adapter.md` stays Parley-owned and is appended last.
 The Couch file-edit adapter is excluded from local composition. The mapped
 bundle fixture tests exercise deterministic output and validation failures.
 

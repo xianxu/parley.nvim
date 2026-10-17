@@ -12,6 +12,48 @@ describe("reference candidates", function()
         assert.same({}, candidates.markdown_links("[empty]() [unclosed](x"))
     end)
 
+    it("matches the legacy Markdown pattern across generated malformed byte streams", function()
+        local function legacy(bytes)
+            local links, pos = {}, 1
+            while true do
+                local first, last, text, url = bytes:find("%[([^%]%z]*)%]%(([^)%z\n]+)%)", pos)
+                if not first then return links end
+                links[#links + 1] = { text = text, url = url, start_col = first, end_col = last }
+                pos = last + 1
+            end
+        end
+        local cases = {
+            "[outer]([inner\nlabel](x)", "[[nested](x)", "[x](a[b](c)) [next](z)",
+            "[bad]x[good](y)", "[bad\0[label](ok)", "[bad](url\0[label](ok)",
+            "[bad](\n[label](ok)", "[empty]() [wrapped\nlabel](url)",
+        }
+        local tokens = { "[", "]", "(", ")", "\0", "\n", "a", "é", "](", "[x](u)" }
+        local seed = 373
+        for _ = 1, 1200 do
+            local chunks = {}
+            for _ = 1, 80 do
+                seed = (seed * 48271) % 2147483647
+                chunks[#chunks + 1] = tokens[seed % #tokens + 1]
+            end
+            cases[#cases + 1] = table.concat(chunks)
+        end
+        for _, bytes in ipairs(cases) do
+            assert.same(legacy(bytes), candidates.markdown_links(bytes), string.format("%q", bytes))
+        end
+        assert.same({}, candidates.markdown_links(nil))
+    end)
+
+    it("bounds malformed label and destination scans as document size grows", function()
+        for _, count in ipairs({ 20000, 40000 }) do
+            for _, bytes in ipairs({ string.rep("[", count), string.rep("[](", math.floor(count / 3)) }) do
+                local started = os.clock()
+                assert.same({}, candidates.markdown_links(bytes))
+                -- CPU cap: this parser runs synchronously during document moves.
+                assert.is_true(os.clock() - started < 0.25, "malformed Markdown must not stall the move")
+            end
+        end
+    end)
+
     it("keeps wrapped Markdown spans and masks references across continuation rows", function()
         local lines = { "é → [long #370", "  @@hidden@@ label](side.md) and #42" }
         local got = candidates.collect(lines, { first = 1, last = 2 })
