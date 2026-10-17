@@ -1,12 +1,12 @@
 ---
 id: 000363
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '2c2e82f733dedb210399fd6a5412b4b5c4974261' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'd2e35a386ff8adb7652d77304d55148dfaa28daa' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T16:08:41-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "8184a722", done: "5e84df71"}
+actual_hours: 1.31
 ---
 
 # Cliproxy credential-restart lifecycle cases intermittently time out and probe the killed port
