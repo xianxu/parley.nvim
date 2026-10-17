@@ -81,7 +81,7 @@ local function escaped(line, pos)
 end
 -- Backtick spans may cross soft line breaks, but not a paragraph/fence boundary.
 -- Index the next exact-width run once; unmatched runs never rescan a suffix.
-local function code_masks(lines, in_code, first_row)
+local function code_masks(lines, blocks, first_row)
     local masks, tokens = {}, {}
     local function finish_paragraph()
         local next_run, following = {}, {}
@@ -107,8 +107,9 @@ local function code_masks(lines, in_code, first_row)
     for row = first_row, #lines do
         local line = lines[row]
         masks[row] = {}
-        if in_code[row] or line:match('^%s*$') then finish_paragraph()
-        else
+        local block = blocks[row]
+        if block.before or block.excluded then finish_paragraph() end
+        if not block.excluded then
             local pos = 1
             while true do
                 local first, last = line:find('`+', pos)
@@ -117,6 +118,7 @@ local function code_masks(lines, in_code, first_row)
                 pos = last + 1
             end
         end
+        if block.after then finish_paragraph() end
     end
     finish_paragraph()
     return masks
@@ -150,7 +152,9 @@ local function rewrite_links(lines, positions, fm_end, target, edits)
         end
         covered[row] = {}
     end
-    local masks = code_masks(lines, in_code, fm_end + 1)
+    local blocks = references.markdown_blocks(lines, { first = fm_end + 1, last = #lines },
+        { in_code = in_code, transcript = false })
+    local masks = code_masks(lines, blocks, fm_end + 1)
     for _, link in ipairs(references.markdown_spans(lines, { first = fm_end + 1, last = #lines },
         { in_code = in_code, transcript = false })) do
         local row, first = link.fallback_row, link.fallback_col + 1

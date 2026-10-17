@@ -287,6 +287,37 @@ describe('moving parent side references', function()
             .. 'text ` code \\` [after](spec.side/q.md)\n'
         assert.equals(after, projection.rewrite_side_references(before, from, to))
     end)
+    it('shares scanner block boundaries for code preservation and live rewrites', function()
+        local boundaries = { '', '  ', '# Heading', '###### Heading', '---', '- - -', '***',
+            '* * *', '___', '_ _ _', '===', '=', '--', '> quoted', '  > quoted',
+            '- item', '+ item', '* item', '1. item', '2) item', '```\n```', '~~~\n~~~' }
+        for _, boundary in ipairs(boundaries) do
+            for _, target in ipairs({ 'design.side/q.md', '../design.md' }) do
+                local before = '` unmatched\n' .. boundary .. '\n[live](' .. target .. ') `\n'
+                local after = before:gsub('design', 'spec')
+                local actual
+                if target:sub(1, 2) == '..' then
+                    actual = projection.rewrite_parent(before,
+                        { old = '/repo/design.side/q.md', new = '/else/spec.side/q.md' },
+                        { old = from, new = to })
+                else actual = projection.rewrite_side_references(before, from, to) end
+                assert.equals(after, actual, boundary)
+            end
+        end
+        for _, start in ipairs({ '- text ', '+ text ', '* text ', '1. text ', '2) text ', 'ordinary ' }) do
+            for _, target in ipairs({ 'design.side/q.md', '../design.md' }) do
+                local before = start .. '` code\n   [literal](' .. target .. ')` [live](' .. target .. ')\n'
+                local after = start .. '` code\n   [literal](' .. target .. ')` [live](' .. target:gsub('design', 'spec') .. ')\n'
+                local actual
+                if target:sub(1, 2) == '..' then
+                    actual = projection.rewrite_parent(before,
+                        { old = '/repo/design.side/q.md', new = '/else/spec.side/q.md' },
+                        { old = from, new = to })
+                else actual = projection.rewrite_side_references(before, from, to) end
+                assert.equals(after, actual, start)
+            end
+        end
+    end)
     it('refuses ambiguous relevant scalar and link syntax without a partial result', function()
         for _, front in ipairs({
             'discussions: [{doc: design.side/q.md}]',

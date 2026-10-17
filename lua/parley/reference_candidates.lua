@@ -36,17 +36,17 @@ function M.markdown_links(line)
     return links
 end
 
--- Join paragraph text once; NUL barriers prevent links crossing excluded rows.
--- Mapping offsets in occurrence order keeps byte coordinates linear in input size.
-function M.markdown_spans(lines, range, opts)
+-- The supported Markdown block dialect, shared by wrapped occurrence scanning
+-- and code containment. List starts break before, retaining their continuation;
+-- headings/walls isolate their row. Excluded rows carry no inline syntax.
+function M.markdown_blocks(lines, range, opts)
     if not range then return {} end
     opts = opts or {}
     local lexical = require("parley.document.lexical")
     local patterns = lexical.patterns(opts.config or {})
     local in_code = opts.in_code or lexical.code_block_memo(lines, patterns, true, opts.transcript)
-    local first, last = math.max(1, range.first), math.min(#lines, range.last)
-    local chunks, starts, size = {}, {}, 0
-    for row = first, last do
+    local out = {}
+    for row = math.max(1, range.first), math.min(#lines, range.last) do
         local line = lines[row]
         local content = line:match("^ ? ? ?(%S.*)$") or ""
         local hashes = content:match("^(#+)%s") or content:match("^(#+)$")
@@ -57,9 +57,25 @@ function M.markdown_spans(lines, range, opts)
         local kind = opts.transcript ~= false and lexical.classify(line, patterns).kind
         local structural = lexical.is_structural_kind(kind) or kind == "reasoning" or kind == "reasoning_end"
         local boundary = wall or structural or heading or line:match("^%s*%d+[.)]%s") or line:match("^%s*[-+*]%s")
-        local barrier = boundary and "\0" or ""
-        local chunk = (in_code[row] or lexical.is_fence_delim(line, true) or line:match("^%s*$"))
-            and "\0" or barrier .. line .. ((heading or wall) and "\0" or "")
+        out[row] = {
+            before = not not boundary, after = not not (heading or wall),
+            excluded = not not (in_code[row] or lexical.is_fence_delim(line, true) or line:match("^%s*$")),
+        }
+    end
+    return out
+end
+
+-- Join paragraph text once; NUL barriers prevent links crossing excluded rows.
+-- Mapping offsets in occurrence order keeps byte coordinates linear in input size.
+function M.markdown_spans(lines, range, opts)
+    if not range then return {} end
+    local blocks = M.markdown_blocks(lines, range, opts)
+    local first, last = math.max(1, range.first), math.min(#lines, range.last)
+    local chunks, starts, size = {}, {}, 0
+    for row = first, last do
+        local block = blocks[row]
+        local barrier = block.before and "\0" or ""
+        local chunk = block.excluded and "\0" or barrier .. lines[row] .. (block.after and "\0" or "")
         starts[row], size = size + 1 + #barrier, size + #chunk + 1
         chunks[#chunks + 1] = chunk
     end

@@ -758,3 +758,5 @@ point as well as internal helpers before calling the family complete.
 - When a scanner admits wrapped syntax, containment must cover the same span. Per-line code masks cannot protect multiline Markdown links; use exact-width backtick spans across soft breaks and test both new and existing rewrite consumers.
 - Recursive output scans cannot distinguish missing files from empty directories at expected leaves. Validate expected file and ancestor types for the whole generated snapshot before the first write; make an earlier output stale so a failure test proves absence of partial mutation.
 - Benchmark the complete consumer with every malformed delimiter family, not only its shared scanner. Removing one backtracking pattern left a fallback that copied and resolved each remaining suffix. Use disjoint token spans and exercise both callers.
+
+- The #373 re-review found the sibling failure after paragraph-wide masks: pairing backticks across a heading or list boundary hid live links. Share the scanner’s existing block segmentation rather than introducing a second notion of paragraph; test live rewrites across every boundary as well as preservation within a block.

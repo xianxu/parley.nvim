@@ -1,6 +1,18 @@
 local candidates = require("parley.reference_candidates")
 
 describe("reference candidates", function()
+    it("shares block boundaries while retaining list and paragraph continuations", function()
+        local lines = { "text", "- item", "  continuation", "# Heading", "> quote", "---", "", "```", "code", "```" }
+        local blocks = candidates.markdown_blocks(lines, { first = 1, last = #lines }, { transcript = false })
+        assert.same({ before = false, after = false, excluded = false }, blocks[1])
+        assert.same({ before = true, after = false, excluded = false }, blocks[2])
+        assert.same(blocks[1], blocks[3])
+        for _, row in ipairs({ 4, 5, 6 }) do
+            assert.same({ before = true, after = true, excluded = false }, blocks[row])
+        end
+        for row = 7, 10 do assert.is_true(blocks[row].excluded) end
+        assert.same({}, candidates.markdown_blocks(lines))
+    end)
     it("enumerates Markdown links with the existing byte-span dialect", function()
         local line = "é [src:#12](src:a.lua:2) and [🌿:topic](chat.md)"
         local links = candidates.markdown_links(line)
