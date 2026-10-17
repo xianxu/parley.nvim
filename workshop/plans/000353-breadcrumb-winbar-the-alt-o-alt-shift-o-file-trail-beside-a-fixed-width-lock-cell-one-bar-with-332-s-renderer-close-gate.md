@@ -470,6 +470,40 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: ef00bddd-5707-455a-921d-4f51fef49928
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000353"
+            recipe: milestone-review
+            round: 4
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/d52888f8a2136581
+            reviewed_head: 4142a92604182a9b5dfb4bbe35f88416b15f9e12
+            slot: parley.nvim:2
+            requested_at: "2026-10-17T18:26:18.792262Z"
+          phase: finished
+          pid: 52066
+          started_at: "2026-10-17T18:26:18.938712Z"
+          finished_at: "2026-10-17T18:30:17.508524Z"
+          session_id: 01a14b1d-6210-71d2-8a29-be3769d5be43
+          outcome: returned
+      "n": 4
+      timestamp: "2026-10-17T11:30:19-07:00"
+      dispatched: "2026-10-17T11:26:18-07:00"
+      agent: codex
+      dispose:
+        - id: BR-5
+          disposition: addressed
+          note: file_history.lua:30–66 separates presentation proof from retained Back history. All six eligibility regressions pass at head and fail with the pre-fix production code restored in a disposable copy. Coverage includes all five exclusion categories, resize, re-entry, same-buffer changes, and preserved Back navigation.
+          round: 4
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 4142a92604182a9b5dfb4bbe35f88416b15f9e12
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#353 (boundary-review)
@@ -515,6 +549,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-5** [Critical] `renderer-ownership-state` (kind: defect) Excluded buffers inherit the previous file's breadcrumb
   lua/parley/document_band.lua:11-13 consumes file_history.peek without checking whether its cached visit describes the displayed buffer. file_history.lua:30-44 leaves that visit unchanged when observation rejects a buffer, so BufWinEnter refresh installs the old trail again. Native probes reproduced this for unnamed, nofile, URI-named, and directory buffers: snapshot correctly returns nil, but the winbar still displays a › b. This is the 2nd finding in family renderer-ownership-state. State and enforce the rule that a trail is presentable only for its current eligible file; sweep every observation-rejection category, preserve native Back history, and test retirement/re-entry and resize sequences. ARCH-ORDER, ARCH-PURPOSE.
 
+## Round 4 — 2026-10-17T11:30:19-07:00 (codex) — passed
+
+### Disposed
+
+- BR-5 — addressed — file_history.lua:30–66 separates presentation proof from retained Back history. All six eligibility regressions pass at head and fail with the pre-fix production code restored in a disposable copy. Coverage includes all five exclusion categories, resize, re-entry, same-buffer changes, and preserved Back navigation.
+
 ## Open findings
 
-- **BR-5** [Critical] `renderer-ownership-state` (kind: defect) Excluded buffers inherit the previous file's breadcrumb
+(none — every finding has been disposed)

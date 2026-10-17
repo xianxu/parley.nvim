@@ -284,3 +284,72 @@ findings:
    Add a `## Revisions` entry defining eligible-file versus excluded-buffer presentation transitions. Enumerate unnamed, special-buftype, URI, directory, and non-editing windows; require retirement, resize, and return-to-file tests while preserving Back history.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"c1f11024-3e06-407b-b31a-d7a690fc2700","repository":"github.com/xianxu/parley.nvim","issue_id":"000353","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/31368fcca9b2d9fe","reviewed_head":"3bf1e5f792ad26348d2f1bedae0eeeeb1a39f780","slot":"parley.nvim:2","requested_at":"2026-10-17T08:46:06.657522Z"},"phase":"finished","pid":39043,"started_at":"2026-10-17T08:46:06.760726Z","finished_at":"2026-10-17T08:48:51.985051Z","session_id":"01a1490a-30c6-7920-aed6-e8864a8853e3","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T11:30:19-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 353 — Breadcrumb winbar: the Alt+o / Alt+Shift+O file trail beside a fixed-width lock cell (one bar with #332's renderer) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000353-breadcrumb-winbar-the-alt-o-alt-shift-o-file-trail-beside-a-fixed-width-lock-cell-one-bar-with-332-s-renderer.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c2e73edc308183b36c24156b60d42d1622d6cfbc..4142a92604182a9b5dfb4bbe35f88416b15f9e12 |
+| command | sdlc close --issue 353 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-17T11:30:19-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned implementation satisfies the revised Spec and Plan. BR-5 is addressed with an enforced presentation-eligibility rule and effective regression tests. No new blocking findings remain. README and atlas updates cover the new surface; the operator’s live check remains the documented landing step.
+
+```findings
+dispose:
+  - id: BR-5
+    disposition: addressed
+    note: |
+      file_history.lua:30–66 separates presentation proof from retained Back history. All six eligibility regressions pass at head and fail with the pre-fix production code restored in a disposable copy. Coverage includes all five exclusion categories, resize, re-entry, same-buffer changes, and preserved Back navigation.
+```
+
+1. **Strengths**
+
+   - [Presentation checks](lua/parley/file_history.lua:55) bind displayed trails to the observed eligible buffer without filesystem work during paint.
+   - [Option ownership](lua/parley/document_band.lua:53) preserves independent user overrides through repaint and cleanup.
+   - Pure models own trail transitions, ancestry reconstruction, and width projection; editor adapters handle navigation and rendering.
+   - README, atlas, traceability, and plan revisions document the delivered contracts.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   Independently verified: renderer 32, history 45, reminder 18, breadcrumb model 11, history model 12, resolver 6, and display/composition 8 tests passed. The serial replay finished without surviving processes.
+
+   Direct inspection of the retained full-suite log confirmed its recorded SHA-256, 462 passing spec files, and clean lint across 774 files. Its tested commit differs from pinned head only in the issue log. The initial `src:` fixture failure disappeared with scratch outside the repository; overlapping-run cleanup interference was resolved by serial replay.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared history installation, composition, and display-unit adapters.
+   - **ARCH-PURE — pass:** pure models have direct tests; IO remains in adapters.
+   - **ARCH-PURPOSE — pass:** navigation routes, Back, reset, splits, and snapshot/restore are delivered.
+   - **ARCH-MOCK — pass:** existing resolver and Couch fake seams remain shared with production.
+   - **ARCH-CONSTRAINTS — pass:** bounded trails/history, width tests, and filesystem-free repaint.
+   - **ARCH-SECURE — pass:** snapshot validation and literal statusline escaping.
+   - **ARCH-ORDER — pass:** guarded follow commits and tested eligibility, ownership, and split-event ordering.
+   - **ARCH-FUNERAL — pass:** window/buffer cleanup paths cover transient state; no new durable store.
+
+7. **Plan revision recommendations:** None.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ef00bddd-5707-455a-921d-4f51fef49928","repository":"github.com/xianxu/parley.nvim","issue_id":"000353","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/d52888f8a2136581","reviewed_head":"4142a92604182a9b5dfb4bbe35f88416b15f9e12","slot":"parley.nvim:2","requested_at":"2026-10-17T18:26:18.792262Z"},"phase":"finished","pid":52066,"started_at":"2026-10-17T18:26:18.938712Z","finished_at":"2026-10-17T18:30:17.508524Z","session_id":"01a14b1d-6210-71d2-8a29-be3769d5be43","outcome":"returned"}] -->

@@ -58,6 +58,8 @@ After code verification: close on SHIP and report green to TL. Do not stage; :0 
 
 ## Log
 
+
+- 2026-10-17: closed — Required suite on a781eae062b35246faad709e5c3395b914f5f2ba:462/462 specs,774 lint files clean,no survivors; suite.log SHA256 e19a36f1b8905111ed8565c977ffcc28cce8c83c2b3555aedecd9c7a5f29b256. Native and pure coverage verifies Alt+o/Back trails,lock/feedback composition,Unicode truncation,option ownership,opaque snapshots,excluded-buffer retirement/re-entry with Back retained,and split pulse/state ordering. BR1-BR5 regression evidence retained in Log. Current code matches tested head; only evidence prose added. Actuals N/A: legacy suite attempt ce659159c9d9e9a01b89a775a0981c34 lacks exact queue endpoints; excluded from calibration per ariadne#420 and TL instruction. No staging; operator smokes after normal landing.; review verdict: SHIP
 ### 2026-10-16
 
 - Planning follows landed #332 PR241, merge `3219cc0c705bd1a7c097bcf920135155892645b9` verified with git rev-parse; exact integrated-head suite passed, four CI checks green. Hub received the outcome (receipt 7d3db9df-927c-40ab-af86-588a7891a6e5 submitted).
