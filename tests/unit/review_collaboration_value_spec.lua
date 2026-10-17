@@ -85,3 +85,92 @@ other: ignored]=]))
         bad("collaboration-mode:\n\tchat: [One]")
     end)
 end)
+
+describe("collaboration declaration recognition", function()
+    local function document(body)
+        local lines = { "---" }
+        for line in (body .. "\n"):gmatch("(.-)\n") do lines[#lines + 1] = line end
+        lines[#lines + 1] = "---"
+        return parser.parse(lines)
+    end
+    it("decodes the same field under uniform root indentation and quoted escapes", function()
+        for _, body in ipairs({
+            "  collaboration-mode: chat",
+            "  title: Example\n  collaboration-mode:\n    default: chat",
+            [['collaboration-mode': chat]],
+            [["collaboration\u002dmode": chat]],
+            [[  "collaboration\x2dmode": chat]],
+        }) do
+            local value, err = document(body)
+            assert.is_nil(err)
+            assert.same(body:find("default:", 1, true) and { default = "chat" } or "chat", value)
+        end
+    end)
+    it("rejects duplicate declarations after dedenting and decoding keys", function()
+        for _, body in ipairs({
+            [[  collaboration-mode: chat
+  "collaboration\u002dmode": discussion]],
+            [["collaboration-mode": chat
+metadata:
+  nested: yes
+'collaboration-mode': discussion]],
+        }) do
+            local value, err = document(body)
+            assert.is_nil(value)
+            assert.is_truthy(err)
+        end
+    end)
+    it("refuses unsupported root shapes rather than defaulting", function()
+        for _, body in ipairs({
+            "{collaboration-mode: chat}",
+            "{\n  collaboration-mode: chat\n}",
+            "- collaboration-mode: chat",
+            "? collaboration-mode\n: chat",
+            "? [collaboration-mode]\n: chat",
+            "!mapping {collaboration-mode: chat}",
+            "&root\ncollaboration-mode: chat",
+            "*root",
+            "defaults: &defaults {collaboration-mode: chat}\n<<: *defaults",
+            [['<<': {collaboration-mode: chat}]],
+            [["\u003c\u003c": {collaboration-mode: chat}]],
+            "!field collaboration-mode: chat",
+            "*field: chat",
+            "&field collaboration-mode: chat",
+            "collaboration-mode", "[collaboration-mode, chat]",
+            [["collaboration\qmode": chat]],
+            "  title: Example\ncollaboration-mode: chat",
+            "title: Example\n  collaboration-mode: chat",
+        }) do
+            local value, err = document(body)
+            assert.is_nil(value)
+            assert.is_truthy(err)
+        end
+    end)
+    it("refuses every unclosed leading frontmatter representation", function()
+        for _, body in ipairs({
+            "", "title: Example", "  collaboration-mode: chat",
+            [["collaboration\u002dmode": chat]], "{collaboration-mode: chat}",
+            "metadata:\n  collaboration-mode: chat",
+        }) do
+            local lines = { "---" }
+            for line in (body .. "\n"):gmatch("(.-)\n") do lines[#lines + 1] = line end
+            local value, err = parser.parse(lines)
+            assert.is_nil(value)
+            assert.is_truthy(err)
+        end
+    end)
+    it("defaults only for recognizable root mappings without the field", function()
+        for _, body in ipairs({
+            "", "# comment", "title: Example",
+            "  title: Example\n  metadata:\n    collaboration-mode: chat",
+            "metadata:\n  collaboration-mode: chat\nowner: ops:0",
+            [["title\u002dtext": Example]],
+            "notes: |\n  collaboration-mode: chat",
+            "notes: |\n  \"unclosed quote is literal text\n  collaboration-mode: chat",
+        }) do
+            local value, err = document(body)
+            assert.is_nil(value)
+            assert.is_nil(err)
+        end
+    end)
+end)

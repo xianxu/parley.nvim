@@ -224,7 +224,11 @@ bundle fixture tests exercise deterministic output and validation failures.
 
 `review/collaboration_value.lua` decodes the collaboration-mode field's scalar,
 block/flow map and heading-list forms without a runtime YAML dependency.
-Unsupported YAML constructs and malformed values refuse visibly. The pure
+Unsupported YAML constructs and malformed values refuse visibly.
+Root frontmatter must be a closed block mapping; uniformly indented and
+quoted/escaped keys are decoded. Root flow maps, sequences, complex keys,
+tags/anchors/aliases and merge keys refuse instead of becoming absent routing.
+Unrelated nested metadata and literal blocks do not define root routing. The pure
 `review/collaboration.lua` resolver handles normalized heading names, repeated
 headings, ATX levels 1–6, fenced code, nearest named ancestors and dangling-name
 warnings. Unknown modes and cross-mode heading conflicts refuse before local

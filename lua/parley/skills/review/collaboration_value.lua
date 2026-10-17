@@ -125,52 +125,100 @@ local function decode(text, block_scalar)
     return result
 end
 
+-- Recognize root block keys before deciding the routing declaration is absent.
+-- Unknown root representations must not turn an actual chat declaration into
+-- the discussion default. Values of unrelated fields remain outside our scope.
 local function field_line(line)
-    local key, value = line:match("^([%w_][%w_-]*)%s*:%s*(.*)$")
-    if not key then key, value = line:match('^"([%w_-]+)"%s*:%s*(.*)$') end
-    if not key then key, value = line:match("^'([%w_-]+)'%s*:%s*(.*)$") end
+    local key, rest
+    if line:sub(1, 1) == '"' or line:sub(1, 1) == "'" then
+        local span = frontmatter.quoted_span(line)
+        if not span then fail("unclosed root mapping key") end
+        key, rest = unquote(span), line:sub(#span + 1)
+    else
+        key, rest = line:match("^(.-)(:%s.*)$")
+        if not key then key, rest = line:match("^(.-)(:)$") end
+        key = key and trim(key)
+        if not key or key == "" or key:match("^[%[%]{}&*!|>%%@`?,:%-]") then
+            fail("unsupported root shape; expected a block mapping with string keys")
+        end
+    end
+    local value = rest and rest:match("^%s*:%s*(.*)$")
+    if value == nil then fail("unsupported root mapping key") end
+    if key == "<<" then fail("root merge keys are unsupported") end
     return key, value
 end
 
-local function parse(lines)
-    local fm = frontmatter.parse(lines)
-    if not fm then
-        if lines[1] == "---" then
-            for _, line in ipairs(lines) do
-                if field_line(line) == "collaboration-mode" then fail("frontmatter is not closed") end
+local function flow_balance(text, stack)
+    local i, previous = 1, nil
+    while i <= #text do
+        local c = text:sub(i, i)
+        if (c == '\"' or c == "'") and (not previous or previous:match("[%[{,:%-]")) then
+            local span = frontmatter.quoted_span(text:sub(i))
+            if not span then fail("multiline quoted flow scalars are unsupported") end
+            i = i + #span
+            previous = c
+        else
+            if c == "[" or c == "{" then stack[#stack + 1] = c
+            elseif c == "]" or c == "}" then
+                local expected = c == "]" and "[" or "{"
+                if stack[#stack] ~= expected then fail("mismatched flow delimiters") end
+                stack[#stack] = nil
             end
+            if not c:match('%s') then previous = c end
+            i = i + 1
         end
-        return nil
     end
-    local field, values = nil, {}
-    for row = 2, fm.close - 1 do
+end
+
+local function root_fields(lines, close)
+    local entries, current, base, stack = {}, nil, nil, {}
+    for row = 2, close - 1 do
         local line = lines[row]
-        local key, value = field_line(line)
-        if key then
-            if key == "collaboration-mode" then
-                if field then fail("duplicate collaboration-mode field") end
-                field = row
-                values[#values + 1] = { indent = 0, text = uncomment(value) }
-            elseif field then break end
-        elseif field then
-            if line:find("\t") then fail("tabs are unsupported in collaboration-mode") end
-            local content = uncomment(line)
-            if content ~= "" then
-                local indent = #(line:match("^(%s*)") or "")
-                if indent == 0 and not (values[1].text:sub(1, 1) == "{" and content:match("^}")) then
-                    fail("expected an indented collaboration-mode value")
+        local prefix = line:match("^(%s*)") or ""
+        if prefix:find("\t", 1, true) then fail("tabs in root indentation are unsupported") end
+        local literal = current and base and #prefix > base and current.value:match('^[|>]')
+        local content = literal and trim(line) or uncomment(line)
+        if content ~= "" then
+            local indent = #prefix
+            base = base or indent
+            if indent < base then fail("inconsistent root mapping indentation") end
+            if #stack > 0 then
+                current.children[#current.children + 1] = { indent = indent - base, text = content }
+                flow_balance(content, stack)
+            elseif indent == base then
+                local key, value = field_line(content)
+                current = { key = key, value = value, children = {} }
+                entries[#entries + 1] = current
+                if value:match("^[%[{]") then flow_balance(value, stack) end
+            else
+                -- Nested mappings belong only to a block collection, not to
+                -- an unrelated scalar followed by a misindented declaration.
+                if current.value ~= "" and not current.value:match("^[|>]")
+                    and (content:find(":%s") or content:match(":$") or content:match("^%-%s")) then
+                    fail("nested collection under a scalar root value")
                 end
-                values[#values + 1] = { indent = indent, text = content }
+                current.children[#current.children + 1] = { indent = indent - base, text = content }
             end
         end
     end
-    -- A following top-level field cannot hide a later duplicate.
-    local seen = 0
-    for row = 2, fm.close - 1 do
-        if field_line(lines[row]) == "collaboration-mode" then seen = seen + 1 end
+    if #stack > 0 then fail("unclosed flow value in root mapping") end
+    return entries
+end
+
+local function parse(lines)
+    if lines[1] ~= "---" then return nil end
+    local fm = frontmatter.parse(lines)
+    if not fm then fail("frontmatter is not closed") end
+    local field
+    for _, entry in ipairs(root_fields(lines, fm.close)) do
+        if entry.key == "collaboration-mode" then
+            if field then fail("duplicate collaboration-mode field") end
+            field = entry
+        end
     end
-    if seen > 1 then fail("duplicate collaboration-mode field") end
     if not field then return nil end
+    local values = { { indent = 0, text = field.value } }
+    for _, child in ipairs(field.children) do values[#values + 1] = child end
     if values[1].text ~= "" then
         if #values > 1 and values[1].text:sub(1, 1) ~= "{" then fail("unexpected continuation of scalar value") end
         local joined = {}

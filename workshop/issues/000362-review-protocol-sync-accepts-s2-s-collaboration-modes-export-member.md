@@ -49,7 +49,7 @@ S2 M1 (ops `universal-agent-input-interface/design.side/01-s2-section-modes.md`,
 
 Approved local-adapter correction: see [implementation plan](../plans/000362-review-protocol-sync-accepts-s2-s-collaboration-modes-export-member-plan.md).
 
-- [ ] Implement pure collaboration frontmatter/section resolution and protected chat ranges.
+- [x] Implement pure collaboration frontmatter/section resolution and protected chat ranges.
 - [x] Add local admission/notices and a proposal guard; test default questions, explicit collaboration/chat, invalid routing and resubmission.
 - [ ] Update the local adapter/docs and re-run full verification and close review.
 
@@ -208,6 +208,25 @@ are implemented and regression-tested; BR-2's old-export success/notice family
 is explicit in Done when and tested for sync plus --check. Shared generic
 edit-engine overlap handling is filed unclaimed as #369, outside this local
 adapter correction. Request full boundary review on the enlarged patch.
+
+### 2026-10-16 — BR-1 declaration family corrected and verified
+
+The full reviewer validated the original compatibility/guard corrections and
+marked BR-2 addressed, but BR-1 stayed open for permissive declaration misses.
+Root block recognition now decodes indentation and escaped/quoted keys, rejects
+unsupported root shapes, merge keys and unclosed frontmatter, and preserves
+true absence plus unrelated nested metadata/literal text. Root flow scanning is
+linear; no external decoder or general YAML runtime dependency was added.
+
+The shared 15-case declaration matrix runs through admission and real tool IO.
+A disposable spec loading the pinned earlier parser after the test harness reset
+reproduces nine forbidden writes (/tmp/parley-362-declaration-actual-red.log).
+The first comparison attempt loaded the current module and was not red evidence.
+Corrected real invocation tests pass all 64 cases; 17 pure value-parser cases
+pass (Lua and LuaJIT), including a red/green literal quoted-text control.
+Final mapped modes/review, lint, pinned-source --check and diff checks pass,
+with clean process census. Submit the corrected code head to fresh full-suite
+verification, then ask the binary's next boundary review to dispose BR-1.
 
 ## Revisions
 

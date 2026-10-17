@@ -147,6 +147,30 @@ describe("skill_invoke.invoke", function()
         assert.same({ 'alpha beta' }, vim.fn.readfile(path))
     end)
 
+    for _, case in ipairs(require('tests.helpers.collaboration_declarations')) do
+        it('does not write through unrecognized chat declaration: ' .. case.name, function()
+            local document = { '---' }
+            for _, line in ipairs(case.header) do document[#document + 1] = line end
+            if case.closed ~= false then document[#document + 1] = '---' end
+            document[#document + 1] = 'secret'
+            vim.fn.writefile(document, path)
+            vim.cmd('edit!')
+            parley.dispatcher.query = function(_, _, _, _, on_exit)
+                tasker.set_query('qid_test', { raw_response = propose_edits_sse({
+                    { old_string = 'secret', new_string = 'CHANGED', explain = 'test' },
+                }) })
+                vim.schedule(function() on_exit('qid_test') end)
+            end
+            skill_invoke.invoke(buf, manifest(), {}, {
+                validate_edits = require('parley.skills.review.collaboration').validate_edits,
+                on_done = function(result) done_result = result end,
+            })
+            assert.is_true(vim.wait(5000, function() return done_result ~= nil end))
+            assert.is_false(done_result.ok)
+            assert.same(document, vim.fn.readfile(path))
+        end)
+    end
+
     for _,denied in ipairs({'admit','finish','observation'})do
         it('obeys pure model rejection of '..denied,function()
             local Model=require('parley.skill_source_read');local transition=Model.transition

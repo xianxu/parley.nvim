@@ -93,6 +93,23 @@ describe("review.run_via_invoke", function()
         assert.equals(0, #invoke_calls)
     end)
 
+    for _, case in ipairs(require('tests.helpers.collaboration_declarations')) do
+        it('never admits protected or unsupported routing in ' .. case.name, function()
+            local document = { '---' }
+            for _, line in ipairs(case.header) do document[#document + 1] = line end
+            if case.closed ~= false then document[#document + 1] = '---' end
+            document[#document + 1] = 'secret 🤖[why?]'
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, document)
+            local old_notify, notices = vim.notify, {}
+            vim.notify = function(msg) notices[#notices + 1] = msg end
+            review.run_via_invoke(buf, { mode = 'copy-editing' })
+            vim.notify = old_notify
+            assert.equals(0, #invoke_calls)
+            assert.is_true(#notices > 0)
+            assert.same(document, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+        end)
+    end
+
     it('excludes chat markers from admission and resubmission', function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
             '---', 'collaboration-mode: {chat: [Inbox]}', '---', '# Notes', '🤖[edit]', '# Inbox', '🤖[chat]',
