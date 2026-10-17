@@ -1,13 +1,13 @@
 ---
 id: 000376
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '4c5b5a0c57643fd930eabe4de749dbe0ef3c7b6c' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'f6e7b2290587450e148fee7ef80a3353108e71d8' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T07:18:15-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "bc9b0b22", done: "ff519f53"}
+actual_hours: 0.18
 ---
 
 # packaging_vm_spec reads an empty vms.json: fake_tart's state write is not atomic (flake)
