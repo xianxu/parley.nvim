@@ -46,7 +46,7 @@ Rule (the #370 lesson): a positive wait, one that returns on arrival, is bounded
 - [x] '-- bound: <reason>' marker: reviewed the candidates whose case names suggest timing ("before", "immediate", "native timers run"). Each checks its property after the wait, so none needed the marker.
 - [x] tests/arch/arrival_budget_spec.lua: refuses a bare literal in the three assert forms, with a floor of 250 found. Mutation check: one literal reintroduced in outline_spec fails it, and the same line with '-- bound: probe' passes.
 - [x] atlas/infra/test_harness.md: the rule, the marker and the arch test's reach.
-- [ ] Full suite green.
+- [x] Full suite green: sdlc local-check on 236db111 (3m54s).
 
 ## Revisions
 
