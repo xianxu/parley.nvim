@@ -132,16 +132,29 @@ describe("attention: a session-sync file's Alt+Return", function()
         assert.same({ version = 1, paths = { "/root.md", file } }, entry(file).breadcrumb)
     end)
 
-    it("records a second submit of the same file as a second pending ID", function()
-        open()
-        edit("- first")
-        keymap(buf, "<M-CR>")()
-        await(function() return entry(file) ~= nil end, "the first submit was never recorded")
-        edit("- second")
-        keymap(buf, "<M-CR>")()
-        await(function() return entry(file) and vim.tbl_count(entry(file).pending) == 2 end, "the second submit was never recorded")
-        assert.is_nil(entry(file).breadcrumb)
-    end)
+    for _, seam in ipairs({ "real", "unavailable" }) do
+        it("records two pending IDs with the " .. seam .. " breadcrumb seam", function()
+            if seam == "unavailable" then package.loaded["parley.file_history"] = {} end
+            open()
+            local expected
+            if seam == "real" then
+                expected = assert(require("parley.file_history").snapshot(vim.fn.bufwinid(buf)))
+            end
+            edit("- first")
+            keymap(buf, "<M-CR>")()
+            await(function() return entry(file) and entry(file).pending["msg-1"] ~= nil end,
+                "the first accepted submit was never recorded")
+            assert.same(expected, entry(file).breadcrumb)
+            edit("- second")
+            keymap(buf, "<M-CR>")()
+            await(function() return entry(file) and vim.tbl_count(entry(file).pending) == 2 end,
+                "the second submit was never recorded")
+            assert.same({ "msg-1", "msg-2" }, vim.fn.sort(vim.tbl_keys(entry(file).pending)))
+            -- A real one-file root is an opaque value, even though it draws no
+            -- trail. Nil belongs to an unavailable seam, not a normal file.
+            assert.same(expected, entry(file).breadcrumb)
+        end)
+    end
 
     -- ARCH-ORDER late completion: the send completes after its buffer is
     -- gone, so the engine's stale-state guard drops the callback. The message
@@ -149,11 +162,14 @@ describe("attention: a session-sync file's Alt+Return", function()
     it("records a send that completes after its buffer was wiped", function()
         vim.env.FAKE_COUCH_SLEEP = "0.3"
         open()
+        local expected = assert(require("parley.file_history").snapshot(vim.fn.bufwinid(buf)))
         edit("- item")
         keymap(buf, "<M-CR>")()
         vim.api.nvim_buf_delete(buf, { force = true })
-        await(function() return entry(file) ~= nil end, "a send completing after its buffer was wiped was not recorded")
+        await(function() return entry(file) and entry(file).pending["msg-1"] ~= nil end,
+            "a send completing after its buffer was wiped was not recorded")
         assert.same({ "msg-1" }, vim.tbl_keys(entry(file).pending))
+        assert.same(expected, entry(file).breadcrumb)
     end)
 
     it("a record that throws leaves the submit's own completion intact", function()
