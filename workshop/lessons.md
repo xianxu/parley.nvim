@@ -677,3 +677,13 @@ oracle, and the mutation that would make the test fail.
   copied transient frames using its exact installed-value proof.
 - Put the basename in a bounded winbar label and the full path in its one-line
   notification; truncating a path prefix can erase the filename entirely.
+
+## 2026-10-16 (#363 — model the effect, not the function return)
+
+- A returned stop call does not prove anything was killed. A closed-port stall
+  fixture must prove a PID was signalled and exited; an unidentified or still
+  alive listener needs the real fallback observation. Inject the delay at the
+  precise endpoint that crosses its deadline, then record the real effect.
+- An await failure does not cancel the operation. Own every synthetic delayed
+  callback with the case, cancel its timer at teardown and guard an already
+  queued callback before it can resume production work in the next case.
