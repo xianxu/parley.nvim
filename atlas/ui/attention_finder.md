@@ -14,7 +14,7 @@ Every file submitted with Alt+Return that Couch accepted, and every new side doc
 
 ## Side docs
 - A new side doc the agent writes is listed as **answered**, marked `↳`, and leaves by the same rule. On every open, `attention.discover` scans the `.side/` folder of each entry: a `*.md` with frontmatter `type: side-doc`, written after its parent entered the finder, becomes a `discovered` event (applied as one `batch`). Side docs are entries, so their own `.side/` folders are scanned on the next open.
-- "New" means modified after its parent entered the finder: a side doc that predates its parent's entry counts once the agent rewrites it. A side doc that leaves is `retired` (at most 256), so a scan never brings it back, rewritten or not. The frontmatter is read through `frontmatter.parse` and the folder through `document_move_plan.side_path`. Parley sees no agent writes, so this is a scan when the operator looks, not a file watcher.
+- "New" means modified after its parent entered the finder: a side doc that predates its parent's entry counts once the agent rewrites it. Answer docs are side docs too (every one carries `type: side-doc` in a `.side/` folder), so this one rule covers them. A side doc that leaves is `retired` (at most 256), so a scan never brings it back, rewritten or not; bringing back a seen or retired side doc on an agent rewrite is #367. The frontmatter is read through `frontmatter.parse` and the folder through `document_move_plan.side_path`. Parley sees no agent writes, so this is a scan when the operator looks, not a file watcher.
 - Cost on open: the sweep write, then a synchronous scan of at most 256 `.side/` folders (40 head lines per new candidate), then one batch write, before the rows render.
 
 ## Recording
