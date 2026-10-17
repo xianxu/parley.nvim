@@ -79,6 +79,24 @@ Scripts that run in test mode with their own roots declare them the same way
 (`check-spell-compatibility.sh`). `make goldens` replaces the direct golden
 refresh. Pinned by `test_isolation_spec` (unit and integration).
 
+**Specs start from an allowlist environment, never the operator's (#365).**
+Pinning HOME and XDG wasn't enough. A spec still inherited the slot's live
+`COUCH_THREAD_SCOPE`/`TAG`, so any move or open without its own fake asked the
+REAL `couch` registry, and could mutate it. Every nvim in `Makefile.parley` now
+starts through `scripts/test-env.sh` (`TEST_RUN`), which runs `env -i` and copies
+only a fixed list: PATH, the pinned roots, TMPDIR, the harness's own knobs,
+locale, and `PARLEY_LIVE_*` opt-ins. `SHELL=/bin/sh` is set explicitly. No
+`COUCH_*`, `PAIR_*`, terminal owner or credential crosses; `make fixtures` alone
+names its API keys in `PARLEY_TEST_ENV_PASS`. The launcher also puts
+`tests/fixtures/sentinel-bin` first on PATH. A bare `couch` or `pair` that no
+fake shadows records the call in `$(TEST_ENV_ROOT)/sentinel.log` and exits 97,
+and every target fails afterwards on a non-empty log (`SENTINEL_CHECK`, beside
+the orphan gate). That's the proof no spec reached the real CLI or its registry
+socket. A spec that wants Couch installs a fake bin ahead of the sentinel.
+Pinned by `test_isolation_spec`: `ambient()` is empty in a spec process, the
+launcher's output is exactly the list, the sentinel refuses and logs, and no
+Makefile nvim launch bypasses the launcher.
+
 Corollary worth keeping: a full `make test` mutates nothing inside the repo
 working tree. That is checkable — snapshot `find . -path ./.git -prune -o -print`
 with mtimes before and after, and diff.

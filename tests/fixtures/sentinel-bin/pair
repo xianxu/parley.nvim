@@ -1,0 +1,7 @@
+#!/bin/sh
+# Test sentinel (#365): first on every spec's PATH (scripts/test-env.sh). A
+# spec that reaches this called the REAL CLI, which would ask the operator's
+# live registry. Record the call for the Makefile's gate, then refuse.
+printf '%s\t%s\t%s\n' "$(basename "$0")" "$PWD" "$*" >> "${PARLEY_TEST_SENTINEL_LOG:-/dev/null}"
+echo "$(basename "$0"): test sentinel: install a fake; specs never reach the real CLI (#365)" >&2
+exit 97

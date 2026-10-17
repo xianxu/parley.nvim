@@ -77,3 +77,34 @@ describe("cliproxy data root under test mode", function()
         assert.is_true(pcall(cliproxy._catalog_path))
     end)
 end)
+
+-- #365: no ambient Couch, Pair or terminal-owner name reaches a spec.
+describe("test_isolation.ambient", function()
+    it("names every COUCH_*, PAIR_* and terminal owner, sorted, and nothing else", function()
+        assert.same({ "COUCH_THREAD_SCOPE", "COUCH_THREAD_TAG", "KITTY_WINDOW_ID", "PAIR_SLOT", "TMUX" },
+            iso.ambient({ COUCH_THREAD_TAG = "t", COUCH_THREAD_SCOPE = "s", PAIR_SLOT = "4", TMUX = "x",
+                KITTY_WINDOW_ID = "1", HOME = "/h", PATH = "/bin",
+                PARLEY_TEST_MODE = "1", NVIM = "the harness parent", XCOUCH_Y = "not a prefix" }))
+    end)
+    it("is empty for the allowlist", function()
+        assert.same({}, iso.ambient({ PATH = "/bin", HOME = "/h", TMPDIR = "/t", SHELL = "/bin/sh", LANG = "C" }))
+    end)
+end)
+
+-- #365: a target that starts nvim without the allowlist launcher would leak the
+-- operator's environment again; every launch line names scripts/test-env.sh.
+describe("every harness nvim starts through the allowlist launcher", function()
+    it("has no nvim launch in Makefile.parley outside scripts/test-env.sh", function()
+        local launches, bare = 0, {}
+        for n, l in ipairs(vim.fn.readfile("Makefile.parley")) do
+            if not l:match("^%s*#") and (l:match("[%s'\"]nvim %-") or l:match("[%s'\"]nvim$")) then
+                launches = launches + 1
+                if not (l:find("$(TEST_RUN) nvim", 1, true) or l:find('scripts/test-env.sh" nvim', 1, true)) then
+                    bare[#bare + 1] = n .. ": " .. vim.trim(l)
+                end
+            end
+        end
+        assert.is_true(launches >= 7, "found only " .. launches .. " nvim launches; the scan is stale")
+        assert.same({}, bare)
+    end)
+end)

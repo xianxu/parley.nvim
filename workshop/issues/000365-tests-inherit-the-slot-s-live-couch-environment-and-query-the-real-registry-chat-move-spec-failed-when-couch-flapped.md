@@ -48,13 +48,18 @@ Quick flow. The shape follows pair#617, as the TL asked: an allowlist environmen
 | sentinel `couch` and `pair` | `tests/fixtures/sentinel-bin/` | new |
 | `ambient` (denied ambient names) | `lua/parley/test_isolation.lua` | new |
 
-- [ ] `scripts/test-env.sh CMD…` execs `env -i` with only the allowlisted names copied from its own environment: PATH, HOME, the XDG roots, TMPDIR, `PARLEY_TEST_ENV_ROOT`, `NVIM_TEST_PLENARY`, `PARLEY_TEST_JITSTAT*`, `PERF_OUTPUT`, locale, and `PARLEY_LIVE_*` opt-ins. It also sets `SHELL=/bin/sh` and prepends the sentinel bin to PATH. It is the one owner of the list. Every nvim launch in `Makefile.parley` goes through it: RUN_SPEC, test-spec, test-changed, perf, perf-finder, goldens, fixtures.
-- [ ] The sentinel `couch` and `pair` record each call (cwd and argv) to `$PARLEY_TEST_ENV_ROOT/sentinel.log`, then refuse with exit 97. A spec's fake wins because the spec prepends its own bin. `PREP_TEST_ENV` empties the log, and every target fails afterwards if it isn't empty: proof that no spec reached the real CLI, and so the real registry socket.
-- [ ] `test_isolation.ambient(env)` lists every visible `COUCH_*`, `PAIR_*` and terminal-owner name (TMUX, NVIM, KITTY_*, WEZTERM_*, ITERM_SESSION_ID, TERM_SESSION_ID, ZELLIJ, …). Pure, with unit tests.
-- [ ] Guard, `tests/integration/test_isolation_spec.lua`: the spec process's own environment has no ambient names, in particular no `COUCH_THREAD_SCOPE` or `COUCH_THREAD_TAG`; a bare `couch` resolves to the sentinel; calling it refuses and logs (to a log of the case's own). A launcher case runs `test-env.sh` with a polluted environment and checks the child's environment is exactly the allowlist.
+- [x] `scripts/test-env.sh CMD…` execs `env -i` with only the allowlisted names copied from its own environment: PATH, HOME, the XDG roots, TMPDIR, `PARLEY_TEST_ENV_ROOT`, `NVIM_TEST_PLENARY`, `PARLEY_TEST_JITSTAT*`, `PERF_OUTPUT`, locale, and `PARLEY_LIVE_*` opt-ins. It also sets `SHELL=/bin/sh` and prepends the sentinel bin to PATH. It is the one owner of the list. Every nvim launch in `Makefile.parley` goes through it: RUN_SPEC, test-spec, test-changed, perf, perf-finder, goldens, fixtures.
+- [x] The sentinel `couch` and `pair` record each call (cwd and argv) to `$PARLEY_TEST_ENV_ROOT/sentinel.log`, then refuse with exit 97. A spec's fake wins because the spec prepends its own bin. `PREP_TEST_ENV` empties the log, and every target fails afterwards if it isn't empty: proof that no spec reached the real CLI, and so the real registry socket.
+- [x] `test_isolation.ambient(env)` lists every visible `COUCH_*`, `PAIR_*` and terminal-owner name (TMUX, NVIM, KITTY_*, WEZTERM_*, ITERM_SESSION_ID, TERM_SESSION_ID, ZELLIJ, …). Pure, with unit tests.
+- [x] Guard, `tests/integration/test_isolation_spec.lua`: the spec process's own environment has no ambient names, in particular no `COUCH_THREAD_SCOPE` or `COUCH_THREAD_TAG`; a bare `couch` resolves to the sentinel; calling it refuses and logs (to a log of the case's own). A launcher case runs `test-env.sh` with a polluted environment and checks the child's environment is exactly the allowlist.
 - [ ] The suite is green with the slot's live `COUCH_THREAD_*` exported. `chat_move_spec` now runs plain, because no thread is visible.
-- [ ] The atlas `infra/test_harness.md` gets the allowlist, the sentinel, and why.
+- [x] The atlas `infra/test_harness.md` gets the allowlist, the sentinel, and why.
 
 ## Log
 
 ### 2026-10-16
+- Built on 2026-10-16. `NVIM` is left out of the denied names: Neovim sets it in every job it starts, so a spec sees the harness's own parent (plenary runs each file in a child). The launcher strips the operator's anyway.
+- `couch_spec`'s "couch conformance (live)" case now runs pending under the harness, since no thread is visible. That is by design: a live check must not ride on the operator's ambient thread.
+- Mutation check: letting the launcher pass `COUCH_THREAD_SCOPE` fails both the in-process guard and the exact-allowlist case.
+- An extra guard: no `nvim` launch in `Makefile.parley` bypasses the launcher. There are 7 launches: RUN_SPEC, test-spec, test-changed, perf, perf-finder, goldens, fixtures.
+

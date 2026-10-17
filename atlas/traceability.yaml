@@ -688,6 +688,9 @@ atlas:
       - lua/parley/test_isolation.lua
       - scripts/golden_fixture.lua
       - Makefile.parley
+      - scripts/test-env.sh
+      - tests/fixtures/sentinel-bin/couch
+      - tests/fixtures/sentinel-bin/pair
       - scripts/check-fresh-clone.sh
       - tests/helpers/fresh_clone_probe.lua
       - tests/minimal_init.vim
