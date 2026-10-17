@@ -56,6 +56,7 @@ Root cause is not yet established. Determine whether the first timed-out callbac
 - Same-head focused replay: `/tmp/parley353-lifecycle-repro.log`, all63 cases pass, no surviving processes. No lifecycle source, fixture, assertions or timeouts were edited. This confirms intermittence; the root-cause investigation remains open.
 
 ### 2026-10-16 — priority and investigation
+- 2026-10-16: closed — Deterministic models-only 2200ms delay failed the old fixture at its unchanged 8s await; fixed fixture passes all66 lifecycle cases. A deliberate closed-port reuse probe still fails both ORIGINAL assertions. Recorded full suite on 09f235c1b9e98e6234518f14e7dfb9ce82c0d894: first attempt452pass, only existing #360 warm-fetch flake, retained failed log967cf6ec616ace4cd27d8c2c85d07fcd (sha a78f45c6dd70); code-identical catalog22pass; one unchanged full rerun453/453pass, exit0 3m18s, logsha ad7a192f6912, lint757 and census clean. Temporary verification ref removed. Atlas and lessons updated; #364 deduplicated. Fixture-only repair: no production restart behavior, old assertion or timeout changes; no operator environment live check required. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 Hub delivery c322a428-5e9c-4da8-981f-e6cbccada6c2 prioritizes these failures
 before #362. #364 reports the same pair of lifecycle failures and preserves
