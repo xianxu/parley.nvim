@@ -1,13 +1,21 @@
 ---
 id: 000365
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: high
-card_mirror: '87f92852d4e468fd95bd42a81e2b86ca7cb97f1a' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '18df816a847a78a77c8f710b82a61ed12d3a4817' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T17:17:24-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Tests inherit the slot's live Couch environment and query the real registry (chat_move_spec failed when Couch flapped)
@@ -32,7 +40,20 @@ This is worse than a flake. A spec that moves a document the live registry knows
 
 ## Plan
 
-- [ ]
+Quick flow. The shape follows pair#617, as the TL asked: an allowlist environment, not a denylist.
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `test-env.sh` (the allowlist launcher) | `scripts/test-env.sh` | new |
+| sentinel `couch` and `pair` | `tests/fixtures/sentinel-bin/` | new |
+| `ambient` (denied ambient names) | `lua/parley/test_isolation.lua` | new |
+
+- [ ] `scripts/test-env.sh CMD…` execs `env -i` with only the allowlisted names copied from its own environment: PATH, HOME, the XDG roots, TMPDIR, `PARLEY_TEST_ENV_ROOT`, `NVIM_TEST_PLENARY`, `PARLEY_TEST_JITSTAT*`, `PERF_OUTPUT`, locale, and `PARLEY_LIVE_*` opt-ins. It also sets `SHELL=/bin/sh` and prepends the sentinel bin to PATH. It is the one owner of the list. Every nvim launch in `Makefile.parley` goes through it: RUN_SPEC, test-spec, test-changed, perf, perf-finder, goldens, fixtures.
+- [ ] The sentinel `couch` and `pair` record each call (cwd and argv) to `$PARLEY_TEST_ENV_ROOT/sentinel.log`, then refuse with exit 97. A spec's fake wins because the spec prepends its own bin. `PREP_TEST_ENV` empties the log, and every target fails afterwards if it isn't empty: proof that no spec reached the real CLI, and so the real registry socket.
+- [ ] `test_isolation.ambient(env)` lists every visible `COUCH_*`, `PAIR_*` and terminal-owner name (TMUX, NVIM, KITTY_*, WEZTERM_*, ITERM_SESSION_ID, TERM_SESSION_ID, ZELLIJ, …). Pure, with unit tests.
+- [ ] Guard, `tests/integration/test_isolation_spec.lua`: the spec process's own environment has no ambient names, in particular no `COUCH_THREAD_SCOPE` or `COUCH_THREAD_TAG`; a bare `couch` resolves to the sentinel; calling it refuses and logs (to a log of the case's own). A launcher case runs `test-env.sh` with a polluted environment and checks the child's environment is exactly the allowlist.
+- [ ] The suite is green with the slot's live `COUCH_THREAD_*` exported. `chat_move_spec` now runs plain, because no thread is visible.
+- [ ] The atlas `infra/test_harness.md` gets the allowlist, the sentinel, and why.
 
 ## Log
 
