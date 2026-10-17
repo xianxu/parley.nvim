@@ -158,7 +158,11 @@ loaded model, the namespace cache, or an earlier background answer.
 - A positively plain document renames plainly.
 - An unknown identity or a legacy `type: session-sync` file refuses at once
   with nothing moved (`move not confirmed: … Run the move again`), and asks
-  Couch in the background, so the rerun proceeds.
+  Couch in the background, so the rerun proceeds. A background "absent"
+  answer holds for `ANSWER_TTL_MS` (60 s). A rerun after that asks again, so a
+  registration made since is never moved past.
+- Neovim gives the rename hooks no `!`, so any rename onto an existing path
+  (`:saveas!`, or `:file` there) takes the bounded check below.
 - Only `:saveas!` onto an existing file asks inline, within
   `agentic_move_timeout_ms`. Neovim writes it before Couch could refuse, and
   past the deadline the recovery is `rename back to OLD, then run it again`.

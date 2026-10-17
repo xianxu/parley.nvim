@@ -57,7 +57,8 @@ registry failed, it turns red with `not confirmed: submit again`. Alt+Return the
 completes it, and it never delivers twice: a press while a send is still out
 joins it. Moves and renames never wait on Couch: a registered document moves at
 once while Couch confirms in the background, and one parley doesn't know yet
-says to run the move again. Only `:saveas!` onto an existing file asks first,
+says to run the move again (rerun within a minute: the background answer then
+expires). Only `:saveas!` onto an existing file asks first,
 within `agentic_move_timeout_ms` (default 5000), and on that deadline says to
 rename back first.
 An explicit `couch-owner:` overrides the default; a business `owner:` does not
