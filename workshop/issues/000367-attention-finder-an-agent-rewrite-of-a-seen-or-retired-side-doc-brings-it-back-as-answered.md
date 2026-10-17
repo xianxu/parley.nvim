@@ -1,12 +1,20 @@
 ---
 id: 000367
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
-card_mirror: '5d51b1c181d04d772b2eeeafe6c6c59a06451852' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '4a5705456aec0a9de72de25785c78525feba85a5' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-16T19:46:30-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Attention finder: an agent rewrite of a seen or retired side doc brings it back as answered
@@ -30,7 +38,31 @@ card_mirror: '5d51b1c181d04d772b2eeeafe6c6c59a06451852' # card fields mirrored f
 
 ## Plan
 
-- [ ]
+**The agent-write signal (what was measured).** Couch's ledger can't tell the two writers apart for side docs. `LastWrite` is set only by `couch --session-sync write`. The review skill (`xx-universal-review`, adapters/file-edit.md) creates a new side doc directly on disk, and rewrites one directly too unless the side doc is registered with Couch; side docs usually aren't. Session-sync's FileChangedShell sees only open `type: session-sync` buffers. So the seam is the writer we do own: the operator edits in Neovim, and every save Neovim makes fires BufWritePost. **An agent write is a disk mtime that this editor did not write.**
+
+- The store keeps a `saved` map `{[path] = "sec.nsec"}`: the mtime of the operator's last save of a side doc. A BufWritePost in the existing `ParleyAttentionViews` augroup records it for any `*.md` directly inside a `*.side/` folder, and for any path that is an entry or retired. It is recorded through the one `apply`, as the pure event `saved{path, mtime}`. The map is pruned on every write to paths that are entries, retired, or under an entry's `.side/` folder, and capped at LIMIT; this follows the ARCH-FUNERAL rule.
+- Why not a lock or lease, which the invariant rule asks about: the agent writes untracked side docs with no lease, and requiring one is a change to the review skill and Couch in another repo. This one-step check needs only the editor.
+
+**The rule (pure, in `attention_model`).** A new `M.scan(state, files)` takes the stat of each `.side/` file the glue found, `{path, parent, mtime_sec, mtime_id}`, and returns the events. A file is agent-written when `mtime_id ~= state.saved[path]`.
+- **New** (neither an entry nor retired): agent-written and `mtime_sec > since`, which is the current rule. The result is `discovered`. The current rule also lists a side doc the operator creates and saves themselves as answered; this check removes that gap too.
+- **Retired:** agent-written and `mtime_sec > retired_at`. The result is `discovered`, and `handlers.discovered` now un-retires the path instead of ignoring it. It becomes an answered entry again, with `answered_at = mtime_sec`.
+- **Seen side entry:** agent-written and `mtime_sec > seen_at`. The result is `rewritten{path, at = mtime_sec}`, which sets `answered_at = at`, so `state_of` reads answered again. A rewrite of a waiting or answered entry, or one at or before `seen_at`, changes nothing.
+- `attention.discover` keeps only the IO: scan, stat and the frontmatter head read. It hands the files to `Model.scan`.
+
+**Boundaries, as stated in the atlas.**
+- An edit made outside this editor, or in an editor without parley, counts as an agent write.
+- mtimes are compared at whole seconds against `seen_at`, so an agent write in the same second as the operator's view is missed, as with the current `discovered` rule.
+- Only the `.side/` folders of current entries are scanned. A side doc whose parent entry has also left comes back on the parent's next submit.
+
+**Steps** (quick flow, single pass):
+- [ ] Model: the `saved` and `rewritten` events, `discovered` un-retiring, and `scan`, with unit specs for the Done-when cases. Those are: rewrite after seen gives answered; operator save gives nothing; rewrite at or before seen gives nothing; retired with a newer agent write comes back; retired with an operator save stays retired; an operator-created side doc is not listed.
+- [ ] Store: parse and type `saved` with one warning per read, and prune it.
+- [ ] Glue: BufWritePost records `saved`, and `discover` goes through `Model.scan`.
+- [ ] Integration spec through `attention.open`:
+  - the agent rewrites a seen side doc and it is listed as answered;
+  - the operator `:w`s it and it is not;
+  - a retired one comes back.
+- [ ] Atlas: update `attention_finder.md`'s side-docs section and traceability.
 
 ## Log
 
