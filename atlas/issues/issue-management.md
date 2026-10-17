@@ -23,9 +23,16 @@ the issue **home**: `config.issues_dir` is seeded at setup from the cue
 default), so every reader derives from the one cue source.
 
 The generated JSON ships with Parley and resolves from the plugin's own root,
-never the launch directory. The loader validates category/lifecycle structure
-and limits regular-file reads to 1 MiB. A ready or unavailable result is cached;
-explicit `setup()` reloads it so a repaired installation recovers.
+never the launch directory. It is committed on purpose: a plugin-manager install
+never runs weave, so the installed tree must already hold it. The manifest's
+`internal ship` row (#371, ariadne#422) has weave write
+`issue.json.weave-sha256`, committed beside it. On a cold checkout (CI, a fresh
+clone, no ownership inventory), the matching digest lets weave regenerate the
+file after an ariadne vocabulary change instead of refusing it as foreign, while
+a hand edit, which no longer matches, is still refused. The loader validates
+category/lifecycle structure and limits regular-file reads to 1 MiB. A ready or
+unavailable result is cached; explicit `setup()` reloads it so a repaired
+installation recovers.
 
 Missing or invalid data does not prevent chat startup. Raw issue records remain
 readable and sort by ID (archive order still uses mtime), without fabricated

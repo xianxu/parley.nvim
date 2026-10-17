@@ -1,14 +1,15 @@
+local arrival = require("tests.helpers.arrival")
 local A=require('parley.tools.async_builtin')
 local T=require('parley.tasker')
 local Fake=require('tests.helpers.fake_process')
-local function wait(fn)assert.is_true(vim.wait(2000,fn,1))end
+local function wait(fn)assert.is_true(vim.wait(arrival.MS,fn,1))end
 
 describe('asynchronous builtins',function()
     local processes
     before_each(function()T._reset();T._uv,processes=Fake.new()end)
     after_each(function()
         for _,p in pairs(processes.processes)do p:finish()end
-        vim.wait(100,function()return T.stats().active==0 end,1);T._reset();T._uv=nil
+        vim.wait(100,function()return T.stats().active==0 end,1);T._reset();T._uv=nil -- drain: teardown settle; T._reset() follows
     end)
     it('registers all eleven executable builtins with asynchronous capability',function()
         for _,name in ipairs({'read_file','write_file','edit_file','propose_edits','grep','ack','find','ls',
@@ -138,6 +139,20 @@ describe('asynchronous builtins',function()
         wait(function()state.drain();return result~=nil end)
         assert.is_false(result.result.is_error);assert.equals('after',state.files['/root/file'].bytes)
         assert.equals('before',state.files['/root/file.parley-backup.1'].bytes)
+    end)
+    it('refuses an overlapping edit batch before any backup or write (#369)',function()
+        local runtime,state=require('tests.helpers.fake_tool_filesystem').new()
+        state.put('/root','','directory');state.put('/root/file','alpha\n# Chat\nsecret')
+        local fs=require('parley.tools.filesystem').new({runtime=runtime,schedule=state.schedule})
+        local result
+        require('parley.tools.builtin.propose_edits').execute_async({file_path='/root/file',
+            edits={{old_string='alpha',new_string='x',explain='e'},{old_string='pha',new_string='',explain='e'}}},
+            {filesystem=fs,operation_id='overlap'},function(v)result=v end)
+        wait(function()state.drain();return result~=nil end)
+        assert.is_true(result.result.is_error)
+        assert.matches('edits #1 (alpha) and #2 (pha) overlap',result.result.content,1,true)
+        assert.equals('alpha\n# Chat\nsecret',state.files['/root/file'].bytes)
+        assert.is_nil(state.files['/root/file.parley-backup.1'])
     end)
     it('captures history roots and stops before a second root after cancellation',function()
         local result

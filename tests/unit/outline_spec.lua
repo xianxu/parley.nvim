@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local outline = require("parley.outline")
 local Document=require('parley.document')
 local function settle(buf) Document.drain(Document.attach(buf,{schedule=false}),1000) end
@@ -95,7 +96,7 @@ describe('Indexed live outline',function()
         vim.api.nvim_buf_set_lines(b,0,-1,false,{'💬: q','body'})
         local loaded
         outline._load_live_items(b,{chat_user_prefix='💬:'},{is_chat=true},function(items) loaded=items end)
-        assert.is_true(vim.wait(2000,function()return loaded~=nil end,5))
+        assert.is_true(vim.wait(arrival.MS,function()return loaded~=nil end,5))
         assert.equals(1,#loaded)
         local chosen=loaded[1].value
         vim.api.nvim_buf_set_lines(b,0,1,false,{'plain'})
@@ -111,7 +112,7 @@ describe('Indexed live outline',function()
         local completed,observed=false,nil
         outline._load_live_items(b,{chat_user_prefix='💬:'},{is_chat=true},function()completed=true end)
         vim.defer_fn(function()observed=completed end,2)
-        assert.is_true(vim.wait(500,function()return observed~=nil end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return observed~=nil end,1))
         vim.api.nvim_buf_delete(b,{force=true})
         assert.is_false(observed)
     end)

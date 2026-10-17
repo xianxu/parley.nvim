@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local repository = vim.fn.getcwd()
 describe('loopback HTTP fixtures without reverse DNS', function()
     local root, process
@@ -22,7 +23,7 @@ describe('loopback HTTP fixtures without reverse DNS', function()
                     vim.list_extend(args, {'--port', '0'})
                 end
                 process = vim.system(args, {text = true})
-                assert.is_true(vim.wait(3000, function()
+                assert.is_true(vim.wait(arrival.MS, function()
                     return vim.fn.filereadable(root .. '/ready') == 1
                 end, 10), 'fixture exceeded its 3-second readiness deadline')
                 local port = assert(tonumber(vim.fn.readfile(root .. '/ready')[1]))

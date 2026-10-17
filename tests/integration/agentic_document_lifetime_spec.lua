@@ -1,9 +1,10 @@
 -- Hold real subprocess completions after durable publication. Cancellation is
 -- deliberately followed by late delivery, so editor incarnation guards matter.
+local arrival = require("tests.helpers.arrival")
 describe("agentic document buffer lifetime", function()
     local root, file, buf, saved, document, couch, ss, controls, group
     local function await(predicate)
-        assert.is_true(vim.wait(10000, predicate, 10), "buffer lifecycle did not settle")
+        assert.is_true(vim.wait(arrival.MS, predicate, 10), "buffer lifecycle did not settle")
     end
     local function drain()
         local done = false

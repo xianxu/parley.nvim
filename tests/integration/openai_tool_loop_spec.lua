@@ -13,7 +13,7 @@
 -- notably the class the plan gate caught, where messages reached the wire
 -- untranslated.
 
-local uv = vim.uv or vim.loop
+local arrival = require("tests.helpers.arrival")
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 local dispatcher = require("parley.dispatcher")
@@ -35,18 +35,7 @@ local function start_fake(port, response_mode, env)
     local handle, _, err, pid = fixture_process.spawn(FAKE,
         { "--port", tostring(port), "--response-mode", response_mode }, env)
     assert(handle, "spawn fake: " .. tostring(err))
-    -- wait for the listener
-    local up = false
-    vim.wait(5000, function()
-        local c = uv.new_tcp()
-        c:connect("127.0.0.1", port, function(err)
-            up = err == nil
-            c:close()
-        end)
-        vim.wait(50, function() return false end)
-        return up
-    end, 50)
-    assert(up, "fake did not come up on port " .. port)
+    ready_port.require_listening(port)
     return pid
 end
 
@@ -125,7 +114,7 @@ describe("openai tool loop against a stateful fake (#198)", function()
                 results[#results+1]={response=query.response,calls=vim.deepcopy(calls)}
             end,
         }))
-        assert.is_true(vim.wait(15000,function()return Session.snapshot(session).status=="terminal"end,5),
+        assert.is_true(vim.wait(arrival.MS,function()return Session.snapshot(session).status=="terminal"end,5),
             vim.inspect(Session.snapshot(session)))
         assert.equals("success",Session.snapshot(session).generation.outcome)
         return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),"\n"),continuations,results

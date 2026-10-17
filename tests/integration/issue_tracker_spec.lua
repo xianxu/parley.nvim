@@ -1,11 +1,12 @@
 -- #308: the tracker reader against real git — a bare remote and two clones,
 -- with an orphan `issue-tracker` branch carrying cards (ARCH-MOCK: the real
 -- binary behind the same seam, no function-call mocks).
+local arrival = require("tests.helpers.arrival")
 local tracker = require("parley.issue_tracker")
 local fixture = require("tests.helpers.tracker_repo")
 
 local function wait_for(predicate)
-    assert(vim.wait(10000, predicate, 10), "timed out waiting for the tracker")
+    assert(vim.wait(arrival.MS, predicate, 10), "timed out waiting for the tracker")
 end
 
 local function load(root)

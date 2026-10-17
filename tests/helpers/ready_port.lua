@@ -77,11 +77,12 @@ function M.free_port()
     return port
 end
 
---- Is something accepting connections on this port right now? One attempt, no
---- polling — the negative predicate a dormancy assertion needs.
+--- One TCP connect to the port; true when the handshake completed. Not proof
+--- of a listener on its own (see is_listening). Replaceable so a spec can
+--- stage the false positive without winning a kernel race.
 --- @param port number
 --- @return boolean
-function M.is_listening(port)
+function M._connect(port)
     local uv = vim.uv or vim.loop
     local ok, done = false, false
     local c = uv.new_tcp()
@@ -94,14 +95,99 @@ function M.is_listening(port)
     return ok
 end
 
+-- Hang guard on the confirming lsof. Generous, like cliproxy's LSOF_GUARD_MS
+-- (#345 measured lsof past 2 s under the 8-way suite): a cutoff below what a
+-- loaded lsof needs turns a fake that is up into a readiness timeout. It does
+-- not eat wait_listening's budget either: vim.wait checks its deadline only
+-- between polls, so a confirm that started always finishes with an answer.
+local LSOF_TIMEOUT_MS = 10000
+
+--- Run the listener query. Replaceable so a spec can pin each exit shape.
+--- @param port number
+--- @return table|nil vim.system result, nil when it could not run
+function M._run_lsof(port)
+    local ok, res = pcall(function()
+        return vim.system({ "lsof", "-nP", "-iTCP:" .. port, "-sTCP:LISTEN", "-t" },
+            { text = true, timeout = LSOF_TIMEOUT_MS }):wait()
+    end)
+    return ok and res or nil
+end
+
+--- Is lsof installed here? Replaceable for the same reason.
+--- @return boolean
+function M._lsof_present()
+    return vim.fn.executable("lsof") == 1
+end
+
+--- Does a socket in LISTEN state hold the port? nil when lsof can't say
+--- (absent, refused or hung past its guard).
+--- @param port number
+--- @return boolean|nil
+function M._has_listener(port)
+    local res = M._run_lsof(port)
+    if not res or res.code == 124 then
+        return nil
+    end
+    if res.code == 0 then
+        return (res.stdout or ""):match("%d") ~= nil
+    end
+    -- lsof exits 1 for "no such socket"; anything else is lsof failing.
+    if res.code == 1 then
+        return false
+    end
+    return nil
+end
+
+--- Is something accepting connections on this port right now? One attempt, no
+--- polling — the negative predicate a dormancy assertion needs.
+---
+--- A completed connect is not enough (#360): free_port hands the number back to
+--- the kernel's shared ephemeral pool, a parallel spec's probe can take it as
+--- its SOURCE port, and two probes aimed at each other's freed ports complete a
+--- TCP simultaneous open with nothing listening — measured as 6 refused first
+--- fetches in 240. So a connect is confirmed by a LISTEN socket on the port.
+--- The lsof runs only after a connect succeeds, so polling a port that is
+--- still refusing costs nothing extra. Where lsof is absent the connect stands
+--- alone, as before; where it is present but cannot answer, the connect is
+--- unconfirmed.
+--- @param port number
+--- @return boolean
+function M.is_listening(port)
+    if not M._connect(port) then
+        return false
+    end
+    local listener = M._has_listener(port)
+    if listener == nil then
+        return not M._lsof_present()
+    end
+    return listener
+end
+
+local DEFAULT_LISTEN_MS = 5000
+
 --- Poll until something is listening on `port`, so probes don't race startup.
+--- A caller that drops the answer turns "the fake never came up" into whatever
+--- the product does against a dead port (#361: a missing login prompt, or a
+--- retry where give_up was due), so the result must be consumed; a caller that
+--- only needs the fake up uses require_listening.
 --- @param port number
 --- @param timeout_ms number|nil
 --- @return boolean listening
+---@nodiscard
 function M.wait_listening(port, timeout_ms)
-    return vim.wait(timeout_ms or 5000, function()
+    return vim.wait(timeout_ms or DEFAULT_LISTEN_MS, function()
         return M.is_listening(port)
     end, 50) or false
+end
+
+--- wait_listening, or fail the spec here, by name.
+--- @param port number
+--- @param timeout_ms number|nil
+function M.require_listening(port, timeout_ms)
+    if not M.wait_listening(port, timeout_ms) then
+        error(("fake never came up on port %d (waited %dms)"):format(port,
+            timeout_ms or DEFAULT_LISTEN_MS), 2)
+    end
 end
 
 return M

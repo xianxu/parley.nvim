@@ -70,7 +70,7 @@ fallback-to-selection behavior.
 | `skill_assembly.lua` | Build invocation context and resolve the agent |
 | `skill_invoke.lua` | Run one exchange, execute tools, refresh the captured source and call completion hooks |
 | `skill_source_read.lua` | Pure admission, logical completion, deadline and physical retirement decisions for final source reads |
-| `skill_edits.lua`, `tools/builtin/propose_edits.lua` | Compute and apply document edits |
+| `skill_edits.lua`, `tools/builtin/propose_edits.lua` | Compute and apply document edits; a batch whose spans overlap is refused whole (#369) |
 | `tools/backup.lua`, `skill_render.lua` | Backups, highlights, diagnostics |
 | `skills/review/`, `skills/voice_apply/`, `skills/define/` | Built-in manifests and behavior |
 

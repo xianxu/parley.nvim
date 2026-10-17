@@ -2,6 +2,7 @@
 -- CLIProxyAPI release, against tests/fixtures/fake_github_releases (a stateful
 -- fake of GitHub's release endpoints) and tests/fixtures/fake_cliproxy.
 
+local arrival = require("tests.helpers.arrival")
 local cliproxy = require("parley.cliproxy")
 local fake_releases = require("tests.helpers.fake_releases")
 local fixture_process = require("tests.helpers.fixture_process")
@@ -139,14 +140,14 @@ describe("version_probe", function()
     it("reads the version off a rejected key, from a proxy parley did not configure", function()
         local port = ready_port.free_port()
         spawn_fake({ "--port", tostring(port), "--management-key", "k" }, { PARLEY_FAKE_CPA_VERSION = "9.9.9" })
-        ready_port.wait_listening(port)
+        ready_port.require_listening(port)
         assert.same({ "9.9.9" }, { cliproxy.version_probe("127.0.0.1", port) })
     end)
 
     it("says no_header when the proxy answers without one", function()
         local port = ready_port.free_port()
         spawn_fake({ "--port", tostring(port) })
-        ready_port.wait_listening(port)
+        ready_port.require_listening(port)
         assert.same({ nil, "no_header" }, { cliproxy.version_probe("127.0.0.1", port) })
     end)
 
@@ -372,7 +373,7 @@ describe(":ParleyProxy update", function()
         -- a cliproxy parley did not launch holds the port (think brew services)
         local holder = spawn_fake({ "--port", tostring(proxy_port), "--management-key", "k" },
             { PARLEY_FAKE_CPA_VERSION = "1.0.0" })
-        ready_port.wait_listening(proxy_port)
+        ready_port.require_listening(proxy_port)
         ps_sees({ ps_row(holder:get_pid(), "python3 " .. FAKE .. " --port " .. proxy_port) })
         local r = update()
         assert.is_true(r.ok, r.msg)
@@ -390,7 +391,7 @@ describe(":ParleyProxy update", function()
         fake_releases.publish(server, "9.9.6")
         -- No management key, so no X-Cpa-Version: to parley this is any server.
         spawn_fake({ "--port", tostring(proxy_port) })
-        ready_port.wait_listening(proxy_port)
+        ready_port.require_listening(proxy_port)
         local r = update()
         assert.is_true(r.ok, r.msg)
         assert.is_true(r.warn)
@@ -404,7 +405,7 @@ describe(":ParleyProxy update", function()
         cliproxy.download({ version = "9.9.4" })
         fake_releases.publish(server, "9.9.6")
         spawn_fake({ "--port", tostring(proxy_port), "--management-key", "k" }, { PARLEY_FAKE_CPA_VERSION = "1.0.0" })
-        ready_port.wait_listening(proxy_port)
+        ready_port.require_listening(proxy_port)
         cliproxy._set_process_tools({ ps = "parley-test-no-such-ps" }) -- a machine without ps
         local r = update()
         assert.is_true(r.ok, r.msg)
@@ -426,7 +427,7 @@ describe(":ParleyProxy update", function()
         cliproxy.download({ version = "9.9.4" })
         fake_releases.publish(server, "9.9.6")
         spawn_fake({ "--port", tostring(proxy_port), "--management-key", "k" }, { PARLEY_FAKE_CPA_VERSION = "1.0.0" })
-        ready_port.wait_listening(proxy_port)
+        ready_port.require_listening(proxy_port)
         ps_sees({}, broken) -- ps readable, so the identity read reaches lsof
         local r = update()
         assert.is_true(r.ok, r.msg)
@@ -447,7 +448,7 @@ describe(":ParleyProxy update", function()
         end)
         -- Wait for the first update's restart BEFORE any assertion: returning
         -- early would leave its spawn in flight past after_each (PQ-5).
-        vim.wait(25000, function()
+        vim.wait(2 * arrival.MS, function()
             return first ~= nil
         end, 20)
         assert.same({ ok = false, msg = "an update is already running" }, second)
@@ -507,7 +508,7 @@ describe(":ParleyProxy update", function()
         assert.equals("9.9.11", cliproxy.installed_version()) -- installed; the next restart serves it
         assert.same({ "9.9.4" }, { cliproxy.version_probe("127.0.0.1", proxy_port) }) -- never taken for new
         kill_held()
-        assert.is_true(vim.wait(5000, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             return cliproxy.version_probe("127.0.0.1", proxy_port) == nil
         end, 50), "the held old proxy still answers after SIGKILL")
     end)
@@ -614,10 +615,10 @@ describe("status version", function()
             calls = calls + 1
             info = i
         end)
-        vim.wait(8000, function()
+        vim.wait(arrival.MS, function()
             return info ~= nil
         end, 20)
-        vim.wait(300, function()
+        vim.wait(300, function() -- absence: plain sleep; a second callback must not land
             return false
         end) -- a second callback would land here
         assert.equals(1, calls)
@@ -629,17 +630,17 @@ describe("status version", function()
         -- after the latest release (single-threaded: 1.4 s, inside curl's 2 s).
         spawn_fake({ "--port", tostring(proxy_port), "--management-key", "k" },
             { PARLEY_FAKE_CPA_VERSION = "9.9.4", PARLEY_FAKE_GET_DELAY_MS = "700" })
-        ready_port.wait_listening(proxy_port)
+        ready_port.require_listening(proxy_port)
         fake_releases.publish(server, "9.9.5")
         local calls, info = 0, nil
         cliproxy.status(function(i)
             calls = calls + 1
             info = i
         end)
-        vim.wait(8000, function()
+        vim.wait(arrival.MS, function()
             return info ~= nil
         end, 20)
-        vim.wait(300, function()
+        vim.wait(300, function() -- absence: plain sleep; a second callback must not land
             return false
         end) -- a second callback would land here
         assert.equals(1, calls)
@@ -699,7 +700,7 @@ describe("management lockout (7.2.x)", function()
     it("never spends a failed attempt on parley's own proxy, however often it probes", function()
         spawn_fake({ "--port", tostring(proxy_port), "--management-key", cliproxy.management_key() },
             { PARLEY_FAKE_CPA_VERSION = "9.9.9" })
-        ready_port.wait_listening(proxy_port)
+        ready_port.require_listening(proxy_port)
         for _ = 1, 8 do
             assert.same({ "9.9.9" }, { cliproxy.version_probe("127.0.0.1", proxy_port) })
         end
@@ -709,7 +710,7 @@ describe("management lockout (7.2.x)", function()
     it("says the proxy banned parley once five attempts have failed, as 7.2.x does", function()
         spawn_fake({ "--port", tostring(proxy_port), "--management-key", cliproxy.management_key() },
             { PARLEY_FAKE_CPA_VERSION = "9.9.9" })
-        ready_port.wait_listening(proxy_port)
+        ready_port.require_listening(proxy_port)
         for i = 1, 5 do
             assert.equals("401", unauthenticated_attempt(), "attempt " .. i)
         end

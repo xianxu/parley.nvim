@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local root = vim.fn.getcwd()
 local uv = vim.uv or vim.loop
 
@@ -45,7 +46,7 @@ describe('installed launcher', function()
             'local uv = vim.uv or vim.loop',
             'local function pause()',
             '  vim.fn.writefile({ tostring(uv.os_getpid()) }, vim.env.TEST_READY)',
-            '  assert(vim.wait(8000, function() return vim.fn.filereadable(vim.env.TEST_PROCEED) == 1 end, 10), "barrier timed out")',
+            '  assert(vim.wait(' .. arrival.MS .. ', function() return vim.fn.filereadable(vim.env.TEST_PROCEED) == 1 end, 10), "barrier timed out")',
             'end',
             operation == 'owner' and 'local write = vim.fn.writefile; vim.fn.writefile = function(lines, path, ...)' or
                 'local link = uv.fs_link; uv.fs_link = function(...) pause(); return link(...) end',
@@ -58,7 +59,7 @@ describe('installed launcher', function()
     -- creates the file before its bytes land, so existence alone is not it (#346).
     local function await_ready()
         local pid
-        assert.is_true(vim.wait(3000, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             local ready = scratch .. '/ready'
             pid = vim.fn.filereadable(ready) == 1 and tonumber(vim.fn.readfile(ready)[1] or '') or nil
             return pid ~= nil

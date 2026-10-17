@@ -162,8 +162,18 @@ def main():
             code, error = "registry-uncertain", "published but reply unavailable"
         if mode == "wrong-path":
             registration = dict(ID="wrong", File="/wrong.md", Owner="ops:0", RegisteredOwner="ops:0", RegisteredAt="2026-10-15T00:00:00Z")
-        print(json.dumps(dict(Code=code, Error=error, Registration=registration, Changed=changed)))
-        return 0 if code == "ok" else 1
+        reply = json.dumps(dict(Code=code, Error=error, Registration=registration, Changed=changed))
+    # FAKE_COUCH_REGISTRY_REPLY_DELAY (seconds): the change is published, and the
+    # lock released, before the caller hears about it, as with the real Couch,
+    # whose reply travels after it persists (#372). FAKE_COUCH_REGISTRY_REPLY_DELAY_OPS
+    # (comma list, default all) limits it, so a spec can watch the registry
+    # lead the caller's own view.
+    reply_delay = float(os.environ.get("FAKE_COUCH_REGISTRY_REPLY_DELAY") or "0")
+    reply_only = os.environ.get("FAKE_COUCH_REGISTRY_REPLY_DELAY_OPS")
+    if reply_delay > 0 and (not reply_only or op in reply_only.split(",")):
+        time.sleep(min(reply_delay, 10.0))
+    print(reply)
+    return 0 if code == "ok" else 1
 
 
 if __name__ == "__main__":

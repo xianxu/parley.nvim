@@ -5,6 +5,7 @@
 -- ~/.cli-proxy-api/logs/), not invented shapes.
 
 local ca = require("parley.cliproxy_auth")
+local arrival = require("tests.helpers.arrival")
 
 -- The exact 215-byte body from issue #197, served with HTTP 503.
 local NO_AUTH = '{"type":"error","error":{"type":"api_error","message":"auth_unavailable: '
@@ -731,7 +732,7 @@ describe("credential_health_across contract", function()
             got = { readings[1].channel, readings[2].channel }
             return readings[1].health, readings[1].channel
         end, function() end)
-        vim.wait(2000, function() return got ~= nil end, 10)
+        vim.wait(arrival.MS, function() return got ~= nil end, 10)
         cliproxy.credential_health = saved
         assert.same({ "first", "second" }, got)
     end)
@@ -757,7 +758,7 @@ describe("credential_health_across contract", function()
         cliproxy.credential_health_across({ "a", "b", "c" },
             require("parley.cliproxy_auth").likeliest_culprit,
             function() done = true end)
-        vim.wait(3000, function() return done end, 5)
+        vim.wait(arrival.MS, function() return done end, 5)
         cliproxy.credential_health = saved
         assert.is_true(done, "the chain never settled")
         assert.equals(1, max_in_flight,
@@ -776,7 +777,7 @@ describe("credential_health_across contract", function()
         cliproxy.credential_health_across({ "first", "second" },
             require("parley.cliproxy_auth").likeliest_culprit,
             function(_h, _c, repaired) seen = repaired end)
-        vim.wait(2000, function() return seen ~= nil end, 10)
+        vim.wait(arrival.MS, function() return seen ~= nil end, 10)
         cliproxy.credential_health = saved
         assert.is_true(seen, "a repair on any candidate must reach the caller")
     end)

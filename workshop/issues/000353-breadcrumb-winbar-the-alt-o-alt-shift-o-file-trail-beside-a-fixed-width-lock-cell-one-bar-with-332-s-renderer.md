@@ -120,6 +120,8 @@ After code verification: close on SHIP and report green to TL. Do not stage; :0 
 
 - 2026-10-17 post-BR5 required suite passed on `a781eae062b35246faad709e5c3395b914f5f2ba`:462/462 spec files,774 lint files with zero warnings/errors, no surviving test processes. Retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/a781eae062b35246faad709e5c3395b914f5f2ba/suite.log`, SHA256 `e19a36f1b8905111ed8565c977ffcc28cce8c83c2b3555aedecd9c7a5f29b256`. TL observed the green status and directed re-close then normal-gated landing without staging (submitted receipt3496528e-e3b1-43d7-87bf-4caa9a58a4d3). BR5 rejection-category tests, Back retention and native split reminder ordering are included in this run. A subsequent evidence-only Log commit preserves this result before re-close; long review waits are handed back to the hub.
 
+- 2026-10-17 close finalized SHIP on4142a926: all five findings disposed, no open Critical/Important/Minor. Close evidence `f0e0bce60129614d786d7038ac1bf083a880e7a0`, codecomplete mirror `7d126cc90c434f05601f382b60723e013672a58b`. Normal merge refused integration against main `d5646b04ddf0a46ee540752c1d8394343f81eee9`: conflicts in session_sync_spec.lua. As the gate directed, merged main manually and resolved all five hunks by retaining main's arrival_ms() waits and #353's exact fixed lock-cell/feedback assertions. No production conflict. Full integrated-head suite and fixed-then-ship re-review with full-suite evidence are required before retrying normal landing. No staging, no bypasses.
+
 ## Revisions
 
 ### 2026-10-16 — #354 persisted-trail coordination

@@ -187,3 +187,7 @@ BR-5 (renderer-ownership-state) exposes that rejected observations retained a tr
 ### 2026-10-17 — Split ownership precedes first history repaint
 
 The BR-5 targeted run completed, not interrupted: band32/history45 passed; one reminder case exposed that history's new eligibility repaint immediately replaced the WinNew pulse cleanup's restored free cell. Native split cleanup now installs buffer-wide, non-priority underlying owner layers before history repaint, using the copied option proof. Window-scoped layers and transient pulses remain on their original windows. The existing generic-owner split regression is the failing oracle; retain it unchanged.
+
+### 2026-10-17 — Landing integration preserves main's wait budget
+
+Normal landing found conflicts only in session_sync_spec.lua: main replaced load-guessed arrival waits with the production submit deadline, while #353 replaced whole-bar text with lock-cell composition. Retain main's arrival_ms() waits and #353's exact expected cells/feedback. Other main changes merge automatically. Run a full integrated-head suite, then the required fixed-then-ship review with full-suite evidence before retrying normal landing.

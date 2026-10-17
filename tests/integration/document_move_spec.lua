@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local uv = vim.uv or vim.loop
 
 describe('durable leased document migration', function()
@@ -22,7 +23,7 @@ describe('durable leased document migration', function()
     local function advance(operation)
         local result
         move().advance(operation, function(value) result = value end)
-        assert.is_true(vim.wait(3000, function() return result ~= nil end))
+        assert.is_true(vim.wait(arrival.MS, function() return result ~= nil end))
         return result
     end
     local function recover(options)
@@ -33,7 +34,7 @@ describe('durable leased document migration', function()
         }, options or {}), function(value) result = value end)
         if operation then operations[#operations + 1] = operation end
         if err then return nil, err end
-        assert.is_true(vim.wait(3000, function() return result ~= nil end))
+        assert.is_true(vim.wait(arrival.MS, function() return result ~= nil end))
         return result, operation
     end
     before_each(function()
@@ -113,14 +114,14 @@ describe('durable leased document migration', function()
         assert.is_nil(uv.fs_stat(root .. '/new.side')); assert.is_nil(uv.fs_stat(new))
         write(new, 'parent\n')
         local result; move().advance(operation, function(value) result = value end)
-        assert.is_true(vim.wait(3000, function() return metadata ~= nil end))
+        assert.is_true(vim.wait(arrival.MS, function() return metadata ~= nil end))
         assert.is_nil(result); assert.equals(1, calls)
         assert.equals('---\nparent: ../new.md\n---\n[parent](../new.md#anchor)\nunchanged\n', read(root .. '/new.side/child.md'))
         assert.equals('binary\0payload', read(root .. '/new.side/binary.bin'))
         assert.equals('parent\n', read(old))
         assert.equals('busy', select(2, begin()).kind)
         metadata({ kind = 'registered', registration = registration(new), changed = false })
-        assert.is_true(vim.wait(3000, function() return result ~= nil end))
+        assert.is_true(vim.wait(arrival.MS, function() return result ~= nil end))
         assert.equals('registered', result.kind); assert.is_nil(uv.fs_stat(operation.journal_path))
     end)
 

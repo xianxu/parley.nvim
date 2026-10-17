@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local ok,Runner=pcall(require,'parley.generation_runner')
 local D=require('parley.document')
 local FakeEditor=require('tests.helpers.fake_document_editor')
@@ -262,11 +263,11 @@ describe('generation runner sequences',function()
         local marker=D.query(doc,2,3)[1];local body=D.query(doc,3,4)[1]
         local r=assert(Runner.start(doc,{entity=marker.handle,first=marker.start_byte,last=body.end_byte-1,
             input={message='scheduled'}},fake.adapters));runners[#runners+1]=r
-        assert.is_true(vim.wait(1000,function()return #fake.preparations==1 end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return #fake.preparations==1 end,1))
         fake:prepare()
-        assert.is_true(vim.wait(1000,function()return #fake.requests==1 end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return #fake.requests==1 end,1))
         fake:output(1,'```\nbody\n```');fake:complete(1)
-        assert.is_true(vim.wait(2000,function()D.repair_step(doc);return Runner.snapshot(r).phase=='terminal' end,1))
+        assert.is_true(vim.wait(arrival.MS,function()D.repair_step(doc);return Runner.snapshot(r).phase=='terminal' end,1))
         assert.equals(12,Runner.snapshot(r).committed_bytes)
     end)
 

@@ -29,8 +29,9 @@ live() { eval "[ -n \"\${$1-}\" ]"; }
 live PARLEY_LIVE_CONFORMANCE && keep="$keep CLIPROXYAPI_API_KEY"
 live PARLEY_LIVE_CLIPBOARD && keep="$keep DISPLAY WAYLAND_DISPLAY"
 # The --actors check (make check-couch-actors-live) runs couch_spec ALONE with the
-# real thread; RUN_SPEC strips this flag, so a suite never sees the thread.
-live PARLEY_LIVE_COUCH && keep="$keep COUCH_THREAD_SCOPE COUCH_THREAD_TAG COUCH_STORE_DIR COUCH_ISOLATED_ROOT COUCH_TREE"
+# real thread; RUN_SPEC strips this flag, so a suite never sees the thread. The
+# CLI names its caller by the thread plus pair's session name and launch nonce (#366).
+live PARLEY_LIVE_COUCH && keep="$keep COUCH_THREAD_SCOPE COUCH_THREAD_TAG COUCH_STORE_DIR COUCH_ISOLATED_ROOT COUCH_TREE PAIR_SESSION_NAME PAIR_LAUNCH_NONCE"
 # A target that records from real services names its credentials explicitly
 # (only `make fixtures` does).
 for name in ${PARLEY_TEST_ENV_PASS-}; do

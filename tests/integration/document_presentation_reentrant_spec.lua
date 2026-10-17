@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 describe('native presentation publication ownership',function()
     local child
     local function exec(code,...)return vim.rpcrequest(child,'nvim_exec_lua',code,{...})end
@@ -140,6 +141,7 @@ describe('native presentation publication ownership',function()
     end)
     it('schedules surviving windows when setup loses one window during configuration',function()
         local result=exec([[
+            local arrival_ms=...
             local D=require('parley.document');local F=require('parley.tool_folds')
             local buf=vim.api.nvim_get_current_buf()
             vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','🤖: a','🧠: think','body','🧠:[END]'})
@@ -153,11 +155,11 @@ describe('native presentation publication ownership',function()
                 if not switched then switched=true;vim.api.nvim_win_set_buf(first,scratch)end
             end})
             F.setup(buf)
-            local ready=vim.wait(1500,function()
+            local ready=vim.wait(arrival_ms,function()
                 return vim.api.nvim_win_call(other,function()return vim.fn.foldlevel(3)==1 end)
             end,1)
             return {switched=switched,ready=ready}
-        ]])
+        ]],arrival.MS)
         assert.is_true(result.switched);assert.is_true(result.ready)
     end)
 

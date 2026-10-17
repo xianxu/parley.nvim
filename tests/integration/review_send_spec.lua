@@ -1,5 +1,6 @@
 -- #332: pane Alt+Return saves, registers and submits unchanged Markdown.
 -- Outside a pane the existing instruction-driven review stays local.
+local arrival = require("tests.helpers.arrival")
 local rs = require("parley.review_send")
 local review = require("parley.skills.review")
 local uv = vim.uv or vim.loop
@@ -83,7 +84,7 @@ describe("review_send", function()
     local doc = { "---", 'process-instruction: "[copy-edit] keep the voice"', "---", "", "- a" }
 
     local function delivered(count)
-        assert.is_true(vim.wait(5000, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             local status = require("parley.agentic_document").status(buf)
             return #sent() == count and status and status.phase == "registered" and not status.operation
         end))
@@ -164,7 +165,7 @@ describe("review_send", function()
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         open(doc)
         alt_return()
-        assert.is_true(vim.wait(1000, function() return invoked ~= nil end))
+        assert.is_true(vim.wait(arrival.MS, function() return invoked ~= nil end))
         assert.equals(buf, invoked.buf)
         assert.same({ modes = { "copy-editing" }, instruction = "keep the voice" }, invoked.args)
         assert.same({}, sent())
@@ -207,7 +208,7 @@ describe("review_send", function()
             end
             return false
         end
-        assert.is_true(vim.wait(2000, told))
+        assert.is_true(vim.wait(arrival.MS, told))
         assert.same({}, sent())
         assert.is_nil(invoked)
     end)
@@ -221,6 +222,33 @@ describe("review_send", function()
         assert.is_true(has(table.concat(errors, "\n"), "[nope] is not a stock prompt"))
         vim.wait(100)
         assert.same({}, sent())
+    end)
+
+    it('refuses bad collaboration routing without prompting or rewriting frontmatter', function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+        local messages, prompted = {}, false
+        vim.notify = function(msg) messages[#messages + 1] = msg end
+        vim.ui.input = function() prompted = true end
+        local document = { '---', 'collaboration-mode: bad', '---', '🤖[why?]' }
+        open(document)
+        alt_return()
+        assert.is_false(prompted)
+        assert.is_nil(invoked)
+        assert.same(document, lines())
+        assert.same(document, vim.fn.readfile(file))
+        assert.truthy(table.concat(messages, '\n'):find('unknown collaboration mode bad', 1, true))
+    end)
+
+    it('reports invalid review and collaboration modes together outside Couch', function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+        local messages = {}
+        vim.notify = function(msg) messages[#messages + 1] = msg end
+        open({ '---', 'process-instruction: [nope]', 'collaboration-mode: bad', '---', '🤖[why?]' })
+        alt_return()
+        assert.is_nil(invoked)
+        local text = table.concat(messages, '\n')
+        assert.truthy(text:find('[nope] is not a stock prompt', 1, true))
+        assert.truthy(text:find('unknown collaboration mode bad', 1, true))
     end)
 
     it("no process-instruction submits unchanged Markdown without prompting", function()
@@ -269,7 +297,7 @@ describe("review_send", function()
         local words = vim.tbl_map(function(i) return i.word end, offered)
         assert.truthy(vim.tbl_contains(words, "copy-editing]"))
         assert.truthy(vim.tbl_contains(words, "free-form]"))
-        assert.is_true(vim.wait(1000, function() return lines()[2]:sub(1, 23) == 'process-instruction: "[' end))
+        assert.is_true(vim.wait(arrival.MS, function() return lines()[2]:sub(1, 23) == 'process-instruction: "[' end))
         assert.equals('process-instruction: "[' .. words[1] .. ' keep"', lines()[2])
     end)
 end)

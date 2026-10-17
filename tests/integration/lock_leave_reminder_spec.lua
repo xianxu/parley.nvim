@@ -1,9 +1,10 @@
+local arrival = require("tests.helpers.arrival")
 local band = require("parley.document_band")
 local ss = require("parley.session_sync")
 
 describe("lock leave reminder", function()
     local root, source, dest, win, saved, red, messages, timers, painted
-    local function await(predicate) assert.is_true(vim.wait(2000, predicate, 5)) end
+    local function await(predicate) assert.is_true(vim.wait(arrival.MS, predicate, 5)) end
     local function edit() vim.api.nvim_buf_set_lines(source, -1, -1, false, { "held edit" }) end
     local function swap() vim.api.nvim_win_set_buf(win, dest) end
     local function label() return vim.wo[win].winbar end

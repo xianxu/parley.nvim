@@ -55,7 +55,7 @@ describe('drill-in user transaction interruption',function()
             vim.api.nvim_buf_set_text=original_set_text;vim.api.nvim_buf_set_lines=original_set_lines
             assert.is_true(injected,'the fixture must deliver a native edit during mutation')
             assert.equals(human,vim.api.nvim_buf_get_lines(buf,4,5,false)[1])
-            vim.wait(500,function()return #calls>0 end,1)
+            vim.wait(500,function()return #calls>0 end,1) -- absence: interrupted source must not reach the provider
             assert.equals(0,#calls,'interrupted source must not become a provider request')
         end)
     end

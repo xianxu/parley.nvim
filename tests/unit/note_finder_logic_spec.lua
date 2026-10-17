@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local M = require("parley")
 
 describe("NoteFinder logic", function()
@@ -440,12 +441,12 @@ describe("NoteFinder logic", function()
             local initial = float_line_containing("scanning…")
 
             assert.is_not_nil(initial)
-            assert(vim.wait(1000, function()
+            assert(vim.wait(arrival.MS, function()
                 local current = float_line_containing("scanning…")
                 return sentinel and current ~= nil and current ~= initial
             end, 10), "Note spinner did not tick while acquisition was pending")
             vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true)
-            assert(vim.wait(500, function() return cancel_count == 1 end, 10))
+            assert(vim.wait(arrival.MS, function() return cancel_count == 1 end, 10))
         end)
 
         it("cancels loading acquisition before a recency mapping reopens Note", function()
@@ -465,10 +466,10 @@ describe("NoteFinder logic", function()
             M.cmd.NoteFinder()
             vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-a>", true, false, true), "x", true)
 
-            assert(vim.wait(1000, function() return cancel_count == 1 and scan_count == 2 end, 10))
+            assert(vim.wait(arrival.MS, function() return cancel_count == 1 and scan_count == 2 end, 10))
             assert.equals(1, scan_count - cancel_count)
             vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true)
-            assert(vim.wait(500, function() return cancel_count == 2 end, 10))
+            assert(vim.wait(arrival.MS, function() return cancel_count == 2 end, 10))
         end)
 
         it("joins matching retained prewarm and settles its subscriber once", function()

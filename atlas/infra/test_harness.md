@@ -93,7 +93,13 @@ crosses, with three exceptions:
 - `PARLEY_LIVE_COUCH` takes the real thread, but only for
   `make check-couch-actors-live`, which runs `couch_spec` alone. `TEST_RUN`
   strips the flag for every other target, so an exported one never reaches the
-  suite, `test-spec` or the rest.
+  suite, `test-spec` or the rest. The real thread is the Couch names plus
+  `PAIR_SESSION_NAME` and `PAIR_LAUNCH_NONCE`, the caller identity the CLI
+  checks (#366). The CLI also refuses the isolated `XDG_DATA_HOME`, so the
+  live call alone gets the operator's data home through
+  `PARLEY_LIVE_COUCH_DATA_HOME`; the spec process stays isolated. When the
+  call still fails, the case goes pending with the exit code and the first
+  stderr line.
 - `make fixtures` names its API keys in `PARLEY_TEST_ENV_PASS`.
 
 The launcher also puts `tests/fixtures/sentinel-bin` first on PATH. A bare `couch` or `pair` that no
@@ -156,6 +162,20 @@ zero-byte, empty-then-filled, non-numeric, and out-of-range signals directly.
 via `PARLEY_PUBLISH_DELAY` and asserts the ready path is never observable
 incomplete — and asserts the delay was honored, so the hook cannot be deleted to
 make it pass. Neither has a race to win.
+
+Fixtures given a fixed `--port` (picked by `ready_port.free_port`) are waited on
+with `ready_port.wait_listening`, never a hand-rolled connect loop. A completed
+connect is not proof of a listener (#360): the freed number goes back to the
+kernel's ephemeral pool, a parallel spec's probe can take it as a source port,
+and two crossing probes complete a TCP simultaneous open with nothing
+listening. So `is_listening` confirms a connect with a LISTEN socket on the
+port (`lsof`, bounded, run only after a connect succeeds). `ready_port_spec`
+stages that false positive through the `_connect` seam.
+A spec that only needs the fake up calls `ready_port.require_listening`, which
+fails by name ("fake never came up on port N"). `wait_listening` is
+`---@nodiscard`, and `tests/arch/nodiscard_spec.lua` refuses a dropped answer
+(#361): one turned a dead fake into a missing login prompt, or a retry where
+give_up was due.
 
 ## Process lifecycle
 
@@ -305,6 +325,26 @@ the choice. `tests/helpers/jit_tuning.lua` owns the version rule and gives such
 processes one 1MB mcode area (catastrophic on the old allocator, so gated).
 `PARLEY_TEST_JITSTAT=1 make test` prints each spec process's LuaJIT VM states
 and trace flushes (`tests/helpers/jit_watch.lua`), grandchildren included.
+
+### Predicate waits take the arrival budget (#370, #374)
+
+A positive wait returns the moment its outcome arrives, so its bound costs a
+passing run nothing; a short literal only turns suite load into a flake. Every
+`vim.wait(<literal>, <predicate>)` in `tests/unit` and `tests/integration` is
+bounded by `tests/helpers/arrival.lua`'s `MS` (the product's Couch submit
+deadline, `agentic_submit_timeout_ms`, read from config: 15 s) or a named product
+deadline (a constant ending in `_MS`; session_sync_spec reads
+`agentic_submit_timeout_ms` itself), or it says why not on the line that opens it:
+`-- absence:` (the spec expects the predicate to stay false), `-- drain:`
+(best-effort teardown), or `-- bound:` (the bound is the property under test). A
+plain sleep (`vim.wait(N)` or a `return false` predicate) needs nothing.
+`tests/arch/arrival_budget_spec.lua` reads the line that opens each wait,
+whether it is asserted, bare, or assigned. It allows a bound only when it derives
+from `arrival` or names an `_MS` deadline, so a literal behind a parameter or an
+`ms or 3000` default is refused as well. It cannot follow a literal passed into a
+helper's parameter from a call site. Code that a spec writes for a child Neovim
+takes the budget by value, since the child has no `arrival` in scope. The cost:
+a broken case now takes up to 15 s to report its first failed wait.
 
 ### Waiting on work that converges (#293)
 

@@ -711,6 +711,22 @@ oracle, and the mutation that would make the test fail.
   callback with the case, cancel its timer at teardown and guard an already
   queued callback before it can resume production work in the next case.
 
+## 2026-10-16 (#362 — check the consumer capabilities of imported prompts)
+
+Before importing a shared protocol, trace every required IO operation through
+the receiving adapter. Text composition and matching hashes do not prove that
+an artifact-bound single-file edit tool can execute side-doc, cross-file or
+previous-read flows. Resolve unsupported routing explicitly before shipping.
+
+For synchronous parsers, test input scale as well as syntax. Per-character
+prefix copies, per-token tail copies, repeated list concatenation and unanchored
+whitespace patterns can all make an otherwise bounded grammar quadratic. Count
+copied bytes where possible and include long whitespace runs in a stall check.
+
+A parser-level benchmark does not cover its semantic resolver. Trace a finding's
+family from the user action through every newly added stage, including name
+normalization and heading extraction; pin scale through the production entry
+point as well as internal helpers before calling the family complete.
 ## 2026-10-16 (#367 — a picker query that the temp path can match)
 
 - A fuzzy picker spec's query must contain a character no temp path holds
@@ -727,3 +743,32 @@ oracle, and the mutation that would make the test fail.
 ## 2026-10-17 (#353 — retained navigation is not presentation evidence)
 
 - A rejected observation must revoke presentation eligibility even when history is deliberately retained for Back. Bind cached paint to the observed eligible buffer/name; test every rejection category across resize and re-entry. Window creation can copy installed pixels without copying ownership, so retire proven copies in non-editing windows too.
+## 2026-10-17 (#370 — a positive wait bounded by a load guess)
+
+- Bound a wait for an outcome by the path's own deadline, not by a guess at
+  load. A positive `vim.wait` returns the moment its condition holds, so a long
+  bound costs a passing run nothing; a short one turns machine load into a
+  flake. session_sync_spec waited 2 s for a fake `couch` send, and the product
+  allows 15 s (`agentic_submit_timeout_ms`), so a loaded suite failed it once
+  with the code right (the #355 class). Pin the fix with a fake slower than
+  the old literal (`FAKE_COUCH_SLEEP=2.5`). Keep short fixed waits only for
+  absence checks, where the bound is the test's cost.
+- Trace before blaming ordering: wrapping `couch.run` to log each argv with a
+  timestamp showed one process, started 15 ms after the key, with nothing
+  queued ahead of it.
+
+## 2026-10-17 (#374 — a sweep and its guard must see every form of the thing)
+
+- Before sweeping a pattern, list every syntactic form it takes, then write the
+  guard as an allowlist over all of them. #374's first sweep matched only
+  `assert(vim.wait(N, …))`. It missed 185 bare and local-assigned waits, which
+  were the most common form. Round 2's denylist of digit literals then missed
+  `vim.wait(ms or 3000, …)`. Each gap cost a close-review round. "Allow what
+  derives from the budget, or carries a reason" has no form left to escape.
+- A mechanical rewrite also rewrites Lua that a spec writes out as a string for a
+  child Neovim, where test helpers are out of scope. Pass the value in by
+  argument or interpolation.
+- Classifying 185 sites as positive, absence or drain parallelised cleanly
+  across three subagents, each given disjoint files and the same rule. Fill in a
+  prompt's placeholders before sending it: one went out with a literal
+  LIST_PLACEHOLDER, and the agent rightly refused to guess.

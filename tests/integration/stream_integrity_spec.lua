@@ -8,6 +8,7 @@
 -- race relocation and a loaded scheduler. The oracle compares the buffer's
 -- answer with the response the model sent, byte for byte.
 
+local arrival = require("tests.helpers.arrival")
 local uv = vim.uv or vim.loop
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
@@ -34,14 +35,7 @@ end
 local function start_fake(port, env)
     local handle, _, err = fixture_process.spawn(FAKE, { "--port", tostring(port), "--response-mode", "stream" }, env)
     assert(handle, "spawn fake: " .. tostring(err))
-    local up = false
-    vim.wait(5000, function()
-        local c = uv.new_tcp()
-        c:connect("127.0.0.1", port, function(e) up = e == nil; c:close() end)
-        vim.wait(50, function() return false end)
-        return up
-    end, 50)
-    assert(up, "fake did not come up on port " .. port)
+    ready_port.require_listening(port)
 end
 
 describe("streamed answer integrity under interference (#229)", function()
@@ -104,7 +98,7 @@ describe("streamed answer integrity under interference (#229)", function()
             build_input = function(previous) return previous end,
             on_result = function(_, query) response = query.response end,
         }))
-        assert.is_true(vim.wait(30000, function() return Session.snapshot(session).status == "terminal" end, 5),
+        assert.is_true(vim.wait(2 * arrival.MS, function() return Session.snapshot(session).status == "terminal" end, 5),
             vim.inspect(Session.snapshot(session)))
         streaming = false
         assert.equals("success", Session.snapshot(session).generation.outcome)

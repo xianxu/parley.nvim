@@ -5,6 +5,7 @@
 
 local uv = vim.uv or vim.loop
 local ready_port = require("tests.helpers.ready_port")
+local arrival = require("tests.helpers.arrival")
 local fixture_process = require("tests.helpers.fixture_process")
 
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
@@ -19,7 +20,7 @@ local mark
 local function start_fake(port)
     local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port) })
     assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
-    assert(ready_port.wait_listening(port), "fake never came up")
+    ready_port.require_listening(port)
     return pid
 end
 
@@ -42,7 +43,7 @@ describe("cliproxy model catalog", function()
         cliproxy.fetch_catalog(function(m)
             models, done = m, true
         end)
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
         assert(done, "fetch_catalog never resolved (hang!)")
         return models
     end
@@ -93,7 +94,7 @@ describe("cliproxy model catalog", function()
         fetch()
 
         fixture_process.reap({ since = mark })
-        vim.wait(300, function() return not ready_port.is_listening(port) end, 20)
+        vim.wait(arrival.MS, function() return not ready_port.is_listening(port) end, 20)
 
         local cached = cliproxy.catalog_cached()
         assert.is_true(#cached > 0, "cache should outlive the proxy")
@@ -138,7 +139,7 @@ describe("cliproxy model catalog", function()
         fixture_process.reap({ since = mark })
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port), "--mode", "client_key_mismatch" })
         assert(handle, "failed to spawn the fake in 401 mode")
-        assert(ready_port.wait_listening(port), "401-mode fake never came up")
+        ready_port.require_listening(port)
 
         fetch()
         assert.equals(#warm, #cliproxy.catalog_cached(),
@@ -152,7 +153,7 @@ describe("cliproxy model catalog", function()
         local port = ready_port.free_port()
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port), "--mode", "needs_login" })
         assert(handle)
-        assert(ready_port.wait_listening(port))
+        ready_port.require_listening(port)
         set_endpoint(port)
         cliproxy._write_catalog({ { id = "stale-1", owner = "openai" } })
 
@@ -211,7 +212,7 @@ describe("cliproxy model catalog", function()
         local foreign_port = ready_port.free_port()
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(foreign_port), "--mode", "foreign" })
         assert(handle)
-        assert(ready_port.wait_listening(foreign_port), "foreign fake never came up")
+        ready_port.require_listening(foreign_port)
         set_endpoint(foreign_port)
 
         fetch()
@@ -231,7 +232,7 @@ describe("cliproxy model catalog", function()
         cliproxy.fetch_catalog(function(models)      -- lands on the in-flight path
             second = models ~= nil
         end)
-        vim.wait(8000, function() return first and second end, 20)
+        vim.wait(arrival.MS, function() return first and second end, 20)
         assert.is_true(second, "the second caller was never resolved")
     end)
 
@@ -254,7 +255,7 @@ describe("cliproxy model catalog", function()
         assert.is_true(cliproxy.catalog_stale(), "cold cache should invite one attempt")
         local done = false
         cliproxy.fetch_catalog(function() done = true end)
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
 
         assert.is_false(cliproxy.catalog_stale(),
             "a failed attempt still counts as an attempt; otherwise every open re-polls")
@@ -280,7 +281,7 @@ describe("cliproxy catalog side effects", function()
 
         local done = false
         cliproxy.fetch_catalog(function() done = true end)
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
 
         assert.equals(0, vim.fn.filereadable(dir .. "/management.key"),
             "refreshing the catalog wrote a management key")
@@ -307,7 +308,7 @@ describe("cliproxy catalog staleness clocks", function()
 
         local done = false
         cliproxy.fetch_catalog(function() done = true end) -- fails: no endpoint set here
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
 
         assert.is_false(cliproxy.catalog_stale(), "should back off right after a failure")
         cliproxy._set_failed_attempt_at(os.time() - 60) -- 60s later
@@ -347,7 +348,7 @@ describe("cliproxy catalog invalidation on login", function()
         local port = ready_port.free_port()
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port) })
         assert(handle)
-        assert(ready_port.wait_listening(port))
+        ready_port.require_listening(port)
         parley.dispatcher.providers.cliproxyapi = {
             endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
         }
@@ -357,7 +358,7 @@ describe("cliproxy catalog invalidation on login", function()
         cliproxy.invalidate_catalog()
         local done = false
         cliproxy.fetch_catalog(function() done = true end)
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
         assert.is_false(cliproxy.catalog_stale(),
             "a STORED refresh serves the invalidation")
     end)
@@ -400,7 +401,7 @@ describe("cliproxy login invalidation survives a failed refresh", function()
         }
         local done = false
         cliproxy.fetch_catalog(function() done = true end)
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
 
         assert.is_true(cliproxy.catalog_stale(),
             "a declined refresh must not consume the login's invalidation")
@@ -427,7 +428,7 @@ describe("cliproxy catalog cold install", function()
         local port = ready_port.free_port()
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port) })
         assert(handle)
-        assert(ready_port.wait_listening(port))
+        ready_port.require_listening(port)
         parley.dispatcher = parley.dispatcher or {}
         parley.dispatcher.providers = parley.dispatcher.providers or {}
         parley.dispatcher.providers.cliproxyapi = {
@@ -440,7 +441,7 @@ describe("cliproxy catalog cold install", function()
         local done = false
         providers.get("cliproxyapi").pre_query(function() done = true end,
                                               function() done = true end)
-        vim.wait(8000, function()
+        vim.wait(arrival.MS, function()
             return done and #cliproxy.catalog_cached() > 0
         end, 50)
         local n = #cliproxy.catalog_cached()

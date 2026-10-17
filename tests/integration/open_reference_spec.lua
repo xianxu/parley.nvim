@@ -7,6 +7,7 @@
 -- buffer type that has it today, so the extraction that unifies the chains
 -- cannot silently drop an arm.
 
+local arrival = require("tests.helpers.arrival")
 local tmp_dir = vim.fn.tempname() .. "-parley-open-ref"
 local chat_dir = tmp_dir .. "/chats"
 local src_root = tmp_dir .. "/src"
@@ -521,7 +522,7 @@ describe("reference opening: the fall-through reaches artifact resolution", func
         end
         parley.open_buf = function(path) opened = path end
         local ok, err = pcall(parley.cmd.OpenFileUnderCursor)
-        vim.wait(200, function() return opened ~= nil end)
+        vim.wait(arrival.MS, function() return opened ~= nil end)
         vim.system, parley.open_buf = real_system, real_open
         assert(ok, err)
 

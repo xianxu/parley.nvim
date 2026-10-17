@@ -1,6 +1,7 @@
 -- #354: every Alt+Return submit that Couch accepted is recorded for the
 -- attention finder, through the one hook both paths share (session_sync's
 -- release_and_send): an agentic document, and a `type: session-sync` file.
+local arrival = require("tests.helpers.arrival")
 local Attention = require("parley.attention")
 local Store = require("parley.attention_store")
 local Model = require("parley.attention_model")
@@ -8,7 +9,7 @@ local logger = require("parley.logger")
 local p = require("parley")
 
 local function await(predicate, why)
-    assert.is_true(vim.wait(10000, predicate, 10), why)
+    assert.is_true(vim.wait(arrival.MS, predicate, 10), why)
 end
 
 -- The stored entry for `path`, or nil.

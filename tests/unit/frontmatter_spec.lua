@@ -33,6 +33,22 @@ describe("frontmatter.parse", function()
         assert.equals('"a"', fm.quoted_span('"a" # c'))
     end)
 
+    it("preserves long interior whitespace and strips separated comments", function()
+        local value = "a" .. string.rep(" ", 20000) .. "z"
+        local r = fm.parse({ "---", "plain: " .. value .. "   ", "commented: " .. value .. "   # note", "---" })
+        assert.equals(value, r.fields.plain)
+        assert.equals(value, r.raw.plain)
+        assert.equals(value, r.fields.commented)
+        assert.equals(value .. "   # note", r.raw.commented)
+    end)
+
+    it("reads a quoted span at an offset without copying its tail", function()
+        assert.equals('"a\\\"b"', fm.quoted_span('key: "a\\\"b", "tail"', 6))
+        assert.equals("'it''s'", fm.quoted_span("key: 'it''s', tail", 6))
+        assert.is_nil(fm.quoted_span('key: "open', 6))
+        assert.is_nil(fm.quoted_span('key: plain', 6))
+    end)
+
     it("is nil without an opening or a closing fence", function()
         assert.is_nil(fm.parse({ "# title", "a: b" }))
         assert.is_nil(fm.parse({ "---", "a: b" }))

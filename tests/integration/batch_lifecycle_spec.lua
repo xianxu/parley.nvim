@@ -1,5 +1,6 @@
 -- These aborts carry fixture strings, not real transport tokens, so the
 -- harness watch for a refusal with no words expects them (#261 M5).
+local arrival = require("tests.helpers.arrival")
 vim.g.parley_expected_unkeyed={'fixture failure','fixture cleanup','old physical cancellation complete'}
 local parley=require('parley')
 local Respond=require('parley.chat_respond')
@@ -9,7 +10,7 @@ vim.fn.mkdir(directory,'p')
 parley.setup({chat_dir=directory,state_dir=directory..'/state',providers={},api_keys={},
     default_agent='BatchFixture',agents={{name='Choose a model',disable=true},
         {name='BatchFixture',provider='openai',model={model='fixture'},system_prompt='Fixture',tools={}}}})
-local function wait(predicate)assert.is_true(vim.wait(5000,predicate,1),'batch did not settle')end
+local function wait(predicate)assert.is_true(vim.wait(arrival.MS,predicate,1),'batch did not settle')end
 describe('public batch membership lifetime',function()
     local buf,calls,old_query,old_stop
     before_each(function()
