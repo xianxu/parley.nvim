@@ -38,6 +38,7 @@ For old journals, read the current version-1 schema unchanged. New S3 journals u
 | Migration transition model | PURE | `lua/parley/document_move_state.lua` | new |
 | Validated protocol snapshot | PURE | `scripts/sync-review-protocol.py` | modified |
 | Leased migration journal | INTEGRATION | `lua/parley/document_move.lua` | modified |
+| Kernel migration lease | INTEGRATION | `lua/parley/document_lease.lua` | modified |
 | Editor move handoff | INTEGRATION | `lua/parley/agentic_document.lua` | modified |
 | Protocol source/output adapter | INTEGRATION | `scripts/sync-review-protocol.py` | modified |
 
