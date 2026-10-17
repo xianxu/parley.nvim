@@ -35,6 +35,7 @@ For old journals, read the current version-1 schema unchanged. New S3 journals u
 |---|---|---|---|
 | Move projection and side path | PURE | `lua/parley/document_move_plan.lua` | modified |
 | Parent side-reference rewrite | PURE | `lua/parley/document_move_plan.lua` | new |
+| Migration transition model | PURE | `lua/parley/document_move_state.lua` | new |
 | Validated protocol snapshot | PURE | `scripts/sync-review-protocol.py` | modified |
 | Leased migration journal | INTEGRATION | `lua/parley/document_move.lua` | modified |
 | Editor move handoff | INTEGRATION | `lua/parley/agentic_document.lua` | modified |
@@ -63,7 +64,29 @@ Extend generated-output ownership/preflight to examples recursively: no symlinks
 7. Preserve `record_write` support while Couch metadata is pending: only an already-synchronized parent may adopt subsequent operator saves. Recovery must never reapply old parent edits onto newer operator bytes.
 8. Confirm registry rename, finish existing local handoff, delete journal and owned temps, release lease. Report the full orphan destination through the existing notification surface; recovery may repeat an accurate pending notice but must never suffix the orphan twice.
 
-The same state table governs fresh and reopened operations. At each new stage tests inject failure before effect, after effect/before checkpoint, and after checkpoint; unknown observations remain pending. No new background task outlives the operation, and existing registry requests retain cancellation/late-result guards.
+### Authoritative v2 transition model (PQ-1)
+
+`document_move_state.step(state, event)` is pure and returns the next state plus at most one requested effect or a pending/refusal outcome. `document_move_state.restore(record)` validates the persisted tagged state; `initial(intent)` starts it. The one mutable owner is an operation-local dispatcher in document_move.lua; all fresh and recovered v2 operations call that dispatcher. The shell never advances journal checkpoint fields itself. `journal.state` is replaced only from the dispatcher snapshot; existing v1 checkpoint handling remains in its compatibility branch. Add an architecture guard over v2 writes so a second checkpoint owner fails tests.
+
+The phase names denote the next unproven effect, not a claim that an asynchronous call has finished:
+
+| Phase | Proven observation/completion event | Next phase | Effect when proven not yet published |
+|---|---|---|---|
+| prepared | journal persisted | orphan | inspect captured orphan and chosen suffix |
+| orphan | no displacement needed, or recorded orphan inode at suffix with canonical target vacant | document | no-replace rename captured orphan |
+| document | owned rename/native write proven against captured witness | side | existing document move/adopt |
+| side | canonical side tree has recorded source identity, or no source side tree was captured | children | no-replace source side rename |
+| children | every required backlink projection proven after | parent | CAS next child rewrite |
+| parent | parent bytes equal recorded rewrite after hash, or rewrite is a no-op | editor | CAS parent rewrite |
+| editor | loaded bytes, baseline and NEW witness acknowledge the same parent generation | metadata | synchronize the editor without discarding edits |
+| metadata | Couch confirms the expected ID and NEW path | complete | one registry rename request |
+| complete | local finish and cleanup acknowledged | retired | delete journal/temps, release lease |
+
+Events are discriminated records: `journal_saved`, `observed` (phase, proof = before/after/unknown, exact witness/generation), `effect_failed`, `editor_synced` (generation), `saved` (new hash/generation), `metadata_reply`, `cleanup_done`. A matching after-proof advances; before-proof permits the phase's effect; unknown/failed proof returns pending with the same phase. An event for an old phase/generation is ignored or refused without effects. `children` additionally records a bounded set of completed entry identities, not independent booleans. Invalid phase/progress combinations refuse restore.
+
+`saved` is allowed only in metadata after editor synchronization; it replaces the current document witness without re-entering parent rewriting. Before editor synchronization it returns pending and cannot authorize a save acknowledgement. A refused/lost metadata response retains phase metadata; reopening re-observes filesystem/editor identity before replaying the same rename. Late callbacks are correlated with the operation generation and cannot mutate retired state.
+
+Fresh and recovered paths restore the same model and feed it adapter observations; persisted before/after witnesses let a crash after publication but before checkpoint be recognized without repeating the rename. The existing document-ID lease owns dispatcher lifetime, while no-replace and CAS own cross-document/path exclusion. No new background task outlives the operation. Test controllable event sequences against preservation, legal ordering, single-publication, and stale-event invariants; IO tests inject publication/checkpoint failures through the existing fs adapter.
 
 ## Operating envelope and residue
 
@@ -79,14 +102,16 @@ Generated fixture trees are a fixed shipped snapshot replaced by a deliberate sy
 - Modify `scripts/sync-review-protocol.py`, `tests/unit/review_protocol_export_test.py`.
 - Regenerate `lua/parley/skills/review/export.json`, `SKILL.md`, canonical protocol files, and exported `examples/` only after producer lands.
 - Modify `lua/parley/document_move_plan.lua`, `tests/unit/document_move_plan_spec.lua`.
+- Create `lua/parley/document_move_state.lua` and `tests/unit/document_move_state_spec.lua` for the pure transition contract; the M2 adapter consumes it.
 - Add `tests/unit/document_move_shared_spec.lua`; map it in `atlas/traceability.yaml`.
 
 - [ ] Verify #424 landed and pin its merge commit from Git. Re-read export and reference projection; append any contract delta as a Revision before coding.
-- [ ] Add failing Python tests for v1/v2 acceptance, fixture roles/paths/name matching, digests, stale output, source/output symlinks, wrong version/role combinations, and fixture exclusion from prompt/mode discovery. Run `python3 -m unittest discover -s tests/unit -p review_protocol_export_test.py`; confirm the failures specifically identify the missing v2 contract.
+- [ ] Test `validate_manifest`, `render_snapshot`, `read_source` and `read_output` with malformed role/path/version/digest and symlink trees; mutation-free preflight plus deterministic snapshot comparison is the guard. Run `python3 -m unittest discover -s tests/unit -p review_protocol_export_test.py` red before implementation.
 - [ ] Implement minimal version-aware validation/snapshot ownership; sync from the pinned source and run `--check`. Verify deterministic output twice and all hashes.
-- [ ] Add pure failing tests for parent links plus block index edits, exact-byte preservation, quoted paths/comments, malformed relevant entries, unrelated links, code examples, wrapped link text, CRLF, same-name directory moves and extension-only renames.
+- [ ] Test new `rewrite_side_references(bytes, old, new)` and existing `rewrite_parent` with generated valid/ambiguous path/scalar/Markdown byte streams; exact untouched-byte comparison and relevant-syntax refusal are the guard. Test `project` with adversarial occupancy and canonical-path observations; all-or-nothing effects and first-free bounded suffix selection are the guard.
 - [ ] Extend the existing projection with the parent rewrite and orphan-displacement effects from supplied observations. No IO in the projection. Expose orphan destination in its result, not a parallel shell-only string.
 - [ ] Load every exported fixture group through manifest metadata, parse the bounded `move: OLD NEW` operation from case.md, project its before tree, and compare the complete path→bytes result to after. Run both fixtures without fixtures-specific expected strings. Include `_1` occupied → `_2` and empty-directory cases in supplemental local tests.
+- [ ] Implement/test `document_move_state.initial`, `restore`, and `step` with generated reordered/duplicated/stale event sequences; preservation and legal-phase invariants are the oracle, with the single-writer architecture guard enforced when M2 connects the adapter.
 - [ ] Use a temporary make target following Makefile.parley's `PREP_TEST_ENV`/`TEST_RUN`/orphan/sentinel recipe for the two pure specs; run serially. Confirm old projection fails the shared cases, then green.
 - [ ] Commit this contract boundary, update atlas/review sync documentation and issue log, and run `sdlc milestone-close --issue 373 --milestone M1` with measured verification. Address the binary's findings before M2.
 
@@ -99,10 +124,10 @@ Generated fixture trees are a fixed shipped snapshot replaced by a deliberate sy
 - Inspect `lua/parley/init.lua` reference openers, `tests/integration/open_reference_spec.lua`, existing registry fake/helper.
 - Update `README.md`, `atlas/modes/review.md`, and relevant existing mover atlas entries; keep `atlas/index.md` correct.
 
-- [ ] Write failing integration tests for both new journal stages, v1 recovery compatibility and v2 schema validation, correct temp manifest, occupied destination-document refusal, same-path side no-op, source absent, and safe orphan reporting.
+- [ ] Test `document_move.begin`, journal validation, `advance`, `recover` and `record_write` with forged/partially published operation histories; no-replace identity proofs, preimage CAS, and before/after complete-tree comparisons are the guard. Require v1 compatibility and v2 tagged-state validation.
 - [ ] Extend journal creation/validation/recovery and no-replace orphan displacement as one coherent change. Preserve existing lease, inode, tree, preimage, size and symlink checks. Reject malicious forged orphan/temp/checkpoint tuples before any effects.
-- [ ] Add deterministic filesystem fault injection at every new publication/checkpoint, including parent temp publication and orphan move. Recover from mixed completed/uncompleted stages and prove no overwrite, duplicate displacement or orphan-byte change. Test candidate race, target-tree replacement, concurrent same-target documents and failed observations.
-- [ ] Add actual editor tests: command move and native saveas, parent links/index in buffer and disk, save after synchronous rewrite, save while delayed metadata is pending, reopen recovery, stale buffer edits/undo, stale parent preimage, lost registry reply and late completion. Reuse existing persistent fake registry and delay controls.
+- [ ] Drive `advance`/`recover` with filesystem faults at publication/checkpoint boundaries and raced observations; retained journal plus byte/inode comparison proves exactly one displacement and no overwritten content.
+- [ ] Drive `agentic_document.move_path`, native saveas handoff and recovery with adversarial editor/save/metadata interleavings through the persistent fake; buffer/disk/baseline generation agreement and preserved operator bytes are the guard.
 - [ ] Implement parent synchronization hook and NEW witness update, then run focused tests red→green. Registry rename remains the final external confirmation after filesystem and editor stages.
 - [ ] Execute exported before/after cases against the real mover in an isolated tree, with the existing fake registry. Compare all files byte-for-byte, including unchanged nested side doc and displaced orphan. Assert returned/visible displacement path.
 - [ ] Audit Alt+o from a registered parent into a side doc through the actual opener and registry fake. If it registers, prove effective owner and child registration; if not, file a separate unclaimed same-repo issue with exact call-path and reproducible evidence, as this issue's Done-when allows. Report it to TL; do not silently expand into a registration feature.
@@ -119,3 +144,5 @@ Confirm preserving the explicit-overwrite exception safely (no orphan displaceme
 - 2026-10-17 — TL approved both milestones and all three policies (receipt 6d2d8e58-b402-4f59-af38-d945acb5c1af): bounded suffix search before effects, orphan classification only from pre-admission absent NEW, quoted/comment-preserving discussions scalars with refusal on ambiguity. This resolves the approval questions above; YAML is authoritative and disagreement refuses, matching #424. Implementation still waits for #424 to land.
 
 - 2026-10-17 — Producer dependency landed: ariadne PR #284, Git-verified merge 5fa50f084f8062fafb493bec86b8207fc8f5617a. Diff against planning pin 5990bf04 shows no changes under construct/local/universal-review or pkg/reviewexport/move_test.go. This merge is the implementation snapshot pin; the dependency wait is satisfied. No scope or policy change.
+
+- 2026-10-17 — Plan-quality round 1: PQ-1 required an authoritative recovery model; added the named pure v2 reducer, phase/event table, dispatcher ownership, stale-event and save-generation rules above. PQ-2 required function-level adversarial strategies; compressed checklist test inventories into named function contracts and mechanical guards. No implementation yet; request TL approval of this internal model clarification before rerunning change-code.
