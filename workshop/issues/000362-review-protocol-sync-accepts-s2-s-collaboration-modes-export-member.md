@@ -45,7 +45,7 @@ S2 M1 (ops `universal-agent-input-interface/design.side/01-s2-section-modes.md`,
   examples exclusion. Verify the existing local source orders its adapter last.
 - [x] Coordinate with ariadne:2 and snapshot the landed S2 M1 export; verify
   --check and standalone packaged composition. Update atlas and README.
-- [ ] Run focused/mapped tests and a recorded full suite, close-review, land
+- [x] Run focused/mapped tests and a recorded full suite, close-review, land
   on SHIP and report to the hub.
 
 ## Log
@@ -102,6 +102,16 @@ make test-spec SPEC=modes/review run passed, including standalone copied-package
 composition round -> grammar -> collaboration modes -> selected review modes ->
 local adapter, with clean process census. Exact pinned-source --check and
 git diff --check passed. Next: recorded full suite and the SDLC close review.
+
+### 2026-10-16 — recorded full suite green
+
+The pushed code head 56270d7110ca6ec36f34c23fa5f4337337460256 passed its first
+recorded full suite in 2m6s, with all files passing, 759 Lua files lint-clean
+and no surviving test processes. Log: .git/sdlc/local-checks/
+56270d7110ca6ec36f34c23fa5f4337337460256/suite.log, SHA256 prefix 0d949f63ee13.
+No retry or waiver. The sync/prompt snapshot adds no editor control or new
+runtime transport; standalone packaged composition is the acceptance check.
+Request the binary-owned close review and land on SHIP.
 
 ## Revisions
 
