@@ -51,6 +51,13 @@ The winbar confirms the destination and time after submission succeeds, until
 your next edit or the agent's write; failures show an error there. Unchanged
 content shows `nothing to submit` instead of sending again. Press Alt+Return
 a second time within two seconds to resend explicitly.
+The editor never waits on a submit: the winbar shows `submitting…`. If Couch
+hasn't confirmed it within `agentic_submit_timeout_ms` (default 15000), or the
+registry failed, it turns red with `not confirmed: submit again`. Alt+Return then
+completes it, and it never delivers twice: a press while a send is still out
+joins it. Moves and renames ask Couch inline, within `agentic_move_timeout_ms`
+(default 5000). On that deadline they say to run the move again, or after a
+rename, to rename back first.
 An explicit `couch-owner:` overrides the default; a business `owner:` does not
 (`owner:` remains a fallback only for legacy `type: session-sync` files).
 [Agentic documents](atlas/modes/session_sync.md) use the existing turn engine:

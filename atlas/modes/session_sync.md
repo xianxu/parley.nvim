@@ -53,7 +53,9 @@ turn an agent write reloads the unmodified buffer silently (and so does a
 buffer-local `FileChangedShell` on focus or `:checktime`). Either reload keeps
 every window on the text it showed (#356): `view_map` maps each cursor and top
 line through a line diff, and a line the agent rewrote is followed by its own
-text. The operator's turn
+text. `window_views` (capture before, restore after) owns that wrap, and
+parley's own whole-buffer rewrites use it too (#358): `file_refresh` after the
+chat write, edit and propose tools, and the review round's reload. The operator's turn
 never starts on an old copy unnoticed: an agent write that landed just before
 the first edit lost the race, and goes through the violation path below with
 the operator's text kept. Outside the operator's turn, submit refuses to
@@ -133,6 +135,27 @@ HH:MM` (DiagnosticOk), retained through saves and status probes until the next
 operator edit or observed agent write. Explicit submit failures show a bounded
 literal error (DiagnosticError), including before registry attachment; this
 feedback changes neither turn ownership nor the acquisition baseline.
+
+The submit never blocks the editor (#357). It shows `submitting…` until its
+outcome, under one deadline (`agentic_submit_timeout_ms`, 15 s) that covers the
+registry stage and the send together. Past the deadline, or on a registry
+failure, the band reads `not confirmed: submit again · <reason>`. That is one
+state, and Alt+Return is its one action:
+- A registry stage that timed out still holds the operator's lock, since the
+  send never started. The next press confirms the registration, then submits
+  the current bytes.
+- A send already issued is never killed, because a kill can't tell delivered
+  from not. A press while it is out joins it (`submitting… still waiting for
+  Couch`), and its late success records the receipt below, so an identical
+  resubmit sends nothing.
+
+The move and rename preflights still block, because they decide inside
+BufFilePre and BufFilePost (asynchronous moves are #359). Their deadline is
+`agentic_move_timeout_ms`, 5 s. Before anything moved, the recovery is `move
+not confirmed: … nothing moved. Run the move again`. At BufFilePost Neovim has
+already renamed the buffer, so the recovery there is `rename not confirmed: …
+rename back to OLD, then run it again`; renaming back aborts the move. A move
+whose registry rename outlasts the wait finishes through its journal.
 
 The last confirmed successful submission also records its captured post-save
 content hash, stable document ID, namespace, effective owner and local time in

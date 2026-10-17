@@ -15,6 +15,7 @@ help-parley:
 	"  make check-vocabulary Compare shipped data to upstream (maintainer tools)" \
 	"  make check-sdlc-conformance Compare real/fake sdlc resolver contracts (maintainers)" \
 	"  make check-couch-registry-conformance Compare isolated real/fake registry contracts" \
+	"  make check-couch-actors-live  Check the real couch --actors JSON against this thread (live)" \
 	"  make perf             Report real headless chat-typing performance" \
 	"  make perf-finder      Report ChatFinder materializer performance" \
 	"  make lint             Run luacheck on lua/ and tests/" \
@@ -54,7 +55,17 @@ LEGACY_TEST_DIRS = "$(CURDIR)/.test-home" "$(CURDIR)/.test-xdg" "$(CURDIR)/.test
 # (#294). Probed on first use, once per make invocation, and only by targets
 # that expand TEST_ENV.
 TEST_NVIM_DIR = $(eval TEST_NVIM_DIR := $$(shell scripts/test-nvim.sh))$(TEST_NVIM_DIR)
+# #365: every nvim starts through scripts/test-env.sh, which keeps only an
+# allowlist of these names (no ambient COUCH_*, PAIR_* or terminal owner) and puts
+# the sentinel couch/pair first on PATH. TEST_RUN is the prefix for one command.
 TEST_ENV = PARLEY_TEST_ENV_ROOT="$(TEST_ENV_ROOT)" HOME="$(TEST_HOME)" XDG_CONFIG_HOME="$(TEST_XDG)/config" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)" $(if $(TEST_NVIM_DIR),PATH="$(TEST_NVIM_DIR):$$PATH")
+# The real Couch thread reaches a spec only through check-couch-actors-live, the
+# one target that sets PARLEY_LIVE_COUCH after this strip; every TEST_RUN drops it.
+TEST_RUN = $(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" env -u PARLEY_LIVE_COUCH "$(CURDIR)/scripts/test-env.sh"
+# One log per target ($@), so concurrent targets never truncate each other's evidence.
+SENTINEL_LOG = $(TEST_ENV_ROOT)/sentinel-$@.log
+# The sentinel gate (#365): a call to the real couch/pair that no fake shadowed.
+SENTINEL_CHECK = if [ -s "$(SENTINEL_LOG)" ]; then echo "test sentinel (\#365): a spec reached the real CLI (cli, cwd, argv):" >&2; sed "s/^/  /" "$(SENTINEL_LOG)" >&2; false; fi
 
 # The orphan gate (#220). `before` reaps what an earlier interrupted run left;
 # `after` reports this run's survivors and fails. One owner, so a new test target
@@ -62,7 +73,7 @@ TEST_ENV = PARLEY_TEST_ENV_ROOT="$(TEST_ENV_ROOT)" HOME="$(TEST_HOME)" XDG_CONFI
 ORPHANS = python3 scripts/reap-test-orphans.py --root "$(CURDIR)"
 
 define PREP_TEST_ENV
-mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/config" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)" && $(ORPHANS) --phase before
+mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/config" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)" && : > "$(SENTINEL_LOG)" && $(ORPHANS) --phase before
 endef
 
 # Run the whole suite. Execution model (parallel fan-out, per-spec processes,
@@ -89,12 +100,12 @@ JOBS ?= 8
 # summary is authoritative either way. With PARLEY_TEST_JITSTAT=1, PASS and FAIL
 # also show each spec process's final LuaJIT line, grandchildren included
 # (tests/helpers/jit_watch.lua, #294).
-RUN_SPEC = sh -c 'jitstat() { [ -s "$$1" ] && awk "{last[\$$2]=\$$0} END {for (p in last) print \"  \" last[p]}" "$$1"; true; }; out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); t0=$$(date +%s); export PARLEY_TEST_JITSTAT_LOG="$$out.jit"; if nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s (%ss)\n" "$$1" $$(( $$(date +%s) - t0 )); jitstat "$$out.jit"; rm -f "$$out" "$$out.jit"; else { printf "===FAIL: %s (%ss)===\n" "$$1" $$(( $$(date +%s) - t0 )); sed "s/^/  /" "$$out"; jitstat "$$out.jit"; }; rm -f "$$out.jit"; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
+RUN_SPEC = sh -c 'jitstat() { [ -s "$$1" ] && awk "{last[\$$2]=\$$0} END {for (p in last) print \"  \" last[p]}" "$$1"; true; }; out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); t0=$$(date +%s); export PARLEY_TEST_JITSTAT_LOG="$$out.jit"; if env -u PARLEY_LIVE_COUCH "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s (%ss)\n" "$$1" $$(( $$(date +%s) - t0 )); jitstat "$$out.jit"; rm -f "$$out" "$$out.jit"; else { printf "===FAIL: %s (%ss)===\n" "$$1" $$(( $$(date +%s) - t0 )); sed "s/^/  /" "$$out"; jitstat "$$out.jit"; }; rm -f "$$out.jit"; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
 
 # Each spec file runs in its own Neovim process.
 test-unit:
 	@$(PREP_TEST_ENV)
-	@export $(TEST_ENV); \
+	@export $(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)"; \
 	FAILED_LOG=$$(mktemp "$$TMPDIR/parley-failed.XXXXXX"); export FAILED_LOG; \
 	find tests/unit -name '*_spec.lua' | sort | \
 	  xargs -P $(JOBS) -I {} $(RUN_SPEC) {}; \
@@ -106,12 +117,13 @@ test-unit:
 	fi; \
 	rm -f "$$FAILED_LOG"; \
 	$(ORPHANS) --phase after || rc=1; \
+	$(SENTINEL_CHECK) || rc=1; \
 	exit $$rc
 
 # Integration + arch specs, same per-file process fan-out.
 test-integration:
 	@$(PREP_TEST_ENV)
-	@export $(TEST_ENV); \
+	@export $(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)"; \
 	FAILED_LOG=$$(mktemp "$$TMPDIR/parley-failed.XXXXXX"); export FAILED_LOG; \
 	find tests/integration tests/arch -name '*_spec.lua' | sort | \
 	  xargs -P $(JOBS) -I {} $(RUN_SPEC) {}; \
@@ -123,6 +135,7 @@ test-integration:
 	fi; \
 	rm -f "$$FAILED_LOG"; \
 	$(ORPHANS) --phase after || rc=1; \
+	$(SENTINEL_CHECK) || rc=1; \
 	exit $$rc
 
 # Run tests mapped to one spec key/path from atlas/traceability.yaml.
@@ -142,11 +155,12 @@ test-spec:
 	rc=0; \
 	for test_file in $$tests; do \
 		echo "Running $$test_file"; \
-		$(TEST_ENV) nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+		$(TEST_RUN) nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 		  -c "PlenaryBustedFile $$test_file" \
 		  -c "qa!" || rc=1; \
 	done; \
 	$(ORPHANS) --phase after || rc=1; \
+	$(SENTINEL_CHECK) || rc=1; \
 	exit $$rc
 
 # Run tests mapped to changed spec files under atlas/*/*.md.
@@ -199,7 +213,7 @@ test-changed:
 	if [ -n "$$lua_tests" ]; then \
 		for test_file in $$lua_tests; do \
 			echo "Running $$test_file"; \
-			$(TEST_ENV) nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+			$(TEST_RUN) nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 			  -c "PlenaryBustedFile $$test_file" \
 			  -c "qa!" || rc=1; \
 		done; \
@@ -212,6 +226,7 @@ test-changed:
 		rc=1; \
 	fi; \
 	$(ORPHANS) --phase after || rc=1; \
+	$(SENTINEL_CHECK) || rc=1; \
 	exit $$rc
 
 # Report-only real-Neovim chat typing benchmark. Elapsed timings never gate CI;
@@ -220,9 +235,10 @@ PERF_OUTPUT ?= $(TEST_TMP)/perf/parley-chat-typing.json
 perf:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
-	$(TEST_ENV) PERF_OUTPUT="$(PERF_OUTPUT)" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+	$(TEST_ENV) PERF_OUTPUT="$(PERF_OUTPUT)" PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" env -u PARLEY_LIVE_COUCH "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 	  -c "lua require('tests.perf.chat_typing').start()" || rc=1; \
 	$(ORPHANS) --phase after || rc=1; \
+	$(SENTINEL_CHECK) || rc=1; \
 	exit $$rc
 
 # Run static analysis for Lua code and tests.
@@ -237,8 +253,9 @@ lint:
 perf-finder:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
-	$(TEST_ENV) nvim --headless -u "$(CURDIR)/tests/minimal_init.vim" -l tests/perf_chat_finder.lua || rc=1; \
+	$(TEST_RUN) nvim --headless -u "$(CURDIR)/tests/minimal_init.vim" -l tests/perf_chat_finder.lua || rc=1; \
 	$(ORPHANS) --phase after || rc=1; \
+	$(SENTINEL_CHECK) || rc=1; \
 	exit $$rc
 
 # Regenerate tests/fixtures/golden_payloads/*.json. Under TEST_ENV like every
@@ -246,10 +263,11 @@ perf-finder:
 goldens:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
-	$(TEST_ENV) nvim --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+	$(TEST_RUN) nvim --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 	  -c "luafile scripts/refresh_goldens.lua" \
 	  -c "qa!" || rc=1; \
 	$(ORPHANS) --phase after || rc=1; \
+	$(SENTINEL_CHECK) || rc=1; \
 	exit $$rc
 
 # Refresh SSE fixture files from real APIs.
@@ -257,10 +275,11 @@ goldens:
 fixtures:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
-	$(TEST_ENV) nvim --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+	PARLEY_TEST_ENV_PASS="ANTHROPIC_API_KEY OPENAI_API_KEY GOOGLEAI_API_KEY" $(TEST_RUN) nvim --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 	  -c "luafile scripts/record_fixtures.lua" \
 	  -c "qa!" || rc=1; \
 	$(ORPHANS) --phase after || rc=1; \
+	$(SENTINEL_CHECK) || rc=1; \
 	exit $$rc
 
 # Check latest model offerings from each provider and optionally update fixture models.
@@ -281,7 +300,7 @@ test-clean-env:
 	@rm -rf "$(TEST_HOME)" "$(TEST_XDG)" "$(TEST_TMP)" $(LEGACY_TEST_DIRS)
 
 # Public contributors may keep Plenary anywhere; normal tests need no ariadne.
-.PHONY: check-test-deps check-vocabulary check-fresh-clone check-sdlc-conformance check-couch-registry-conformance
+.PHONY: check-test-deps check-vocabulary check-fresh-clone check-sdlc-conformance check-couch-registry-conformance check-couch-actors-live
 check-test-deps:
 	@test -r "$(PLENARY)/plugin/plenary.vim" || { \
 	  echo "Missing plenary.nvim. Clone nvim-lua/plenary.nvim, then run make test PLENARY=/absolute/path/to/plenary.nvim" >&2; exit 1; }
@@ -301,5 +320,17 @@ check-sdlc-conformance:
 	@python3 scripts/check-sdlc-resolve-conformance.py
 
 # Opt-in diagnostic only; requires Couch's explicit singleton-isolation support.
+# The live --actors conformance check (#365): couch_spec ALONE, with the slot's
+# real Couch thread (PARLEY_LIVE_COUCH carries it through scripts/test-env.sh).
+# Never part of `make test`, whose runner strips the flag.
+check-couch-actors-live:
+	@$(PREP_TEST_ENV) || exit $$?; \
+	rc=0; \
+	$(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" PARLEY_LIVE_COUCH=1 "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+	  -c "PlenaryBustedFile tests/unit/couch_spec.lua" -c "qa!" || rc=1; \
+	$(ORPHANS) --phase after || rc=1; \
+	$(SENTINEL_CHECK) || rc=1; \
+	exit $$rc
+
 check-couch-registry-conformance:
 	@python3 scripts/check-couch-registry-conformance.py
