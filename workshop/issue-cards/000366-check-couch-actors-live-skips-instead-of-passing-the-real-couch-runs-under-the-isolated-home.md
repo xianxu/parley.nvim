@@ -1,6 +1,6 @@
 ---
 id: 000366
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-17
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.29
+tracker:
+    version: 1
+    completion:
+        token: close-0c1cb74ecd27
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: e6b4a8de051080a9f129ad213dab016e38ac8e6a
+        evidence_commit: d7e7f91aebf9d99fd1861d1634b97d335a02ca0d
 ---
 
 # check-couch-actors-live skips instead of passing: the real couch runs under the isolated HOME
