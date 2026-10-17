@@ -178,3 +178,92 @@ dispose:
    Add a `## Revisions` entry defining “absent versus unsupported routing,” enumerating declaration forms and required regression coverage. Reopen the completed parser/admission verification items until that rule holds. Add explicit PURE/INTEGRATION kinds to the Core concepts tables; the listed entities otherwise exist at their stated paths.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"4adbe885-05fc-4eea-906b-65301257cfb7","repository":"github.com/xianxu/parley.nvim","issue_id":"000362","recipe":"milestone-review","round":2,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/7f95cbb77a770a55","reviewed_head":"5789ac0f26392fb45a8c9121f323b3ddbc980da5","slot":"parley.nvim:1","requested_at":"2026-10-17T02:26:03.487465Z"},"phase":"finished","pid":34637,"started_at":"2026-10-17T02:26:03.592884Z","finished_at":"2026-10-17T02:28:12.455932Z","session_id":"01a147ae-3e2c-77b3-8503-bec981baaf24","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T20:25:34-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 362 — Review-protocol sync accepts S2's collaboration-modes export member |
+| repo | parley.nvim |
+| issue file | workshop/issues/000362-review-protocol-sync-accepts-s2-s-collaboration-modes-export-member.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 75c795b448fbe7fdd8c38785f2c7c64001ef91c4..21b756db6e71597fed48ada97c69c5e301f4058d |
+| command | sdlc close --issue 362 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-16T20:25:34-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The export support, local compatibility policy, and chat protection are implemented and regression-tested. BR-1 is addressed. One new Important finding blocks close: quadratic frontmatter scanning stalls the editor synchronously.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      local-adapter.md:10-18 overrides incompatible imported operations; admission and invocation-owned proposal validation enforce chat protection. All 64 invocation tests pass at head. Restoring the pre-correction parser in a disposable copy produces 12 regression failures.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Issue Done when lines 37-39 explicitly require old-v1 sync and --check notices. test_old_v1_cli_reports_absent_collaboration_modes verifies both commands; all 16 Python contract tests pass.
+findings:
+  - id: new
+    severity: Important
+    kind: defect
+    family: synchronous-input-work-bounds
+    title: |
+      Frontmatter comment scanning causes quadratic editor stalls
+    detail: |
+      ARCH-CONSTRAINTS: lua/parley/skills/review/collaboration_value.lua:13 copies and searches the entire preceding prefix for every character, even in unrelated metadata. Parsing {'---', 'notes: '..string.rep('a', n), '---', 'body'} under LuaJIT took 0.279/1.110/4.471 seconds for 5/10/20 KB. review_send.lua:66 and review/init.lua:590 call this synchronously, so a submission can repeat several seconds of editor blocking before generation. Track the preceding non-whitespace character incrementally, inspect sibling scanners for repeated-prefix work, and add representative scaling coverage.
+```
+
+Done-when: current — it covers export compatibility and notices, local in-place answers, immutable chat sections, and routing validation.
+
+1. **Strengths**
+   - Export composition fixes the member order independently of manifest order; digest, corruption, stale-output, and symlink cases have coverage.
+   - The local adapter explicitly reconciles the canonical protocol with single-artifact capabilities.
+   - Chat protection runs before tool effects and rejects crossing spans, overlapping edits, and multiple proposal batches.
+   - README and atlas document the new behavior and limitations.
+
+2. **Critical findings**
+
+   None.
+
+3. **Important findings**
+
+   The synchronous parser stall above. Replace the repeated prefix search with incremental scanner state.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   Passed all 16 Python export tests, mapped `modes/review` tests, 64 real invocation tests, and range whitespace checks. Restoring the earlier parser produced 12 invocation failures. The disposable copy was removed. Functional coverage is strong; input-scale coverage is missing.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** routing is shared across admission, resubmission, and permission checks.
+   - **ARCH-PURE — pass:** listed pure entities exist and have direct tests without IO.
+   - **ARCH-PURPOSE — pass:** packaged composition and local capability reconciliation are delivered.
+   - **ARCH-MOCK — pass:** injected provider responses exercise the production tool/filesystem path.
+   - **ARCH-CONSTRAINTS — flag:** measured quadratic work blocks the interactive submission path.
+   - **ARCH-SECURE — pass:** unsupported declarations refuse visibly; snapshot permission checks precede writes.
+   - **ARCH-ORDER — pass:** the correction adds no persistent event state; proposal batches are constrained before effects.
+   - **ARCH-FUNERAL — pass:** generated package files are replaced in place; routing creates no durable runtime artifacts.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry defining linear frontmatter scanning, representative input sizes, and scaling verification for synchronous local review admission.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"9de6d1e1-4936-452a-8312-88f6fca44412","repository":"github.com/xianxu/parley.nvim","issue_id":"000362","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/f07e4555abd9f3f6","reviewed_head":"21b756db6e71597fed48ada97c69c5e301f4058d","slot":"parley.nvim:1","requested_at":"2026-10-17T03:22:45.42142Z"},"phase":"finished","pid":45565,"started_at":"2026-10-17T03:22:45.543142Z","finished_at":"2026-10-17T03:25:32.506179Z","session_id":"01a147e2-26a9-7b02-899e-185422223da4","outcome":"returned"}] -->

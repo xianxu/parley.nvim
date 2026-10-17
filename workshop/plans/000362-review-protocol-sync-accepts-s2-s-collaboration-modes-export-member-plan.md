@@ -78,3 +78,13 @@ are not declarations. Add this representation matrix to parser, admission and
 real-write tests; keep canonical field value forms. Re-run focused/full
 verification and the binary boundary review. The previous policy and no-IO
 boundary remain unchanged.
+
+### 2026-10-16 — linear synchronous frontmatter scans (BR-3)
+
+Bound scanning/copying by input bytes: incremental quote context; quote offsets
+instead of tail copies; one join for multiline lists; anchored edge whitespace
+scans in the parser and shared flat reader. Regression sizes are 5/10/20 KB
+metadata, 100/200/400 quoted flow members, 20 KB interior whitespace and 4,001
+multiline members. Deterministic copied-byte bounds and a broad CPU stall cap
+cover the measured class; re-run the full suite and boundary review. No new
+routing, state, IO, or generated protocol changes.

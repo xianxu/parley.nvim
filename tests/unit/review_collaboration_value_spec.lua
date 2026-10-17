@@ -174,3 +174,54 @@ metadata:
         end
     end)
 end)
+
+-- Count copied bytes rather than timing the editor: the bound is independent
+-- of machine load, and catches both growing prefixes and repeated tail copies.
+local function copied_bytes(body)
+    local original, bytes = string.sub, 0
+    -- luacheck: push ignore 122 (bounded instrumentation, restored after pcall)
+    string.sub = function(s, first, last)
+        local result = original(s, first, last)
+        bytes = bytes + #result
+        return result
+    end
+    local ok, value, err = pcall(read, body)
+    string.sub = original
+    -- luacheck: pop
+    assert.is_truthy(ok)
+    assert.is_nil(err)
+    return bytes, value
+end
+
+describe("collaboration frontmatter scan work", function()
+    it("handles large whitespace runs and multiline collections without editor stalls", function()
+        local start = os.clock()
+        local value, err = read("notes: a" .. string.rep(" ", 20000) .. "z")
+        assert.is_nil(value)
+        assert.is_nil(err)
+        local rows = { "collaboration-mode:", "  chat: [" }
+        for _ = 1, 4000 do rows[#rows + 1] = '    "A",' end
+        rows[#rows + 1] = '    "Z"]'
+        value, err = read(table.concat(rows, "\n"))
+        assert.is_nil(err)
+        assert.equals(4001, #value.chat)
+        -- CPU time excludes queue waits; 1 s leaves two orders of magnitude
+        -- over normal execution while detecting seconds of pattern backtracking.
+        assert.is_truthy(os.clock() - start < 1)
+    end)
+    it("bounds copied bytes for long unrelated metadata", function()
+        for _, size in ipairs({ 5000, 10000, 20000 }) do
+            local body = "notes: " .. string.rep("a", size)
+            local bytes = copied_bytes(body)
+            assert.is_truthy(bytes < #body * 40)
+        end
+    end)
+    it("bounds copied bytes across many quoted flow values", function()
+        for _, count in ipairs({ 100, 200, 400 }) do
+            local body = 'collaboration-mode: {chat: [' .. string.rep('"A", ', count) .. '"Z"]}'
+            local bytes, value = copied_bytes(body)
+            assert.equals(count + 1, #value.chat)
+            assert.is_truthy(bytes < #body * 40)
+        end
+    end)
+end)

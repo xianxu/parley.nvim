@@ -694,3 +694,8 @@ Before importing a shared protocol, trace every required IO operation through
 the receiving adapter. Text composition and matching hashes do not prove that
 an artifact-bound single-file edit tool can execute side-doc, cross-file or
 previous-read flows. Resolve unsupported routing explicitly before shipping.
+
+For synchronous parsers, test input scale as well as syntax. Per-character
+prefix copies, per-token tail copies, repeated list concatenation and unanchored
+whitespace patterns can all make an otherwise bounded grammar quadratic. Count
+copied bytes where possible and include long whitespace runs in a stall check.

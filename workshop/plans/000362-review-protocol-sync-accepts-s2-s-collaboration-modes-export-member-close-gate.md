@@ -184,6 +184,112 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 9de6d1e1-4936-452a-8312-88f6fca44412
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000362"
+            recipe: milestone-review
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/f07e4555abd9f3f6
+            reviewed_head: 21b756db6e71597fed48ada97c69c5e301f4058d
+            slot: parley.nvim:1
+            requested_at: "2026-10-17T03:22:45.42142Z"
+          phase: finished
+          pid: 45565
+          started_at: "2026-10-17T03:22:45.543142Z"
+          finished_at: "2026-10-17T03:25:32.506179Z"
+          session_id: 01a147e2-26a9-7b02-899e-185422223da4
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 21b756db6e71597fed48ada97c69c5e301f4058d
+        tracker_head: c6dcebbc8ce96368e5cf8b3a4f3ecef3584f1992
+        branch_point: 75c795b448fbe7fdd8c38785f2c7c64001ef91c4
+        since: "2026-10-16T16:04:39-07:00"
+        until: "2026-10-16T20:22:30-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T16:04:39-07:00"
+              end: "2026-10-16T20:22:30-07:00"
+              began: "2026-10-16T16:04:39-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 306931385fe6c3b3535a9f34d78cdeaab47d33fb200f98a17f6aaec1f578cb36
+              started: "2026-10-14T05:35:58.09Z"
+              spawned: false
+              bytes: 31134246
+              windows:
+                - start: "2026-10-16T16:04:39-07:00"
+                  end: "2026-10-16T20:22:30-07:00"
+            - harness: codex
+              id: 01a146f9-ac61-7822-bc08-cf9d7136b471
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 5d6d82af37c5a841eed73228ff16cf3920b542368a2670b4bc05a436fe3c8a5a
+              started: "2026-10-16T23:08:50.276Z"
+              spawned: true
+              bytes: 569640
+              windows:
+                - start: "2026-10-16T23:08:50.276Z"
+                  end: "2026-10-16T20:22:30-07:00"
+            - harness: codex
+              id: 01a1478c-d17c-7823-9d2b-ffd0b50bb137
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 9a788b17b422bb0a3c5a013979a33327d8f2c816679da1c96735cfd4f5c22742
+              started: "2026-10-17T01:49:33.55Z"
+              spawned: true
+              bytes: 856648
+              windows:
+                - start: "2026-10-17T01:49:33.55Z"
+                  end: "2026-10-16T20:22:30-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 0.042216666666666666
+        cuts:
+            - dispatched: "2026-10-16T18:11:06-07:00"
+              finalized: "2026-10-16T18:12:54-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T19:26:03-07:00"
+              finalized: "2026-10-16T19:28:14-07:00"
+              finalizing: false
+      "n": 3
+      timestamp: "2026-10-16T20:25:34-07:00"
+      dispatched: "2026-10-16T20:22:45-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: local-adapter.md:10-18 overrides incompatible imported operations; admission and invocation-owned proposal validation enforce chat protection. All 64 invocation tests pass at head. Restoring the pre-correction parser in a disposable copy produces 12 regression failures.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: Issue Done when lines 37-39 explicitly require old-v1 sync and --check notices. test_old_v1_cli_reports_absent_collaboration_modes verifies both commands; all 16 Python contract tests pass.
+          round: 3
+      findings:
+        - kind: defect
+          id: BR-3
+          severity: Important
+          title: Frontmatter comment scanning causes quadratic editor stalls
+          detail: 'ARCH-CONSTRAINTS: lua/parley/skills/review/collaboration_value.lua:13 copies and searches the entire preceding prefix for every character, even in unrelated metadata. Parsing {''---'', ''notes: ''..string.rep(''a'', n), ''---'', ''body''} under LuaJIT took 0.279/1.110/4.471 seconds for 5/10/20 KB. review_send.lua:66 and review/init.lua:590 call this synchronously, so a submission can repeat several seconds of editor blocking before generation. Track the preceding non-whitespace character incrementally, inspect sibling scanners for repeated-prefix work, and add representative scaling coverage.'
+          family: synchronous-input-work-bounds
+          round: 3
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#362 (boundary-review)
@@ -208,6 +314,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-1 — not-addressed — The local-adapter override and reachable admission/proposal guards correct the original mismatch for recognized declarations; removing those fixes produces regression failures. However, collaboration_value.lua:128-173 recognizes only column-zero field lines. Frontmatter containing either `  collaboration-mode: chat` or `{collaboration-mode: chat}` returns no value and no error. Direct execution confirms resolve marks the body editable discussion and validate_edits permits replacing its text. Thus the promised chat protection remains incomplete. For family prompt-adapter-capability-contract, state and enforce the general rule: distinguish genuinely absent routing from unsupported or malformed declarations; decode supported representations and visibly refuse unsupported ones. Enumerate declaration representations and add parser, admission, and real-write regression coverage. ARCH-PURPOSE, ARCH-SECURE.
 - BR-2 — addressed — The pinned issue diff adds Done-when lines 37-39 requiring old-v1 sync and --check success, with a notice from each command. This matches scripts/sync-review-protocol.py:156-158 and test_old_v1_cli_reports_absent_collaboration_modes at tests/unit/review_protocol_export_test.py:296-305, which exercises both commands and passed. This is a prose-only acceptance correction.
 
+## Round 3 — 2026-10-16T20:25:34-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — local-adapter.md:10-18 overrides incompatible imported operations; admission and invocation-owned proposal validation enforce chat protection. All 64 invocation tests pass at head. Restoring the pre-correction parser in a disposable copy produces 12 regression failures.
+- BR-2 — addressed — Issue Done when lines 37-39 explicitly require old-v1 sync and --check notices. test_old_v1_cli_reports_absent_collaboration_modes verifies both commands; all 16 Python contract tests pass.
+
+### Raised
+
+- **BR-3** [Important] `synchronous-input-work-bounds` (kind: defect) Frontmatter comment scanning causes quadratic editor stalls
+  ARCH-CONSTRAINTS: lua/parley/skills/review/collaboration_value.lua:13 copies and searches the entire preceding prefix for every character, even in unrelated metadata. Parsing {'---', 'notes: '..string.rep('a', n), '---', 'body'} under LuaJIT took 0.279/1.110/4.471 seconds for 5/10/20 KB. review_send.lua:66 and review/init.lua:590 call this synchronously, so a submission can repeat several seconds of editor blocking before generation. Track the preceding non-whitespace character incrementally, inspect sibling scanners for repeated-prefix work, and add representative scaling coverage.
+
 ## Open findings
 
-- **BR-1** [Critical] `prompt-adapter-capability-contract` (kind: defect) The imported collaboration contract requires operations the local adapter cannot perform
+- **BR-3** [Important] `synchronous-input-work-bounds` (kind: defect) Frontmatter comment scanning causes quadratic editor stalls

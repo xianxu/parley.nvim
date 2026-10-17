@@ -237,6 +237,31 @@ no retry or waiver. Log .git/sdlc/local-checks/
 The full run includes the 64 invocation cases and declaration admission matrix.
 Request the full boundary review to dispose the remaining BR-1 family.
 
+### 2026-10-16 — BR-3 synchronous scan work
+
+Round 3 addressed BR-1/BR-2 and found no Critical defects, but measured quadratic
+comment scanning (5/10/20 KB: 0.277/1.127/4.441 CPU seconds reproduced). The class
+sweep also found repeated quoted-tail copies, multiline list concatenation,
+and whitespace-pattern backtracking in the shared flat reader and trim.
+Incremental previous-character state, offset-based quoted spans, one join per
+list, and anchored edge scans remove those repeated prefixes/tails. The same
+20 KB metadata parses in 0.001220 s; interior whitespace drops from 3.651 s to
+0.001038 s. No canonical generated file or routing policy changes.
+
+Regression evidence: both deterministic copied-byte bounds failed before the
+fix (/tmp/parley-362-scan-red.log); the whitespace/multiline CPU budget also
+failed (/tmp/parley-362-whitespace-red.log). All 20 pure parser tests pass after
+the fix. The copied-byte bounds cover 5/10/20 KB scalar metadata and 100/200/400
+quoted list members; the CPU check covers 20 KB interior whitespace and 4,001
+multiline members with a generous 1-second CPU ceiling. Shared quoting tests
+cover offset escapes and whitespace/comment preservation.
+
+Focused verification note: the first post-sweep mapped and invocation commands
+were accidentally overlapped in one checkout; the mapped cleanup correctly
+reaped the other run as a leak (logs /tmp/parley-362-scan-final-mapped.log and
+/tmp/parley-362-scan-invoke.log). This is a harness scheduling error, not a
+passing test result or a product flake. Re-run those commands serially.
+
 ## Revisions
 
 ### 2026-10-16 — priority interruption
@@ -290,3 +315,13 @@ collaboration-mode under an unrelated field is not root routing. Keep all
 canonical scalar/block/flow field values. Cover the declaration matrix in
 pure parsing, local admission and real tool effects. This fixes the existing
 chat-protection invariant, adding no routing mode, IO or baseline.
+
+### 2026-10-16 — bound synchronous frontmatter work (BR-3)
+
+ARCH-CONSTRAINTS: frontmatter admission must scan and copy in proportion to
+input size. Track quote context incrementally, scan quotes by offset, join
+multiline values once, and trim only at the edges. Pin 5/10/20 KB metadata,
+long whitespace runs and many quoted/multiline members with deterministic
+copy bounds plus a broad CPU stall check. Inspect all sibling parser scanners
+and shared flat-reader patterns; re-run focused/full verification and close.
+No change to the approved single-artifact policy or canonical export.

@@ -2,22 +2,30 @@
 -- Supports scalar modes, block/flow mappings and heading-name sequences only.
 local M = {}
 local frontmatter = require("parley.frontmatter")
-local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
+local function trim(s)
+    local first, last = 1, #s
+    while first <= last and s:sub(first, first):match("%s") do first = first + 1 end
+    while last >= first and s:sub(last, last):match("%s") do last = last - 1 end
+    return s:sub(first, last)
+end
 local function fail(message) error(message, 0) end
 
 -- Comments start only outside quotes and after separation whitespace.
 local function uncomment(s)
-    local i = 1
+    local i, previous = 1, nil
     while i <= #s do
         local c = s:sub(i, i)
-        local previous = s:sub(1, i - 1):match("(%S)%s*$")
         if (c == '"' or c == "'") and (not previous or previous:match("[%[{,:%-]")) then
-            local span = frontmatter.quoted_span(s:sub(i))
+            local span = frontmatter.quoted_span(s, i)
             if not span then fail("unclosed quoted value") end
             i = i + #span
+            previous = c
         elseif c == "#" and (i == 1 or s:sub(i - 1, i - 1):match("%s")) then
             return trim(s:sub(1, i - 1))
-        else i = i + 1 end
+        else
+            if not c:match("%s") then previous = c end
+            i = i + 1
+        end
     end
     return trim(s)
 end
@@ -59,7 +67,7 @@ local function decode(text, block_scalar)
         skip()
         local c = text:sub(i, i)
         if c == '"' or c == "'" then
-            local span = frontmatter.quoted_span(text:sub(i))
+            local span = frontmatter.quoted_span(text, i)
             if not span then fail("unclosed quoted value") end
             i = i + #span
             return unquote(span)
@@ -153,7 +161,7 @@ local function flow_balance(text, stack)
     while i <= #text do
         local c = text:sub(i, i)
         if (c == '\"' or c == "'") and (not previous or previous:match("[%[{,:%-]")) then
-            local span = frontmatter.quoted_span(text:sub(i))
+            local span = frontmatter.quoted_span(text, i)
             if not span then fail("multiline quoted flow scalars are unsupported") end
             i = i + #span
             previous = c
@@ -247,10 +255,12 @@ local function parse(lines)
             if #names == 0 then fail("heading names require a list") end
             value = "[" .. table.concat(names, ",") .. "]"
         elseif value:sub(1, 1) == "[" then
+            local continuation = { value }
             while index <= #values and values[index].indent > indent do
-                value = value .. " " .. values[index].text
+                continuation[#continuation + 1] = values[index].text
                 index = index + 1
             end
+            value = table.concat(continuation, " ")
         end
         parts[#parts + 1] = key .. ":" .. value
     end
