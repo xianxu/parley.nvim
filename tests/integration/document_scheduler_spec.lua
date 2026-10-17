@@ -1,4 +1,5 @@
 local Document = require('parley.document')
+local arrival = require("tests.helpers.arrival")
 
 describe('document repair scheduling', function()
     it('lets native timers run before a multi-slice repair completes', function()
@@ -16,7 +17,7 @@ describe('document repair scheduling', function()
                 vim.defer_fn(function() heartbeat = true end, 1)
             end
         end)
-        local ran = vim.wait(10000, function() return heartbeat end, 1)
+        local ran = vim.wait(arrival.MS, function() return heartbeat end, 1)
         local finished_before_heartbeat = complete
         Document.detach(doc)
         vim.api.nvim_buf_delete(buf, {force = true})

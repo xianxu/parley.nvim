@@ -736,3 +736,19 @@ point as well as internal helpers before calling the family complete.
 - Trace before blaming ordering: wrapping `couch.run` to log each argv with a
   timestamp showed one process, started 15 ms after the key, with nothing
   queued ahead of it.
+
+## 2026-10-17 (#374 — a sweep and its guard must see every form of the thing)
+
+- Before sweeping a pattern, list every syntactic form it takes, then write the
+  guard as an allowlist over all of them. #374's first sweep matched only
+  `assert(vim.wait(N, …))`. It missed 185 bare and local-assigned waits, which
+  were the most common form. Round 2's denylist of digit literals then missed
+  `vim.wait(ms or 3000, …)`. Each gap cost a close-review round. "Allow what
+  derives from the budget, or carries a reason" has no form left to escape.
+- A mechanical rewrite also rewrites Lua that a spec writes out as a string for a
+  child Neovim, where test helpers are out of scope. Pass the value in by
+  argument or interpolation.
+- Classifying 185 sites as positive, absence or drain parallelised cleanly
+  across three subagents, each given disjoint files and the same rule. Fill in a
+  prompt's placeholders before sending it: one went out with a literal
+  LIST_PLACEHOLDER, and the agent rightly refused to guess.

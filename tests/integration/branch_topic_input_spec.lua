@@ -1,5 +1,6 @@
 -- Topic input contains the current file conversation, while the main request
 -- keeps its complete system prefix followed by ancestor context.
+local arrival = require("tests.helpers.arrival")
 local parley=require('parley')
 local Respond=require('parley.chat_respond')
 local root=vim.fn.tempname()..'-branch-topic'
@@ -10,7 +11,7 @@ parley.setup({chat_dir=root,state_dir=root..'/state',providers={},api_keys={},pa
         {name='TopicSynthetic',provider='openai',model={model='fixture'},system_prompt='SYNTHETIC POLICY',
             synthetic_system_prompt=true,synthetic_system_prompt_ack='SYNTHETIC ACK',tools={}},
         {name='TopicEmpty',provider='openai',model={model='fixture'},system_prompt='',tools={}}}})
-local function wait(predicate)assert.is_true(vim.wait(5000,predicate,1),'topic flow did not settle')end
+local function wait(predicate)assert.is_true(vim.wait(arrival.MS,predicate,1),'topic flow did not settle')end
 
 describe('branch topic input boundaries',function()
     local buf,calls,old_query,old_stop,parent,child

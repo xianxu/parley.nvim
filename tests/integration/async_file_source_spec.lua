@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local async_file_source = require("parley.async_file_source")
 local failure_kind = require("parley.finder_scan").FAILURE_KIND
 
@@ -24,7 +25,7 @@ local function with_tree(callback)
 end
 
 local function wait_for(predicate)
-    assert(vim.wait(2000, predicate, 10), "timed out waiting for async file source")
+    assert(vim.wait(arrival.MS, predicate, 10), "timed out waiting for async file source")
 end
 
 describe("real asynchronous file source", function()

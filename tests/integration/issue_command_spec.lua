@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local issues = require('parley.issues')
 local vocab = require('parley.issue_vocabulary')
 
@@ -9,7 +10,7 @@ describe('optional sdlc command routes', function()
         issues.run_sdlc_issue_new(title,{issues_dir=dir..'/issues'},function(path,err)
             result, failure, done = path, err, true
         end)
-        assert(vim.wait(3000,function() return done end,10),'creation did not finish')
+        assert(vim.wait(arrival.MS,function() return done end,10),'creation did not finish')
         return result, failure
     end
     before_each(function()

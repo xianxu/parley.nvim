@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local markdown_finder = require("parley.markdown_finder")
 local float_picker = require("parley.float_picker")
 
@@ -95,11 +96,11 @@ describe("real asynchronous Markdown finder", function()
 		markdown_finder.open()
 		local initial = line_containing("scanning…")
 		assert.is_not_nil(initial)
-		assert(vim.wait(1000, function()
+		assert(vim.wait(arrival.MS, function()
 			local current = line_containing("scanning…")
 			return sentinel and current ~= nil and current ~= initial
 		end, 10), "spinner did not tick while Git remained pending")
-		assert(vim.wait(3000, function() return line_containing("late.md") ~= nil end, 10),
+		assert(vim.wait(arrival.MS, function() return line_containing("late.md") ~= nil end, 10),
 			"delayed Markdown result did not settle; lines=" .. table.concat(picker_lines(), " | ")
 				.. "; warnings=" .. table.concat(warnings, " | "))
 		assert.same({}, warnings)
@@ -126,7 +127,7 @@ describe("real asynchronous Markdown finder", function()
 		vim.api.nvim_win_close(results_win, true)
 		vim.api.nvim_exec_autocmds("VimResized", {})
 
-		assert(vim.wait(500, function() return cancel_count == 1 end, 10),
+		assert(vim.wait(arrival.MS, function() return cancel_count == 1 end, 10),
 			"destroying the picker did not cancel its producer")
 		settle_git({ status = "success", paths = { "late.md" } })
 		vim.wait(50, function() return false end, 10)
@@ -145,7 +146,7 @@ describe("real asynchronous Markdown finder", function()
 		markdown_finder.setup(parley_for(root, warnings))
 
 		markdown_finder.open()
-		assert(vim.wait(3000, function() return line_containing("regular.md") ~= nil end, 10),
+		assert(vim.wait(arrival.MS, function() return line_containing("regular.md") ~= nil end, 10),
 			"real Git Markdown result did not settle; lines=" .. table.concat(picker_lines(), " | ")
 				.. "; warnings=" .. table.concat(warnings, " | "))
 

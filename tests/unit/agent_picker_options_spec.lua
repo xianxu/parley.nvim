@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 describe('agent picker continuation options', function()
     local picker, widget, proxy, saved, captured, plugin, rows
     before_each(function()
@@ -71,10 +72,10 @@ describe('agent picker continuation options', function()
             on_cancel = function() cancelled = cancelled + 1 end})
         local initial = captured
         captured.on_select({kind = 'login', provider = 'codex'})
-        vim.wait(30, function() return finish ~= nil end, 1)
+        vim.wait(arrival.MS, function() return finish ~= nil end, 1)
         local got_finish = finish ~= nil
         if finish then finish(true) end
-        vim.wait(30, function() return captured ~= initial end, 1)
+        vim.wait(arrival.MS, function() return captured ~= initial end, 1)
         for key, value in pairs(original) do proxy[key] = value end
         assert.is_true(got_finish)
         assert.equals(0, cancelled)
@@ -94,7 +95,7 @@ describe('agent picker continuation options', function()
         picker.agent_picker(plugin, {on_cancel = function() cancelled = cancelled + 1 end})
         local initial = captured
         captured.on_select({kind = 'login', provider = 'codex'})
-        vim.wait(30, function() return cancelled > 0 end, 1)
+        vim.wait(arrival.MS, function() return cancelled > 0 end, 1)
         for key, value in pairs(original) do proxy[key] = value end
         assert.equals(1, cancelled)
         assert.equals(initial, captured)

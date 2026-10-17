@@ -1,4 +1,5 @@
-local function wait(predicate)assert.is_true(vim.wait(5000,predicate,1),'file operation did not finish')end
+local arrival = require("tests.helpers.arrival")
+local function wait(predicate)assert.is_true(vim.wait(arrival.MS,predicate,1),'file operation did not finish')end
 describe('checked file tool editor completion',function()
     local root,path,buf
     before_each(function()

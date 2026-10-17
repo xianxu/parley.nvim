@@ -5,6 +5,7 @@
 --
 -- Fail-closed: a generation must HOLD the turn, not merely "not be blocked". An
 -- unheld turn refuses every generation rather than admitting all of them.
+local arrival = require("tests.helpers.arrival")
 local D=require('parley.document')
 local Fake=require('tests.helpers.fake_document_editor')
 
@@ -379,14 +380,14 @@ describe('write turn matrix',function()
     -- the waiter whether or not anyone notified it.
     it('wakes a queued generation without hand-stepping when the holder finishes',function()
         local _,editor,r,f=pair({schedule=true})
-        assert.is_true(vim.wait(2000,function()return #f.a.preparations==1 and #f.b.preparations==1 end,5))
+        assert.is_true(vim.wait(arrival.MS,function()return #f.a.preparations==1 and #f.b.preparations==1 end,5))
         f.a:prepare();f.b:prepare()
-        assert.is_true(vim.wait(2000,function()return #f.a.requests==1 and #f.b.requests==1 end,5),
+        assert.is_true(vim.wait(arrival.MS,function()return #f.a.requests==1 and #f.b.requests==1 end,5),
             'both requests start at once')
         f.b:output(1,'beta');f.b:complete(1)
-        assert.is_true(vim.wait(2000,function()return Runner.snapshot(r.b).phase=='draining' end,5))
+        assert.is_true(vim.wait(arrival.MS,function()return Runner.snapshot(r.b).phase=='draining' end,5))
         f.a:output(1,'alpha');f.a:complete(1)
-        assert.is_true(vim.wait(2000,function()return Runner.snapshot(r.b).phase=='terminal' end,5),
+        assert.is_true(vim.wait(arrival.MS,function()return Runner.snapshot(r.b).phase=='terminal' end,5),
             'the waiter must wake on its own once the holder retires')
         assert.equals('success',Runner.snapshot(r.b).outcome)
         assert.truthy(table.concat(editor.lines,'\n'):find('beta',1,true))

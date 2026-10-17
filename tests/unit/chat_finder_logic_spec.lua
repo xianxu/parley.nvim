@@ -6,6 +6,7 @@
 -- Note: Full UI integration (floating picker, keymappings, buffer manipulation)
 -- is not tested here; these specs stay focused on logic that can be verified headlessly.
 
+local arrival = require("tests.helpers.arrival")
 local M = require("parley")
 
 describe("ChatFinder logic", function()
@@ -284,7 +285,7 @@ describe("ChatFinder logic", function()
                     local mapping = vim.fn.maparg(case.key, "i", false, true)
                     assert.is_function(mapping.callback, "missing finder key " .. case.key)
                     mapping.callback()
-                    assert(vim.wait(500, function() return prompt ~= nil end, 10), "no confirmation")
+                    assert(vim.wait(arrival.MS, function() return prompt ~= nil end, 10), "no confirmation")
                     if case.tree then
                         assert.is_truthy(prompt:find("2 file(s) in tree", 1, true), prompt)
                     else
@@ -294,7 +295,7 @@ describe("ChatFinder logic", function()
                     respond(case.answer)
                     assert.are.equal(case.answer == "y" and 0 or 1, vim.fn.filereadable(parent))
                     assert.are.equal(1, vim.fn.filereadable(child), "single deletion removed child")
-                    assert(vim.wait(500, function() return #find_float_wins() > 0 end, 10),
+                    assert(vim.wait(arrival.MS, function() return #find_float_wins() > 0 end, 10),
                         "finder did not resume after confirmation")
                 end)
             end
@@ -723,7 +724,7 @@ describe("ChatFinder logic", function()
             local initial = float_line_containing("scanning…")
 
             assert.is_not_nil(initial)
-            assert(vim.wait(1000, function()
+            assert(vim.wait(arrival.MS, function()
                 local current = float_line_containing("scanning…")
                 return sentinel and current ~= nil and current ~= initial
             end, 10), "Chat spinner did not tick while acquisition was pending")
@@ -732,7 +733,7 @@ describe("ChatFinder logic", function()
                 "x",
                 true
             )
-            assert(vim.wait(500, function() return cancel_count == 1 end, 10))
+            assert(vim.wait(arrival.MS, function() return cancel_count == 1 end, 10))
         end)
 
         it("cancels loading acquisition before a recency mapping reopens Chat", function()
@@ -752,10 +753,10 @@ describe("ChatFinder logic", function()
             M.cmd.ChatFinder()
             vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<C-a>", true, false, true), "x", true)
 
-            assert(vim.wait(1000, function() return cancel_count == 1 and scan_count == 2 end, 10))
+            assert(vim.wait(arrival.MS, function() return cancel_count == 1 and scan_count == 2 end, 10))
             assert.equals(1, scan_count - cancel_count)
             vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true)
-            assert(vim.wait(500, function() return cancel_count == 2 end, 10))
+            assert(vim.wait(arrival.MS, function() return cancel_count == 2 end, 10))
         end)
 
 		it("joins a matching retained prewarm instead of starting a second scan", function()

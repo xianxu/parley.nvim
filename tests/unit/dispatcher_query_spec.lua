@@ -11,6 +11,7 @@
 -- Strategy: Mock vault and tasker.run to capture the out_reader closure,
 -- then drive it directly with synthetic chunks.
 
+local arrival = require("tests.helpers.arrival")
 local dispatcher = require("parley.dispatcher")
 local vault = require("parley.vault")
 local tasker = require("parley.tasker")
@@ -470,7 +471,7 @@ describe("dispatcher.query internals", function()
             captured_terminal(0, 0, "", status_stderr("200"), nil)
 
             -- Need to wait for vim.schedule to execute
-            vim.wait(100, function()
+            vim.wait(arrival.MS, function()
                 return #callback_calls > 0
             end, 10)
 
@@ -695,7 +696,7 @@ describe("dispatcher.query internals", function()
             captured_terminal(0, 0, 'data: {"choices":[{"delta":{"content":"ok"}}]}',
                 status_stderr("200"), nil)
             assert.equals("exit", events[1])
-            assert.is_true(vim.wait(100, function() return #events == 2 end, 10))
+            assert.is_true(vim.wait(arrival.MS, function() return #events == 2 end, 10))
             assert.same({ "exit", "callback" }, events)
         end)
 
@@ -895,7 +896,7 @@ describe("dispatcher.query internals", function()
             captured_out_reader(nil, body)
             captured_out_reader(nil, nil)
             local ok, err = pcall(captured_terminal, 0, 0, body, status_stderr("200"), nil)
-            local completed = vim.wait(100, function()
+            local completed = vim.wait(arrival.MS, function()
                 return callback_calls == 1 and #vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {}) == 0
             end, 5)
 
@@ -923,7 +924,7 @@ describe("dispatcher.query internals", function()
                 end)
             captured_out_reader(nil, nil)
             captured_terminal(0, 0, "", status_stderr("200"), nil)
-            assert.is_true(vim.wait(100, function() return callback_calls == 1 end, 5))
+            assert.is_true(vim.wait(arrival.MS, function() return callback_calls == 1 end, 5))
             vim.wait(20, function() return false end, 5)
             logger.error = original_error
 
@@ -954,7 +955,7 @@ describe("dispatcher.query internals", function()
                     local expected = {}
                     if surfaces.on_exit then table.insert(expected, "exit") end
                     if surfaces.callback then
-                        assert.is_true(vim.wait(100, function() return #events == #expected + 1 end, 5))
+                        assert.is_true(vim.wait(arrival.MS, function() return #events == #expected + 1 end, 5))
                         table.insert(expected, "callback")
                     end
                     assert.same(expected, events)
@@ -1126,7 +1127,7 @@ describe("dispatcher.query internals", function()
             with_adapter(function() return true end, function()
                 errors = fail_query()
                 assert.equals(0, #errors)
-                assert.is_true(vim.wait(2000, function() return #errors == 1 end, 5),
+                assert.is_true(vim.wait(arrival.MS, function() return #errors == 1 end, 5),
                     "the backstop never fired")
             end)
             dispatcher.recovery_timeout_ms = saved_timeout

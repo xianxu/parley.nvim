@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 local Registry = require("parley.keybinding_registry")
 
@@ -136,7 +137,7 @@ describe("private note Return continuation", function()
         parley.cmd.ChatRespond = function() submitted = submitted + 1 end
         local ok, err = pcall(function()
             keys("A<CR><Esc>")
-            assert.is_true(vim.wait(1000, function() return submitted == 1 end))
+            assert.is_true(vim.wait(arrival.MS, function() return submitted == 1 end))
             assert.is_nil(vim.bo[buf].comments:find("🔒:", 1, true))
         end)
         parley.cmd.ChatRespond = respond

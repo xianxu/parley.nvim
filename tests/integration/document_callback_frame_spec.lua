@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local D=require('parley.document')
 local Grammar=require('parley.document.grammar')
 local buffers={}
@@ -110,7 +111,7 @@ describe('native callback source frames',function()
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('i<CR><BS><Esc>',true,false,true),'nx',false)
         settle(doc)
         local yielded=false;vim.schedule(function()yielded=true end)
-        assert.is_true(vim.wait(1000,function()return yielded end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return yielded end,1))
         local last;D.subscribe(doc,function(e)if e.kind=='edit'then last=e end end)
         vim.api.nvim_buf_set_text(buf,1,0,1,0,{'x'})
         assert.is_true(last.reused_suffix,vim.inspect(last))

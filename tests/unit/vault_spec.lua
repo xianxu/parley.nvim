@@ -10,6 +10,7 @@
 -- Strategy: Reset module state between test groups via package.loaded removal.
 -- Mock tasker.run to invoke callbacks synchronously.
 
+local arrival = require("tests.helpers.arrival")
 describe("vault", function()
     local vault
     local tasker
@@ -428,10 +429,10 @@ describe("vault copilot bearer from the token endpoint", function()
             function(message) errors[#errors + 1] = message end) end
         refresh()
         local p = processes.processes[4242]; p:finish(22, 0)
-        assert.is_true(vim.wait(1000, function() return #errors == 1 end, 5), "a failed curl never reported")
+        assert.is_true(vim.wait(arrival.MS, function() return #errors == 1 end, 5), "a failed curl never reported")
         refresh()
         answer("<html>proxy error</html>")
-        assert.is_true(vim.wait(1000, function() return #errors == 2 end, 5), "an undecodable body never reported")
+        assert.is_true(vim.wait(arrival.MS, function() return #errors == 2 end, 5), "an undecodable body never reported")
         -- A vault with no copilot secret resolved returns early: it must report too.
         package.loaded["parley.vault"] = nil
         vault = require("parley.vault"); vault.setup({ state_dir = dir })
@@ -442,14 +443,14 @@ describe("vault copilot bearer from the token endpoint", function()
     it("V1: drops a non-numeric expires_at and fetches again on the next request", function()
         local refreshed = 0
         vault.refresh_copilot_bearer(function() refreshed = refreshed + 1 end)
-        assert.is_true(vim.wait(1000, function() return processes.spawn_calls == 1 end, 5))
+        assert.is_true(vim.wait(arrival.MS, function() return processes.spawn_calls == 1 end, 5))
         answer('{"token":"t","expires_at":"soon"}')
-        assert.is_true(vim.wait(1000, function() return refreshed == 1 end, 5))
+        assert.is_true(vim.wait(arrival.MS, function() return refreshed == 1 end, 5))
         assert.equals("t", vault._state.copilot_bearer.token)
         assert.is_nil(vault._state.copilot_bearer.expires_at)
         local ok, err = pcall(vault.refresh_copilot_bearer, function() refreshed = refreshed + 1 end)
         assert(ok, err)
-        assert.is_true(vim.wait(1000, function() return processes.spawn_calls == 2 end, 5),
+        assert.is_true(vim.wait(arrival.MS, function() return processes.spawn_calls == 2 end, 5),
             "a bearer without a numeric expiry must be fetched again")
     end)
     -- #204: a bearer is reused only for the copilot key it was fetched with,
@@ -459,7 +460,7 @@ describe("vault copilot bearer from the token endpoint", function()
         local function refresh() vault.refresh_copilot_bearer(function() ready = ready + 1 end) end
         refresh()
         answer(('{"token":"t1","expires_at":%d}'):format(os.time() + 3600))
-        assert.is_true(vim.wait(1000, function() return ready == 1 end, 5))
+        assert.is_true(vim.wait(arrival.MS, function() return ready == 1 end, 5))
 
         vault.setup({ state_dir = dir })
         vault.add_secret("copilot", "fixture-token")
@@ -471,7 +472,7 @@ describe("vault copilot bearer from the token endpoint", function()
         vault.setup({ state_dir = dir })
         vault.add_secret("copilot", "edited-token")
         refresh()
-        assert.is_true(vim.wait(1000, function() return processes.spawn_calls == 2 end, 5),
+        assert.is_true(vim.wait(arrival.MS, function() return processes.spawn_calls == 2 end, 5),
             "a bearer fetched with the old key must not be reused")
     end)
     it("V4: a token fetch still running when setup re-runs is discarded", function()
@@ -480,7 +481,7 @@ describe("vault copilot bearer from the token endpoint", function()
             function(message) errors[#errors + 1] = message end)
         vault.setup({ state_dir = dir })
         answer(('{"token":"old","expires_at":%d}'):format(os.time() + 3600))
-        assert.is_true(vim.wait(1000, function() return #errors == 1 end, 5))
+        assert.is_true(vim.wait(arrival.MS, function() return #errors == 1 end, 5))
         assert.is_truthy(errors[1]:find("setup() re-ran", 1, true))
         assert.equals(0, ready)
         assert.is_nil(vault._state.copilot_bearer)

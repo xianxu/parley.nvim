@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local uv = vim.uv or vim.loop
 
 describe("document registry process boundary", function()
@@ -5,14 +6,14 @@ describe("document registry process boundary", function()
     local function request(op, args, options)
         local result
         client.request(op, args, { path = args[1], generation = 1 }, function(value) result = value end, options)
-        assert.is_true(vim.wait(4000, function() return result ~= nil end, 10))
+        assert.is_true(vim.wait(arrival.MS, function() return result ~= nil end, 10))
         return result
     end
 
     local function run(argv)
         local result
         require("parley.couch").run(argv, function(value) result = value end)
-        assert.is_true(vim.wait(4000, function() return result ~= nil end, 10))
+        assert.is_true(vim.wait(arrival.MS, function() return result ~= nil end, 10))
         return result
     end
     local function status(path, trailing_flag)
@@ -134,7 +135,7 @@ describe("document registry process boundary", function()
                 if result.error == "registry request queue full" then full = full + 1 end
             end, { timeout_ms = 30 })
         end
-        assert.is_true(vim.wait(4000, function() return count == 70 end, 10))
+        assert.is_true(vim.wait(arrival.MS, function() return count == 70 end, 10))
         assert.equals(2, full)
         for n = 1, 70 do
             assert.equals(1, seen[n]); assert.equals("unavailable", results[n].kind); handles[n].cancel()
@@ -144,7 +145,7 @@ describe("document registry process boundary", function()
             canceled = canceled + 1; cancellation = result
         end, { timeout_ms = 2500 })
         client.shutdown()
-        assert.is_true(vim.wait(4000, function() return cancellation ~= nil end, 10))
+        assert.is_true(vim.wait(arrival.MS, function() return cancellation ~= nil end, 10))
         assert.equals("unavailable", cancellation.kind); pending.cancel()
         assert.is_nil(uv.fs_stat(vim.env.FAKE_COUCH_REGISTRY))
         vim.env.FAKE_COUCH_REGISTRY_MODE = nil
@@ -170,7 +171,7 @@ describe("document registry process boundary", function()
         local count, result = 0
         local handle = client.request("lookup", { file }, {}, function(value) count, result = count + 1, value end,
             { timeout_ms = 30 })
-        assert.is_true(vim.wait(2000, function() return result ~= nil end, 10))
+        assert.is_true(vim.wait(arrival.MS, function() return result ~= nil end, 10))
         handle.cancel()
         vim.wait(100, function() return false end, 10)
         assert.equals(1, count)

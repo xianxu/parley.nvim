@@ -25,6 +25,7 @@ local uv = vim.uv or vim.loop
 local fixture_process = require("tests.helpers.fixture_process")
 local cliproxy = require("parley.cliproxy")
 local ready_port = require("tests.helpers.ready_port")
+local arrival = require("tests.helpers.arrival")
 local ca = require("parley.cliproxy_auth")
 
 cliproxy._set_data_dir(vim.fn.tempname())
@@ -140,7 +141,7 @@ describe("cliproxyapi management API conformance", function()
 
     local function get(bearer, route)
         local body, code
-        local ok = vim.wait(20000, function()
+        local ok = vim.wait(2 * arrival.MS, function()
             local res = vim.system({
                 "curl", "-s", "-w", "\n%{http_code}", "--max-time", "2",
                 "-H", "Authorization: Bearer " .. bearer,
@@ -329,7 +330,7 @@ describe("cliproxyapi management API conformance", function()
     -- binary can say the header still exists.
     local function probe_until_up(p)
         local v, reason
-        vim.wait(20000, function()
+        vim.wait(2 * arrival.MS, function()
             v, reason = cliproxy.version_probe("127.0.0.1", p)
             return reason ~= "down"
         end, 250)

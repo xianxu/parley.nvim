@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local ok,C=pcall(require,'parley.response_completion')
 local D=require('parley.document')
 local Fake=require('tests.helpers.fake_document_editor')
@@ -52,7 +53,7 @@ describe('current indexed response completion',function()
         ctx.cancelled=function()return cancelled end
         local _,calls=start(doc,ctx,{user_prefix='💬:',schedule=true})
         cancelled=true
-        assert.is_true(vim.wait(500,function()return #calls==1 end,5))
+        assert.is_true(vim.wait(arrival.MS,function()return #calls==1 end,5))
         assert.same({'failed'},calls)
     end)
     -- #261 M4 W13: a step that throws settles the finalize failed.
@@ -60,7 +61,7 @@ describe('current indexed response completion',function()
         local doc,_,ctx=setup({'💬: q','🤖: a','text'})
         ctx.cancelled=function()error('completion exploded')end
         local _,calls=start(doc,ctx,{user_prefix='💬:',schedule=true})
-        assert.is_true(vim.wait(500,function()return #calls==1 end,5))
+        assert.is_true(vim.wait(arrival.MS,function()return #calls==1 end,5))
         assert.same({'failed'},calls)
     end)
     after_each(function()
@@ -150,7 +151,7 @@ describe('current indexed response completion',function()
             seen={status=status,state=C.snapshot(op).status,cancel=C.cancel(op)}
             error('host callback failed')
         end,{user_prefix='💬:',schedule=true}))
-        assert.is_true(vim.wait(3000,function()return C.snapshot(op).status~='more'end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return C.snapshot(op).status~='more'end,1))
         assert.same({status='applied',state='applied',cancel=false},seen)
         assert.equals('💬:',text()[6])
     end)

@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local diagnostic_refresh = require("parley.diagnostic_refresh")
 
 describe('streaming diagnostic primitives',function()
@@ -135,7 +136,7 @@ describe('indexed diagnostic refresh',function()
         vim.defer_fn(function()
             observed=#vim.diagnostic.get(b,{namespace=require('parley.skill_render').diag_namespace()})
         end,2)
-        assert.is_true(vim.wait(500,function()return observed~=nil end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return observed~=nil end,1))
         diagnostic_refresh.clear(b);vim.api.nvim_buf_delete(b,{force=true})
         assert.equals(0,observed)
     end)

@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 describe("agentic markdown admission", function()
     local root, file, buf, saved, document
     local function sent_payload()
@@ -11,7 +12,7 @@ describe("agentic markdown admission", function()
     -- send and scheduled completions. Each production request keeps its own
     -- deadline; the test budget also permits suite-wide process contention.
     local function await(predicate)
-        local ready, reason = vim.wait(10000, predicate, 10)
+        local ready, reason = vim.wait(arrival.MS, predicate, 10)
         assert.is_true(ready, vim.inspect({
             wait_reason = reason, path = file,
             lifecycle = document and buf and document.status(buf),

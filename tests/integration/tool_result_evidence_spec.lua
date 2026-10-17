@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local Producer=require('parley.tools.producer')
 local Scheduler=require('parley.tools.scheduler')
 require('parley.tools').register_builtins()
@@ -23,7 +24,7 @@ describe('truthful bounded tool result publication',function()
         producer.start({id='large',name='read_file',input={path=path}},
             {epoch=1,generation=1,round=1,attempt=1},
             {outcome=function(kind,value)assert.equals('known',kind);result=value end,resolved=function()done=true end})
-        local settled=vim.wait(5000,function()return done end,1)
+        local settled=vim.wait(arrival.MS,function()return done end,1)
         producer.close();vim.fn.delete(root,'rf')
         assert.is_true(settled);assert.is_false(result.is_error)
         visible(result);assert.is_true(#result.content<=524288)

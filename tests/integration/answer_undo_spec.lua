@@ -5,6 +5,7 @@
 --
 -- The chat is loaded from disk: a set_lines fixture would share an undo block
 -- with the answer, and one `u` would empty the buffer.
+local arrival = require("tests.helpers.arrival")
 local tmp_dir = (os.getenv('TMPDIR') or '/tmp') .. '/claude/parley-test-answer-undo-' .. os.time()
 local parley = require('parley')
 parley.setup({
@@ -25,7 +26,7 @@ local Fixture = require('tests.helpers.respond_fixture')
 local ORIGINAL = { '# topic: Undo', '- file: undo.md', '---', '', '💬: question', '' }
 local seq = 0
 
-local function wait_for(predicate) assert.is_true(vim.wait(10000, predicate, 1), 'did not settle') end
+local function wait_for(predicate) assert.is_true(vim.wait(arrival.MS, predicate, 1), 'did not settle') end
 local function lines(buf) return vim.api.nvim_buf_get_lines(buf, 0, -1, false) end
 local function has(buf, text)
     for _, l in ipairs(lines(buf)) do if l:find(text, 1, true) then return true end end
