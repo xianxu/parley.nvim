@@ -75,3 +75,8 @@ actual_hours: 0.27
 - 2026-10-16: `discover` first read every side doc's head on each open. Now `Model.scan` picks candidates from stat data, and only those have their frontmatter read, the pre-#367 bound.
 - 2026-10-16: folded-in flake fix (#354's spec, on main). "keeps the typed filter and the selected row across a live repaint" failed about one run in nine: "typeahead did not filter to the two qzx rows". Printing on timeout showed the prompt "> qzx" with all three rows. A query of three characters or fewer matches the whole search text, which includes the random temp directory, so `beta.md` matched. The spec now uses `q+` (no temp path holds `+`). Shown deterministically: `_fuzzy_score("qzx", "beta.md /tmp/nvim.u/aqbzcx/0")` = 21, `"q+"` = nil. Six clean runs after the fix.
 - 2026-10-16: mutation checks. Not recording saves fails the integration spec. Ignoring `saved` in scan fails 3 model specs and the integration spec. Never un-retiring fails 2 model specs and the integration spec.
+- 2026-10-16: close review gave SHIP with three minor findings, all fixed.
+  - `saved` was pruned only at sweep, so it grew between finder opens. It now records only `*.md` files directly in a `.side/` folder and prunes on every save.
+  - The cap of 256 could drop live saves, and the float sort misordered nanoseconds. The cap is now 2 × LIMIT and the sort orders by seconds, then nanoseconds; reverting to the float sort fails the new spec.
+  - Stores from before #367 have no `saved` map. That one-time effect is now in the atlas's Limits.
+

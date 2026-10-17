@@ -177,14 +177,14 @@ function M.discover(state)
     end, Model.scan(state, files))
 end
 
---- The operator's editor wrote `buf`'s file: when it is a file in a `.side/`
+--- The operator's editor wrote `buf`'s file: when it is a `*.md` in a `.side/`
 --- folder, record its new mtime, so a scan does not take the save for the agent's.
 function M.saved(buf)
     if vim.bo[buf].buftype ~= "" then return end
     local name = vim.api.nvim_buf_get_name(buf)
     if name == "" then return end
     local path = vim.fn.fnamemodify(name, ":p")
-    if not path:match("%.side/[^/]+$") then return end
+    if not path:match("%.side/[^/]+%.md$") then return end
     local stat = (vim.uv or vim.loop).fs_stat(path)
     if not stat then return end
     apply({ type = "saved", path = path, mtime = mtime_id(stat) }, { now = M.clock() })

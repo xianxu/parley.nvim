@@ -18,12 +18,13 @@ Every file submitted with Alt+Return that Couch accepted, and every new side doc
   - **new** (neither an entry nor retired): an agent write after its parent entered the finder becomes `discovered`. A side doc that predates its parent's entry counts once the agent rewrites it; one the operator creates and saves is not listed.
   - **retired** (it left the finder; at most 256): an agent write after it retired becomes `discovered`, which un-retires it.
   - **seen**: an agent write after the operator saw it becomes `rewritten`, so it is answered again. A write to a waiting or answered entry changes nothing.
-  - `saved` keeps only the saves a scan can still ask about (of an entry, of a retired path, or in an entry's `.side/` folder), at most 256.
+  - `saved` records only `*.md` files directly in a `.side/` folder, and on every save keeps only the ones a scan can still ask about (of an entry, of a retired path, or in an entry's `.side/` folder), at most 512, newest first.
 - Answer docs are side docs too (every one carries `type: side-doc` in a `.side/` folder), so this one rule covers them. The frontmatter is read through `frontmatter.parse`, only for the files the rule picks, and the folder through `document_move_plan.side_path`. Parley sees no agent writes directly, so this is a scan when the operator looks, not a file watcher.
 - Limits:
   - An edit made outside this editor, or in a Neovim without parley, counts as an agent write.
   - mtimes are compared at whole seconds against `seen_at`, so an agent write in the same second as the operator's view is missed.
   - Only the `.side/` folders of current entries are scanned: a side doc whose parent has also left comes back with the parent's next submit.
+  - A store written before #367 has no `saved` map: a seen or retired side doc the operator had edited reads as agent-written once, on the first open after the upgrade.
 - Cost on open: the sweep write, then a synchronous scan of at most 256 `.side/` folders (a stat per file, and 40 head lines for each file the rule picks), then one batch write, before the rows render.
 
 ## Recording

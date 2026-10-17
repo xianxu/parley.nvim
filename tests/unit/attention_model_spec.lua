@@ -376,15 +376,20 @@ describe("attention_model.scan: an agent write is an mtime the operator's editor
         assert.same({}, Model.scan(state, { file(10, 0, "/a.side/old.md") }))
     end)
 
-    it("keeps only the saves a scan can still ask about, at most LIMIT", function()
+    it("keeps only the saves a scan can still ask about, at most 2 × LIMIT, on every save", function()
         local state = run({ { submitted(PARENT, "m1"), 10 }, { saved(20, 0, "/a.side/x.md"), 20 },
-            { saved(20, 0, "/elsewhere.side/y.md"), 20 }, { { type = "sweep", grace = 10 }, 21 } })
+            { saved(20, 0, "/elsewhere.side/y.md"), 20 } })
         assert.same({ ["/a.side/x.md"] = "20.0" }, state.saved)
-        for i = 1, Model.LIMIT + 1 do
+        for i = 1, 2 * Model.LIMIT do
             state = Model.transition(state, saved(100 + i, 0, ("/a.side/%03d.md"):format(i)), 200)
         end
-        state = Model.transition(state, { type = "sweep", grace = 10 }, 300)
-        assert.equals(Model.LIMIT, vim.tbl_count(state.saved))
+        assert.equals(2 * Model.LIMIT, vim.tbl_count(state.saved))
         assert.is_nil(state.saved["/a.side/x.md"]) -- the oldest save goes first
+        -- Within one second the nanoseconds order them, numerically: 9 is older than 10.
+        state = run({ { submitted(PARENT, "m1"), 10 } })
+        for i = 1, 2 * Model.LIMIT - 1 do state.saved[("/a.side/s%03d.md"):format(i)] = "500." .. (1000 + i) end
+        state = run({ { saved(500, 9, "/a.side/older.md"), 20 }, { saved(500, 10, "/a.side/newer.md"), 20 } }, state)
+        assert.is_nil(state.saved["/a.side/older.md"])
+        assert.equals("500.10", state.saved["/a.side/newer.md"])
     end)
 end)

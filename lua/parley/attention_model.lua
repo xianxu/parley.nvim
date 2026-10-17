@@ -173,8 +173,15 @@ function handlers.viewed(state, event)
     return next_state
 end
 
+-- The "sec.nsec" mtime as comparable numbers (nsec is not zero-padded).
+local function mtime_order(mtime)
+    local sec, nsec = tostring(mtime):match("^(%d+)%.(%d+)$")
+    return tonumber(sec) or 0, tonumber(nsec) or 0
+end
+
 -- Keep only the saves a scan can still ask about: of an entry, of a retired
--- path, or of a file in an entry's `.side/` folder; at most LIMIT, newest kept.
+-- path, or of a file in an entry's `.side/` folder; at most 2 × LIMIT (as many
+-- as entries and retired paths together), newest kept.
 local function prune_saved(state)
     local folders = {}
     for path in pairs(state.entries) do
@@ -188,12 +195,14 @@ local function prune_saved(state)
         end
     end
     table.sort(kept, function(a, b)
-        local x, y = tonumber(a.mtime) or 0, tonumber(b.mtime) or 0
-        if x ~= y then return x > y end
+        local a_sec, a_nsec = mtime_order(a.mtime)
+        local b_sec, b_nsec = mtime_order(b.mtime)
+        if a_sec ~= b_sec then return a_sec > b_sec end
+        if a_nsec ~= b_nsec then return a_nsec > b_nsec end
         return a.path < b.path
     end)
     state.saved = {}
-    for i = 1, math.min(#kept, M.LIMIT) do state.saved[kept[i].path] = kept[i].mtime end
+    for i = 1, math.min(#kept, 2 * M.LIMIT) do state.saved[kept[i].path] = kept[i].mtime end
 end
 
 function handlers.sweep(state, event, now)
@@ -210,6 +219,7 @@ end
 function handlers.saved(state, event)
     local next_state = with_entry(state, nil)
     next_state.saved[event.path] = event.mtime
+    prune_saved(next_state)
     return next_state
 end
 
