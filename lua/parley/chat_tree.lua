@@ -1,6 +1,6 @@
 -- The chat tree as request context (#233): a submission sees the tree in
 -- depth-first pre-order, cut at the exchange being submitted. That is the
--- ancestor path plus every subtree to its left, so an aside a `<M-i>` branch
+-- ancestor path plus every subtree to its left, so an aside a `<M-b>` branch
 -- opened is part of every later question's context, in the order the operator
 -- read it. Nothing to the right of the cut is included.
 --

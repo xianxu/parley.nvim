@@ -1,7 +1,7 @@
 -- #214 BR-1 (Critical). The n/i branch path created its child with an EMPTY
 -- topic, which silently disabled two lifecycle steps: auto-titling fires only
 -- on `headers.topic == "?"` (chat_respond.lua) and the slug rename bails on ""
--- (init.lua). Every <M-i> branch was therefore a permanently anonymous
+-- (init.lua). Every <M-b> branch was therefore a permanently anonymous
 -- <timestamp>.md whose parent ref line stayed `🌿: ….md: ` forever.
 --
 -- The plan claimed the slug "fills in afterwards". The mechanism did exist —
@@ -377,7 +377,7 @@ describe("branched submission (#214 M3)", function()
         parley._branch_inserters(parent_buf, false, true).n()
     end
 
-    -- 1.2 — no markers: a PLACEHOLDER at the cursor. `<M-i>` reads as an
+    -- 1.2 — no markers: a PLACEHOLDER at the cursor. `<M-b>` reads as an
     -- insertion, so it must not delete an answer or move the line elsewhere.
     it("with no markers it inserts a placeholder at the cursor", function()
         branch_here(10)   -- inside the answer of exchange 1
@@ -404,14 +404,14 @@ describe("branched submission (#214 M3)", function()
         local child = child_path_from(l[ref_line_index(l)])
         local body = table.concat(vim.fn.readfile(child), "\n")
         assert.is_nil(body:find("first question", 1, true),
-            "a bare <M-i> must not copy the question into the child")
+            "a bare <M-b> must not copy the question into the child")
     end)
 
-    it("an answered question is never destroyed by a bare <M-i>", function()
+    it("an answered question is never destroyed by a bare <M-b>", function()
         branch_here(6)    -- on 💬: first question, which HAS an answer
         local joined = table.concat(lines_now(), "\n")
         assert.is_truthy(joined:find("answer text here", 1, true),
-            "a bare <M-i> deleted the answer — that is <M-CR>'s job, not this one")
+            "a bare <M-b> deleted the answer — that is <M-CR>'s job, not this one")
     end)
 
     -- 1.3 — with markers: rearrange, and the reference still lands at the cursor.
@@ -1047,11 +1047,11 @@ describe("branch creation lands on the first question (#248)", function()
     end
 end)
 
--- #214 BR-75 end-to-end: the sequence the finding describes. <M-i> inserts a
+-- #214 BR-75 end-to-end: the sequence the finding describes. <M-b> inserts a
 -- reference mid-answer (where the chord puts one, by design), then <M-CR> on
 -- that exchange resubmits — which deletes question..answer.line_end. Before the
 -- fix that deleted the reference, orphaning a child that exists on disk.
-describe("a resubmit does not orphan the child <M-i> just made (#214 BR-75)", function()
+describe("a resubmit does not orphan the child <M-b> just made (#214 BR-75)", function()
     local tmpdir, parent_path, parent_buf
 
     after_each(function()
@@ -1060,7 +1060,7 @@ describe("a resubmit does not orphan the child <M-i> just made (#214 BR-75)", fu
     end)
 
     -- BR-79 end-to-end: the VISUAL case, which is the one that produces an
-    -- inline link inside the answer. <M-i> on a selection, then a resubmit of
+    -- inline link inside the answer. <M-b> on a selection, then a resubmit of
     -- that exchange, must not orphan the child.
     it("an inline link from a visual branch survives a resubmit", function()
         parley.setup({})

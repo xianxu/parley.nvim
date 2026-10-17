@@ -69,7 +69,7 @@ describe("branch_submit.plan_submission", function()
 
     -- The narrowing (operator, 2026-09-07): with no markers there is nothing to
     -- rearrange, so the planner declines and the caller inserts a plain
-    -- reference at the cursor. `<M-i>` reads as an INSERTION; an insertion must
+    -- reference at the cursor. `<M-b>` reads as an INSERTION; an insertion must
     -- not delete your answer. The earlier "copy the question, delete the answer"
     -- reading was coherent only for the branch shortcut as a *submission* — and the two
     -- keys share one callback, so it would have been reachable from the key that
@@ -84,7 +84,7 @@ describe("branch_submit.plan_submission", function()
 
         it("an ANSWERED question is never destroyed", function()
             local p = bs.plan_submission(TWO, 5, false)
-            assert.is_nil(p, "a bare <M-i> must not plan to delete an answer")
+            assert.is_nil(p, "a bare <M-b> must not plan to delete an answer")
         end)
 
         it("a cursor inside an answer is likewise a placeholder", function()
@@ -93,7 +93,7 @@ describe("branch_submit.plan_submission", function()
     end)
 
     -- Placement rule (operator, revising the earlier end-of-answer decision):
-    -- the reference lands AT THE CURSOR. <M-i> reads as an *insertion*, so
+    -- the reference lands AT THE CURSOR. <M-b> reads as an *insertion*, so
     -- relocating the line elsewhere made the keypress jump.
     describe("case 2 — pending <M-q> markers", function()
         it("the ref lands at the cursor, not at the end of the answer", function()
@@ -143,7 +143,7 @@ describe("branch_submit.plan_submission", function()
 end)
 
 -- #214 BR-60: the chord's claim is that it strips the way `<M-CR>` strips, so
--- both must gather with the SAME options. `<M-i>` hardcoded `bracket = true`
+-- both must gather with the SAME options. `<M-b>` hardcoded `bracket = true`
 -- while chat_respond read `config.mark_reference_span`, so with that option off
 -- branching injected `[…]` brackets into the parent that responding would not.
 describe("both keys gather with one set of options (#214 BR-60)", function()

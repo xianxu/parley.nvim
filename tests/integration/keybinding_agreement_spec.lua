@@ -658,7 +658,7 @@ describe("published shortcut reference agrees with bindings (#206, #214 BR-61)",
         end
         for k in pairs(reg.native_overrides) do bound[canon(k)] = true end
         local reference = assert(require("parley.help").read("atlas/ui/keybindings"))
-        for _, key in ipairs({ "<M-q>", "<M-CR>", "<M-i>", "<M-p>", "<C-g>?", "gf" }) do
+        for _, key in ipairs({ "<M-q>", "<M-CR>", "<M-i>", "<M-b>", "<M-p>", "<C-g>?", "gf" }) do
             assert.is_truthy(reference:find("`" .. key .. "`", 1, true),
                 key .. " is missing from the published shortcut reference")
             assert.is_true(bound[canon(key)] == true, key .. " resolves to no binding")

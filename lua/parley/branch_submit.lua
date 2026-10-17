@@ -19,7 +19,7 @@
 --
 -- WHERE the reference lands (operator, 2026-09-07, revising the earlier
 -- end-of-answer rule): at the CURSOR. The branch shortcut reads as a *submission*, whose
--- effect is not local to anywhere — but `<M-i>` is the key that actually works
+-- effect is not local to anywhere — but `<M-b>` is the key that actually works
 -- in a terminal, and it reads as an *insertion*, which has to happen where you
 -- are. Relocating the line to the end of the answer made the keypress jump.
 --
@@ -63,11 +63,11 @@ end
 --- — returns nil, and the caller inserts a plain reference at the cursor and
 --- opens an empty child. That is a deliberate narrowing (operator, 2026-09-07):
 ---
----   `<M-i>` reads as an INSERTION. An insertion must not delete your answer.
+---   `<M-b>` reads as an INSERTION. An insertion must not delete your answer.
 ---
 --- The earlier design copied the question into the child and deleted the answer
 --- it replaced, mirroring `<M-CR>`'s resubmit. That fits submission semantics,
---- but `<M-i>` and `<C-g>i` share one registry entry and callback. Destructive
+--- but `<M-b>` and `<C-g>i` share one registry entry and callback. Destructive
 --- submission would therefore be reachable from the key that reads as
 --- "insert here". That behavior was dropped rather than left unreachable.
 ---

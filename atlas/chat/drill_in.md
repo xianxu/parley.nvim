@@ -131,7 +131,7 @@ at any line beginning with a configured turn prefix. To keep `generate_snippet`
 pure, the prefixes are passed in as `opts.boundaries`. **`drill_in.chat_gather_opts`
 owns the option set** — the boundaries (`💬: 🤖: 🧠: 📝: 🔧: 📎: 🌿:`, plus
 `chat_local_prefix` when set) and `bracket` together — and both consumers call it:
-`chat_respond` for `<M-CR>` and `branch_inserters` for `<M-i>`. They were assembled
+`chat_respond` for `<M-CR>` and `branch_inserters` for `<M-b>`. They were assembled
 independently until #214 BR-60, when the branch path was found hardcoding
 `bracket = true` against the other's config read. Note `---` is a *body* section
 separator, **not** a turn boundary, so it never stops the scan.
@@ -163,7 +163,7 @@ Both parley and ariadne (`/fix` skill) parse this marker family identically. The
 ## Key files
 
 - `lua/parley/drill_in.lua` — pure-function module (`parse`, `gather_edit_plan`, `gather_and_strip`, `generate_snippet`, `resolve`, `accept_at`, `reject_at`, `format_block`, `format_blocks`, `wrap`, `append_blocks`, `bracket_at`) — and `chat_gather_opts`, the single owner of the option set both consumers pass in (#214 BR-60).
-- `lua/parley/chat_respond.lua` — pre-processing hook before message build (gates on resubmit detection); gets its options from `drill_in.chat_gather_opts` (it used to assemble them itself, which is how `<M-i>` came to disagree with it) and threads them into `gather_and_strip` (#127, #214).
+- `lua/parley/chat_respond.lua` — pre-processing hook before message build (gates on resubmit detection); gets its options from `drill_in.chat_gather_opts` (it used to assemble them itself, which is how `<M-b>` came to disagree with it) and threads them into `gather_and_strip` (#127, #214).
 - `lua/parley/init.lua` — `<M-q>` (insert), `<M-a>` (accept), `<M-r>` (reject) wiring inside `prep_chat` / `setup_markdown_keymaps`; and the chat-only `*`/`#`/`g*`/`g#` anchor-jump maps (`bracket_jump`, #141) set in `prep_chat`.
 - `lua/parley/skills/review/init.lua` — shared section parser (`_parse_marker_sections`).
 - `lua/parley/buffer_edit.lua` — validates and applies bounded half-open marker/anchor edits; narrow line operations place the destination turn.

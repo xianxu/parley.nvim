@@ -346,7 +346,7 @@ end
 --- The gather options for a chat buffer: the turn-prefix boundaries plus whether
 --- to enclose each referenced span in `[]` in place.
 ---
---- One owner (#214 BR-60). `chat_respond` built this inline and `<M-i>`'s branch
+--- One owner (#214 BR-60). `chat_respond` built this inline and `<M-b>`'s branch
 --- path hardcoded `bracket = true`, so with `mark_reference_span = false` the two
 --- keys disagreed: branching injected brackets into the parent that responding
 --- would not. The chord's whole claim is that it strips the way `<M-CR>` strips.

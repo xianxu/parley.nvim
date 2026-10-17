@@ -421,14 +421,15 @@ local config = {
 	-- reserved for inserting private-note prefixes.
 	chat_shortcut_prune = { modes = { "n" }, shortcut = "<C-g>b" },
 	-- Branch: create a sub-transcript at this point in the chat tree.
-	-- <M-i> is the portable primary; <C-g>i remains the legacy alias.
-	chat_shortcut_branch_ref = { modes = { "n", "i", "v" }, shortcut = { "<M-i>", "<C-g>i" } },
+	-- <M-b> (b for branch) is the portable primary; <C-g>i remains the legacy
+	-- alias. #377 moved it off <M-i>, which now pastes an image.
+	chat_shortcut_branch_ref = { modes = { "n", "i", "v" }, shortcut = { "<M-b>", "<C-g>i" } },
 	-- Private note: start a new line with the local-note prefix, ready for typing.
 	chat_shortcut_pair_at = { modes = { "i" }, shortcut = "@" },
 	chat_shortcut_private_note = { modes = { "n", "i" }, shortcut = "<M-p>" },
-	-- #231: paste the clipboard image as an attachment. <M-v> — v for paste,
-	-- free, joins the alt family. (<M-i> was the request; it is branch_ref.)
-	chat_shortcut_paste_image = { modes = { "n", "i" }, shortcut = "<M-v>" },
+	-- #231: paste the clipboard image as an attachment. <M-i> (#377, was
+	-- <M-v>): the same key attaches an image in pair's draft nvim.
+	chat_shortcut_paste_image = { modes = { "n", "i" }, shortcut = "<M-i>" },
 	chat_shortcut_export_markdown = { modes = { "n" }, shortcut = "<C-g>em" },
 	chat_shortcut_export_html = { modes = { "n" }, shortcut = "<C-g>eh" },
 	chat_shortcut_exchange_cut = { modes = { "n", "v" }, shortcut = "<C-g>X" },

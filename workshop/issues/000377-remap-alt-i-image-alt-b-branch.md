@@ -1,13 +1,21 @@
 ---
 id: 000377
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '62825bc936b6a48b87142d4e5c45026acf763751' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'dc5e2422c8f8e56ad7e8ecf988f64636ec15348a' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-17T12:11:42-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Remap keys: Alt+i pastes an image (matching pair draft), Alt+b creates a sub-chat
@@ -36,8 +44,18 @@ Pair's draft nvim puts "attach an image" on Alt+i. In parley, Alt+i creates a su
 
 ## Plan
 
-- [ ]
+- [x] config.lua + registry defaults: paste_image <M-i>, branch_ref <M-b> + <C-g>i; <M-v> unbound
+- [x] Comments, specs (keybindings, agreement, paste_image incl. <M-v> unbound, starter config + probe), README, atlas
 
 ## Log
 
 ### 2026-10-17
+
+- Conflict check, run before any change and reported to the hub. The TL approved `<M-v>` being dropped.
+  - parley: `<M-b>` was unbound in every mode and buffer type, and `<C-g>b` (prune) is a separate chord.
+  - pair's draft nvim: it uses `<M-i>` to attach an image and `<M-b>` for scrollback. It never loads parley.
+  - pair's zellij config (clear-defaults) binds neither key.
+  - Couch's chords, including Ctrl+Alt+b broadcast, and pair's global chords are clear.
+  - The operator's personal `~/.config/zellij/config.kdl` binds Alt i to MoveTab outside pair. The hub has been told; parley does not own that config.
+- Swept every `<M-i>` that meant branch in lua/, tests/ and atlas/, changing each to `<M-b>`. The M1-migration history notes were left as they are.
+- Targeted specs pass: keybindings 81, starter_config 7, paste_image 23 (it now also asserts `<M-v>` is unbound in n and i), keybinding_agreement 35, branch_submit 18, branch_child 63, config_tools 26.

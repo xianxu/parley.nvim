@@ -67,7 +67,7 @@ still works. Use local help to check availability, and see
 
 The shipped defaults put frequent actions on Alt/Option (`<M-…>`): visual
 `<M-q>` quotes selected text into an editable drill-in comment; `<M-CR>` sends
-from Normal/Insert mode and defines a selected term in Visual mode; `<M-i>`
+from Normal/Insert mode and defines a selected term in Visual mode; `<M-b>`
 creates and opens a sub-chat; `<M-p>` starts a private-note line below the
 cursor; Normal-mode `<C-g>b` moves the current exchange and following exchanges
 into a child chat. `<C-g>?` (or `<M-h>`) opens current help. Normal `gf`
@@ -198,15 +198,15 @@ Help shows **every** bound key: the primary holds the aligned column and the
 aliases follow the description as `(also <C-g>i)`. The shipped order
 puts the key a reader should reach for first, because the column is the one they
 see. Two rules decide it: the **alt spelling leads** for transcript actions —
-`branch_ref` with `<M-i>` and `open_file` with `<M-o>`, each keeping its `<C-g>`
+`branch_ref` with `<M-b>` and `open_file` with `<M-o>`, each keeping its `<C-g>`
 spelling as a legacy alias rather than revoking it — and
 the **portable key leads** where portability is the issue, so `branch_ref` shows
-`<M-i>`, with `<C-g>i` retained for terminals that need the legacy escape
+`<M-b>`, with `<C-g>i` retained for terminals that need the legacy escape
 sequence.
 
 The alt family means "act on this transcript": quote, respond/define, accept,
 reject, branch, outline, skill picker (`<M-s>`), paste an image as an
-attachment (`<M-v>`, `paste_image`, #231), and follow-a-link
+attachment (`<M-i>`, `paste_image`, #231; moved off `<M-v>` by #377 to match pair's draft nvim), and follow-a-link
 (`<M-o>`, #225 — one key for "go to what I'm looking at", falling through to
 smart `gf` when the cursor is not on a parley reference).
 `<M-n>` (new question, #263) and `<M-h>` (help, #292) join that family. `<C-g>` is
@@ -218,7 +218,7 @@ the registry, four entries lead with `<C-g>` — `outline` (`<C-g>t`/`<M-t>`),
 because the operator asked for `<C-g>n` by name and retired `chat_search` to
 free it) and `help` (`<C-g>?`/`<M-h>`, #292, the key the docs and finder
 footers already teach) — and two lead with the alt key, where portability is the point:
-`open_file` (`<M-o>`/`<C-g>o`) and `branch_ref` (`<M-i>`/`<C-g>i`). `keys[1]` is
+`open_file` (`<M-o>`/`<C-g>o`) and `branch_ref` (`<M-b>`/`<C-g>i`). `keys[1]` is
 what the help float advertises, so
 the order in `config.lua` *is* the decision. Read "the portable key leads" as
 the rule for the cases where a terminal cannot be relied on to deliver the
