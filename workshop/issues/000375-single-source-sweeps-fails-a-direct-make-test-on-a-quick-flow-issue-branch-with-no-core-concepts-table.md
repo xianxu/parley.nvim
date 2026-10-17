@@ -1,13 +1,13 @@
 ---
 id: 000375
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '713d71b8a61de5009d9f8994a876dfff9e6048fc' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'f4f80fe73c8df221a875e19eaba0a362854e809e' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T05:45:26-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "cb30f25a", done: "3a08a598"}
+actual_hours: 0.57
 ---
 
 # single_source_sweeps fails a direct make test on a quick-flow issue branch with no Core-concepts table
