@@ -1,14 +1,27 @@
 #!/usr/bin/env python3
-"""Stateful VM fixture; guest commands are recorded and can fail by phase."""
+"""Stateful VM fixture; guest commands are recorded and can fail by phase.
+
+The script under test starts `tart run` detached and keeps calling the fake
+meanwhile, so calls overlap (#376). Each call holds one exclusive lock over its
+read-modify-write of vms.json, and replaces the file whole, so a lock-free
+reader (the spec) never sees it torn. As with real tart, `exec` needs the VM
+running, so a readiness loop waits for a slow `run` instead of racing it."""
+import fcntl
 import json
 import os
 import pathlib
 import sys
+import time
 root = pathlib.Path(os.environ['FAKE_TART_STATE'])
 root.mkdir(parents=True, exist_ok=True)
 statefile = root / 'vms.json'
-state = json.loads(statefile.read_text()) if statefile.exists() else {'tools-test': 'running'}
 args = sys.argv[1:]
+# A slow detached `run`, as a loaded machine makes it (#376).
+if args[:1] == ['run'] and os.getenv('FAKE_TART_RUN_DELAY'):
+    time.sleep(float(os.environ['FAKE_TART_RUN_DELAY']))
+lock = (root / 'vms.lock').open('w')
+fcntl.flock(lock, fcntl.LOCK_EX)
+state = json.loads(statefile.read_text()) if statefile.exists() else {'tools-test': 'running'}
 with (root / 'calls.jsonl').open('a') as log:
     log.write(json.dumps({'args': args, 'no_prune': os.getenv('TART_NO_AUTO_PRUNE')}) + '\n')
 command = args[0]
@@ -32,6 +45,8 @@ elif command == 'delete':
         sys.exit(2)
     state.pop(args[1], None)
 elif command == 'exec':
+    if state.get(args[1]) != 'running':
+        sys.exit(1)
     script = ' '.join(args[2:])
     if 'cat "$HOME/.parley-acceptance/boot.json"' in script:
         print(json.dumps({'boot': True, 'containment': True, 'decoy_unchanged': True}))
@@ -49,4 +64,6 @@ elif command == 'exec':
         sys.exit(1)
 else:
     sys.exit(2)
-statefile.write_text(json.dumps(state))
+staged = root / ('vms.json.%d' % os.getpid())
+staged.write_text(json.dumps(state))
+os.replace(staged, statefile)

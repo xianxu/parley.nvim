@@ -1,13 +1,21 @@
 ---
 id: 000376
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '8777ee4608fee868869f9f75787e469ef55e94eb' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '4c5b5a0c57643fd930eabe4de749dbe0ef3c7b6c' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-17T07:18:15-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # packaging_vm_spec reads an empty vms.json: fake_tart's state write is not atomic (flake)
@@ -33,7 +41,12 @@ The fake's state write is atomic: write a temporary file in the same directory, 
 
 ## Plan
 
-- [ ]
+Measured cause: scripts/test-parley-vm.py starts `tart run` detached (`subprocess.Popen`, `start_new_session`) and then polls the guest with `tart exec`, so fake_tart calls overlap. Each call read, changed and rewrote vms.json unlocked, using `write_text`, which truncates and then writes. That gives a torn read (the observed empty JSON) and lost updates. The fake's `exec` also succeeded on a VM that was not running, unlike real tart, so under load `boot` could return before the detached `run` had recorded the VM.
+
+- [x] Regression first: "boot waits for a slow detached run before it reports ready", with `FAKE_TART_RUN_DELAY=1.5`. Red before the fix: `boot` returned 0 with the VM not running.
+- [x] fake_tart holds one exclusive `flock` (vms.lock) over each read-modify-write and writes through a temp file plus `os.replace`. `exec` on a VM that is not running exits 1, as real tart does.
+- [x] packaging_vm_spec 18/18 on three runs. With the `exec` check removed, the regression fails. fixture_lifecycle_spec 4/4. luacheck clean.
+- [x] Not pinned deterministically: the lock and the atomic replace. They are correct by construction; a race test for them would itself be timing-dependent.
 
 ## Log
 
