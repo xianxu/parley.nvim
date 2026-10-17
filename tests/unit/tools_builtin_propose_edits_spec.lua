@@ -113,6 +113,19 @@ describe("propose_edits inline backup", function()
         assert.are.equal("ab ab", read(path)) -- untouched
         vim.fn.delete(path)
     end)
+
+    it("refuses an overlapping batch with an error, no backup and no write (#369)", function()
+        local path = tmpfile("alpha\n# Chat\nsecret")
+        local result = propose_edits.handler({ file_path = path, edits = {
+            { old_string = "alpha", new_string = "x", explain = "e" },
+            { old_string = "pha", new_string = "", explain = "e" },
+        } })
+        assert.is_true(result.is_error)
+        assert.matches("edits #1 and #2 overlap", result.content)
+        assert.are.equal(0, vim.fn.filereadable(path .. ".parley-backup.1"))
+        assert.are.equal("alpha\n# Chat\nsecret", read(path))
+        vim.fn.delete(path)
+    end)
 end)
 
 describe("propose_edits via dispatcher.execute_call (cwd-scope keystone)", function()

@@ -139,6 +139,20 @@ describe('asynchronous builtins',function()
         assert.is_false(result.result.is_error);assert.equals('after',state.files['/root/file'].bytes)
         assert.equals('before',state.files['/root/file.parley-backup.1'].bytes)
     end)
+    it('refuses an overlapping edit batch before any backup or write (#369)',function()
+        local runtime,state=require('tests.helpers.fake_tool_filesystem').new()
+        state.put('/root','','directory');state.put('/root/file','alpha\n# Chat\nsecret')
+        local fs=require('parley.tools.filesystem').new({runtime=runtime,schedule=state.schedule})
+        local result
+        require('parley.tools.builtin.propose_edits').execute_async({file_path='/root/file',
+            edits={{old_string='alpha',new_string='x',explain='e'},{old_string='pha',new_string='',explain='e'}}},
+            {filesystem=fs,operation_id='overlap'},function(v)result=v end)
+        wait(function()state.drain();return result~=nil end)
+        assert.is_true(result.result.is_error)
+        assert.matches('edits #1 and #2 overlap',result.result.content)
+        assert.equals('alpha\n# Chat\nsecret',state.files['/root/file'].bytes)
+        assert.is_nil(state.files['/root/file.parley-backup.1'])
+    end)
     it('captures history roots and stops before a second root after cancellation',function()
         local result
         local context={tasker=T,cwd='/root',logical_generation='g',operation_id='history',chat_roots={{dir='/root/one'},{dir='/root/two'}}}

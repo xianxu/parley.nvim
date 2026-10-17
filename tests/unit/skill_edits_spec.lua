@@ -59,3 +59,51 @@ describe("skill_edits.compute_edits", function()
         assert.is_nil(res.content)
     end)
 end)
+
+-- #369: positions are found against the original content and applied from the
+-- back, so two spans that overlap would splice bytes outside either span.
+describe("skill_edits.compute_edits overlapping spans", function()
+    local function edit(old, new) return { old_string = old, new_string = new, explain = "e" } end
+    local function refused(content, edits)
+        local res = skill_edits.compute_edits(content, edits)
+        assert.is_false(res.ok)
+        assert.is_nil(res.content)
+        assert.same({}, res.applied)
+        assert.matches("overlap", res.msg)
+        return res
+    end
+
+    it("refuses the #369 reproducer instead of consuming the next heading", function()
+        local res = refused("alpha\n# Chat\nsecret", { edit("alpha", "x"), edit("pha", "") })
+        assert.matches("edits #1 and #2 overlap", res.msg)
+    end)
+
+    -- Strategy: each overlap shape in both batch orders; the message names the
+    -- edits by their place in the batch.
+    local shapes = {
+        { "containment", "abcdef", "bcde", "cd" },
+        { "partial overlap", "abcdef", "abcd", "cdef" },
+        { "identical spans", "abcdef", "cd", "cd" },
+        { "same start", "abcdef", "abc", "abcd" },
+    }
+    for _, shape in ipairs(shapes) do
+        it("refuses " .. shape[1] .. " in either order", function()
+            refused(shape[2], { edit(shape[3], "X"), edit(shape[4], "Y") })
+            refused(shape[2], { edit(shape[4], "Y"), edit(shape[3], "X") })
+        end)
+    end
+
+    it("names the overlapping pair among other edits", function()
+        local res = refused("one two three", { edit("one", "1"), edit("three", "3"), edit("hree", "") })
+        assert.matches("edits #2 and #3 overlap", res.msg)
+    end)
+
+    it("still applies adjacent and disjoint spans", function()
+        local adjacent = skill_edits.compute_edits("abcdef", { edit("def", "D"), edit("abc", "A") })
+        assert.is_true(adjacent.ok)
+        assert.equals("AD", adjacent.content)
+        local disjoint = skill_edits.compute_edits("alpha\n# Chat\nsecret", { edit("alpha", "x"), edit("secret", "s") })
+        assert.is_true(disjoint.ok)
+        assert.equals("x\n# Chat\ns", disjoint.content)
+    end)
+end)
