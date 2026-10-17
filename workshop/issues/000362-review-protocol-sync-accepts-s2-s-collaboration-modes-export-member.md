@@ -98,3 +98,16 @@ Hub delivery c322a428-5e9c-4da8-981f-e6cbccada6c2 prioritizes the shared
 cliproxy lifecycle flakes (#363/#364) before this issue. Consumer changes are
 committed and targeted green; preserve this branch while investigating from
 fresh main, then return here for the landed producer export and final gates.
+
+### 2026-10-16 — resume on the landed producer
+
+After #363 landed, merge fresh main and pin ariadne #412's landed export at
+1db0ec0ed0b6e2affb426c2a311bebf5c24c70a2. Independently verified main ancestry,
+manifest SHA256 f8301e9c4fbd89d453b8999aa400147440b19e5c4c2aac0a2e09d56da0135c3c,
+and the 20746-byte member digest from the producer's submitted handoff
+b3009571-8c11-4e64-8af2-dec6abc03632. Parley:4 confirmed in submitted delivery
+3fc24d3f-ebfa-4627-83bb-8944347c3c94 that singleton means at most one when
+present; older v1 exports remain valid. Add a one-line CLI notice when an old
+export omits collaboration modes; require the new member in shipped-package
+and standalone composition tests. This additive visibility change stays inside
+the original optional-v1 contract; no runtime parser or alternate builder.
