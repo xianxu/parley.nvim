@@ -45,7 +45,7 @@ Root cause is not yet established. Determine whether the first timed-out callbac
   ordering with controlled delay, without load or a wider deadline.
 - [x] Correct the demonstrated root cause and add a regression that fails
   without it; cover both credential-restart outcomes and teardown isolation.
-- [ ] Run focused and mapped cases plus a recorded full suite, update the
+- [x] Run focused and mapped cases plus a recorded full suite, update the
   relevant atlas, close-review and land on SHIP; then resume #362.
 
 ## Log
@@ -150,3 +150,16 @@ verification-only ref verify-363-suite-09f235c1 at the exact original commit
 to satisfy that precondition without rewriting the issue branch. It holds no
 new development; delete it after the check finishes, including a failed check.
 The unchanged suite rerun is then invoked against 09f235c1 explicitly.
+
+### 2026-10-16 — unchanged recorded rerun passed; ready for close
+
+The one unchanged full rerun on 09f235c1b9e98e6234518f14e7dfb9ce82c0d894
+PASSED: 453/453 files, lint757 clean, final census clean, exit0 in 3m18s
+after1356s queue wait. Catalog passed (4s), lifecycle passed (45s).
+Log .git/sdlc/local-checks/09f235c1b9e98e6234518f14e7dfb9ce82c0d894/suite.log,
+SHA256 prefix ad7a192f6912. The first failed attempt remains retained above;
+#360 remains open, not claimed fixed here. Temporary verification-only ref
+verify-363-suite-09f235c1 was deleted with an exact-tip lease after completion.
+All implementation/verification checklist work is complete. Close review and
+landing remain the next gate-owned actions; no live operator environment was
+changed by this fixture-only repair.
