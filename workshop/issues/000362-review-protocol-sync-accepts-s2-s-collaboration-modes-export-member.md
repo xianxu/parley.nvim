@@ -131,6 +131,19 @@ refusal, versus a larger multi-file adapter. Await approval before introducing
 that policy. BR-2's Done-when clause now explicitly covers old-v1 success plus
 the notice for both normal sync and --check; its existing regression passes.
 
+### 2026-10-16 — design-owner proposal, not yet approved
+
+Submitted peer replies f872b978-b47b-4d29-b9da-fd480f671585 and
+5386b2ab-299e-4b50-8e11-faabffb91e0a propose local in-place answers for
+non-chat sections, untouched chat sections, and deterministic vim.notify
+notices computed before generation, including all-chat/no-marker rounds.
+Unknown mode names or conflicting heading assignments would retain canonical
+refusal. The notices cannot be model replies: propose_edits has per-edit
+explanations only, and an empty batch offers no round-summary channel.
+This needs section/frontmatter resolution and pre-generation admission, beyond
+mere snapshot composition. The design owner explicitly says to wait for the
+TL's policy decision. No implementation of this proposal has begun.
+
 ## Revisions
 
 ### 2026-10-16 — priority interruption
