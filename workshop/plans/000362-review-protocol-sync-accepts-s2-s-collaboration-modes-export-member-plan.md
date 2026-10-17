@@ -88,3 +88,14 @@ metadata, 100/200/400 quoted flow members, 20 KB interior whitespace and 4,001
 multiline members. Deterministic copied-byte bounds and a broad CPU stall cap
 cover the measured class; re-run the full suite and boundary review. No new
 routing, state, IO, or generated protocol changes.
+
+### 2026-10-16 — complete resolver-level bounded work (BR-3)
+
+The prior sweep stopped at parsing. Enumerate full admission: parser scans and
+joins; flat-reader scans; assignment normalization; fence recognition/closing;
+ATX extraction and closing hashes; mode/protected spans and sorted warnings.
+Use bounded edge/prefix/suffix scans, including nested/unmatched parenthesized
+annotations. Add production-resolve scaling at 5/10/20 KB for document headings
+and frontmatter names, plus closing hashes, fences and malformed-shape controls.
+Re-run focused/full evidence and ordinary close; do not use the round-cap
+finding demotion to ship an unresolved measured stall.

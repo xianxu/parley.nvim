@@ -69,3 +69,56 @@ describe('local collaboration routing', function()
         assert.is_string(routing.validate_edits('original', { { old_string = 'created by a prior call', new_string = '' } }))
     end)
 end)
+
+-- Exercise production resolve, not only its YAML value parser: names and ATX
+-- headings have their own edge scans. CPU time excludes suite queue waits.
+describe('routing admission scan work', function()
+    it('bounds heading and assigned-name scans at representative input sizes', function()
+        for _, n in ipairs({ 5000, 10000, 20000 }) do
+            local name = 'A' .. string.rep(' ', n) .. 'Z'
+            local start = os.clock()
+            local plain = assert(routing.resolve({ '# ' .. name, 'body' }))
+            assert.equals('discussion', plain.mode_by_row[2])
+            local assigned = assert(routing.resolve(doc('{chat: ["' .. name .. '"]}', { '# ' .. name, 'body' })))
+            assert.equals('chat', assigned.mode_by_row[5])
+            assert.same({}, assigned.warnings)
+            assert.is_true(os.clock() - start < 1)
+        end
+    end)
+    it('bounds closing-hash and parenthesized-suffix scans including malformed suffixes', function()
+        local start = os.clock()
+        local spaces = string.rep(' ', 20000)
+        local plan = assert(routing.resolve(doc('{chat: [Ops]}', { '# Ops' .. spaces .. '###', 'body' })))
+        assert.equals('chat', plan.mode_by_row[5])
+        plan = assert(routing.resolve({ '# Ops' .. spaces .. 'Z###', 'body' }))
+        assert.equals('discussion', plan.mode_by_row[2])
+        assert.equals('ops', routing.normalize('Ops' .. spaces .. '(a (nested) annotation)'))
+        local malformed = string.rep('(', 20000) .. 'unfinished'
+        assert.equals(malformed, routing.normalize(malformed))
+        assert.equals(string.rep('(', 19999), routing.normalize(string.rep('(', 20000) .. 'x)'))
+        assert.is_true(os.clock() - start < 1)
+    end)
+    it('bounds fence recognition and rejected heading shapes', function()
+        local start = os.clock()
+        local spaces = string.rep(' ', 20000)
+        local hashes = string.rep('#', 20000)
+        local plan = assert(routing.resolve({
+            spaces .. '# Ops', hashes, '````lua', '# Hidden',
+            '````' .. spaces, '# Visible', '~~~' .. spaces, '# Hidden too', '~~~',
+        }))
+        assert.equals('discussion', plan.mode_by_row[9])
+        assert.is_true(os.clock() - start < 1)
+    end)
+    it('preserves ATX and single trailing annotation semantics', function()
+        assert.equals('ops (first)', routing.normalize(' OPS (first) (second) '))
+        assert.equals('ops (unfinished', routing.normalize('Ops (unfinished'))
+        local plan = assert(routing.resolve(doc('{chat: [Ops]}', {
+            '#Ops', '    # Ops', '# Ops ###  ', 'body', '# Else###', 'other', '#', 'empty',
+        })))
+        assert.equals('discussion', plan.mode_by_row[4])
+        assert.equals('discussion', plan.mode_by_row[5])
+        assert.equals('chat', plan.mode_by_row[7])
+        assert.equals('discussion', plan.mode_by_row[9])
+        assert.equals('discussion', plan.mode_by_row[11])
+    end)
+end)

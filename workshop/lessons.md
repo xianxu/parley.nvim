@@ -699,3 +699,8 @@ For synchronous parsers, test input scale as well as syntax. Per-character
 prefix copies, per-token tail copies, repeated list concatenation and unanchored
 whitespace patterns can all make an otherwise bounded grammar quadratic. Count
 copied bytes where possible and include long whitespace runs in a stall check.
+
+A parser-level benchmark does not cover its semantic resolver. Trace a finding's
+family from the user action through every newly added stage, including name
+normalization and heading extraction; pin scale through the production entry
+point as well as internal helpers before calling the family complete.

@@ -301,6 +301,35 @@ timeout before exiting with status 1. The retained evidence file contains that
 explicit timeout. The stage had already been cleared; the two live passes and
 the observed logged-out provider blocker are unchanged.
 
+### 2026-10-16 — BR-3 complete routing admission sweep
+
+Round 4 disposed BR-1/BR-2, found no Critical or new defects, but kept BR-3
+unaddressed: the parser was bounded while semantic routing still backtracked.
+Reproduced document heading costs at 5/10/20 KB: 0.244/0.938/3.755 CPU seconds.
+Two resolver-level scale cases failed before correction
+(/tmp/parley-362-resolver-red.log). This is an incomplete class disposition,
+not a new product-policy decision. The gate's round-cap demotion is not used
+to ship the unresolved defect; close returned REWORK and remains unfinished.
+
+The complete resolve-path enumeration is now: value-parser comment/quote/flow
+scans and collection joins; flat-reader value/comment scans; heading-name trim,
+whitespace collapse and one balanced suffix removal; fence recognition/closing;
+ATX prefix/title extraction and closing-hash removal; per-row mode/protected
+spans; deterministic missing-name warnings. Replace unanchored edge and heading
+patterns with bounded scans, scan parenthesized suffixes backward, and normalize
+each assignment once. Missing-name sorting keeps its existing deterministic
+ordering; no routing/refusal/state/IO policy changes.
+
+Post-fix 20 KB heading resolution is 0.000097 CPU seconds. All 10 resolver tests
+and 20 value-parser tests pass; both new scale failures are green under Lua and
+LuaJIT. Coverage includes 5/10/20 KB headings and assigned names, closing hashes,
+20 KB interior whitespace, nested/unmatched annotations, long fence tails,
+indented/overlong rejected headings, and existing functional routing cases.
+Disposable differential checks agree for 10,000 deterministic name strings and
+1,000 routing snapshots against the prior implementation
+(/tmp/parley-362-resolver-compare.lua). Re-run mapped/real-tool tests and the
+recorded full suite before close. Prior partial live acceptance remains exact.
+
 ## Revisions
 
 ### 2026-10-16 — priority interruption
@@ -364,3 +393,12 @@ long whitespace runs and many quoted/multiline members with deterministic
 copy bounds plus a broad CPU stall check. Inspect all sibling parser scanners
 and shared flat-reader patterns; re-run focused/full verification and close.
 No change to the approved single-artifact policy or canonical export.
+
+### 2026-10-16 — complete synchronous routing admission (BR-3)
+
+Extend the bounded-work rule through the full resolve path, beyond YAML parsing:
+heading extraction, closing-hash removal, name edge scans, whitespace collapse,
+and one balanced trailing annotation. Enumerate fence handling, per-row routing
+and warning assembly too. Require resolver-level scaling and semantic controls,
+then fresh focused/full evidence and close review. This completes the same
+performance class without changing the approved product policy.

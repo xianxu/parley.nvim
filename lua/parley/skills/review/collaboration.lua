@@ -3,9 +3,28 @@ local M = {}
 local values = require('parley.skills.review.collaboration_value')
 local frontmatter = require('parley.frontmatter')
 local known = { discussion = true, collaboration = true, chat = true }
-local function trim(s) return (s:gsub('^%s+', ''):gsub('%s+$', '')) end
+local function trim(s)
+    local first, last = 1, #s
+    while first <= last and s:sub(first, first):match('%s') do first = first + 1 end
+    while last >= first and s:sub(last, last):match('%s') do last = last - 1 end
+    return s:sub(first, last)
+end
 function M.normalize(s)
-    return trim(trim(s):lower():gsub('%s+', ' '):gsub('%s*%b()$', ''))
+    s = trim(s):lower():gsub('%s+', ' ')
+    -- Find the opening parenthesis of one balanced suffix from the end.
+    -- Searching forward for %b() retries every unmatched opening parenthesis.
+    if s:sub(-1) == ')' then
+        local depth = 1
+        for i = #s - 1, 1, -1 do
+            local c = s:sub(i, i)
+            if c == ')' then depth = depth + 1
+            elseif c == '(' then
+                depth = depth - 1
+                if depth == 0 then return trim(s:sub(1, i - 1)) end
+            end
+        end
+    end
+    return s
 end
 local function bad_mode(name)
     return 'unknown collaboration mode ' .. tostring(name) .. '; choose discussion, collaboration, chat'
@@ -15,6 +34,19 @@ local function fence(line)
     if not run or #indent > 3 or #run < 3 then return end
     if not run:match('^`+$') and not run:match('^~+$') then return end
     return run:sub(1, 1), #run, tail
+end
+
+local function heading(line)
+    local indent, hashes, tail = line:match('^( *)(#+)(.*)$')
+    if not hashes or #indent > 3 or #hashes > 6 then return end
+    if tail ~= '' and not tail:sub(1, 1):match('%s') then return end
+    local title = trim(tail)
+    local last = #title
+    while last > 0 and title:sub(last, last) == '#' do last = last - 1 end
+    if last > 0 and last < #title and title:sub(last, last):match('%s') then
+        title = trim(title:sub(1, last))
+    end
+    return #hashes, title
 end
 
 function M.resolve(lines)
@@ -30,10 +62,10 @@ function M.resolve(lines)
                 if not known[mode] then return nil, bad_mode(mode) end
                 if type(names) ~= 'table' then return nil, 'collaboration-mode.' .. mode .. ' must be a heading list' end
                 for _, name in ipairs(names) do
-                    if type(name) ~= 'string' or M.normalize(name) == '' then
+                    local key = type(name) == 'string' and M.normalize(name)
+                    if not key or key == '' then
                         return nil, 'collaboration-mode heading names must be nonempty strings'
                     end
-                    local key = M.normalize(name)
                     if assigned[key] and assigned[key] ~= mode then
                         return nil, 'heading ' .. name .. ' is assigned to both ' .. assigned[key] .. ' and ' .. mode
                     end
@@ -56,18 +88,13 @@ function M.resolve(lines)
             elseif char and (char == '~' or not tail:find('`', 1, true)) then
                 delimiter, length = char, count
             else
-                local indent, hashes, title = line:match('^( *)(#+)%s+(.-)%s*$')
-                if not hashes then
-                    indent, hashes = line:match('^( *)(#+)$')
-                    title = ''
-                end
-                if hashes and #indent <= 3 and #hashes <= 6 then
-                    title = title:gsub('%s+#+%s*$', '')
-                    while #stack > 0 and stack[#stack].level >= #hashes do table.remove(stack) end
+                local level, title = heading(line)
+                if level then
+                    while #stack > 0 and stack[#stack].level >= level do table.remove(stack) end
                     local parent = stack[#stack]
                     local key = M.normalize(title)
                     if assigned[key] then matched[key] = true end
-                    stack[#stack + 1] = { level = #hashes, mode = assigned[key] or (parent and parent.mode) or default,
+                    stack[#stack + 1] = { level = level, mode = assigned[key] or (parent and parent.mode) or default,
                         label = assigned[key] and title or (parent and parent.label) or title }
                 end
             end

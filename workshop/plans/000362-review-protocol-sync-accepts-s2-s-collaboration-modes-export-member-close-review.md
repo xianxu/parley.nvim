@@ -267,3 +267,101 @@ Done-when: current — it covers export compatibility and notices, local in-plac
    Add a `## Revisions` entry defining linear frontmatter scanning, representative input sizes, and scaling verification for synchronous local review admission.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"9de6d1e1-4936-452a-8312-88f6fca44412","repository":"github.com/xianxu/parley.nvim","issue_id":"000362","recipe":"milestone-review","round":3,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/f07e4555abd9f3f6","reviewed_head":"21b756db6e71597fed48ada97c69c5e301f4058d","slot":"parley.nvim:1","requested_at":"2026-10-17T03:22:45.42142Z"},"phase":"finished","pid":45565,"started_at":"2026-10-17T03:22:45.543142Z","finished_at":"2026-10-17T03:25:32.506179Z","session_id":"01a147e2-26a9-7b02-899e-185422223da4","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T21:43:21-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 362 — Review-protocol sync accepts S2's collaboration-modes export member |
+| repo | parley.nvim |
+| issue file | workshop/issues/000362-review-protocol-sync-accepts-s2-s-collaboration-modes-export-member.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 75c795b448fbe7fdd8c38785f2c7c64001ef91c4..4e50304904ca03049b21675361ae8a62c053f1d8 |
+| command | sdlc close --issue 362 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-16T21:43:21-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The export support, local routing safeguards, and documentation are consistent with the revised contract. Focused tests pass, and BR-3’s new regressions demonstrably fail against the earlier parser. However, BR-3 remains open: the complete synchronous resolver still stalls for seconds on modest inputs because its normalization and heading scans retain quadratic patterns.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The local adapter explicitly overrides imported routing; admission and invocation-owned protection enforce that policy. The mapped review suite and all 64 real-tool invocation cases pass, including declaration refusals, protected chat bytes, and multiple-proposal rejection.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Issue Done when lines 37–39 explicitly require successful old-v1 sync and --check with the absent-modes notice. test_old_v1_cli_reports_absent_collaboration_modes verifies both commands; all 16 Python contracts pass.
+  - id: BR-3
+    disposition: not-addressed
+    note: |
+      ARCH-CONSTRAINTS / ARCH-PURPOSE, family synchronous-input-work-bounds: parser fixes are regression-proven, but collaboration.lua:6 retains unanchored whitespace trimming and :59/:65 retain backtracking heading patterns. On pinned HEAD under LuaJIT, resolve({'# A'..string.rep(' ',n)..'Z','body'}) takes 0.235/0.952/3.780 CPU seconds at 5/10/20 KB; a quoted chat heading assignment takes 0.148/0.591/2.346 seconds. For that 20 KB assignment, parse alone takes 0.001084 seconds while resolve takes 2.356312 seconds. These paths remain synchronous in review_send.lua:66 and review/init.lua:590. Complete the existing family sweep across full routing admission, replace backtracking edge/heading scans with bounded scans, and add resolver-level scaling regressions.
+```
+
+Done-when: current — it covers optional export composition, old-export notices, local routing, protected chat content, and invalid-declaration refusal.
+
+1. **Strengths**
+
+   - Snapshot validation checks member digests and fixed output ownership; tests cover corruption, symlinks, stale output, ordering, and old-v1 compatibility.
+   - One pure routing result supplies admission, notices, marker eligibility, and edit protection.
+   - The invocation guard runs before tool effects; real-tool tests verify protected bytes remain unchanged.
+   - README and atlas describe the new surface and local limitations.
+
+2. **Critical findings**
+
+   None.
+
+3. **Important findings**
+
+   **BR-3 remains open** at `lua/parley/skills/review/collaboration.lua:6`, `:59`, and `:65`. The correction fixed parser instances without completing the synchronous-work family. Enumerate the entire `resolve` path, remove repeated suffix/backtracking work, and test both frontmatter heading assignments and document headings through the production resolver.
+
+   Reproduction:
+
+   ```lua
+   resolve({'# A' .. string.rep(' ', 20000) .. 'Z', 'body'})
+   ```
+
+   This blocks the editor for approximately 3.78 CPU seconds before generation.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - `make test-spec SPEC=modes/review`: passed; process census clean.
+   - Python export contracts: 16 passed.
+   - Real invocation/tool integration: 64 passed; process census clean.
+   - All three new scan regressions failed with pre-fix modules and passed with HEAD.
+   - Those regressions exercise `parse`, leaving the expensive `resolve` paths uncovered.
+   - Range whitespace check passed; checkout remains unchanged.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY: pass** — routing and composition have shared owners.
+   - **ARCH-PURE: pass** — declared pure entities exist and run without application IO; effects remain in integration callers.
+   - **ARCH-PURPOSE: flag** — BR-3’s family sweep stops before semantic normalization and heading resolution.
+   - **ARCH-MOCK: pass** — the changed tool seam is exercised through injected provider/filesystem fakes.
+   - **ARCH-CONSTRAINTS: flag** — measured synchronous stalls remain.
+   - **ARCH-SECURE: pass** — unsupported declarations refuse visibly; edit permission is invocation-owned.
+   - **ARCH-ORDER: pass** — the guard precedes effects, rejects multiple proposal calls, and preserves existing completion supervision.
+   - **ARCH-FUNERAL: pass** — no accumulating artifact family is introduced; generated package members have fixed ownership.
+
+7. **Plan revision recommendations**
+
+   Add a `## Revisions` entry extending BR-3’s bounded-work rule to **complete routing admission**, explicitly enumerating parser scans, heading extraction, closing-hash removal, and name normalization. Require resolver-level scaling coverage before marking the family complete.
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"80b24dbe-71d9-4da3-bf5c-bcde1c017d0e","repository":"github.com/xianxu/parley.nvim","issue_id":"000362","recipe":"milestone-review","round":4,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/d756f455484f1e33","reviewed_head":"4e50304904ca03049b21675361ae8a62c053f1d8","slot":"parley.nvim:1","requested_at":"2026-10-17T04:41:30.256322Z"},"phase":"finished","pid":8276,"started_at":"2026-10-17T04:41:30.35248Z","finished_at":"2026-10-17T04:43:19.684208Z","session_id":"01a1482a-3edb-73e3-b76c-700d5706fd37","outcome":"returned"}] -->

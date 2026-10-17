@@ -290,6 +290,111 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 80b24dbe-71d9-4da3-bf5c-bcde1c017d0e
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000362"
+            recipe: milestone-review
+            round: 4
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/d756f455484f1e33
+            reviewed_head: 4e50304904ca03049b21675361ae8a62c053f1d8
+            slot: parley.nvim:1
+            requested_at: "2026-10-17T04:41:30.256322Z"
+          phase: finished
+          pid: 8276
+          started_at: "2026-10-17T04:41:30.35248Z"
+          finished_at: "2026-10-17T04:43:19.684208Z"
+          session_id: 01a1482a-3edb-73e3-b76c-700d5706fd37
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 4e50304904ca03049b21675361ae8a62c053f1d8
+        tracker_head: 3745aab13916d280ccce680af05af48eb41487ad
+        branch_point: 75c795b448fbe7fdd8c38785f2c7c64001ef91c4
+        since: "2026-10-16T16:04:39-07:00"
+        until: "2026-10-16T21:41:15-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-16T16:04:39-07:00"
+              end: "2026-10-16T21:41:15-07:00"
+              began: "2026-10-16T16:04:39-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        sources:
+            - harness: codex
+              id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              digest: 0599def1d742ca2de267f78901964e7c5c0db7a4c777ed5781425297dc8b9f1b
+              started: "2026-10-14T05:35:58.09Z"
+              spawned: false
+              bytes: 33742178
+              windows:
+                - start: "2026-10-16T16:04:39-07:00"
+                  end: "2026-10-16T21:41:15-07:00"
+            - harness: codex
+              id: 01a146f9-ac61-7822-bc08-cf9d7136b471
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 5d6d82af37c5a841eed73228ff16cf3920b542368a2670b4bc05a436fe3c8a5a
+              started: "2026-10-16T23:08:50.276Z"
+              spawned: true
+              bytes: 569640
+              windows:
+                - start: "2026-10-16T23:08:50.276Z"
+                  end: "2026-10-16T21:41:15-07:00"
+            - harness: codex
+              id: 01a1478c-d17c-7823-9d2b-ffd0b50bb137
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+              parent_id: 01a138e8-e0b1-7a60-bb7e-e76aa10a425e
+              digest: 9a788b17b422bb0a3c5a013979a33327d8f2c816679da1c96735cfd4f5c22742
+              started: "2026-10-17T01:49:33.55Z"
+              spawned: true
+              bytes: 856648
+              windows:
+                - start: "2026-10-17T01:49:33.55Z"
+                  end: "2026-10-16T21:41:15-07:00"
+        excluded_brain_sessions: 1
+        excluded_brain_minutes: 0.042216666666666666
+        cuts:
+            - dispatched: "2026-10-16T18:11:06-07:00"
+              finalized: "2026-10-16T18:12:54-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T19:26:03-07:00"
+              finalized: "2026-10-16T19:28:14-07:00"
+              finalizing: false
+            - dispatched: "2026-10-16T20:22:45-07:00"
+              finalized: "2026-10-16T20:25:34-07:00"
+              finalizing: false
+      "n": 4
+      timestamp: "2026-10-16T21:43:22-07:00"
+      dispatched: "2026-10-16T21:41:30-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: The local adapter explicitly overrides imported routing; admission and invocation-owned protection enforce that policy. The mapped review suite and all 64 real-tool invocation cases pass, including declaration refusals, protected chat bytes, and multiple-proposal rejection.
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: Issue Done when lines 37–39 explicitly require successful old-v1 sync and --check with the absent-modes notice. test_old_v1_cli_reports_absent_collaboration_modes verifies both commands; all 16 Python contracts pass.
+          round: 4
+        - id: BR-3
+          disposition: not-addressed
+          note: 'ARCH-CONSTRAINTS / ARCH-PURPOSE, family synchronous-input-work-bounds: parser fixes are regression-proven, but collaboration.lua:6 retains unanchored whitespace trimming and :59/:65 retain backtracking heading patterns. On pinned HEAD under LuaJIT, resolve({''# A''..string.rep('' '',n)..''Z'',''body''}) takes 0.235/0.952/3.780 CPU seconds at 5/10/20 KB; a quoted chat heading assignment takes 0.148/0.591/2.346 seconds. For that 20 KB assignment, parse alone takes 0.001084 seconds while resolve takes 2.356312 seconds. These paths remain synchronous in review_send.lua:66 and review/init.lua:590. Complete the existing family sweep across full routing admission, replace backtracking edge/heading scans with bounded scans, and add resolver-level scaling regressions.'
+          round: 4
+      recipe: milestone-review
+      isolation: fenced
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#362 (boundary-review)
@@ -325,6 +430,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - **BR-3** [Important] `synchronous-input-work-bounds` (kind: defect) Frontmatter comment scanning causes quadratic editor stalls
   ARCH-CONSTRAINTS: lua/parley/skills/review/collaboration_value.lua:13 copies and searches the entire preceding prefix for every character, even in unrelated metadata. Parsing {'---', 'notes: '..string.rep('a', n), '---', 'body'} under LuaJIT took 0.279/1.110/4.471 seconds for 5/10/20 KB. review_send.lua:66 and review/init.lua:590 call this synchronously, so a submission can repeat several seconds of editor blocking before generation. Track the preceding non-whitespace character incrementally, inspect sibling scanners for repeated-prefix work, and add representative scaling coverage.
+
+## Round 4 — 2026-10-16T21:43:22-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — The local adapter explicitly overrides imported routing; admission and invocation-owned protection enforce that policy. The mapped review suite and all 64 real-tool invocation cases pass, including declaration refusals, protected chat bytes, and multiple-proposal rejection.
+- BR-2 — addressed — Issue Done when lines 37–39 explicitly require successful old-v1 sync and --check with the absent-modes notice. test_old_v1_cli_reports_absent_collaboration_modes verifies both commands; all 16 Python contracts pass.
+- BR-3 — not-addressed — ARCH-CONSTRAINTS / ARCH-PURPOSE, family synchronous-input-work-bounds: parser fixes are regression-proven, but collaboration.lua:6 retains unanchored whitespace trimming and :59/:65 retain backtracking heading patterns. On pinned HEAD under LuaJIT, resolve({'# A'..string.rep(' ',n)..'Z','body'}) takes 0.235/0.952/3.780 CPU seconds at 5/10/20 KB; a quoted chat heading assignment takes 0.148/0.591/2.346 seconds. For that 20 KB assignment, parse alone takes 0.001084 seconds while resolve takes 2.356312 seconds. These paths remain synchronous in review_send.lua:66 and review/init.lua:590. Complete the existing family sweep across full routing admission, replace backtracking edge/heading scans with bounded scans, and add resolver-level scaling regressions.
 
 ## Open findings
 
