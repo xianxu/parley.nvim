@@ -1,13 +1,21 @@
 ---
 id: 000375
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '6a367e4358a56a6ad0f831aa46c487dc5f37c431' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '713d71b8a61de5009d9f8994a876dfff9e6048fc' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-17T05:45:26-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # single_source_sweeps fails a direct make test on a quick-flow issue branch with no Core-concepts table
@@ -31,7 +39,10 @@ When the current issue's docs carry no Core-concepts table (a quick-flow issue),
 
 ## Plan
 
-- [ ]
+- [x] Extract the Core-concepts parser into a pure `concept_rows(body)`, which returns the count of Status-headed tables and their rows.
+- [x] The plan-to-code case goes pending when no doc carries such a table. An emptied table (a header with no rows) still fails.
+- [x] Spec: "concept_rows tells a body without a table from an emptied one" (no table, emptied, and full).
+- [x] On this quick-flow branch the case is pending, and the file passes 28/0. With the pending branch removed, it fails as reported. luacheck is clean.
 
 ## Log
 

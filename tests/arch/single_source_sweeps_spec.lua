@@ -104,6 +104,31 @@ local function branch_point()
     end
 end
 
+-- The Core-concepts rows of one issue or plan body. Core-concepts rows only,
+-- and the table's HEADER defines the class: selecting by shape (`^| \``)
+-- claimed every other table in the plan, including a mutation ledger whose
+-- cells name specs (#261 M5 close: BR-89). Rows count while the table's header
+-- carries the Status column the writing-plans skill specifies; anything but a
+-- row or a separator ends the region. Returns the number of such tables and
+-- their row lines. A quick-flow issue has no table at all (#375).
+local function concept_rows(body)
+    local tables, rows, in_concepts = 0, {}, false
+    for line in body:gmatch("[^\n]+") do
+        if in_concepts and line:match("^| `") then rows[#rows + 1] = line end
+        -- A separator row matches "^|" too, and carries no Status cell, so it
+        -- simply leaves the region as it is.
+        if line:match("^|") then
+            if line:match("|%s*Status%s*|") then
+                in_concepts = true
+                tables = tables + 1
+            end
+        elseif vim.trim(line) ~= "" then
+            in_concepts = false
+        end
+    end
+    return tables, rows
+end
+
 describe("arch: single-source sweeps stay swept", function()
     it("the plan's Core-concepts tables name every entity THIS issue added", function()
         -- The other direction of the referent sweep, and scoped to the issue's
@@ -288,26 +313,12 @@ describe("arch: single-source sweeps stay swept", function()
         end
         local missing = {}
         local survived = {}
-        local rows = 0
+        local rows, tables = 0, 0
         for _, doc in ipairs(docs) do
             if doc ~= "" then
-                local body = read(doc)
-                -- Core-concepts rows only, and the table's HEADER defines the
-                -- class: selecting by shape (`^| \``) claimed every other table
-                -- in the plan, including a mutation ledger whose cells name
-                -- specs (#261 M5 close: BR-89). Rows count while the table's
-                -- header carries the Status column the writing-plans skill
-                -- specifies; anything but a row or a separator ends the region.
-                local in_concepts = false
-                for line in body:gmatch("[^\n]+") do
-                    if in_concepts and line:match("^| `") then rows = rows + 1 end
-                    -- A separator row matches "^|" too, and carries no Status
-                    -- cell, so it simply leaves the region as it is.
-                    if line:match("^|") then
-                        if line:match("|%s*Status%s*|") then in_concepts = true end
-                    elseif vim.trim(line) ~= "" then
-                        in_concepts = false
-                    end
+                local found, lines = concept_rows(read(doc))
+                tables, rows = tables + found, rows + #lines
+                for _, line in ipairs(lines) do
                     -- A `deleted` row names a symbol that by definition no
                     -- longer exists — that is the whole content of the row.
                     -- `deleted` is in the writing-plans status legend alongside
@@ -316,7 +327,7 @@ describe("arch: single-source sweeps stay swept", function()
                     -- outright would let a plan claim a deletion that never
                     -- happened (#225 review), so the row asserts the symbol is
                     -- GONE with the same matcher.
-                    local deleted_row = in_concepts and line:match("^| `") and line:match("|%s*deleted%s*|")
+                    local deleted_row = line:match("|%s*deleted%s*|")
                     if deleted_row then
                         for name in line:gmatch("`([%w_]+)`") do
                             if #name > 3 and not name:match("^lua$") then
@@ -330,7 +341,7 @@ describe("arch: single-source sweeps stay swept", function()
                             end
                         end
                     end
-                    if in_concepts and line:match("^| `") and not deleted_row then
+                    if not deleted_row then
                         -- A row names either a SYMBOL or a MODULE. A module is
                         -- checked as a file (its row carries the path in another
                         -- cell); a symbol must have a DEFINITION, not a mention.
@@ -363,11 +374,34 @@ describe("arch: single-source sweeps stay swept", function()
                 end
             end
         end
-        assert.is_true(rows > 0, "no Core-concepts row was selected, so this guard checked nothing")
+        if tables == 0 then
+            -- A quick-flow issue carries no Core-concepts table, so there is
+            -- nothing to check; an emptied table still fails below (#375).
+            pending("issue #" .. id .. " has no Core-concepts table (quick flow)")
+            return
+        end
+        assert.is_true(rows > 0, "a Core-concepts table has no rows, so this guard checked nothing")
         assert.same({}, missing,
             "these are named in a Core-concepts table but exist nowhere in the tree")
         assert.same({}, survived,
             "these are marked `deleted` in a Core-concepts table but are still defined")
+    end)
+
+    -- #375: a quick-flow issue has no Core-concepts table; the case above is
+    -- then pending, while an emptied table (a header and no rows) still fails.
+    it("concept_rows tells a body without a table from an emptied one", function()
+        local quick = "## Spec\n\n| Field | Value |\n|---|---|\n| `name` | x |\n\n## Plan\n- [ ] do it\n"
+        local found, rows = concept_rows(quick)
+        assert.equals(0, found)
+        assert.same({}, rows)
+        local emptied = "| Name | Lives in | Status |\n|------|----------|--------|\n\nprose\n"
+        found, rows = concept_rows(emptied)
+        assert.equals(1, found)
+        assert.same({}, rows)
+        local full = "| Name | Lives in | Status |\n|---|---|---|\n| `Thing` | `lua/x.lua` | new |\nprose\n| `stray` |\n"
+        found, rows = concept_rows(full)
+        assert.equals(1, found)
+        assert.same({ "| `Thing` | `lua/x.lua` | new |" }, rows)
     end)
 
     it("the definition matcher accepts every real definition form", function()
