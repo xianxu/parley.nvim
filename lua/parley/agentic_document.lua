@@ -45,7 +45,7 @@ end
 -- API rename leaves Neovim's "not edited" flag set, so ordinary writes (including
 -- auto-save) would refuse NEW with E13. A non-bang native read acknowledges it;
 -- never force a write or discard an edit made during the handoff.
-local function read_moved_document(s, path, expected, after)
+local function read_moved_document(s, path, expected, after, alternate_after)
     if vim.bo[s.buf].modified or hash(s.buf) ~= expected then return false, "buffer changed during owned move" end
     local undo = vim.o.undoreload
     s.owned_renaming = true
@@ -65,7 +65,8 @@ local function read_moved_document(s, path, expected, after)
     vim.o.undoreload = undo
     s.owned_renaming = nil
     if not ok then return false, tostring(err) end
-    if after and hash(s.buf) ~= after then
+    local observed = hash(s.buf)
+    if observed ~= after and observed ~= alternate_after then
         -- The native read may clear 'modified' after a BufReadPost edit. Keep
         -- the differing text visibly unsaved so a later reopen cannot discard it.
         vim.bo[s.buf].modified = true
@@ -104,6 +105,12 @@ local function editor_snapshot(s, moving)
         return moving.content
     end
 end
+local function projected_editor_hash(buf, old_path, new_path)
+    local projected, projection_error = require("parley.document_move_plan").rewrite_side_references(
+        table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"), old_path, new_path)
+    if not projected then return nil, projection_error end
+    return vim.fn.sha256(vim.json.encode(vim.split(projected, "\n", { plain = true })))
+end
 local function parent_rewritten(s, moving)
     return function(operation, proof)
         if states[s.buf] ~= s or not vim.api.nvim_buf_is_loaded(s.buf)
@@ -116,10 +123,8 @@ local function parent_rewritten(s, moving)
         -- BufReadPost edits can end with 'modified' cleared by the native read.
         -- Derive the expected editor postimage from the same pure rewrite used
         -- for disk bytes, keeping line-ending/encoding normalization in Neovim.
-        local projected, projection_error = require("parley.document_move_plan").rewrite_side_references(
-            table.concat(vim.api.nvim_buf_get_lines(s.buf, 0, -1, false), "\n"), operation.old, operation.new)
-        if not projected then return false, projection_error end
-        local expected = vim.fn.sha256(vim.json.encode(vim.split(projected, "\n", { plain = true })))
+        local expected, projection_error = projected_editor_hash(s.buf, operation.old, operation.new)
+        if not expected then return false, projection_error end
         local read, read_error = read_moved_document(s, proof.path, before, expected)
         if not read then return false, read_error end
         local baseline_before = proof.before_editor_hash or before
@@ -829,7 +834,16 @@ recover_migration = function(s, fresh_write)
             return token ~= nil, restore_error
         end,
         document_moved = function()
-            local ok, name_error = read_moved_document(s, journal.new, moving.content)
+            -- Recovery may read an already published mechanical parent rewrite.
+            -- Accept only that projection or the captured editor preimage; a
+            -- read autocmd's other edit must remain unsaved before any reread.
+            local projected
+            if journal.version == 2 then
+                local projection_error
+                projected, projection_error = projected_editor_hash(s.buf, journal.old, journal.new)
+                if not projected then return false, projection_error end
+            end
+            local ok, name_error = read_moved_document(s, journal.new, moving.content, moving.content, projected)
             if ok then s.path = journal.new; moving.content = hash(s.buf) end
             return ok, name_error
         end,

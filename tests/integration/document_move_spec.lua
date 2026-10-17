@@ -587,8 +587,14 @@ describe('durable leased document migration', function()
         assert.equals('pending', advance(operation).kind)
         assert.equals('[child](new.side/child.md)\n', read(new))
         operation.release()
-        local result = assert(recover())
-        assert.equals('registered', result.kind, result.error)
+        local named = 0
+        local result = assert(recover({ document_moved = function(op)
+            named = named + 1
+            assert.equals('editor', op.journal.state.phase, 'parent publication proof must precede the recovered editor handoff')
+            assert.equals('[child](new.side/child.md)\n', read(new))
+            return true
+        end }))
+        assert.equals('registered', result.kind, result.error); assert.equals(1, named)
         assert.equals('[child](new.side/child.md)\n', read(new))
     end)
 
@@ -739,6 +745,33 @@ describe('durable leased document migration', function()
             }))
             assert.equals('pending', advance(operation).kind)
             assert.equals(0, metadata); assert.equals(before, read(new))
+        end)
+    end
+
+    for _, interrupted_at in ipairs({ 'metadata', 'parent' }) do
+        it('proves recovered raw NEW before invoking the document name handoff from ' .. interrupted_at, function()
+            local options = { move_document = true, metadata = function(_, cb) cb({ kind = 'unavailable', error = 'metadata interrupted' }) end }
+            if interrupted_at == 'parent' then
+                write(old, '[child](old.side/child.md)\n')
+                local fs = setmetatable({}, { __index = uv })
+                fs.fs_rename = function(from, to)
+                    local ok, err = uv.fs_rename(from, to)
+                    if to == new and from:match('%.tmp$') and ok then return nil, 'parent published before checkpoint' end
+                    return ok, err
+                end
+                options.fs = fs
+            end
+            local operation = assert(begin(options))
+            assert.equals('pending', advance(operation).kind)
+            assert.equals(interrupted_at, operation.journal.state.phase)
+            operation.release()
+            write(new, 'unknown replacement after interruption\n')
+            local names = 0
+            local result = assert(recover({ document_moved = function() names = names + 1; return true end }))
+            assert.equals('pending', result.kind)
+            assert.equals(0, names, 'raw proof must precede any editor name/read handoff')
+            assert.equals('unknown replacement after interruption\n', read(new))
+            assert.is_truthy(uv.fs_lstat(operation.journal_path))
         end)
     end
 

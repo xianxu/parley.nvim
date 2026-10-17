@@ -838,18 +838,24 @@ local function dispatch(operation, callback, saved_write)
         if j.new_witness and (hash(bytes) ~= j.new_witness.hash or not same_file(stat, j.new_witness)) then return nil, 'NEW changed since its last recorded write' end
         return bytes, nil, stat
     end
-    if j.document_move and j.state.phase ~= 'prepared' and j.state.phase ~= 'orphan'
-        and j.state.phase ~= 'document' and not operation.document_notified then
+    local function notify_document()
+        if not j.document_move or operation.document_notified then return true end
         local named, name_err = hook(operation, 'document_moved')
-        if not named then pending(name_err or 'buffer name handoff is pending'); return end
+        if not named then return nil, name_err or 'buffer name handoff is pending' end
         operation.document_notified = true
+        return true
     end
-    -- A restored metadata checkpoint still needs fresh file/editor proof.
-    if operation.recovering and j.state.phase ~= 'prepared' and j.state.phase ~= 'orphan'
+    -- Prove raw NEW before a recovered name handoff can read it into an
+    -- editor. Parent publication gaps use the existing parent before/after
+    -- proof below, then hand off at editor with the updated raw witness.
+    if (operation.recovering or j.document_move and not operation.document_notified)
+        and j.state.phase ~= 'prepared' and j.state.phase ~= 'orphan'
         and j.state.phase ~= 'document' and j.state.phase ~= 'parent' then
         local bytes, read_err = document_bytes()
         if not bytes then pending(read_err); return end
-        if j.state.phase == 'metadata' or j.state.phase == 'complete' then
+        local named, name_err = notify_document()
+        if not named then pending(name_err); return end
+        if operation.recovering and (j.state.phase == 'metadata' or j.state.phase == 'complete') then
             local synced, sync_err = hook(operation, 'parent_rewritten', {
                 path = j.new, before_hash = j.parent.before, after_hash = j.parent.after,
                 current_hash = hash(bytes), document_generation = j.state.document_generation, recovering = true,
@@ -949,10 +955,9 @@ local function dispatch(operation, callback, saved_write)
             local current = witness(stat); current.hash = hash(bytes)
             ok, phase_err = checkpoint({ kind = 'observed', phase = phase, proof = 'after', witness = j.parent.before },
                 function() j.new_witness = current end)
-            if ok and j.document_move and not operation.document_notified then
-                local named, name_err = hook(operation, 'document_moved')
-                if not named then pending(name_err or 'buffer name handoff is pending'); return end
-                operation.document_notified = true
+            if ok then
+                local named, name_err = notify_document()
+                if not named then pending(name_err); return end
             end
         elseif phase == 'side' then
             local source, target = side(j.old), side(j.new)
@@ -1019,6 +1024,8 @@ local function dispatch(operation, callback, saved_write)
         elseif phase == 'editor' then
             local bytes, read_err = document_bytes()
             if not bytes then pending(read_err); return end
+            local named, name_err = notify_document()
+            if not named then pending(name_err); return end
             ok, phase_err = authorize(j.state.document_witness)
             if not ok then pending(phase_err); return end
             local synced, protection = hook(operation, 'parent_rewritten', { path = j.new, before_hash = j.parent.before,

@@ -104,7 +104,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals("edit after rewrite", vim.fn.readfile(target)[7])
     end)
 
-    it("recovers the mechanical baseline after the editor checkpoint cannot publish", function()
+    local function interrupted_editor_move()
         s3_parent()
         local target = destination .. "/spec.md"
         local mover = require("parley.document_move")
@@ -133,6 +133,11 @@ describe("registered ordinary Markdown through Parley move doors", function()
         local journal = vim.json.decode(table.concat(vim.fn.readfile(journal_path), "\n"))
         assert.equals("editor", journal.state.phase)
         assert.is_string(journal.parent.editor_before_hash)
+        return target
+    end
+
+    it("recovers the mechanical baseline after the editor checkpoint cannot publish", function()
+        local target = interrupted_editor_move()
         document.detach(buf)
         assert.is_true(document.attach(buf))
         await(function()
@@ -142,6 +147,60 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals(registration.ID, document.identity(buf).ID)
         assert.equals(0, vim.fn.filereadable(target .. ".lock"), "recovery must not invent an operator turn")
         assert.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
+    end)
+
+    it("preserves an operator edit made during the recovered name read", function()
+        local target = interrupted_editor_move()
+        document.detach(buf)
+        local edited = false
+        vim.api.nvim_create_autocmd("BufReadPost", { buffer = buf, once = true, callback = function()
+            edited = true
+            vim.api.nvim_buf_set_lines(buf, 6, 7, false, { "operator edit during recovered read" })
+        end })
+        assert.is_true(document.attach(buf))
+        assert.is_true(edited, "recovery must cross the real name-read autocmd")
+        assert.equals("operator edit during recovered read", vim.api.nvim_buf_get_lines(buf, 6, 7, false)[1])
+        assert.is_true(vim.bo[buf].modified)
+        assert.equals("original", vim.fn.readfile(target)[7])
+        assert.equals("absent", lookup(target).kind, "interrupted editor read precedes registry rename")
+        assert.equals(1, vim.fn.filereadable(target .. ".lock"))
+        assert.is_not.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
+    end)
+
+    it("preserves an operator edit made during a v1 recovered name read", function()
+        local target = destination .. "/legacy.md"
+        vim.env.FAKE_COUCH_REGISTRY_MODE = "unsupported"
+        local handled, moved, err = document.move_path(file, target)
+        assert.is_true(handled); assert.equals(target, moved, tostring(err))
+        local journal_path = vim.fn.glob(root .. "/state/document-moves/*/*.json")
+        assert.is_not.equals("", journal_path)
+        await(function()
+            local record = vim.json.decode(table.concat(vim.fn.readfile(journal_path), "\n"))
+            return record.state.phase == "metadata" and not document.status(buf).operation
+        end)
+        document.detach(buf)
+        local journal = vim.json.decode(table.concat(vim.fn.readfile(journal_path), "\n"))
+        assert.equals(journal.old_hash, journal.new_witness.hash, "v1 fixture must retain unchanged document bytes")
+        journal.version = 1
+        journal.state, journal.parent, journal.captured, journal.editor_captured = nil, nil, nil, nil
+        journal.orphan, journal.confirmation = nil, nil
+        table.remove(journal.temps) -- v2's parent rewrite temp is absent from v1.
+        journal.steps = { document_moved = true, side_moved = true, rewritten = {}, metadata = false }
+        vim.fn.writefile({vim.json.encode(journal)}, journal_path)
+        vim.env.FAKE_COUCH_REGISTRY_MODE = nil
+        local edited = false
+        vim.api.nvim_create_autocmd("BufReadPost", { buffer = buf, once = true, callback = function()
+            edited = true
+            vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "operator edit during v1 recovery" })
+        end })
+        assert.is_true(document.attach(buf))
+        assert.is_true(edited, "validated v1 recovery must cross the real name read")
+        assert.equals("operator edit during v1 recovery", vim.api.nvim_buf_get_lines(buf, 4, 5, false)[1])
+        assert.is_true(vim.bo[buf].modified)
+        assert.equals("original", vim.fn.readfile(target)[5])
+        assert.equals("absent", lookup(target).kind, "v1 read refusal must precede metadata publication")
+        assert.equals(1, vim.fn.filereadable(target .. ".lock"))
+        assert.equals(1, vim.fn.filereadable(journal_path))
     end)
 
     it("preserves an operator edit made during the rewritten parent read", function()
