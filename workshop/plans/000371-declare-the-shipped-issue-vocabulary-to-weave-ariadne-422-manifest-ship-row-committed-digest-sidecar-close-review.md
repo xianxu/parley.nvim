@@ -69,3 +69,63 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"a6a57041-3b99-4a80-92c1-f7089d8c734b","repository":"github.com/xianxu/parley.nvim","issue_id":"000371","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/dbaa40619c4c8cd5","reviewed_head":"e546f1ae4c8dc2eaf0b379804422a7b640cea9b2","slot":"parley.nvim:4","requested_at":"2026-10-17T14:18:32.260475Z"},"phase":"finished","pid":95896,"started_at":"2026-10-17T14:18:32.357958Z","finished_at":"2026-10-17T14:19:10.439925Z","session_id":"65fe9237-d5d8-4715-b455-e9f24f3b7656","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T10:49:54-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 371 — Declare the shipped issue vocabulary to weave (ariadne#422): manifest ship row, committed digest sidecar |
+| repo | parley.nvim |
+| issue file | workshop/issues/000371-declare-the-shipped-issue-vocabulary-to-weave-ariadne-422-manifest-ship-row-committed-digest-sidecar.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 7beb951ccf92e2415e933c0584aaa00865ba8333..1016075b4fc4e299a093513f3963a19f5f8d89e2 |
+| command | sdlc close --issue 371 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-17T10:49:54-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Both Minor findings from round 1 are fixed in this window, and the fixes add no new defects. Outside the generated gate ledger and close-review record, only two files change. In `atlas/issues/issue-management.md`, lines 32–35 are re-wrapped and now run 76, 79, 73 and 22 characters, consistent with the paragraph around them (max 81). In `construct/base.manifest:32`, the row is now `internal  ship …` with two spaces, matching the `internal  prose` row at `:23`. They are the only two `internal` rows in the manifest. The interdiff does not touch `## Spec`, `## Revisions` or `## Done when`, and adds no behavior, so the scope has not changed. There are no conflict resolutions to judge.
+
+1. **Strengths**
+   - Each fix is whitespace-only and limited to the site the finding named. The atlas re-wrap keeps the text word for word.
+   - The manifest alignment now holds across every row of that kind: both `internal` rows line up.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor:** none new. `atlas/issues/issue-management.md:28` is a short line (55 characters), but it predates this window and was already reviewed, so it is out of scope.
+
+5. **Test coverage:** this window only changes whitespace in docs and the manifest, so it needs no regression test. The manifest still has the same tokens (`internal`, `ship`, path), and only the spacing between them changed.
+
+6. **Architecture (interdiff only)**
+   - ARCH-DRY: pass. No logic changed.
+   - ARCH-PURE: pass. No code in the window.
+   - ARCH-PURPOSE: pass. Both fixes cover the whole class of their finding: there are no other `internal` rows to align, and no other overlong lines in the reflowed paragraph.
+
+7. **Plan revisions:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Lines 32-35 re-wrapped (76/79/73/22 chars), text unchanged; consistent with the paragraph's ~80-col wrap.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      construct/base.manifest:32 now "internal  ship", matching :23 "internal  prose"; these are the only internal rows.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"65f7f3a6-ffcd-4fb7-812f-d96d22ba39bf","repository":"github.com/xianxu/parley.nvim","issue_id":"000371","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/faaddf7f97f7ca40","reviewed_head":"1016075b4fc4e299a093513f3963a19f5f8d89e2","slot":"parley.nvim:4","requested_at":"2026-10-17T17:49:33.135207Z"},"phase":"finished","pid":86998,"started_at":"2026-10-17T17:49:33.298692Z","finished_at":"2026-10-17T17:49:52.619275Z","session_id":"82143618-4c53-480c-8567-98e3809fcbb6","outcome":"returned"}] -->
