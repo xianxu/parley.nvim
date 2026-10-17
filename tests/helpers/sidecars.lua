@@ -278,6 +278,25 @@ return {
         end,
     },
     {
+        reader = "lua/parley/attention_store.lua",
+        file = "attention/attention.json",
+        path = function() return require("parley.attention_store").path() end,
+        writes = "rewrite", why = "app-owned attention finder state; a dropped entry only loses a finder row",
+        wrong_shapes = {
+            { version = "1", entries = {} },
+            { version = 1, entries = 3 },
+            { version = 1, entries = { ["/fixture.md"] = 3 } },
+            { version = 1, entries = { ["/fixture.md"] = { path = 3, pending = 3, submitted_at = "x", breadcrumb = 3 } } },
+        },
+        exercise = function()
+            local state = require("parley.attention_store").load()
+            for path, entry in pairs(state.entries) do
+                assert(type(entry.pending) == "table" and type(entry.submitted_at) == "number",
+                    "attention entry " .. tostring(path) .. " is not typed")
+            end
+        end,
+    },
+    {
         reader = "lua/parley/chat_respond.lua",
         file = "remote_reference_cache.json",
         writes = "rewrite", why = "a cache of fetched references; a dropped entry is fetched again",

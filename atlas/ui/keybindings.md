@@ -41,6 +41,16 @@ Code: `lua/parley/file_history_model.lua` owns pure ordering and positions;
 Markdown buffer preparation consults the read-only restoration scope so it does
 not reset mode or consume typeahead during Back.
 
+## Attention finder
+
+`<M-Space>` (Alt+Space) or `<C-y><Space>` (in the `<C-y>` family with `<C-y>f`), in
+Normal or Insert mode, or `:ParleyAttention`, opens the
+[attention finder](attention_finder.md). In Insert mode with the completion popup
+showing, `<C-y><Space>` keeps its literal meaning, accept and then a space (the
+registry's `pum_passthrough`). Configure it with
+`global_shortcut_attention = { modes = { "n", "i" }, shortcut = { "<M-Space>", "<C-y><Space>" } }`,
+or `shortcut = {}` to disable it. Adding it to Couch's own key help is pair#619 (now for Alt+Space). Nothing in pair's zellij config, Couch or parley binds Alt+Space; Ghostty sends Option as Alt.
+
 ## Command
 `:ParleyKeyBindings` (`<C-g>?`, alias `<M-h>`, #292): centered floating window showing context-scoped
 shortcuts. Press Ctrl+g, then `?`. Help is built when opened from the current
