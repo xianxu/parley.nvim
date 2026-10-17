@@ -55,15 +55,19 @@ claimant:
 - Only the `.side/` folders of current entries are scanned. A side doc whose parent entry has also left comes back on the parent's next submit.
 
 **Steps** (quick flow, single pass):
-- [ ] Model: the `saved` and `rewritten` events, `discovered` un-retiring, and `scan`, with unit specs for the Done-when cases. Those are: rewrite after seen gives answered; operator save gives nothing; rewrite at or before seen gives nothing; retired with a newer agent write comes back; retired with an operator save stays retired; an operator-created side doc is not listed.
-- [ ] Store: parse and type `saved` with one warning per read, and prune it.
-- [ ] Glue: BufWritePost records `saved`, and `discover` goes through `Model.scan`.
-- [ ] Integration spec through `attention.open`:
+- [x] Model: the `saved` and `rewritten` events, `discovered` un-retiring, and `scan`, with unit specs for the Done-when cases. Those are: rewrite after seen gives answered; operator save gives nothing; rewrite at or before seen gives nothing; retired with a newer agent write comes back; retired with an operator save stays retired; an operator-created side doc is not listed.
+- [x] Store: parse and type `saved` with one warning per read, and prune it.
+- [x] Glue: BufWritePost records `saved`, and `discover` goes through `Model.scan`.
+- [x] Integration spec through `attention.open`:
   - the agent rewrites a seen side doc and it is listed as answered;
   - the operator `:w`s it and it is not;
   - a retired one comes back.
-- [ ] Atlas: update `attention_finder.md`'s side-docs section and traceability.
+- [x] Atlas: update `attention_finder.md`'s side-docs section and traceability.
 
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: TL approved the plan. TL check: the operator runs more than one parley Neovim. `saved` lives in the shared store file, so one editor's save reads as the operator's in another; a store spec covers this with two module instances.
+- 2026-10-16: `discover` first read every side doc's head on each open. Now `Model.scan` picks candidates from stat data, and only those have their frontmatter read, the pre-#367 bound.
+- 2026-10-16: folded-in flake fix (#354's spec, on main). "keeps the typed filter and the selected row across a live repaint" failed about one run in nine: "typeahead did not filter to the two qzx rows". Printing on timeout showed the prompt "> qzx" with all three rows. A query of three characters or fewer matches the whole search text, which includes the random temp directory, so `beta.md` matched. The spec now uses `q+` (no temp path holds `+`). Shown deterministically: `_fuzzy_score("qzx", "beta.md /tmp/nvim.u/aqbzcx/0")` = 21, `"q+"` = nil. Six clean runs after the fix.
+- 2026-10-16: mutation checks. Not recording saves fails the integration spec. Ignoring `saved` in scan fails 3 model specs and the integration spec. Never un-retiring fails 2 model specs and the integration spec.

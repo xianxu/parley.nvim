@@ -9,8 +9,9 @@
 --   seen      looked at after its last answer: opened from the finder, or
 --             viewed in a window (`viewed`), however the operator got there.
 -- A failed probe is never evidence of an answer: it only marks `unknown`.
--- A side doc that left the finder is `retired`, so a later scan of its folder
--- does not bring it back.
+-- A side doc that left the finder is `retired` until the agent writes it again
+-- (#367). An agent write is a file mtime the operator's editor did not write:
+-- `saved` holds the mtime of the operator's last save of each side doc.
 
 local M = {}
 
@@ -18,7 +19,7 @@ M.VERSION = 1
 M.LIMIT = 256
 
 function M.empty()
-    return { version = M.VERSION, entries = {}, retired = {} }
+    return { version = M.VERSION, entries = {}, retired = {}, saved = {} }
 end
 
 function M.state_of(entry)
@@ -53,9 +54,10 @@ local function with_entry(state, path)
         entry = copy(entry)
         entries[path] = entry
     end
-    local retired = {}
+    local retired, saved = {}, {}
     for key, at in pairs(state.retired or {}) do retired[key] = at end
-    return { version = state.version, entries = entries, retired = retired }, entry
+    for key, mtime in pairs(state.saved or {}) do saved[key] = mtime end
+    return { version = state.version, entries = entries, retired = retired, saved = saved }, entry
 end
 
 local function newest_first(a, b)
@@ -171,23 +173,108 @@ function handlers.viewed(state, event)
     return next_state
 end
 
+-- Keep only the saves a scan can still ask about: of an entry, of a retired
+-- path, or of a file in an entry's `.side/` folder; at most LIMIT, newest kept.
+local function prune_saved(state)
+    local folders = {}
+    for path in pairs(state.entries) do
+        local folder = require("parley.document_move_plan").side_path(path)
+        if folder then folders[folder] = true end
+    end
+    local kept = {}
+    for path, mtime in pairs(state.saved) do
+        if state.entries[path] or state.retired[path] or folders[path:match("^(.*)/[^/]*$") or ""] then
+            kept[#kept + 1] = { path = path, mtime = mtime }
+        end
+    end
+    table.sort(kept, function(a, b)
+        local x, y = tonumber(a.mtime) or 0, tonumber(b.mtime) or 0
+        if x ~= y then return x > y end
+        return a.path < b.path
+    end)
+    state.saved = {}
+    for i = 1, math.min(#kept, M.LIMIT) do state.saved[kept[i].path] = kept[i].mtime end
+end
+
 function handlers.sweep(state, event, now)
     local next_state = with_entry(state, nil)
     for path, entry in pairs(state.entries) do
         if M.state_of(entry) == "seen" and now - entry.seen_at >= event.grace then remove(next_state, path, now) end
     end
+    prune_saved(next_state)
+    return next_state
+end
+
+-- The operator's editor wrote `path`, leaving the file's mtime `mtime`
+-- ("sec.nsec"): a scan finding that mtime knows the write was not the agent's.
+function handlers.saved(state, event)
+    local next_state = with_entry(state, nil)
+    next_state.saved[event.path] = event.mtime
+    return next_state
+end
+
+-- The agent wrote a seen side doc again at `at`: it is answered again.
+function handlers.rewritten(state, event)
+    local entry = state.entries[event.path]
+    if not entry or entry.kind ~= "side" or M.state_of(entry) ~= "seen" or event.at <= entry.seen_at then
+        return state
+    end
+    local next_state, rewritten = with_entry(state, event.path)
+    rewritten.answered_at = event.at
     return next_state
 end
 
 -- A side doc the agent wrote at `at` for the entry `parent`: answered, not yet
--- seen. Ignored when the path is already an entry or was retired.
+-- seen. Ignored when the path is already an entry, or retired at or after `at`;
+-- a later write un-retires it.
 function handlers.discovered(state, event, now)
-    if state.entries[event.path] or (state.retired or {})[event.path] then return state end
+    local retired_at = (state.retired or {})[event.path]
+    if state.entries[event.path] or (retired_at and event.at <= retired_at) then return state end
     local next_state = with_entry(state, nil)
+    next_state.retired[event.path] = nil
     if not make_room(next_state, now) then return state, "full" end
     next_state.entries[event.path] = { path = event.path, pending = {}, kind = "side", parent = event.parent,
         submitted_at = event.at, answered_at = event.at, recorded_at = now }
     return next_state
+end
+
+--- The events for the side docs a scan found. `files` lists each `*.md` in
+--- the `.side/` folder of an entry (the caller keeps only side docs), as
+--- `{ path, parent, mtime_sec, mtime_id }`, where mtime_id is the "sec.nsec"
+--- that `saved` records. A file whose mtime the operator's editor did not
+--- write is the agent's:
+---   new       written after its parent entered the finder → discovered
+---   retired   written after it was retired → discovered (un-retires it)
+---   seen side written after the operator saw it → rewritten
+--- Ordered by path, one event per path.
+function M.scan(state, files)
+    local events, done = {}, {}
+    for _, file in ipairs(files) do
+        local path, at = file.path, file.mtime_sec
+        local entry, retired_at = state.entries[path], (state.retired or {})[path]
+        local parent = state.entries[file.parent]
+        if not done[path] and file.mtime_id ~= (state.saved or {})[path] then
+            if entry then
+                if entry.kind == "side" and M.state_of(entry) == "seen" and at > entry.seen_at then
+                    done[path] = true
+                    events[#events + 1] = { type = "rewritten", path = path, at = at }
+                end
+            elseif retired_at then
+                if at > retired_at then
+                    done[path] = true
+                    events[#events + 1] = { type = "discovered", path = path, parent = file.parent, at = at }
+                end
+            elseif parent then
+                local since = parent.kind == "side" and parent.submitted_at or (parent.recorded_at or parent.submitted_at)
+                if at > since then
+                    done[path] = true
+                    events[#events + 1] = { type = "discovered", path = path, parent = file.parent, at = at }
+                end
+            end
+        end
+    end
+    table.sort(events, function(x, y) return x.path < y.path end)
+    return events
 end
 
 -- Several events as one change (one store write for a scan's discoveries).

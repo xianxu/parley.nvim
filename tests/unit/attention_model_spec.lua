@@ -242,16 +242,19 @@ describe("attention_model side docs", function()
         assert.equals(80, state.retired["/a.side/s.md"])
     end)
 
-    it("a retired or already-known path is never rediscovered", function()
+    it("an already-known path is never rediscovered; a retired one only by a later write", function()
         local state = run({
             { submitted("/a.side/s.md", "m1"), 10 },
             { discovered("/a.side/s.md", "/a.md", 50), 60 },
         })
         assert.equals("waiting", state_of(state, "/a.side/s.md"))
         state = Model.empty()
-        state.retired["/b.side/t.md"] = 5
+        state.retired["/b.side/t.md"] = 50
         state = Model.transition(state, discovered("/b.side/t.md", "/b.md", 50), 60)
         assert.equals("absent", state_of(state, "/b.side/t.md"))
+        state = Model.transition(state, discovered("/b.side/t.md", "/b.md", 51), 61)
+        assert.equals("answered", state_of(state, "/b.side/t.md"))
+        assert.is_nil(state.retired["/b.side/t.md"])
     end)
 
     it("an evicted side doc is retired too, and the retired set stays bounded", function()
@@ -302,5 +305,86 @@ describe("attention_model viewed", function()
             local state = run(SETUPS[setup])
             assert.equals(state, Model.transition(state, viewed("/a.md", 99), 100))
         end
+    end)
+end)
+
+describe("attention_model.scan: an agent write is an mtime the operator's editor did not write (#367)", function()
+    -- Strategy: build each starting state through events, then scan one file
+    -- and check the events it yields, and the state they lead to.
+    local PARENT = "/a.md"
+    local SIDE = "/a.side/s.md"
+    local function file(mtime_sec, nsec, path)
+        return { path = path or SIDE, parent = PARENT, mtime_sec = mtime_sec, mtime_id = mtime_sec .. "." .. (nsec or 0) }
+    end
+    local function saved(mtime_sec, nsec, path) return { type = "saved", path = path or SIDE, mtime = mtime_sec .. "." .. (nsec or 0) } end
+    -- The parent submitted at 10; its side doc found at 50, seen at 70.
+    local function seen_side()
+        return run({
+            { submitted(PARENT, "m1"), 10 },
+            { { type = "discovered", path = SIDE, parent = PARENT, at = 50 }, 60 },
+            { { type = "opened", path = SIDE }, 70 },
+        })
+    end
+    local function scan_apply(state, files, now)
+        local events = Model.scan(state, files)
+        return Model.transition(state, { type = "batch", events = events }, now), events
+    end
+
+    it("an agent rewrite after seen makes the side doc answered again", function()
+        local state, events = scan_apply(seen_side(), { file(80) }, 90)
+        assert.same({ { type = "rewritten", path = SIDE, at = 80 } }, events)
+        assert.equals("answered", state_of(state, SIDE))
+        assert.equals(80, state.entries[SIDE].answered_at)
+    end)
+
+    it("the operator's own save after seen changes nothing", function()
+        local state = run({ { saved(80, 123), 80 } }, seen_side())
+        local events = Model.scan(state, { file(80, 123) })
+        assert.same({}, events)
+        -- The agent writes the same second: a different mtime, so it is the agent's.
+        assert.same({ { type = "rewritten", path = SIDE, at = 80 } }, Model.scan(state, { file(80, 456) }))
+    end)
+
+    it("a write at or before seen changes nothing, and so does one to an answered or waiting entry", function()
+        assert.same({}, Model.scan(seen_side(), { file(70) }))
+        local answered = run({ { submitted(PARENT, "m1"), 10 }, { { type = "discovered", path = SIDE, parent = PARENT, at = 50 }, 60 } })
+        assert.same({}, Model.scan(answered, { file(80) }))
+        local waiting = run({ { submitted(PARENT, "m1"), 10 }, { submitted(SIDE, "m2"), 20 } })
+        assert.same({}, Model.scan(waiting, { file(80) }))
+        -- The rewritten event itself refuses those too.
+        local state = Model.transition(answered, { type = "rewritten", path = SIDE, at = 80 }, 90)
+        assert.equals(50, state.entries[SIDE].answered_at)
+    end)
+
+    it("a retired side doc comes back on a later agent write, not on an operator save", function()
+        local retired = run({ { { type = "sweep", grace = 10 }, 100 } }, seen_side())
+        assert.equals(100, retired.retired[SIDE])
+        assert.same({}, Model.scan(retired, { file(100) }))
+        local saved_state = run({ { saved(120, 7), 120 } }, retired)
+        assert.same({}, Model.scan(saved_state, { file(120, 7) }))
+        local state, events = scan_apply(saved_state, { file(130, 1) }, 140)
+        assert.same({ { type = "discovered", path = SIDE, parent = PARENT, at = 130 } }, events)
+        assert.equals("answered", state_of(state, SIDE))
+        assert.is_nil(state.retired[SIDE])
+    end)
+
+    it("a side doc the operator created is not listed; the agent's new one is", function()
+        local state = run({ { submitted(PARENT, "m1"), 10 }, { saved(20, 5, "/a.side/mine.md"), 20 } })
+        local events = Model.scan(state, { file(20, 5, "/a.side/mine.md"), file(25, 0, "/a.side/agent.md") })
+        assert.same({ { type = "discovered", path = "/a.side/agent.md", parent = PARENT, at = 25 } }, events)
+        -- Written before its parent entered the finder: not new.
+        assert.same({}, Model.scan(state, { file(10, 0, "/a.side/old.md") }))
+    end)
+
+    it("keeps only the saves a scan can still ask about, at most LIMIT", function()
+        local state = run({ { submitted(PARENT, "m1"), 10 }, { saved(20, 0, "/a.side/x.md"), 20 },
+            { saved(20, 0, "/elsewhere.side/y.md"), 20 }, { { type = "sweep", grace = 10 }, 21 } })
+        assert.same({ ["/a.side/x.md"] = "20.0" }, state.saved)
+        for i = 1, Model.LIMIT + 1 do
+            state = Model.transition(state, saved(100 + i, 0, ("/a.side/%03d.md"):format(i)), 200)
+        end
+        state = Model.transition(state, { type = "sweep", grace = 10 }, 300)
+        assert.equals(Model.LIMIT, vim.tbl_count(state.saved))
+        assert.is_nil(state.saved["/a.side/x.md"]) -- the oldest save goes first
     end)
 end)

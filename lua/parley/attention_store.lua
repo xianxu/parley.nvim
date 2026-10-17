@@ -70,6 +70,10 @@ function M.parse(decoded, label)
         if type(path) == "string" and type(at) == "number" then state.retired[path] = at else dropped = dropped + 1 end
     end
     if decoded.retired ~= nil and type(decoded.retired) ~= "table" then dropped = dropped + 1 end
+    for path, mtime in pairs(type(decoded.saved) == "table" and decoded.saved or {}) do
+        if type(path) == "string" and type(mtime) == "string" then state.saved[path] = mtime else dropped = dropped + 1 end
+    end
+    if decoded.saved ~= nil and type(decoded.saved) ~= "table" then dropped = dropped + 1 end
     if dropped > 0 then
         logger.warning(("Ignoring malformed parts of %d attention entr%s of %s"):format(dropped,
             dropped == 1 and "y" or "ies", label))
