@@ -906,13 +906,13 @@ describe("cliproxy IO lifecycle", function()
             return dir
         end
 
-        local in_window, window_probes -- the #340 stall window, below
-        local function start_keyless(port, store)
+        local in_window, window_probes, stopped_pids, probe_scope -- the #340 stall window, below
+        local function start_keyless(port, store, extra_env)
             local cfg_file = vim.fn.tempname() .. ".json"
             vim.fn.writefile({ vim.json.encode({
                 port = port, ["auth-dir"] = store, ["api-keys"] = { "testkey" },
             }) }, cfg_file)
-            local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file })
+            local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file }, extra_env)
             assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
             ready_port.wait_listening(port)
             in_window = false -- a listener is back on the port (see #340 below)
@@ -922,20 +922,24 @@ describe("cliproxy IO lifecycle", function()
         -- #340: under the parallel suite a probe of the port whose proxy was just
         -- killed went unanswered until curl's --max-time (measured ~2 s, twice per
         -- repair), so "down" arrived by timeout and the case ran out its budget.
-        -- Emulate exactly that window: a probe issued after stop() and before the
-        -- next spawn() answers "down" only after STALL_MS. The repair must not
-        -- probe in that window at all — it waits for the killed process to exit.
+        -- Emulate that CLOSED-port window, not every return from stop(): an
+        -- unidentified listener (no PID signalled), or one still alive at the
+        -- deadline, legitimately needs a real probe (#363). Only a confirmed
+        -- exited signalled process can stand for the just-closed port.
         local STALL_MS = 5000
         local orig = {}
         before_each(function()
             cliproxy._reset_management_restart()
-            in_window, window_probes = false, 0
+            in_window, window_probes, stopped_pids = false, 0, {}
+            probe_scope = { active = true, timers = {} }
+            local scope = probe_scope
             orig.stop, orig.spawn, orig.probe = cliproxy.stop, cliproxy.spawn, cliproxy.health_probe
             -- The window opens when stop has signalled the old proxy. The repair
             -- is a budgeted path, so it stops through the sync stop (#345 B).
             cliproxy.stop = function(...)
                 local n, pids, read_err = orig.stop(...)
-                in_window = true
+                stopped_pids = pids
+                in_window = #pids > 0
                 return n, pids, read_err
             end
             cliproxy.spawn = function(...)
@@ -943,15 +947,101 @@ describe("cliproxy IO lifecycle", function()
                 return orig.spawn(...)
             end
             cliproxy.health_probe = function(host, port, secret, cb)
-                if not in_window then
+                local alive = vim.tbl_filter(function(pid)
+                    local ok, _, name = uv.kill(pid, 0)
+                    return ok ~= nil or name ~= "ESRCH"
+                end, stopped_pids)
+                if not in_window or #alive > 0 then
                     return orig.probe(host, port, secret, cb)
                 end
                 window_probes = window_probes + 1
-                vim.defer_fn(function() cb("down") end, STALL_MS)
+                local timer = vim.defer_fn(function()
+                    if scope.active then cb("down") end
+                end, STALL_MS)
+                table.insert(scope.timers, timer)
             end
         end)
+        local function retire_probe_scope()
+            probe_scope.active = false
+            for _, timer in ipairs(probe_scope.timers) do
+                if not timer:is_closing() then
+                    timer:stop()
+                    timer:close()
+                end
+            end
+        end
         after_each(function()
+            retire_probe_scope()
             cliproxy.stop, cliproxy.spawn, cliproxy.health_probe = orig.stop, orig.spawn, orig.probe
+        end)
+
+        it("still stalls a confirmed closed port and retires its delayed callback (#363)", function()
+            local port = ready_port.free_port()
+            set_endpoint(port)
+            local pid = start_keyless(port, write_store())
+            local n = cliproxy.stop()
+            assert.equals(1, n)
+            assert.is_true(vim.wait(3000, function()
+                local ok, _, name = uv.kill(pid, 0)
+                return ok == nil and name == "ESRCH"
+            end, 10))
+
+            local late, called = nil, false
+            local defer = vim.defer_fn
+            vim.defer_fn = function(cb, ms)
+                if ms == STALL_MS then late = cb end
+                return defer(cb, ms)
+            end
+            local ok, err = pcall(cliproxy.health_probe, "127.0.0.1", port, "testkey", function() called = true end)
+            vim.defer_fn = defer
+            assert.is_true(ok, err)
+            assert.equals(1, window_probes, "the original closed-port regression must stay armed")
+            assert.is_not_nil(late)
+            assert.is_false(called)
+            local timer = probe_scope.timers[1]
+            retire_probe_scope()
+            assert.is_true(timer:is_closing())
+            late() -- already queued callback cannot continue into the next case
+            assert.is_false(called)
+        end)
+
+        it("does not invent a killed-port stall when the stop identity request times out (#363)", function()
+            local port = ready_port.free_port()
+            local store = write_store()
+            set_endpoint(port)
+            local old_pid = start_keyless(port, store, { PARLEY_FAKE_MODELS_DELAY_ONCE_MS = "2200" })
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE, auth_dir = store } }
+
+            -- Management 404 is prompt. The first /v1/models exceeds curl's
+            -- unchanged 2s limit: stop identifies/kills nobody. Later real
+            -- observations find that original proxy still serving, so repair
+            -- refuses within the ordinary 8s await rather than fabricating down.
+            local h = await(function(done) cliproxy.credential_health(done, "claude") end)
+            assert.equals("unknown", h.state)
+            assert.equals("no_management_route", h.reason)
+            assert.equals(0, window_probes, "no process was killed, so there is no killed-port window")
+            assert.same({}, stopped_pids, "the timed-out identity request did not authorize a signal")
+            assert.same({}, cliproxy.spawned_pids())
+            assert.is_not_nil(uv.kill(old_pid, 0), "an unidentified proxy must remain alive")
+        end)
+
+        it("does not fabricate a closed-port stall while a signalled proxy is still alive (#363)", function()
+            local port = ready_port.free_port()
+            local store = write_store()
+            set_endpoint(port)
+            local old_pid = start_keyless(port, store, { PARLEY_FAKE_IGNORE_SIGTERM = "1" })
+            parley.config = { cliproxy = { manage = true, binary_path = FAKE, auth_dir = store } }
+
+            local h = await(function(done) cliproxy.credential_health(done, "claude") end)
+            assert.equals("unknown", h.state)
+            assert.equals("no_management_route", h.reason)
+            assert.truthy(h.message:find("still answers", 1, true))
+            assert.equals(0, window_probes, "a live listener is not the closed-port stall")
+            assert.is_true(vim.tbl_contains(stopped_pids, old_pid))
+            assert.same({}, cliproxy.spawned_pids())
+            assert.is_not_nil(uv.kill(old_pid, 0))
+            -- fixture_process owns this SIGTERM-ignoring child and reaps it
+            -- with SIGKILL in the outer after_each, including assertion failure.
         end)
 
         it("restarts a keyless proxy once, then reads health from the new one", function()

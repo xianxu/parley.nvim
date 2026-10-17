@@ -53,7 +53,9 @@ turn an agent write reloads the unmodified buffer silently (and so does a
 buffer-local `FileChangedShell` on focus or `:checktime`). Either reload keeps
 every window on the text it showed (#356): `view_map` maps each cursor and top
 line through a line diff, and a line the agent rewrote is followed by its own
-text. The operator's turn
+text. `window_views` (capture before, restore after) owns that wrap, and
+parley's own whole-buffer rewrites use it too (#358): `file_refresh` after the
+chat write, edit and propose tools, and the review round's reload. The operator's turn
 never starts on an old copy unnoticed: an agent write that landed just before
 the first edit lost the race, and goes through the violation path below with
 the operator's text kept. Outside the operator's turn, submit refuses to
@@ -117,11 +119,65 @@ override them.
 | violated | `<owner> wrote under your lock: yours kept, theirs in .clobbered` (`changed as you started typing: …` for the race) | `ParleySessionSyncOperator` |
 | stale | `unsent edits, Alt+Return to submit` | `ParleySessionSyncStale` (orange, black bold) |
 
+Leaving a held, unsubmitted turn triggers three 150ms bright-red pulses through
+`document_band`, plus a one-line reminder naming the source file. A WinLeave
+pulses the departing physical window; a same-window buffer switch pulses its
+destination bar and names the source. Navigation is never blocked. The existing
+acquisition baseline suppresses an undone turn, even before deferred release;
+auto-save does not suppress an outstanding turn. One cancellable pulse owns each
+window, duplicate leave events coalesce, and underlying view updates remain live.
+Window/buffer replacement, source turn release/detach and user option overrides
+retire the pulse. New splits do not retain a copied red frame. The bright group
+is `ParleySessionSyncLeave` (red `#ff0000`, white bold).
+
 A completed Couch-pane submission overlays the band with `submitted to OWNER ·
 HH:MM` (DiagnosticOk), retained through saves and status probes until the next
 operator edit or observed agent write. Explicit submit failures show a bounded
 literal error (DiagnosticError), including before registry attachment; this
 feedback changes neither turn ownership nor the acquisition baseline.
+
+The submit never blocks the editor (#357). It shows `submitting…` until its
+outcome, under one deadline (`agentic_submit_timeout_ms`, 15 s) that covers the
+registry stage and the send together. Past the deadline, or on a registry
+failure, the band reads `not confirmed: submit again · <reason>`. That is one
+state, and Alt+Return is its one action:
+- A registry stage that timed out still holds the operator's lock, since the
+  send never started. The next press confirms the registration, then submits
+  the current bytes.
+- A send already issued is never killed, because a kill can't tell delivered
+  from not. A press while it is out joins it (`submitting… still waiting for
+  Couch`), and its late success records the receipt below, so an identical
+  resubmit sends nothing.
+
+**Moves never wait on Couch (#359)**, except an overwrite of an existing file.
+`document_move_plan.move_preflight` decides from what parley already holds: the
+loaded model, the namespace cache, or an earlier background answer.
+- A registered document moves at once. Couch's own rename is the authority on
+  NEW, refusing an occupied destination (`destination_registered =
+  "authority"`), and the journal carries the metadata rename forward.
+- A positively plain document renames plainly.
+- An unknown identity or a legacy `type: session-sync` file refuses at once
+  with nothing moved (`move not confirmed: … Run the move again`), and asks
+  Couch in the background, so the rerun proceeds. A background "absent"
+  answer holds for `ANSWER_TTL_MS` (60 s). A rerun after that asks again, so a
+  registration made since is never moved past.
+- Neovim gives the rename hooks no `!`, so any rename onto an existing path
+  (`:saveas!`, or `:file` there) takes the bounded check below.
+- Only `:saveas!` onto an existing file asks inline, within
+  `agentic_move_timeout_ms`. Neovim writes it before Couch could refuse, and
+  past the deadline the recovery is `rename back to OLD, then run it again`.
+
+`move_outcome` projects what the band shows once the document moved:
+- `moving: confirming with Couch`;
+- past `agentic_submit_timeout_ms`, `finishing in the background` (the rename
+  itself gets three deadlines);
+- for a stale registration at NEW (`target-conflict`), the pasteable
+  `Run: couch --session-sync forget NEW, then reopen`, with the whole command
+  also in the notification;
+- for a lost reply, `move pending: reopen to recover`.
+
+Saving works meanwhile: `document_move.record_write` makes each save the
+journal's witness for NEW, so recovery stays provable.
 
 The last confirmed successful submission also records its captured post-save
 content hash, stable document ID, namespace, effective owner and local time in
@@ -188,9 +244,9 @@ probe is documented in [TOOLING](../../TOOLING.md).
 
 Native and public move preflight also checks the loaded coordinator before
 plain fallback: unresolved owner selection, pending admission and an active
-submit cannot be renamed past. Fresh bounded OLD membership confirms the
-plain bypass; unavailable membership blocks migration while editing stays
-available.
+submit cannot be renamed past. The plain bypass needs positive absence that
+parley already holds (#359). While Couch is unavailable, a held identity still
+moves, and its journal recovers the rename on reopen; editing stays available.
 
 A true buffer unload retires its async incarnation and execution lease; reopen
 confirms registration and resumes any durable forward-only move journal.

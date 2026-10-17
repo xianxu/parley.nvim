@@ -51,11 +51,26 @@ The winbar confirms the destination and time after submission succeeds, until
 your next edit or the agent's write; failures show an error there. Unchanged
 content shows `nothing to submit` instead of sending again. Press Alt+Return
 a second time within two seconds to resend explicitly.
+The editor never waits on a submit: the winbar shows `submitting…`. If Couch
+hasn't confirmed it within `agentic_submit_timeout_ms` (default 15000), or the
+registry failed, it turns red with `not confirmed: submit again`. Alt+Return then
+completes it, and it never delivers twice: a press while a send is still out
+joins it. Moves and renames never wait on Couch: a registered document moves at
+once while Couch confirms in the background, and one parley doesn't know yet
+says to run the move again (rerun within a minute: the background answer then
+expires). Only `:saveas!` onto an existing file asks first,
+within `agentic_move_timeout_ms` (default 5000), and on that deadline says to
+rename back first.
 An explicit `couch-owner:` overrides the default; a business `owner:` does not
 (`owner:` remains a fallback only for legacy `type: session-sync` files).
 [Agentic documents](atlas/modes/session_sync.md) use the existing turn engine:
 the first edit takes your turn before auto-save, undo back to the pre-edit
 baseline releases it, and redo takes it again. Saves never move that baseline.
+Leaving a document with an unsubmitted turn gives three short red winbar pulses
+and a file-named `unsubmitted: Alt+Return to submit` reminder. Navigation stays
+free; after a same-window file switch the destination bar names the file left
+behind. Undo back to the baseline suppresses the reminder, while auto-save does
+not count as submission.
 Quiet owners with owed deliveries are pinged after `session_sync_ping_minutes`
 (default 15); unsent edits become stale after `session_sync_stale_minutes`
 (default 5). Unknown offline membership stays editable with `Couch unavailable:
@@ -79,6 +94,16 @@ created through APIs or RPC start with empty history. File-entry events begin
 their history; Back can also establish the displayed file as their root.
 See [file navigation](atlas/ui/keybindings.md#file-history-back)
 for the command and configuration.
+
+Press **Alt+Space** or **Ctrl+Y Space** (`:ParleyAttention`) to list every file you submitted with
+Alt+Return, newest first: **waiting** while the agent still owes it, **answered**
+once the agent has folded the submit, and **seen**, dimmed, once you have looked
+at it after the answer: opened it from the finder, or focused, moved or scrolled
+in a window showing it. The file in your current window is left out. New side docs the agent writes in a listed file's `.side/`
+folder appear too, as answered (`↳`). Opening an entry restores the trail of
+files it had when you submitted it. A seen entry leaves the list `attention.seen_grace_minutes` later
+(default 60); a new submit makes it waiting again. See the
+[attention finder](atlas/ui/attention_finder.md).
 
 ## Learn by chatting
 

@@ -23,7 +23,9 @@ end
 function M.classify_reply(operation, exit_code, decoded, null_sentinel)
     local mutation = operation == "register" or operation == "rename"
     local error_text = type(decoded) == "table" and type(decoded.Error) == "string" and decoded.Error or nil
-    local unavailable = { kind = "unavailable", error = error_text or "Invalid registry response" }
+    -- The refusal's code travels with it: a move names a target-conflict (#359).
+    local code = type(decoded) == "table" and type(decoded.Code) == "string" and decoded.Code ~= "ok" and decoded.Code or nil
+    local unavailable = { kind = "unavailable", code = code, error = error_text or "Invalid registry response" }
     if operation ~= "lookup" and not mutation then return unavailable end
     if type(decoded) ~= "table" then return unavailable end
     if mutation and decoded.Code == "registry-uncertain" then
@@ -90,13 +92,15 @@ function M.new(context)
             and witness.incarnation == state.incarnation and witness.generation == state.generation
     end
 
-    local function pending(operation, message)
+    -- code: Couch's refusal code, when it gave one (a move names a
+    -- target-conflict, #359).
+    local function pending(operation, message, code)
         state.pending = copy(operation)
         state.operation = nil
         state.phase = "pending"
         local effect = copy(operation.args)
         effect.kind, effect.operation = "reconcile", operation.witness.operation
-        effect.witness, effect.error = copy(operation.witness), message
+        effect.witness, effect.error, effect.code = copy(operation.witness), message, code
         return { effect }
     end
 
@@ -194,6 +198,10 @@ function M.new(context)
             -- Registration confirmation must never automatically resend a message.
             local args = copy(previous.args)
             args.resume_only = true
+            -- The operator pressed Alt+Return again (#357): once a pending
+            -- registration is confirmed, submit afresh, saving the current bytes.
+            -- The confirmation itself still sends nothing stale.
+            args.resubmit = (event.submit and operation == "register") or nil
             local witness = copy(previous.witness)
             witness.generation = state.generation
             return { issue(operation, args, witness) }
@@ -325,7 +333,7 @@ function M.new(context)
             if operation.args.submit then return notify(result.error or "Registered owner could not be confirmed") end
             return state.registration and {} or { { kind = "band", message = "Couch unavailable: agentic state unknown" } }
         end
-        if not valid then return pending(operation, result.error) end
+        if not valid then return pending(operation, result.error, result.code) end
         state.operation, state.pending = nil, nil
         state.registration = copy(result.registration)
         if kind == "rename" then
@@ -334,7 +342,10 @@ function M.new(context)
                 registration = copy(state.registration), witness = copy(operation.witness) } }
         end
         local effects = { { kind = "attach", registration = copy(state.registration), witness = copy(operation.witness) } }
-        if operation.args.resume_only then state.phase = "registered" else effects[2] = send(operation.args, event.now_ms) end
+        if operation.args.resume_only then
+            state.phase = "registered"
+            if operation.args.resubmit then effects[2] = { kind = "resubmit", witness = copy(operation.witness) } end
+        else effects[2] = send(operation.args, event.now_ms) end
         return effects
     end
 

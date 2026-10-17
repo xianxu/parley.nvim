@@ -63,6 +63,7 @@ its feature pages, and the three tutorials without reading personal files.
 - [Packaged Themes](ui/themes.md): Live preview and persistence for the starter colorschemes.
 - [Key Bindings Help](ui/keybindings.md): Configured shortcuts, aliases, disabled actions, and fixed picker controls.
 - [Breadcrumb Winbar](ui/breadcrumb.md): Per-window link trails, lock cells and snapshot restoration.
+- [Attention Finder](ui/attention_finder.md): Alt+Return submits as waiting, answered or seen (#354).
 - [Outline Navigation](ui/outline.md): Questions, markers, and branches; branch selection opens the child file.
 - [Lualine Integration](ui/lualine.md)
 - [Syntax Highlighting](ui/highlights.md)

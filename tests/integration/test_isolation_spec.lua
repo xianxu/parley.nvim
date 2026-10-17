@@ -64,3 +64,81 @@ describe("test isolation guard", function()
         assert.equals(1, vim.fn.filereadable(env.XDG_DATA_HOME .. "/nvim/sentinel"))
     end)
 end)
+
+-- #365: every spec starts from scripts/test-env.sh's allowlist, so the slot's
+-- live Couch thread never reaches a spec, and a bare couch/pair is the sentinel.
+describe("the allowlist environment (#365)", function()
+    local iso = require("parley.test_isolation")
+    local repo = vim.fn.getcwd()
+
+    it("this spec process sees no ambient Couch, Pair or terminal-owner name", function()
+        assert.same({}, iso.ambient())
+        assert.is_nil(vim.env.COUCH_THREAD_SCOPE)
+        assert.is_nil(vim.env.COUCH_THREAD_TAG)
+    end)
+
+    it("resolves a bare couch and pair to the sentinel, which records the call and refuses", function()
+        assert.equals(repo .. "/tests/fixtures/sentinel-bin/couch", vim.fn.exepath("couch"))
+        assert.equals(repo .. "/tests/fixtures/sentinel-bin/pair", vim.fn.exepath("pair"))
+        local log = vim.fn.tempname()
+        local result = vim.system({ "couch", "--session-sync", "lookup", "/x.md" },
+            { text = true, env = { PARLEY_TEST_SENTINEL_LOG = log } }):wait(5000)
+        assert.equals(97, result.code)
+        assert.matches("test sentinel", result.stderr)
+        assert.matches("^couch\t.*\t%-%-session%-sync lookup /x%.md\n$", table.concat(vim.fn.readfile(log, "b"), "\n"))
+        vim.fn.delete(log)
+    end)
+
+    it("the launcher passes exactly the allowlist, whatever the caller exports", function()
+        local root = vim.fn.tempname()
+        vim.fn.mkdir(root, "p")
+        local result = vim.system({ repo .. "/scripts/test-env.sh", "/usr/bin/env" }, { text = true, clear_env = true,
+            env = { PATH = "/usr/bin:/bin", HOME = root .. "/home", PARLEY_TEST_ENV_ROOT = root, TMPDIR = root,
+                COUCH_THREAD_SCOPE = "live", COUCH_THREAD_TAG = "live", PAIR_SLOT = "4", TMUX = "x",
+                NVIM = "/tmp/nvim.sock", ANTHROPIC_API_KEY = "secret", PARLEY_LIVE_GITHUB = "1" } }):wait(5000)
+        assert.equals(0, result.code, result.stderr)
+        local names = {}
+        for line in result.stdout:gmatch("[^\n]+") do names[#names + 1] = line:match("^([^=]+)=") end
+        table.sort(names)
+        assert.same({ "HOME", "PARLEY_LIVE_GITHUB", "PARLEY_TEST_ENV_ROOT", "PARLEY_TEST_SENTINEL_LOG", "PATH", "SHELL",
+            "TMPDIR" }, names)
+        assert.matches("PATH=" .. vim.pesc(repo) .. "/tests/fixtures/sentinel%-bin:/usr/bin:/bin\n", result.stdout)
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("lets each live flag carry only its own check's names", function()
+        local root = vim.fn.tempname()
+        vim.fn.mkdir(root, "p")
+        local function names(env)
+            local result = vim.system({ repo .. "/scripts/test-env.sh", "/usr/bin/env" }, { text = true, clear_env = true,
+                env = vim.tbl_extend("force", { PATH = "/usr/bin:/bin", PARLEY_TEST_ENV_ROOT = root,
+                    CLIPROXYAPI_API_KEY = "c", COUCH_THREAD_SCOPE = "s", COUCH_THREAD_TAG = "t" }, env) }):wait(5000)
+            assert.equals(0, result.code, result.stderr)
+            local found = {}
+            for line in result.stdout:gmatch("[^\n]+") do found[line:match("^([^=]+)=")] = true end
+            return found
+        end
+        local plain = names({})
+        assert.is_nil(plain.CLIPROXYAPI_API_KEY)
+        assert.is_nil(plain.COUCH_THREAD_SCOPE)
+        local conformance = names({ PARLEY_LIVE_CONFORMANCE = "1" })
+        assert.is_true(conformance.CLIPROXYAPI_API_KEY)
+        assert.is_nil(conformance.COUCH_THREAD_SCOPE)
+        local live_couch = names({ PARLEY_LIVE_COUCH = "1" })
+        assert.is_true(live_couch.COUCH_THREAD_SCOPE and live_couch.COUCH_THREAD_TAG)
+        assert.is_nil(live_couch.CLIPROXYAPI_API_KEY)
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("passes a credential only when the target names it in PARLEY_TEST_ENV_PASS", function()
+        local root = vim.fn.tempname()
+        vim.fn.mkdir(root, "p")
+        local result = vim.system({ repo .. "/scripts/test-env.sh", "/usr/bin/env" }, { text = true, clear_env = true,
+            env = { PATH = "/usr/bin:/bin", PARLEY_TEST_ENV_ROOT = root, ANTHROPIC_API_KEY = "k", OPENAI_API_KEY = "o",
+                PARLEY_TEST_ENV_PASS = "ANTHROPIC_API_KEY" } }):wait(5000)
+        assert.equals(0, result.code, result.stderr)
+        assert.matches("\nANTHROPIC_API_KEY=k\n", "\n" .. result.stdout)
+        assert.is_nil(result.stdout:find("OPENAI_API_KEY", 1, true))
+        vim.fn.delete(root, "rf")
+    end)
+end)

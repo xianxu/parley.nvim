@@ -225,7 +225,7 @@ describe("shared document bands", function()
         local failures = {}
         for _, item in ipairs({ typed, ordinary }) do
             vim.api.nvim_buf_set_lines(item.buf, -1, -1, false, { "new submission" })
-            failures[#failures + 1] = submitted(item, "operation failed:", true)
+            failures[#failures + 1] = submitted(item, "not confirmed: submit again", true)
         end
         assert.same(failures[1], failures[2])
     end)
@@ -239,7 +239,7 @@ describe("shared document bands", function()
         document.submit(ordinary.buf)
         await(function() return document.status(ordinary.buf).phase == "pending" end)
         assert.is_nil(ss.identity(ordinary.buf))
-        compare_feedback(typed, ordinary, "operation failed: published but reply unavailable", true)
+        compare_feedback(typed, ordinary, "not confirmed: submit again · published but reply unavailable", true)
     end)
 
     it("highlights a real pending move recovery when OLD is reopened", function()

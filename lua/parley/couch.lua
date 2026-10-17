@@ -36,11 +36,12 @@ end
 
 --- Run a couch query; cb(decoded) with nil unless it exited 0 with Code "ok".
 --- JSON null decodes to nil (never vim.NIL), so a missing field reads as absent.
-M.query = function(argv, cb)
+--- `options` reaches vim.system (e.g. { timeout = ms }; expiry is a nonzero exit).
+M.query = function(argv, cb, options)
 	return M.run(argv, function(obj)
 		local decoded, data = pcall(vim.json.decode, obj.stdout or "", { luanil = { object = true, array = true } })
 		cb(obj.code == 0 and decoded and type(data) == "table" and data.Code == "ok" and data or nil)
-	end)
+	end, options)
 end
 
 local function binding(actor)

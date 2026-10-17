@@ -347,6 +347,10 @@ local config = {
 	default_keymaps = true,
 	-- File-level Back, independent of same-file cursor jumps.
 	global_shortcut_file_back = { modes = { "n", "i" }, shortcut = "<M-O>" },
+	-- The attention finder (#354): Alt+Return submits, waiting, answered or seen.
+	-- <C-y><Space> joins the <C-y> family; with the completion popup showing it
+	-- stays accept-then-space in Insert mode.
+	global_shortcut_attention = { modes = { "n", "i" }, shortcut = { "<M-Space>", "<C-y><Space>" } },
 	-- local shortcuts bound to the chat buffer
 	-- (be careful to choose something which will work across specified modes)
 	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = { "<C-g><C-g>" } },
@@ -489,6 +493,16 @@ local config = {
 	-- minutes holding the lock.
 	session_sync_stale_minutes = 5,
 	session_sync_ping_minutes = 15,
+	-- #357: how long an Alt+Return submit (the registry stage and the send
+	-- together) may take before it shows "not confirmed: submit again". The
+	-- editor never waits for it; a busy machine's couch CLI can take seconds.
+	-- Every other asynchronous registry request (the open-time lookup, a
+	-- move's rename) uses the same deadline.
+	agentic_submit_timeout_ms = 15000,
+	-- #357, #359: the one move that still asks Couch inline, a :saveas! onto an
+	-- existing file (BufFilePost decides before Neovim writes), so it stays
+	-- modest. Every other move asks nothing first.
+	agentic_move_timeout_ms = 5000,
 	-- Agent for document review. NIL by default (#215): it used to name
 	-- "Claude-Sonnet", which is absent from the shipped roster — and since
 	-- get_agent never returns nil, that did not fall through, it silently
@@ -626,6 +640,13 @@ local config = {
 		-- (or, without one, its question alone, truncated); "full" renders them
 		-- like any exchange. Applies whether or not `enable` is on (#352).
 		side_chats = "summary",
+	},
+
+	-- the attention finder (#354): files submitted with Alt+Return, as waiting,
+	-- answered or seen. A seen entry (opened from the finder after its answer)
+	-- leaves the finder this many minutes later.
+	attention = {
+		seen_grace_minutes = 60,
 	},
 
 	-- memory preferences: per-tag user preference profiles from chat history

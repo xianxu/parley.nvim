@@ -999,6 +999,9 @@ M.setup = function(opts)
 	end)
 	require("parley.skills.review.diag_display").set(true)
 
+	-- The attention finder (#354) counts a file as seen when the operator looks at it.
+	require("parley.attention").setup()
+
 	-- Register all global keymaps from the keybinding registry
 	kb_registry.register_global(
 		{ "global", "repo", "note", "issue", "vision", "chat" },
@@ -1006,6 +1009,7 @@ M.setup = function(opts)
 		{
 			help = function() M.cmd.KeyBindings() end,
 			file_back = function() M.cmd.FileBack() end,
+			attention = function() M.cmd.Attention() end,
 			chat_new = function() M.cmd.ChatNew({}) end,
 			chat_finder = function() M.cmd.ChatFinder() end,
 			chat_review = function() M.cmd.ChatReview({}) end,
@@ -3891,10 +3895,14 @@ M.move_chat_tree = function(file_name, target_dir)
 	-- Move all files
 	-- Prove membership for the whole set before any sibling moves. An unavailable
 	-- registry is not evidence that the existing plain-file path is safe.
+	-- Ask about every file before refusing (#359): each unknown identity starts
+	-- its background lookup now, so one rerun suffices for the whole tree.
+	local refusal
 	for _, src in ipairs(tree_files) do
 		local member, membership_error = require("parley.agentic_document").move_membership(src)
-		if member == nil then return nil, membership_error end
+		if member == nil and not refusal then refusal = membership_error end
 	end
+	if refusal then return nil, refusal end
 	for _, src in ipairs(tree_files) do
 		local handled, moved, move_error = require("parley.agentic_document").move_path(src, path_map[src])
 		if handled then
@@ -5083,6 +5091,8 @@ M.cmd.CopyContext = function() copy_mod.copy_context(2, 2) end
 M.cmd.CopyContextWide = function() copy_mod.copy_context(5, 10) end
 
 M.cmd.FileBack = function() return require("parley.file_history").back() end
+-- The attention finder (#354): files submitted with Alt+Return, waiting, answered or seen.
+M.cmd.Attention = function() return require("parley.attention").open() end
 
 -- One invocation generation invalidates older entity pickers and resolutions.
 local reference_generation = 0
