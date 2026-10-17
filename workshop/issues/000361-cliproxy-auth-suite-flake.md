@@ -1,12 +1,12 @@
 ---
 id: 000361
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-17
 estimate_hours:
-card_mirror: 'a6ec29171edf4a09a6c807922171ebab333400a3' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'f56804cf1787288f7c23dd232aeb959c750e5311' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T02:19:20-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "4ace9bce", done: "e3120362"}
+actual_hours: 0.72
 ---
 
 # Cliproxy expired-token recovery intermittently retries instead of prompting
