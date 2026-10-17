@@ -34,14 +34,7 @@ end
 local function start_fake(port, env)
     local handle, _, err = fixture_process.spawn(FAKE, { "--port", tostring(port), "--response-mode", "stream" }, env)
     assert(handle, "spawn fake: " .. tostring(err))
-    local up = false
-    vim.wait(5000, function()
-        local c = uv.new_tcp()
-        c:connect("127.0.0.1", port, function(e) up = e == nil; c:close() end)
-        vim.wait(50, function() return false end)
-        return up
-    end, 50)
-    assert(up, "fake did not come up on port " .. port)
+    assert(ready_port.wait_listening(port), "fake did not come up on port " .. port)
 end
 
 describe("streamed answer integrity under interference (#229)", function()

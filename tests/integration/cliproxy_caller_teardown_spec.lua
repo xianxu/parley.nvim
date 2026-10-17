@@ -43,16 +43,7 @@ local mark
 local function start_fake(port, mode)
     local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port), "--mode", mode })
     assert(handle, "spawn fake: " .. tostring(err))
-    vim.wait(5000, function()
-        local ok = false
-        local c = uv.new_tcp()
-        c:connect("127.0.0.1", port, function(err)
-            ok = err == nil
-            c:close()
-        end)
-        vim.wait(100, function() return false end)
-        return ok
-    end, 50)
+    assert(ready_port.wait_listening(port), "fake did not come up on port " .. port)
     return pid
 end
 
