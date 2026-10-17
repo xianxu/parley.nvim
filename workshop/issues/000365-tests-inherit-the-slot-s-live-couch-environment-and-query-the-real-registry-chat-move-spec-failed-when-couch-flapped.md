@@ -58,6 +58,7 @@ Quick flow. The shape follows pair#617, as the TL asked: an allowlist environmen
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Round 1 findings fixed at 1ce4859c. BR-1: each PARLEY_LIVE_* flag carries its own names (integration test). BR-2: env -u NAME, so values never reach argv (static test: only PATH and the sentinel log are built). BR-3: make check-couch-actors-live runs couch_spec alone with PARLEY_LIVE_COUCH, calling the real binary past the sentinel; RUN_SPEC strips the flag. Minors: one SENTINEL_CHECK per orphan gate (test; mutation fails it), per-target sentinel logs. test_isolation_spec unit 14/14, integration 9/9, couch_spec 5/5, fixture_lifecycle 4/4. Previous full suite green on e7a42fb4 with live COUCH_THREAD_* exported; rerun on 1ce4859c recorded separately.; review verdict: FIX-THEN-SHIP
 - Built on 2026-10-16. `NVIM` is left out of the denied names: Neovim sets it in every job it starts, so a spec sees the harness's own parent (plenary runs each file in a child). The launcher strips the operator's anyway.
 - `couch_spec`'s "couch conformance (live)" case now runs pending under the harness, since no thread is visible. That is by design: a live check must not ride on the operator's ambient thread.
 - Mutation check: letting the launcher pass `COUCH_THREAD_SCOPE` fails both the in-process guard and the exact-allowlist case.
@@ -70,7 +71,11 @@ Quick flow. The shape follows pair#617, as the TL asked: an allowlist environmen
   - Minor: a test pins one SENTINEL_CHECK per orphan gate (mutation: dropping one fails it).
   - Minor: the sentinel log is per target (`sentinel-$@.log`).
 
+- Close review round 2: FIX-THEN-SHIP with no blocking findings, so codecomplete is published. Its three Minor findings are fixed here:
+  - `PARLEY_LIVE_COUCH` is stripped in `TEST_RUN` and in every launch except `check-couch-actors-live`. Before, an exported flag reached `test-spec` and the other targets. A scan test pins this, and mutating TEST_RUN's strip fails it.
+  - `SENTINEL_LOG` is per target, pinned by the same test.
+  - The atlas sentence about `env -i` is corrected, and the list is split from the sentinel paragraph.
+
 ## Revisions
 
 - **2026-10-16, close review round 1.** The launcher removes names with `env -u` instead of rebuilding the environment from `env -i NAME=value`, so values stay out of argv. Live opt-ins carry their own names. The live `--actors` check moves to its own target. The sentinel log is per target.
-

@@ -59,7 +59,9 @@ TEST_NVIM_DIR = $(eval TEST_NVIM_DIR := $$(shell scripts/test-nvim.sh))$(TEST_NV
 # allowlist of these names (no ambient COUCH_*, PAIR_* or terminal owner) and puts
 # the sentinel couch/pair first on PATH. TEST_RUN is the prefix for one command.
 TEST_ENV = PARLEY_TEST_ENV_ROOT="$(TEST_ENV_ROOT)" HOME="$(TEST_HOME)" XDG_CONFIG_HOME="$(TEST_XDG)/config" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)" $(if $(TEST_NVIM_DIR),PATH="$(TEST_NVIM_DIR):$$PATH")
-TEST_RUN = $(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" "$(CURDIR)/scripts/test-env.sh"
+# The real Couch thread reaches a spec only through check-couch-actors-live, the
+# one target that sets PARLEY_LIVE_COUCH after this strip; every TEST_RUN drops it.
+TEST_RUN = $(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" env -u PARLEY_LIVE_COUCH "$(CURDIR)/scripts/test-env.sh"
 # One log per target ($@), so concurrent targets never truncate each other's evidence.
 SENTINEL_LOG = $(TEST_ENV_ROOT)/sentinel-$@.log
 # The sentinel gate (#365): a call to the real couch/pair that no fake shadowed.
@@ -233,7 +235,7 @@ PERF_OUTPUT ?= $(TEST_TMP)/perf/parley-chat-typing.json
 perf:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
-	$(TEST_ENV) PERF_OUTPUT="$(PERF_OUTPUT)" PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+	$(TEST_ENV) PERF_OUTPUT="$(PERF_OUTPUT)" PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" env -u PARLEY_LIVE_COUCH "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 	  -c "lua require('tests.perf.chat_typing').start()" || rc=1; \
 	$(ORPHANS) --phase after || rc=1; \
 	$(SENTINEL_CHECK) || rc=1; \
@@ -324,7 +326,7 @@ check-sdlc-conformance:
 check-couch-actors-live:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
-	PARLEY_LIVE_COUCH=1 $(TEST_RUN) nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+	$(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" PARLEY_LIVE_COUCH=1 "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 	  -c "PlenaryBustedFile tests/unit/couch_spec.lua" -c "qa!" || rc=1; \
 	$(ORPHANS) --phase after || rc=1; \
 	$(SENTINEL_CHECK) || rc=1; \

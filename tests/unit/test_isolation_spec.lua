@@ -107,6 +107,25 @@ describe("every harness nvim starts through the allowlist launcher", function()
         assert.is_true(launches >= 7, "found only " .. launches .. " nvim launches; the scan is stale")
         assert.same({}, bare)
     end)
+    it("strips PARLEY_LIVE_COUCH from every launch but check-couch-actors-live, and logs per target", function()
+        local lines, carrying, test_run = vim.fn.readfile("Makefile.parley"), {}, nil
+        for n, l in ipairs(lines) do
+            if l:match("^TEST_RUN = ") then test_run = l end
+            if l:match("^SENTINEL_LOG = ") then assert.truthy(l:find("$@", 1, true), "SENTINEL_LOG is not per target") end
+            if not l:match("^%s*#") and l:find('scripts/test-env.sh" nvim', 1, true)
+                and not l:find('env -u PARLEY_LIVE_COUCH "$(CURDIR)/scripts/test-env.sh" nvim', 1, true) then
+                carrying[#carrying + 1] = n
+            end
+        end
+        assert.truthy(test_run and test_run:find("env -u PARLEY_LIVE_COUCH", 1, true), "TEST_RUN keeps the Couch flag")
+        assert.equals(1, #carrying, "launches that keep PARLEY_LIVE_COUCH: " .. vim.inspect(carrying))
+        local target
+        for i = carrying[1], 1, -1 do
+            target = lines[i]:match("^([%w-]+):")
+            if target then break end
+        end
+        assert.equals("check-couch-actors-live", target)
+    end)
 end)
 
 -- #365 close review: every target that runs specs checks the sentinel after
