@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "d50d682c", done: "d1ee8c53"}
 ---
 
 # New parley chats declare collaboration-mode: collaboration (S2 M2 follow-up)
