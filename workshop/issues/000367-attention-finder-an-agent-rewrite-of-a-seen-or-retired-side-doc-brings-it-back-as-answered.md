@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "9789166a", done: "edfe67b7"}
 ---
 
 # Attention finder: an agent rewrite of a seen or retired side doc brings it back as answered
