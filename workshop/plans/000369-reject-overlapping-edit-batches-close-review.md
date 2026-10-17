@@ -73,3 +73,73 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"116b8a96-d2af-472d-9f2b-add4f8906332","repository":"github.com/xianxu/parley.nvim","issue_id":"000369","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/226c39ef00a92b50","reviewed_head":"be2bcad41a9e7bc27fa907b933c7e4993dd862aa","slot":"parley.nvim:3","requested_at":"2026-10-17T04:07:13.261809Z"},"phase":"finished","pid":66749,"started_at":"2026-10-17T04:07:13.433011Z","finished_at":"2026-10-17T04:09:18.192241Z","session_id":"e1558855-00d9-4a01-8f19-88fc7030c9e5","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T21:11:41-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 369 — Reject overlapping edit batches |
+| repo | parley.nvim |
+| issue file | workshop/issues/000369-reject-overlapping-edit-batches.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | e34b34d3863c3a823ab2d13ab6985dc31634d7fc..6184b45993c76622407b6a68bbdd97f7fb62bff9 |
+| command | sdlc close --issue 369 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T21:11:41-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Both prior fixes look correct in the diff. Now I'm finding the test runner so I can run the changed specs.
+
+Running the changed specs through the make harness so the test environment is set up correctly.
+
+Now reverting the message fix to confirm the new assertions fail without it.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Both earlier findings are fixed, and each fix covers the whole class of problem, not just the line that was flagged. The overlap error now shows each edit's text next to its own batch number. Tests check the exact message in both batch orders, and they fail without the fix. The header comment in `skill_edits.lua` now names the real caller. A grep confirms `tools/file_transform.lua:44` is the only place outside the module that calls `compute_edits`, and both `propose_edits` paths go through it. The changes to the issue file only record the close: the status, `actual_hours` and a Log line. `## Spec`, `## Revisions` and `## Done when` are unchanged, and no new behaviour was added. Nothing blocks SHIP.
+
+1. **Strengths**
+   - `lua/parley/skill_edits.lua:60-65`: the two edits are put in batch order by swapping the records themselves, not just the index numbers. So each text snippet always stays with its own number, and the bug can't come back by this route.
+   - `tests/unit/skill_edits_spec.lua:92-94`: the loop over overlap shapes now checks the exact message in the reversed order. That is the order where the old message was wrong.
+   - The tests compare the whole message (`assert.equals`, or a plain-text match in the IO specs), so a wrong pairing can't slip through a loose pattern.
+
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor:** none new. The generated "closed" Log line was inserted above the existing "Filed from #362" paragraph rather than after it. That's cosmetic and comes from the tool, so I'm not raising it.
+
+5. **Test coverage notes:** I ran four specs at head through the make test environment, and all passed: `skill_edits_spec`, `tools_builtin_propose_edits_spec`, `integration/async_builtin_spec` and `tool_file_transform_spec`. I then put the base version of `skill_edits.lua` back in the disposable checkout and ran the first three again:
+   - `skill_edits_spec`: 6 of 12 failed.
+   - `propose_edits`: 1 failed.
+   - `async_builtin`: 1 failed.
+
+   Afterwards I restored the file, and the working tree is clean. So the fix is reachable, and the tests do fail without it.
+
+6. **Architecture (this window only)**
+   - **ARCH-DRY: pass.** The overlap message is still built in one place, the shared engine. The three test files assert the same text, which is acceptable for tests.
+   - **ARCH-PURE: pass.** The message is built purely from data. The unit specs test it with no IO.
+   - **ARCH-PURPOSE: pass.** For BR-1, I checked the window for any other error that names a pair; there are none. For BR-2, I checked every claim that something is the "single source" or the "one caller". `propose_edits.lua:7` ("single-source `parley.skill_edits.compute_edits`") is accurate, and no stale sibling claims remain.
+
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      skill_edits.lua:60-65 now shows "edits #a (snipA) and #b (snipB) overlap", with each snippet next to its own batch number. Exact-message asserts in skill_edits_spec (both orders), propose_edits and async_builtin specs fail with the base engine (6+1+1 red) and pass at head.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The header now names tools/file_transform as the one caller. A grep confirms file_transform.lua:44 is the only compute_edits call site, and propose_edits.lua:48 and :58 route through file_transform.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"9e6adc6e-7a89-4784-9b27-e10e1687682a","repository":"github.com/xianxu/parley.nvim","issue_id":"000369","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/0a856e0cd0a1f7da","reviewed_head":"6184b45993c76622407b6a68bbdd97f7fb62bff9","slot":"parley.nvim:3","requested_at":"2026-10-17T04:10:33.683113Z"},"phase":"finished","pid":97542,"started_at":"2026-10-17T04:10:33.880285Z","finished_at":"2026-10-17T04:11:40.673704Z","session_id":"21d0c211-d9dd-40aa-b7e5-0699115c0e46","outcome":"returned"}] -->

@@ -64,6 +64,8 @@ Quick flow. Once every edit has its unique position, `skill_edits.compute_edits`
 ## Log
 
 
+
+- 2026-10-16: closed — Advisories fixed: the overlap error now reads "edits #1 (alpha) and #2 (pha) overlap", each snippet beside its batch number, pinned exactly in the pure specs for both orders of every shape; the header names tools/file_transform as the one caller. skill_edits, propose_edits, async_builtin, file_transform and review specs green; lint clean. (fixed-then-ship); review verdict: SHIP
 - 2026-10-16: closed — Pure specs: the issue reproducer (alpha then pha) and the containment, partial-overlap, identical-span and same-start shapes in both batch orders are refused, with no content and the pair named; adjacent and disjoint spans apply as before. All six were red before the fix. IO: propose_edits.handler (sync) and execute_async on the fake tool filesystem (async) both return the overlap error with the file unchanged and no backup. With the guard removed, all eight new specs fail. skill_edits, propose_edits, async_builtin, file_transform and review specs green; lint clean.; review verdict: SHIP
 Filed from #362's bounded investigation. The local guard already protects its
 own invocation; this is independent shared-tool work for another slot.
