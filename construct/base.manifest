@@ -29,7 +29,7 @@ internal  prose AGENTS.local.md
 # row has weave write its digest sidecar (issue.json.weave-sha256, committed
 # beside it), so a cold checkout regenerates the file after an ariadne
 # vocabulary change instead of refusing it, and a hand edit is still refused.
-internal ship construct/generated/vocabulary/issue.json
+internal  ship construct/generated/vocabulary/issue.json
 
 # ── Skills ────────────────────────────────────────────────────────────────────
 # parley declares NO `skill` rows. The adapted (superpowers-*) and shared local

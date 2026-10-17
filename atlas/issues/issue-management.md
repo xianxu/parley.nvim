@@ -29,9 +29,10 @@ never runs weave, so the installed tree must already hold it. The manifest's
 `issue.json.weave-sha256`, committed beside it. On a cold checkout (CI, a fresh
 clone, no ownership inventory), the matching digest lets weave regenerate the
 file after an ariadne vocabulary change instead of refusing it as foreign, while
-a hand edit, which no longer matches, is still refused. The loader validates category/lifecycle structure
-and limits regular-file reads to 1 MiB. A ready or unavailable result is cached;
-explicit `setup()` reloads it so a repaired installation recovers.
+a hand edit, which no longer matches, is still refused. The loader validates
+category/lifecycle structure and limits regular-file reads to 1 MiB. A ready or
+unavailable result is cached; explicit `setup()` reloads it so a repaired
+installation recovers.
 
 Missing or invalid data does not prevent chat startup. Raw issue records remain
 readable and sort by ID (archive order still uses mtime), without fabricated
