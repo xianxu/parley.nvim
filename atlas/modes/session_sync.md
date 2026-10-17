@@ -243,7 +243,10 @@ the current effective owner; an idempotent replay succeeds. Only then is the
 matching OLD lock removed and the completed journal deleted.
 Unresolved journals are never aged out. Lease files are bounded to 4096 IDs per
 namespace and remain allocated; deleting a live lease pathname would split
-execution ownership. There is no automatic lease-file garbage collection.
+execution ownership. Lease digests preserve raw identity bytes across Neovim
+versions; when an older SHA API rejects NUL, the boundary hashes raw stdin with
+sha256sum/shasum and refuses before allocation if neither is available. There is
+no automatic lease-file garbage collection.
 
 Code: `agentic_document.lua` owns admission, cached knowledge and native move
 hooks and the public Parley movers. Owned file moves journal intent before an
