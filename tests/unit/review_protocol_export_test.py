@@ -293,6 +293,17 @@ class ExportTest(unittest.TestCase):
             self.assertEqual(0, self.cli(source, output).returncode)
             self.assertEqual('local', (output / 'local-adapter.md').read_text())
 
+    def test_old_v1_cli_reports_absent_collaboration_modes(self):
+        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+            base = Path(tmp)
+            source = self.make_source(base)
+            output = base / 'bundle'
+            for check in (False, True):
+                result = self.cli(source, output, check)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn('export has no collaboration-modes member; '
+                              'the synced prompt has no collaboration modes', result.stderr)
+
     def test_cli_refuses_corrupt_source_and_unsafe_output_without_writes(self):
         with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
             base = Path(tmp)
@@ -338,6 +349,8 @@ class ExportTest(unittest.TestCase):
         output = ROOT / 'lua/parley/skills/review'
         manifest = json.loads((output / 'export.json').read_bytes())
         self.api.validate_manifest(manifest)
+        self.assertEqual(['collaboration-modes.md'],
+                         [m['path'] for m in manifest['members'] if m['role'] == 'collaboration-modes'])
         for member in manifest['members']:
             if member['role'] != 'adapter':
                 data = (output / member['path']).read_bytes()
@@ -346,6 +359,10 @@ class ExportTest(unittest.TestCase):
         skill = (output / 'SKILL.md').read_text()
         self.assertIn((output / 'round.md').read_text().strip(), skill)
         self.assertIn((output / 'review-convention.md').read_text().strip(), skill)
+        collaboration = (output / 'collaboration-modes.md').read_text().strip()
+        self.assertEqual(1, skill.count(collaboration))
+        self.assertLess(skill.index((output / 'review-convention.md').read_text().strip()),
+                        skill.index(collaboration))
         self.assertNotIn('adapters/file-edit.md\n', skill)
 
 

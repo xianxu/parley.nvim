@@ -43,7 +43,7 @@ S2 M1 (ops `universal-agent-input-interface/design.side/01-s2-section-modes.md`,
 - [x] Extend owned-output preflight and add Python pure/real-CLI regressions
   for ordering, corruption, duplicate/unknown roles, stale/unsafe output and
   examples exclusion. Verify the existing local source orders its adapter last.
-- [ ] Coordinate with ariadne:2 and snapshot the landed S2 M1 export; verify
+- [x] Coordinate with ariadne:2 and snapshot the landed S2 M1 export; verify
   --check and standalone packaged composition. Update atlas and README.
 - [ ] Run focused/mapped tests and a recorded full suite, close-review, land
   on SHIP and report to the hub.
@@ -89,6 +89,19 @@ its --check passes unchanged, proving backward compatibility. Await the landed
 S2 M1 pin before refreshing the snapshot and final recorded full suite/close.
 Couch discovery in a login shell temporarily failed; the same bare command in
 a non-login shell resolves the installed binary normally. No resend needed.
+
+### 2026-10-16 — landed snapshot and compatibility notice verified
+
+Snapshot generated from an isolated git archive of the landed producer pin,
+including its canonical grammar symlink. The new packaged member is 20746
+bytes with SHA256 2ccd78b5c8834f42d9551c78b66c5aba9f2d83847a40436a373345f6a7ae64f3;
+the manifest hash matches the producer handoff. No examples were copied.
+The notice and shipped-member assertions first failed for their missing
+behavior, then all sixteen Python contract tests passed. The mapped
+make test-spec SPEC=modes/review run passed, including standalone copied-package
+composition round -> grammar -> collaboration modes -> selected review modes ->
+local adapter, with clean process census. Exact pinned-source --check and
+git diff --check passed. Next: recorded full suite and the SDLC close review.
 
 ## Revisions
 

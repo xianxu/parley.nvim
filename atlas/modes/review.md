@@ -212,7 +212,9 @@ Add `--check` for a read-only freshness check. The plugin runs from its packaged
 files, with no sibling Ariadne checkout or runtime peer lookup required.
 `export.json` records the source manifest; generated `SKILL.md` combines the
 round, grammar and the optional `collaboration-modes.md` member in that order.
-That role is a singleton in version 1; older exports without it remain valid.
+That role is a singleton in version 1; older exports without it remain valid
+and the sync CLI prints a notice that the resulting prompt lacks collaboration
+modes. The shipped snapshot includes it; package tests require its presence.
 It receives the same digest, output-preflight and freshness checks; examples
 are not exported. `local-adapter.md` stays Parley-owned and is appended last.
 The Couch file-edit adapter is excluded from local composition. The mapped

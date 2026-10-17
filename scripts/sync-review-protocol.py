@@ -153,6 +153,9 @@ def main():
     args = parser.parse_args()
     try:
         expected = read_source(args.source)
+        if 'collaboration-modes.md' not in expected:
+            print('review protocol export: export has no collaboration-modes member; '
+                  'the synced prompt has no collaboration modes', file=sys.stderr)
         actual = read_output(args.output)
         differences = compare_snapshot(expected, actual)
         if args.check or differences['extra']:
