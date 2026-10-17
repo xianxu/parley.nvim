@@ -1,6 +1,6 @@
 ---
 id: 000359
-status: codecomplete
+status: done
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
@@ -22,6 +22,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: aae97db73b9403cb42264d9f7e39a5e40d877513
         evidence_commit: 0dcbb1b4116dd59b1632ca8973a414a6a10a9139
+        landed_commit: 601798ecb09db76aebb7b2bfb402fbbbc0a31d75
 ---
 
 # Asynchronous rename protocol for agentic documents (BufFilePre/BufFilePost preflights)
