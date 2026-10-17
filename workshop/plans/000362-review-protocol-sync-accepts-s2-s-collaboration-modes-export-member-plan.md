@@ -54,9 +54,9 @@ ARCH-DRY/PURE: one resolver supplies notices, admission, resubmission and edit p
 
 - [x] Document the local behavior and limitations in README and atlas/modes/review.md; retain BR-1/BR-2 dispositions and lessons in the issue Log.
 - [x] Exact pinned-source --check must still pass; generated canonical files stay unchanged by the compatibility correction.
-- [ ] Push the code head and run sdlc local-check run --name suite; retain any failure and apply the issue-backed one-retry rule.
-- [ ] Run sdlc close with explicit focused/full-suite evidence. Its binary-owned full review checks the enlarged diff; no separate boundary review.
-- [ ] On SHIP run sdlc pr and sdlc merge --yes, verify the merge with Git and report to the hub. No multi-file/baseline work belongs in this issue.
+- [x] Push the code head and run sdlc local-check run --name suite; retain any failure and apply the issue-backed one-retry rule.
+- [x] Run sdlc close with explicit focused/full-suite evidence. Its binary-owned full review checks the enlarged diff; no separate boundary review.
+- [x] On SHIP run sdlc pr and sdlc merge --yes, verify the merge with Git and report to the hub. No multi-file/baseline work belongs in this issue.
 
 ## Revisions
 

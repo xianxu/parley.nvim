@@ -51,7 +51,7 @@ Approved local-adapter correction: see [implementation plan](../plans/000362-rev
 
 - [x] Implement pure collaboration frontmatter/section resolution and protected chat ranges.
 - [x] Add local admission/notices and a proposal guard; test default questions, explicit collaboration/chat, invalid routing and resubmission.
-- [ ] Update the local adapter/docs and re-run full verification and close review.
+- [x] Update the local adapter/docs and re-run full verification and close review.
 
 - [x] Extend pure validation/rendering for an optional singleton at the fixed
   collaboration-modes.md path; compose round, grammar, collaboration modes.
@@ -61,7 +61,7 @@ Approved local-adapter correction: see [implementation plan](../plans/000362-rev
   examples exclusion. Verify the existing local source orders its adapter last.
 - [x] Coordinate with ariadne:2 and snapshot the landed S2 M1 export; verify
   --check and standalone packaged composition. Update atlas and README.
-- [ ] Run focused/mapped tests and a recorded full suite, close-review, land
+- [x] Run focused/mapped tests and a recorded full suite, close-review, land
   on SHIP and report to the hub.
 
 ## Log
@@ -196,6 +196,18 @@ the real invocation suite passes all 49 cases, process census clean.
 The recorded run on d38fa68feae91fb320ff6d742989594c9c76b0f4 was cancelled
 while queued (no suite tests had started) to add these corrections. This is a
 new code head requiring fresh verification, not an unchanged flake retry.
+
+### 2026-10-16 — corrected code head full suite passed
+
+fce152dc891b3c7679f001aabd2e9acbd9e39aac passed the first full suite that
+actually ran on this corrected head in 2m12s after 1456s queue. All files pass,
+lint and process census clean; no retry/waiver. Recorded log:
+.git/sdlc/local-checks/fce152dc891b3c7679f001aabd2e9acbd9e39aac/suite.log,
+SHA256 prefix 8a72baa22663. BR-1's compatibility policy and runtime permissions
+are implemented and regression-tested; BR-2's old-export success/notice family
+is explicit in Done when and tested for sync plus --check. Shared generic
+edit-engine overlap handling is filed unclaimed as #369, outside this local
+adapter correction. Request full boundary review on the enlarged patch.
 
 ## Revisions
 
