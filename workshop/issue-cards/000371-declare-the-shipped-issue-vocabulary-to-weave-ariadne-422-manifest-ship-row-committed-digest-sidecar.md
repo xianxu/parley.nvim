@@ -1,6 +1,6 @@
 ---
 id: 000371
-status: codecomplete
+status: done
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 1016075b4fc4e299a093513f3963a19f5f8d89e2
         evidence_commit: 9676af6056fa6e025d3fed65d36d17dbd4bc6bbf
+        landed_commit: 47589570c0a8e3469d3e2cf9efcf55a481992f08
 ---
 
 # Declare the shipped issue vocabulary to weave (ariadne#422): manifest ship row, committed digest sidecar
