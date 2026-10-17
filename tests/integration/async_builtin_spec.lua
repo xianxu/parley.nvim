@@ -1,7 +1,8 @@
+local arrival = require("tests.helpers.arrival")
 local A=require('parley.tools.async_builtin')
 local T=require('parley.tasker')
 local Fake=require('tests.helpers.fake_process')
-local function wait(fn)assert.is_true(vim.wait(2000,fn,1))end
+local function wait(fn)assert.is_true(vim.wait(arrival.MS,fn,1))end
 
 describe('asynchronous builtins',function()
     local processes

@@ -6,6 +6,7 @@
 
 -- Fixture strings, not transport tokens: the harness watch for a refusal
 -- with no words expects them (#261 M5).
+local arrival = require("tests.helpers.arrival")
 vim.g.parley_expected_unkeyed={'test abort'}
 local uv = vim.uv or vim.loop
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
@@ -113,7 +114,7 @@ describe("cliproxy on_abort teardown per caller", function()
         require("parley.memory_prefs").generate_preferences(
             { topicA = { "s1" }, topicB = { "s2" } },
             function(prefs) done = prefs end)
-        assert.is_true(vim.wait(1000, function() return done ~= nil end, 10))
+        assert.is_true(vim.wait(arrival.MS, function() return done ~= nil end, 10))
         tasker.run = original_run
 
         assert.equals(2, runs)

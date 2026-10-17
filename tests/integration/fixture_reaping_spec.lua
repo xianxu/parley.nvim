@@ -1,6 +1,7 @@
 -- #220: a harness process whose parent is gone must exit on its own. Every
 -- assertion here orphans a REAL process and waits for it to die; liveness is
 -- probed with uv.kill(pid, 0), never `ps`, which an agent sandbox refuses.
+local arrival = require("tests.helpers.arrival")
 local uv = vim.uv or vim.loop
 local ROOT = vim.fn.getcwd()
 local ORPHAN = ROOT .. "/tests/fixtures/orphan_me.sh"
@@ -22,7 +23,7 @@ local function orphan(argv, env)
     local done = vim.system(vim.list_extend({ ORPHAN, pidfile }, argv),
         env and { env = env } or {}):wait(5000)
     assert.equals(0, done.code, "orphan_me.sh failed: " .. tostring(done.stderr))
-    assert.is_true(vim.wait(3000, function() return vim.fn.filereadable(pidfile) == 1 end, 20),
+    assert.is_true(vim.wait(arrival.MS, function() return vim.fn.filereadable(pidfile) == 1 end, 20),
         "no pid was published")
     local pid = tonumber(vim.trim(table.concat(vim.fn.readfile(pidfile), "")))
     assert.is_truthy(pid, "unreadable pid")
@@ -154,7 +155,7 @@ describe("#220 the fixture seam owns every process it starts", function()
 
         fixture_process.reap()
         assert.equals(0, fixture_process.live())
-        assert.is_true(vim.wait(5000, function() return gone(pid) end, 50),
+        assert.is_true(vim.wait(arrival.MS, function() return gone(pid) end, 50),
             "reap() left pid " .. tostring(pid) .. " alive")
     end)
 
@@ -168,13 +169,13 @@ describe("#220 the fixture seam owns every process it starts", function()
         local transient = start()
 
         fixture_process.reap({ since = mark })
-        assert.is_true(vim.wait(5000, function() return gone(transient) end, 50),
+        assert.is_true(vim.wait(arrival.MS, function() return gone(transient) end, 50),
             "the marked reap left pid " .. tostring(transient) .. " alive")
         assert.is_false(gone(kept), "the marked reap killed a file-scope fixture")
         assert.equals(1, fixture_process.live())
 
         fixture_process.reap()
-        assert.is_true(vim.wait(5000, function() return gone(kept) end, 50))
+        assert.is_true(vim.wait(arrival.MS, function() return gone(kept) end, 50))
     end)
 
     it("forgets a process that exited on its own, so live() cannot over-count", function()
@@ -184,7 +185,7 @@ describe("#220 the fixture seam owns every process it starts", function()
         local handle, exited = fixture_process.spawn(
             ROOT .. "/tests/fixtures/fake_cliproxy", { "--port", "1", "--mode", "crash" })
         assert.is_truthy(handle)
-        assert.is_true(vim.wait(5000, exited, 50), "the crash-mode fake never exited")
+        assert.is_true(vim.wait(arrival.MS, exited, 50), "the crash-mode fake never exited")
         assert.equals(0, fixture_process.live())
     end)
 
@@ -193,7 +194,7 @@ describe("#220 the fixture seam owns every process it starts", function()
         -- shuts down gracefully.
         local pid = start()
         fixture_process.reap({ signal = "sigterm" })
-        assert.is_true(vim.wait(5000, function() return gone(pid) end, 50),
+        assert.is_true(vim.wait(arrival.MS, function() return gone(pid) end, 50),
             "sigterm did not stop pid " .. tostring(pid))
     end)
 end)

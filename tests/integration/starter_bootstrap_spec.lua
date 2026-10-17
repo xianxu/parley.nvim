@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local uv = vim.uv or vim.loop
 local entry = vim.fn.getcwd() .. '/packaging/starter-config/init.lua'
 local fixture = vim.fn.getcwd() .. '/tests/packaging/bootstrap_lazy.lua'
@@ -244,7 +245,7 @@ describe('starter bootstrap', function()
             env = vim.tbl_extend('force', env, { NVIM_APPNAME = 'parley', BOOTSTRAP_HOLD = hold }),
             text = true,
         })
-        assert.is_true(vim.wait(5000, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             return vim.fn.filereadable(hold .. '.ready') == 1
         end, 10))
         local second = vim.system({ 'nvim', '--headless', '-u', entry, '+qa!' }, {
@@ -267,7 +268,7 @@ describe('starter bootstrap', function()
             env = vim.tbl_extend('force', env, { NVIM_APPNAME = 'parley', BOOTSTRAP_HOLD = hold }),
             text = true,
         })
-        assert.is_true(vim.wait(5000, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             return vim.fn.filereadable(hold .. '.ready') == 1
         end, 10))
         first:kill(9)

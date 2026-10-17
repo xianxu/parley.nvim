@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local ok,Topic=pcall(require,'parley.response_topic')
 local D=require('parley.document')
 local Dispatcher=require('parley.dispatcher')
@@ -49,7 +50,7 @@ describe('independent automatic topic ownership',function()
         local final
         require('tests.helpers.stub').with_stub(D,'repair_step',function()error('topic exploded')end,function()
             local job=assert(Topic.start(doc,value,{terminal=function(result)final=result end}));jobs[#jobs+1]=job
-            assert(vim.wait(500,function()return final~=nil end,5),'the topic never retired')
+            assert(vim.wait(arrival.MS,function()return final~=nil end,5),'the topic never retired')
         end)
         assert.equals('failed',final.status)
         assert.equals(0,D.user_guard_stats(doc).live)
@@ -63,7 +64,7 @@ describe('independent automatic topic ownership',function()
             return {request=function()error('request exploded')end,cancel_operation=function()return false end}
         end,function()
             local job=assert(Topic.start(doc,value,{terminal=function(result)final=result end}));jobs[#jobs+1]=job
-            assert(vim.wait(500,function()return final~=nil end,5),'the topic never retired')
+            assert(vim.wait(arrival.MS,function()return final~=nil end,5),'the topic never retired')
         end)
         assert.equals('failed',final.status)
         assert.equals(0,D.user_guard_stats(doc).live)

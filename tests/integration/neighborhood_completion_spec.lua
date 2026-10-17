@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 local neighborhood = require("parley.neighborhood")
 
@@ -231,7 +232,7 @@ describe("neighborhood completion", function()
         }
         local buf, path = make_chat()
         parley.prep_chat(buf, path)
-        assert.is_true(vim.wait(500, function() return captured ~= nil end))
+        assert.is_true(vim.wait(arrival.MS, function() return captured ~= nil end))
         local blink = require('parley.spell_blink')
         blink.attach(buf, { blink = true }, require('tests.helpers.fake_blink').new())
         neighborhood.attach_cmp_completion(buf)

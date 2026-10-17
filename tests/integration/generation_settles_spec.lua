@@ -7,6 +7,7 @@
 -- Every wait M4 settles, and the test that pins each (#261 M4 review I4). The
 -- list carries its evidence: the last case below checks that every spec and
 -- case named here exists, so it cannot claim a test that is not there.
+local arrival = require("tests.helpers.arrival")
 local WAITS = {
     { "W1", { "tests/integration/generation_settles_spec.lua", "W1: a preparation whose start threw" },
         { "tests/integration/generation_settles_spec.lua", "W1: a request whose start threw" },
@@ -215,14 +216,14 @@ describe("every wait a generation holds settles", function()
         fake.adapters.stopping = function() kills = kills + 1 end
         fake.adapters.terminal = function(snapshot) final = snapshot end
         local r = start(doc, fake.adapters, { schedule = true })
-        assert.is_true(vim.wait(500, function() return #fake.preparations == 1 end, 5))
+        assert.is_true(vim.wait(arrival.MS, function() return #fake.preparations == 1 end, 5))
         fake:prepare()
-        assert.is_true(vim.wait(500, function() return #fake.requests == 1 end, 5))
+        assert.is_true(vim.wait(arrival.MS, function() return #fake.requests == 1 end, 5))
         -- Only the scheduled step writes, so a throw here escapes nothing but the
         -- step itself: the Deferred's error path.
         require("tests.helpers.stub").with_stub(D, "append", function() error("step exploded") end, function()
             fake:output(1, "answer")
-            assert.is_true(vim.wait(500, function() return final ~= nil end, 5), "the runner never reached terminal")
+            assert.is_true(vim.wait(arrival.MS, function() return final ~= nil end, 5), "the runner never reached terminal")
         end)
         assert.equals("fault", final.outcome)
         -- The Lua error is the diagnosis; `fault`'s own words come from the
@@ -249,7 +250,7 @@ describe("a stopped response never holds a slot", function()
     local Vault = require("parley.vault")
     local FakeProcess = require("tests.helpers.fake_process")
     local root, path, buf, processes, now, old_secret, old_run, baseline
-    local function wait(fn, what) assert.is_true(vim.wait(5000, fn, 1), what or "the response did not settle") end
+    local function wait(fn, what) assert.is_true(vim.wait(arrival.MS, fn, 1), what or "the response did not settle") end
     local function providers()
         local out = {}
         for _, p in pairs(processes.processes) do

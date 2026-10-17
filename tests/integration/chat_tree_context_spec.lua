@@ -1,6 +1,7 @@
 -- #233 over real files: the request context is the chat tree in depth-first
 -- order, cut at the exchange being submitted. Files are read from their loaded
 -- buffer when there is one, so an unsaved child is seen as the operator sees it.
+local arrival = require("tests.helpers.arrival")
 local tmp_dir = vim.fn.tempname() .. "-parley-chat-tree"
 local chat_dir = tmp_dir .. "/chats"
 vim.fn.mkdir(chat_dir, "p")
@@ -138,7 +139,7 @@ describe("chat context over a real chat tree (#233)", function()
         local resolved
         chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
             chat_file = child, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
-        assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10), "remote resolution never finished")
+        assert.is_true(vim.wait(arrival.MS, function() return resolved ~= nil end, 10), "remote resolution never finished")
         assert.equals("the cached page", resolved[url])
         local out = messages_for(child, 1, { remote = resolved })
         assert.is_truthy(table.concat(out, "\n"):find("the cached page", 1, true), table.concat(out, "\n"))
@@ -161,7 +162,7 @@ describe("chat context over a real chat tree (#233)", function()
         local resolved
         chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
             chat_file = named, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
-        assert.is_true(vim.wait(5000, function() return resolved ~= nil end, 10), "remote resolution never finished")
+        assert.is_true(vim.wait(arrival.MS, function() return resolved ~= nil end, 10), "remote resolution never finished")
         assert.equals("CACHED", resolved[url])
     end)
 
@@ -171,7 +172,7 @@ describe("chat context over a real chat tree (#233)", function()
         local resolved
         chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
             chat_file = later, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
-        assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10))
+        assert.is_true(vim.wait(arrival.MS, function() return resolved ~= nil end, 10))
         local chats = chat_respond.load_remote_reference_cache().chats
         for _, file in ipairs({ root, aside, nested }) do
             assert.is_nil(chats[file], "a lookup created a cache entry for " .. file)
@@ -198,7 +199,7 @@ describe("chat context over a real chat tree (#233)", function()
             local resolved
             chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
                 chat_file = child, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
-            assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10))
+            assert.is_true(vim.wait(arrival.MS, function() return resolved ~= nil end, 10))
             return resolved
         end
         local ok, err = pcall(function()
@@ -312,7 +313,7 @@ describe("chat context over a real chat tree (#233)", function()
             local ok, err = pcall(function()
                 chat_respond.resolve_remote_references({ parsed_chat = parsed, config = parley.config,
                     chat_file = root, exchange_idx = at, sequence = sequence }, function(value) resolved = value end)
-                assert.is_true(vim.wait(2000, function() return resolved ~= nil end, 10))
+                assert.is_true(vim.wait(arrival.MS, function() return resolved ~= nil end, 10))
             end)
             oauth.fetch_content = saved
             assert(ok, err)

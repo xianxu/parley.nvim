@@ -2,6 +2,7 @@
 -- that died mid-flow — its callback listener went with it, the browser redirect
 -- had nowhere to land, and NOTHING reported the death.
 
+local arrival = require("tests.helpers.arrival")
 local uv = vim.uv or vim.loop
 local parley = require("parley")
 local cliproxy = require("parley.cliproxy")
@@ -81,7 +82,7 @@ describe("cliproxy login", function()
             done, result = true, ok
         end)
         vim.api.nvim_list_uis = saved_uis
-        assert.is_true(vim.wait(8000, function() return done end, 25))
+        assert.is_true(vim.wait(arrival.MS, function() return done end, 25))
         assert.is_false(result)
         assert.matches('Sign%-in did not finish', all_notices())
         assert.is_nil(all_notices():find('exited 3', 1, true))

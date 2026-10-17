@@ -1,10 +1,11 @@
+local arrival = require("tests.helpers.arrival")
 local p=require('parley')
 local R=require('parley.chat_respond')
 local OAuth=require('parley.oauth')
 local root=vim.fn.tempname()..'-remote-preparation';vim.fn.mkdir(root,'p')
 p.setup({chat_dir=root,state_dir=root..'/state',providers={},api_keys={},default_agent='RemoteFixture',
  agents={{name='Choose a model',disable=true},{name='RemoteFixture',provider='openai',model={model='fixture'},system_prompt='Fixture',tools={}}}})
-local function wait(predicate)assert.is_true(vim.wait(3000,predicate,1),'remote preparation did not settle')end
+local function wait(predicate)assert.is_true(vim.wait(arrival.MS,predicate,1),'remote preparation did not settle')end
 local function snapshot(s)return R.response_snapshot(s)end
 describe('remote preparation positive child completion',function()
     local buf,session,children,requests,saves,old_fetch,old_query,old_save

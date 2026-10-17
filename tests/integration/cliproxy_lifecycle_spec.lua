@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local ready_port = require("tests.helpers.ready_port")
 -- Integration tests for lua/parley/cliproxy.lua (issue #131).
 -- Exercises the IO seam against a process-level fake (tests/fixtures/fake_cliproxy),
@@ -981,7 +982,7 @@ describe("cliproxy IO lifecycle", function()
             local pid = start_keyless(port, write_store())
             local n = cliproxy.stop()
             assert.equals(1, n)
-            assert.is_true(vim.wait(3000, function()
+            assert.is_true(vim.wait(arrival.MS, function()
                 local ok, _, name = uv.kill(pid, 0)
                 return ok == nil and name == "ESRCH"
             end, 10))

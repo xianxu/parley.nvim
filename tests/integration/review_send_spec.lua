@@ -1,5 +1,6 @@
 -- #332: pane Alt+Return saves, registers and submits unchanged Markdown.
 -- Outside a pane the existing instruction-driven review stays local.
+local arrival = require("tests.helpers.arrival")
 local rs = require("parley.review_send")
 local review = require("parley.skills.review")
 local uv = vim.uv or vim.loop
@@ -83,7 +84,7 @@ describe("review_send", function()
     local doc = { "---", 'process-instruction: "[copy-edit] keep the voice"', "---", "", "- a" }
 
     local function delivered(count)
-        assert.is_true(vim.wait(5000, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             local status = require("parley.agentic_document").status(buf)
             return #sent() == count and status and status.phase == "registered" and not status.operation
         end))
@@ -164,7 +165,7 @@ describe("review_send", function()
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         open(doc)
         alt_return()
-        assert.is_true(vim.wait(1000, function() return invoked ~= nil end))
+        assert.is_true(vim.wait(arrival.MS, function() return invoked ~= nil end))
         assert.equals(buf, invoked.buf)
         assert.same({ modes = { "copy-editing" }, instruction = "keep the voice" }, invoked.args)
         assert.same({}, sent())
@@ -207,7 +208,7 @@ describe("review_send", function()
             end
             return false
         end
-        assert.is_true(vim.wait(2000, told))
+        assert.is_true(vim.wait(arrival.MS, told))
         assert.same({}, sent())
         assert.is_nil(invoked)
     end)
@@ -296,7 +297,7 @@ describe("review_send", function()
         local words = vim.tbl_map(function(i) return i.word end, offered)
         assert.truthy(vim.tbl_contains(words, "copy-editing]"))
         assert.truthy(vim.tbl_contains(words, "free-form]"))
-        assert.is_true(vim.wait(1000, function() return lines()[2]:sub(1, 23) == 'process-instruction: "[' end))
+        assert.is_true(vim.wait(arrival.MS, function() return lines()[2]:sub(1, 23) == 'process-instruction: "[' end))
         assert.equals('process-instruction: "[' .. words[1] .. ' keep"', lines()[2])
     end)
 end)

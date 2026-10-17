@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local float_picker = require("parley.float_picker")
 
 -- PROMPT_OVERHEAD: 5 rows consumed by prompt window borders + content.
@@ -740,7 +741,7 @@ describe("float_picker", function()
             vim.api.nvim_feedkeys(
                 vim.api.nvim_replace_termcodes("<C-a>", true, false, true), "x", true
             )
-            assert(vim.wait(200, function() return mapped and cancel_count == 1 end))
+            assert(vim.wait(arrival.MS, function() return mapped and cancel_count == 1 end))
 
             assert.equals(1, cancel_count)
             assert.is_nil(find_any_float_win(), "loading mapping should dismiss the picker")

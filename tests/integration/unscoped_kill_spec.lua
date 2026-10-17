@@ -4,10 +4,11 @@
 -- over the stateful process fake behind its runtime seam; each test fires the
 -- deadline timer and lets the fake exit on the signal, as luv reports a kill
 -- (code 0, signal 15).
+local arrival = require("tests.helpers.arrival")
 local T = require("parley.tasker")
 local Fake = require("tests.helpers.fake_process")
 
-local function wait(fn) assert.is_true(vim.wait(2000, fn, 1)) end
+local function wait(fn) assert.is_true(vim.wait(arrival.MS, fn, 1)) end
 
 describe("a killed unscoped process is a failure", function()
     local processes, fresh

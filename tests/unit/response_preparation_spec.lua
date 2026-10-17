@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local P=require('parley.response_preparation')
 local L=require('parley.response_layout')
 local D=require('parley.document')
@@ -46,7 +47,7 @@ describe('finite response preparation',function()
         local failed,resolved
         local op=assert(P.start(doc,ctx,{failed=function(reason)failed=reason end,
             resolved=function()resolved=true end},spec,{schedule=true}))
-        assert.is_true(vim.wait(500,function()return resolved==true end,5))
+        assert.is_true(vim.wait(arrival.MS,function()return resolved==true end,5))
         assert.truthy(tostring(failed):find('preparation exploded',1,true))
         assert.equals('error',P.snapshot(op).status)
     end)
@@ -125,9 +126,9 @@ describe('finite response preparation',function()
         local prepared=false;local observed
         local op=assert(P.start(doc,ctx,{prepared=function()prepared=true end,resolved=function()end},spec))
         vim.defer_fn(function()observed=prepared end,2)
-        assert.is_true(vim.wait(2000,function()return observed~=nil end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return observed~=nil end,1))
         assert.is_false(observed)
-        assert.is_true(vim.wait(4000,function()return P.snapshot(op).status~='more'end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return P.snapshot(op).status~='more'end,1))
         assert.equals('applied',P.snapshot(op).status)
         assert.same({'💬: q','','🤖: agent','','🌿: child.md: child','💬: next'},
             vim.api.nvim_buf_get_lines(fake.buf,0,-1,false))

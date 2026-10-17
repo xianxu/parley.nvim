@@ -5,6 +5,7 @@
 
 -- Fixture strings, not transport tokens: the harness watch for a refusal
 -- with no words expects them (#261 M5).
+local arrival = require("tests.helpers.arrival")
 vim.g.parley_expected_unkeyed={'fixture transport failure'}
 local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-chat-respond-" .. os.time()
 
@@ -67,7 +68,7 @@ end
 
 local Respond=require('parley.chat_respond')
 local function wait_for(predicate)
-    assert.is_true(vim.wait(5000,predicate,1),'response did not settle')
+    assert.is_true(vim.wait(arrival.MS,predicate,1),'response did not settle')
 end
 -- Native buffers with a stateful transport fixture: physical terminal callbacks
 -- are explicit, and each response exposes its actual session lifetime.

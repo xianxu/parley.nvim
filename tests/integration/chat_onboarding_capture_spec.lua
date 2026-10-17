@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local parley=require('parley')
 local Respond=require('parley.chat_respond')
 local Ready=require('parley.llm_readiness')
@@ -6,7 +7,7 @@ parley.setup({chat_dir=root,state_dir=root..'/state',providers={},api_keys={},de
  agents={{name='Choose a model',placeholder=true,provider='cliproxyapi',model={model='choose-a-model'},system_prompt='Placeholder',tools={}},
  {name='SelectedFixture',provider='openai',model={model='selected-model'},system_prompt='Selected prompt',tools={},max_tool_iterations=1,tool_result_max_bytes=8},
  {name='OtherFixture',provider='openai',model={model='other-model'},system_prompt='Other prompt',tools={}}}})
-local function wait(predicate)assert.is_true(vim.wait(3000,predicate,1),'onboarding response did not settle')end
+local function wait(predicate)assert.is_true(vim.wait(arrival.MS,predicate,1),'onboarding response did not settle')end
 local function text(buf)return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n')end
 local function row(buf,wanted)
     for i,line in ipairs(vim.api.nvim_buf_get_lines(buf,0,-1,false))do if line==wanted then return i-1 end end

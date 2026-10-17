@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local FS=require('parley.tools.filesystem')
 local uv=vim.uv or vim.loop
 
@@ -8,7 +9,7 @@ describe('native asynchronous tool filesystem conformance',function()
     local function await(start)
         local result;local handle=start(function(value)result=value end)
         assert.is_nil(result,'filesystem completion must be asynchronous')
-        assert.is_true(vim.wait(5000,function()return result~=nil end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return result~=nil end,1))
         return result,handle
     end
     it('preserves exact backup bytes and completes checked writes without blocking a native timer',function()

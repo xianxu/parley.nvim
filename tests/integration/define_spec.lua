@@ -2,6 +2,7 @@
 -- See workshop/issues/000161-inline-term-definition.md and its plan.
 
 -- Bootstrap parley so M.config is populated (parse_chat reads it).
+local arrival = require("tests.helpers.arrival")
 require("parley").setup({
     chat_dir = vim.fn.tempname() .. "-define-chat",
     -- These transport fixtures own a configured model; onboarding is tested separately.
@@ -420,7 +421,7 @@ describe("define_visual + render_definition (#161)", function()
         assert.equals("idle",Document.drain(doc,10000).status)
         local ready=false
         vim.defer_fn(function() ready=true end,0)
-        assert.is_true(vim.wait(2000,function() return ready end,5))
+        assert.is_true(vim.wait(arrival.MS,function() return ready end,5))
     end)
 
     after_each(function()
@@ -453,7 +454,7 @@ describe("define_visual + render_definition (#161)", function()
         require("parley").define_visual(buf)
         vim.api.nvim_buf_set_lines(buf,0,0,false,{"human introduction"})
         vim.api.nvim_buf_set_text(buf,4,9,4,9,{" human ending"})
-        assert.is_true(vim.wait(2000,function()
+        assert.is_true(vim.wait(arrival.MS,function()
             return #vim.diagnostic.get(buf,{namespace=ns})>0
         end))
         assert.equals("human introduction",vim.api.nvim_buf_get_lines(buf,0,1,false)[1])
@@ -524,7 +525,7 @@ describe("define_visual + render_definition (#161)", function()
         assert.are.same({ { " ⠙" } }, mark[4].virt_text)
         assert.are.equal("inline", mark[4].virt_text_pos)
 
-        assert.is_true(vim.wait(500, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             local current = spinner_marks(buf)[1]
             return current and current[4].virt_text[1][1] ~= " ⠙"
         end, 10), "spinner frame did not advance")
@@ -548,7 +549,7 @@ describe("define_visual + render_definition (#161)", function()
         local moved = spinner_marks(buf)[1]
         assert.are.equal(3, moved[2], "Neovim must move the selection mark")
         local first_frame = moved[4].virt_text[1][1]
-        assert.is_true(vim.wait(500, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             local current = spinner_marks(buf)[1]
             return current and current[4].virt_text[1][1] ~= first_frame
         end, 10), "spinner frame did not advance")
@@ -594,7 +595,7 @@ describe("define_visual + render_definition (#161)", function()
             vim.fn.setpos("'<", { buf, 3, 9, 0 })
             vim.fn.setpos("'>", { buf, 3, 12, 0 })
             require("parley").define_visual(buf)
-            assert.is_true(vim.wait(1000, function()
+            assert.is_true(vim.wait(arrival.MS, function()
                 return not require("parley.skill_invoke").is_in_flight(buf)
             end, 10), label)
             assert.are.equal(0, #spinner_marks(buf), label)
@@ -631,7 +632,7 @@ describe("define_visual + render_definition (#161)", function()
             raw_response = emit_definition_sse("ASIN", "Should not land."),
         })
         held_exit("stale-definition")
-        assert.is_true(vim.wait(1000, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             return #spinner_marks(buf) == 0
         end, 10))
         local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
@@ -701,7 +702,7 @@ describe("define_visual + render_definition (#161)", function()
             vim.api.nvim_buf_delete(buf, { force = true })
             tasker.set_query("deleted-definition", { raw_response = "" })
             held_exit("deleted-definition")
-            assert.is_true(vim.wait(1000, function()
+            assert.is_true(vim.wait(arrival.MS, function()
                 for _,timer in ipairs(timers) do if not timer.closed then return false end end
                 return true
             end,10))
@@ -728,7 +729,7 @@ describe("define_visual + render_definition (#161)", function()
         vim.fn.setpos("'<", { buf, 3, 9, 0 })
         vim.fn.setpos("'>", { buf, 3, 12, 0 })
         require("parley").define_visual(buf)
-        assert.is_true(vim.wait(1000, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             return #spinner_marks(buf) == 0
         end, 10), "malformed completion leaked the Definition spinner")
         assert.is_false(require("parley.progress").is_active())

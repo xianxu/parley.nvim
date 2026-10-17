@@ -1,6 +1,7 @@
+local arrival = require("tests.helpers.arrival")
 local T=require('parley.tasker')
 local Fake=require('tests.helpers.fake_process')
-local function wait(fn)assert.is_true(vim.wait(2000,fn,1))end
+local function wait(fn)assert.is_true(vim.wait(arrival.MS,fn,1))end
 
 describe('bounded process supervision',function()
     local processes,now

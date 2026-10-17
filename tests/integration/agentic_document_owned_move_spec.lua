@@ -1,10 +1,11 @@
 -- Public Parley move doors also accept ordinary Markdown under a chat root.
 -- Exercise those doors, rather than imitating a native saveas event sequence.
+local arrival = require("tests.helpers.arrival")
 describe("registered ordinary Markdown through Parley move doors", function()
     local root, source, destination, file, buf, saved, p, document, registration
     local uv = vim.uv or vim.loop
     local function await(predicate)
-        assert.is_true(vim.wait(4000, predicate, 10), "registered document operation did not finish")
+        assert.is_true(vim.wait(arrival.MS, predicate, 10), "registered document operation did not finish")
     end
     local function lookup(path)
         local result

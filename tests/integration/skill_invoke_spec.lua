@@ -5,6 +5,7 @@
 -- vim.wait for the (vim.scheduled) on_done. The propose_edits call applies through
 -- the real asynchronous producer and checked filesystem onto the artifact file.
 
+local arrival = require("tests.helpers.arrival")
 local skill_invoke = require("parley.skill_invoke")
 local parley = require("parley")
 local tasker = require("parley.tasker")
@@ -113,7 +114,7 @@ describe("skill_invoke.invoke", function()
                 validate_edits = require('parley.skills.review.collaboration').validate_edits,
                 on_done = function(result) done_result = result end,
             })
-            assert.is_true(vim.wait(5000, function() return done_result ~= nil end))
+            assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
             local expected = vim.deepcopy(original)
             if target == 'alpha' then expected[5] = 'CHANGED' end
             assert.same(expected, vim.fn.readfile(path))
@@ -141,7 +142,7 @@ describe("skill_invoke.invoke", function()
             validate_edits = require('parley.skills.review.collaboration').validate_edits,
             on_done = function(result) done_result = result end,
         })
-        assert.is_true(vim.wait(5000, function() return done_result ~= nil end))
+        assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
         assert.equals(2, #done_result.calls)
         assert.is_false(done_result.ok)
         assert.same({ 'alpha beta' }, vim.fn.readfile(path))
@@ -165,7 +166,7 @@ describe("skill_invoke.invoke", function()
                 validate_edits = require('parley.skills.review.collaboration').validate_edits,
                 on_done = function(result) done_result = result end,
             })
-            assert.is_true(vim.wait(5000, function() return done_result ~= nil end))
+            assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
             assert.is_false(done_result.ok)
             assert.same(document, vim.fn.readfile(path))
         end)
@@ -244,7 +245,7 @@ describe("skill_invoke.invoke", function()
                 end
                 skill_invoke.invoke(buf,manifest(),{},{on_terminal=function(r)done_result=r end})
                 FS.new=native_new
-                assert.is_true(vim.wait(5000,function()return read_started or done_result~=nil end,1))
+                assert.is_true(vim.wait(arrival.MS,function()return read_started or done_result~=nil end,1))
                 assert.is_nil(done_result)
                 assert.same({'ALPHA beta'},vim.fn.readfile(path))
                 assert.same({'alpha beta'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
@@ -259,7 +260,7 @@ describe("skill_invoke.invoke", function()
                     vim.fn.mkdir(tmpdir,'p');vim.fn.writefile({'redirected'},path)
                 end
                 held()
-                assert.is_true(vim.wait(5000,function()return done_result~=nil end,1))
+                assert.is_true(vim.wait(arrival.MS,function()return done_result~=nil end,1))
                 if mode=='success' then
                     assert.is_true(done_result.ok)
                     assert.same({'ALPHA beta'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
@@ -293,7 +294,7 @@ describe("skill_invoke.invoke", function()
             end
             skill_invoke.invoke(b,manifest(),{},{on_terminal=function(value)record.terminal=value end})
             FS.new=native_new
-            assert.is_true(vim.wait(5000,function()return record.done~=nil or record.terminal~=nil end,1))
+            assert.is_true(vim.wait(arrival.MS,function()return record.done~=nil or record.terminal~=nil end,1))
             if i<=16 then
                 assert.is_nil(record.terminal)
                 skill_invoke.cancel(b)
@@ -332,7 +333,7 @@ describe("skill_invoke.invoke", function()
             end,function()
                 skill_invoke.invoke(buf,manifest(),{},{on_terminal=function(r)done_result=r end})
             end)
-            assert.is_true(vim.wait(5000,function()return done~=nil end,1))
+            assert.is_true(vim.wait(arrival.MS,function()return done~=nil end,1))
             skill_invoke.cancel(buf)
             assert.is_true(skill_invoke.is_in_flight(buf),'the stranded read holds the guard')
             local before=buf
@@ -365,7 +366,7 @@ describe("skill_invoke.invoke", function()
         end
         skill_invoke.invoke(buf,manifest(),{},{on_terminal=function(r)done_result=r end})
         FS.new=native_new
-        assert.is_true(vim.wait(5000,function()return done~=nil end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return done~=nil end,1))
         skill_invoke.cancel(buf)
         local clock=vim.uv.hrtime;local warning=parley.logger.warning
         local now=clock()+6000000000
@@ -405,7 +406,7 @@ describe("skill_invoke.invoke", function()
         skill_invoke.invoke(buf,manifest(),{},{on_done=callback})
         callback=nil
         FS.new=native_new
-        assert.is_true(vim.wait(5000,function()return done~=nil end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return done~=nil end,1))
         local D=require('parley.document');local doc=D.get(buf)
         assert.is_true(D.user_guard_stats(doc).live>0)
         local clock=vim.uv.hrtime;local now=clock()+6000000000
@@ -428,7 +429,7 @@ describe("skill_invoke.invoke", function()
 
     it('keeps the source untouched for no_reload even with autoread enabled',function()
         skill_invoke.invoke(buf,manifest(),{},{no_reload=true,on_done=function(r)done_result=r end})
-        assert.is_true(vim.wait(5000,function()return done_result~=nil end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return done_result~=nil end,1))
         assert.is_true(done_result.ok)
         assert.same({'alpha beta'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
         assert.same({'ALPHA beta'},vim.fn.readfile(path))
@@ -444,7 +445,7 @@ describe("skill_invoke.invoke", function()
         skill_invoke.invoke(buf, manifest({ tools = { "read_file" }, elevated = {}, force_tool = "read_file" }), {}, {
             no_reload = true, on_done = function(result) done_result = result end,
         })
-        assert.is_true(vim.wait(5000, function() return done_result ~= nil end, 1))
+        assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end, 1))
         assert.is_true(done_result.ok)
         local result = done_result.results[1]
         assert.is_true(result.truncated)
@@ -491,7 +492,7 @@ describe("skill_invoke.invoke", function()
             vim.schedule(function() on_exit("qid_test") end)
         end
         skill_invoke.invoke(buf, manifest(), {}, { manual = true, on_done = function(r) done_result = r end })
-        assert.is_true(vim.wait(2000, function() return done_result ~= nil end), "on_done never ran")
+        assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end), "on_done never ran")
         assert.is_true(done_result.ok)
         local view = vim.fn.winsaveview()
         return { view.lnum, view.col, view.topline }
@@ -516,7 +517,7 @@ describe("skill_invoke.invoke", function()
             on_done = function(r) done_result = r end,
         })
         vim.api.nvim_buf_set_text(buf, 0, 10, 0, 10, { " human" })
-        assert.is_true(vim.wait(2000, function() return done_result ~= nil end))
+        assert.is_true(vim.wait(arrival.MS, function() return done_result ~= nil end))
         assert.equals("alpha beta human", table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"))
         assert.equals("ALPHA beta", table.concat(vim.fn.readfile(path), "\n"))
         assert.is_false(done_result.ok)
@@ -716,11 +717,11 @@ describe("skill_invoke.invoke", function()
         end
         skill_invoke.invoke(buf,manifest({tools={'skill_async_fixture'},elevated={},force_tool=nil}),{},
             {no_reload=true,on_done=function(result)done_result=result end})
-        assert.is_true(vim.wait(2000,function()return done~=nil end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return done~=nil end,1))
         assert.equals(0,legacy);assert.is_nil(done_result)
         vim.api.nvim_buf_set_lines(buf,0,-1,false,{'human continued editing'})
         done({certainty='known',effect='not_applied',physical_resolved=true,result={content='async',is_error=false}})
-        assert.is_true(vim.wait(2000,function()return done_result~=nil end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return done_result~=nil end,1))
         assert.is_true(done_result.ok)
         assert.same({'human continued editing'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
     end)
@@ -805,7 +806,7 @@ describe("skill_invoke terminal ownership (#182)", function()
                 on_done = function() table.insert(events, "done") end,
             })
             case.fire(callbacks)
-            assert.is_true(vim.wait(1000, function() return #events == 2 end, 10), case.name)
+            assert.is_true(vim.wait(arrival.MS, function() return #events == 2 end, 10), case.name)
             callbacks.on_abort("late")
             callbacks.on_error("q", { code = 8 })
             assert.are.same({ "terminal", "done" }, events, case.name)
@@ -845,7 +846,7 @@ describe("skill_invoke terminal ownership (#182)", function()
         vim.api.nvim_buf_delete(buf, { force = true })
         tasker.set_query("deleted", { raw_response = "" })
         held_exit("deleted")
-        assert.is_true(vim.wait(1000, function() return #events > 0 end, 10))
+        assert.is_true(vim.wait(arrival.MS, function() return #events > 0 end, 10))
         -- #261 M4 W17: the run ends when its buffer unloads, before completion
         -- is even scheduled; still no read and no done.
         assert.are.same({ "buffer unloaded" }, events)
@@ -928,7 +929,7 @@ describe("skill_invoke terminal ownership (#182)", function()
             end,
             on_done = function(result) done = result end,
         })
-        assert.is_true(vim.wait(1000, function() return done ~= nil end, 10),
+        assert.is_true(vim.wait(arrival.MS, function() return done ~= nil end, 10),
             "malformed completion leaked its terminal")
         assert.are.equal(1, terminal_calls)
         assert.is_false(done.ok)
