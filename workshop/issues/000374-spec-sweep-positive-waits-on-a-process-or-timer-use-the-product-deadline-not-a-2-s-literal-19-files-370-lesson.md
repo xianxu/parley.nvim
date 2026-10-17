@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "461e862b", done: "9a3f2a5c"}
 ---
 
 # Spec sweep: positive waits on a process or timer use the product deadline, not a 2 s literal (19 files; #370 lesson)
