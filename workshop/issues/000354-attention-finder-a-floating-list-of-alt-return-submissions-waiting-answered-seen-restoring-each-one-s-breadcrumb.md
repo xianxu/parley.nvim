@@ -1,12 +1,12 @@
 ---
 id: 000354
-status: working
+status: codecomplete
 deps: [parley.nvim#332, parley.nvim#353]
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours: 3.39
-card_mirror: 'ceeda60e4f61f8f9c829179583ea002befe00762' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '48aa6f8e123fe2eb6310f9c1dd721bdef8b98d59' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T11:20:37-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 3.60
 ---
 
 # Attention finder: a floating list of Alt+Return submissions (waiting / answered / seen), restoring each one's breadcrumb
