@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "787ab1ab", done: "650e0e1d"}
 ---
 
 # Remap keys: Alt+i pastes an image (matching pair draft), Alt+b creates a sub-chat
