@@ -53,7 +53,9 @@ turn an agent write reloads the unmodified buffer silently (and so does a
 buffer-local `FileChangedShell` on focus or `:checktime`). Either reload keeps
 every window on the text it showed (#356): `view_map` maps each cursor and top
 line through a line diff, and a line the agent rewrote is followed by its own
-text. The operator's turn
+text. `window_views` (capture before, restore after) owns that wrap, and
+parley's own whole-buffer rewrites use it too (#358): `file_refresh` after the
+chat write, edit and propose tools, and the review round's reload. The operator's turn
 never starts on an old copy unnoticed: an agent write that landed just before
 the first edit lost the race, and goes through the violation path below with
 the operator's text kept. Outside the operator's turn, submit refuses to

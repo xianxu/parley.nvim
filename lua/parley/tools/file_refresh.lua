@@ -3,6 +3,7 @@
 local M={}
 local states=setmetatable({},{__mode='k'})
 local Edit=require('parley.buffer_edit')
+local Views=require('parley.window_views')
 local function canonical(path)return vim.fn.resolve(vim.fn.fnamemodify(path,':p'))end
 function M.capture(path,deferred_buf)
     local ticket={};local s={path=canonical(path),buffers={}}
@@ -52,6 +53,8 @@ function M.complete(ticket,bytes)
                 and not vim.bo[buf].modified and old.autoread and vim.bo[buf].autoread
                 and (not old.document or old.proof and Edit.resolve_user(old.proof))
             if safe then
+                -- A whole-buffer replace keeps line numbers only (#358).
+                local views=Views.capture(buf)
                 local ok,receipt=pcall(function()
                     if old.document then return Edit.apply_user(old.proof,{{region=1,text=table.concat(lines,'\n')}})end
                     Edit.replace_all_lines(buf,lines);return {status='applied'}
@@ -71,7 +74,7 @@ function M.complete(ticket,bytes)
                     if not matches()then
                         reconciliation=true
                         if vim.api.nvim_buf_is_valid(buf)then vim.bo[buf].modified=true end
-                    end
+                    else Views.restore(buf,views) end
                 else reconciliation=true end
             else reconciliation=true end
         end

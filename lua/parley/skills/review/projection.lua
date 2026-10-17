@@ -16,8 +16,8 @@ local skill_render = require("parley.skill_render")
 
 -- Per-buffer: { records = { [hash] = snapshot }, watching = bool }.
 local _state = {}
--- Buffers whose own round-apply is in flight — the round's `:edit!` must not be
--- mistaken for a user edit by the watcher.
+-- Buffers whose own round-apply is in flight — the round's reload (a whole-buffer
+-- apply_user) must not be mistaken for a user edit by the watcher.
 local _applying = {}
 
 -- Cap the per-buffer record set so a long edit session can't grow it without
