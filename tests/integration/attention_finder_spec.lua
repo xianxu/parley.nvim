@@ -316,22 +316,45 @@ describe("attention finder", function()
         assert.equals("answered", Model.state_of(Store.load().entries[a]))
     end)
 
-    it("is bound to <M-Space> and :ParleyAttention", function()
+    it("is bound to <M-Space> and <C-y><Space>, and :ParleyAttention", function()
         local registry_entries = require("parley.keybinding_registry")
         local entry = vim.tbl_filter(function(e) return e.id == "attention" end, registry_entries.entries)[1]
-        assert.equals("<M-Space>", entry.default_key)
-        assert.equals("<M-Space>", require("parley.config").global_shortcut_attention.shortcut)
-        -- The mapping itself, as setup() registers it: Alt+Space opens the finder.
+        assert.same({ "<M-Space>", "<C-y><Space>" }, entry.default_key)
+        assert.same({ "<M-Space>", "<C-y><Space>" }, require("parley.config").global_shortcut_attention.shortcut)
+        -- The mappings themselves, as setup() registers them.
         local opened = 0
         registry_entries.register_global({ "global" }, require("parley.config"), { attention = function() opened = opened + 1 end })
-        for _, mode in ipairs({ "n", "i" }) do
-            local mapping = vim.fn.maparg("<M-Space>", mode, false, true)
-            assert.is_function(mapping.callback, "no <M-Space> mapping in mode " .. mode)
-            mapping.callback()
+        for _, key in ipairs({ "<M-Space>", "<C-y><Space>" }) do
+            for _, mode in ipairs({ "n", "i" }) do
+                local mapping = vim.fn.maparg(key, mode, false, true)
+                assert.is_function(mapping.callback, ("no %s mapping in mode %s"):format(key, mode))
+                mapping.callback()
+            end
         end
-        assert.equals(2, opened)
+        assert.equals(4, opened)
         -- setup() makes a :Parley<Name> command of every M.cmd entry.
         assert.equals("function", type(p.cmd.Attention))
+    end)
+
+    it("<C-y><Space> with the completion popup showing accepts it and types a space", function()
+        local opened = 0
+        require("parley.keybinding_registry").register_global({ "global" }, require("parley.config"),
+            { attention = function() opened = opened + 1 end })
+        local buf = vim.api.nvim_create_buf(true, true)
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "alphabet", "" })
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        local completeopt = vim.o.completeopt
+        vim.o.completeopt = "menuone"
+        -- Keyword completion opens the popup on "alphabet"; <C-y><Space> accepts it, then a space.
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("Aal<C-n><C-y><Space>x<Esc>", true, false, true), "mx", false)
+        vim.o.completeopt = completeopt
+        assert.equals("alphabet x", vim.api.nvim_buf_get_lines(buf, 1, 2, false)[1])
+        assert.equals(0, opened)
+        -- Without a popup, the same keys open the finder.
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("A<C-y><Space>", true, false, true), "mx", false)
+        assert.equals(1, opened)
+        vim.cmd("stopinsert")
     end)
 end)
 

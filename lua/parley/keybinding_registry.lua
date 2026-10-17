@@ -108,6 +108,10 @@ end
 --   preserve_existing - skip effective user/plugin mappings (buffer-local entries)
 --   help_only    - true if registration is handled elsewhere (finders, review)
 --   preserve_insert - keep Insert mode for a global callback that supports it
+--   pum_passthrough - an Insert-mode key that starts with <C-y> keeps its literal
+--                     meaning while the completion popup shows (accept, then the
+--                     rest), so accepting a completion then typing on is never
+--                     taken for the action
 
 M.entries = {
 	-- ── Global ──────────────────────────────────────────────────────────
@@ -133,9 +137,10 @@ M.entries = {
 	{
 		id = "attention",
 		config_key = "global_shortcut_attention",
-		default_key = "<M-Space>",
+		default_key = { "<M-Space>", "<C-y><Space>" },
 		default_modes = { "n", "i" },
 		scope = "global",
+		pum_passthrough = true,
 		desc = "Parley attention finder: Alt+Return submits, waiting, answered or seen",
 		help_desc = "Attention finder (submits waiting, answered, seen)",
 	},
@@ -1411,6 +1416,16 @@ function M.register_global(scopes, config, callbacks)
 								end
 							else
 								wrapped = cb
+							end
+							if mode == "i" and entry.pum_passthrough and key:sub(1, 5) == "<C-y>" then
+								local action = wrapped
+								wrapped = function()
+									if vim.fn.pumvisible() == 1 then
+										vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(key, true, false, true), "in", false)
+									else
+										action()
+									end
+								end
 							end
 							vim.keymap.set(mode, key, wrapped, { silent = true, desc = entry.desc })
 							table.insert(M._installed_global,

@@ -1,6 +1,6 @@
 # Spec: Attention Finder (#354)
 
-Every file submitted with Alt+Return that Couch accepted, and every new side doc the agent writes for one, is listed as **waiting**, **answered** or **seen**, so the operator can find what came back. Open it with `<M-Space>` (Alt+Space) or `:ParleyAttention` (configured by `global_shortcut_attention`).
+Every file submitted with Alt+Return that Couch accepted, and every new side doc the agent writes for one, is listed as **waiting**, **answered** or **seen**, so the operator can find what came back. Open it with `<M-Space>` (Alt+Space), `<C-y><Space>` or `:ParleyAttention` (configured by `global_shortcut_attention`).
 
 ## States
 - One pure transition, `attention_model.transition`, owns every change. States are derived, never stored:
