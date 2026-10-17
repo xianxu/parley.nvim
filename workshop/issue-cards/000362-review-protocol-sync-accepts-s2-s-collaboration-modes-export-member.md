@@ -1,8 +1,8 @@
 ---
 id: 000362
-status: codecomplete
+status: done
 created: 2026-10-16
-updated: 2026-10-16
+updated: 2026-10-17
 estimate_hours:
 github_issue:
 started: 2026-10-16T16:04:39-07:00
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 8be9bfde97b0618704bcdd4c035550c30bea6791
         evidence_commit: bf4bf6058ed9f56ba737ce8c8e30909b084288e0
+        landed_commit: 6ea6fc8b7853625c407629637627291faf7de0bd
 ---
 
 # Review-protocol sync accepts S2's collaboration-modes export member
