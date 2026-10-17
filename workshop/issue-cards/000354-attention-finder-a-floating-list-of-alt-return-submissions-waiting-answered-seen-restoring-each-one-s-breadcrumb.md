@@ -1,6 +1,6 @@
 ---
 id: 000354
-status: working
+status: codecomplete
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours: 3.39
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 3.60
+tracker:
+    version: 1
+    completion:
+        token: close-62492606112a
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 57c581887b9cb89eec44d9e4c2e004128982750a
+        evidence_commit: 01bec5e31bbb99556e070ae2737ccde44f76542e
 ---
 
 # Attention finder: a floating list of Alt+Return submissions (waiting / answered / seen), restoring each one's breadcrumb
