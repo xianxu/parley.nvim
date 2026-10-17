@@ -1,4 +1,24 @@
 ---
+reviewer_runs:
+    - version: 1
+      intent:
+        id: d037acf1-5328-456d-b6bb-dad82c9d2aaa
+        repository: github.com/xianxu/parley.nvim
+        issue_id: "000373"
+        recipe: estimate-quality
+        round: 1
+        attempt: 1
+        agent: codex
+        root: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+        reviewed_head: 2fa6f4c1c0daf3e80a21c18299ed8d610bc2c1cb
+        slot: parley.nvim:1
+        requested_at: "2026-10-17T14:39:09.384856Z"
+      phase: finished
+      pid: 51704
+      started_at: "2026-10-17T14:39:09.474502Z"
+      finished_at: "2026-10-17T14:39:35.722758Z"
+      session_id: 01a14a4d-6978-7983-87a6-96666ef3d84d
+      outcome: returned
 gate: plan-quality
 issue: 373
 id_prefix: PQ
@@ -73,7 +93,40 @@ rounds:
           note: Named function contracts now pair adversarial inputs with mechanical guards while retaining fixture-driven integration acceptance.
           round: 2
       blocked: false
-content_hash: 56b0c502d6535216a95d44aa7fa34bad0ddb4ccb874d7dc42555c6e8b23781c4
+    - reviewer_runs:
+        - version: 1
+          intent:
+            id: aba028c2-d147-4482-b239-ba44889c84ec
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: plan-quality
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+            reviewed_head: 2fa6f4c1c0daf3e80a21c18299ed8d610bc2c1cb
+            slot: parley.nvim:1
+            requested_at: "2026-10-17T14:38:35.514514Z"
+          phase: finished
+          pid: 49199
+          started_at: "2026-10-17T14:38:35.612828Z"
+          finished_at: "2026-10-17T14:39:08.36832Z"
+          session_id: 01a14a4c-e538-7380-a5e6-3262ec911043
+          outcome: returned
+      "n": 3
+      timestamp: "2026-10-17T07:39:08-07:00"
+      agent: codex
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: The pure v2 reducer, phase/event model, single dispatcher, and recovery invariants define authoritative state transitions.
+          round: 3
+        - id: PQ-2
+          disposition: addressed
+          note: Test contracts name functions, adversarial input classes, and mechanical guards across pure and integration boundaries.
+          round: 3
+      blocked: false
+content_hash: 62ee1fa2e25e315634beedfa1cbe7f3f35d0127bdb1d409c2ade3b271850be90
 ---
 
 # Gate ledger — parley.nvim#373 (plan-quality)
@@ -96,6 +149,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - PQ-1 — addressed — The pure v2 reducer, phase/event model, single dispatcher, mutation guard, recovery rules, and adversarial sequence strategy satisfy the finding.
 - PQ-2 — addressed — Named function contracts now pair adversarial inputs with mechanical guards while retaining fixture-driven integration acceptance.
+
+## Round 3 — 2026-10-17T07:39:08-07:00 (codex) — passed
+
+### Disposed
+
+- PQ-1 — addressed — The pure v2 reducer, phase/event model, single dispatcher, and recovery invariants define authoritative state transitions.
+- PQ-2 — addressed — Test contracts name functions, adversarial input classes, and mechanical guards across pure and integration boundaries.
 
 ## Open findings
 
