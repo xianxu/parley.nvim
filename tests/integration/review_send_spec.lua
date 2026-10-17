@@ -223,6 +223,33 @@ describe("review_send", function()
         assert.same({}, sent())
     end)
 
+    it('refuses bad collaboration routing without prompting or rewriting frontmatter', function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+        local messages, prompted = {}, false
+        vim.notify = function(msg) messages[#messages + 1] = msg end
+        vim.ui.input = function() prompted = true end
+        local document = { '---', 'collaboration-mode: bad', '---', '🤖[why?]' }
+        open(document)
+        alt_return()
+        assert.is_false(prompted)
+        assert.is_nil(invoked)
+        assert.same(document, lines())
+        assert.same(document, vim.fn.readfile(file))
+        assert.truthy(table.concat(messages, '\n'):find('unknown collaboration mode bad', 1, true))
+    end)
+
+    it('reports invalid review and collaboration modes together outside Couch', function()
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
+        local messages = {}
+        vim.notify = function(msg) messages[#messages + 1] = msg end
+        open({ '---', 'process-instruction: [nope]', 'collaboration-mode: bad', '---', '🤖[why?]' })
+        alt_return()
+        assert.is_nil(invoked)
+        local text = table.concat(messages, '\n')
+        assert.truthy(text:find('[nope] is not a stock prompt', 1, true))
+        assert.truthy(text:find('unknown collaboration mode bad', 1, true))
+    end)
+
     it("no process-instruction submits unchanged Markdown without prompting", function()
         vim.ui.input = function() error("pane submission must not prompt") end
         open({ "# notes", "- a" })

@@ -45,6 +45,90 @@ class ExportTest(unittest.TestCase):
         self.assertIsNotNone(self.api, 'build-time review export generator must exist')
         self.manifest, self.content = fixture()
 
+    def add_collaboration_modes(self):
+        path, data = 'collaboration-modes.md', b'# Collaboration modes\nCanonical routing.\n'
+        self.manifest['members'].append(dict(role='collaboration-modes', path=path,
+            bytes=len(data), sha256=hashlib.sha256(data).hexdigest()))
+        self.content[path] = data
+        return path
+
+    def test_collaboration_modes_snapshot_follows_grammar_regardless_of_manifest_order(self):
+        path = self.add_collaboration_modes()
+        self.manifest['members'].reverse()
+        snapshot = self.api.render_snapshot(self.manifest, self.content)
+        self.assertEqual(self.content[path], snapshot[path])
+        skill = snapshot['SKILL.md']
+        positions = [skill.index(self.content[p].strip()) for p in ('round.md', 'review-convention.md', path)]
+        self.assertEqual(sorted(positions), positions)
+        self.assertEqual(1, skill.count(self.content[path].strip()))
+
+    def test_collaboration_modes_refuses_duplicate_wrong_path_and_unknown_role(self):
+        self.add_collaboration_modes()
+        for replacement in ({}, {'path': 'other.md'}, {'role': 'future-role'}):
+            mutant = copy.deepcopy(self.manifest)
+            if replacement:
+                mutant['members'][-1].update(replacement)
+            else:
+                mutant['members'].append(copy.deepcopy(mutant['members'][-1]))
+            with self.subTest(replacement=replacement), self.assertRaises(ValueError):
+                self.api.validate_manifest(mutant)
+
+    def test_collaboration_modes_cli_sync_and_check_track_owned_output(self):
+        path = self.add_collaboration_modes()
+        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+            base = Path(tmp)
+            source = self.make_source(base)
+            (source / 'examples').mkdir()
+            (source / 'examples/private.md').write_text('not exported')
+            output = base / 'bundle'
+            result = self.cli(source, output)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(self.content[path], (output / path).read_bytes())
+            self.assertFalse((output / 'examples').exists())
+            self.assertEqual(0, self.cli(source, output, True).returncode)
+            (output / 'local-adapter.md').write_text('local adapter')
+            (output / path).write_text('changed')
+            before = self.tree(output)
+            result = self.cli(source, output, True)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('changed: ' + path, result.stderr)
+            self.assertEqual(before, self.tree(output))
+            self.assertEqual(0, self.cli(source, output).returncode)
+            self.assertEqual(self.content[path], (output / path).read_bytes())
+            self.assertEqual('local adapter', (output / 'local-adapter.md').read_text())
+            # Older v1 source cannot silently leave a stale owned member behind.
+            self.manifest['members'].pop()
+            (source / 'export.json').write_text(json.dumps(self.manifest))
+            before = self.tree(output)
+            result = self.cli(source, output)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('extra: ' + path, result.stderr)
+            self.assertEqual(before, self.tree(output))
+
+    def test_collaboration_modes_corruption_and_output_symlinks_refuse_before_writes(self):
+        path = self.add_collaboration_modes()
+        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+            base = Path(tmp)
+            source = self.make_source(base)
+            output = base / 'bundle'
+            for data in (b'truncated', bytes([self.content[path][0] ^ 1]) + self.content[path][1:]):
+                (source / path).write_bytes(data)
+                result = self.cli(source, output)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn('mismatch: ' + path, result.stderr)
+                self.assertFalse(output.exists())
+            (source / path).write_bytes(self.content[path])
+            output.mkdir()
+            victim = base / 'victim'
+            victim.write_text('untouched')
+            (output / path).symlink_to(victim)
+            for check in (True, False):
+                result = self.cli(source, output, check)
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn('unsafe output symlink', result.stderr)
+                self.assertEqual('untouched', victim.read_text())
+                self.assertFalse((output / 'round.md').exists())
+
     def test_manifest_rejects_seeded_type_and_contract_mutations(self):
         self.api.validate_manifest(self.manifest)
         mutations = []
@@ -209,6 +293,17 @@ class ExportTest(unittest.TestCase):
             self.assertEqual(0, self.cli(source, output).returncode)
             self.assertEqual('local', (output / 'local-adapter.md').read_text())
 
+    def test_old_v1_cli_reports_absent_collaboration_modes(self):
+        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+            base = Path(tmp)
+            source = self.make_source(base)
+            output = base / 'bundle'
+            for check in (False, True):
+                result = self.cli(source, output, check)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn('export has no collaboration-modes member; '
+                              'the synced prompt has no collaboration modes', result.stderr)
+
     def test_cli_refuses_corrupt_source_and_unsafe_output_without_writes(self):
         with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
             base = Path(tmp)
@@ -254,6 +349,8 @@ class ExportTest(unittest.TestCase):
         output = ROOT / 'lua/parley/skills/review'
         manifest = json.loads((output / 'export.json').read_bytes())
         self.api.validate_manifest(manifest)
+        self.assertEqual(['collaboration-modes.md'],
+                         [m['path'] for m in manifest['members'] if m['role'] == 'collaboration-modes'])
         for member in manifest['members']:
             if member['role'] != 'adapter':
                 data = (output / member['path']).read_bytes()
@@ -262,6 +359,10 @@ class ExportTest(unittest.TestCase):
         skill = (output / 'SKILL.md').read_text()
         self.assertIn((output / 'round.md').read_text().strip(), skill)
         self.assertIn((output / 'review-convention.md').read_text().strip(), skill)
+        collaboration = (output / 'collaboration-modes.md').read_text().strip()
+        self.assertEqual(1, skill.count(collaboration))
+        self.assertLess(skill.index((output / 'review-convention.md').read_text().strip()),
+                        skill.index(collaboration))
         self.assertNotIn('adapters/file-edit.md\n', skill)
 
 

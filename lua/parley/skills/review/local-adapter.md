@@ -7,6 +7,16 @@ use them in place of frontmatter mode selection. With no selected mode, the
 explicit marker-only flags preserve the local marker review. Interpret those
 flag values using the canonical round's table.
 
+For this local single-artifact adapter, discussion (including the default)
+and collaboration both answer questions in place and make requested edits in
+place. This overrides the imported discussion side-doc routing. Chat sections
+and their items are read-only: skip them even during a whole-document review
+mode pass. Parley resolves their headings and shows deterministic notices
+before generation; the hub agent answers chat. Never create side docs, answer
+docs, links to new files, cross-document folds, or perform actions elsewhere.
+Those operations stay with the agent-side skill. Unknown collaboration modes
+and conflicting heading assignments have already been refused by Parley.
+
 This adapter defines all IO and reply behavior for this invocation. Use only
 `propose_edits` for ALL responses, including edits and clarifying questions.
 Never reply with plain text or edit a file directly. Include every change in

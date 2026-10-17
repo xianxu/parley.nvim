@@ -125,6 +125,7 @@
         }
     },
     "scaffold": {
+        "collaboration_mode": "collaboration",
         "sections": [
             {
                 "name": "Problem"

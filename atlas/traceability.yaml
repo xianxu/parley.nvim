@@ -746,6 +746,8 @@ atlas:
 
   modes/review:
     code:
+      - lua/parley/skills/review/collaboration.lua
+      - lua/parley/skills/review/collaboration_value.lua
       - scripts/sync-review-protocol.py
       - lua/parley/comment/codec.lua
       - lua/parley/comment/view.lua
@@ -759,6 +761,9 @@ atlas:
       - lua/parley/frontmatter.lua
       - lua/parley/couch.lua
     tests:
+      - tests/unit/review_collaboration_spec.lua
+      - tests/unit/review_collaboration_value_spec.lua
+      - tests/integration/skill_invoke_review_spec.lua
       - tests/integration/review_protocol_bundle_spec.lua
       - tests/integration/review_mode_load_spec.lua
       - tests/unit/review_mode_spec.lua
