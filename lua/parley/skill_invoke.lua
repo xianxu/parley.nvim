@@ -459,9 +459,11 @@ function M.invoke(buf, manifest, args, opts)
                     local errors = {}
                     assert(#calls<=32,'skill tool call capacity')
                     local seen={}
+                    local proposal_count = 0
                     for _,call in ipairs(calls)do
                         assert(require('parley.tools.types').validate_call(call),'invalid skill tool call')
                         assert(not seen[call.id],'duplicate skill tool call');seen[call.id]=true
+                        if call.name == 'propose_edits' then proposal_count = proposal_count + 1 end
                     end
                     local function finish_tools()
                         if read_state.logical or _gen[buf]~=gen then return end
@@ -578,8 +580,11 @@ function M.invoke(buf, manifest, args, opts)
                                 end
                             end
                         end
-                        local denied = call.name == 'propose_edits' and opts.validate_edits
-                            and opts.validate_edits(original, call.input.edits)
+                        local denied
+                        if call.name == 'propose_edits' and opts.validate_edits then
+                            denied = proposal_count > 1 and 'guarded local review requires one proposal batch'
+                                or opts.validate_edits(original, call.input.edits)
+                        end
                         if denied then
                             results[i] = { is_error = true, content = denied, name = call.name }
                             remaining = remaining - 1

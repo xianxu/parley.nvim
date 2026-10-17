@@ -57,3 +57,13 @@ ARCH-DRY/PURE: one resolver supplies notices, admission, resubmission and edit p
 - [ ] Push the code head and run sdlc local-check run --name suite; retain any failure and apply the issue-backed one-retry rule.
 - [ ] Run sdlc close with explicit focused/full-suite evidence. Its binary-owned full review checks the enlarged diff; no separate boundary review.
 - [ ] On SHIP run sdlc pr and sdlc merge --yes, verify the merge with Git and report to the hub. No multi-file/baseline work belongs in this issue.
+
+## Revisions
+
+### 2026-10-16 — proposal permission completion
+
+The approved chat-byte invariant also requires disjoint unique snapshot spans
+and one proposal batch: overlapping edits shift original offsets, and repeated
+calls can match text created by a prior call. Reject these before any proposal
+write; regressions include real tool IO and a disposable earlier validator.
+This is the same invocation-owned permission, with no new product routing.

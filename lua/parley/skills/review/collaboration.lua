@@ -119,17 +119,23 @@ function M.validate_edits(snapshot, edits)
     local plan, err = M.resolve(lines)
     if not plan then return err end
     if type(edits) ~= 'table' then return 'invalid local review edits' end
+    local positioned = {}
     for _, edit in ipairs(edits) do
         local old = type(edit) == 'table' and edit.old_string
         if type(old) == 'string' and old ~= '' then
             local first, last = snapshot:find(old, 1, true)
-            if first then
-                for _, span in ipairs(plan.protected) do
-                    if first <= span.last and last >= span.first then
-                        return 'local review cannot edit chat sections or collaboration frontmatter; the hub agent answers chat'
-                    end
+            if not first or snapshot:find(old, first + 1, true) then
+                return 'local review edits must match unique text in the invocation snapshot'
+            end
+            for _, span in ipairs(plan.protected) do
+                if first <= span.last and last >= span.first then
+                    return 'local review cannot edit chat sections or collaboration frontmatter; the hub agent answers chat'
                 end
             end
+            for _, span in ipairs(positioned) do
+                if first <= span.last and last >= span.first then return 'local review edits must not overlap' end
+            end
+            positioned[#positioned + 1] = { first = first, last = last }
         end
     end
 end

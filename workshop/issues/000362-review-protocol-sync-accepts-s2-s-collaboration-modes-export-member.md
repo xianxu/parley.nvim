@@ -182,6 +182,21 @@ quoted scalar/boundary helpers. No external YAML process/dependency. Readable
 canonical forms are supported; unsupported YAML shapes refuse explicitly.
 Plan uses the canonical issue-slug filename named by change-code.
 
+### 2026-10-16 — close the proposal permission class
+
+Further concrete validation found that overlapping replacements can shift bytes
+past their old spans and several proposal calls can reuse newly created text.
+The local guard now requires unique snapshot matches, disjoint replacement
+spans and one proposal batch per invocation before any proposal effect. The
+multiple-call regression failed against the earlier driver and passes now;
+a disposable earlier guard accepts overlapping spans, while the corrected guard
+rejects overlap/non-snapshot cases. Mapped tests pass with six resolver cases;
+the real invocation suite passes all 49 cases, process census clean.
+
+The recorded run on d38fa68feae91fb320ff6d742989594c9c76b0f4 was cancelled
+while queued (no suite tests had started) to add these corrections. This is a
+new code head requiring fresh verification, not an unchanged flake retry.
+
 ## Revisions
 
 ### 2026-10-16 — priority interruption

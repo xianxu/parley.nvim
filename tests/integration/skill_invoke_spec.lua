@@ -121,6 +121,32 @@ describe("skill_invoke.invoke", function()
         end)
     end
 
+    it('rejects multiple local proposal calls before either can write', function()
+        parley.dispatcher.query = function(_, _, _, _, on_exit)
+            local events = {}
+            for index, old in ipairs({ 'alpha', 'ALPHA' }) do
+                events[#events + 1] = { type = 'content_block_start', index = index - 1,
+                    content_block = { type = 'tool_use', id = 't' .. index, name = 'propose_edits', input = {} } }
+                events[#events + 1] = { type = 'content_block_delta', index = index - 1,
+                    delta = { type = 'input_json_delta', partial_json = vim.json.encode({ edits = {
+                        { old_string = old, new_string = 'ALPHA', explain = 'test' },
+                    } }) } }
+                events[#events + 1] = { type = 'content_block_stop', index = index - 1 }
+            end
+            events[#events + 1] = { type = 'message_stop' }
+            tasker.set_query('qid_test', { raw_response = sse(events) })
+            vim.schedule(function() on_exit('qid_test') end)
+        end
+        skill_invoke.invoke(buf, manifest(), {}, {
+            validate_edits = require('parley.skills.review.collaboration').validate_edits,
+            on_done = function(result) done_result = result end,
+        })
+        assert.is_true(vim.wait(5000, function() return done_result ~= nil end))
+        assert.equals(2, #done_result.calls)
+        assert.is_false(done_result.ok)
+        assert.same({ 'alpha beta' }, vim.fn.readfile(path))
+    end)
+
     for _,denied in ipairs({'admit','finish','observation'})do
         it('obeys pure model rejection of '..denied,function()
             local Model=require('parley.skill_source_read');local transition=Model.transition

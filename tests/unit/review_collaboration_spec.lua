@@ -61,4 +61,11 @@ describe('local collaboration routing', function()
         assert.is_false(plan.discussion)
         assert.is_true(#plan.chat > 0)
     end)
+
+    it('rejects overlapping or non-snapshot replacements before they can shift protected bytes', function()
+        assert.is_string(routing.validate_edits('alpha\n# Chat\nsecret', {
+            { old_string = 'alpha', new_string = 'x' }, { old_string = 'pha', new_string = '' },
+        }))
+        assert.is_string(routing.validate_edits('original', { { old_string = 'created by a prior call', new_string = '' } }))
+    end)
 end)
