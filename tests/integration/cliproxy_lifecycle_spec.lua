@@ -123,7 +123,7 @@ describe("cliproxy IO lifecycle", function()
         it("classifies a healthy proxy", function()
             local port = ready_port.free_port()
             start_fake(port, "healthy")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             local state = await(function(done)
                 cliproxy.health_probe("127.0.0.1", port, "k", done)
             end)
@@ -133,7 +133,7 @@ describe("cliproxy IO lifecycle", function()
         it("classifies needs_login (200 + empty data)", function()
             local port = ready_port.free_port()
             start_fake(port, "needs_login")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             local state = await(function(done)
                 cliproxy.health_probe("127.0.0.1", port, "k", done)
             end)
@@ -143,7 +143,7 @@ describe("cliproxy IO lifecycle", function()
         it("classifies a client key mismatch (401)", function()
             local port = ready_port.free_port()
             start_fake(port, "client_key_mismatch")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             local state = await(function(done)
                 cliproxy.health_probe("127.0.0.1", port, "k", done)
             end)
@@ -153,7 +153,7 @@ describe("cliproxy IO lifecycle", function()
         it("classifies a foreign server", function()
             local port = ready_port.free_port()
             start_fake(port, "foreign")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             local state = await(function(done)
                 cliproxy.health_probe("127.0.0.1", port, "k", done)
             end)
@@ -182,7 +182,7 @@ describe("cliproxy IO lifecycle", function()
             local pid = cliproxy.spawn(FAKE, cfgfile)
             assert.is_truthy(pid)
             assert.is_truthy(vim.tbl_contains(cliproxy.spawned_pids(), pid))
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             local state = await(function(done)
                 cliproxy.health_probe("127.0.0.1", port, "k", done)
             end)
@@ -238,7 +238,7 @@ describe("cliproxy IO lifecycle", function()
             local port = ready_port.free_port()
             set_endpoint(port)
             start_fake(port, "healthy")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             local outcome = run_ensure()
             assert.is_true(outcome.ok)
@@ -254,7 +254,7 @@ describe("cliproxy IO lifecycle", function()
             local handle = fixture_process.spawn(FAKE, { "--port", tostring(port),
                 "--management-key", cliproxy.management_key(), "--auth-store", auth })
             assert(handle)
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             assert.is_nil(cliproxy.discover_binary(), "fixture must have no discoverable executable")
             local picks = 0
             local app = { _state = { agent = "saved" },
@@ -287,7 +287,7 @@ describe("cliproxy IO lifecycle", function()
             local port = ready_port.free_port()
             set_endpoint(port) -- adds vault secret "testkey"
             start_fake(port, "healthy")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             local done
             cliproxy.ensure_running(function() done = true end, function() done = true end)
@@ -305,7 +305,7 @@ describe("cliproxy IO lifecycle", function()
             local port = ready_port.free_port()
             set_endpoint(port)
             start_fake(port, "needs_login")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             assert.is_true(run_ensure().ok)
         end)
@@ -324,7 +324,7 @@ describe("cliproxy IO lifecycle", function()
             local port = ready_port.free_port()
             set_endpoint(port)
             start_fake(port, "foreign")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             local outcome = run_ensure()
             assert.is_false(outcome.ok)
@@ -339,7 +339,7 @@ describe("cliproxy IO lifecycle", function()
             local port = ready_port.free_port()
             set_endpoint(port)
             local pid = start_fake(port, "client_key_mismatch")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             if listener_command then
                 local config_path = await(function(done) cliproxy.status(done) end).config_path
@@ -389,7 +389,7 @@ describe("cliproxy IO lifecycle", function()
             -- identify it and read the listeners (read 1) to reap it; the release
             -- then re-reads them (read 2) once it has exited.
             local leftover = start_fake(port, "healthy")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             local lsof_log = vim.fn.tempname()
             vim.env.PARLEY_FAKE_LSOF_DELAY_MS = tostring(LSOF_DELAY_MS)
             vim.env.PARLEY_FAKE_LSOF_PIDS = tostring(leftover)
@@ -448,7 +448,7 @@ describe("cliproxy IO lifecycle", function()
             set_endpoint(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             local leftover = start_fake(port, "healthy")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             vim.env.PARLEY_FAKE_LSOF_DELAY_MS = "4000"
             vim.env.PARLEY_FAKE_LSOF_PIDS = tostring(leftover)
             cliproxy._set_process_tools({ lsof = vim.fn.getcwd() .. "/tests/fixtures/fake_lsof" })
@@ -479,7 +479,7 @@ describe("cliproxy IO lifecycle", function()
             assert.is_true(run_ensure().ok)
             local ours = cliproxy.spawned_pids()[1]
             start_fake(peer_port, "healthy")
-            ready_port.wait_listening(peer_port)
+            ready_port.require_listening(peer_port)
             set_endpoint(peer_port)
             cliproxy._set_process_tools({ lsof = "parley-test-no-such-lsof" })
             local outcome
@@ -628,7 +628,7 @@ describe("cliproxy IO lifecycle", function()
                 local port = ready_port.free_port()
                 set_endpoint(port)
                 local leftover = start_fake(port, "healthy") -- tracked by the seam, NOT in _spawned
-                ready_port.wait_listening(port)
+                ready_port.require_listening(port)
                 assert.equals(0, #cliproxy.spawned_pids()) -- this session spawned nothing
                 local n = stop({ leftover })
                 assert.is_truthy(n >= 1) -- reaped the leftover via port identity
@@ -642,7 +642,7 @@ describe("cliproxy IO lifecycle", function()
                 local port = ready_port.free_port()
                 set_endpoint(port)
                 start_fake(port, "foreign") -- not a cliproxy
-                ready_port.wait_listening(port)
+                ready_port.require_listening(port)
                 local n = stop()
                 assert.equals(0, n) -- nothing reaped — identity probe said "foreign"
                 local state = await(function(done)
@@ -656,7 +656,7 @@ describe("cliproxy IO lifecycle", function()
             local port = ready_port.free_port()
             set_endpoint(port)
             start_fake(port, "healthy")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             -- render the config once (so drift can be evaluated)
             local done
@@ -736,7 +736,7 @@ describe("cliproxy IO lifecycle", function()
             local port = ready_port.free_port()
             set_endpoint(port)
             start_fake(port, "healthy") -- mixed-owner list (anthropic + openai)
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             local r = await(function(done)
                 cliproxy.list_models("claude", function(ids, err)
@@ -754,7 +754,7 @@ describe("cliproxy IO lifecycle", function()
             local port = ready_port.free_port()
             set_endpoint(port)
             start_fake(port, "healthy")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             local r = await(function(done)
                 cliproxy.list_models("codex", function(ids, err)
@@ -769,7 +769,7 @@ describe("cliproxy IO lifecycle", function()
             local port = ready_port.free_port()
             set_endpoint(port)
             start_fake(port, "needs_login") -- proxy up, no upstream login → empty registry
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
             local r = await(function(done)
                 cliproxy.list_models("claude", function(ids, err)
@@ -820,7 +820,7 @@ describe("cliproxy IO lifecycle", function()
             vim.fn.writefile({ vim.json.encode(conf) }, cfg_file)
             local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file })
             assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
         end
 
         local function health(channel)
@@ -915,7 +915,7 @@ describe("cliproxy IO lifecycle", function()
             }) }, cfg_file)
             local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file }, extra_env)
             assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             in_window = false -- a listener is back on the port (see #340 below)
             return pid
         end
@@ -1148,7 +1148,7 @@ describe("cliproxy IO lifecycle", function()
             }) }, cfg_file)
             local handle, _, err, pid = fixture_process.spawn(FAKE, { "-config", cfg_file })
             assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE, auth_dir = store } }
 
             local h = await(function(done) cliproxy.credential_health(done, "claude") end)
@@ -1179,7 +1179,7 @@ describe("cliproxy IO lifecycle", function()
             vim.fn.writefile({ vim.json.encode({ port = port }) }, cfgfile)
             vim.env.PARLEY_FAKE_MODE = "healthy"
             local pid = cliproxy.spawn(FAKE, cfgfile)
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
 
             local peers = cliproxy.peers()
             if #peers == 0 and not vim.system then
@@ -1239,7 +1239,7 @@ describe("cliproxy IO lifecycle", function()
             }
             require("parley.vault").add_secret("cliproxyapi", "testkey")
             start_fake(port, "healthy")
-            ready_port.wait_listening(port)
+            ready_port.require_listening(port)
             parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
 
             for _ = 1, 3 do
@@ -1309,7 +1309,7 @@ describe("cliproxy IO lifecycle", function()
             vim.fn.writefile({ vim.json.encode({ port = old_port }) }, cfgfile)
             vim.env.PARLEY_FAKE_MODE = "healthy"
             local stray = cliproxy.spawn(FAKE, cfgfile)
-            ready_port.wait_listening(old_port)
+            ready_port.require_listening(old_port)
 
             -- endpoint moves elsewhere
             parley.dispatcher.providers.cliproxyapi = {

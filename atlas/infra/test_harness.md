@@ -171,6 +171,11 @@ and two crossing probes complete a TCP simultaneous open with nothing
 listening. So `is_listening` confirms a connect with a LISTEN socket on the
 port (`lsof`, bounded, run only after a connect succeeds). `ready_port_spec`
 stages that false positive through the `_connect` seam.
+A spec that only needs the fake up calls `ready_port.require_listening`, which
+fails by name ("fake never came up on port N"). `wait_listening` is
+`---@nodiscard`, and `tests/arch/nodiscard_spec.lua` refuses a dropped answer
+(#361): one turned a dead fake into a missing login prompt, or a retry where
+give_up was due.
 
 ## Process lifecycle
 

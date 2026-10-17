@@ -122,6 +122,22 @@ describe("ready_port.is_listening", function()
         assert.is_false(ready_port.is_listening(1))
     end)
 
+    it("require_listening fails by name when the fake never comes up (#361)", function()
+        local port = ready_port.free_port()
+        local ok, err = pcall(ready_port.require_listening, port, 100)
+        assert.is_false(ok)
+        assert.truthy(tostring(err):find(("fake never came up on port %d (waited 100ms)"):format(port), 1, true))
+    end)
+
+    it("require_listening returns once a real listener is up", function()
+        local server = uv.new_tcp()
+        server:bind("127.0.0.1", 0)
+        server:listen(8, function() end)
+        local ok = pcall(ready_port.require_listening, server:getsockname().port, 2000)
+        server:close()
+        assert.is_true(ok)
+    end)
+
     it("reads each lsof exit shape", function()
         local cases = {
             { res = { code = 0, stdout = "4242\n" }, want = true },

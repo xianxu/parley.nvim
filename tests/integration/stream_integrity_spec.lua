@@ -35,7 +35,7 @@ end
 local function start_fake(port, env)
     local handle, _, err = fixture_process.spawn(FAKE, { "--port", tostring(port), "--response-mode", "stream" }, env)
     assert(handle, "spawn fake: " .. tostring(err))
-    assert(ready_port.wait_listening(port), "fake did not come up on port " .. port)
+    ready_port.require_listening(port)
 end
 
 describe("streamed answer integrity under interference (#229)", function()

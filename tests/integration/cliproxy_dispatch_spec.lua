@@ -27,7 +27,7 @@ local mark
 local function start_fake(port, mode)
     local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port), "--mode", mode })
     assert(handle, "spawn fake: " .. tostring(err))
-    assert(ready_port.wait_listening(port), "fake did not come up on port " .. port)
+    ready_port.require_listening(port)
     return pid
 end
 
