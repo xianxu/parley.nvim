@@ -1,6 +1,6 @@
 ---
 id: 000361
-status: codecomplete
+status: done
 created: 2026-10-16
 updated: 2026-10-17
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 12105c271e036569b9a917a5ca3da1c1860116ba
         evidence_commit: 794343525606bee58c2efffc145c31a7970d0fc9
+        landed_commit: 9bc380e8b5f0586f89ef78df8fb828d01d65fe44
 ---
 
 # Cliproxy expired-token recovery intermittently retries instead of prompting
