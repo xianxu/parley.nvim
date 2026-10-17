@@ -337,7 +337,7 @@ describe("branch/prune chords (#214 M1)", function()
 
     it("branch_ref resolves the portable key and legacy alias", function()
         local keys = reg.resolve_keys(entry("branch_ref"), parley.config)
-        assert.same({ "<M-i>", "<C-g>i" }, keys)
+        assert.same({ "<M-b>", "<C-g>i" }, keys)
     end)
 
     it("the help float advertises a key that works in a plain terminal", function()
@@ -350,7 +350,7 @@ describe("branch/prune chords (#214 M1)", function()
         end
         assert.is_truthy(shown, "branch_ref missing from the chat help")
         local primary = shown:match("^%s*(%S+)")
-        assert.are.equal("<M-i>", primary,
+        assert.are.equal("<M-b>", primary,
             "help must LEAD with the portable key, got: " .. tostring(shown))
         assert.is_truthy(shown:find("(also <C-g>i)", 1, true),
             "the legacy alias is no longer advertised: " .. tostring(shown))
@@ -369,7 +369,7 @@ describe("branch/prune chords (#214 M1)", function()
     -- falls back to default_key. Assert the SHIPPED file carries the list.
     it("config.lua itself ships both chord lists", function()
         local shipped = dofile("lua/parley/config.lua")
-        assert.same({ "<M-i>", "<C-g>i" },
+        assert.same({ "<M-b>", "<C-g>i" },
             shipped.chat_shortcut_branch_ref.shortcut)
         assert.equals("<C-g>b", shipped.chat_shortcut_prune.shortcut)
     end)
@@ -382,8 +382,8 @@ describe("branch/prune chords (#214 M1)", function()
             if l:find("branch", 1, true) or l:find("Insert branch", 1, true) then shown = l end
         end
         assert.is_truthy(shown, "branch_ref missing from the chat help")
-        assert.are.equal("<M-i>", shown:match("^%s*(%S+)"),
-            "help must lead with <M-i>, got: " .. tostring(shown))
+        assert.are.equal("<M-b>", shown:match("^%s*(%S+)"),
+            "help must lead with <M-b>, got: " .. tostring(shown))
     end)
 end)
 
@@ -726,7 +726,7 @@ describe("<C-g>? can show every bound key (#214 I2)", function()
     it("the aliases the chords depend on are visible by name", function()
         local chat = help_text("chat")
         for _, k in ipairs({ "<M-q>", "<C-g>q", "<M-t>", "<C-g>t",
-                             "<M-i>", "<C-g>i", "<M-p>", "<C-g>b" }) do
+                             "<M-b>", "<C-g>i", "<M-p>", "<C-g>b" }) do
             assert.is_truthy(chat:find(k, 1, true), k .. " is not shown in the chat help")
         end
     end)
@@ -1139,7 +1139,7 @@ describe("finder key lists and help (#251)", function()
 
     it("names the sub-chat creation and opening behavior", function()
         setup_parley()
-        assert.is_true(has_line(registry.help_lines("chat", parley.config), "<M-i>", "Create and open sub-chat"))
+        assert.is_true(has_line(registry.help_lines("chat", parley.config), "<M-b>", "Create and open sub-chat"))
     end)
 
     it("shows fixed prompt basics in every finder even with default maps disabled", function()

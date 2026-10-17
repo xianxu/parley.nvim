@@ -179,7 +179,7 @@ describe("a resubmit preserves annotations (#214 BR-75)", function()
         assert.same({ "🔒: one", "🌿: c.md: two" }, kept)
     end)
 
-    -- BR-79: the same hazard in the INLINE form. `<M-i>` on a visual selection
+    -- BR-79: the same hazard in the INLINE form. `<M-b>` on a visual selection
     -- leaves `[🌿:anchor](child.md)` embedded in the answer's prose — that is
     -- the whole point of the visual case — and my first fix matched only
     -- LINE-START prefixes, so a resubmit deleted the line and the child with it.

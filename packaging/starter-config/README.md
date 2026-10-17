@@ -64,7 +64,7 @@ Press `i` to type and Escape to return to NORMAL. Its colors follow
    You can reopen these prompts with `:ParleyProxy connect` and `:ParleyAgent`.
 3. Press `i` and type a question. Press Alt+Enter to send it. If your terminal
    does not transmit Alt+Enter, press Escape and use `:ParleyChatRespond`.
-4. Copy an image, then press Alt+v to attach it .
+4. Copy an image, then press Alt+i to attach it .
    Alt+t opens the conversation outline. Press Escape and type `:wq` to save
    and quit. Use `:ParleyChatNew` for a new conversation.
 

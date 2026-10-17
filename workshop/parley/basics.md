@@ -58,7 +58,7 @@ place in the main discussion.
 After sending the rainbow question below, try this:
 
 1. Press `ESC` and move the cursor to the part of the answer you want to explore.
-2. Press `Option+i`, or `ctrl+g` then `i`. Parley creates and opens a linked chat.
+2. Press `Option+b`, or `ctrl+g` then `i`. Parley creates and opens a linked chat.
 3. In that child chat, press `i` and type a follow-up after its question marker,
    for example: "Why do different colors bend by different amounts?"
 4. Send with `Option+return`. You can keep asking questions in this branch.
@@ -69,7 +69,7 @@ The main chat keeps a branch link marked with a leaf. Put the cursor on that
 link and press `Option+o` to open the child again. You can also find either chat
 through Chat Finder.
 
-Later, try selecting a phrase in an answer with your mouse, then pressing `Option+i`.
+Later, try selecting a phrase in an answer with your mouse, then pressing `Option+b`.
 Parley uses that selection to start a branch asking for more about the phrase.
 
 Continue with [3. Advanced](./advanced.md) for project folders, local tools,
