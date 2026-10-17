@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "bc9b0b22", done: "ff519f53"}
 ---
 
 # packaging_vm_spec reads an empty vms.json: fake_tart's state write is not atomic (flake)
