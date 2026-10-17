@@ -722,3 +722,17 @@ point as well as internal helpers before calling the family complete.
 - When a rule moves into the pure model, keep the cost bound of the IO it
   replaces. Let the model pick candidates from cheap stat data, then read only
   those. The first draft read every side doc's head on every open.
+
+## 2026-10-17 (#370 — a positive wait bounded by a load guess)
+
+- Bound a wait for an outcome by the path's own deadline, not by a guess at
+  load. A positive `vim.wait` returns the moment its condition holds, so a long
+  bound costs a passing run nothing; a short one turns machine load into a
+  flake. session_sync_spec waited 2 s for a fake `couch` send, and the product
+  allows 15 s (`agentic_submit_timeout_ms`), so a loaded suite failed it once
+  with the code right (the #355 class). Pin the fix with a fake slower than
+  the old literal (`FAKE_COUCH_SLEEP=2.5`). Keep short fixed waits only for
+  absence checks, where the bound is the test's cost.
+- Trace before blaming ordering: wrapping `couch.run` to log each argv with a
+  timestamp showed one process, started 15 ms after the key, with nothing
+  queued ahead of it.
