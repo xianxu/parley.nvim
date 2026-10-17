@@ -6,6 +6,7 @@
 
 -- Fixture strings, not transport tokens: the harness watch for a refusal
 -- with no words expects them (#261 M5).
+local arrival = require("tests.helpers.arrival")
 vim.g.parley_expected_unkeyed={'test abort'}
 local uv = vim.uv or vim.loop
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
@@ -83,7 +84,7 @@ describe("cliproxy on_abort teardown per caller", function()
             { topicA = { "s1" }, topicB = { "s2" } },
             function(prefs) done = prefs end
         )
-        vim.wait(9000, function() return done ~= nil end, 20)
+        vim.wait(arrival.MS, function() return done ~= nil end, 20)
         parley.get_agent = saved_get_agent
 
         assert.is_truthy(done) -- callback fired → on_abort → process_next past BOTH tags
@@ -113,7 +114,7 @@ describe("cliproxy on_abort teardown per caller", function()
         require("parley.memory_prefs").generate_preferences(
             { topicA = { "s1" }, topicB = { "s2" } },
             function(prefs) done = prefs end)
-        assert.is_true(vim.wait(1000, function() return done ~= nil end, 10))
+        assert.is_true(vim.wait(arrival.MS, function() return done ~= nil end, 10))
         tasker.run = original_run
 
         assert.equals(2, runs)
@@ -141,7 +142,7 @@ describe("cliproxy on_abort teardown per caller", function()
         end
         local Respond = require("parley.chat_respond")
         local started, response = pcall(Respond.respond, { range = 0 })
-        local settled = started and response and vim.wait(1000, function()
+        local settled = started and response and vim.wait(arrival.MS, function()
             return Respond.response_snapshot(response).status == "terminal"
         end, 10)
         parley.dispatcher.query = saved_query
@@ -193,7 +194,7 @@ describe("cliproxy on_abort teardown per caller", function()
         end
 
         pcall(function() skill_invoke.invoke(buf, manifest, {}, {}) end)
-        vim.wait(300, function() return not skill_invoke.is_in_flight(buf) end, 10)
+        vim.wait(arrival.MS, function() return not skill_invoke.is_in_flight(buf) end, 10)
 
         parley.get_agent = saved_get_agent
         parley.dispatcher.query = saved_query

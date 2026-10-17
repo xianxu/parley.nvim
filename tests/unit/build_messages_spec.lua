@@ -4,6 +4,7 @@
 -- It's pure logic except for file I/O via helpers.format_file_content,
 -- which we stub out in tests.
 
+local arrival = require("tests.helpers.arrival")
 local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-build-messages-" .. os.time()
 
 -- Bootstrap parley
@@ -2271,7 +2272,7 @@ describe("attachments (#231): both builders, one budget", function()
             with_limits({ MAX_REQUEST_BYTES = 200 }, function()
                 local session = parley.chat_respond({ range = 0 })
                 assert.is_not_nil(session)
-                assert.is_true(vim.wait(2000, function()
+                assert.is_true(vim.wait(arrival.MS, function()
                     return require('parley.chat_respond').response_snapshot(session).status == 'terminal'
                 end, 10), 'preparation failure must settle')
                 assert.equals('prepare_failed', require('parley.chat_respond').response_snapshot(session).generation.outcome)

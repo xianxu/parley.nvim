@@ -1,5 +1,6 @@
 -- #308: the Issue Finder folds tracker cards into its rows (real disk scan,
 -- real git, stub picker).
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 parley.setup({
     chat_dir = vim.fn.tempname() .. "-issue-finder-tracker-spec",
@@ -83,7 +84,7 @@ describe("IssueFinder tracker overlay", function()
 
     it("shows the card status in the tracker highlight and sorts by it", function()
         open_finder(repos.reader .. "/workshop/issues")
-        assert(vim.wait(10000, function()
+        assert(vim.wait(arrival.MS, function()
             local items = #updates > 0 and last_items()
             local alpha = items and row(items, "000001")
             return alpha and alpha.issue.status == "wontfix"
@@ -101,7 +102,7 @@ describe("IssueFinder tracker overlay", function()
 
     it("repaints when a background fetch moves the tracker, keeping the selection", function()
         open_finder(repos.reader .. "/workshop/issues")
-        assert(vim.wait(10000, function()
+        assert(vim.wait(arrival.MS, function()
             local alpha = #updates > 0 and row(last_items(), "000001")
             return alpha and alpha.issue.status == "wontfix"
         end, 10))
@@ -111,7 +112,7 @@ describe("IssueFinder tracker overlay", function()
         fixture.write_card(repos.writer, "000002-beta.md", { status = "working", title = "Beta" })
         updates = {}
         open_finder(repos.reader .. "/workshop/issues")
-        assert(vim.wait(10000, function()
+        assert(vim.wait(arrival.MS, function()
             local beta = #updates > 0 and row(last_items(), "000002")
             return beta and beta.issue.status == "working"
         end, 10), "fetched card never reached the finder")
@@ -121,16 +122,16 @@ describe("IssueFinder tracker overlay", function()
     it("repaints when another view's read finds a moved tip", function()
         issue_tracker.fetch_interval_s = 3600
         open_finder(repos.reader .. "/workshop/issues")
-        assert(vim.wait(10000, function()
+        assert(vim.wait(arrival.MS, function()
             local alpha = #updates > 0 and row(last_items(), "000001")
             return alpha and alpha.issue.status == "wontfix"
         end, 10))
 
-        assert(vim.wait(10000, function() return not issue_tracker._busy_for_tests(repos.reader) end, 10))
+        assert(vim.wait(arrival.MS, function() return not issue_tracker._busy_for_tests(repos.reader) end, 10))
         fixture.write_card(repos.writer, "000002-beta.md", { status = "working", title = "Beta" })
         fixture.git(repos.reader, { "fetch", "-q", "origin", "issue-tracker" })
         issue_tracker.load(repos.reader, function() end) -- e.g. an issue buffer's BufEnter
-        assert(vim.wait(10000, function()
+        assert(vim.wait(arrival.MS, function()
             local beta = row(last_items(), "000002")
             return beta and beta.issue.status == "working"
         end, 10), "the finder never heard of the move")
@@ -139,7 +140,7 @@ describe("IssueFinder tracker overlay", function()
     it("leaves an untracked repository's rows as they are", function()
         vim.fn.delete(repos.reader .. "/workshop/issue-tracker.json")
         open_finder(repos.reader .. "/workshop/issues")
-        assert(vim.wait(5000, function() return #updates > 0 end, 10))
+        assert(vim.wait(arrival.MS, function() return #updates > 0 end, 10))
         vim.wait(200)
         local alpha = row(last_items(), "000001")
         assert.equals("open", alpha.issue.status)
@@ -201,7 +202,7 @@ describe("IssueFinder card-only issues", function()
     end
 
     local function wait_items(predicate, what)
-        assert(vim.wait(10000, function()
+        assert(vim.wait(arrival.MS, function()
             return #updates > 0 and predicate(updates[#updates].items)
         end, 10), "timed out waiting for " .. what)
         return updates[#updates].items
@@ -370,7 +371,7 @@ describe("IssueFinder card-only issues", function()
     it("adds no card-only rows for an untracked repository", function()
         vim.fn.delete(repos.reader .. "/workshop/issue-tracker.json")
         open_finder(0)
-        assert(vim.wait(5000, function() return #updates > 0 end, 10))
+        assert(vim.wait(arrival.MS, function() return #updates > 0 end, 10))
         vim.wait(200)
         for _, item in ipairs(updates[#updates].items) do
             assert.is_nil(item.issue.card_only)

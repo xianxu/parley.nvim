@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local D=require('parley.document')
 local Fake=require('tests.helpers.fake_document_editor')
 local ok,T=pcall(require,'parley.response_target')
@@ -31,7 +32,7 @@ describe('response target admission before IO',function()
         local value=spec();value.schedule=true
         require('tests.helpers.stub').with_stub(D,'repair_step',function()error('target exploded')end,function()
             assert(T.start(doc,value,{cancelled=function(reason)cancelled=reason end}))
-            assert(vim.wait(500,function()return cancelled~=nil end,5),'the target never settled')
+            assert(vim.wait(arrival.MS,function()return cancelled~=nil end,5),'the target never settled')
         end)
         assert.truthy(tostring(cancelled):find('target exploded',1,true))
         assert.equals(0,D.user_guard_stats(doc).live)

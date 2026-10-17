@@ -1,5 +1,6 @@
 -- Integration tests for the review-diagnostic inline display toggle (#133 M6).
 
+local arrival = require("tests.helpers.arrival")
 local dd = require("parley.skills.review.diag_display")
 
 local function ns_cfg()
@@ -116,7 +117,7 @@ describe("review.diag_display", function()
             source = "parley-footnote",
         } })
 
-        vim.wait(100, function()
+        vim.wait(arrival.MS, function()
             return #diagnostic_floats() == 1
         end)
 

@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local float_picker = require("parley.float_picker")
 
 -- PROMPT_OVERHEAD: 5 rows consumed by prompt window borders + content.
@@ -508,7 +509,7 @@ describe("float_picker", function()
             vim.api.nvim_feedkeys(
                 vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true
             )
-            vim.wait(200, function() return cancel_count == 1 end)
+            vim.wait(arrival.MS, function() return cancel_count == 1 end)
             picker.close()
 
             assert.equals(1, cancel_count)
@@ -528,7 +529,7 @@ describe("float_picker", function()
 
             picker.close()
             picker.close()
-            vim.wait(200, function() return cancel_count == 1 end)
+            vim.wait(arrival.MS, function() return cancel_count == 1 end)
 
             assert.equals(1, cancel_count)
             assert.is_true(picker.is_closed())
@@ -545,7 +546,7 @@ describe("float_picker", function()
             vim.api.nvim_feedkeys(
                 vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", true
             )
-            vim.wait(200, function() return selected ~= nil end)
+            vim.wait(arrival.MS, function() return selected ~= nil end)
 
             assert.is_not_nil(selected)
             assert.equals("the_value", selected.value)
@@ -564,7 +565,7 @@ describe("float_picker", function()
             vim.api.nvim_feedkeys(
                 vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true
             )
-            vim.wait(200, function() return cancelled end)
+            vim.wait(arrival.MS, function() return cancelled end)
 
             assert.is_true(cancelled)
             assert.is_nil(find_any_float_win(), "window should be closed after cancel")
@@ -580,7 +581,7 @@ describe("float_picker", function()
             })
 
             vim.api.nvim_feedkeys("q", "x", true)
-            vim.wait(200, function() return cancelled end)
+            vim.wait(arrival.MS, function() return cancelled end)
 
             assert.is_true(cancelled)
             assert.is_nil(find_any_float_win(), "window should be closed after cancel")
@@ -598,7 +599,7 @@ describe("float_picker", function()
             })
 
             vim.api.nvim_feedkeys("x", "x", true)
-            vim.wait(200, function() return mapped_item ~= nil end)
+            vim.wait(arrival.MS, function() return mapped_item ~= nil end)
 
             assert.is_not_nil(mapped_item)
             assert.equals("extra_val", mapped_item.value)
@@ -634,7 +635,7 @@ describe("float_picker", function()
             assert.is_false(picker.is_closed())
             vim.api.nvim_set_current_win(prompt_win)
             vim.fn.maparg("<CR>", "i", false, true).callback()
-            vim.wait(100, function() return selected ~= nil end)
+            vim.wait(arrival.MS, function() return selected ~= nil end)
             assert.equals("alias-item", selected)
             assert.equals(6, #calls)
         end)
@@ -654,7 +655,7 @@ describe("float_picker", function()
             vim.api.nvim_feedkeys(
                 vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", true
             )
-            vim.wait(200, function() return selected ~= nil end)
+            vim.wait(arrival.MS, function() return selected ~= nil end)
 
             assert.is_not_nil(selected)
             assert.equals("the_value", selected.value)
@@ -680,7 +681,7 @@ describe("float_picker", function()
             })
 
             vim.api.nvim_feedkeys("d", "x", true)
-            vim.wait(200, function() return closed_via_mapping end)
+            vim.wait(arrival.MS, function() return closed_via_mapping end)
 
             assert.is_true(closed_via_mapping)
             assert.is_nil(find_any_float_win(), "window should be closed by mapping close_fn")
@@ -708,7 +709,7 @@ describe("float_picker", function()
             vim.api.nvim_feedkeys(
                 vim.api.nvim_replace_termcodes("<C-d>", true, false, true), "x", true
             )
-            vim.wait(200, function() return closed_via_mapping end)
+            vim.wait(arrival.MS, function() return closed_via_mapping end)
             vim.wait(50)
 
             assert.is_true(closed_via_mapping)
@@ -740,7 +741,7 @@ describe("float_picker", function()
             vim.api.nvim_feedkeys(
                 vim.api.nvim_replace_termcodes("<C-a>", true, false, true), "x", true
             )
-            assert(vim.wait(200, function() return mapped and cancel_count == 1 end))
+            assert(vim.wait(arrival.MS, function() return mapped and cancel_count == 1 end))
 
             assert.equals(1, cancel_count)
             assert.is_nil(find_any_float_win(), "loading mapping should dismiss the picker")
@@ -760,7 +761,7 @@ describe("float_picker", function()
             vim.api.nvim_feedkeys(
                 vim.api.nvim_replace_termcodes("<C-d>", true, false, true), "x", true
             )
-            vim.wait(200, function() return mapped_item ~= nil end)
+            vim.wait(arrival.MS, function() return mapped_item ~= nil end)
 
             assert.is_not_nil(mapped_item)
             assert.equals("ctrl_d_val", mapped_item.value)
@@ -1161,7 +1162,7 @@ describe("float_picker", function()
                 on_select = function(item) picked = item.value end,
             })
             feed_cr()
-            vim.wait(200, function() return picked ~= nil end)
+            vim.wait(arrival.MS, function() return picked ~= nil end)
             assert.equals("a", float_picker._last_selection["spec.basic"])
         end)
 
@@ -1243,7 +1244,7 @@ describe("float_picker", function()
                 on_select = function(item) picked = item.name end,
             })
             feed_cr()
-            vim.wait(200, function() return picked ~= nil end)
+            vim.wait(arrival.MS, function() return picked ~= nil end)
             assert.equals("agent-A", float_picker._last_selection["spec.agents"])
         end)
 
@@ -1262,7 +1263,7 @@ describe("float_picker", function()
             vim.api.nvim_feedkeys(
                 vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "x", true
             )
-            vim.wait(200, function() return find_any_float_win() == nil end)
+            vim.wait(arrival.MS, function() return find_any_float_win() == nil end)
             assert.equals("preserved", float_picker._last_selection["spec.cancel"])
         end)
     end)

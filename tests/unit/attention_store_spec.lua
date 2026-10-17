@@ -1,6 +1,7 @@
 -- #354: the attention store. Real files and a real document lease under a
 -- temporary state directory; the corruption cases also run through
 -- tests/helpers/sidecars.lua.
+local arrival = require("tests.helpers.arrival")
 local Store = require("parley.attention_store")
 local Model = require("parley.attention_model")
 local logger = require("parley.logger")
@@ -14,7 +15,7 @@ local function submitted(path, id) return { type = "submitted", path = path, id 
 local function apply(event, options)
     local done, state, err = false, nil, nil
     Store.apply(event, options, function(s, e) done, state, err = true, s, e end)
-    assert(vim.wait(2000, function() return done end, 5), "apply never finished")
+    assert(vim.wait(arrival.MS, function() return done end, 5), "apply never finished")
     return state, err
 end
 
@@ -104,7 +105,7 @@ describe("attention_store", function()
         here.apply({ type = "submitted", path = "/a.md", id = "m1" }, { now = 10 }, function()
             here.apply({ type = "saved", path = "/a.side/s.md", mtime = "20.5" }, { now = 20 }, function() done = true end)
         end)
-        assert(vim.wait(2000, function() return done end, 5), "apply never finished")
+        assert(vim.wait(arrival.MS, function() return done end, 5), "apply never finished")
         local state = there.load()
         assert.same({ ["/a.side/s.md"] = "20.5" }, state.saved)
         local file = { path = "/a.side/s.md", parent = "/a.md", mtime_sec = 20, mtime_id = "20.5" }

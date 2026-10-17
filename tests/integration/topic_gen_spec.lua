@@ -2,6 +2,7 @@
 -- request — the default system prompt mandates a `🧠:` thinking block, which an
 -- obedient model emits and which then lands as the "topic".
 
+local arrival = require("tests.helpers.arrival")
 local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/parley-topic-gen-" .. os.time()
 vim.fn.mkdir(tmp_dir, "p")
 
@@ -132,7 +133,7 @@ describe("generate_topic", function()
             "openai", { model = "gpt-x" }, function(topic, reason)
                 result = { topic = topic, reason = reason }
             end)
-        assert.is_true(vim.wait(500, function() return result ~= nil end, 10))
+        assert.is_true(vim.wait(arrival.MS, function() return result ~= nil end, 10))
         tasker.run = original_run
 
         assert.is_nil(result.topic)

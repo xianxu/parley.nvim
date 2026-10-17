@@ -1,4 +1,5 @@
 -- Public response ownership through the real dispatcher and managed process seam.
+local arrival = require("tests.helpers.arrival")
 local parley=require('parley')
 local Respond=require('parley.chat_respond')
 local Process=require('tests.helpers.fake_process')
@@ -8,7 +9,7 @@ parley.setup({chat_dir=root,state_dir=root..'/state',providers={},api_keys={},de
     agents={{name='Choose a model',disable=true},{name='OwnershipFixture',provider='openai',
         model={model='fixture'},system_prompt='Fixture',tools={}}}})
 local function text(buf)return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n')end
-local function settle(predicate)assert.is_true(vim.wait(3000,predicate,1),'scheduled response did not settle')end
+local function settle(predicate)assert.is_true(vim.wait(arrival.MS,predicate,1),'scheduled response did not settle')end
 local function status(p)
     for i,arg in ipairs(p.args)do if arg=='--write-out'then
         p:emit('stderr',p.args[i+1]:match('%%{stderr}(.-)%%{http_code}')..'200\n');return

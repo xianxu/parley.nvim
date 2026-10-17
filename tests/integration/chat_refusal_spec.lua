@@ -1,5 +1,6 @@
 -- #261 M5 Task 5.3: every refusal and every non-success ending reaches the user
 -- exactly once, in words, with an action. A user's own Stop says nothing.
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 local Respond = require("parley.chat_respond")
 local Fixture = require("tests.helpers.respond_fixture")
@@ -10,7 +11,7 @@ parley.setup({ chat_dir = root, state_dir = root .. "/state", providers = {}, ap
         { name = "RefusalFixture", provider = "openai", model = { model = "fixture" }, system_prompt = "Fixture", tools = {} } } })
 
 local PREFIXES = vim.tbl_values(require("parley.refusal").PREFIX)
-local function wait(fn, what) assert.is_true(vim.wait(3000, fn, 1), what or "did not settle") end
+local function wait(fn, what) assert.is_true(vim.wait(arrival.MS, fn, 1), what or "did not settle") end
 
 describe("refusals reach the user once, in words", function()
     local buf, calls, restore, warnings, serial = nil, nil, nil, nil, 0

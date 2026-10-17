@@ -3,6 +3,7 @@
 -- clock and #353's file_history seam injected, checked by what the operator
 -- sees (rows) and what the store keeps; plus a probe counter for the limit
 -- of 4, and observations that land after the finder closed.
+local arrival = require("tests.helpers.arrival")
 local Attention = require("parley.attention")
 local Store = require("parley.attention_store")
 local Model = require("parley.attention_model")
@@ -13,7 +14,7 @@ local p = require("parley")
 local root, registry, saved, warnings, now
 
 local function await(predicate, why)
-    assert.is_true(vim.wait(10000, predicate, 10), why)
+    assert.is_true(vim.wait(arrival.MS, predicate, 10), why)
 end
 
 -- Apply `event` to the store at the test clock and wait for it.

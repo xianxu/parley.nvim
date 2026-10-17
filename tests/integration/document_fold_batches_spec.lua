@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local D=require('parley.document')
 local F=require('parley.tool_folds')
 local Reader=require('parley.line_reader')
@@ -43,7 +44,7 @@ describe('bounded native fold batches',function()
             seen=true
             assert.equals(0,vim.fn.foldlevel(3+149*4))
         end,1)
-        assert.is_true(vim.wait(1000,function() return seen end,1))
+        assert.is_true(vim.wait(arrival.MS,function() return seen end,1))
         assert.equals('idle',F.flush(buf))
         assert.equals(3+149*4,vim.fn.foldclosed(3+149*4))
     end)

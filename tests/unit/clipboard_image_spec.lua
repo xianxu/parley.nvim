@@ -5,6 +5,7 @@
 -- fake runner, a HELD fake runner (nothing settles until released), and the
 -- default vim.system runner against `sh` (the real seam, including the
 -- synthesized timeout message).
+local arrival = require("tests.helpers.arrival")
 local ci = require("parley.clipboard_image")
 
 local function env(sysname, wayland, manager, tools)
@@ -271,7 +272,7 @@ describe("clipboard_image: read_png", function()
         ci.read_png(recipe, out, function(s, m)
             status, msg = s, m
         end, runner)
-        vim.wait(500, function()
+        vim.wait(arrival.MS, function()
             return status ~= nil
         end, 10)
         assert.same({ "t", out }, seen_argv)
@@ -291,7 +292,7 @@ describe("clipboard_image: read_png", function()
             status = s
         end, runner)
         assert.is_nil(status, "settles on the main loop, after read_png returns")
-        vim.wait(500, function()
+        vim.wait(arrival.MS, function()
             return status ~= nil
         end, 10)
         assert.equals("ok", status)
@@ -307,7 +308,7 @@ describe("clipboard_image: read_png", function()
         ci.read_png(recipe, out, function(s, m)
             status, msg = s, m
         end, runner)
-        vim.wait(500, function()
+        vim.wait(arrival.MS, function()
             return status ~= nil
         end, 10)
         assert.equals("no_image", status)
@@ -324,7 +325,7 @@ describe("clipboard_image: read_png", function()
         ci.read_png(recipe, out, function(s)
             status = s
         end, runner)
-        vim.wait(500, function()
+        vim.wait(arrival.MS, function()
             return status ~= nil
         end, 10)
         assert.equals("no_image", status)
@@ -340,7 +341,7 @@ describe("clipboard_image: read_png", function()
         ci.read_png(recipe, out, function(s, m)
             status, msg = s, m
         end, runner)
-        vim.wait(500, function()
+        vim.wait(arrival.MS, function()
             return status ~= nil
         end, 10)
         assert.equals("failed", status)
@@ -359,7 +360,7 @@ describe("clipboard_image: read_png", function()
         end, runner)
         assert.is_function(held, "the runner was spawned")
         assert.is_nil(status, "nothing settles until the tool answers")
-        vim.wait(50, function()
+        vim.wait(50, function() -- absence: the held runner has not answered, nothing may settle
             return status ~= nil
         end, 10)
         assert.is_nil(status, "still nothing after the loop turns")
@@ -368,7 +369,7 @@ describe("clipboard_image: read_png", function()
         -- what is on disk at the moment the tool answers, not at spawn time.
         write_file(out, "PNG")
         held(0, "")
-        vim.wait(500, function()
+        vim.wait(arrival.MS, function()
             return status ~= nil
         end, 10)
         assert.equals("ok", status)
@@ -382,7 +383,7 @@ describe("clipboard_image: read_png", function()
         ci.read_png(sh_recipe, out, function(s, m)
             status, msg = s, m
         end)
-        vim.wait(2000, function()
+        vim.wait(arrival.MS, function()
             return status ~= nil
         end, 10)
         assert.equals("ok", status, msg)
@@ -399,7 +400,7 @@ describe("clipboard_image: read_png", function()
         ci.read_png(sh_recipe, out, function(s, m)
             status, msg = s, m
         end)
-        vim.wait(2000, function()
+        vim.wait(arrival.MS, function()
             return status ~= nil
         end, 10)
         assert.equals("no_image", status)
@@ -416,7 +417,7 @@ describe("clipboard_image: read_png", function()
             status, msg = s, m
         end, runner)
         assert.is_nil(status, "the launch error is routed onto the main loop, not raised inline")
-        vim.wait(500, function()
+        vim.wait(arrival.MS, function()
             return status ~= nil
         end, 10)
         assert.equals("failed", status)
@@ -436,10 +437,10 @@ describe("clipboard_image: read_png", function()
             calls = calls + 1
             status = s
         end, runner)
-        vim.wait(300, function()
+        vim.wait(arrival.MS, function()
             return calls > 0
         end, 10)
-        vim.wait(100, function()
+        vim.wait(100, function() -- absence: a second on_done must not arrive
             return calls > 1
         end, 10)
         assert.equals(1, calls, "on_done fires exactly once")
@@ -455,7 +456,7 @@ describe("clipboard_image: read_png", function()
             status, msg = s, m
         end)
         assert.is_true(ok, "read_png raised: " .. tostring(err))
-        vim.wait(2000, function()
+        vim.wait(arrival.MS, function()
             return status ~= nil
         end, 10)
         assert.equals("failed", status)
@@ -472,7 +473,7 @@ describe("clipboard_image: read_png", function()
             ci.read_png(sh_recipe, out, function(s, m)
                 status, msg = s, m
             end)
-            vim.wait(3000, function()
+            vim.wait(arrival.MS, function()
                 return status ~= nil
             end, 10)
         end)

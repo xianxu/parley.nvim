@@ -6,6 +6,7 @@
 -- Strategy: Use real shell commands (echo, printf) to test subprocess execution
 -- without mocking uv.spawn. This verifies the actual libuv integration.
 
+local arrival = require("tests.helpers.arrival")
 local tasker = require("parley.tasker")
 local logger = require("parley.logger")
 
@@ -47,7 +48,7 @@ describe("tasker.run integration", function()
             )
 
             -- Wait for process to complete
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -74,7 +75,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -100,7 +101,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -129,7 +130,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -158,7 +159,7 @@ describe("tasker.run integration", function()
                 end
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -186,7 +187,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -211,7 +212,7 @@ describe("tasker.run integration", function()
             )
 
             -- Check that handle was added (before process exits)
-            vim.wait(100, function()
+            vim.wait(arrival.MS, function()
                 return #tasker._handles > initial_count
             end, 10)
 
@@ -219,7 +220,7 @@ describe("tasker.run integration", function()
                 "Handle should be added to _handles")
 
             -- Wait for completion
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
         end)
@@ -239,7 +240,7 @@ describe("tasker.run integration", function()
             )
 
             -- Wait for process to complete
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -264,7 +265,7 @@ describe("tasker.run integration", function()
             )
 
             -- Check handle has correct buffer
-            vim.wait(100, function()
+            vim.wait(arrival.MS, function()
                 for _, h in ipairs(tasker._handles) do
                     if h.buf == test_buf then
                         return true
@@ -284,7 +285,7 @@ describe("tasker.run integration", function()
             assert.is_true(found_buf, "Handle should track buffer number")
 
             -- Wait for cleanup
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -330,7 +331,7 @@ describe("tasker.run integration", function()
                 "Second process should not start when buffer is busy")
 
             -- Wait for first process to complete
-            vim.wait(2000, function()
+            vim.wait(arrival.MS, function()
                 return first_exit
             end, 10)
 
@@ -354,7 +355,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return first_exit
             end, 10)
 
@@ -372,7 +373,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return second_exit
             end, 10)
 
@@ -401,7 +402,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -429,7 +430,7 @@ describe("tasker.run integration", function()
                 nil
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -459,7 +460,7 @@ describe("tasker.run integration", function()
             assert.is_true(success, "Should not error during cleanup")
 
             -- Wait for process to complete
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return #tasker._handles == 0
             end, 10)
         end)
@@ -478,7 +479,7 @@ describe("tasker.run integration", function()
             )
 
             -- Wait for process to complete (we can't check callback, but handles should clear)
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return #tasker._handles == 0
             end, 10)
 
@@ -501,7 +502,7 @@ describe("tasker.run integration", function()
                 nil  -- nil err_reader
             )
 
-            vim.wait(1000, function()
+            vim.wait(arrival.MS, function()
                 return exit_called
             end, 10)
 
@@ -541,7 +542,7 @@ describe("tasker.run integration", function()
                     state.on_exit(0, 0)
                 end
                 assert.is_nil(terminal, "terminal must remain scheduled off the fast callback")
-                assert.is_true(vim.wait(100, function() return terminal ~= nil end, 5))
+                assert.is_true(vim.wait(arrival.MS, function() return terminal ~= nil end, 5))
                 assert.same({ 0, 0, "out", "err" }, { terminal[1], terminal[2], terminal[3], terminal[4] })
                 assert.is_nil(terminal[5])
                 assert.equals("terminal", events[#events])
@@ -575,7 +576,7 @@ describe("tasker.run integration", function()
             state.pipes[1].reader(nil, nil) -- defensive late libuv delivery is ignored
             state.pipes[2].reader(nil, nil)
             state.on_exit(9, 0)
-            assert.is_true(vim.wait(100, function() return terminal ~= nil end, 5))
+            assert.is_true(vim.wait(arrival.MS, function() return terminal ~= nil end, 5))
             assert.equals(3, #stdout_events)
             assert.equals("read boom", stdout_events[2].err)
             assert.is_nil(stdout_events[2].data)
@@ -608,7 +609,7 @@ describe("tasker.run integration", function()
                 state.pipes[2].reader(nil, nil)
                 state.on_exit(0, 0)
             end)
-            assert.is_true(vim.wait(100, function() return terminals == 1 end, 5))
+            assert.is_true(vim.wait(arrival.MS, function() return terminals == 1 end, 5))
             assert.equals(2, stdout_calls)
             assert.equals(2, stderr_calls)
             assert.equals(0, #tasker._handles)
@@ -626,7 +627,7 @@ describe("tasker.run integration", function()
             state.pipes[1].reader(nil, nil) -- a late EOF after the error is ignored
             state.pipes[2].reader(nil, nil)
             state.on_exit(0, 0)
-            assert.is_true(vim.wait(100, function() return terminals == 1 end, 5))
+            assert.is_true(vim.wait(arrival.MS, function() return terminals == 1 end, 5))
             assert.same({ { data = "out" }, { err = "ECONNRESET" }, {} }, calls)
         end)
 
@@ -647,7 +648,7 @@ describe("tasker.run integration", function()
             state.pipes[2].reader(nil, nil)
             state.on_exit(0, 0)
 
-            assert.is_true(vim.wait(100, function()
+            assert.is_true(vim.wait(arrival.MS, function()
                 return terminals == 1 and finished == 1 and #tasker._handles == 0
             end, 5))
             pcall(vim.api.nvim_del_autocmd, autocmd)
@@ -672,7 +673,7 @@ describe("tasker.run integration", function()
             state.pipes[1].reader(nil, nil)
             state.pipes[2].reader(nil, nil)
             state.on_exit(0, 0)
-            local completed = vim.wait(100, function() return #tasker._handles == 0 end, 5)
+            local completed = vim.wait(arrival.MS, function() return #tasker._handles == 0 end, 5)
             logger.error = original_error
 
             assert.is_true(completed)
@@ -701,7 +702,7 @@ describe("tasker.run integration", function()
 
                 state.pipes[case.live_pipe].reader(nil, nil)
                 state.on_exit(0, 0)
-                assert.is_true(vim.wait(100, function() return terminals == 1 end, 5))
+                assert.is_true(vim.wait(arrival.MS, function() return terminals == 1 end, 5))
                 assert.is_truthy(terminal_error)
                 local rejected_pipe = case.stream == "stdout" and state.pipes[1] or state.pipes[2]
                 assert.equals(1, rejected_pipe.close_calls)
@@ -717,7 +718,7 @@ describe("tasker.run integration", function()
             local terminals = 0
             run(9, "fake", {}, function() terminals = terminals + 1 end,
                 nil, nil, function() starts = starts + 1 end)
-            assert.is_true(vim.wait(100, function() return starts == 1 end, 5))
+            assert.is_true(vim.wait(arrival.MS, function() return starts == 1 end, 5))
             assert.equals(2, #state.pipes)
             assert.equals(1, state.spawn_calls)
             assert.equals(1, #tasker._handles)
@@ -731,7 +732,7 @@ describe("tasker.run integration", function()
             local terminals = 0
             run(nil, "fake", {}, function() terminals = terminals + 1 end,
                 nil, nil, function() starts = starts + 1 end)
-            assert.is_true(vim.wait(100, function() return starts == 1 end, 5))
+            assert.is_true(vim.wait(arrival.MS, function() return starts == 1 end, 5))
             assert.equals(2, #state.pipes)
             assert.equals(1, state.pipes[1].close_calls)
             assert.equals(1, state.pipes[2].close_calls)
@@ -762,7 +763,7 @@ describe("tasker.run integration", function()
                     table.insert(events, data and "stderr" or "stderr_eof")
                 end)
 
-            assert.is_true(vim.wait(1000, function()
+            assert.is_true(vim.wait(arrival.MS, function()
                 return events[#events] == "terminal"
             end, 10))
             assert.equals("out", stdout)
@@ -782,7 +783,7 @@ describe("tasker.run integration", function()
                 assert.is_truthy(tostring(message):find("start", 1, true))
             end)
 
-            assert.is_true(vim.wait(1000, function() return start_errors == 1 end, 10))
+            assert.is_true(vim.wait(arrival.MS, function() return start_errors == 1 end, 10))
             assert.equals(0, terminals)
             assert.equals(0, #tasker._handles)
         end)
@@ -801,7 +802,7 @@ describe("tasker.run integration", function()
                 if split < #marker then state.pipes[2].reader(nil, marker:sub(split + 1)) end
                 state.pipes[2].reader(nil, nil)
                 state.on_exit(0, 0)
-                assert.is_true(vim.wait(100, function() return captured ~= nil end, 5))
+                assert.is_true(vim.wait(arrival.MS, function() return captured ~= nil end, 5))
                 assert.equals(marker, captured, "split boundary " .. split)
             end
         end)
@@ -823,7 +824,7 @@ describe("tasker.run integration", function()
             assert.is_true(tasker.is_busy(11, true))
             state.pipes[1].reader(nil, nil)
             state.pipes[2].reader(nil, nil)
-            vim.wait(100, function() return not tasker.is_busy(11, true) end, 5)
+            vim.wait(arrival.MS, function() return not tasker.is_busy(11, true) end, 5)
             assert.is_false(tasker.is_busy(11, true))
         end)
         it("releases admission before callback launches retry with reused PID", function()
@@ -836,7 +837,7 @@ describe("tasker.run integration", function()
             state.on_exit(0, 0)
             state.pipes[1].reader(nil, nil)
             state.pipes[2].reader(nil, nil)
-            assert.is_true(vim.wait(100, function() return retry ~= nil end, 5))
+            assert.is_true(vim.wait(arrival.MS, function() return retry ~= nil end, 5))
             assert.is_true(tasker.is_busy(11, true))
             assert.equals(2, state.spawn_calls)
         end)
@@ -861,7 +862,7 @@ describe("tasker.run integration", function()
             assert.is_true(tasker.is_busy(11,true))
             assert.equals(0,done)
             state.processes[4242]:finish()
-            vim.wait(100,function() return done==1 end,5)
+            vim.wait(arrival.MS,function() return done==1 end,5)
             assert.equals(1,done)
             assert.equals(1,#tasker._handles)
             assert.equals(4243,tasker._handles[1].pid)
@@ -881,7 +882,7 @@ describe("tasker.run integration", function()
             assert.is_not_nil(tasker.get_query("q"))
             state.processes[4242]:emit("stdout",nil)
             state.processes[4242]:emit("stderr",nil)
-            vim.wait(100,function() return #tasker._handles==0 end,5)
+            vim.wait(arrival.MS,function() return #tasker._handles==0 end,5)
             tasker.cleanup_old_queries(0,-1)
             assert.is_nil(tasker.get_query("q"))
         end)
@@ -892,7 +893,7 @@ describe("tasker.run integration", function()
                 local rejected=0
                 tasker.set_query("q",{buf=11})
                 run(11,"fake",{},nil,nil,nil,function() rejected=rejected+1 end,{query_id="q"})
-                assert.is_true(vim.wait(100,function() return rejected==1 end,5))
+                assert.is_true(vim.wait(arrival.MS,function() return rejected==1 end,5))
                 for _,pipe in ipairs(state.pipes) do assert.equals(1,pipe.close_calls) end
                 assert.is_false(tasker.is_busy(11,true))
                 tasker.cleanup_old_queries(0,-1)
@@ -904,7 +905,7 @@ describe("tasker.run integration", function()
             tasker._uv=runtime
             local done=0
             run(11,"fake",{},function() done=done+1 end)
-            assert.is_true(vim.wait(100,function() return done==1 end,5))
+            assert.is_true(vim.wait(arrival.MS,function() return done==1 end,5))
             assert.is_false(tasker.is_busy(11,true))
             assert.is_true(state.handle.closing)
         end)
@@ -921,7 +922,7 @@ describe("tasker.run integration", function()
             copy.exited,copy.stdout_eof,copy.stderr_eof=true,true,true
             assert.is_true(tasker.is_busy(buf,true))
             state.processes[4242]:finish()
-            assert.is_true(vim.wait(100,function() return not tasker.is_busy(buf,true) end,5))
+            assert.is_true(vim.wait(arrival.MS,function() return not tasker.is_busy(buf,true) end,5))
         end)
         -- A scoped attempt is signalled as a group, an unscoped one by pid; a
         -- failed signal must be retryable on both paths (#261 M3 review).

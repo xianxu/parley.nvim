@@ -5,6 +5,7 @@
 
 -- Fixture strings, not transport tokens: the harness watch for a refusal
 -- with no words expects them (#261 M5).
+local arrival = require("tests.helpers.arrival")
 vim.g.parley_expected_unkeyed={'fixture transport failure'}
 local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-chat-respond-" .. os.time()
 
@@ -67,7 +68,7 @@ end
 
 local Respond=require('parley.chat_respond')
 local function wait_for(predicate)
-    assert.is_true(vim.wait(5000,predicate,1),'response did not settle')
+    assert.is_true(vim.wait(arrival.MS,predicate,1),'response did not settle')
 end
 -- Native buffers with a stateful transport fixture: physical terminal callbacks
 -- are explicit, and each response exposes its actual session lifetime.
@@ -813,7 +814,7 @@ describe("chat_respond_all", function()
         parley.chat_respond_all()
 
         -- Wait for both callbacks to complete
-        vim.wait(500, function() return all_completed end, 10)
+        vim.wait(arrival.MS, function() return all_completed end, 10)
 
         -- Should have called dispatcher twice (once for each question)
         assert.equals(2, call_count, "Dispatcher should be called once per exchange")
@@ -868,7 +869,7 @@ describe("chat_respond_all", function()
         end
 
         parley.chat_respond_all()
-        vim.wait(500, function() return all_completed end, 10)
+        vim.wait(arrival.MS, function() return all_completed end, 10)
 
         assert.equals(2, call_count, "Dispatcher should still run once per exchange")
         assert.same({ "https://example.com/one.txt" }, fetch_calls)

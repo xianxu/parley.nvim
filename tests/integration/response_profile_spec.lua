@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local S=require('parley.response_session')
 local D=require('parley.document')
 local L=require('parley.response_layout')
@@ -11,7 +12,7 @@ local function finish(p)
     for index,arg in ipairs(p.args)do if arg=='--write-out'then
         p:emit('stderr',p.args[index+1]:match('%%{stderr}(.-)%%{http_code}')..'200\n');break
     end end
-    p:finish();vim.wait(100,function()return #Tasker._handles==0 end,1)
+    p:finish();vim.wait(arrival.MS,function()return #Tasker._handles==0 end,1)
 end
 local function declare(p,id)
     p:emit('stdout','data: '..vim.json.encode({choices={{delta={tool_calls={{index=0,id=id,type='function',

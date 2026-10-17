@@ -2,6 +2,7 @@
 -- CLIProxyAPI release, against tests/fixtures/fake_github_releases (a stateful
 -- fake of GitHub's release endpoints) and tests/fixtures/fake_cliproxy.
 
+local arrival = require("tests.helpers.arrival")
 local cliproxy = require("parley.cliproxy")
 local fake_releases = require("tests.helpers.fake_releases")
 local fixture_process = require("tests.helpers.fixture_process")
@@ -447,7 +448,7 @@ describe(":ParleyProxy update", function()
         end)
         -- Wait for the first update's restart BEFORE any assertion: returning
         -- early would leave its spawn in flight past after_each (PQ-5).
-        vim.wait(25000, function()
+        vim.wait(2 * arrival.MS, function()
             return first ~= nil
         end, 20)
         assert.same({ ok = false, msg = "an update is already running" }, second)
@@ -507,7 +508,7 @@ describe(":ParleyProxy update", function()
         assert.equals("9.9.11", cliproxy.installed_version()) -- installed; the next restart serves it
         assert.same({ "9.9.4" }, { cliproxy.version_probe("127.0.0.1", proxy_port) }) -- never taken for new
         kill_held()
-        assert.is_true(vim.wait(5000, function()
+        assert.is_true(vim.wait(arrival.MS, function()
             return cliproxy.version_probe("127.0.0.1", proxy_port) == nil
         end, 50), "the held old proxy still answers after SIGKILL")
     end)
@@ -614,10 +615,10 @@ describe("status version", function()
             calls = calls + 1
             info = i
         end)
-        vim.wait(8000, function()
+        vim.wait(arrival.MS, function()
             return info ~= nil
         end, 20)
-        vim.wait(300, function()
+        vim.wait(300, function() -- absence: plain sleep; a second callback must not land
             return false
         end) -- a second callback would land here
         assert.equals(1, calls)
@@ -636,10 +637,10 @@ describe("status version", function()
             calls = calls + 1
             info = i
         end)
-        vim.wait(8000, function()
+        vim.wait(arrival.MS, function()
             return info ~= nil
         end, 20)
-        vim.wait(300, function()
+        vim.wait(300, function() -- absence: plain sleep; a second callback must not land
             return false
         end) -- a second callback would land here
         assert.equals(1, calls)

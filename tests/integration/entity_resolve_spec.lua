@@ -1,5 +1,6 @@
 -- Real resolver subprocesses use a local filesystem-backed executable. Only
 -- chooser callbacks are retained; parsing, argv, resolution and opening are real.
+local arrival = require("tests.helpers.arrival")
 local parley = require("parley")
 local fixture = vim.fn.getcwd() .. "/tests/fixtures/fake_sdlc"
 
@@ -27,7 +28,7 @@ describe("entity navigation with the sdlc executable", function()
     end
     local function requests() return complete_records(state .. "/requests.jsonl") end
     local function wait_for(predicate, message)
-        assert(vim.wait(4000, predicate, 10), message)
+        assert(vim.wait(arrival.MS, predicate, 10), message)
     end
     local function same_path(path)
         return vim.fn.resolve(vim.api.nvim_buf_get_name(0)) == vim.fn.resolve(path)

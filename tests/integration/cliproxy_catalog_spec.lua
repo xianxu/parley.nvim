@@ -5,6 +5,7 @@
 
 local uv = vim.uv or vim.loop
 local ready_port = require("tests.helpers.ready_port")
+local arrival = require("tests.helpers.arrival")
 local fixture_process = require("tests.helpers.fixture_process")
 
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
@@ -42,7 +43,7 @@ describe("cliproxy model catalog", function()
         cliproxy.fetch_catalog(function(m)
             models, done = m, true
         end)
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
         assert(done, "fetch_catalog never resolved (hang!)")
         return models
     end
@@ -93,7 +94,7 @@ describe("cliproxy model catalog", function()
         fetch()
 
         fixture_process.reap({ since = mark })
-        vim.wait(300, function() return not ready_port.is_listening(port) end, 20)
+        vim.wait(arrival.MS, function() return not ready_port.is_listening(port) end, 20)
 
         local cached = cliproxy.catalog_cached()
         assert.is_true(#cached > 0, "cache should outlive the proxy")
@@ -231,7 +232,7 @@ describe("cliproxy model catalog", function()
         cliproxy.fetch_catalog(function(models)      -- lands on the in-flight path
             second = models ~= nil
         end)
-        vim.wait(8000, function() return first and second end, 20)
+        vim.wait(arrival.MS, function() return first and second end, 20)
         assert.is_true(second, "the second caller was never resolved")
     end)
 
@@ -254,7 +255,7 @@ describe("cliproxy model catalog", function()
         assert.is_true(cliproxy.catalog_stale(), "cold cache should invite one attempt")
         local done = false
         cliproxy.fetch_catalog(function() done = true end)
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
 
         assert.is_false(cliproxy.catalog_stale(),
             "a failed attempt still counts as an attempt; otherwise every open re-polls")
@@ -280,7 +281,7 @@ describe("cliproxy catalog side effects", function()
 
         local done = false
         cliproxy.fetch_catalog(function() done = true end)
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
 
         assert.equals(0, vim.fn.filereadable(dir .. "/management.key"),
             "refreshing the catalog wrote a management key")
@@ -307,7 +308,7 @@ describe("cliproxy catalog staleness clocks", function()
 
         local done = false
         cliproxy.fetch_catalog(function() done = true end) -- fails: no endpoint set here
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
 
         assert.is_false(cliproxy.catalog_stale(), "should back off right after a failure")
         cliproxy._set_failed_attempt_at(os.time() - 60) -- 60s later
@@ -357,7 +358,7 @@ describe("cliproxy catalog invalidation on login", function()
         cliproxy.invalidate_catalog()
         local done = false
         cliproxy.fetch_catalog(function() done = true end)
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
         assert.is_false(cliproxy.catalog_stale(),
             "a STORED refresh serves the invalidation")
     end)
@@ -400,7 +401,7 @@ describe("cliproxy login invalidation survives a failed refresh", function()
         }
         local done = false
         cliproxy.fetch_catalog(function() done = true end)
-        vim.wait(8000, function() return done end, 20)
+        vim.wait(arrival.MS, function() return done end, 20)
 
         assert.is_true(cliproxy.catalog_stale(),
             "a declined refresh must not consume the login's invalidation")
@@ -440,7 +441,7 @@ describe("cliproxy catalog cold install", function()
         local done = false
         providers.get("cliproxyapi").pre_query(function() done = true end,
                                               function() done = true end)
-        vim.wait(8000, function()
+        vim.wait(arrival.MS, function()
             return done and #cliproxy.catalog_cached() > 0
         end, 50)
         local n = #cliproxy.catalog_cached()

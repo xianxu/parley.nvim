@@ -8,6 +8,7 @@
 -- pre-spawn rejection. These tests drive real curl processes against
 -- tests/fixtures/fake_sse_server so the terminal paths are the real ones.
 
+local arrival = require("tests.helpers.arrival")
 local tmp_dir = vim.fn.tempname() .. "-parley-query-cache"
 vim.fn.mkdir(tmp_dir, "p")
 
@@ -111,7 +112,7 @@ describe("dispatcher request-transport cache", function()
                 pcall(process.handle.kill, process.handle, "sigterm")
             end
         end
-        local reaped = vim.wait(500, function()
+        local reaped = vim.wait(500, function() -- bound: SIGTERM grace window before the SIGKILL escalation below
             for _, process in ipairs(processes) do
                 if not process.exited() then return false end
             end
@@ -123,7 +124,7 @@ describe("dispatcher request-transport cache", function()
                     pcall(process.handle.kill, process.handle, "sigkill")
                 end
             end
-            reaped = vim.wait(500, function()
+            reaped = vim.wait(arrival.MS, function()
                 for _, process in ipairs(processes) do
                     if not process.exited() then return false end
                 end
@@ -151,7 +152,7 @@ describe("dispatcher request-transport cache", function()
     end
 
     local function wait_settled(probe)
-        assert.is_true(vim.wait(4000, function() return probe.settled ~= nil end, 10),
+        assert.is_true(vim.wait(arrival.MS, function() return probe.settled ~= nil end, 10),
             "query never reached a terminal path")
         return probe.settled
     end
@@ -202,7 +203,7 @@ describe("dispatcher request-transport cache", function()
         local probe = send(payload)
         -- The delayed fixture holds the response for >1s; curl is alive and
         -- the body is on disk when the kill lands.
-        assert.is_true(vim.wait(1000, function() return #parley.tasker._handles > 0 end, 10),
+        assert.is_true(vim.wait(arrival.MS, function() return #parley.tasker._handles > 0 end, 10),
             "curl never started")
         assert.equals(1, #transport_files_containing(base64), "body must be on disk while curl runs")
 

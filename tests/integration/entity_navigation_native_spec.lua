@@ -1,5 +1,6 @@
 -- Exercise the real mapping and event-loop mode transitions in a clean editor.
 -- Command spies cannot prove that startinsert lands in the destination buffer.
+local arrival = require("tests.helpers.arrival")
 describe("entity navigation native input", function()
     local child, root, source, target
 
@@ -12,7 +13,7 @@ describe("entity navigation native input", function()
     end
 
     local function wait_for(code)
-        assert.is_true(vim.wait(2000, function() return exec(code) end), code)
+        assert.is_true(vim.wait(arrival.MS, function() return exec(code) end), code)
     end
 
     before_each(function()

@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local A=require('parley.tools.path_authority')
 local Scope=require('parley.tools.process_scope')
 local Bootstrap=require('parley.tools.process_bootstrap')
@@ -53,7 +54,7 @@ describe('native captured subprocess authority',function()
         local result,done
         producer.start({id='scope',name=name,input=input},{epoch=1,generation=1,attempt=1,round=1},
             {outcome=function(_,v)result=v end,resolved=function()done=true end})
-        local finished=vim.wait(10000,function()return done end,1)
+        local finished=vim.wait(arrival.MS,function()return done end,1)
         Tasker.run=native
         producer.close();assert.is_true(finished,'production subprocess did not settle')
         if before_spawn then assert.is_true(intercepted,'controlled replacement must run before native spawn')end
@@ -96,10 +97,10 @@ describe('native captured subprocess authority',function()
         local delivered=0
         local handle=producer.start({id='cancel',name='find',input={path=root..'/inside'}},
             {epoch=1,generation=1,attempt=1,round=1},{outcome=function()delivered=delivered+1 end})
-        assert.is_true(vim.wait(5000,function()return Tasker.stats().active>baseline end,1),
+        assert.is_true(vim.wait(arrival.MS,function()return Tasker.stats().active>baseline end,1),
             'cancellation must exercise a launched child')
         producer.cancel(handle);producer.close()
-        assert.is_true(vim.wait(10000,function()return Tasker.stats().active==baseline end,1))
+        assert.is_true(vim.wait(arrival.MS,function()return Tasker.stats().active==baseline end,1))
         assert.equals(0,delivered)
     end)
 

@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local parley=require('parley')
 local Respond=require('parley.chat_respond')
 local D=require('parley.document')
@@ -6,7 +7,7 @@ vim.fn.mkdir(root,'p')
 parley.setup({chat_dir=root,state_dir=root..'/state',providers={},api_keys={},
     default_agent='ScopedFixture',agents={{name='Choose a model',disable=true},
         {name='ScopedFixture',provider='openai',model={model='fixture'},system_prompt='Fixture',tools={}}}})
-local function wait(predicate)assert.is_true(vim.wait(5000,predicate,1),'response did not settle')end
+local function wait(predicate)assert.is_true(vim.wait(arrival.MS,predicate,1),'response did not settle')end
 
 describe('generation scoped Stop commands',function()
     local old_query,old_stop,buf,calls
@@ -124,7 +125,7 @@ describe('generation scoped Stop commands',function()
             tool_calls={{index=0,id='test-call',type='function',
                 ['function']={name='unknown_fixture_tool',arguments='{}'}}}}}}})..'\n\n'
         calls[1].complete(calls[1].id)
-        local settled=vim.wait(5000,function()return Respond.response_snapshot(a).generation.phase=='paused'end,1)
+        local settled=vim.wait(arrival.MS,function()return Respond.response_snapshot(a).generation.phase=='paused'end,1)
         assert.is_true(settled,vim.inspect(Respond.response_snapshot(a)))
         return a
     end

@@ -6,6 +6,7 @@
 -- We query applied highlights via vim.api.nvim_buf_get_extmarks with the
 -- parley_question namespace.
 
+local arrival = require("tests.helpers.arrival")
 local tmp_dir = vim.fn.tempname() .. "-parley-highlight"
 vim.fn.mkdir(tmp_dir, "p")
 
@@ -676,7 +677,7 @@ describe("timezone diagnostics", function()
         require("parley.buffer_lifecycle").setup(buf)
 
         vim.cmd("doautocmd TextChanged")
-        vim.wait(100, function()
+        vim.wait(arrival.MS, function()
             return #vim.diagnostic.get(buf, { namespace = tz.diag_namespace() }) == 0
         end)
         assert.equals(0, #vim.diagnostic.get(buf, { namespace = tz.diag_namespace() }))
@@ -685,7 +686,7 @@ describe("timezone diagnostics", function()
             "Now 2026-04-18T00:00:00Z",
         })
         vim.cmd("doautocmd TextChanged")
-        vim.wait(100, function()
+        vim.wait(arrival.MS, function()
             return #vim.diagnostic.get(buf, { namespace = tz.diag_namespace() }) == 1
         end)
 
@@ -815,7 +816,7 @@ describe("markdown footnote diagnostics", function()
         require("parley.buffer_lifecycle").setup(buf)
 
         vim.cmd("doautocmd TextChanged")
-        vim.wait(100, function()
+        vim.wait(arrival.MS, function()
             local diagnostics = vim.diagnostic.get(buf, { namespace = ns })
             return #diagnostics == 1 and diagnostics[1].source == "parley-skill"
         end)
@@ -826,7 +827,7 @@ describe("markdown footnote diagnostics", function()
             "[^asin]: Amazon Standard Identification Number.",
         })
         vim.cmd("doautocmd TextChanged")
-        vim.wait(100, function()
+        vim.wait(arrival.MS, function()
             local diagnostics = vim.diagnostic.get(buf, { namespace = ns })
             return #diagnostics == 2
         end)
@@ -841,7 +842,7 @@ describe("markdown footnote diagnostics", function()
 
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "footnote removed" })
         vim.cmd("doautocmd TextChanged")
-        vim.wait(100, function()
+        vim.wait(arrival.MS, function()
             local diagnostics = vim.diagnostic.get(buf, { namespace = ns })
             return #diagnostics == 1 and diagnostics[1].source == "parley-skill"
         end)
@@ -908,7 +909,7 @@ describe("markdown chat reference rendering", function()
         parley._parley_bufs[buf] = "markdown"
 
         parley.highlight_chat_branch_refs(buf)
-        vim.wait(700, function()
+        vim.wait(arrival.MS, function()
             local line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
             return line == "🌿: " .. chat_path .. ": Rendered Topic"
         end)
@@ -971,7 +972,7 @@ describe("markdown chat reference rendering", function()
         parley._parley_bufs[buf] = "markdown"
 
         parley.highlight_chat_branch_refs(buf)
-        vim.wait(700, function()
+        vim.wait(arrival.MS, function()
             local line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
             return line == "🌿: " .. chat_path .. ": Actual topic"
         end)

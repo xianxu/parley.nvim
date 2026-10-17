@@ -1,3 +1,4 @@
+local arrival = require("tests.helpers.arrival")
 local D=require('parley.document')
 local Runner=require('parley.generation_runner')
 local Editor=require('tests.helpers.fake_document_editor')
@@ -53,7 +54,7 @@ local function setup(options)
         local declared={};for i,c in ipairs(calls)do declared[i]={call_id=c.id,arguments=c}end
         local expected=#requests+1
         assert.is_true(req.cb.round(declared));req.cb.resolved();drain()
-        if options.actual then assert.is_true(vim.wait(5000,function()
+        if options.actual then assert.is_true(vim.wait(arrival.MS,function()
             drain();return #requests>=expected
         end,1),'asynchronous real tool round did not settle')end
     end

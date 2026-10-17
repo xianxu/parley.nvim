@@ -1,10 +1,11 @@
+local arrival = require("tests.helpers.arrival")
 describe("shared document bands", function()
     local root, saved, p, ss, document, opened
     local env_keys = { "PATH", "COUCH_THREAD_SCOPE", "COUCH_THREAD_TAG", "COUCH_ISOLATED_ROOT",
         "FAKE_COUCH_REGISTRY", "FAKE_COUCH_REGISTRY_MODE", "FAKE_COUCH_ACTORS", "FAKE_COUCH_STATUS",
         "FAKE_COUCH_EXIT", "FAKE_COUCH_SLEEP", "FAKE_COUCH_LOG_DELAY" }
     local function await(predicate)
-        assert.is_true(vim.wait(10000, predicate, 10), "band transition timed out")
+        assert.is_true(vim.wait(arrival.MS, predicate, 10), "band transition timed out")
     end
     local function observe(item)
         return { winbar = vim.wo[item.win].winbar, winhighlight = vim.wo[item.win].winhighlight }
