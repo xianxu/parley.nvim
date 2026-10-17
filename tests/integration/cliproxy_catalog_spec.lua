@@ -19,7 +19,7 @@ local mark
 local function start_fake(port)
     local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port) })
     assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
-    assert(ready_port.wait_listening(port), "fake never came up")
+    ready_port.require_listening(port)
     return pid
 end
 
@@ -138,7 +138,7 @@ describe("cliproxy model catalog", function()
         fixture_process.reap({ since = mark })
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port), "--mode", "client_key_mismatch" })
         assert(handle, "failed to spawn the fake in 401 mode")
-        assert(ready_port.wait_listening(port), "401-mode fake never came up")
+        ready_port.require_listening(port)
 
         fetch()
         assert.equals(#warm, #cliproxy.catalog_cached(),
@@ -152,7 +152,7 @@ describe("cliproxy model catalog", function()
         local port = ready_port.free_port()
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port), "--mode", "needs_login" })
         assert(handle)
-        assert(ready_port.wait_listening(port))
+        ready_port.require_listening(port)
         set_endpoint(port)
         cliproxy._write_catalog({ { id = "stale-1", owner = "openai" } })
 
@@ -211,7 +211,7 @@ describe("cliproxy model catalog", function()
         local foreign_port = ready_port.free_port()
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(foreign_port), "--mode", "foreign" })
         assert(handle)
-        assert(ready_port.wait_listening(foreign_port), "foreign fake never came up")
+        ready_port.require_listening(foreign_port)
         set_endpoint(foreign_port)
 
         fetch()
@@ -347,7 +347,7 @@ describe("cliproxy catalog invalidation on login", function()
         local port = ready_port.free_port()
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port) })
         assert(handle)
-        assert(ready_port.wait_listening(port))
+        ready_port.require_listening(port)
         parley.dispatcher.providers.cliproxyapi = {
             endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
         }
@@ -427,7 +427,7 @@ describe("cliproxy catalog cold install", function()
         local port = ready_port.free_port()
         local handle, _, err, pid = fixture_process.spawn(FAKE, { "--port", tostring(port) })
         assert(handle)
-        assert(ready_port.wait_listening(port))
+        ready_port.require_listening(port)
         parley.dispatcher = parley.dispatcher or {}
         parley.dispatcher.providers = parley.dispatcher.providers or {}
         parley.dispatcher.providers.cliproxyapi = {

@@ -144,7 +144,7 @@ describe("#220 the fixture seam owns every process it starts", function()
         local handle, _, err, pid = fixture_process.spawn(
             ROOT .. "/tests/fixtures/fake_cliproxy", { "--port", tostring(port) })
         assert.is_truthy(handle, tostring(err))
-        assert.is_true(ready_port.wait_listening(port), "the fake never came up")
+        ready_port.require_listening(port)
         return pid
     end
 

@@ -145,6 +145,9 @@ describe("cliproxy.recover", function()
         -- held open (the fake binds 300 ms late) and the probe's connect is
         -- staged to succeed, as a simultaneous open between parallel probes
         -- does. Readiness must still wait for the real listener.
+        if not ready_port._lsof_present() then
+            return pending("needs lsof to confirm the listener")
+        end
         local real_connect = ready_port._connect
         ready_port._connect = function() return true end
         local ok, err = pcall(serve, { claude = { unavailable = true, status_message = "dead" } },

@@ -17,7 +17,7 @@ function M.start(dialect, mode, split, env, delay_ms)
     local handle, _, err = fixture_process.spawn(M.FAKE, { "--dialect", dialect, "--port", tostring(port),
         "--mode", mode or "ok", "--split", split or "none", "--write-delay-ms", tostring(delay_ms or 0) }, env)
     assert(handle, "spawn fake_provider: " .. tostring(err))
-    assert(ready_port.wait_listening(port), "fake_provider did not come up on " .. port)
+    ready_port.require_listening(port)
     return port
 end
 

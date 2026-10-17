@@ -42,7 +42,7 @@ Determine why an expired-channel fake credential can take the retry branch under
 
 - [x] Reproduce both variants by holding the readiness window open.
 - [x] `ready_port.require_listening` fails by name; `wait_listening` is `---@nodiscard`.
-- [x] Switch the 37 calls that dropped the answer (lifecycle 26, update 9, recovery_e2e, auth_login, fake_releases).
+- [x] Switch the 38 calls that dropped the answer (lifecycle 26, update 9, recovery_e2e, auth_login, fake_releases).
 - [x] `nodiscard_spec` checks spec-side helper members across `tests/`.
 - [x] Forced-window regression in `cliproxy_auth_login_spec` (`PARLEY_FAKE_BIND_DELAY_MS` plus a staged connect).
 - [x] Full suite, close.
@@ -55,7 +55,13 @@ Filed under the test-economy flake rule after one failed full run and one same-h
 
 - Same mechanism as #360. `serve()` waited with `ready_port.wait_listening`, but a crossing connect could report ready before the fake bound, and `serve()` ignored the answer anyway. `recover` then read the management API of a fake that was not listening yet.
 - Forced-window reproduction: a scratch copy of the two cases, recovering a fixed time after spawn with no readiness wait. At 0 ms there was no prompt (the line-149 variant, give_up with nothing to offer); at 40 and 80 ms it settled `retry` (the line-128 variant); from 120 ms on it passed. Both logged variants are this one window.
-- Fix: #360 (landed, 775246fb) removed the false positive. Here every caller asserts readiness. `require_listening` raises "fake never came up on port N (waited Xms)", and the 37 callers that dropped the answer use it. I checked each: every one waits for a fake it just started.
+- Fix: #360 (landed, 775246fb) removed the false positive. Here every caller asserts readiness. `require_listening` raises "fake never came up on port N (waited Xms)", and the 38 callers that dropped the answer use it. I checked each: every one waits for a fake it just started.
 - Guard (ARCH-DRY: the existing `nodiscard_spec`, not a second sweep): `wait_listening` is `---@nodiscard`, and the spec now reads annotations from `tests/helpers/*.lua` and checks calls across `tests/`. In spec files it enforces only helper members: specs' own setup ignores product results like `custom_prompts.set` on purpose (18 such calls), and that is a separate question. Mutation: one bare `wait_listening` put back is flagged by file and line.
 - Regression: "waits out a readiness probe that a crossing connect fooled" stages `_connect` as succeeding and has the fake bind 300 ms late (new `PARLEY_FAKE_BIND_DELAY_MS`, capped at 10 s), and must settle give_up with the claude prompt. Mutation: dropping the LISTEN confirm fails it at line 160. Unit cases: `require_listening` raises by name, and returns for a real listener.
 - Focused: ready_port 14/14, nodiscard 2/2, lifecycle 66/66, update 40/40, recovery_e2e 6/6, auth_login 23/23, fixture_lifecycle 4/4.
+
+### 2026-10-17 — close review round 1 (FIX-THEN-SHIP)
+
+- BR-1 (Important, lsof-dependent-test-guard): fixed. The forced-window case stubs `_connect`, so without lsof `is_listening` trusts the connect, and the case would fail deterministically. It now reports pending there, like the unit spec's rejects case. Class sweep (grep `_connect = ` under tests/): four cases stub it. The other two also stub `_lsof_present`, so they don't depend on lsof; the two that rely on real lsof both guard.
+- Minor (doc-count-claims): fixed. The listed parts add up to 38, not 37, in both the Plan and the Log.
+- Minor (ready-wait-assert-restated, ARCH-DRY): fixed, not deferred. The 12 hand-written `assert(ready_port.wait_listening(port), msg)` sites (openai_tool_loop, catalog ×6, fixture_reaping, caller_teardown, dispatch, stream_integrity, provider_scenarios) now call `require_listening`. Outside ready_port and its unit spec, every readiness wait now goes through `require_listening`.
