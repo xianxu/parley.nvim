@@ -341,6 +341,26 @@ without conflicts, including README, traceability and lessons. Preserve the
 queue-only log and run a fresh recorded full suite on the integrated head;
 keep that head fixed through the run.
 
+### 2026-10-16 — final complete-resolver integrated verification
+
+On integrated head 95639f28b67bb97776d3a8b04bcc5786be2b651a, mapped review and
+64 real invocation/tool cases passed serially (logs
+/tmp/parley-362-integrated-mapped.log and /tmp/parley-362-integrated-invoke.log).
+All 30 pure parser/resolver cases, 16 Python contracts, pinned-source --check,
+lint and whitespace checks passed. No generated canonical source changed.
+
+Recorded full suite: exit 0 in 2m24s after 4037 s queued; 461/461 files,
+773 files lint-clean, no surviving test processes. First full attempt on this
+integrated code head, no test failures or flake retries. The queued runner
+survived the 22:22 Couch restart; its slot-holder and acquire process remained
+alive, so it kept its place. Log SHA256 prefix 0f301da12b61:
+/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/95639f28b67bb97776d3a8b04bcc5786be2b651a/suite.log.
+
+The staged live evidence remains the exact partial result on 665ad29c above,
+accepted by the TL in 855c7c6f. The complete-resolver correction changes scan
+work while preserving routing semantics (direct and differential controls).
+Re-close normally; BR-3 must be addressed by evidence, not its round-cap status.
+
 ## Revisions
 
 ### 2026-10-16 — priority interruption
