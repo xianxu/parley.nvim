@@ -131,3 +131,112 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"62e0c8d7-2c3d-4d2d-8e66-f3856493f966","repository":"github.com/xianxu/parley.nvim","issue_id":"000359","recipe":"milestone-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/c3e2593110710224","reviewed_head":"656611a6c5a13a9e734f1a47ab9e94fdd7257dbc","slot":"parley.nvim:4","requested_at":"2026-10-17T02:15:02.623955Z"},"phase":"finished","pid":1014,"started_at":"2026-10-17T02:15:03.40328Z","finished_at":"2026-10-17T02:22:58.638647Z","session_id":"9bfea3df-1218-46aa-853e-93b7039b594e","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-16T19:32:21-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 359 — Asynchronous rename protocol for agentic documents (BufFilePre/BufFilePost preflights) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000359-asynchronous-rename-protocol-for-agentic-documents-buffilepre-buffilepost-preflights.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 630f6aac732056d390a4a21d77f4c668abda8900..aae97db73b9403cb42264d9f7e39a5e40d877513 |
+| command | sdlc close --issue 359 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-16T19:32:21-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Verifying the round-1 fixes now: reading `move_preflight` and the BufFilePost path, then running the specs.
+
+Running the touched specs, then mutation-checking the round-1 fixes.
+
+Green. Now reverting each fix to confirm its test goes red.
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+The round-1 fixes hold. I reverted each of the three blocking fixes in the disposable checkout, and each one turned its regression test red. Reverting the tree pre-pass to an early return failed "asks about every unknown document of a tree before refusing". Removing the expiry check failed "lets a background absent answer expire". Replacing `decision.wait_destination` with `false` failed row 9 ("a :saveas! onto an existing file whose check times out…"). With the fixes in place, all five touched spec files pass: `document_move_plan_spec`, `document_session_spec`, `agentic_document_owned_move_spec`, `agentic_document_spec` and `document_move_spec`. The checkout was restored and `git status` is clean. Two Minor items from round 1 stay open (BR-4 has no test; BR-6 is documented but not enforced). There is one new Minor finding about the 60 s expiry. None of these blocks the close.
+
+1. **Strengths**
+   - `document_move_plan.lua:270` `move_preflight` and `:290` `move_outcome` are pure, unit-tested decision tables. All three entry points now use them: `move_membership` at `agentic_document.lua:647`, BufFilePre at `:817` and BufFilePost at `:872`. This is ARCH-DRY and ARCH-PURE done right.
+   - `init.lua:3887-3894` asks about every file in the tree before refusing, so the operator needs only one rerun. Only two callers exist (`init.lua:3499` and `:3891`), so the class is covered, not just the instance.
+   - `agentic_document.lua:576-588`: the absent answer expires using the live `M.ANSWER_TTL_MS`, which lets the test shrink the TTL without changing production code. `asking` dedupes so only one request per path is out at a time.
+   - The `couch.run` spy in the tree test passes calls through to the production runner, so the test runs against the stateful fake, not a stub (ARCH-MOCK).
+   - `move_outcome`'s `shell_word` (`document_move_plan.lua:283`) quotes the pasteable `forget` command with structural escaping (ARCH-SECURE).
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings**
+   - **The 60 s expiry quietly bounds "one rerun".** If the operator reruns more than `ANSWER_TTL_MS` after the refusal, the move refuses again. The atlas (`atlas/modes/session_sync.md:152-161`) and README (`README.md:58-60`) still describe "an earlier background answer" with no bound. This is a new instance in the `one-recovery-action` family; see the findings block.
+   - **`overwrite` is the same value as `new_exists`.** BufFilePost passes `filereadable()` as both (`agentic_document.lua:871-873`), so `move_preflight`'s `overwrite` field carries no information. One effect: `:file existing.md`, which renames without writing, also waits inline. That is conservative and harmless, but the docs say "only `:saveas!`".
+   - **BR-4 (still open):** the `record_write` failure now notifies (`agentic_document.lua:903-908`), but no test reaches that branch.
+
+5. **Test coverage notes**
+   - The three new or changed blocking behaviours each have a test that fails when the fix is reverted (verified above).
+   - Not covered: the `record_write`-failure notify branch, and pruning of expired `answered` entries. Pruning is cosmetic: the reader already rejects expired entries.
+
+6. **Architectural notes**
+
+   | Marker | Result | Note |
+   |---|---|---|
+   | ARCH-DRY | pass | |
+   | ARCH-PURE | pass | |
+   | ARCH-PURPOSE | pass | Tree sweep complete |
+   | ARCH-MOCK | pass | |
+   | ARCH-CONSTRAINTS | pass | The UI path waits only for an overwrite, bounded by `agentic_move_timeout_ms`. Tree fan-out is one request per unknown path, deduplicated. |
+   | ARCH-SECURE | pass | |
+   | ARCH-ORDER | flag (Minor, BR-6) | The move's state is now listed in order in a comment (`agentic_document.lua:134-145`). But flags still change directly, not through a transition function, and a comment does not satisfy the principle. Upcoming work should fold `s.move` into a tagged state that `move_outcome`/`move_preflight`'s module owns. |
+   | ARCH-FUNERAL | pass | `answered` is pruned when a new answer is inserted and capped by expiry; `asking` clears when its callback runs. |
+
+7. **Plan revision recommendations**
+   - Add to the 2026-10-16 Revisions entry: "A rerun later than `ANSWER_TTL_MS` (60 s) after the refusal asks again; one recovery action holds only within that window." Mirror that in atlas `session_sync.md` and the README move sentence.
+   - Note that `move_preflight`'s `overwrite` is filled from `filereadable(NEW)`, so any rename onto an existing path (including `:file`) asks inline.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      init.lua:3887-3894 collects the first refusal after asking about every file; reverting to the early return fails the new two-child tree test (verified).
+  - id: BR-2
+    disposition: addressed
+    note: |
+      answered now stores an expiry checked in known_identity (agentic_document.lua:599-600); dropping the expiry check fails "lets a background absent answer expire" (verified).
+  - id: BR-3
+    disposition: addressed
+    note: |
+      BufFilePost decides through move_preflight.wait_destination (agentic_document.lua:872-874); replacing it with false fails row 9 in agentic_document_spec (verified).
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      A notify was added at agentic_document.lua:903-908, but no test reaches the record_write-failure branch; Minor, non-blocking.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      The plan's ARCH-FUNERAL paragraph now says requests are not cancelled and callbacks are guarded; answered expires and asking dedupes per path, matching the code.
+  - id: BR-6
+    disposition: not-addressed
+    note: |
+      The fields are documented in order (agentic_document.lua:134-145), but there is still no transition function, so ARCH-ORDER is unmet; Minor, non-blocking.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: one-recovery-action
+    title: |
+      The 60 s absent-answer expiry quietly bounds the one-rerun promise, and the docs do not say so
+    detail: |
+      This is the 2nd finding in family one-recovery-action. Rule: every refusal that tells the operator to run the move again must state how long its answer stays valid, in the plan, atlas and README. A rerun more than ANSWER_TTL_MS after the refusal refuses again (agentic_document.lua:599-600), but atlas session_sync.md:152-161 and README.md:58-60 describe "an earlier background answer" with no bound. Separately, BufFilePost passes filereadable(NEW) as both new_exists and overwrite, so :file onto an existing path also waits inline, contrary to "only :saveas!".
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"72e49f77-f526-4571-97fb-de633e074377","repository":"github.com/xianxu/parley.nvim","issue_id":"000359","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/0c104a8eca5f175a","reviewed_head":"aae97db73b9403cb42264d9f7e39a5e40d877513","slot":"parley.nvim:4","requested_at":"2026-10-17T02:28:14.719194Z"},"phase":"finished","pid":49800,"started_at":"2026-10-17T02:28:14.835028Z","finished_at":"2026-10-17T02:32:17.837824Z","session_id":"ed65899a-889b-4725-8501-94c09333129f","outcome":"returned"}] -->

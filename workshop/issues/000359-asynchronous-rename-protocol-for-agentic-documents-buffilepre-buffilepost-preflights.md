@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "b6b87e44", done: "edfeb538"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Asynchronous rename protocol for agentic documents (BufFilePre/BufFilePost preflights)
@@ -52,6 +52,8 @@ The durable plan, with the state projection table: [000359 plan](../plans/000359
 ## Log
 
 ### 2026-10-16
+- 2026-10-16: closed — Round 1 findings fixed at aae97db7, each blocking one with a mutation-checked test: tree pre-pass asks about every file (two-unknown-children test; early return fails it); background absent expires after ANSWER_TTL_MS (expiry test; dropping it fails); BufFilePost overwrite routed through move_preflight.wait_destination (removing the branch fails row 9 and the occupied-target test). Minors: record_write failure notifies; move state documented; plan ARCH-FUNERAL claim corrected. agentic_document_spec 47/47, owned_move 16/16, document_move 33/33, document_move_plan 29/29, chat_move, lifetime, session_sync green.; review verdict: SHIP
+- 2026-10-16: flow upgraded quick → full — 328 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 ### 2026-10-16 (build notes, before code)
 - The code is now unblocked: #357 landed (PR #277) and main is merged in. `change-code` inferred the quick flow. If the diff leaves the shell, the close review upgrades itself.
