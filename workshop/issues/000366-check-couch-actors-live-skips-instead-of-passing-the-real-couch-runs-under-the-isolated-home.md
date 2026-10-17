@@ -58,6 +58,7 @@ With both fixed and HOME still isolated, `couch --actors --json` exits 0 with Co
 ### 2026-10-16
 
 ### 2026-10-17
+- 2026-10-17: closed — Unsandboxed make check-couch-actors-live: live case Success, no Pending (5 Success, 0 Failed). Sandboxed: Pending with "couch unreachable here (exit 1): couch: dial unix ...sock: connect: operation not permitted". Focused isolation and couch specs green; with the identity names removed from test-env.sh, the allowlist spec fails. luacheck clean.; review verdict: SHIP
 
 - Unsandboxed `make check-couch-actors-live`: the live case is Success, with no Pending line (5 Success, 0 Failed).
 - Sandboxed: Pending, "couch unreachable here (exit 1): couch: dial unix /tmp/pair-message-501/....sock: connect: operation not permitted".
