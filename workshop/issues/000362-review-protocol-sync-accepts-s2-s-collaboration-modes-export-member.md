@@ -34,6 +34,9 @@ S2 M1 (ops `universal-agent-input-interface/design.side/01-s2-section-modes.md`,
 
 - `tests/unit/review_protocol_export_test.py` covers: an export with the role syncs and composes it in that order; a duplicate refuses; a still-unknown role refuses.
 - The sync against ariadne's M1 export updates `lua/parley/skills/review/` and `--check` is clean.
+- Older version-1 exports without collaboration modes successfully sync and
+  pass `--check`, with each command reporting that the synced prompt has no
+  collaboration modes.
 
 ## Plan
 
@@ -45,7 +48,7 @@ S2 M1 (ops `universal-agent-input-interface/design.side/01-s2-section-modes.md`,
   examples exclusion. Verify the existing local source orders its adapter last.
 - [x] Coordinate with ariadne:2 and snapshot the landed S2 M1 export; verify
   --check and standalone packaged composition. Update atlas and README.
-- [x] Run focused/mapped tests and a recorded full suite, close-review, land
+- [ ] Run focused/mapped tests and a recorded full suite, close-review, land
   on SHIP and report to the hub.
 
 ## Log
@@ -113,6 +116,21 @@ No retry or waiver. The sync/prompt snapshot adds no editor control or new
 runtime transport; standalone packaged composition is the acceptance check.
 Request the binary-owned close review and land on SHIP.
 
+### 2026-10-16 — close review REWORK, adapter decision pending
+
+Round 1 independently passed the Python contracts, mapped review tests and
+pinned-source check, but raised BR-1 (Critical, prompt-adapter-capability-contract)
+and BR-2 (Important, acceptance-contract-coverage). Verified BR-1 against
+skill_invoke's artifact-bound propose_edits and local-adapter's single-file,
+no-baseline contract: the canonical default discussion and explicit chat flows
+need side docs, cross-file folds, discovery and previous-read changes that the
+local adapter cannot provide. Do not ship dangling links or promise these
+operations. Hub decision requested in 232ecfeb-a078-4eec-8a92-239117b594f6;
+proposed in-place-only local support plus an explicit unsupported-routing
+refusal, versus a larger multi-file adapter. Await approval before introducing
+that policy. BR-2's Done-when clause now explicitly covers old-v1 success plus
+the notice for both normal sync and --check; its existing regression passes.
+
 ## Revisions
 
 ### 2026-10-16 — priority interruption
@@ -134,3 +152,10 @@ present; older v1 exports remain valid. Add a one-line CLI notice when an old
 export omits collaboration modes; require the new member in shipped-package
 and standalone composition tests. This additive visibility change stays inside
 the original optional-v1 contract; no runtime parser or alternate builder.
+
+### 2026-10-16 — acceptance coverage correction (BR-2)
+
+Append the old-v1 success/notice requirement to Done when, matching the
+already-recorded compatibility revision and existing real-CLI regression.
+BR-1's local adapter capability mismatch remains pending the hub's scope
+decision; no runtime policy has changed.
