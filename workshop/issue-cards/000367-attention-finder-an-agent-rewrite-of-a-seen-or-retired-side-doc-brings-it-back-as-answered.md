@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.27
+actual_hours: 0.30
 tracker:
     version: 1
     completion:
-        token: close-bfb8f84726c0
+        token: close-80fd3d7ed830
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 108f5a7f689d16d3c2e9e999867538e577c3eba6
-        evidence_commit: d30cd73a121928fd772c642f1e709a4121884262
+        reviewed_head: 5cc88a00812ee8fc93ff67982226cbc540291717
+        evidence_commit: 5f498f3ed74a0d00c0dac91e4a70da979a8a0f02
 ---
 
 # Attention finder: an agent rewrite of a seen or retired side doc brings it back as answered
