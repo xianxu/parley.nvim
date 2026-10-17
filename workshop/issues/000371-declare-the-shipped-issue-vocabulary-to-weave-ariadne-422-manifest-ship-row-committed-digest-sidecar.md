@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "40a1e508", done: "b1238f69"}
 ---
 
 # Declare the shipped issue vocabulary to weave (ariadne#422): manifest ship row, committed digest sidecar
