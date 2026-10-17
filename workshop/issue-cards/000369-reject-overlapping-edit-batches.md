@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.04
+actual_hours: 0.05
 tracker:
     version: 1
     completion:
-        token: close-7b67c36d6ec5
+        token: close-de3d9bca4d57
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: be2bcad41a9e7bc27fa907b933c7e4993dd862aa
-        evidence_commit: 50e5d4a5e4992ea2030eab8dbd1907e0512ed412
+        reviewed_head: 6184b45993c76622407b6a68bbdd97f7fb62bff9
+        evidence_commit: 1a30b6ab4da4c00f2030eb02ae7346c7f9377b1c
 ---
 
 # Reject overlapping edit batches
