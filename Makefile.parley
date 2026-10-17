@@ -323,10 +323,13 @@ check-sdlc-conformance:
 # The live --actors conformance check (#365): couch_spec ALONE, with the slot's
 # real Couch thread (PARLEY_LIVE_COUCH carries it through scripts/test-env.sh).
 # Never part of `make test`, whose runner strips the flag.
+# #366: the real CLI refuses the isolated XDG_DATA_HOME (it conflicts with the
+# store COUCH_STORE_DIR selects), so its one call gets the operator's data home.
+LIVE_COUCH_DATA_HOME = $(or $(XDG_DATA_HOME),$(REAL_HOME)/.local/share)
 check-couch-actors-live:
 	@$(PREP_TEST_ENV) || exit $$?; \
 	rc=0; \
-	$(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" PARLEY_LIVE_COUCH=1 "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
+	$(TEST_ENV) PARLEY_TEST_SENTINEL_LOG="$(SENTINEL_LOG)" PARLEY_LIVE_COUCH=1 PARLEY_LIVE_COUCH_DATA_HOME="$(LIVE_COUCH_DATA_HOME)" "$(CURDIR)/scripts/test-env.sh" nvim -n --headless --noplugin -u "$(CURDIR)/tests/minimal_init.vim" \
 	  -c "PlenaryBustedFile tests/unit/couch_spec.lua" -c "qa!" || rc=1; \
 	$(ORPHANS) --phase after || rc=1; \
 	$(SENTINEL_CHECK) || rc=1; \
