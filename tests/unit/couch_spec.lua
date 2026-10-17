@@ -47,10 +47,13 @@ describe("couch conformance (live)", function()
             pending("live only: make check-couch-actors-live, inside a pair slot")
             return
         end
-        local out = vim.system({ binary, "--actors", "--json" }, { text = true }):wait(10000)
+        -- #366: the operator's data home for this one call; the spec stays isolated.
+        local out = vim.system({ binary, "--actors", "--json" },
+            { text = true, env = { XDG_DATA_HOME = vim.env.PARLEY_LIVE_COUCH_DATA_HOME } }):wait(10000)
         local ok, data = pcall(vim.json.decode, out.stdout or "", { luanil = { object = true, array = true } })
         if out.code ~= 0 or not ok or type(data) ~= "table" or data.Code ~= "ok" then
-            pending("couch unreachable here")
+            pending(("couch unreachable here (exit %s): %s"):format(out.code,
+                ((out.stderr or ""):match("[^\n]+") or (out.stdout or ""):match("[^\n]+") or "no output")))
             return
         end
         local own = couch.own_actor(data.Actors, thread)

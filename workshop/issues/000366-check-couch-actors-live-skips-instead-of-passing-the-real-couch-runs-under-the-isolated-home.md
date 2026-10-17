@@ -43,11 +43,11 @@ Measured (2026-10-16, unsandboxed, real binary through scripts/test-env.sh with 
 2. With that fixed: `couch: operation requires the calling conversation identity`. pair's callerIdentity reads COUCH_THREAD_SCOPE, COUCH_THREAD_TAG, PAIR_SESSION_NAME and PAIR_LAUNCH_NONCE, and the allowlist keeps only the first two.
 With both fixed and HOME still isolated, `couch --actors --json` exits 0 with Code ok.
 
-- [ ] scripts/test-env.sh: under PARLEY_LIVE_COUCH only, also keep PAIR_SESSION_NAME and PAIR_LAUNCH_NONCE.
-- [ ] Makefile.parley: check-couch-actors-live passes PARLEY_LIVE_COUCH_DATA_HOME (the operator's XDG_DATA_HOME, else REAL_HOME/.local/share).
-- [ ] tests/unit/couch_spec.lua: that one vim.system call gets XDG_DATA_HOME from it; the spec process stays isolated. The pending message carries the exit code and the first stderr line.
-- [ ] test_isolation specs: the live-Couch expected names gain the two identity names.
-- [ ] Verify: unsandboxed `make check-couch-actors-live` shows Success with no Pending; sandboxed shows Pending with the stderr.
+- [x] scripts/test-env.sh: under PARLEY_LIVE_COUCH only, also keep PAIR_SESSION_NAME and PAIR_LAUNCH_NONCE.
+- [x] Makefile.parley: check-couch-actors-live passes PARLEY_LIVE_COUCH_DATA_HOME (the operator's XDG_DATA_HOME, else REAL_HOME/.local/share).
+- [x] tests/unit/couch_spec.lua: that one vim.system call gets XDG_DATA_HOME from it; the spec process stays isolated. The pending message carries the exit code and the first stderr line.
+- [x] test_isolation specs: the live-Couch expected names gain the two identity names.
+- [x] Verify: unsandboxed `make check-couch-actors-live` shows Success with no Pending; sandboxed shows Pending with the stderr.
 
 ## Revisions
 
@@ -56,3 +56,10 @@ With both fixed and HOME still isolated, `couch --actors --json` exits 0 with Co
 ## Log
 
 ### 2026-10-16
+
+### 2026-10-17
+
+- Unsandboxed `make check-couch-actors-live`: the live case is Success, with no Pending line (5 Success, 0 Failed).
+- Sandboxed: Pending, "couch unreachable here (exit 1): couch: dial unix /tmp/pair-message-501/....sock: connect: operation not permitted".
+- Mutation check: with test-env.sh's two identity names removed, "lets each live flag carry only its own check's names" fails.
+- Lesson: `command -v couch` in an agent shell can be a shell function. Find the real binary with `whence -pa couch` before measuring it.
