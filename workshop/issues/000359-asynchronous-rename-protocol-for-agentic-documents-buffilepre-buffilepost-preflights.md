@@ -1,13 +1,13 @@
 ---
 id: 000359
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-16
 updated: 2026-10-16
 estimate_hours:
 severity: low
-card_mirror: '79500d940f4625450ce5167c0a3b94a65af54dda' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'dd018d7c95c55048c9759fac70bc090d2f6ffa0c' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-16T12:52:47-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 5.04
 ---
 
 # Asynchronous rename protocol for agentic documents (BufFilePre/BufFilePost preflights)
