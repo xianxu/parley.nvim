@@ -122,6 +122,8 @@ After code verification: close on SHIP and report green to TL. Do not stage; :0 
 
 - 2026-10-17 close finalized SHIP on4142a926: all five findings disposed, no open Critical/Important/Minor. Close evidence `f0e0bce60129614d786d7038ac1bf083a880e7a0`, codecomplete mirror `7d126cc90c434f05601f382b60723e013672a58b`. Normal merge refused integration against main `d5646b04ddf0a46ee540752c1d8394343f81eee9`: conflicts in session_sync_spec.lua. As the gate directed, merged main manually and resolved all five hunks by retaining main's arrival_ms() waits and #353's exact fixed lock-cell/feedback assertions. No production conflict. Full integrated-head suite and fixed-then-ship re-review with full-suite evidence are required before retrying normal landing. No staging, no bypasses.
 
+- 2026-10-17 conflict-resolved integrated suite passed on `dd729500bb294e21388f031ae183fbdf0fcb77fc`:465/465 spec files,781 lint files with zero warnings/errors, no surviving processes. Retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/dd729500bb294e21388f031ae183fbdf0fcb77fc/suite.log`, SHA256 `6ccfe5741f15f929d30e550d67690acd97255aa8785828d9bd0710751dc77313`. Includes session_sync_spec's resolved production-deadline waits and composed-cell assertions. TL directed fixed-then-ship review as the merge gate requires (submitted receipt05756ab0-af42-4b76-99c2-45b0afa5f3d2), then normal merge, without staging. Preserve actuals exclusion: legacy suite attempt ce659159c9d9e9a01b89a775a0981c34 lacks exact queue endpoints; excluded from calibration per ariadne#420.
+
 ## Revisions
 
 ### 2026-10-16 — #354 persisted-trail coordination
