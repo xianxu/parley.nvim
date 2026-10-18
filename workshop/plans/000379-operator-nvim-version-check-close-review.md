@@ -94,3 +94,67 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"70f12047-441f-495f-b592-b4c283e9476d","repository":"github.com/xianxu/parley.nvim","issue_id":"000379","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/92f9b3e55b147601","reviewed_head":"3f6ec81426a78f71a94b976be4632feb55899547","slot":"parley.nvim:4","requested_at":"2026-10-18T04:18:53.78209Z"},"phase":"finished","pid":53810,"started_at":"2026-10-18T04:18:53.877099Z","finished_at":"2026-10-18T04:22:04.964318Z","session_id":"24186cc3-723c-449f-ba65-b8079098cb38","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T21:29:04-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 379 — Check operator Neovim compatibility |
+| repo | parley.nvim |
+| issue file | workshop/issues/000379-operator-nvim-version-check.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 5faf003ee134d13aa7158fcd5ec6b51a921040eb..9d14002faac5989a513086a70facc27869593ef5 |
+| command | sdlc close --issue 379 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-17T21:29:04-07:00 |
+| verdict | SHIP |
+
+## Review
+
+I'm checking whether the spec still passes. My direct plenary run hung, so I'm stopping it and switching to the repo's make target.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All three prior Minor findings are fixed, and the interdiff adds no new defects. I tested the `--supported` probe in this checkout, including two deliberate breakages. It accepts 0.11.7 with rc=0. It returns rc=1 with a message in each failure case: a missing nvim binary, a `version_support` module that throws on `require`, a `supported()` that throws at runtime, and a MINIMUM raised to 0.99, which prints the refusal. `make help-parley` now lists `test-compat`. Run through the harness (`make test-spec SPEC=infra/test_harness`), `version_support_spec` passes 5 of 5. The issue-file diff only records the close and the fixes. `## Spec`, `## Revisions` and `## Done when` are unchanged, and nothing beyond what the findings asked for was added, so the scope has not changed. There were no conflict resolutions to judge.
+
+1. **Strengths**
+   - `scripts/test-nvim.sh:29-38`: the probe now uses the same rule as `has_mcode_fix`: only an exact `yes` on stdout passes. A runtime error that `pcall` doesn't catch is still covered, because stdout stays empty and the probe refuses. That fixes the whole fail-open class, not only the `require` failure.
+   - The probe reports why it refused: the refusal message from `version_support.refusal`, "could not load parley.version_support", or "did not answer".
+   - `tests/unit/version_support_spec.lua:31-40`: the test saves `_setup_called` before the call, restores it, and then asserts on the saved value. Restoring before asserting means the cleanup still happens when an assertion fails.
+
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor:** none new.
+5. **Test coverage**
+   - BR-1 is shell glue with no automated test. I covered it by breaking the module on purpose, as listed above, which is reasonable for a probe this small.
+   - BR-3 is test hygiene, so no failing test can demonstrate it. The fix is plainly visible in the diff.
+6. **Architecture**
+   - **ARCH-DRY:** pass. The probe reuses the pattern `has_mcode_fix` already uses. The earlier suggestion to share a "Lua predicate in DIR/nvim, fail closed" helper still applies, but only once a third probe appears.
+   - **ARCH-PURE:** pass. The policy still lives only in the pure module `version_support`, and the shell does nothing but call it.
+   - **ARCH-PURPOSE:** pass. All three fixes cover the class each finding named. There are two nvim probes in `test-nvim.sh`, and both now fail closed. `help-parley` lists every test target. The spec restores every global it changes: `vim.version`, `vim.notify` and `_setup_called`.
+7. **Plan revisions:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Probe accepts only an exact "yes". Verified: 0.11.7 rc=0; missing nvim, require throws, supported() throws, MINIMUM raised to 0.99 each rc=1 with a message.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Makefile.parley:14 lists test-compat, and make help-parley shows it.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The spec saves and restores _setup_called alongside vim.version and vim.notify, then asserts on the captured value. The spec passes 5 of 5 under the harness.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"cad3c3a9-d530-4e3c-98a3-3ec4d0ec64a3","repository":"github.com/xianxu/parley.nvim","issue_id":"000379","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/da63bc43dbfdeccd","reviewed_head":"9d14002faac5989a513086a70facc27869593ef5","slot":"parley.nvim:4","requested_at":"2026-10-18T04:23:35.924597Z"},"phase":"finished","pid":96448,"started_at":"2026-10-18T04:23:36.094026Z","finished_at":"2026-10-18T04:29:03.594372Z","session_id":"8270d301-2279-4a3b-9783-8e27da3644db","outcome":"returned"}] -->
