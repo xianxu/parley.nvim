@@ -7,7 +7,7 @@ created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '21092f0a7884e848e1e2e2948822b444448be645' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '4ec9d061fc8b4d059ad8170d15d1a4b0ae76b309' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T18:13:34-07:00
 claimant:
     operator: Xian Xu
@@ -17,7 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "d23ddeb8", done: "d768b4e3"}
-actual_hours: 0.25
+actual_hours: 0.30
 ---
 
 # review_protocol_export_test hardcodes /tmp for temp dirs (#342 rule)
