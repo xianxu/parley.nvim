@@ -45,6 +45,29 @@ describe("document registry process boundary", function()
         vim.fn.delete(root, "rf")
     end)
 
+    -- #382: a caller that names no deadline used to get a 2.5 s literal, which
+    -- a loaded suite's couch spawn missed (spec setups failed as `deadline
+    -- exceeded`) and which document_move's journaled renames ran on in
+    -- production. It now gets the product's submit deadline, read from config.
+    it("gives a request that names no deadline the configured submit deadline", function()
+        local file = root .. "/slow.md"
+        vim.fn.writefile({ "plain" }, file)
+        local config = require("parley").config
+        local configured = config.agentic_submit_timeout_ms
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "3"
+        local ok, err = pcall(function()
+            -- 3 s is past the old 2.5 s default and inside the 15 s one
+            assert.equals("absent", request("lookup", { file }).kind)
+            config.agentic_submit_timeout_ms = 1000
+            local late = request("lookup", { file })
+            assert.equals("unavailable", late.kind)
+            assert.matches("deadline exceeded", late.error)
+        end)
+        config.agentic_submit_timeout_ms = configured
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = nil, nil
+        assert.is_true(ok, tostring(err))
+    end)
+
     it("preserves null-only absence and persisted identity across register and rename replay", function()
         local old, new = root .. "/a space;note.md", root .. "/new.md"
         vim.fn.writefile({ "plain" }, old)

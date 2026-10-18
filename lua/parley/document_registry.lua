@@ -7,6 +7,16 @@ local active, queue, handles = 0, {}, {}
 local MAX_ACTIVE, MAX_QUEUE = 4, 64
 local pump
 
+--- A positive millisecond setting: the user's config, else the shipped default.
+--- One owner for agentic deadlines (#382); agentic_document reads it too.
+--- @param key string
+--- @return number
+function M.config_ms(key)
+    local value = (require("parley").config or {})[key]
+    if type(value) == "number" and value > 0 then return value end
+    return require("parley.config")[key]
+end
+
 local function unavailable(message)
     return { kind = "unavailable", error = message }
 end
@@ -68,7 +78,10 @@ function M.request(operation, args, witness, callback, options)
     end
     handles[item] = true
     item.timer = (vim.uv or vim.loop).new_timer()
-    item.timer:start(options.timeout_ms or 2500, 0, vim.schedule_wrap(function()
+    -- A caller that names no deadline gets the product's (#382). It used to be
+    -- a 2.5 s literal: under suite load the couch spawn missed it, and
+    -- document_move's journaled renames, which name none, ran on it too.
+    item.timer:start(options.timeout_ms or M.config_ms("agentic_submit_timeout_ms"), 0, vim.schedule_wrap(function()
         if item.child then pcall(item.child.kill, item.child, 15) end
         finish(unavailable("Couch registry deadline exceeded; mutation outcome may be unknown"))
     end))

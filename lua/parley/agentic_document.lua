@@ -156,11 +156,7 @@ end
 
 -- A deadline from the operator's config, else the shipped default (config.lua
 -- is the one place the numbers live).
-local function config_ms(key)
-    local value = (require("parley").config or {})[key]
-    if type(value) == "number" and value > 0 then return value end
-    return require("parley.config")[key]
-end
+local config_ms = registry.config_ms
 
 local function band(s, message, highlight)
     if message == "" then s.renderer.clear()
@@ -351,7 +347,7 @@ local function execute(s, effects)
                 if kind == "lookup" and result.kind == "absent" then cache(s, nil, true) end
                 dispatch(s, { type = "reply", witness = effect.witness, result = result })
                 if s.model.snapshot().phase == "unknown" then ensure_retry() end
-            end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
+            end))
         elseif kind == "flush_queued" then
             -- #378: the model released a press it held; drop_queued needs nothing.
             M.submit(s.buf)
@@ -697,7 +693,7 @@ local function ask_in_background(ns, key, loaded, operation, owner)
             prune_answers()
             answered[slot] = uv.now() + M.ANSWER_TTL_MS
         end
-    end, { timeout_ms = config_ms("agentic_submit_timeout_ms") })
+    end)
 end
 
 -- Public Parley movers must reserve the identity before touching OLD. A plain
