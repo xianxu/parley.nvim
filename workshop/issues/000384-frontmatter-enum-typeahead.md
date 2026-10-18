@@ -35,7 +35,12 @@ Frontmatter keys with a fixed set of values (`collaboration-mode:` today, `prese
 
 ## Done when
 
-In a markdown buffer, typing on a `collaboration-mode:` line in the frontmatter offers `discussion`, `collaboration` and `chat` (filtered by prefix), drawn from the resolver's own list. Nothing is offered outside the frontmatter or on undeclared keys. Issue files still complete `status:`, through the same registry. A spec covers the pure context and candidate logic and the cmp source, and adding a key is a one-line declaration.
+- In a markdown buffer, typing on a `collaboration-mode:` line in the frontmatter offers `discussion`, `collaboration` and `chat`, filtered by prefix and drawn from the resolver's own list.
+- Nothing is offered outside the frontmatter, on undeclared keys, or once the value is typed out in full.
+- Issue files still complete `status:`, through the same registry, and other files don't.
+- Adding a key is a one-line declaration.
+- With nvim-cmp active in the buffer, only one menu opens (cmp's, holding the values). Without cmp, Vim's popup is used.
+- Specs cover the pure context and candidate logic, the popup, and the cmp path.
 
 ## Plan
 
