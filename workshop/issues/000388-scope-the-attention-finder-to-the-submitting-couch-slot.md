@@ -56,6 +56,7 @@ Actions: submit, open finder, toggle scope, reopen. Existing waiting/answered/se
 ## Log
 
 ### 2026-10-18 — focused verification and disposable live check
+- 2026-10-18: closed — 191 focused cases pass on preferred Neovim 0.12.5 and stock 0.11.7; lint 0 warnings/errors in 803 files. Red/green covers sender instead of recipient, latest resubmit, inherited side-doc slot, typed store/legacy, O(N) membership counts at 16/32, current/all toggle and late probes, real picker query retention, remapping/disable. Hub-authorized disposable real-profile/live-Couch check on staged :0 passed current+legacy 2/all 3/back 2/outside 3; scratch removed, stage cleared and :0 clean exactly at origin/main. Atlas and README updated. Recorded full suite b128ef609d54b16545d71033a29d85f7 is queued on code-identical 3da98e74; hub explicitly allows review overlap, and a recorded pass remains mandatory before landing. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 All 191 focused cases passed on both preferred 0.12.5 and stock 0.11.7;
 make lint reports 0 warnings / 0 errors across 803 files. Full recorded suite
