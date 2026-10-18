@@ -54,6 +54,8 @@ Reproduce first: run the pair in parallel under load, with the registry's error 
 - [x] Fix at the cause. `document_registry.request` no longer falls back to a 2.5 s literal; a caller that names no deadline gets `agentic_submit_timeout_ms`. `config_ms` moves into `document_registry` as the one owner of agentic deadlines (ARCH-DRY), `agentic_document` uses it, and its two calls that passed that same value explicitly drop it.
 - [x] Regression: a `document_registry_spec` case. A lookup with no deadline against a 3 s-slow fake answers; a configured 1 s deadline fails it with "deadline exceeded". With the 2.5 s literal put back, the case fails.
 - [x] Re-run the loaded reproduction, then the full suite.
+- [x] (Revision 1) The deadline bounds the child from its spawn, not from enqueue. Results carry `queued_ms`/`ran_ms`, and refusals carry the child's `exit`/`stderr`. Spec setups print them through `fake_couch.explain`.
+- [x] (Revision 1) Every failure-declaring deadline refreshes the loop clock first, through `helper.start_deadline` (uv timers) or `helper.defer_deadline` (drop-in for `vim.defer_fn`).
 
 ## Log
 
@@ -88,3 +90,14 @@ Reproduce first: run the pair in parallel under load, with the registry's error 
 - New `tests/unit/start_deadline_spec.lua`. A 300 ms deadline started after a 600 ms block fires at ≥ 290 ms; with `update_time` removed (mutation) it fired after 5 ms and the spec fails. The injected-runtime path is covered with and without `update_time`. Mapped in traceability.yaml.
 - Targeted runs pass: start_deadline 2, document_registry 11, agentic_document 47, side_inherit 9, owned_move 43, tasker_run 43, tasker_supervision 30, tasker_unit 16, oauth 110, single_source_sweeps 28.
 - The recorded suite on d5bc1f90 failed in tests/arch/arrival_budget_spec: the new start_deadline_spec used `vim.wait(5000, …)`, a bare literal (#374 rule). Fixed to `arrival.MS`; both specs pass. Lesson logged.
+
+## Revisions
+
+- 2026-10-18, after close review round 4 (REWORK, BR-3 scope-change-after-close). Two inputs from parley.nvim:1, relayed and approved by the hub, widened the issue after its close; the Log records each with its measurement.
+  - **Delta 1:** a registry deadline bounds the child from spawn, not from enqueue. Queued time behind `MAX_ACTIVE` is not Couch being slow, and a request that never ran cannot have an unknown outcome. The queue is bounded by count (`MAX_QUEUE`, 64), not by time; a caller that needs a wall-clock bound has its own (`bounded_request`). Results carry `queued_ms`/`ran_ms`, and refusals carry `exit`/`stderr`, so an `unavailable` names its cause.
+  - **Delta 2:** libuv measures timers from the loop's cached time (measured: a 500 ms timer started after a 1 s block fired at 6 ms on 0.11.7 and 0.12.5). Every timer whose expiry declares a failure now refreshes the clock first.
+    - Through `helper.start_deadline`: the registry child, agentic_document's submit band, oauth's login timeout, and tasker's reconcile delay and attempt deadline.
+    - Through `helper.defer_deadline` (`vim.defer_fn` deadlines): the agentic_document move-overdue band, the dispatcher recovery timeout and the cliproxy update-restart deadline.
+    - Excluded with reasons: repeating timers (spinners, pulses, polls); one-shot timers that only delay work (debounces, highlight clears, deferred_work coalescing, session_sync idle, finder deferrals); and deadlines whose pure model re-reads a fresh clock and re-arms if early (skill_invoke's read reconcile, tools/scheduler's arm).
+  - `## Done when` is unchanged. Both deltas serve its "fix at the cause" clause, and each has a regression test with a mutation check.
+

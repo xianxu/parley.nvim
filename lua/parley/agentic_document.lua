@@ -211,7 +211,7 @@ local function moving_metadata(s, moving)
         dispatch(s, { type = "moved", witness = moving.witness, ok = true })
         if s.move ~= moving then return end
         show_move(s, moving)
-        vim.defer_fn(function()
+        require("parley.helper").defer_deadline(function()
             if states[s.buf] ~= s or s.move ~= moving or moving.answered then return end
             moving.overdue = true
             show_move(s, moving)

@@ -22,6 +22,21 @@ _H.start_deadline = function(timer, ms, callback, runtime)
 	return timer:start(ms, 0, callback)
 end
 
+--- vim.defer_fn for a deadline (#382): `fn` runs on the main loop `ms` after
+--- now, with the loop clock refreshed first. Returns the timer, closed after
+--- it fires, so a caller may stop it earlier as with vim.defer_fn.
+--- @param fn function
+--- @param ms integer
+--- @return userdata timer
+_H.defer_deadline = function(fn, ms)
+	local timer = (vim.uv or vim.loop).new_timer()
+	_H.start_deadline(timer, ms, vim.schedule_wrap(function()
+		if not timer:is_closing() then timer:close() end
+		fn()
+	end))
+	return timer
+end
+
 -- Navigation belongs in editing windows, never overlays such as Screenkey.
 _H.is_editing_window = function(win)
     if not vim.api.nvim_win_is_valid(win) then return false end

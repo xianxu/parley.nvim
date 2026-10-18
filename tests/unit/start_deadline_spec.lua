@@ -32,4 +32,17 @@ describe("helper.start_deadline", function()
         helper.start_deadline(timer, 7, cb, {})
         assert.same({ 7, 0, cb }, started)
     end)
+
+    it("defer_deadline measures from its start too, and closes its timer", function()
+        local fired_after, timer
+        vim.schedule(function()
+            local t0 = uv.hrtime()
+            while (uv.hrtime() - t0) < 600e6 do end -- block the loop 600 ms
+            local started = uv.hrtime()
+            timer = helper.defer_deadline(function() fired_after = (uv.hrtime() - started) / 1e6 end, 300)
+        end)
+        assert.is_true(vim.wait(arrival.MS, function() return fired_after ~= nil end, 5))
+        assert.is_true(fired_after >= 290, ("a 300 ms deadline fired after %.0f ms"):format(fired_after))
+        assert.is_true(timer:is_closing())
+    end)
 end)
