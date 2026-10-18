@@ -1,6 +1,6 @@
 ---
 id: 000267
-status: working
+status: codecomplete
 created: 2026-09-18
 updated: 2026-10-17
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 1.05
+tracker:
+    version: 1
+    completion:
+        token: close-2c5a76663f06
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 85d1284c76f86011cb0c0a11d3a8c6c6d3e64619
+        evidence_commit: 0c0853420e0b37b9aaf9a088778dab6e1f6f0ac3
 ---
 
 # tool_resources_spec dies silently under parallel load in its JIT-off call-hook case
