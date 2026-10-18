@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.42
+actual_hours: 0.43
 tracker:
     version: 1
     completion:
-        token: close-79520995e2ca
+        token: close-5b9de1c4ccb6
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 3f6ec81426a78f71a94b976be4632feb55899547
-        evidence_commit: 9c522b705159951620ec7807afe7bdd5673783a1
+        reviewed_head: 9d14002faac5989a513086a70facc27869593ef5
+        evidence_commit: 31b98a329caf673c6d74f6fff35ee549c7fd1cab
 ---
 
 # Check operator Neovim compatibility
