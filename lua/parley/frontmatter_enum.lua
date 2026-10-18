@@ -70,15 +70,75 @@ local function at_cursor()
     return M.context(vim.api.nvim_buf_get_lines(buf, 0, SCAN_LINES, false), row, col)
 end
 
+local SOURCE = "parley_frontmatter"
+local registered = false
+
+-- nvim-cmp, when it is loaded and enabled for the current buffer, else nil.
+-- Two menus fight (#384, measured with the operator's config: Vim's popup
+-- and cmp's own menu both open), so with cmp the values go through cmp.
+local function active_cmp()
+    local cmp = package.loaded["cmp"]
+    if type(cmp) ~= "table" or type(cmp.get_config) ~= "function" or type(cmp.register_source) ~= "function" then return nil end
+    local enabled = cmp.get_config().enabled
+    if type(enabled) == "function" then enabled = enabled() end
+    return enabled ~= false and cmp or nil
+end
+
+--- The buffer's cmp sources with ours first: its own group, sorted before the
+--- rest, so on a frontmatter value cmp shows only the values. Elsewhere our
+--- source is unavailable and the buffer's sources work as before.
+function M.with_source(sources)
+    local lowest = 1
+    for _, source in ipairs(sources or {}) do
+        if source.name == SOURCE then return sources end
+        lowest = math.min(lowest, source.group_index or 0)
+    end
+    local out = { { name = SOURCE, group_index = lowest - 1 } }
+    vim.list_extend(out, vim.deepcopy(sources or {}))
+    return out
+end
+
+-- Register the source once, and put it in this buffer's sources. Host configs
+-- and parley's chat setup reset buffer sources, so this runs on each change.
+-- Returns whether the source was just added (cmp then needs a fresh complete).
+local function ensure_cmp(cmp)
+    if not registered then
+        cmp.register_source(SOURCE, {
+            is_available = function() return at_cursor() ~= nil end,
+            get_keyword_pattern = function() return [[\%(\w\|-\)*]] end,
+            complete = function(_, _, callback)
+                local ctx = at_cursor()
+                local items = {}
+                for _, value in ipairs(ctx and M.candidates(ctx.key, ctx.partial, vim.api.nvim_buf_get_name(0)) or {}) do
+                    items[#items + 1] = { label = value }
+                end
+                callback(items)
+            end,
+        })
+        registered = true
+    end
+    local sources = cmp.get_config().sources
+    local with = M.with_source(sources)
+    if with == sources then return false end
+    cmp.setup.buffer({ sources = with })
+    return true
+end
+
 --- Typeahead on a markdown buffer: in Insert mode, typing a declared key's
---- value pops up the matching values (the popup the issue status: field had,
---- generalized; it needs no completion plugin).
+--- value offers the matching values. Without nvim-cmp it is Vim's own popup
+--- (the one the issue status: field had, generalized); with cmp active in the
+--- buffer, the values are a cmp source instead, so only one menu opens.
 function M.attach(buf)
     if vim.b[buf].parley_frontmatter_enum then return end
     vim.b[buf].parley_frontmatter_enum = true
     vim.api.nvim_create_autocmd("TextChangedI", { buffer = buf, callback = function()
         local ctx = at_cursor()
         if not ctx then return end
+        local cmp = active_cmp()
+        if cmp then
+            if ensure_cmp(cmp) and type(cmp.complete) == "function" then cmp.complete() end
+            return
+        end
         local matches = M.candidates(ctx.key, ctx.partial, vim.api.nvim_buf_get_name(buf))
         -- Nothing to offer once the value is typed out in full.
         if #matches == 0 or (#matches == 1 and matches[1] == ctx.partial) then return end

@@ -79,4 +79,45 @@ describe("frontmatter typeahead popup (#384)", function()
         assert.is_true(vim.b[md].parley_frontmatter_enum)
         vim.api.nvim_buf_delete(md, { force = true })
     end)
+
+    describe("with nvim-cmp active", function()
+        local stub, saved_cmp
+        before_each(function()
+            saved_cmp = package.loaded["cmp"]
+            stub = { registered = {}, buffer_sources = nil, completes = 0, enabled = true }
+            stub.register_source = function(name, source) stub.registered[name] = source end
+            stub.get_config = function()
+                return { enabled = function() return stub.enabled end,
+                    sources = stub.buffer_sources or { { name = "buffer", group_index = 1 } } }
+            end
+            stub.setup = { buffer = function(config) stub.buffer_sources = config.sources end }
+            stub.complete = function() stub.completes = stub.completes + 1 end
+            package.loaded["cmp"] = stub
+        end)
+        after_each(function() package.loaded["cmp"] = saved_cmp end)
+
+        it("offers the values through cmp, ahead of the buffer's sources, and opens no Vim popup", function()
+            assert.is_nil(type_at(2, "collaboration-mode: di"))
+            assert.equals("parley_frontmatter", stub.buffer_sources[1].name)
+            assert.is_true(stub.buffer_sources[1].group_index < stub.buffer_sources[2].group_index)
+            assert.equals("buffer", stub.buffer_sources[2].name)
+            assert.equals(1, stub.completes) -- the source was just added: cmp asks again
+            local source = stub.registered.parley_frontmatter
+            assert.is_true(source.is_available())
+            local items
+            source.complete(nil, {}, function(result) items = result end)
+            assert.same({ { label = "discussion" } }, items)
+            -- Already in the sources: cmp's own trigger handles the next key.
+            type_at(2, "collaboration-mode: dis")
+            assert.equals(1, stub.completes)
+            vim.api.nvim_win_set_cursor(0, { 6, 2 })
+            assert.is_false(source.is_available()) -- the body: cmp's sources as before
+        end)
+
+        it("falls back to Vim's popup where cmp is disabled for the buffer", function()
+            stub.enabled = false
+            assert.same({ "discussion" }, type_at(2, "collaboration-mode: di").items)
+            assert.is_nil(stub.buffer_sources)
+        end)
+    end)
 end)

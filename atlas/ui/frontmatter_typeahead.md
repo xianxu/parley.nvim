@@ -1,8 +1,14 @@
 # Frontmatter Typeahead
 
 Typing the value of a frontmatter key with a fixed set of values pops up the values that match what's typed (#384).
-It works in Insert mode, in any markdown or chat buffer, and needs no completion plugin: it uses Vim's own
-`complete()` through `helper.complete_noselect`, as the issue `status:` popup did before it moved here.
+It works in Insert mode, in any markdown or chat buffer. There is one menu, never two:
+- **Without nvim-cmp** (or with cmp disabled for the buffer), it uses Vim's own `complete()` through
+  `helper.complete_noselect`, as the issue `status:` popup did before it moved here.
+- **With nvim-cmp active,** the values are the `parley_frontmatter` cmp source instead. It sits in its own group,
+  sorted before the buffer's sources, so on a frontmatter value cmp lists only the values. It is unavailable
+  everywhere else, so cmp's other sources behave as before. The source is re-added on each change, because host
+  configs and parley's chat setup reset buffer sources. Measured with the operator's config: when both ran, Vim's
+  popup and cmp's menu opened at once.
 
 - **Where it offers:** only on a declared key's value line inside the opening `---` block, after the colon. It
   offers nothing in the body, on undeclared keys, or once the value is typed out in full.
