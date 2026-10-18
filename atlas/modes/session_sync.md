@@ -299,6 +299,43 @@ remains the single edit-turn, watch, baseline/undo, ping and rendering engine.
 Dispatch and keys live in `setup_markdown_keymaps` (`lua/parley/init.lua`). The maintainer real/fake registry
 probe is documented in [TOOLING](../../TOOLING.md).
 
+### The agent's round and `presentation:` (#383)
+
+Couch keeps the change an agent's last write made, as its round (pair#661).
+Spans hold 0-based `[line, byte column]` positions in the written file, the
+old and new text, and an optional `explain`. A document's `presentation:`
+frontmatter key (`direct` | `highlight` | `propose`; missing or unknown means
+`highlight`, as Couch reads it) says how parley shows the round. The pure
+`presentation.lua` reads the key and places the spans. It places a span where
+Couch says only when the buffer's hash is the round's `result_hash` and the
+text is there. Otherwise it re-finds the span by its new text, nearest its old
+position. A deletion has no text to find, so it is placed only on a matching
+hash. A span that can't be placed is dropped, never clamped. At most
+`MAX_SPANS` (200) spans are placed.
+
+`edit_round.lua` is the shell around it. `refresh(buf)` asks Couch (`round PATH
+--json`, through `document_registry`'s bounded client and its own reply
+classifier) and draws under `highlight`. Under `direct` nothing is drawn, and
+under `propose` the proposal markers are already in the text. A larger rewrite
+arrives as a `→ [proposal](…)` side-doc link, followed and inherited like any
+side doc. A generation per buffer drops a reply that a later refresh or clear
+overtook. A round with more than 200 spans says so once, as a WARN notice
+(`showing 200 of N agent changes`). `session_sync` refreshes after `reload()`,
+at `FileChangedShellPost` and on attach. It clears in `release_and_send`'s
+confirmed branch, before the state guard (sent is sent). A reopen draws nothing
+once Couch reports the round `Cleared`, which means a submit came after it,
+compared as instants. BufUnload forgets the buffer.
+
+Drawing is `skill_render`'s round kind: `ParleyAgentChange` highlights (linked
+to `DiffAdd`) in the `parley_round_hl` namespace, plus INFO diagnostics with
+source `parley-round` in the shared review namespace. Footnote and review-skill
+diagnostics survive a round's publish and clear. Marks move with the text and
+diagnostics do not, so a buffer-local `on_lines` re-derives them from the
+marks. Keystrokes coalesce into one scheduled re-derive per buffer, O(spans),
+which a counted 8/16-keystroke spec holds. The fake keeps a seeded round and
+stamps submits to the microsecond. The opt-in registry conformance probe
+checks the real binary's `round` too.
+
 ### S3 move projection and execution (#373)
 
 `document_move_plan.project(OLD, NEW, observations)` describes effects from

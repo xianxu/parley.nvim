@@ -193,7 +193,10 @@ change baseline.
   by the selected name; the menu prettifies for display.
 - **Behavior flags:** `scope` (`whole-doc` | `markers-only`), `deletions`
   (`apply-with-gutter-why` | `propose-strike` | `apply`), `frontier` (`on` | `off`
-  — when on, treat text above the topmost `🤖[]` as settled). Plus `order:` — the
+  — when on, treat text above the topmost `🤖[]` as settled). `deletions` is
+  optional with no default (#383): export v3 (ariadne#437) retires it, and the
+  document's own `presentation:` is then the one proposal knob, copied into no
+  flag. A v2 mode file carries it. Plus `order:` — the
   editorial-sequence position that orders the menu (developmental=1 … free-form=6).
 - **Six shipped modes:** developmental, line-editing, copy-editing, proofreading,
   fact-check (inserts `🤖{}` findings only — no edits; resolution handed to the
@@ -218,7 +221,11 @@ modes. The shipped snapshot includes it; package tests require its presence.
 Version 2 also exports the canonical move fixtures as `fixture` members under
 `examples/<case>/`; the sync snapshots and hashes those trees but excludes them
 from prompt composition and mode discovery. Version 1 remains accepted with a
-notice that move fixtures are absent. The shipped snapshot requires both move
+notice that move fixtures are absent. Version 3 drops `deletions` from every
+mode record and mode file; a v3 record still carrying it is refused, and v1/v2
+records still require it. With no mode selected, the brief's default
+`deletions: propose-strike` line follows the snapshot's version: v2 keeps it,
+v3 writes none. The shipped snapshot requires both move
 cases, and the mover's projection checks load their before/after bytes through
 the manifest. Recursive generated-output preflight rejects symlinks and special
 files; stale files are reported for explicit removal. `local-adapter.md` stays Parley-owned and is appended last.

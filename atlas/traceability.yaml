@@ -801,6 +801,8 @@ atlas:
       - lua/parley/couch.lua
       - lua/parley/frontmatter.lua
       - lua/parley/helper.lua
+      - lua/parley/presentation.lua
+      - lua/parley/edit_round.lua
       - scripts/check-couch-registry-conformance.py
       - scripts/couch-registry-probe.lua
       - tests/fixtures/fake_couch_registry.py
@@ -828,6 +830,11 @@ atlas:
       - tests/integration/document_lease_spec.lua
       - tests/integration/document_move_spec.lua
       - tests/integration/sidecar_degrade_spec.lua
+      - tests/unit/presentation_spec.lua
+      - tests/unit/fake_couch_round_spec.lua
+      - tests/unit/skill_render_round_spec.lua
+      - tests/integration/edit_round_spec.lua
+      - tests/integration/edit_round_hooks_spec.lua
 
   modes/interview:
     code:

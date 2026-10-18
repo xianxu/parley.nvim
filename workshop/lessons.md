@@ -814,3 +814,7 @@ point as well as internal helpers before calling the family complete.
 - To test working-tree Lua inside a session that already loaded the installed plugin, prepend the checkout to `runtimepath`, not `package.path`. Neovim's runtimepath searcher runs before `package.path`, so a module present in both resolves to the installed copy. In #384 that happened silently: `collaboration.modes` came back nil and the probe looked like a product bug.
 - Reload only the modules under test. Clearing every `parley.*` entry from `package.loaded` breaks the installed plugin's already-wired autocmds, and the result is noise.
 - Checking an interaction with a completion plugin means measuring both menus at once, Vim's (`pumvisible()`) and the plugin's own view (`cmp.core.view:visible()`). `cmp.visible()` counts Vim's popup as cmp's.
+
+## A random sweep must prove it reaches its adversarial class (#383)
+
+A seeded fuzz loop in presentation_spec passed with its guard removed, because a hand-rolled LCG (`seed * 1103515245 + 12345 mod 2^31`, then `seed % n`) correlates its low bits and never produced the malformed inputs. Rule: a randomized spec counts how often it hits the class it exists for and asserts a floor, and a mutation that removes the guard must turn it red before the spec counts as evidence. Use `math.random` with a fixed `math.randomseed`, not a hand-rolled generator.
