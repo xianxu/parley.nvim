@@ -299,7 +299,7 @@ class ExportTest(unittest.TestCase):
     def test_manifest_rejects_seeded_type_and_contract_mutations(self):
         self.api.validate_manifest(self.manifest)
         mutations = []
-        for key, bad in [('schema', 'other'), ('version', True), ('version', 3), ('members', {})]:
+        for key, bad in [('schema', 'other'), ('version', True), ('version', 4), ('members', {})]:
             mutant = copy.deepcopy(self.manifest)
             mutant[key] = bad
             mutations.append(mutant)
@@ -332,6 +332,38 @@ class ExportTest(unittest.TestCase):
             with self.subTest(manifest=mutant), self.assertRaises(ValueError):
                 self.api.validate_manifest(mutant)
         self.assertEqual(fixture()[0], self.manifest)
+
+    def as_v3(self):
+        """The v3 shape (ariadne#437): no deletions on any mode record or mode file."""
+        self.manifest['version'] = 3
+        for member in self.manifest['members']:
+            if member['role'] == 'mode':
+                member.pop('deletions')
+                data = b''.join(line + b'\n' for line in self.content[member['path']].split(b'\n')[:-1]
+                                if not line.startswith(b'deletions:'))
+                self.content[member['path']] = data
+                member.update(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+
+    def test_v3_export_without_deletions_renders(self):
+        self.as_v3()
+        snapshot = self.api.render_snapshot(self.manifest, self.content)
+        self.assertIn(b'version 3;', snapshot['SKILL.md'])
+        self.assertNotIn(b'deletions', snapshot['modes/line-editing.md'])
+
+    def test_deletions_belongs_to_v1_and_v2_only(self):
+        # A v3 record still carrying deletions is a half-migrated export.
+        self.as_v3()
+        mutant = copy.deepcopy(self.manifest)
+        mutant['members'][3]['deletions'] = 'propose-strike'
+        with self.assertRaisesRegex(ValueError, 'version 3 mode carries no deletions'):
+            self.api.validate_manifest(mutant)
+        # And v2 keeps requiring it: a missing flag never defaults.
+        for version in (1, 2):
+            mutant = copy.deepcopy(fixture()[0])
+            mutant['version'] = version
+            mutant['members'][3].pop('deletions')
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError, 'invalid mode deletions'):
+                self.api.validate_manifest(mutant)
 
     def test_new_well_formed_modes_and_adapters_are_authoritative(self):
         mode = dict(self.manifest['members'][3], name='new-mode', path='modes/new-mode.md', order=7)
