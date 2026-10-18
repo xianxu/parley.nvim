@@ -177,6 +177,18 @@
   - clear `edit_round`'s generation on `BufUnload`.
 - [ ] Get to green, then commit.
 
+### Task 7: universal-review export v2 and v3 (scope addition, hub 2026-10-18)
+
+ariadne#437 retires the `deletions` mode flag (propose-strike) and bumps the export to version 3. Under v3, proposals come from the document's `presentation: propose`, not from a mode. parley must load both shapes and must never let a missing `deletions` fall back to propose-strike. #383 lands first. The exact v3 shape comes from ariadne:1 before this task is coded.
+
+**Files:** modify `scripts/sync-review-protocol.py`, `lua/parley/skills/review/mode.lua` and `lua/parley/skills/review/instruction.lua`; test `tests/unit/review_protocol_export_test.py`, `tests/unit/review_mode_spec.lua` and `tests/unit/review_instruction_spec.lua`.
+
+- [ ] Strategy: one rule per parser, guarded by the same pair of fixtures. A v2 export and a v3 export each go through `validate_manifest`, `mode.parse` and `instruction.context`. The guard: v2's brief is byte-identical to today's, and v3's brief contains no `deletions` line. A v3 mode record that carries `deletions` is refused.
+- [ ] `validate_manifest` accepts version 3. Under it, `deletions` is forbidden on mode records and fixtures are allowed. Versions 1 and 2 still require `deletions`.
+- [ ] `mode.parse`: `deletions` is optional with no default. If present it is validated as now; if absent it is nil.
+- [ ] `instruction.context` writes `deletions:` only when the first mode has one. With no mode selected, the default line follows the snapshot's `export.json` version: v2 keeps propose-strike, v3 writes none.
+- [ ] Commit `#383: the review export loads v2 and v3; no default deletions`.
+
 ### Task 6: propose's side-doc link, conformance, atlas
 
 **Files:**
@@ -201,3 +213,4 @@ The issue's Done when: on a document under the default presentation, an agent `a
   3. untrusted span positions are checked in the pure layer and extmarks use `strict = false` (Tasks 2, 3);
   4. the `on_lines` coalescing envelope with a counted N/2N spec and a 200-span cap (Integration points, Task 4).
 - 2026-10-18 (hub): the span cap must be visible. Past 200 spans, one WARN notice per round, `showing 200 of N agent changes`, instead of only a debug log.
+- 2026-10-18 (hub, ariadne:1): scope addition, Task 7: load universal-review export v2 and v3, never defaulting a missing `deletions` to propose-strike.
