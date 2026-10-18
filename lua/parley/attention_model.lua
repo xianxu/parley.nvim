@@ -65,10 +65,13 @@ local function newest_first(a, b)
     return a.path < b.path
 end
 
---- Entries, newest submit first (ties by path).
-function M.list(state)
+--- Entries, newest submit first (ties by path); optional slot includes legacy entries.
+function M.list(state, slot)
     local result = {}
-    for _, entry in pairs(state.entries) do result[#result + 1] = entry end
+    for _, entry in pairs(state.entries) do
+        local origin = entry.slot
+        if not slot or not origin or origin == slot then result[#result + 1] = entry end
+    end
     table.sort(result, newest_first)
     return result
 end
@@ -129,6 +132,7 @@ function handlers.submitted(state, event, now)
     entry.pending[event.id] = now
     entry.submitted_at = now
     entry.breadcrumb = event.breadcrumb
+    entry.slot = event.slot
     return next_state
 end
 
@@ -244,7 +248,8 @@ function handlers.discovered(state, event, now)
     next_state.retired[event.path] = nil
     if not make_room(next_state, now) then return state, "full" end
     next_state.entries[event.path] = { path = event.path, pending = {}, kind = "side", parent = event.parent,
-        submitted_at = event.at, answered_at = event.at, recorded_at = now }
+        submitted_at = event.at, answered_at = event.at, recorded_at = now,
+        slot = state.entries[event.parent] and state.entries[event.parent].slot }
     return next_state
 end
 

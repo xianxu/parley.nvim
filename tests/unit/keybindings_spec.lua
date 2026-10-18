@@ -21,6 +21,16 @@ local function setup_parley(extra)
 end
 
 describe("key bindings help", function()
+    it("attention scope help follows remapping and disabling", function()
+        local reg = require("parley.keybinding_registry")
+        local config = vim.deepcopy(require("parley.config"))
+        config.attention_finder_mappings.toggle_scope = { shortcut = "<F6>" }
+        assert.is_true(has_line(reg.help_lines("attention_finder", config), "<F6>", "Toggle current/all Couch slots"))
+        config.attention_finder_mappings.toggle_scope = { shortcut = "" }
+        assert.is_false(has_line(reg.help_lines("attention_finder", config), "<C-a>", "Toggle current/all Couch slots"))
+        assert.is_nil(reg.keys_for("attention_scope", config))
+    end)
+
     it("other context shows global keys only", function()
         setup_parley()
 

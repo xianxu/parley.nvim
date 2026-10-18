@@ -16,7 +16,7 @@ local M = {}
 local TRIES, DELAY_MS = 10, 25
 
 local OPTIONAL = { answered_at = "number", seen_at = "number", breadcrumb = "table", unknown = "string",
-    recorded_at = "number", kind = "string", parent = "string" }
+    recorded_at = "number", kind = "string", parent = "string", slot = "string" }
 
 -- One stored entry as a typed entry, or nil with why it cannot be one. A wrong
 -- optional field is dropped; a wrong required one drops the entry.
