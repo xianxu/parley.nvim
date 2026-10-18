@@ -85,17 +85,35 @@ describe("arch: harness scratch stays out of the repo tree", function()
     -- pins it fails on every Neovim version, and it bypasses the isolated
     -- TEST_ENV_ROOT. Shell `${TMPDIR:-/tmp}` and Python's `os.environ.get("TMPDIR")
     -- or "/tmp"` fall back to /tmp only when TMPDIR is unset, which is fine.
+    -- Every spelling of the class, not only the ones #381 swept: Python's
+    -- dir= with any /tmp path or Path('/tmp'); shell mktemp by template,
+    -- -p or --tmpdir; Lua opening or making a literal /tmp path.
     local FIXED_TMP = {
-        { lang = "python", pattern = "dir%s*=%s*['\"]/tmp['\"]" },
+        { lang = "python", pattern = "dir%s*=%s*[%w_.]*%(?%s*['\"]/tmp[/'\"]" },
         { lang = "shell", pattern = "mktemp[^\n]-%s['\"]?/tmp/" },
+        { lang = "shell", pattern = "mktemp[^\n]-%s%-p%s*['\"]?/tmp" },
+        { lang = "shell", pattern = "mktemp[^\n]-%-%-tmpdir=['\"]?/tmp" },
+        { lang = "lua", pattern = "io%.open%(%s*['\"]/tmp/" },
+        { lang = "lua", pattern = "mkdir%(%s*['\"]/tmp" },
+        { lang = "lua", pattern = "writefile%(.-,%s*['\"]/tmp/" },
     }
+    -- Each rule reads only its own language: Lua's `dir = f("/tmp/…")` is a
+    -- path string, not Python's dir= keyword.
+    local function lang_of(path)
+        if path:match("%.py$") then return "python" end
+        if path:match("%.lua$") then return "lua" end
+        return "shell"
+    end
     local function fixed_tmp_roots(files)
         local found = {}
         for _, path in ipairs(files) do
             local ok, lines = pcall(vim.fn.readfile, path)
+            local lang = lang_of(path)
             for n, line in ipairs(ok and lines or {}) do
                 for _, rule in ipairs(FIXED_TMP) do
-                    if line:find(rule.pattern) then found[#found + 1] = ("%s:%d: %s"):format(path, n, vim.trim(line)) end
+                    if rule.lang == lang and line:find(rule.pattern) then
+                        found[#found + 1] = ("%s:%d: %s"):format(path, n, vim.trim(line))
+                    end
                 end
             end
         end
@@ -108,18 +126,38 @@ describe("arch: harness scratch stays out of the repo tree", function()
         assert.same({}, fixed_tmp_roots(files))
     end)
 
-    it("the /tmp guard sees both forms it refuses, and passes the fallbacks", function()
+    it("the /tmp guard sees every spelling it refuses, and passes the fallbacks", function()
         local dir = vim.fn.tempname()
         vim.fn.mkdir(dir, "p")
         -- Spelled in pieces, so this spec's own source never matches the scan.
         local tmp = "/" .. "tmp"
-        vim.fn.writefile({ "tempfile.TemporaryDirectory(prefix='x-', dir='" .. tmp .. "')",
-            'with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR") or "' .. tmp .. '"):' }, dir .. "/a.py")
-        vim.fn.writefile({ "d=$(mktemp -d " .. tmp .. "/x.XXXXXX)", 'd=$(mktemp -d "${TMPDIR:-' .. tmp .. '}/x.XXXXXX")' }, dir .. "/b.sh")
-        local found = fixed_tmp_roots({ dir .. "/a.py", dir .. "/b.sh" })
+        local refused = {
+            py = { "tempfile.TemporaryDirectory(prefix='x-', dir='" .. tmp .. "')",
+                "tempfile.mkdtemp(dir='" .. tmp .. "/')", "tempfile.mkdtemp(dir='" .. tmp .. "/sub')",
+                "tempfile.mkdtemp(dir=Path('" .. tmp .. "'))" },
+            sh = { "d=$(mktemp -d " .. tmp .. "/x.XXXXXX)", "d=$(mktemp -d -p " .. tmp .. " x.XXXXXX)",
+                "d=$(mktemp -d --tmpdir=" .. tmp .. " x.XXXXXX)" },
+            lua = { 'io.open("' .. tmp .. '/x", "w")', 'vim.fn.mkdir("' .. tmp .. '/x", "p")',
+                'vim.fn.writefile({ "a" }, "' .. tmp .. '/x")' },
+        }
+        local allowed = {
+            py = { 'tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR") or "' .. tmp .. '")' },
+            sh = { 'd=$(mktemp -d "${TMPDIR:-' .. tmp .. '}/x.XXXXXX")' },
+            lua = { 'vim.fn.writefile({ "' .. tmp .. '/only/content" }, path)', 'vim.fn.mkdir(scratch .. "' .. tmp .. '", "p")' },
+        }
+        local files, expected = {}, 0
+        for ext, lines in pairs(refused) do
+            local path = dir .. "/x." .. ext
+            vim.fn.writefile(vim.list_extend(vim.deepcopy(lines), allowed[ext]), path)
+            files[#files + 1], expected = path, expected + #lines
+        end
+        local found = fixed_tmp_roots(files)
         vim.fn.delete(dir, "rf")
-        assert.equals(2, #found, vim.inspect(found))
-        assert.matches("a%.py:1:", found[1])
-        assert.matches("b%.sh:1:", found[2])
+        assert.equals(expected, #found, vim.inspect(found))
+        for _, hit in ipairs(found) do
+            local n = tonumber(hit:match(":(%d+):"))
+            local ext = hit:match("x%.(%a+):")
+            assert.is_true(n <= #refused[ext], "an allowed fallback was refused: " .. hit)
+        end
     end)
 end)
