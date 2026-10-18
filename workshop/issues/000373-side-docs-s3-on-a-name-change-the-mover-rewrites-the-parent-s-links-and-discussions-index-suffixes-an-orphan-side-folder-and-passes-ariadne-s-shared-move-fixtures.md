@@ -79,13 +79,14 @@ Design 1.92 × 1.15 + implementation 3.32 = 5.528, rounded 5.53 focused ship-hou
 ## Plan
 
 - [x] M1 — Export v2 fixture snapshot and pure move projection; review via milestone-close.
-- [ ] M2 — Recoverable orphan/parent rewrite journal, editor handoff, shared integration fixtures and acceptance; review via milestone-close.
+- [x] M2 — Recoverable orphan/parent rewrite journal, editor handoff, shared integration fixtures and acceptance; review via milestone-close.
 
 Durable plan: [000373-side-doc-moves-plan.md](../plans/000373-side-doc-moves-plan.md).
 
 ## Log
 
 ### 2026-10-17
+- 2026-10-17: closed M2 — Recorded full suite770515e02991ee8795546d70ac5cfb09 passed on84a71a57,3m41s,log199444acad6e,clean census. Crash-after-each-finalization-step proof:11 reducer72 mover2 owner;75 native26 editor on0.12 and actual0.11; real-profile scratch rename/orphan/rewrite/save/reopen stableID passed and cleaned. legacy suite attempt a97173e6 lacks exact queue endpoints; excluded from calibration per ariadne#420; review verdict: SHIP
 - 2026-10-17: closed M1 — TL authorizes fourth M1 review solely to dispose BR-5 atlas text; no ledger waiver. Atlas fix 2d1c2a26 documents S3 pure observations, effect order, refusals and orphan_destination separately from M2 runtime. Round 3 passed all code findings; descendants of reusable green 714899bf suite (3m28s, log sha256 7283fecc279a) are docs-only. legacy suite attempt a97173e6 lacks exact queue endpoints; excluded from calibration per ariadne#420. Stop for new findings beyond atlas text.; review verdict: SHIP
 
 Planning only, 2026-10-17: claimed and started from current main. Read S3 design section 6 and producer #424 at 5990bf04a5d7cebb58dcf279b19e142ae3f2fe5f; producer confirms unlanded/no PR, fixture role in export v2. Existing mover owns leases/no-replace renames, conservative byte rewrites and forward recovery; new parent rewrite must synchronize loaded buffer and NEW witness before later saves. Read-only explorer confirmed these seams. No implementation or generated snapshot changes; code waits for landed producer and approved full-flow plan.

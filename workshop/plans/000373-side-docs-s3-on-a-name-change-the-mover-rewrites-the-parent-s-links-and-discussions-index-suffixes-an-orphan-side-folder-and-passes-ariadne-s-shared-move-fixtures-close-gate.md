@@ -245,6 +245,41 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: eaf92ded-3b0c-49ca-a1c7-715d8386bfc6
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 2
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/814ab84b1132503e
+            reviewed_head: e2d99474a999f66a196818ce72ccc88d0e527b76
+            slot: parley.nvim:1
+            requested_at: "2026-10-18T02:05:04.925828Z"
+          phase: finished
+          pid: 50776
+          started_at: "2026-10-18T02:05:05.04447Z"
+          finished_at: "2026-10-18T02:07:49.802395Z"
+          session_id: 01a14cc1-65e0-7bf3-9cd7-b1382106a530
+          outcome: returned
+      "n": 6
+      timestamp: "2026-10-17T19:07:50-07:00"
+      dispatched: "2026-10-17T19:05:04-07:00"
+      agent: codex
+      dispose:
+        - id: BR-6
+          disposition: addressed
+          note: document_move.lua:695-746 persists release authority and retirement progress before journal unlink; editor adoption follows unlink. Fresh/recovered unlink regressions pass at HEAD. Restoring pre-fix production files in disposable checkouts makes both regressions fail, including recovery completion after removing journal-shape assertions.
+          round: 6
+      boundary: M2
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: e2d99474a999f66a196818ce72ccc88d0e527b76
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#373 (boundary-review)
@@ -307,6 +342,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-6** [Critical] `replayable-local-finalization` Recovery releases protection before journal retirement is safely recoverable
   lua/parley/document_move.lua:1084 calls the recovery finish hook before unlinking the journal. That hook releases the synthetic destination lock at lua/parley/agentic_document.lua:859, but the retained complete journal still requires that lock. A targeted fault-injection test confirmed that failing journal unlink after successful handoff leaves the journal permanently interrupted on reopening with "destination protection changed". ARCH-ORDER/ARCH-FUNERAL: model and persist partial finalization so lock release and journal retirement remain safely replayable; enumerate failures and crashes across these effects and add real editor recovery regressions.
 
+## Round 6 — 2026-10-17T19:07:50-07:00 (codex) — passed
+
+### Disposed
+
+- BR-6 — addressed — document_move.lua:695-746 persists release authority and retirement progress before journal unlink; editor adoption follows unlink. Fresh/recovered unlink regressions pass at HEAD. Restoring pre-fix production files in disposable checkouts makes both regressions fail, including recovery completion after removing journal-shape assertions.
+
 ## Open findings
 
-- **BR-6** [Critical] `replayable-local-finalization` Recovery releases protection before journal retirement is safely recoverable
+(none — every finding has been disposed)
