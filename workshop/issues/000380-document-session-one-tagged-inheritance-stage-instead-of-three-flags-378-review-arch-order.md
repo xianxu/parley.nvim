@@ -48,6 +48,7 @@ Collapse the flags into one tagged inheritance stage carried by the model: none,
 ## Log
 
 ### 2026-10-17
+- 2026-10-17: closed — Pure refactor of document_session internals, no new surface. REWORK fixed structurally: the inheritance stage rides on the operation record (issue 4th arg, never in effects), so pending() copies it, retry reissues with it, and it ends exactly with its operation; state.inheritance removed. Transition table 29 rows incl. registering->uncertain/retried/refused->relooking/registered, changed keeps a mutation stage, stray matching event leaves confirming intact; settle table adds retried-register rows (flush into registration/adoption, drop on absent). Mutations (retry drops stage; matching event clears it) fail both tables. side_inherit 9, agentic_document 47, owned_move 16, lifetime 10; full suite green on e4fd6fb1.; review verdict: SHIP
 - Plan posted to the hub, proceeding unless it objected. Built as planned; no shell change was needed, because agentic_document never read the flags.
 - Targeted runs pass: document_session 47, which includes the settle table unchanged and the new 26-row transition table; side_inherit 9; agentic_document 47; owned_move 16; lifetime 10. Mutation check: with `changed` no longer clearing the stage, the transition table fails (relooking → changed).
 - Close review round 1: REWORK. Three findings, all one class, inheritance-stage-lifetime-vs-operation. I had tied the stage's life to "the next matching event", not to the operation:
