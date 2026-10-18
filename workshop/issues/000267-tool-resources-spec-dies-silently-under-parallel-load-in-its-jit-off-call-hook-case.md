@@ -68,6 +68,11 @@ failure, not a stalled drain. Every #267-family file passed. Suite exit 2,
 sha256 3fcd052486401a5180e4d79924890c0340e588d71d37ec97e008ef0f74504156.
 
 Taking tl-worker's one unchanged-code rerun for a tracked unrelated flake.
+Retry attempt c83da5529448660148145c8a4b3d874a is live on pushed tip
+18dac2ef65ad445c3239bfde2efbf7a5c3bbaa87, with the same code/tests as b8;
+expected log .git/sdlc/test-stats/inflight/c83da5529448660148145c8a4b3d874a/run.log.
+It remains queued (do not restart a healthy run). The prior stock-0.11 full
+run is complete and green, so only this default-suite result is outstanding.
 The binary refuses --rev b8 because the docs-only PR update moved origin's
 branch tip; that refusal ran no suite. Push current docs and retry the tip,
 whose production code and tests are identical to b8. If that rerun fails on
