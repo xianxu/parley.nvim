@@ -65,3 +65,7 @@ Collapse the flags into one tagged inheritance stage carried by the model: none,
   - An inherit that arrives while an inheritance is under way, including one pending, is refused. It used to overwrite the stashed hint; the first hint now wins, and the transition table pins this.
   - `changed` during an inherited register keeps the stage, matching the code before #380.
 - Targeted runs pass: document_session 47, side_inherit 9, agentic_document 47, owned_move 16, lifetime 10.
+
+## Revisions
+
+- 2026-10-17, after close review round 1 (REWORK). Plan item 1 is superseded. There is no `state.inheritance`. The stage lives on the operation record (and on `state.pending` while pending), set by `issue`'s 4th argument, so it ends exactly when its operation ends and is never cleared by a matching event. Plan item 2 is superseded too: the transition table has 29 rows, not 26, adding pending/retry and `changed` on a mutation, plus a stray-event case. The settle table gained three retried-register rows, and its existing rows are unchanged.
