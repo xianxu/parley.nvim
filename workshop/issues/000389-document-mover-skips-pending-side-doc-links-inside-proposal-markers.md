@@ -39,7 +39,9 @@ Treat an engine-generated pending side-doc link inside a `🤖{…}` proposal ma
 
 - [x] Pin single-backslash pending-link failure plus the issue's literal double-backslash spelling; preserve marker bytes and reject escaped prose/code examples.
 - [x] Give the mover's existing Markdown span/rewrite path a narrow proposal-link exception, preserving byte coordinates, code masks and destination validation (ARCH-DRY, ARCH-PURE). Limit recognition to complete same-line robot insertion proposals carrying a side-doc link; do not broaden navigation parsing.
-- [ ] Verify parent index, moved side folder, child backlink and resolving pending link through a native filesystem migration fixture; run focused tests, required suite, close and normal landing.
+- [x] Verify parent index, moved side folder, child backlink and resolving pending link through a native filesystem migration fixture; run focused tests and the required suite.
+
+Close review and normal landing follow these implementation checks.
 
 ## Log
 
@@ -49,3 +51,11 @@ Treat an engine-generated pending side-doc link inside a `🤖{…}` proposal ma
 
 - RED `/tmp/parley389-red.log` reproduced the single-backslash unit and actual filesystem-move failure: the discussions index changed while the proposal destination remained old. The issue's double-backslash spelling already passed. An extra human-comment-chain negative initially failed against existing Markdown behavior; removed that out-of-scope assertion rather than changing comment-chain navigation semantics. The first GREEN attempt found a Lua pattern string escaping error (retained `/tmp/parley389-green.log`); corrected with a literal long-bracket pattern. Final `/tmp/parley389-final-green.log` passes78 migration +51 pure projection cases, zero failures/errors, no surviving processes. Includes destination-only marker preservation for single/double spelling and proposal/discussion labels, CRLF/fragments/idempotence, native index/folder/backlink/resolution, unchanged escaped prose/inline/fenced/malformed examples, and a counted8/16-link check that the shared scanner receives the document once. Three-file luacheck and whitespace checks pass.
 - Implemented25 added/changed production lines in the existing pure mover module: recognize complete one-line insertion-link openers, admit their existing Markdown destination span through the escape guard, retain fence/code masks and path validation. Only side-folder references enable this; ordinary navigation and child-parent parsing stay on their existing rules. Atlas updated. Required suite and close review follow on the pushed source head.
+
+- Required suite passed on `470b5df5de1d350bb619e0728f120f2b75b3f9c4` (exit0,4m53s): all479 unique spec paths pass (958 PASS records),803 lint files clean, no surviving processes. Retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/470b5df5de1d350bb619e0728f120f2b75b3f9c4/suite.log`, SHA256 `0bdd051bd951b474ca0818dd500c87bb16900bccde0f3d41154108c45e5b47a9`. Hub directed close and normal landing without a separate staging hold (submitted receipt39689127-cae7-444d-ae9c-80edd93d185f).
+
+## Revisions
+
+### 2026-10-18 — Keep workflow gates after implementation checks
+
+The third plan checkbox combined native verification and the suite with future close/landing gates. Separate those gates into follow-on prose so the pre-close checklist records completed verification honestly; no scope or implementation change.
