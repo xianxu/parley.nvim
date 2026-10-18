@@ -2,7 +2,7 @@
 id: 000382
 status: codecomplete
 created: 2026-10-17
-updated: 2026-10-17
+updated: 2026-10-18
 estimate_hours:
 github_issue:
 started: 2026-10-17T22:18:10-07:00
@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.49
+actual_hours: 0.84
 tracker:
     version: 1
     completion:
-        token: close-ede3b1d9cbb4
+        token: close-37bd2b35381b
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 50cb93e46dc57bc449d2667e192049344968b039
-        evidence_commit: b0db11667fd3aeeab27260addb34860899825b6c
+        reviewed_head: 22100e5415f47db4e8f39b8734e254fd4053d3f0
+        evidence_commit: 2c576d4a496fec893c6c086451c70dbdec428743
 ---
 
 # Fake-registry setup answers unavailable when owned_move and side_inherit specs run under load
