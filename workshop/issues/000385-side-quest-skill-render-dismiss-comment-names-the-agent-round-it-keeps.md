@@ -1,13 +1,21 @@
 ---
 id: 000385
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'fa4bea4bac04a6ca2e5f9eee3771be3e8620e423' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '10051facccb5d6d1fc4c0d07bc6c8f90503df64d' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-18T06:48:17-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # side-quest: skill_render dismiss comment names the agent round it keeps
