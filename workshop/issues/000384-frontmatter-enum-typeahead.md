@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "48ec21bb", done: "797d45fc"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Frontmatter typeahead for enum values (collaboration-mode first, generic registry)
@@ -66,6 +66,8 @@ Quick flow (about 80 code lines). One source per key (ARCH-DRY); the pure part i
 ## Log
 
 ### 2026-10-18
+- 2026-10-18: closed — Suite green on 9e3ea59d (sdlc-local/suite). Specs: frontmatter_enum_spec 9/9, frontmatter_enum_popup_spec 7/7; issues, issue_vocabulary, issue_unavailable, collaboration, review_send green. Mutations fail their spec: no markdown attach, hardcoded mode list, no cmp branch, no symlink resolution. Live: scripts/check-frontmatter-cmp.lua passes against the operator real nvim-cmp (pumvisible=0, cmp menu = discussion) and fails with the cmp branch removed (both menus). Review round 1 BR-1/BR-2 and the 3 minors fixed (Revisions).; review verdict: SHIP
+- 2026-10-18: flow upgraded quick → full — 219 added lines in code files (limit 100); an earlier round of this close already ran the full review
 
 - Built. The integration changed from the posted plan, a simplification: issue files already had a working `status:` typeahead, a TextChangedI popup in `init.lua` calling `helper.complete_noselect`, which needs no completion plugin. The `omnifunc` in `issues.lua` was dead code (`setup_issue_completion` had no caller). So the popup is generalized into `frontmatter_enum.attach`, and no nvim-cmp source or omnifunc is added: one mechanism, which works whether or not cmp is installed (ARCH-DRY).
 - `collaboration.lua` exports `M.modes`. Its `known` set and its bad-mode message are built from it.

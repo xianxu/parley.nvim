@@ -124,3 +124,121 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"4c9dc90a-9f65-4ec5-8633-55c052871ee9","repository":"github.com/xianxu/parley.nvim","issue_id":"000384","recipe":"milestone-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/3df66a58c64a6a70","reviewed_head":"2ebbd9e0c3dda31b52ba9d7df1a2c4a29af88f7e","slot":"parley.nvim:3","requested_at":"2026-10-18T08:27:45.733548Z"},"phase":"finished","pid":42690,"started_at":"2026-10-18T08:27:45.829522Z","finished_at":"2026-10-18T08:29:27.695015Z","session_id":"a7f497bb-5ccd-4a61-acfe-6ad8487a5e3f","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-18T02:01:54-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 384 — Frontmatter typeahead for enum values (collaboration-mode first, generic registry) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000384-frontmatter-enum-typeahead.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 48d7874c658aa3a0bc60f27cfb2216bcc2dc510c..9e3ea59d8048877d821f8b18a8af690530a5c02b |
+| command | sdlc close --issue 384 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-18T02:01:54-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Inspected the diff; now running the specs to verify the claimed fixes.
+
+Still running the affected specs (retrying without `timeout`, which macOS lacks).
+
+Let me use the Makefile's own target instead.
+
+Specs pass. Now reverting the BR-1 symlink fix to confirm its regression test goes red.
+
+Checking an existing issue-file classifier in `init.lua` that the new `applies` may duplicate.
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+All five findings from round 1 are fixed, and I checked each fix against the code or a test rather than the commit messages. Both specs that cover this feature pass (`make test-spec SPEC=ui/frontmatter_typeahead`: 7 integration and 9 unit). I also ran `issues_spec`, `issue_vocabulary_spec` and `issue_unavailable_spec`. For BR-1 I put the symlink fix back to its old form in the disposable checkout: the spec "matches an issue file reached through a symlinked workspace" then failed, and it passed again once I restored the file. The working tree is clean.
+
+I raise two new findings, both Minor, so neither blocks SHIP. One is a repeat in the `stub-without-conformance` family, the other in `path-canonicalization-before-prefix-match`. For each I state the rule that covers the family, as the escalation asks. Confidence is medium for one reason: I did not run `scripts/check-frontmatter-cmp.lua`. It loads the operator's real Neovim config, and that is outside a read-only review sandbox. The claim that it "fails with the cmp branch removed" therefore rests on reading the script, not on a run.
+
+**1. Strengths**
+- **One list for the modes.** `collaboration.lua:7` exports `M.modes`, and the resolver's `known` set and its `bad_mode` message are both built from it. The unit spec checks this through the resolver itself: every mode resolves and `nope` fails. It does not just compare two copies of the list.
+- **Clean pure core.** `context` and `candidates` (`frontmatter_enum.lua:58-78`) take lines and a path and do no IO. They are unit-tested with no buffer, and the declarations are scoped so tests don't leak.
+- **Works with cmp.** `with_source` puts the parley source in its own first group, never replaces the buffer's sources, and is re-added when a host config resets them. The source reports itself unavailable outside the frontmatter, so cmp behaves as before everywhere else.
+- **Dead code is gone.** `omnifunc`, `setup_issue_completion`, `complete_frontmatter_values` and `enumerable_values` are deleted. A grep finds no remaining references in `lua/`, `tests/`, `scripts/` or `atlas/`.
+- **Typing stays bounded.** `SCAN_LINES` caps how much of the buffer is read on each keystroke (`frontmatter_enum.lua:81`).
+
+**2. Critical findings:** none.
+
+**3. Important findings:** none.
+
+**4. Minor findings**
+- **Live cmp check isn't a make target** (`stub-without-conformance`, 2nd). `scripts/check-frontmatter-cmp.lua` exists, but nothing in `Makefile.parley` or its help lists it. The repo's other conformance checks are all `make check-*-conformance` targets.
+  - Rule: every stub of an external dependency gets its conformance check as a named `make check-*-conformance` target in the help list.
+  - Fix: add a `check-frontmatter-cmp-conformance` target.
+- **Second "is this an issue file?" check** (`path-canonicalization-before-prefix-match`, 2nd). The `status` declaration's `applies` (`frontmatter_enum.lua:197-211`) repeats the resolve-then-prefix logic that `detect_buffer_context` already has (`init.lua:~1662`).
+  - Rule: whether a path lies inside a configured directory is decided in one place. That helper resolves symlinks on both sides and compares against `dir .. "/"`.
+  - Prevalence: 16 `resolve(fnamemodify(...))` sites in `lua/`.
+  - Fix for this issue: an `issues.is_issue_file(path)` that both callers use. The wider sweep is separate work.
+
+**5. Test coverage notes**
+- **cmp stub.** It keeps state between calls (registered sources, buffer sources, a count of `complete` calls) and covers ordering: the source goes first, `complete` fires only on the first add, it is unavailable in the body, and the Vim popup is used when cmp is disabled.
+- **Not covered.** No spec checks that `real()` handles a buffer whose file does not exist yet (a new file). The symlink spec happens to cover this, because `000001-x.md` is never created.
+
+**6. Architectural notes**
+- **ARCH-DRY:** flagged; see the second Minor finding. The mode list itself is single-source.
+- **ARCH-PURE:** passes. The IO is limited to `at_cursor`, `active_cmp` and `ensure_cmp`.
+- **ARCH-PURPOSE:** passes. Both consumers read their values from the module that enforces them, and `presentation` is correctly left to #383.
+- **ARCH-MOCK:** passes, with the first Minor finding about wiring the live check into make.
+- **ARCH-CONSTRAINTS:** passes. Each insert-mode keystroke in a markdown or chat buffer, plus each cmp `is_available` call, reads at most 500 lines. An optional speed-up: return early when the current line isn't a declared `key:` line, before reading the buffer.
+- **ARCH-SECURE:** passes. The only inputs are buffer names and the vocabulary, and no secrets are involved.
+- **ARCH-ORDER:** passes. The state is one module-level `registered` flag and one buffer flag set once; a host resetting the buffer's sources is handled by re-adding the source on each change.
+- **ARCH-FUNERAL:** passes. The script deletes its temporary directory, and the buffer-level cmp sources disappear with the buffer.
+
+**7. Plan revision recommendations:** none. The Plan, the Spec bullet, the Revisions entries and the atlas page all match the shipped mechanism.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      real() resolves both sides (frontmatter_enum.lua:31). Reverting it in the disposable checkout fails the symlinked-workspace spec, and restoring it passes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The Spec bullet, the Plan Integration bullet (cmp source plus Vim fallback, no omnifunc), the Revisions entries and the header comment at frontmatter_enum.lua:4-5 all match the code.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      complete_frontmatter_values and enumerable_values are deleted, a grep finds no remaining references, and their tests now go through status_values() and the registry.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      M.undeclare was added, the unit spec's after_each tears down both test keys, and a spec checks keys() afterwards.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      scripts/check-frontmatter-cmp.lua is a repeatable live check against the real cmp, documented in atlas. Not run here because it loads the operator's config; its make wiring is raised as a new Minor finding.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: stub-without-conformance
+    title: |
+      Live cmp conformance script is not a make check-*-conformance target
+    detail: |
+      2nd in family. Rule: every stub of an external dependency gets its conformance check as a named make check-*-conformance target in the Makefile.parley help, as with the sdlc and couch checks. Add check-frontmatter-cmp-conformance running scripts/check-frontmatter-cmp.lua.
+  - id: new
+    severity: Minor
+    kind: defect
+    family: path-canonicalization-before-prefix-match
+    title: |
+      status applies() re-implements the issue-file check from init.lua detect_buffer_context
+    detail: |
+      2nd in family. Rule: whether a path is inside a configured directory is decided by one helper that resolves both sides and compares with a trailing separator. Prevalence: 16 resolve(fnamemodify) sites in lua/. For this issue, add issues.is_issue_file(path) and use it from frontmatter_enum.lua and from init.lua around line 1662.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"a5341ddc-e057-462e-a48c-d01a6526bbec","repository":"github.com/xianxu/parley.nvim","issue_id":"000384","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/d0542d1c0f803c5c","reviewed_head":"9e3ea59d8048877d821f8b18a8af690530a5c02b","slot":"parley.nvim:3","requested_at":"2026-10-18T08:59:06.585637Z"},"phase":"finished","pid":24601,"started_at":"2026-10-18T08:59:06.894225Z","finished_at":"2026-10-18T09:01:53.268347Z","session_id":"80ae0c69-c096-42f2-8e2f-ee655e3fa1d0","outcome":"returned"}] -->
