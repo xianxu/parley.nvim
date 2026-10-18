@@ -11,10 +11,16 @@ local DIAG_NS = "parley_skill"
 local HL_NS = "parley_skill_hl"
 local FOOTNOTE_HL_NS = "parley_footnote_hl"
 local FOOTNOTE_SOURCE = "parley-footnote"
+local ROUND_HL_NS = "parley_round_hl"
+local ROUND_SOURCE = "parley-round"
 
 local diag_ns_id
 local hl_ns_id
 local footnote_hl_ns_id
+local round_hl_ns_id
+-- buf -> { [extmark id] = decoration }: what each round mark says, so its
+-- diagnostic can follow the mark as the text moves (#383).
+local round_marks = {}
 
 local function ensure_namespaces()
     if not diag_ns_id then
@@ -26,6 +32,10 @@ local function ensure_namespaces()
     if not footnote_hl_ns_id then
         footnote_hl_ns_id = vim.api.nvim_create_namespace(FOOTNOTE_HL_NS)
     end
+    if not round_hl_ns_id then
+        round_hl_ns_id = vim.api.nvim_create_namespace(ROUND_HL_NS)
+        vim.api.nvim_set_hl(0, "ParleyAgentChange", { link = "DiffAdd", default = true })
+    end
 end
 
 --- Clear previous skill diagnostics and highlights from a buffer.
@@ -34,6 +44,8 @@ function M.clear_decorations(buf)
     vim.diagnostic.reset(diag_ns_id, buf)
     vim.api.nvim_buf_clear_namespace(buf, hl_ns_id, 0, -1)
     vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
+    vim.api.nvim_buf_clear_namespace(buf, round_hl_ns_id, 0, -1)
+    round_marks[buf] = nil
 end
 
 --- Dismiss the live round decorations (manual <dismiss> binding). Decorations
@@ -118,6 +130,80 @@ function M.clear_footnote_diagnostics(buf)
         end
     end
     vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+end
+
+local function is_round_diagnostic(diagnostic)
+    return diagnostic.source == ROUND_SOURCE or (diagnostic.user_data or {}).parley_kind == "round"
+end
+
+-- Set the round's diagnostics, from each mark's current place, beside the
+-- shared namespace's other kinds.
+local function set_round_diagnostics(buf)
+    local diagnostics = {}
+    for _, existing in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
+        if not is_round_diagnostic(existing) then
+            table.insert(diagnostics, existing)
+        end
+    end
+    local said = round_marks[buf] or {}
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, round_hl_ns_id, 0, -1, { details = true })) do
+        local decoration = said[mark[1]]
+        if decoration then
+            table.insert(diagnostics, {
+                lnum = mark[2],
+                col = mark[3],
+                end_lnum = mark[4].end_row or mark[2],
+                end_col = mark[4].end_col or mark[3],
+                message = decoration.message,
+                severity = vim.diagnostic.severity.INFO,
+                source = ROUND_SOURCE,
+                user_data = { parley_kind = "round" },
+            })
+        end
+    end
+    vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+end
+
+--- Draw the agent's last round (#383): presentation.decorations as
+--- highlights, a deletion as a zero-width mark, each with an INFO diagnostic.
+--- Replaces any round drawn before; other kinds are kept.
+--- @param buf number
+--- @param decorations table[] {lnum, col, end_lnum, end_col, message, deletion}, 0-based
+function M.publish_round(buf, decorations)
+    ensure_namespaces()
+    vim.api.nvim_buf_clear_namespace(buf, round_hl_ns_id, 0, -1)
+    local said = {}
+    for _, d in ipairs(decorations) do
+        local id = vim.api.nvim_buf_set_extmark(buf, round_hl_ns_id, d.lnum, d.col, {
+            end_row = d.end_lnum,
+            end_col = d.end_col,
+            hl_group = not d.deletion and "ParleyAgentChange" or nil,
+            strict = false,
+        })
+        said[id] = d
+    end
+    round_marks[buf] = said
+    set_round_diagnostics(buf)
+end
+
+--- Re-derive the round's diagnostics from where its marks are now: marks move
+--- with the text, diagnostics do not.
+function M.rederive_round(buf)
+    ensure_namespaces()
+    if round_marks[buf] and vim.api.nvim_buf_is_valid(buf) then
+        set_round_diagnostics(buf)
+    end
+end
+
+--- Clear only the round kind: its marks and diagnostics.
+function M.clear_round(buf)
+    ensure_namespaces()
+    round_marks[buf] = nil
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return
+    end
+    vim.api.nvim_buf_clear_namespace(buf, round_hl_ns_id, 0, -1)
+    set_round_diagnostics(buf)
 end
 
 --- Attach INFO diagnostics from edit explanations. Each diagnostic spans the
