@@ -476,7 +476,7 @@ describe("skill_invoke.invoke", function()
         assert.are.equal("alpha beta", done_result.original)
         assert.are.equal("ALPHA beta", done_result.new_content)
         assert.is_true(#done_result.decorations >= 1)
-        assert.are.equal("edit", done_result.decorations[1].kind)
+        assert.are.equal("change", done_result.decorations[1].kind) -- #387: "alpha" became "ALPHA"
         assert.are.equal("uppercase", done_result.decorations[1].explain)
     end)
 

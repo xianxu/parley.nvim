@@ -211,7 +211,7 @@ describe("review.run_via_invoke", function()
         require("parley.skill_render").attach_diagnostics(b, { { pos = 1, explain = "why" } }, "edited line")
         invoke_calls[#invoke_calls].opts.on_done({
             ok = true, original = "original line", new_content = "edited line",
-            decorations = { { kind = "edit", explain = "why" } },
+            decorations = { { kind = "change", explain = "why" } },
         })
         -- undo to base → style cleared (base recorded empty)
         vim.api.nvim_buf_set_lines(b, 0, -1, false, { "original line" })
@@ -238,7 +238,7 @@ describe("review.run_via_invoke", function()
             ok = true,
             original = "original line",
             new_content = "edited line",
-            decorations = { { kind = "edit", explain = "tightened the wording" } },
+            decorations = { { kind = "change", explain = "tightened the wording" } },
         })
         local J = require("parley.skills.review.journal")
         local p = J.read(doc)

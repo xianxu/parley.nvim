@@ -108,8 +108,10 @@ accept/reject markers instead, and a rewrite too large for them arrives as a
 `→ [proposal](…)` side-doc link that Alt+o follows. Under `direct`, nothing is
 drawn. A round past 200 changes highlights the first 200 and says so. This
 needs a Couch with the `round` verb (pair#661). An older one shows nothing.
-Changed text is underlined, and nothing else about it changes color. To restyle
-it, set `highlight.edit_change`. In Markdown
+Added text gets a faint green background, changed text a faint blue one. Both
+are tinted from your theme's own background, so they stay quiet in any color
+scheme, and a deletion leaves no mark. To restyle them, set
+`highlight.edit_add` and `highlight.edit_change`. In Markdown
 documents, 🤖 markers and links show in full. In chats, Parley still hides its
 own branch links and model params. Markdown links there show in full too,
 unless you set `chat_treesitter = true`, which conceals them.

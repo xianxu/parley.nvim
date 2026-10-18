@@ -65,20 +65,28 @@ local function nearest(text, new, near)
     end
 end
 
-local function message(span, deletion)
-    if deletion then
-        local first = span.old:match("^[^\n]*")
-        return "deleted: " .. first .. (#first < #span.old and "…" or "")
-    end
+--- An edit's kind from its old and new text (#387): "delete" when nothing is
+--- left, "add" when it replaced nothing, "change" otherwise. The one rule for
+--- the agent's round and the review skill's edits alike.
+--- @param old string|nil
+--- @param new string|nil
+--- @return "add"|"change"|"delete"
+function M.kind(old, new)
+    if new == nil or new == "" then return "delete" end
+    return (old == nil or old == "") and "add" or "change"
+end
+
+local function message(span)
     return type(span.explain) == "string" and span.explain ~= "" and span.explain or "changed by the agent"
 end
 
 --- Where a round's spans land in `lines`: `{lnum, col, end_lnum, end_col,
---- message, deletion}` with 0-based positions, for at most MAX_SPANS spans.
+--- message, kind}` with 0-based positions, for at most MAX_SPANS spans. `kind`
+--- is "add" when the span replaced nothing (empty old) and "change" otherwise;
+--- a deletion (empty new) leaves no trace, so it yields nothing (#387).
 --- When `current_hash` is the round's result_hash, a span is placed where Couch
 --- says if its text is there. Otherwise it is re-found by its new text,
---- nearest its old position. A deletion has no text to find, so it is placed
---- only on a matching hash. A span that can't be placed is dropped.
+--- nearest its old position. A span that can't be placed is dropped.
 --- @param round table Couch's round
 --- @param lines string[]
 --- @param current_hash string the hash of `lines` as a file
@@ -90,21 +98,22 @@ function M.decorations(round, lines, current_hash)
     local matched = current_hash == round.result_hash
     for i = 1, math.min(#round.spans, M.MAX_SPANS) do
         local span = round.spans[i]
-        if type(span) == "table" and type(span.old) == "string" and type(span.new) == "string" then
+        local kind = type(span) == "table" and type(span.old) == "string" and type(span.new) == "string"
+            and M.kind(span.old, span.new)
+        if kind and kind ~= "delete" then
             local from = offset_of(span.start, lines, starts)
             local to = offset_of(span["end"], lines, starts)
-            local deletion = span.new == ""
             local placed
             if matched and from and to and from <= to and text:sub(from + 1, to) == span.new then
                 placed = from
-            elseif not deletion then
+            else
                 placed = nearest(text, span.new, from or 0)
             end
             if placed then
                 local lnum, col = position_of(placed, starts)
                 local end_lnum, end_col = position_of(placed + #span.new, starts)
                 out[#out + 1] = { lnum = lnum, col = col, end_lnum = end_lnum, end_col = end_col,
-                    message = message(span, deletion), deletion = deletion }
+                    message = message(span), kind = kind }
             end
         end
     end

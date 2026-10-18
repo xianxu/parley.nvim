@@ -20,31 +20,49 @@ describe("presentation.value", function()
     end)
 end)
 
+describe("presentation.kind (#387)", function()
+    it("is delete with no new text, add with no old text, change otherwise", function()
+        assert.equals("delete", presentation.kind("gone", ""))
+        assert.equals("delete", presentation.kind("gone", nil))
+        assert.equals("add", presentation.kind("", "new"))
+        assert.equals("add", presentation.kind(nil, "new"))
+        assert.equals("change", presentation.kind("old", "new"))
+    end)
+end)
+
 describe("presentation.decorations", function()
     local lines = { "# Title", "the new text here", "tail" }
 
     it("takes the positions as given when the hash matches", function()
         local d = presentation.decorations(round({ span({ 1, 4 }, { 1, 12 }, "old", "new text", "why") }), lines, "match")
-        assert.same({ { lnum = 1, col = 4, end_lnum = 1, end_col = 12, message = "why", deletion = false } }, d)
+        assert.same({ { lnum = 1, col = 4, end_lnum = 1, end_col = 12, message = "why", kind = "change" } }, d)
     end)
 
     it("re-anchors by the new text when the hash differs, nearest the old position", function()
         local moved = { "# Title", "inserted", "x", "the new text here", "x new text" }
         local d = presentation.decorations(round({ span({ 1, 4 }, { 1, 12 }, "old", "new text") }), moved, "other")
         assert.same({ { lnum = 3, col = 4, end_lnum = 3, end_col = 12, message = "changed by the agent",
-            deletion = false } }, d)
+            kind = "change" } }, d)
     end)
 
     it("drops a span whose new text is gone", function()
         assert.same({}, presentation.decorations(round({ span({ 1, 4 }, { 1, 12 }, "old", "vanished") }), lines, "other"))
     end)
 
-    it("marks a deletion with its first line of old text, and drops it when the hash differs", function()
+    -- #387: a deletion leaves no trace, matched hash or not.
+    it("yields nothing for a deletion", function()
         local r = round({ span({ 2, 0 }, { 2, 0 }, "gone line\nand more", "") })
-        assert.same({ { lnum = 2, col = 0, end_lnum = 2, end_col = 0, message = "deleted: gone line…",
-            deletion = true } }, presentation.decorations(r, lines, "match"))
-        -- Couch keeps no context around a deletion, so an edited file can't place it.
+        assert.same({}, presentation.decorations(r, lines, "match"))
         assert.same({}, presentation.decorations(r, lines, "other"))
+    end)
+
+    -- #387: empty old text means added; anything else, changed.
+    it("classifies a span with no old text as added, any other as changed", function()
+        local d = presentation.decorations(round({
+            span({ 1, 4 }, { 1, 12 }, "", "new text"),
+            span({ 2, 0 }, { 2, 4 }, "head", "tail"),
+        }), lines, "match")
+        assert.same({ "add", "change" }, { d[1].kind, d[2].kind })
     end)
 
     it("keeps a multi-line span's end line", function()

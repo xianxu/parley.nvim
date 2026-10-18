@@ -309,8 +309,9 @@ frontmatter key (`direct` | `highlight` | `propose`; missing or unknown means
 `presentation.lua` reads the key and places the spans. It places a span where
 Couch says only when the buffer's hash is the round's `result_hash` and the
 text is there. Otherwise it re-finds the span by its new text, nearest its old
-position. A deletion has no text to find, so it is placed only on a matching
-hash. A span that can't be placed is dropped, never clamped. At most
+position. Each placed span carries a kind from `presentation.kind`: `add` when
+its old text is empty, `change` otherwise. A deletion (empty new text) leaves
+no trace, so it yields nothing (#387). A span that can't be placed is dropped, never clamped. At most
 `MAX_SPANS` (200) spans are placed.
 
 `edit_round.lua` is the shell around it. `refresh(buf)` asks Couch (`round PATH
@@ -326,8 +327,8 @@ confirmed branch, before the state guard (sent is sent). A reopen draws nothing
 once Couch reports the round `Cleared`, which means a submit came after it,
 compared as instants. BufUnload forgets the buffer.
 
-Drawing is `skill_render`'s round kind: `ParleyEditChange` highlights (#386:
-the one quiet group for every edited span) in the `parley_round_hl` namespace, plus INFO diagnostics with
+Drawing is `skill_render`'s round kind: `ParleyEditAdd` or `ParleyEditChange`
+highlights by span kind (#387: faint tints of `Normal`'s background) in the `parley_round_hl` namespace, plus INFO diagnostics with
 source `parley-round` in the shared review namespace. Every writer of that
 namespace replaces only the kind it owns, through one `replace_kind` helper.
 The round is owned by the round functions alone, so a review-skill run, an

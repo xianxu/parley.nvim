@@ -541,6 +541,9 @@ M.display_agent = function(buf, file_name)
     })
 end
 
+-- #387: the edit tints and how far each moves Normal's background toward it.
+local EDIT_TINT_ADD, EDIT_TINT_CHANGE, EDIT_TINT_ALPHA = 0x3fb950, 0x58a6ff, 0.15
+
 -- Define namespace and highlighting colors for questions, annotations, and thinking
 M.setup_highlights = function()
     -- Set up namespace
@@ -671,10 +674,17 @@ M.setup_highlights = function()
         vim.api.nvim_set_hl(0, "ParleyDraftBlock", { link = "CursorLine" })
     end
 
-    -- Edited regions (#386): the review skill's edits, a define footnote's
-    -- term and the agent's round (#383) mark only the changed span, quietly —
-    -- unchanged text keeps its own color. Override via config.highlight.edit_change.
-    vim.api.nvim_set_hl(0, "ParleyEditChange", user_highlights.edit_change or { underline = true })
+    -- Edited spans (#386, #387): the review skill's edits, a define's term and
+    -- the agent's round (#383) mark only the span, as a faint tint of the
+    -- theme's own Normal background — green-ish for added text, blue-ish for
+    -- changed text — so unchanged text keeps its color and the marks stay quiet
+    -- in any theme. Re-derived on every ColorScheme (highlight_groups). Override
+    -- via config.highlight.edit_add / edit_change.
+    local normal_bg = vim.api.nvim_get_hl(0, { name = "Normal", link = false }).bg
+        or (vim.o.background == "light" and 0xffffff or 0x000000)
+    local function tint(rgb) return { bg = require("parley.color").blend(normal_bg, rgb, EDIT_TINT_ALPHA) } end
+    vim.api.nvim_set_hl(0, "ParleyEditAdd", user_highlights.edit_add or tint(EDIT_TINT_ADD))
+    vim.api.nvim_set_hl(0, "ParleyEditChange", user_highlights.edit_change or tint(EDIT_TINT_CHANGE))
 
     -- Review markers — 🤖[user comment] in markdown files
     vim.api.nvim_set_hl(0, "ParleyReviewUser", { link = "DiagnosticWarn" })
