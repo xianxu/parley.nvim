@@ -328,8 +328,11 @@ compared as instants. BufUnload forgets the buffer.
 
 Drawing is `skill_render`'s round kind: `ParleyAgentChange` highlights (linked
 to `DiffAdd`) in the `parley_round_hl` namespace, plus INFO diagnostics with
-source `parley-round` in the shared review namespace. Footnote and review-skill
-diagnostics survive a round's publish and clear. Marks move with the text and
+source `parley-round` in the shared review namespace. Every writer of that
+namespace replaces only the kind it owns, through one `replace_kind` helper.
+The round is owned by the round functions alone, so a review-skill run, an
+undo/redo snapshot or a dismiss leaves it in place. Footnote and review-skill
+diagnostics likewise survive a round's publish and clear. Marks move with the text and
 diagnostics do not, so a buffer-local `on_lines` re-derives them from the
 marks. Keystrokes coalesce into one scheduled re-derive per buffer, O(spans),
 which a counted 8/16-keystroke spec holds. The fake keeps a seeded round and

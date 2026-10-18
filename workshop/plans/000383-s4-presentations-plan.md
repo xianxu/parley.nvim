@@ -221,3 +221,4 @@ The issue's Done when: on a document under the default presentation, an agent `a
   - The proposal-link regression lives in `agentic_document_side_inherit_spec.lua`.
 
   The review also found that `attach_diagnostics` replaced the namespace wholesale and dropped round diagnostics; it now restores them. And `edit_round.clear` now resets `pending`.
+- 2026-10-18 (close review round 2): the shared-namespace finding repeated as a family, so the fix is a rule, not a site. Every writer of the `parley_skill` diagnostic namespace (footnotes, round, attach_diagnostics, clear_decorations, apply_snapshot) now goes through `replace_kind(buf, owns, diagnostics)`. The round is owned by the round functions alone. `snapshot` no longer captures round diagnostics, and `clear_decorations` (the dismiss binding and every skill-round start) leaves the agent's round to its confirmed submit.

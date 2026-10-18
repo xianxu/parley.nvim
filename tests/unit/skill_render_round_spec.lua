@@ -58,10 +58,22 @@ describe("skill_render round", function()
         assert.equals(0, #round_marks())
     end)
 
-    it("keeps the round's diagnostics when a skill round sets its own", function()
+    -- One rule for the shared namespace: every other writer leaves the agent's
+    -- round alone, which only its own functions draw and clear.
+    it("survives every other writer of the shared namespace", function()
         skill_render.publish_round(buf, decorations)
         skill_render.attach_diagnostics(buf, { { pos = 0, explain = "skill edit" } }, "# Title\n")
         assert.same({ "parley-skill", "round", "round" }, kinds())
+        local snap = skill_render.snapshot(buf)
+        assert.same({ "skill edit" }, vim.tbl_map(function(d) return d.message end, snap.diags))
+        skill_render.clear_decorations(buf)
+        assert.same({ "round", "round" }, kinds())
+        skill_render.apply_snapshot(buf, snap)
+        assert.same({ "parley-skill", "round", "round" }, kinds())
+        skill_render.publish_footnotes(buf, {})
+        skill_render.clear_footnote_diagnostics(buf)
+        assert.same({ "parley-skill", "round", "round" }, kinds())
+        assert.equals(2, #round_marks())
     end)
 
     it("re-derives the diagnostics from where the marks moved", function()
