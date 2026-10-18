@@ -1,6 +1,6 @@
 ---
 id: 000386
-status: codecomplete
+status: done
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 0b8c2fa14d28084ae98bc18d93956c8f5a58ba97
         evidence_commit: d57f76e539309a7f335db03970a0e8e0a0d215f8
+        landed_commit: 91f973410ac6da886ca044f952fb07df6fe3a595
 ---
 
 # Edit rendering: subtle changed-span highlight; show full 🤖 marker text and links
