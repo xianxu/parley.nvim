@@ -1,5 +1,5 @@
 -- Unit tests for lua/parley/skill_render.lua — the salvaged buffer-decoration
--- helpers (INFO diagnostics + DiffChange highlights for applied skill edits).
+-- helpers (INFO diagnostics + ParleyEditChange span highlights, #386).
 
 local skill_render = require("parley.skill_render")
 
@@ -37,12 +37,34 @@ describe("skill_render", function()
         skill_render.highlight_edits(buf, { { new_string = "BETA" } }, "alpha\nBETA\ngamma")
     end)
 
-    it("a non-empty edit produces highlight extmarks", function()
-        local buf = scratch({ "alpha", "BETA", "gamma" })
-        skill_render.highlight_edits(buf, { { new_string = "BETA" } }, "alpha\nBETA\ngamma")
+    -- #386: only the changed text is marked, never the whole line.
+    local function spans(buf)
         local hl_ns = vim.api.nvim_create_namespace("parley_skill_hl")
-        local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, {})
-        assert.is_true(#marks > 0)
+        local out = {}
+        for _, m in ipairs(vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, { details = true })) do
+            out[#out + 1] = { m[2], m[3], m[4].end_row, m[4].end_col, m[4].hl_group }
+        end
+        return out
+    end
+
+    it("an edit marks exactly its new text with ParleyEditChange", function()
+        local buf = scratch({ "alpha", "the BETA word", "gamma" })
+        skill_render.highlight_edits(buf, { { new_string = "BETA" } }, "alpha\nthe BETA word\ngamma")
+        assert.same({ { 1, 4, 1, 8, "ParleyEditChange" } }, spans(buf))
+    end)
+
+    it("a multi-line edit is one span from its first byte to its last", function()
+        local content = "keep\nsay héllo\nnew line\nend"
+        local buf = scratch(vim.split(content, "\n"))
+        skill_render.highlight_edits(buf, { { new_string = "héllo\nnew" } }, content)
+        assert.same({ { 1, 4, 2, 3, "ParleyEditChange" } }, spans(buf))
+    end)
+
+    it("an edit ending in a newline ends at the start of the next line", function()
+        local content = "a\nb\nc"
+        local buf = scratch(vim.split(content, "\n"))
+        skill_render.highlight_edits(buf, { { new_string = "b\n" } }, content)
+        assert.same({ { 1, 0, 2, 0, "ParleyEditChange" } }, spans(buf))
     end)
 
     it("a deletion (empty new_string) gets a gutter diagnostic but no highlight", function()
@@ -95,7 +117,8 @@ describe("skill_render", function()
         skill_render.highlight_edits(buf, { { new_string = "line two" } }, content)
         skill_render.attach_diagnostics(buf, { { pos = content:find("two"), explain = "why two" } }, content)
         local snap = skill_render.snapshot(buf)
-        assert.is_true(#snap.hl_lines >= 1)
+        assert.same({ { lnum = 1, col = 0, end_lnum = 1, end_col = 8 } }, snap.hl_spans)
+        assert.is_nil(snap.hl_lines)
         assert.is_true(#snap.diags >= 1)
         -- clear → empty, then restore from the snapshot
         skill_render.clear_decorations(buf)
@@ -105,8 +128,7 @@ describe("skill_render", function()
         assert.is_true(#diags >= 1)
         assert.matches("why two", diags[1].message)
         assert.is_not_nil(diags[1].end_lnum, "end_lnum survives snapshot→apply (#133 M6)")
-        local hl_ns = vim.api.nvim_create_namespace("parley_skill_hl")
-        assert.is_true(#vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, {}) >= 1)
+        assert.same({ { 1, 0, 1, 8, "ParleyEditChange" } }, spans(buf))
     end)
 
     it("snapshot captures and restores highlight and diagnostic column spans", function()

@@ -326,8 +326,8 @@ confirmed branch, before the state guard (sent is sent). A reopen draws nothing
 once Couch reports the round `Cleared`, which means a submit came after it,
 compared as instants. BufUnload forgets the buffer.
 
-Drawing is `skill_render`'s round kind: `ParleyAgentChange` highlights (linked
-to `DiffAdd`) in the `parley_round_hl` namespace, plus INFO diagnostics with
+Drawing is `skill_render`'s round kind: `ParleyEditChange` highlights (#386:
+the one quiet group for every edited span) in the `parley_round_hl` namespace, plus INFO diagnostics with
 source `parley-round` in the shared review namespace. Every writer of that
 namespace replaces only the kind it owns, through one `replace_kind` helper.
 The round is owned by the round functions alone, so a review-skill run, an

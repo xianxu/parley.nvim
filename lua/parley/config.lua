@@ -692,6 +692,7 @@ local config = {
 		chat_reference = nil, -- highlight for 🌿: chat branch/parent links (default: links to Special)
 		reference = nil, -- highlight for [referenced span] markers left by drill-in (#127) (default: underline)
 		footnote = nil, -- highlight for managed definition-footnote footer lines (default: links to DiagnosticHint)
+		edit_change = nil, -- highlight for edited spans: review edits, define terms, the agent's round (default: underline)
 	},
 
 	-- lualine integration options

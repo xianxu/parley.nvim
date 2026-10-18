@@ -495,7 +495,7 @@ describe("define_visual + render_definition (#161)", function()
         assert.are.equal(2, diags[1].end_lnum)
         assert.are.equal(19, diags[1].end_col) -- ASIN plus [^asin]
         assert.is_true(diags[1].message:find("ASIN", 1, true) ~= nil)
-        -- DiffChange highlight covers only ASIN[^asin], not the whole paragraph.
+        -- ParleyEditChange highlight covers only ASIN[^asin], not the whole paragraph.
         local mark = first_hl_mark(buf)
         assert.is_not_nil(mark, "term/reference span not highlighted")
         assert.are.equal(2, mark[2])
