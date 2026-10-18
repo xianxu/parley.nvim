@@ -41,7 +41,7 @@ Any local-gate configuration change requires operator verification under local-g
 
 ## Plan
 
-Measured first, on main 9b0c5d75+ (this branch's base), with `PARLEY_TEST_NVIM=/opt/homebrew/opt/nvim-0.11/bin/nvim make -k test`:
+Measured first, on this branch's base 5ebffb3dd7d39dd168d19dc167ead22fb00c8dc0, with `PARLEY_TEST_NVIM=/opt/homebrew/opt/nvim-0.11/bin/nvim make -k test`:
 - About 160 s of suite time once the machine slot was free. Of the 1550 s wall, 1389 s was the slot queue, not 0.11 itself.
 - 460 spec files pass and 6 fail.
   - Five fail only on 0.11, all with E976 "Using a Blob as a String" (57 hits): agentic_document, agentic_document_lifetime, agentic_document_owned_move, document_band and document_move. This is the SHA-256 class that #373 fixes.
