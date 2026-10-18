@@ -10,7 +10,8 @@
 -- counting n in `log_file .. ".id"`. With $FAKE_COUCH_OWED and
 -- $FAKE_COUCH_REGISTRY, a `submitted: PATH` send also adds its ID to PATH's
 -- owed events in the registry, and `M.fold` removes one, as an agent's
--- `write --fold` does (#354).
+-- `write --fold` does (#354). `M.round` seeds a file's round sidecar, which
+-- `round PATH --json` answers, cleared by a later submit (#383).
 local M = {}
 
 --- Write the fake into `root/bin/couch`; the caller puts `root/bin` on PATH.
@@ -61,6 +62,18 @@ end
 --- the file's owed events.
 function M.fold(registry, path, id)
     ledger(registry, "--fold", id, path)
+end
+
+--- Seed `path`'s round sidecar (#383): `round` is the table Couch's
+--- `round --json` answers as `Round`.
+function M.round(registry, path, round)
+    ledger(registry, "--round", path, vim.json.encode(round))
+end
+
+--- Set the time of `path`'s last recorded submit to the RFC3339 stamp `at`,
+--- which may carry a local offset, as the real ledger's does.
+function M.submit_at(registry, path, at)
+    ledger(registry, "--submit-at", path, at)
 end
 
 --- Why a document_registry request did not register (#382): its refusal code

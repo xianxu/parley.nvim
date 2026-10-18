@@ -32,6 +32,20 @@ local function unavailable(message)
     return { kind = "unavailable", error = message }
 end
 
+-- A `round --json` reply (#383, pair#661): `round` with Couch's sidecar and
+-- whether a submit came after it, `absent` with a positive null, else
+-- unavailable. Not a registration, so model.classify_reply doesn't apply.
+local function classify_round(data)
+    if type(data) ~= "table" or data.Code ~= "ok" then
+        local result = unavailable(type(data) == "table" and tostring(data.Error) or "malformed round reply")
+        result.code = type(data) == "table" and data.Code or nil
+        return result
+    end
+    if data.Round == vim.NIL then return { kind = "absent" } end
+    if type(data.Round) ~= "table" then return unavailable("malformed round reply") end
+    return { kind = "round", round = data.Round, cleared = data.Cleared == true }
+end
+
 function M.request(operation, args, witness, callback, options)
     options = options or {}
     args = vim.deepcopy(args or {})
@@ -57,7 +71,7 @@ function M.request(operation, args, witness, callback, options)
         if item.child then pcall(item.child.kill, item.child, 15) end
         finish(unavailable("request canceled; mutation outcome may be unknown"))
     end
-    local shapes = { lookup = 1, register = 2, rename = 2, forget = 1 }
+    local shapes = { lookup = 1, register = 2, rename = 2, forget = 1, round = 1 }
     if not shapes[operation] or #args ~= shapes[operation] then
         finish(unavailable("invalid registry operation")); return item
     end
@@ -86,13 +100,14 @@ function M.request(operation, args, witness, callback, options)
         item.child = couch.run(argv, function(obj)
             if item.done then return end
             local ok, data = pcall(vim.json.decode, obj.stdout or "")
-            local result = model.classify_reply(operation, obj.code, ok and data or nil, vim.NIL)
+            local result = operation == "round" and classify_round(ok and data or nil)
+                or model.classify_reply(operation, obj.code, ok and data or nil, vim.NIL)
             if result.kind == "registered" then
                 local expected = operation == "rename" and args[2] or args[1]
                 local canonical = uv.fs_realpath(expected) or vim.fs.normalize(expected)
                 if result.registration.File ~= canonical then result = unavailable("registry path mismatch") end
             end
-            if result.kind ~= "registered" and result.kind ~= "absent" then
+            if result.kind ~= "registered" and result.kind ~= "absent" and result.kind ~= "round" then
                 result.exit, result.stderr = obj.code, (obj.stderr or ""):sub(1, 400)
             end
             finish(result)

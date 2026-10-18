@@ -25,9 +25,9 @@ describe("side docs inherit the parent's owner (#378)", function()
         return vim.fn.filereadable(root .. "/sent") == 1 and #vim.fn.readfile(root .. "/sent") or 0
     end
     -- Put the cursor on `line` of the parent (or `from`) and press its Alt+o.
-    local function follow(line, from)
+    local function follow(line, from, col)
         vim.api.nvim_set_current_buf(from or buf)
-        vim.api.nvim_win_set_cursor(0, { line, 2 })
+        vim.api.nvim_win_set_cursor(0, { line, col or 2 })
         local mapping = vim.fn.maparg("<M-o>", "n", false, true)
         assert.equals(1, mapping.buffer)
         mapping.callback()
@@ -41,7 +41,8 @@ describe("side docs inherit the parent's owner (#378)", function()
     before_each(function()
         root = vim.fn.resolve(vim.fn.tempname()); vim.fn.mkdir(root .. "/parent.side", "p")
         parent, side, other = root .. "/parent.md", root .. "/parent.side/child.md", root .. "/other.md"
-        vim.fn.writefile({ "# Parent", "[side](parent.side/child.md)", "[other](other.md)" }, parent)
+        vim.fn.writefile({ "# Parent", "[side](parent.side/child.md)", "[other](other.md)",
+            "→ [proposal](parent.side/03-rewrite.md)" }, parent)
         vim.fn.writefile({ "# A side doc written by hand, no frontmatter" }, side)
         vim.fn.writefile({ "# Not a side doc" }, other)
         require("tests.helpers.fake_couch").write(root, root .. "/sent", root .. "/argv")
@@ -89,6 +90,19 @@ describe("side docs inherit the parent's owner (#378)", function()
         assert.equals("ops:0", document.identity(child).Owner)
         assert.equals("ops:0", lookup(side).registration.Owner)
         assert.equals("ops:0", lookup(parent).registration.Owner)
+        assert.equals(0, sends())
+    end)
+
+    -- #383 (row 33a): under presentation: propose, a rewrite too large for
+    -- per-line markers arrives as a `→ [proposal](…)` side doc. It is followed
+    -- and inherited like any side doc.
+    it("follows a proposal link and registers its side doc to the parent's owner", function()
+        local proposal = root .. "/parent.side/03-rewrite.md"
+        vim.fn.writefile({ "# Proposed rewrite" }, proposal)
+        local child = follow(4, nil, #"→ [")
+        assert.equals(proposal, vim.fn.resolve(vim.api.nvim_buf_get_name(child)))
+        await(function() return document.identity(child) ~= nil end, "the proposal side doc did not inherit")
+        assert.equals("ops:0", lookup(proposal).registration.Owner)
         assert.equals(0, sends())
     end)
 

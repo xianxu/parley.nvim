@@ -1,13 +1,23 @@
 ---
 id: 000383
-status: open
+status: codecomplete
 deps: [pair#661]
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
-estimate_hours:
+estimate_hours: 2.16
 collaboration-mode: collaboration
-card_mirror: '0c9bfd9d6456457f8f90aac1615dbd8537b34441' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '913a70054ed3ee3bacca7525125615fb9c9c7179' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-18T00:03:53-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: full, provenance: operator}
+actual_hours: 2.57
 ---
 
 # S4 presentations: highlight agent rounds from Couch's round sidecar, propose and direct
@@ -30,12 +40,58 @@ Design: `ops:teams/devinfra/projects/universal-agent-input-interface/design.side
 
 ## Done when
 
-On a document under the default presentation, an agent `apply` round shows each edit highlighted with its reason, a `write` round shows its changed lines highlighted ("changed by the agent"), the highlights follow the operator's edits, and they clear on the next confirmed submit and stay cleared on reopen. Under `presentation: propose` the same request shows per-line accept/reject markers, and a large rewrite shows as a followable `→ [proposal]` link. `direct` draws nothing. The behavior is covered by specs against the Couch fake, plus a live check on a real document.
+- Under the default presentation, an agent `apply` round shows each edit highlighted with its reason, and a `write` round shows its changed lines highlighted ("changed by the agent").
+- The highlights follow the operator's edits, clear on the next confirmed submit, and stay cleared on reopen.
+- Under `presentation: propose` the same request shows per-line accept/reject markers, and a large rewrite shows as a followable `→ [proposal]` link.
+- `direct` draws nothing.
+- Specs against the Couch fake cover the behavior, plus a live check on a real document.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim           design=0.3 impl=0.4
+item: lua-neovim           design=0.3 impl=0.4
+item: smaller-go-module    design=0.05 impl=0.15
+item: real-api-discovery   design=0.0 impl=0.2
+item: atlas-docs           design=0.05 impl=0.05
+item: milestone-review     design=0.0 impl=0.15
+design-buffer: 0.15
+total: 2.16
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.* The calibration doc is tagged stale, so treat the numbers as provisional. The two `lua-neovim` items are pure `presentation` with its drawing, and `edit_round` with the session_sync hooks. Their design is v2's 1–3h at the ×0.2 spec discount, since the plan pre-resolves the decisions, and their impl is 40% of 0.5–1.5h. `smaller-go-module` is the closest slug for the Python fake's round verb. `real-api-discovery` is the conformance case against the real M1 binary. The design buffer is +15% because a thorough durable plan exists.
 
 ## Plan
 
-- [ ]
+Durable plan: [workshop/plans/000383-s4-presentations-plan.md](../plans/000383-s4-presentations-plan.md). Coding waits for pair#661 M1 (the hub, 10-18).
+
+- [x] Task 1: the Couch fake keeps a round (`round --json`, `--round` seed, `Cleared` after a submit)
+- [x] Task 2: `presentation` (pure): the key, and a round's spans placed or re-anchored
+- [x] Task 3: `skill_render.publish_round` / `clear_round`, a round kind beside footnotes
+- [x] Task 4: `edit_round` + `document_registry.request("round")`, generation-guarded
+- [x] Task 5: hooks: reload, attach, confirmed submit (`release_and_send`)
+- [x] Task 6: the `→ [proposal]` link spec, the real/fake conformance case, atlas, suite; live check deferred to the operator's Couch restart (hub), steps in the Log
+- [x] Task 7: review export v2 and v3, no default `deletions` (scope addition)
 
 ## Log
 
 ### 2026-10-18
+- 2026-10-18: closed — Full suite green on 845884bc. Round-2 family fixed as a rule: every writer of the shared diagnostic namespace goes through replace_kind; the agent round survives attach_diagnostics, snapshot, clear_decorations, apply_snapshot and footnote writes (skill_render_round spec), 28 skill_render/footnote spec files green. Earlier evidence stands: fake-backed specs, offline conformance against the real M1 couch; live check deferred to the operator Couch restart by the hub. (fixed-then-ship); review verdict: SHIP
+- 2026-10-18: closed — Full suite green on 7ec1433a (sdlc-local/suite). Specs against the stateful Couch fake: fake_couch_round 5, presentation 9 (seeded sweep checked to reach malformed positions; removing the type guard fails it), skill_render_round 5, edit_round 9 (removing the generation guard fails the race case; removing coalescing fails the counted 8/16 case), edit_round_hooks 4 (legacy and registered: reload draws, confirmed submit clears, reopen stays cleared, failed send keeps), proposal-link inheritance, review export v2/v3. Offline conformance against the real M1 couch (pair f8b8235) in an isolated store: not-recording, absent, real write --all span and result_hash equal parley hash, Cleared after a local-offset submit row; real and fake pass. Close review round 1 BR-2 README fixed, minors fixed. Live check deferred to the operator Couch restart by the hub; steps in the Log.; review verdict: FIX-THEN-SHIP
+
+- Claimed and started plan-only (hub, 10-18): code waits for pair#661 M1 to land, so nothing builds against an unlanded Couch verb. The fake's round shape follows the design's sidecar; the plan names it as an assumption to confirm against M1 before Task 1.
+- Design choices: round diagnostics share skill_render's diagnostic namespace as a separate kind, as footnotes do, because `clear_decorations` would wipe footnotes on submit. The fetch reuses document_registry's bounded client (ARCH-DRY). A generation counter is the single guard against a stale reply (ARCH-concurrency). Clearing happens at `release_and_send`'s confirmed branch, the one send path for legacy and registered documents.
+- pair#661 M1 landed (PR 426, merge f8b82353); the hub started #383. Checked the real verb against the plan's contract, using a couch built from pair main in scratch (not installed). sessionsync/round.go's `Round{base_hash, result_hash, at, presentation, spans:[{start, end, old, new, explain?}]}` gives positions in the result as 0-based [line, byte column], and a deletion has Start == End. couchcmd's `roundResponse{Code, Error, Round, Cleared}` and decodeRound's round-invalid cases all match the plan, so the fake shape stands as written. The hub noted two M1 details, and neither changes parley's side: propose-unencodable joins propose-too-large, and both refusals send the agent to a side-doc proposal, which parley sees only as the `→ [proposal]` link Task 6 covers. Under propose, a frontmatter change goes through `write --frontmatter`, an agent-side verb.
+- Scope addition (hub, from ariadne:1's #437 planning): parley loads both universal-review export v2, whose modes carry `deletions`, and v3, which drops it, and never defaults a missing `deletions` to propose-strike. #383 lands first, and #437 bumps the export after it. This is Task 7 in the plan. It waits for ariadne:1's exact v3 shape.
+- Deviation (Task 2): the plan re-anchored a deletion by "the 40 characters before it in the result". The round carries no surrounding context, only old and new per span, so that context doesn't exist when the hash differs. A deletion is now placed only on a matching hash and dropped otherwise. In practice the hash matches on the reload that follows the agent's write, and the extmark then follows the operator's edits. What can be lost: a deletion marker on reopening a file edited since the round.
+- Deviation (Task 6): the proposal-link regression went into `agentic_document_side_inherit_spec.lua`, beside the #378 inheritance cases it extends, not into a new file. The conformance case lives in `scripts/couch-registry-probe.lua`, which the Python driver runs. Against the real binary it covers `not-recording`, absent, a real `write --all` round whose result_hash equals parley's hash of the lines, and Cleared after a local-offset submit row. The probe writes the isolated store's recording marker and that row itself, since no supervisor runs.
+- The seeded sweep in presentation_spec first used a hand-rolled LCG, and a mutation check showed it never reached the malformed positions: the low bits of a power-of-two LCG have short periods, which correlated the draws. It now uses math.random with a fixed seed and asserts it reached more than 50 malformed positions. Removing the type check now fails it. Lesson recorded.
+- Live check deferred to the operator's queued Couch restart (hub, 2026-10-18). The installed couch predates M1 ('round' is an unknown verb there), and parley degrades cleanly against it: nothing is drawn, logged at debug. #383 lands on the offline conformance: the real M1 binary (pair f8b8235, built in scratch) in an isolated store, through `scripts/check-couch-registry-conformance.py --couch <M1 couch>`, with real and fake both passing the round case. Steps for the restart:
+  1. After couch is rebuilt from pair main (f8b8235 or later) and restarted, `couch --session-sync round <doc> --json` answers `{"Code":"ok",...}`, not "unknown verb".
+  2. Open a registered agentic document in parley (no `presentation:` key, so highlight), Alt+Return it, and let the agent answer with `couch --session-sync apply EDITS.json <doc> --if-hash H`, each record carrying an `explain`. On reload, each edited span is highlighted, and its diagnostic shows its explain.
+  3. Have the agent answer the next submit with `write --all`. The changed spans highlight, with the diagnostic "changed by the agent".
+  4. Insert a line above a highlight: the highlight and its diagnostic move with the text.
+  5. Edit and Alt+Return. The highlights clear when the send is confirmed. Close the buffer and reopen it: nothing is drawn.
+  6. Set `presentation: propose` with `write --frontmatter`, then have the agent apply again. The file carries per-line proposal markers and parley draws no round highlights. With `presentation: direct`, nothing is drawn.

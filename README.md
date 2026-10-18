@@ -99,6 +99,16 @@ Unknown collaboration modes or conflicting heading assignments stop the round.
 Side documents, chat answer files and changes since the last read remain with
 the agent-side skill in Couch.
 
+When the agent answers, Parley shows what its write changed the way the
+document's `presentation:` frontmatter asks. Under `highlight` (the default),
+each changed span is highlighted, and its diagnostic gives the agent's reason
+(or "changed by the agent"). The highlights follow your edits and clear on your
+next confirmed Alt+Return. Under `propose`, the agent writes per-line
+accept/reject markers instead, and a rewrite too large for them arrives as a
+`→ [proposal](…)` side-doc link that Alt+o follows. Under `direct`, nothing is
+drawn. A round past 200 changes highlights the first 200 and says so. This
+needs a Couch with the `round` verb (pair#661). An older one shows nothing.
+
 Press **Alt+Shift+O** in Normal or Insert mode to return to the previous file
 in the current window, restoring its cursor position. Follow links with Alt+o,
 then use Alt+Shift+O repeatedly to return through answer and side documents to

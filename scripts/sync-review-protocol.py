@@ -28,11 +28,11 @@ def validate_manifest(manifest):
     """Validate the complete versioned contract without IO or mutations."""
     require(type(manifest) is dict, 'manifest must be an object')
     require(manifest.get('schema') == SCHEMA, 'unsupported export schema')
-    require(type(manifest.get('version')) is int and manifest['version'] in (1, 2), 'unsupported export version')
+    require(type(manifest.get('version')) is int and manifest['version'] in (1, 2, 3), 'unsupported export version')
     members = manifest.get('members')
     require(type(members) is list and bool(members), 'export members must be a nonempty list')
     allowed_roles = {'round', 'grammar', 'collaboration-modes', 'adapter', 'mode'}
-    if manifest['version'] == 2:
+    if manifest['version'] >= 2:
         allowed_roles.add('fixture')
     paths, roles, names, adapters = set(), [], set(), set()
     for member in members:
@@ -76,9 +76,15 @@ def validate_manifest(manifest):
             require(type(name) is str and SAFE_NAME.fullmatch(name) and name not in names, 'invalid or duplicate mode name')
             require(path == 'modes/' + name + '.md', 'mode path must match its name')
             require('order' not in member or (type(order) is int and order > 0), 'invalid mode order')
-            for key, allowed in [('scope', {'whole-doc', 'markers-only'}),
-                                 ('deletions', {'apply-with-gutter-why', 'apply', 'propose-strike'}),
-                                 ('frontier', {'on', 'off'})]:
+            flags = [('scope', {'whole-doc', 'markers-only'}), ('frontier', {'on', 'off'})]
+            # v3 (ariadne#437) retires the deletions flag: the document's own
+            # `presentation:` is the one proposal knob. A v3 record still carrying
+            # it is a half-migrated export, refused rather than half-applied.
+            if manifest['version'] >= 3:
+                require('deletions' not in member, 'a version 3 mode carries no deletions')
+            else:
+                flags.append(('deletions', {'apply-with-gutter-why', 'apply', 'propose-strike'}))
+            for key, allowed in flags:
                 require(type(member.get(key)) is str and member[key] in allowed, 'invalid mode ' + key)
             names.add(name)
     require(roles.count('round') == 1 and roles.count('grammar') == 1 and roles.count('adapter') >= 1

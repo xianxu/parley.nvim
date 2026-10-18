@@ -11,10 +11,16 @@ local DIAG_NS = "parley_skill"
 local HL_NS = "parley_skill_hl"
 local FOOTNOTE_HL_NS = "parley_footnote_hl"
 local FOOTNOTE_SOURCE = "parley-footnote"
+local ROUND_HL_NS = "parley_round_hl"
+local ROUND_SOURCE = "parley-round"
 
 local diag_ns_id
 local hl_ns_id
 local footnote_hl_ns_id
+local round_hl_ns_id
+-- buf -> { [extmark id] = decoration }: what each round mark says, so its
+-- diagnostic can follow the mark as the text moves (#383).
+local round_marks = {}
 
 local function ensure_namespaces()
     if not diag_ns_id then
@@ -26,12 +32,49 @@ local function ensure_namespaces()
     if not footnote_hl_ns_id then
         footnote_hl_ns_id = vim.api.nvim_create_namespace(FOOTNOTE_HL_NS)
     end
+    if not round_hl_ns_id then
+        round_hl_ns_id = vim.api.nvim_create_namespace(ROUND_HL_NS)
+        vim.api.nvim_set_hl(0, "ParleyAgentChange", { link = "DiffAdd", default = true })
+    end
 end
 
---- Clear previous skill diagnostics and highlights from a buffer.
+local function is_footnote_diagnostic(diagnostic)
+    local user_data = diagnostic.user_data or {}
+    return diagnostic.source == FOOTNOTE_SOURCE or user_data.parley_kind == "footnote"
+end
+
+local function is_round_diagnostic(diagnostic)
+    return diagnostic.source == ROUND_SOURCE or (diagnostic.user_data or {}).parley_kind == "round"
+end
+
+local function not_round(diagnostic)
+    return not is_round_diagnostic(diagnostic)
+end
+
+-- The one rule for the shared diagnostic namespace: a writer replaces only the
+-- diagnostics it owns (`owns`) and keeps every other kind. The agent's round
+-- (#383) is owned by the round functions alone; every other writer owns
+-- `not_round`, so a review-skill run, an undo/redo snapshot or a dismiss never
+-- wipes it.
+local function replace_kind(buf, owns, diagnostics)
+    local out = {}
+    for _, existing in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
+        if not owns(existing) then
+            table.insert(out, existing)
+        end
+    end
+    for _, diagnostic in ipairs(diagnostics) do
+        table.insert(out, diagnostic)
+    end
+    vim.diagnostic.set(diag_ns_id, buf, out)
+    return out
+end
+
+--- Clear previous skill diagnostics and highlights from a buffer. The agent's
+--- round is not the skill's: it stays until a confirmed submit (#383).
 function M.clear_decorations(buf)
     ensure_namespaces()
-    vim.diagnostic.reset(diag_ns_id, buf)
+    replace_kind(buf, not_round, {})
     vim.api.nvim_buf_clear_namespace(buf, hl_ns_id, 0, -1)
     vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
 end
@@ -47,11 +90,6 @@ M.dismiss = M.clear_decorations
 function M.diag_namespace()
     ensure_namespaces()
     return diag_ns_id
-end
-
-local function is_footnote_diagnostic(diagnostic)
-    local user_data = diagnostic.user_data or {}
-    return diagnostic.source == FOOTNOTE_SOURCE or user_data.parley_kind == "footnote"
 end
 
 local function highlight_footnote_span(buf, lnum0, col_start, end_lnum0, col_end)
@@ -78,12 +116,6 @@ function M.publish_footnotes(buf,footnotes)
     local diagnostics = {}
     vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
 
-    for _, existing in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
-        if not is_footnote_diagnostic(existing) then
-            table.insert(diagnostics, existing)
-        end
-    end
-
     for _, footnote in ipairs(footnotes) do
         highlight_footnote_span(buf, footnote.lnum, footnote.col, footnote.end_lnum or footnote.lnum, footnote.end_col)
         table.insert(diagnostics, {
@@ -98,7 +130,7 @@ function M.publish_footnotes(buf,footnotes)
         })
     end
 
-    vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+    diagnostics = replace_kind(buf, is_footnote_diagnostic, diagnostics)
     local bytes=0;for _,record in ipairs(diagnostics) do bytes=bytes+#record.message end
     return {entries=#diagnostics,message_bytes=bytes}
 end
@@ -111,13 +143,72 @@ function M.clear_footnote_diagnostics(buf)
         return
     end
     vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
+    replace_kind(buf, is_footnote_diagnostic, {})
+end
+
+-- Set the round's diagnostics, from each mark's current place, beside the
+-- shared namespace's other kinds.
+local function set_round_diagnostics(buf)
     local diagnostics = {}
-    for _, existing in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
-        if not is_footnote_diagnostic(existing) then
-            table.insert(diagnostics, existing)
+    local said = round_marks[buf] or {}
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, round_hl_ns_id, 0, -1, { details = true })) do
+        local decoration = said[mark[1]]
+        if decoration then
+            table.insert(diagnostics, {
+                lnum = mark[2],
+                col = mark[3],
+                end_lnum = mark[4].end_row or mark[2],
+                end_col = mark[4].end_col or mark[3],
+                message = decoration.message,
+                severity = vim.diagnostic.severity.INFO,
+                source = ROUND_SOURCE,
+                user_data = { parley_kind = "round" },
+            })
         end
     end
-    vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+    replace_kind(buf, is_round_diagnostic, diagnostics)
+end
+
+--- Draw the agent's last round (#383): presentation.decorations as
+--- highlights, a deletion as a zero-width mark, each with an INFO diagnostic.
+--- Replaces any round drawn before; other kinds are kept.
+--- @param buf number
+--- @param decorations table[] {lnum, col, end_lnum, end_col, message, deletion}, 0-based
+function M.publish_round(buf, decorations)
+    ensure_namespaces()
+    vim.api.nvim_buf_clear_namespace(buf, round_hl_ns_id, 0, -1)
+    local said = {}
+    for _, d in ipairs(decorations) do
+        local id = vim.api.nvim_buf_set_extmark(buf, round_hl_ns_id, d.lnum, d.col, {
+            end_row = d.end_lnum,
+            end_col = d.end_col,
+            hl_group = not d.deletion and "ParleyAgentChange" or nil,
+            strict = false,
+        })
+        said[id] = d
+    end
+    round_marks[buf] = said
+    set_round_diagnostics(buf)
+end
+
+--- Re-derive the round's diagnostics from where its marks are now: marks move
+--- with the text, diagnostics do not.
+function M.rederive_round(buf)
+    ensure_namespaces()
+    if round_marks[buf] and vim.api.nvim_buf_is_valid(buf) then
+        set_round_diagnostics(buf)
+    end
+end
+
+--- Clear only the round kind: its marks and diagnostics.
+function M.clear_round(buf)
+    ensure_namespaces()
+    round_marks[buf] = nil
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return
+    end
+    vim.api.nvim_buf_clear_namespace(buf, round_hl_ns_id, 0, -1)
+    set_round_diagnostics(buf)
 end
 
 --- Attach INFO diagnostics from edit explanations. Each diagnostic spans the
@@ -149,7 +240,7 @@ function M.attach_diagnostics(buf, edits, original_content)
             source = "parley-skill",
         })
     end
-    vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+    replace_kind(buf, not_round, diagnostics)
 end
 
 --- Highlight edited regions with DiffChange.
@@ -238,7 +329,8 @@ function M.snapshot(buf)
         end
     end
     local diags = {}
-    for _, d in ipairs(vim.diagnostic.get(buf, { namespace = diag_ns_id })) do
+    -- The agent's round is not part of a skill snapshot: it has its own owner.
+    for _, d in ipairs(vim.tbl_filter(not_round, vim.diagnostic.get(buf, { namespace = diag_ns_id }))) do
         table.insert(diags, {
             lnum = d.lnum,
             col = d.col or 0,
@@ -279,7 +371,7 @@ function M.apply_snapshot(buf, snap)
                 user_data = d.user_data,
             })
         end
-        vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+        replace_kind(buf, not_round, diagnostics)
     end
 end
 

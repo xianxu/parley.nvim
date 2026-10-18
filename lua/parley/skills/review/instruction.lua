@@ -3,7 +3,7 @@
 -- `[name][name] free text`: each leading `[name]` names a stock prompt (a
 -- modes/<name>.md file, or a unique prefix of one: `[copy-edit]`), the rest is
 -- the operator's addition. No `[name]` means the free-form mode. Several modes
--- contribute their briefs; the first one's knobs (scope, deletions, frontier)
+-- contribute their briefs; the first one's knobs (scope, frontier, and in v2 deletions)
 -- govern the round, since one round has one set of directives.
 
 local M = {}
@@ -76,18 +76,27 @@ end
 
 --- Neutral inputs for the canonical round; its flag table owns semantics.
 --- No selection retains the local marker-only invocation's parser defaults.
+--- `deletions` is written only when the first mode carries it: export v3
+--- (ariadne#437) retires the flag, and the document's own `presentation:` is
+--- then the one proposal knob, copied nowhere. With no mode selected, a v2
+--- snapshot keeps its propose-strike default and a v3 one writes no line.
 ---@param modes table[]
 ---@param text string|nil
+---@param export_version number|nil the packaged export's version; nil reads as 2
 ---@return string
-M.context = function(modes, text)
+M.context = function(modes, text, export_version)
     local parts = {}
     for _, m in ipairs(modes) do
         parts[#parts + 1] = "## Review mode: " .. m.name .. "\n" .. m.body
     end
     local first = modes[1] or {}
+    local deletions = first.deletions
+    if not modes[1] and (export_version or 2) < 3 then
+        deletions = "propose-strike"
+    end
     parts[#parts + 1] = "## Selected round flags\n"
         .. "scope: " .. (first.scope or "markers-only") .. "\n"
-        .. "deletions: " .. (first.deletions or "propose-strike") .. "\n"
+        .. (deletions and ("deletions: " .. deletions .. "\n") or "")
         .. "frontier: " .. (first.frontier or "on")
     if text and text ~= "" then
         parts[#parts + 1] = "## Operator instruction\n" .. text

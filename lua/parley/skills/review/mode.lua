@@ -8,6 +8,9 @@
 --   deletions apply-with-gutter-why       — apply removals, explain in the gutter
 --             | propose-strike            — propose removals as 🤖~old~{new}
 --             | apply                      — apply silently (mechanical modes)
+--             Optional, with no default: the universal-review export v3
+--             (ariadne#437) retires it, and a document's `presentation:` is
+--             then the one proposal knob. A v2 mode file always carries it.
 --   frontier  on | off                    — respect the settled region above the
 --                                          topmost 🤖[] human marker, or not.
 
@@ -18,7 +21,7 @@ local VALID = {
     deletions = { ["apply-with-gutter-why"] = true, ["propose-strike"] = true, ["apply"] = true },
     frontier = { ["on"] = true, ["off"] = true },
 }
-local DEFAULT = { scope = "markers-only", deletions = "propose-strike", frontier = "on" }
+local DEFAULT = { scope = "markers-only", frontier = "on" }
 
 --- Parse a mode file's content into a Mode. PURE — no IO.
 --- @param content string  the file's text
@@ -60,9 +63,9 @@ function M.parse(content)
     -- Optional editorial-sequence position (developmental → … → free-form), used
     -- to order the menu by the document-construction workflow, not alphabetically.
     out.order = tonumber(flags.order)
-    for key, default in pairs(DEFAULT) do
-        local val = flags[key] or default
-        if not VALID[key][val] then
+    for key in pairs(VALID) do
+        local val = flags[key] or DEFAULT[key]
+        if val ~= nil and not VALID[key][val] then
             return nil, ("mode '%s': invalid %s=%s"):format(flags.name, key, tostring(val))
         end
         out[key] = val
@@ -82,6 +85,15 @@ local function read_file(path)
     local c = f:read("*a")
     f:close()
     return c
+end
+
+--- The packaged universal-review export's version, from <dir>/export.json,
+--- or nil when it can't be read. IO seam.
+--- @param dir string the skill directory
+--- @return number|nil
+function M.export_version(dir)
+    local ok, manifest = pcall(vim.json.decode, read_file(dir .. "/export.json") or "")
+    return ok and type(manifest) == "table" and type(manifest.version) == "number" and manifest.version or nil
 end
 
 --- Load one mode by name from <dir>/<name>.md. IO seam over M.parse.

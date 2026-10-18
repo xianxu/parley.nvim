@@ -25,11 +25,20 @@ describe("review.mode.parse", function()
         assert.are.equal("You are a developmental editor.\nRestructure freely.", m.body)
     end)
 
-    it("defaults missing flags (markers-only / propose-strike / on)", function()
+    it("defaults missing scope and frontier (markers-only / on)", function()
         local m = mode.parse("---\nname: x\n---\nbody")
         assert.are.equal("markers-only", m.scope)
-        assert.are.equal("propose-strike", m.deletions)
         assert.are.equal("on", m.frontier)
+    end)
+
+    -- #383: export v3 (ariadne#437) retires deletions. A missing one stays
+    -- missing; it never falls back to propose-strike, the v2 behavior.
+    it("leaves a missing deletions unset, and still validates a present one", function()
+        assert.is_nil(mode.parse("---\nname: x\nscope: whole-doc\nfrontier: off\n---\nbody").deletions)
+        assert.are.equal("apply", mode.parse("---\nname: x\ndeletions: apply\n---\nb").deletions)
+        local m, err = mode.parse("---\nname: x\ndeletions: shred\n---\nb")
+        assert.is_nil(m)
+        assert.is_truthy(err:match("deletions"))
     end)
 
     it("rejects an unknown flag value", function()

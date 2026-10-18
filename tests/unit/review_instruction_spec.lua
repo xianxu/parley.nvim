@@ -101,5 +101,19 @@ describe("instruction.context", function()
     it("states parser defaults for legacy marker-only invocation", function()
         local body = instruction.context({}, nil)
         assert.truthy(body:find("scope: markers-only\ndeletions: propose-strike\nfrontier: on", 1, true))
+        assert.equals(body, instruction.context({}, nil, 2))
+    end)
+
+    -- #383: export v3 (ariadne#437) has no deletions flag. A v3 brief names
+    -- none, with or without a selected mode, and copies no presentation flag:
+    -- the document's frontmatter is the one source.
+    it("writes no deletions line under export v3", function()
+        local v3 = { name = "line-editing", body = "Line edit.", scope = "whole-doc", frontier = "on" }
+        for _, body in ipairs({ instruction.context({ v3 }, "x", 3), instruction.context({}, nil, 3) }) do
+            assert.falsy(body:find("deletions", 1, true))
+            assert.falsy(body:find("presentation", 1, true))
+        end
+        assert.truthy(instruction.context({ v3 }, "x", 3):find("scope: whole-doc\nfrontier: on", 1, true))
+        assert.truthy(instruction.context({}, nil, 3):find("scope: markers-only\nfrontier: on", 1, true))
     end)
 end)

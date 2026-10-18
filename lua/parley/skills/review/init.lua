@@ -513,7 +513,8 @@ M.skill = {
         assert(adapter_md and adapter_md ~= "", "review local adapter is empty")
         assert(ctx.skill_md and ctx.skill_md ~= "", "review canonical source is empty")
         return table.concat({ ctx.skill_md,
-            require("parley.skills.review.instruction").context(loaded, args.instruction), adapter_md }, "\n\n")
+            require("parley.skills.review.instruction").context(loaded, args.instruction, mode.export_version(dir)),
+            adapter_md }, "\n\n")
     end,
 
     -- Declarative manifest fields (#128). Runs through the skill_invoke driver
