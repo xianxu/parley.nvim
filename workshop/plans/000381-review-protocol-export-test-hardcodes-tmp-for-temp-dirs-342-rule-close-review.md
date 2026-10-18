@@ -162,3 +162,59 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"4124250a-7ed5-4eeb-9f5c-272df4f70272","repository":"github.com/xianxu/parley.nvim","issue_id":"000381","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/03d18069c602a4ab","reviewed_head":"105a962570783575e9bdd540b6e6cedb37547f06","slot":"parley.nvim:4","requested_at":"2026-10-18T01:41:14.08744Z"},"phase":"finished","pid":25545,"started_at":"2026-10-18T01:41:14.469804Z","finished_at":"2026-10-18T01:43:54.14943Z","session_id":"00e49820-77af-431d-8063-bad951c99124","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T18:47:26-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 381 — review_protocol_export_test hardcodes /tmp for temp dirs (#342 rule) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000381-review-protocol-export-test-hardcodes-tmp-for-temp-dirs-342-rule.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 260cfa58cfbf6926705fa4a17f59cea05e5828ac..4d29297e2e121189e49cc8a26ecdc5765bb0eeb1 |
+| command | sdlc close --issue 381 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-17T18:47:26-07:00 |
+| verdict | SHIP |
+
+## Review
+
+The fix-review is finished. I ran the guard spec and checked that it fails when the fix is removed. Writing up the verdict now.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The fix for BR-2 is in place and covers the whole class. The three `mktemp` patterns (`tests/arch/scratch_placement_spec.lua:96-98`) no longer carry a `lang`, so every scanned file is checked against them, whatever its language. The match condition (`:117`) now applies a rule when `rule.lang == nil` or when the language matches. Language scoping is kept only for rules that would match the wrong thing without it: the Python `dir=` keyword and the Lua `io.open`/`mkdir`/`writefile` path patterns. That is the rule the finding asked for. The patterns also accept quotes and commas between words now, so a Python argv list like `['mktemp', '-d', '-p', '/tmp']` is caught. There is a fixture line for each embedded form: a Python `subprocess.run([...'-p', '/tmp'])` line at `:140` and a Lua `vim.fn.system("mktemp -d /tmp/...")` line at `:144`.
+
+I ran `make test-spec SPEC=infra/test_harness` at the pinned head. Both `/tmp` guard cases pass: the scan of the real tree and the fixture case. To check the fix matters, I put back the old behaviour, where untagged rules read only shell files. The fixture case then failed, and passed again once restored. So a test fails without the fix. The other 8 failures in `scratch_placement_spec` come from this checkout's in-repo `TMPDIR`, which earlier rounds also saw; this diff doesn't cause them. Apart from that, the window only changes the generated gate and review records. It makes no Spec, Revisions or Done-when changes and adds no behaviour beyond the fix.
+
+1. **Strengths**
+   - `scratch_placement_spec.lua:103-104`: the comment states the scoping rule itself, "scoped to a language only where it would otherwise misfire", not just the one case that was fixed.
+   - The fixture count is exact, and a second check confirms every hit falls on a refused line. Together these guard against misses and against a pattern that matches too much. This matters now that the patterns read more files.
+   - Using `rule.lang == nil` as the "any language" default keeps the change to one line. Each rule's scope is visible in the rule table.
+
+2. **Critical:** none.
+3. **Important:** none.
+4. **Minor:** none new.
+5. **Test coverage:** both new embedded-`mktemp` spellings have fixture lines. When the fix is reverted, the fixture case fails.
+6. **Architecture**
+   - **ARCH-DRY: pass.** It is still one rule table and one scan loop.
+   - **ARCH-PURE: pass.** `fixed_tmp_roots` is still the only scanning logic. Its one IO step is reading the files, and it gets the file list as an argument.
+   - **ARCH-PURPOSE: pass.** The fix applies the rule to all the shell-command patterns at once, not only the one the finding named.
+7. **Plan revisions:** none.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      mktemp rules (spec:96-98) are now untagged and read every file (spec:117); lang kept only for py dir= and lua path rules; fixture lines for py subprocess and lua vim.fn.system mktemp; reverting to shell-only scoping makes the fixture case fail.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"588159e1-3068-41b6-b1e0-9b4a3a088680","repository":"github.com/xianxu/parley.nvim","issue_id":"000381","recipe":"fix-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/6e867526997b7efa","reviewed_head":"4d29297e2e121189e49cc8a26ecdc5765bb0eeb1","slot":"parley.nvim:4","requested_at":"2026-10-18T01:45:22.620259Z"},"phase":"finished","pid":67193,"started_at":"2026-10-18T01:45:22.860677Z","finished_at":"2026-10-18T01:47:25.684838Z","session_id":"bf613e4f-c762-4b0f-a912-3b75e2058ec6","outcome":"returned"}] -->
