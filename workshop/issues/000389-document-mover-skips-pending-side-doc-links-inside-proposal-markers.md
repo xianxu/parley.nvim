@@ -1,13 +1,21 @@
 ---
 id: 000389
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '86880d9df4d78e115aaa0f6ce456cc045fbd7d6b' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '95801f015aeddf8fac54f60aad0a84d09f573c6e' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-18T12:21:16-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:2
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # Document mover skips pending side-doc links inside proposal markers
@@ -28,9 +36,12 @@ Treat an engine-generated pending side-doc link inside a `🤖{…}` proposal ma
 
 ## Plan
 
-- [ ] Add the red mover fixture using the installed Pair output above.
-- [ ] Extend the one mover reference path to include the pending marker and prove the move and negative cases.
+- [ ] Pin single-backslash pending-link failure plus the issue's literal double-backslash spelling; preserve marker bytes and reject escaped prose/code examples.
+- [ ] Give the mover's existing Markdown span/rewrite path a narrow proposal-link exception, preserving byte coordinates, code masks and destination validation (ARCH-DRY, ARCH-PURE). Limit recognition to complete same-line robot insertion proposals carrying a side-doc link; do not broaden navigation parsing.
+- [ ] Verify parent index, moved side folder, child backlink and resolving pending link through a native filesystem migration fixture; run focused tests, required suite, close and normal landing.
 
 ## Log
 
 - Filed from ariadne#437 close-review follow-up on 2026-10-18. Pair live conformance provided the exact marker bytes; ariadne's shared side-doc parser is being updated there. This Parley follow-up does not block #437.
+
+- Claimed after the card showed no owner; start-plan refreshed the ariadne tool build and was rerun as directed. Read-only probe `/tmp/parley389-probe.lua` confirms one literal backslash before each bracket is skipped; the issue's literal two-backslash spelling already rewrites because the existing escaped predicate counts parity. Pin both byte spellings without changing existing two-backslash behavior. The implementation will preserve all marker bytes and change only destination spans. No new state, recovery action or filesystem effect; existing leased migration/CAS/retry protocol stays authoritative. Existing scan bounds remain; add one linear per-line proposal recognition pass, no per-link suffix rescans.
