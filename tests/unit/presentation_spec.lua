@@ -1,0 +1,111 @@
+-- presentation (#383): the document's `presentation:` key, and where a round's
+-- spans land in the buffer. Pure: plain line tables, no buffer.
+local presentation = require("parley.presentation")
+
+local function span(start, finish, old, new, explain)
+    return { start = start, ["end"] = finish, old = old, new = new, explain = explain }
+end
+
+local function round(spans)
+    return { result_hash = "match", spans = spans }
+end
+
+describe("presentation.value", function()
+    it("reads the key, and highlights when it is missing, unknown or unclosed", function()
+        assert.equals("highlight", presentation.value({ "# no frontmatter" }))
+        assert.equals("propose", presentation.value({ "---", "presentation: propose", "---" }))
+        assert.equals("direct", presentation.value({ "---", 'presentation: "direct"', "---" }))
+        assert.equals("highlight", presentation.value({ "---", "presentation: shout", "---" }))
+        assert.equals("highlight", presentation.value({ "---", "presentation: propose" }))
+    end)
+end)
+
+describe("presentation.decorations", function()
+    local lines = { "# Title", "the new text here", "tail" }
+
+    it("takes the positions as given when the hash matches", function()
+        local d = presentation.decorations(round({ span({ 1, 4 }, { 1, 12 }, "old", "new text", "why") }), lines, "match")
+        assert.same({ { lnum = 1, col = 4, end_lnum = 1, end_col = 12, message = "why", deletion = false } }, d)
+    end)
+
+    it("re-anchors by the new text when the hash differs, nearest the old position", function()
+        local moved = { "# Title", "inserted", "x", "the new text here", "x new text" }
+        local d = presentation.decorations(round({ span({ 1, 4 }, { 1, 12 }, "old", "new text") }), moved, "other")
+        assert.same({ { lnum = 3, col = 4, end_lnum = 3, end_col = 12, message = "changed by the agent",
+            deletion = false } }, d)
+    end)
+
+    it("drops a span whose new text is gone", function()
+        assert.same({}, presentation.decorations(round({ span({ 1, 4 }, { 1, 12 }, "old", "vanished") }), lines, "other"))
+    end)
+
+    it("marks a deletion with its first line of old text, and drops it when the hash differs", function()
+        local r = round({ span({ 2, 0 }, { 2, 0 }, "gone line\nand more", "") })
+        assert.same({ { lnum = 2, col = 0, end_lnum = 2, end_col = 0, message = "deleted: gone line…",
+            deletion = true } }, presentation.decorations(r, lines, "match"))
+        -- Couch keeps no context around a deletion, so an edited file can't place it.
+        assert.same({}, presentation.decorations(r, lines, "other"))
+    end)
+
+    it("keeps a multi-line span's end line", function()
+        local d = presentation.decorations(round({ span({ 1, 4 }, { 2, 2 }, "", "new text here\nta") }), lines, "match")
+        assert.same({ 1, 4, 2, 2 }, { d[1].lnum, d[1].col, d[1].end_lnum, d[1].end_col })
+    end)
+
+    it("re-anchors a matched-hash span whose text isn't there", function()
+        -- A hand-edited sidecar: the hash matches but the positions don't.
+        local d = presentation.decorations(round({ span({ 0, 0 }, { 0, 8 }, "", "new text") }), lines, "match")
+        assert.same({ 1, 4, 1, 12 }, { d[1].lnum, d[1].col, d[1].end_lnum, d[1].end_col })
+    end)
+
+    it("places at most MAX_SPANS spans", function()
+        local spans = {}
+        for i = 1, presentation.MAX_SPANS + 1 do spans[i] = span({ 0, 0 }, { 0, 1 }, "", "#") end
+        assert.equals(presentation.MAX_SPANS, #presentation.decorations(round(spans), lines, "match"))
+    end)
+
+    -- Couch's positions are untrusted input, even on a hash match: a seeded
+    -- random sweep over malformed and out-of-range spans, multibyte and CR text,
+    -- and empty or repeated new text. Nothing raises, and every placed position
+    -- lies inside the lines.
+    it("never raises and never places outside the lines", function()
+        math.randomseed(383)
+        local function rand(n) return math.random(n) - 1 end
+        local junk_seen = 0
+        local alphabet = { "a", "b", " ", "é", "\r", "→", "x" }
+        local function word(n)
+            local out = {}
+            for i = 1, n do out[i] = alphabet[rand(#alphabet) + 1] end
+            return table.concat(out)
+        end
+        local junk = { "x", -1, 1.5, {}, { 1 }, { "a", 0 } }
+        local function position()
+            if rand(5) == 0 then
+                junk_seen = junk_seen + 1
+                return junk[rand(#junk) + 1]
+            end
+            return { rand(8) - 1, rand(12) - 1 }
+        end
+        for _ = 1, 500 do
+            local doc = {}
+            for i = 1, rand(5) + 1 do doc[i] = word(rand(10)) end
+            local spans = {}
+            for i = 1, rand(6) do
+                local new = rand(4) == 0 and "" or (rand(3) == 0 and doc[1]:sub(1, 2) or word(rand(4)))
+                spans[i] = rand(10) == 0 and "junk"
+                    or { start = position(), ["end"] = position(), old = rand(9) == 0 and 7 or word(2), new = new,
+                        explain = rand(2) == 0 and "e" or nil }
+            end
+            local ok, out = pcall(presentation.decorations, round(spans), doc, rand(2) == 0 and "match" or "other")
+            assert.is_true(ok, tostring(out))
+            for _, d in ipairs(out) do
+                for _, p in ipairs({ { d.lnum, d.col }, { d.end_lnum, d.end_col } }) do
+                    assert.is_true(p[1] >= 0 and p[1] < #doc and p[2] >= 0 and p[2] <= #doc[p[1] + 1],
+                        vim.inspect({ d = d, doc = doc }))
+                end
+                assert.is_true(d.end_lnum > d.lnum or (d.end_lnum == d.lnum and d.end_col >= d.col))
+            end
+        end
+        assert.is_true(junk_seen > 50, "the sweep must reach malformed positions")
+    end)
+end)
