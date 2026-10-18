@@ -284,7 +284,9 @@ uses the shared `couch.run` transport and owns the default registry deadline
 (`default_deadline_ms`, read through `config_ms`). A request that names none
 gets `agentic_submit_timeout_ms`, and a rename, native or journaled, gets three
 of them; there is no hidden literal (#382). Only the inline `:saveas!` check
-names its own, shorter deadline. `document_move_plan.lua` projects pure
+names its own, shorter deadline. A deadline bounds the child from its spawn, not
+from when it queued behind the four running ones; every result carries
+`queued_ms`/`ran_ms`, and a refusal the child's `exit` and `stderr`. `document_move_plan.lua` projects pure
 side/backlink effects and the [S3 projection contract](#s3-move-projection-and-execution-373).
 `document_move.lua` dispatches and recovers the journal through the pure
 `document_move_state.lua` reducer; `document_lease.lua` owns kernel leases, and

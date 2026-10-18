@@ -94,6 +94,49 @@ describe("document registry process boundary", function()
         assert.is_true(ok, tostring(err))
     end)
 
+    -- #382: the deadline bounds the child from spawn. Time queued behind
+    -- MAX_ACTIVE others is not Couch being slow: eight lookups the fake answers
+    -- in 0.6 s each, with a 1 s deadline, all answer, though the last four
+    -- finish about 1.2 s after they were asked.
+    it("starts a request's deadline when its child spawns, not when it queues", function()
+        local file = root .. "/queued.md"
+        vim.fn.writefile({ "plain" }, file)
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "0.6"
+        local results, count = {}, 0
+        for n = 1, 8 do
+            client.request("lookup", { file }, {}, function(result) results[n] = result; count = count + 1 end,
+                { timeout_ms = 1000 })
+        end
+        local done = vim.wait(arrival.MS, function() return count == 8 end, 10)
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = nil, nil
+        assert.is_true(done)
+        local queued = 0
+        for n = 1, 8 do
+            assert.equals("absent", results[n].kind, n .. ": " .. vim.inspect(results[n]))
+            if results[n].queued_ms >= 300 then queued = queued + 1 end
+        end
+        assert.is_true(queued >= 4, "the later lookups never waited in the queue: " .. vim.inspect(results))
+    end)
+
+    -- #382: "unavailable" names its cause. A refusal carries the child's exit
+    -- status and stderr and how long it queued and ran; a deadline says its
+    -- length.
+    it("says why a request was refused", function()
+        local file = root .. "/why.md"
+        vim.fn.writefile({ "plain" }, file)
+        vim.env.FAKE_COUCH_REGISTRY_MODE = "unsupported"
+        local refused = request("lookup", { file })
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+        local late = request("lookup", { file }, { timeout_ms = 300 })
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = nil, nil
+        assert.equals("unavailable", refused.kind)
+        assert.equals(2, refused.exit)
+        assert.matches("unknown session%-sync verb", refused.stderr)
+        assert.is_number(refused.queued_ms); assert.is_number(refused.ran_ms)
+        assert.matches("deadline exceeded after 300 ms", late.error)
+        assert.is_true(late.ran_ms >= 300, vim.inspect(late))
+    end)
+
     it("preserves null-only absence and persisted identity across register and rename replay", function()
         local old, new = root .. "/a space;note.md", root .. "/new.md"
         vim.fn.writefile({ "plain" }, old)

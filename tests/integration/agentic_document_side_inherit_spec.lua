@@ -19,7 +19,7 @@ describe("side docs inherit the parent's owner (#378)", function()
         local result
         require("parley.document_registry").request("register", { path, owner }, {}, function(value) result = value end)
         await(function() return result ~= nil end)
-        assert.equals("registered", result.kind, "setup register refused: " .. vim.inspect({ code = result.code, error = result.error }))
+        assert.equals("registered", result.kind, "setup register refused: " .. require("tests.helpers.fake_couch").explain(result))
     end
     local function sends()
         return vim.fn.filereadable(root .. "/sent") == 1 and #vim.fn.readfile(root .. "/sent") or 0
