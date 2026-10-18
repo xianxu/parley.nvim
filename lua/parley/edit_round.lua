@@ -20,6 +20,8 @@ local attached = {}
 local pending = {}
 -- buf -> the result_hash of the last round whose cap was announced.
 local announced = {}
+-- buf -> true once its BufUnload forgets it.
+local hooked = {}
 
 -- Counts for specs: re-derives run, one per scheduled batch of keystrokes.
 M.stats = { rederives = 0 }
@@ -90,6 +92,10 @@ function M.refresh(buf)
     if name == "" then return end
     local path = vim.fn.fnamemodify(name, ":p")
     path = (vim.uv or vim.loop).fs_realpath(path) or path
+    if not hooked[buf] then
+        hooked[buf] = true
+        vim.api.nvim_create_autocmd("BufUnload", { buffer = buf, once = true, callback = function() M.forget(buf) end })
+    end
     generation[buf] = (generation[buf] or 0) + 1
     local mine = generation[buf]
     require("parley.document_registry").request("round", { path }, { path = path, generation = mine },
@@ -119,7 +125,7 @@ end
 --- @param buf number
 function M.forget(buf)
     M.clear(buf)
-    generation[buf], pending[buf], announced[buf] = nil, nil, nil
+    generation[buf], pending[buf], announced[buf], hooked[buf] = nil, nil, nil, nil
 end
 
 return M

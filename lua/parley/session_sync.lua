@@ -326,6 +326,7 @@ local function reload(buf)
     window_views.restore(buf, views)
 	state[buf].probed = nil
 	probe(buf)
+	require("parley.edit_round").refresh(buf) -- the write is usually the agent's round (#383)
 end
 
 -- Whole minutes the owner has owed a response, or nil when nothing is owed.
@@ -684,6 +685,7 @@ M.attach = function(buf, identity, observed)
             if event.event == "FileChangedShellPost" then
                 native_reads[buf] = nil
                 if s.views then window_views.restore(buf, s.views); s.views = nil end
+                require("parley.edit_round").refresh(buf)
             end
             if s.moving then return end
             s.loaded = disk_mtime(buf)
@@ -708,6 +710,7 @@ M.attach = function(buf, identity, observed)
 	s.loaded = disk_mtime(buf)
     refresh(buf)
     restart_idle(buf)
+    require("parley.edit_round").refresh(buf)
     if observed then M.acquire_observed(buf, observed) end
 end
 
@@ -852,6 +855,8 @@ local function release_and_send(buf, owner, callback)
         -- Sent is sent, whatever the engine did meanwhile: record before the
         -- guard. The record is optional work on this path, so it can't throw.
         if obj.code == 0 then
+            -- The operator answered the agent's round (#383).
+            require("parley.edit_round").clear(buf)
             local recorded, why = pcall(attention.record, path, breadcrumb, obj)
             if not recorded then notify("attention: the submit was not tracked: " .. tostring(why), vim.log.levels.WARN) end
         end
