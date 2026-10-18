@@ -326,6 +326,19 @@ processes one 1MB mcode area (catastrophic on the old allocator, so gated).
 `PARLEY_TEST_JITSTAT=1 make test` prints each spec process's LuaJIT VM states
 and trace flushes (`tests/helpers/jit_watch.lua`), grandchildren included.
 
+**Supported versions and the compat pass (#379).** Parley supports Neovim 0.11
+or newer. `lua/parley/version_support.lua` owns that minimum, and `setup()` on
+an older editor refuses with one message. Preferring 0.12 for speed must not
+hide a break that only the operator's editor has. #373's binary SHA-256 hash
+failed on 0.11 alone, with the 0.12 suite green. So `make test` ends with
+`test-compat`: when the first `nvim` on PATH (`scripts/test-nvim.sh
+--installed`) reports a different version from the preferred runtime, it reruns
+`test-unit` and `test-integration` on it, and any failure fails `make test` and
+the recorded suite. An installed editor below the minimum fails with
+`version_support`'s refusal (`--supported`). It is skipped when the versions
+match or no nvim is on PATH. Measured cost: about 160 s for 0.11.7 on arm64,
+about the same as the preferred pass, in the same machine suite slot.
+
 ### Predicate waits take the arrival budget (#370, #374)
 
 A positive wait returns the moment its outcome arrives, so its bound costs a

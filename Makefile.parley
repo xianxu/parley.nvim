@@ -1,7 +1,7 @@
 # Parley-specific targets (Lua/Neovim plugin) — include from your project Makefile:
 #   include Makefile.parley
 
-.PHONY: help-parley test test-unit test-integration test-spec test-changed perf perf-finder lint fixtures goldens model-check model-checker test-clean-env
+.PHONY: help-parley test test-unit test-integration test-compat test-spec test-changed perf perf-finder lint fixtures goldens model-check model-checker test-clean-env
 
 help-parley:
 	@printf '%s\n' \
@@ -88,6 +88,22 @@ test:
 	@$(MAKE) --no-print-directory lint
 	@$(MAKE) --no-print-directory test-unit
 	@$(MAKE) --no-print-directory test-integration
+	@$(MAKE) --no-print-directory test-compat
+
+# #379: the suite above runs the nvim test-nvim.sh prefers (0.12 for its LuaJIT
+# fix), but the operator edits with whatever is first on PATH. When that is a
+# different version, run unit and integration again on it, so a break that only
+# the installed editor has fails `make test` (and the recorded suite). An
+# installed editor below version_support.MINIMUM fails with its refusal.
+# Skipped when the versions match or no nvim is on PATH.
+test-compat:
+	@installed="$$(scripts/test-nvim.sh --installed)"; preferred="$$(scripts/test-nvim.sh)"; \
+	if [ -z "$$installed" ] || [ -z "$$preferred" ]; then echo "compat: no installed nvim to compare; skipped"; exit 0; fi; \
+	iv="$$("$$installed/nvim" --version | head -1)"; pv="$$("$$preferred/nvim" --version | head -1)"; \
+	if [ "$$iv" = "$$pv" ]; then echo "compat: the installed $$iv is the runtime tested above; skipped"; exit 0; fi; \
+	scripts/test-nvim.sh --supported "$$installed" || { echo "compat: the installed nvim ($$installed) is unsupported" >&2; exit 1; }; \
+	echo "compat: also testing the installed $$iv ($$installed/nvim)"; \
+	PARLEY_TEST_NVIM="$$installed/nvim" $(MAKE) --no-print-directory test-unit test-integration
 
 # Number of parallel test processes (override with JOBS=N).
 JOBS ?= 8

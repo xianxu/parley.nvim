@@ -7,6 +7,12 @@
 #
 # PARLEY_TEST_NVIM=/path/to/nvim overrides the search. Warnings go to stderr;
 # stdout is only the directory, or nothing when no nvim is found.
+#
+# #379, for make test's compat pass:
+#   --installed      print the directory of the nvim the operator launches (the
+#                    first on PATH), ignoring PARLEY_TEST_NVIM; nothing if none.
+#   --supported DIR  exit 0 when DIR/nvim meets parley.version_support.MINIMUM,
+#                    else print its refusal to stderr and exit 1.
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
 has_mcode_fix() {
@@ -15,6 +21,18 @@ has_mcode_fix() {
         -c 'lua io.stdout:write(require("tests.helpers.jit_tuning").has_mcode_fix(jit.version) and "yes" or "no")' \
         -c 'qa!' 2>/dev/null | grep -q '^yes$'
 }
+
+case "$1" in
+    --installed)
+        installed=$(command -v nvim) && dirname "$installed"
+        exit 0 ;;
+    --supported)
+        PARLEY_ROOT="$ROOT" "$2/nvim" --clean --headless \
+            -c 'lua package.path = vim.env.PARLEY_ROOT .. "/lua/?.lua;" .. package.path' \
+            -c 'lua local s = require("parley.version_support"); if not s.supported(vim.version()) then io.stderr:write(s.refusal(vim.version()) .. "\n"); vim.cmd("cquit 1") end' \
+            -c 'qa!'
+        exit $? ;;
+esac
 
 if [ -n "$PARLEY_TEST_NVIM" ]; then
     dirname "$PARLEY_TEST_NVIM"

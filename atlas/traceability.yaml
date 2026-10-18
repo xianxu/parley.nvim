@@ -705,6 +705,7 @@ atlas:
       - tests/helpers/jit_tuning.lua
       - tests/helpers/reachability.lua
       - scripts/test-nvim.sh
+      - lua/parley/version_support.lua
       - tests/helpers/fixture_process.lua
       - tests/helpers/exit_with_parent.lua
       - scripts/reap-test-orphans.py
@@ -717,6 +718,7 @@ atlas:
       - tests/perf/chat_typing.lua
     tests:
       - tests/unit/test_isolation_spec.lua
+      - tests/unit/version_support_spec.lua
       - tests/integration/test_isolation_spec.lua
       - tests/unit/golden_fixture_spec.lua
       - tests/integration/fresh_clone_spec.lua

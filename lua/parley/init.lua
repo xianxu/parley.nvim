@@ -540,6 +540,13 @@ M._setup_called = false
 ---@param opts the one returned from config.lua, it can come from several sources, either fully specified
 ---            in ~/.config/nvim/lua/parley/config.lua, or partially overrides from ~/.config/nvim/lua/plugins/parley.lua
 M.setup = function(opts)
+	-- #379: an editor older than the supported minimum gets one clear refusal
+	-- instead of failing later in whatever API it lacks.
+	local version_support = require("parley.version_support")
+	if not version_support.supported(vim.version()) then
+		vim.notify(version_support.refusal(vim.version()), vim.log.levels.ERROR)
+		return
+	end
 	M._setup_called = true
 
 	math.randomseed(os.time())

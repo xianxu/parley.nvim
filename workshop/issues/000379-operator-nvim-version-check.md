@@ -51,10 +51,10 @@ Measured first, on this branch's base 5ebffb3dd7d39dd168d19dc167ead22fb00c8dc0, 
 **Policy.** Neovim 0.11 or newer is supported, which is what `packaging/starter-config/README.md` already promises. The operator's editor is 0.11.7 (`/opt/homebrew/bin/nvim` is the pinned `nvim-0.11` keg). The tests keep preferring 0.12 for its LuaJIT mcode fix (#294).
 
 **Changes.**
-- [ ] `scripts/test-nvim.sh --installed` prints the directory of the nvim the operator actually launches, the first `nvim` on PATH outside the test environment, and stays silent when there is none. The existing no-flag output (the preferred runtime) is unchanged (ARCH-DRY: one script owns runtime discovery).
-- [ ] `make test` gains a compat pass. After the preferred-runtime unit and integration runs, if the installed nvim reports a different `--version` line, it runs `test-unit` and `test-integration` again with `PARLEY_TEST_NVIM` set to that binary. The pass announces itself ("compat: also testing the installed NVIM v0.11.7"), and a failure there fails `make test`, so the recorded `sdlc-local/suite` covers both runtimes. If the installed version is below the supported minimum, `make test` fails with that diagnostic.
-- [ ] A pure `parley.version_support` module with `supported(version_table)` and a `MINIMUM = {0, 11, 0}` constant, plus a unit spec. `parley.setup()` on an older editor notifies "parley needs Neovim 0.11 or newer (this is X)" and returns before anything is installed. The compat pass reads the same constant by asking the installed nvim to evaluate it (ARCH-DRY).
-- [ ] Docs: `TOOLING.md` and `atlas/infra/test_harness.md` ("Which Neovim the tests run") describe the supported versions, the compat pass and its cost. The README's requirements line points to them.
+- [x] `scripts/test-nvim.sh --installed` prints the directory of the nvim the operator actually launches, the first `nvim` on PATH outside the test environment, and stays silent when there is none. The existing no-flag output (the preferred runtime) is unchanged (ARCH-DRY: one script owns runtime discovery).
+- [x] `make test` gains a compat pass. After the preferred-runtime unit and integration runs, if the installed nvim reports a different `--version` line, it runs `test-unit` and `test-integration` again with `PARLEY_TEST_NVIM` set to that binary. The pass announces itself ("compat: also testing the installed NVIM v0.11.7"), and a failure there fails `make test`, so the recorded `sdlc-local/suite` covers both runtimes. If the installed version is below the supported minimum, `make test` fails with that diagnostic.
+- [x] A pure `parley.version_support` module with `supported(version_table)` and a `MINIMUM = {0, 11, 0}` constant, plus a unit spec. `parley.setup()` on an older editor notifies "parley needs Neovim 0.11 or newer (this is X)" and returns before anything is installed. The compat pass reads the same constant by asking the installed nvim to evaluate it (ARCH-DRY).
+- [x] Docs: `TOOLING.md` and `atlas/infra/test_harness.md` ("Which Neovim the tests run") describe the supported versions, the compat pass and its cost. The README's requirements line points to them.
 
 **Detection proof.** On main today, the compat pass goes red on exactly the five E976 specs, so the 0.12 choice can no longer hide the class. After #373 lands, it goes green.
 
@@ -72,3 +72,11 @@ Measured first, on this branch's base 5ebffb3dd7d39dd168d19dc167ead22fb00c8dc0, 
 ### 2026-10-17
 
 Filed unclaimed on TL instruction (receipt 4b20a07a-3975-44a4-8087-b941a0d31569). Evidence: PATH /opt/homebrew/bin/nvim reports NVIM v0.11.7; the selected suite runtime /opt/homebrew/opt/neovim/bin/nvim is 0.12.5. Recorded #373 suite eea1accf42a3e8bb2066abb9742ce90a3b5d2c0f passed, exit 0 in 2m20s, log SHA256 prefix b0d48b081b89. Real profile /Users/xianxu/.config/parley with staged runtime failed at document_lease.lua:106 hashing the NUL-delimited budget namespace. Stage cleared, disposable registry entry forgotten, scratch removed. No credential changes or real-document edits.
+- The TL approved the plan and the sequencing: build now, and run the recorded suite only after #373 has landed and been integrated.
+- Built.
+  - `lua/parley/version_support.lua` holds the MINIMUM 0.11.0 constant, `supported` and `refusal`. Its unit spec has 5 cases, including setup() refusing on 0.10.4 with nothing installed.
+  - `scripts/test-nvim.sh` gained `--installed` and `--supported DIR`. Checked by mutation: with MINIMUM raised to 0.12, `--supported` refuses 0.11.7 with "parley needs Neovim 0.12.0 or newer (this is 0.11.7)" and exits 1.
+  - `make test` ends with `test-compat`. It skips when the preferred runtime is the installed one, or when there is no nvim on PATH; both paths were checked.
+  - Docs: README, TOOLING.md, atlas/infra/config.md and test_harness.md. traceability.yaml maps the new module and spec.
+- Running `make test-compat` alone skips the machine suite lock, which is taken only for the `test` goal. The real check therefore goes through `make test`, and TOOLING.md says so.
+- Filed #381 (unclaimed) for the hardcoded `/tmp` in review_protocol_export_test.py.
