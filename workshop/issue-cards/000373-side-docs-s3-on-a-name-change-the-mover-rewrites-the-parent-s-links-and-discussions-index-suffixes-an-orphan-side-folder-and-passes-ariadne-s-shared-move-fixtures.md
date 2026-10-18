@@ -1,6 +1,6 @@
 ---
 id: 000373
-status: codecomplete
+status: done
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours: 5.53
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 2af674c93083b7e2253ba0fd6d45991a07a87e3a
         evidence_commit: 404bc5d055051367661997e4b8d8dad0862c69b3
+        landed_commit: 4bd385ddf3bd2aafbedf1ec185185162219bf0b9
 ---
 
 # side docs S3: on a name change the mover rewrites the parent's links and discussions index, suffixes an orphan .side folder, and passes ariadne's shared move fixtures
