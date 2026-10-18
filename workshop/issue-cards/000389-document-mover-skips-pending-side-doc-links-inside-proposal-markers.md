@@ -1,6 +1,6 @@
 ---
 id: 000389
-status: working
+status: codecomplete
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.08
+tracker:
+    version: 1
+    completion:
+        token: close-ce8334e4b27f
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 2e5e9b73518ef4d5f95051c1e43bcb37e9b710e2
+        evidence_commit: ac274005470eb21a2254b68db05cbde98c8fcd75
 ---
 
 # Document mover skips pending side-doc links inside proposal markers
