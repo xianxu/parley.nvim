@@ -1,6 +1,6 @@
 ---
 id: 000379
-status: working
+status: codecomplete
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.42
+tracker:
+    version: 1
+    completion:
+        token: close-79520995e2ca
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 3f6ec81426a78f71a94b976be4632feb55899547
+        evidence_commit: 9c522b705159951620ec7807afe7bdd5673783a1
 ---
 
 # Check operator Neovim compatibility
