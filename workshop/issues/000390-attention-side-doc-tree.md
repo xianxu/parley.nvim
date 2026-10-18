@@ -50,6 +50,7 @@ No durable state or new actions: existing open/select/type/Ctrl+A continue. A mi
 ## Log
 
 ### 2026-10-18 — implementation and red/green
+- 2026-10-18: closed — BR-1: four new descendant-cycle regression cases fail the reviewed code and pass the correction (self-cycle, multi-node cycle, nested tails, N/2N bound); 321 focused cases pass on each Neovim 0.12.5 and stock 0.11.7, lint 805 files clean. Prior disposable real operator-profile 0.11.7 check passed root order, nesting, ancestor search, scoped orphan reattachment and Ctrl+A query retention; scratch removed and :0 clean exactly origin/main 04076256. Fresh recorded suite scheduled on 75e98e4e, mandatory before landing; prior queued run cancelled before execution. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 Added tests failed the original flat implementation for grouping, nesting,
 cycles, ancestor search and counted traversal. Pure rows now build a forest
