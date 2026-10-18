@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "f6bef676", done: "7bc14e9a"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Edit rendering: subtle changed-span highlight; show full 🤖 marker text and links
@@ -72,6 +72,10 @@ Steps:
 
 ## Log
 
+
+
+- 2026-10-18: closed — sdlc-local/suite green on 0b8c2fa1 (4m49s). BR-1 fixed as a class: highlight_groups.keep registry, all six group-defining modules registered, guard spec refuses an unregistered module. Earlier evidence: specs for comment view/attach/render, skill_render spans, round group, highlight_groups (underline default, config override, survives :colorscheme twice). Backup-copy mutations of the ColorScheme autocmd fail the colorscheme case. attention_finder typeahead failed once in a loaded focused run and passed 3/3 alone and in this suite; no issue filed since no recorded suite failed. BR-2 Minor left: the three offset converters take different inputs.; review verdict: SHIP
+- 2026-10-18: flow upgraded quick → full — 125 added lines in code files (limit 100)
 - 2026-10-18: plan sent to the hub; Q1 underline and Q2 (markdown 0, chat 2) approved. The hub asked for one line in the README and in the QA answer saying links in chats stay concealed, and why. The QA answer is in ops (the hub's tree), so its line goes to the hub in the report instead of an edit there.
 - Finding: chat buffers stop treesitter unless `chat_treesitter = true` (#294, default false), so markdown links in chats already show in full by default. Only parley's own branch links and model params conceal there. The README line says that, and that `chat_treesitter = true` conceals them.
 - Finding (ARCH-PURPOSE, class not site): no parley highlight group survived `:colorscheme`, which runs `:hi clear`, not only `ParleyAgentChange`. A `ColorScheme` autocmd re-runs the definers. Its callback returns nothing, because `setup_highlights` returns the namespace id and a truthy callback return deletes an autocmd. tests/integration/highlight_groups_spec.lua covers it. Backup-copy mutations, removing the autocmd and passing `M.setup_highlights` bare, each fail the colorscheme case.

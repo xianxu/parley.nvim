@@ -91,3 +91,97 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"949630c7-4702-4875-acb5-5819e1c4591b","repository":"github.com/xianxu/parley.nvim","issue_id":"000386","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/f504c4f5485847b2","reviewed_head":"248e11d528ccc8ea5f7c95405bcbe819e2c49355","slot":"parley.nvim:3","requested_at":"2026-10-18T16:56:55.994632Z"},"phase":"finished","pid":72299,"started_at":"2026-10-18T16:56:56.088222Z","finished_at":"2026-10-18T17:08:59.135896Z","session_id":"0e8e8fb0-5cab-4066-90eb-9a979136c9af","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-18T10:42:36-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 386 — Edit rendering: subtle changed-span highlight; show full 🤖 marker text and links |
+| repo | parley.nvim |
+| issue file | workshop/issues/000386-edit-rendering-subtle-changed-span-highlight-show-full-marker-text-and-links.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 998cde19c99d8d15d45b98e6edee98229ca3e637..0b8c2fa14d28084ae98bc18d93956c8f5a58ba97 |
+| command | sdlc close --issue 386 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | fenced |
+| timestamp | 2026-10-18T10:42:36-07:00 |
+| verdict | SHIP |
+
+## Review
+
+BR-1 looks fixed. Now I'm checking the skill_render and comment-view changes, then I'll run the tests.
+
+Running the touched spec files now.
+
+Running the full unit and integration suites through make.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The fix for BR-1 holds, and it covers the whole class rather than one site. The new `lua/parley/highlight_groups.lua` `keep(name, define)` registry is the single owner of the `ColorScheme` re-run. All six modules that set a Parley group now register with it: highlighter, session_sync, attention, issue_tracker, float_picker and diag_display. A guard spec fails if a module sets a Parley group without registering. I grepped every `nvim_set_hl` in `lua/` and found no unregistered Parley group; the only ones outside the registry are the theme's `Search` and the `@markup.strikethrough` clears. The rest of the issue matches the Spec and Plan. `skill_render` marks only the changed span with `ParleyEditChange`. No whole-line `DiffChange`, `hl_lines`, `highlight_line` or `ParleyAgentChange` is left in `lua/`. `view.layout` no longer hides anything, and the snap and `concealcursor` forcing are gone. `comment.attach` takes the buffer kind: markdown 0, chat 2. The unit suite is green. In `make test-integration`, eight files fail: `scratch_placement`, `zero_config`, `starter_*`, `file_history`, `open_reference`, `fresh_clone` and `entity_textobj`. The failures I could see in `scratch_placement`, `zero_config` (the chat landed under `workshop/parley/` instead of the default dir), `starter_*`, `file_history` and `open_reference` all trace to this review checkout's location: its scratch sits inside the repo tree, under `.sdlc-review/tmp`. I didn't get failure output for `fresh_clone` or `entity_textobj`; their failing set changed between runs. None of the eight specs mention conceal, `ParleyEditChange`, `highlight_groups` or comments. I didn't check whether they also fail at base. Nothing blocks SHIP.
+
+1. **Strengths**
+   - `lua/parley/highlight_groups.lua:15`: the registry is keyed by module name, so registering again replaces the old definer and nothing grows. It holds one augroup, and the callback returns nothing, which avoids the "truthy return deletes the autocmd" trap.
+   - `tests/integration/highlight_groups_spec.lua`: a class guard over `lua/parley/**/*.lua` checks that the rule holds, not just one instance of it. It also tests that a replaced definer stops running.
+   - Removing the duplicate `ParleyPickerApproximateMatch` from `init.lua` fixes a real bug: it ran after `setup_highlights` and overrode `highlight.approximate_match`.
+   - `skill_render.lua:263-280`: `highlight_edits` now marks one exact span and still skips pure deletions. `snapshot` and `apply_snapshot` keep only spans. The comment-module cleanup also removed state: `prev_col`, the `parley_cc_*` window variables and the comment augroup are gone.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - BR-2 (offset-to-(row, col) helpers) is still open; see the disposition below.
+   - `README.md:112` says users can restyle edits through "the `ParleyEditChange` group". But `setup_highlights` sets the group without `default = true` and re-runs on every `ColorScheme`, so a plain `:hi ParleyEditChange` is overwritten at the next `:colorscheme`. The README should point users to `highlight.edit_change`, which is what the Log already says.
+   - The guard checks per file, not per definer: a file with two definers passes if it registers only one. That's acceptable for now.
+   - `highlighter.disable_strikethrough` clears `@markup.strikethrough` once, so a later `:colorscheme` can bring strikethrough back. This predates the issue and isn't a Parley group, but it's a nearby gap.
+
+5. **Test coverage**
+   - Specs cover:
+     - span-only marking, including multi-row edits;
+     - the round group;
+     - surviving `:colorscheme` twice;
+     - the config override;
+     - `keep` replacing a definer;
+     - the registration guard.
+   - No spec shows a session-sync band keeping its color after `:colorscheme`. The guard covers this structurally.
+
+6. **Architecture (one line per principle)**
+   - **ARCH-DRY:** pass. One registry replaces the per-module autocmds. BR-2 remains (Minor).
+   - **ARCH-PURE:** pass. `position_of` is pure. The rendering code was already a thin layer over the vim API.
+   - **ARCH-PURPOSE:** pass. Every module that defines groups now goes through `keep`, and the guard enforces it.
+   - **ARCH-MOCK:** N/A. There are no external binaries or services.
+   - **ARCH-CONSTRAINTS:** pass. The definers run once per `:colorscheme`, and there are only six.
+   - **ARCH-SECURE:** N/A. Nothing reads untrusted input or touches secrets.
+   - **ARCH-ORDER:** pass. The diff removed cross-event cursor and concealcursor state. The registry is a name → function map, and the order definers run in doesn't matter because no definer depends on another.
+   - **ARCH-FUNERAL:** pass. The registry is bounded by module count, keeps one augroup, and writes nothing durable.
+
+7. **Plan revisions:** none needed. The Log already records the registry and BR-2's deferral.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      highlight_groups.keep is registered by all six group-defining modules (grep of nvim_set_hl in lua/ confirms); the guard spec in highlight_groups_spec fails for any unregistered module; the atlas text matches.
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      position_of (skill_render.lua:251) is still a third local offset-to-(row, col) converter; the deferral is reasonable for a Minor and does not block.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: override-through-config
+    title: |
+      README says restyle via the ParleyEditChange group, but setup_highlights overwrites it on every ColorScheme
+    detail: |
+      highlighter.lua:677 sets ParleyEditChange without default=true and re-runs it on ColorScheme through highlight_groups.keep, so a user's direct :hi ParleyEditChange is lost at the next :colorscheme. README.md:112 should point to highlight.edit_change only, which is what the Log already says.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e51952ae-19db-4cd6-aa1f-e6a59386e434","repository":"github.com/xianxu/parley.nvim","issue_id":"000386","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/05d9485f170113c2","reviewed_head":"0b8c2fa14d28084ae98bc18d93956c8f5a58ba97","slot":"parley.nvim:3","requested_at":"2026-10-18T17:22:38.991115Z"},"phase":"finished","pid":92085,"started_at":"2026-10-18T17:22:39.087806Z","finished_at":"2026-10-18T17:42:36.283883Z","session_id":"242c8302-de3c-40f2-a032-2dd0edaf5ce3","outcome":"returned"}] -->
