@@ -182,6 +182,69 @@ describe("attention finder", function()
         vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<Esc>", "n", false, true).callback() end)
     end)
 
+    it("searches nested children with ancestors and keeps scope through late updates", function()
+        local parent, child, leaf, other = submitted("parent.md", "p"), submitted("child.md", "c"),
+            submitted("+++leaf.md", "l"), submitted("unrelated.md", "o")
+        -- Same stored identity/state as discovered side docs, plus one owed leaf for repaint.
+        local state = Store.load()
+        state.entries[parent].slot, state.entries[child].slot, state.entries[leaf].slot = "ops:0", "ops:0", "ops:0"
+        state.entries[child].kind, state.entries[child].parent = "side", parent
+        state.entries[leaf].kind, state.entries[leaf].parent = "side", child
+        state.entries[other].slot = "echo:0"
+        assert(require("parley.helper").table_to_file_atomic(state, Store.path()))
+        local held, refreshed, opened = {}, false, nil
+        Attention.open({ store = { now = now }, own_slot = function(cb) cb({}, { Binding = { Slot = "ops:0" } }) end,
+            run = function(argv, cb) held[argv[#argv]] = cb end, on_refreshed = function() refreshed = true end,
+            on_selected = function() opened = vim.api.nvim_buf_get_name(0) end })
+        local prompt = vim.api.nvim_get_current_buf()
+        local function rows()
+            for _, win in ipairs(vim.api.nvim_list_wins()) do
+                local cfg, buf = vim.api.nvim_win_get_config(win), vim.api.nvim_win_get_buf(win)
+                if cfg.relative ~= "" and vim.bo[buf].buftype ~= "prompt" then
+                    return vim.tbl_filter(function(l) return l:match("%S") end, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+                end
+            end
+        end
+        assert.equals(3, #rows())
+        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> +++" })
+        vim.api.nvim_exec_autocmds("TextChanged", { buffer = prompt })
+        assert.equals(3, #rows())
+        assert.matches("parent.md", rows()[1])
+        assert.matches("child.md", rows()[2])
+        assert.matches("^     waiting", rows()[3]) -- picker adds one selection column
+        for _ = 1, 2 do
+            vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<Down>", "i", false, true).callback() end)
+        end
+        vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<C-a>", "i", false, true).callback() end)
+        assert.equals(3, #rows()) -- unrelated row still does not match
+        for _, cb in pairs(held) do cb({ Status = { Owed = {} } }) end
+        await(function() return refreshed end, "tree repaint did not finish")
+        assert.equals(3, #rows())
+        assert.equals("> +++", vim.api.nvim_buf_get_lines(prompt, 0, 1, false)[1])
+        vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<CR>", "i", false, true).callback() end)
+        await(function() return opened ~= nil end, "selected tree child never opened")
+        assert.equals(leaf, opened)
+    end)
+
+    it("promotes a child when scope hides its parent and reattaches it in all slots", function()
+        local parent, child = submitted("parent.md", "p"), submitted("child.md", "c")
+        local state = Store.load()
+        state.entries[parent].slot = "echo:0"
+        state.entries[child].slot, state.entries[child].kind, state.entries[child].parent = "ops:0", "side", parent
+        assert(require("parley.helper").table_to_file_atomic(state, Store.path()))
+        local picker = fake_picker()
+        open({ picker = picker, own_slot = function(cb) cb({}, { Binding = { Slot = "ops:0" } }) end })
+        assert.equals(1, #picker.items)
+        assert.matches("^waiting", picker.items[1].display)
+        picker.opened.mappings[1].fn()
+        assert.equals(parent, picker.items[1].value)
+        assert.equals(child, picker.items[2].value)
+        assert.matches("^  waiting", picker.items[2].display)
+        picker.opened.mappings[1].fn()
+        assert.equals(1, #picker.items)
+        assert.matches("^waiting", picker.items[1].display)
+    end)
+
     it("lists entries at once, then shows a folded submit as answered", function()
         submitted("a.md", "m1")
         now = 1001
@@ -492,7 +555,7 @@ describe("attention finder: side docs the agent wrote", function()
         now = 2100
         local picker = fake_picker()
         open({ picker = picker })
-        assert.same({ "answered ↳ 01-answer.md  ~/a.side", "waiting    a.md  ~" }, picker.rows())
+        assert.same({ "waiting    a.md  ~", "answered ↳ 01-answer.md  ~/a.side" }, picker.rows())
         assert.equals(a, Store.load().entries[doc].parent)
         -- Opened from the finder: seen; past the grace: gone, and not rediscovered.
         apply({ type = "opened", path = doc })
@@ -533,12 +596,12 @@ describe("attention finder: side docs the agent wrote", function()
         vim.cmd("enew")
         local picker = fake_picker()
         open({ picker = picker })
-        assert.same({ "seen     ↳ 01-answer.md  ~/a.side", "waiting    a.md  ~" }, picker.rows())
+        assert.same({ "waiting    a.md  ~", "seen     ↳ 01-answer.md  ~/a.side" }, picker.rows())
         -- The agent rewrites it: answered again.
         side(a, "01-answer.md", DOC, 3000)
         picker = fake_picker()
         open({ picker = picker })
-        assert.same({ "answered ↳ 01-answer.md  ~/a.side", "waiting    a.md  ~" }, picker.rows())
+        assert.same({ "waiting    a.md  ~", "answered ↳ 01-answer.md  ~/a.side" }, picker.rows())
         -- Seen, then past the grace: retired; a later agent write brings it back.
         now = 3100
         apply({ type = "opened", path = doc })
@@ -548,7 +611,7 @@ describe("attention finder: side docs the agent wrote", function()
         side(a, "01-answer.md", DOC, now + 10)
         picker = fake_picker()
         open({ picker = picker })
-        assert.same({ "answered ↳ 01-answer.md  ~/a.side", "waiting    a.md  ~" }, picker.rows())
+        assert.same({ "waiting    a.md  ~", "answered ↳ 01-answer.md  ~/a.side" }, picker.rows())
         assert.is_nil(Store.load().retired[doc])
         Attention.clock = clock
         pcall(vim.api.nvim_del_augroup_by_name, "ParleyAttentionViews")

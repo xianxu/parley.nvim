@@ -569,6 +569,7 @@ end
 --- @param opts table:
 ---   title      string   – window title (shown on results window)
 ---   items      table    – list of { display: string, value: any, search_text?: string }
+---   filter_items function(items, query, score) -> items (optional); contextual filtering
 ---   initial_query string – initial prompt text used to pre-filter items (optional)
 ---   width      number   – desired window width  (optional, content-driven by default)
 ---   height     number   – desired results height (optional, #items by default)
@@ -1193,7 +1194,9 @@ function M.open(opts)
 
     local function apply_filter(reset_selection)
         local query = query_text:gsub("^%s+", "")
-        if query == "" then
+        if opts.filter_items then
+            filtered = vim.deepcopy(opts.filter_items(items, query, M._fuzzy_score))
+        elseif query == "" then
             filtered = vim.deepcopy(items)
         else
             local scored = {}

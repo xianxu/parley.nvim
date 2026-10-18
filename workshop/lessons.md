@@ -842,3 +842,7 @@ The first ColorScheme fix re-ran only `setup_highlights`, while the atlas said "
   any word token. Pin negative and positive scorer results on an adversarial
   path before asserting picker row counts; #388 reproduced the old failure
   deterministically without changing the timeout or production matcher.
+
+- #390: Cycle recovery in a parent forest must start within the cycle, not at
+  the first unvisited descendant. Test reverse-ordered tails entering self and
+  multi-node cycles, including ancestor-search context and linear traversal.

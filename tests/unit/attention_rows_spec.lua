@@ -39,3 +39,114 @@ describe("attention_rows.items", function()
         assert.same({ "/x/new.md", "/x/old.md" }, vim.tbl_map(function(item) return item.value end, items))
     end)
 end)
+
+
+describe("attention tree rows", function()
+    local function side(path, parent) return entry(path, { kind = "side", parent = parent }) end
+    local function values(items) return vim.tbl_map(function(i) return i.value end, items) end
+
+    it("groups nested children under parents, retaining root and sibling order", function()
+        local input = { side("/grand.md", "/child.md"), entry("/new.md"), side("/child.md", "/old.md"),
+            side("/sibling.md", "/old.md"), entry("/old.md"), side("/orphan.md", "/missing.md") }
+        local before = vim.deepcopy(input)
+        local rows = Rows.items(input, options)
+        assert.same({ "/new.md", "/old.md", "/child.md", "/grand.md", "/sibling.md", "/orphan.md" }, values(rows))
+        assert.matches("^  answered", rows[3].display)
+        assert.matches("^    answered", rows[4].display)
+        assert.matches("^answered", rows[6].display)
+        assert.equals("/old.md", rows[3].parent_value)
+        assert.equals("/child.md", rows[4].parent_value)
+        assert.same(before, input)
+    end)
+
+    it("breaks cycles and self-parents without losing or duplicating entries", function()
+        local rows = Rows.items({ side("/a", "/b"), side("/b", "/a"), side("/self", "/self") }, options)
+        assert.same({ "/a", "/b", "/self" }, values(rows))
+        assert.is_nil(rows[1].parent_value)
+        assert.equals("/a", rows[2].parent_value)
+        assert.is_nil(rows[3].parent_value)
+    end)
+
+    for _, shape in ipairs({
+        { name = "self-cycle child", input = { { "leaf", "a" }, { "a", "a" } }, order = { "a", "leaf" } },
+        { name = "multi-node cycle child", input = { { "leaf", "a" }, { "a", "b" }, { "b", "a" } },
+            order = { "a", "leaf", "b" } },
+        { name = "nested cycle descendants", input = { { "leaf", "child" }, { "child", "a" }, { "a", "b" }, { "b", "a" } },
+            order = { "a", "child", "leaf", "b" } },
+    }) do
+        it("preserves parentage and search context for a " .. shape.name, function()
+            local input = {}
+            for _, pair in ipairs(shape.input) do input[#input + 1] = side("/" .. pair[1], "/" .. pair[2]) end
+            local rows = Rows.items(input, options)
+            local expected = vim.tbl_map(function(name) return "/" .. name end, shape.order)
+            assert.same(expected, values(rows)) -- also proves every entry appears exactly once
+            local by_value = {}
+            for _, row in ipairs(rows) do by_value[row.value] = row end
+            assert.is_nil(by_value["/a"].parent_value)
+            for _, pair in ipairs(shape.input) do
+                if pair[1] ~= "a" then assert.equals("/" .. pair[2], by_value["/" .. pair[1]].parent_value) end
+            end
+            local context = #shape.input == 4 and { "/a", "/child", "/leaf" } or { "/a", "/leaf" }
+            assert.same(context, values(Rows.filter(rows, "leaf", function(_, text)
+                return text:match("^leaf ") and 1 or nil
+            end)))
+        end)
+    end
+
+    it("bounds cycle recovery with newest descendants at N and 2N", function()
+        for _, n in ipairs({ 16, 32 }) do
+            local input, reads = {}, 0
+            for i = n, 1, -1 do
+                local parent = "/" .. (i == 1 and 1 or i - 1)
+                input[#input + 1] = setmetatable(entry("/" .. i, { kind = "side" }), {
+                    __index = function(_, key) if key == "parent" then reads = reads + 1; return parent end end,
+                })
+            end
+            local rows = Rows.items(input, options)
+            assert.equals(n, #rows)
+            assert.is_true(reads <= 4 * n, "cycle parent walks repeated")
+            local roots = 0
+            for _, row in ipairs(rows) do if not row.parent_value then roots = roots + 1 end end
+            assert.equals(1, roots)
+            local found = Rows.filter(rows, "leaf", function(_, text) return text:match("^" .. n .. " ") and 1 end)
+            assert.equals(n, #found)
+        end
+    end)
+
+    it("retains matching descendants and ancestors once in tree order", function()
+        assert.is_function(Rows.filter)
+        local rows = Rows.items({ entry("/root"), side("/child", "/root"), side("/leaf", "/child"),
+            side("/sibling", "/root"), entry("/other") }, options)
+        local score = function(_, text) return text:find("leaf", 1, true) and 10 or nil end
+        assert.same({ "/root", "/child", "/leaf" }, values(Rows.filter(rows, "leaf", score)))
+        assert.same({}, Rows.filter(rows, "none", function() return nil end))
+        assert.same(values(rows), values(Rows.filter(rows, "", function() error("empty query scored") end)))
+    end)
+
+    it("bounds layout parent reads and query scoring at N and 2N", function()
+        assert.is_function(Rows.filter)
+        for _, n in ipairs({ 16, 32 }) do
+            local entries, reads, calls = {}, 0, 0
+            for i = n, 1, -1 do
+                local parent = i > 1 and ("/" .. (i - 1)) or nil
+                entries[#entries + 1] = setmetatable(entry("/" .. i, { kind = "side" }), {
+                    __index = function(_, key) if key == "parent" then reads = reads + 1; return parent end end,
+                })
+            end
+            local rows = Rows.items(entries, options)
+            assert.is_true(reads <= 4 * n, "repeated parent scans")
+            local parent_reads = 0
+            for _, row in ipairs(rows) do
+                local parent = row.parent_value
+                row.parent_value = nil
+                setmetatable(row, { __index = function(_, key)
+                    if key == "parent_value" then parent_reads = parent_reads + 1; return parent end
+                end })
+            end
+            local found = Rows.filter(rows, "all", function() calls = calls + 1; return 1 end)
+            assert.equals(n, #found)
+            assert.equals(n, calls)
+            assert.is_true(parent_reads <= n, "ancestor walks repeated retained edges")
+        end
+    end)
+end)
