@@ -830,3 +830,15 @@ The first ColorScheme fix re-ran only `setup_highlights`, while the atlas said "
   Independent full-format patterns for ID and sender can drift when the
   producer changes its grammar. #388's close review recorded this as a minor,
   non-blocking cleanup in attention.record / parse_message_id.
+
+- New picker key knobs belong under a `<picker>_mappings` table, matching
+  the architecture guard for resolver-installed `help_only` actions. Include
+  single_source_sweeps_spec in targeted verification when adding one: key
+  behavior/help tests alone do not enforce its installation declaration.
+
+- A punctuation suffix alone does not make a short fuzzy fixture selective:
+  q+ typo-matches an alphanumeric path token starting q (distance 1).
+  Punctuation-only +++ uses exact subsequence matching and cannot typo-prefix
+  any word token. Pin negative and positive scorer results on an adversarial
+  path before asserting picker row counts; #388 reproduced the old failure
+  deterministically without changing the timeout or production matcher.

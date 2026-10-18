@@ -14,7 +14,8 @@ local p = require("parley")
 local root, registry, saved, warnings, now
 
 local function await(predicate, why)
-    assert.is_true(vim.wait(arrival.MS, predicate, 10), why)
+    local ok = vim.wait(arrival.MS, predicate, 10)
+    assert.is_true(ok, type(why) == "function" and why() or why)
 end
 
 -- Apply `event` to the store at the test clock and wait for it.
@@ -145,7 +146,7 @@ describe("attention finder", function()
     end)
 
     it("resolves the pane with real Couch queries and installs the real picker toggle", function()
-        local a, b = submitted("q+here.md", "m1"), submitted("q+there.md", "m2")
+        local a, b = submitted("+++here.md", "m1"), submitted("+++there.md", "m2")
         apply({ type = "submitted", path = a, id = "m1", slot = "ops:0" })
         apply({ type = "submitted", path = b, id = "m2", slot = "echo:0" })
         vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "scope-attention", "tag-attention"
@@ -169,13 +170,13 @@ describe("attention finder", function()
             end
         end
         assert.equals(1, #rows())
-        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> q+" })
+        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> +++" })
         vim.api.nvim_exec_autocmds("TextChanged", { buffer = prompt })
         local toggle = vim.api.nvim_buf_call(prompt, function() return vim.fn.maparg("<C-a>", "i", false, true).callback end)
         assert.is_function(toggle)
         toggle()
         assert.equals(2, #rows())
-        assert.equals("> q+", vim.api.nvim_buf_get_lines(prompt, 0, 1, false)[1])
+        assert.equals("> +++", vim.api.nvim_buf_get_lines(prompt, 0, 1, false)[1])
         toggle()
         assert.equals(1, #rows())
         vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<Esc>", "n", false, true).callback() end)
@@ -280,12 +281,20 @@ describe("attention finder", function()
 
     -- The real float_picker: a typed filter and the selected row survive a
     -- repaint landing mid-typing, and Enter opens the row the operator chose.
+    it("uses a filter fixture that cannot typo-match a temporary path", function()
+        local picker = require("parley.float_picker")
+        -- The old q+ fixture typo-matches a random path token starting q.
+        assert.is_not_nil(picker._fuzzy_score("q+", "beta.md /tmp/qzfixture"))
+        assert.is_nil(picker._fuzzy_score("+++", "beta.md /tmp/qzfixture"))
+        assert.is_not_nil(picker._fuzzy_score("+++", "+++alpha.md /tmp/qzfixture"))
+    end)
+
     it("keeps the typed filter and the selected row across a live repaint", function()
-        local alpha = submitted("q+alpha.md", "m1")
+        local alpha = submitted("+++alpha.md", "m1")
         now = now + 1
-        local alto = submitted("q+alto.md", "m2")
+        local alto = submitted("+++alto.md", "m2")
         now = now + 1
-        submitted("beta.md", "m3")
+        submitted("qzbeta.md", "m3") -- adversarial: the old q+ query typo-matched this token
         local held = {}
         local opened
         Attention.open({ store = { now = now }, home = root, history = {},
@@ -304,21 +313,24 @@ describe("attention finder", function()
         end
         local _, prompt = float("prompt")
         assert(prompt, "the real picker did not open")
-        -- `+` is in no temp path, so the query cannot match a row by its directory.
-        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> q+" })
+        -- Punctuation-only +++ cannot prefix-match word tokens; no temp path has +.
+        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> +++" })
         vim.api.nvim_exec_autocmds("TextChanged", { buffer = prompt })
-        await(function() return #results() == 2 end, "typeahead did not filter to the two q+ rows")
-        -- Move to the second row (q+alpha.md, the older submit).
+        await(function() return #results() == 2 end, function()
+            return "typeahead did not filter: " .. vim.inspect({ prompt = vim.api.nvim_buf_get_lines(prompt, 0, -1, false),
+                rows = results(), mode = vim.api.nvim_get_mode().mode })
+        end)
+        -- Move to the second row (+++alpha.md, the older submit).
         vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<Down>", "i", false, true).callback() end)
         -- Meanwhile another editor submits a newer matching file (a row lands
-        -- above the cursor on the next repaint) and the agent folds q+alto.md.
+        -- above the cursor on the next repaint) and the agent folds +++alto.md.
         now = now + 1
-        submitted("q+new.md", "m4")
+        submitted("+++new.md", "m4")
         Couch.fold(registry, alto, "m2")
         for _, release in ipairs(held) do release() end
         await(function() return vim.iter(results()):any(function(l) return l:find("answered", 1, true) ~= nil end) end,
             "the fold never repainted the open picker")
-        assert.equals("> q+", vim.api.nvim_buf_get_lines(prompt, 0, 1, false)[1])
+        assert.equals("> +++", vim.api.nvim_buf_get_lines(prompt, 0, 1, false)[1])
         assert.equals(3, #results())
         vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<CR>", "i", false, true).callback() end)
         await(function() return opened ~= nil end, "Enter opened nothing")

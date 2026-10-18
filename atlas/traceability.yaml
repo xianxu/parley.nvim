@@ -1274,6 +1274,7 @@ atlas:
       - tests/integration/attention_record_spec.lua
       - tests/integration/attention_finder_spec.lua
       - tests/unit/keybindings_spec.lua
+      - tests/arch/single_source_sweeps_spec.lua
 
   ui/outline:
     code:

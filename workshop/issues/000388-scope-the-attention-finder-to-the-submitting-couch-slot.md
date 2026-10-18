@@ -56,6 +56,27 @@ Actions: submit, open finder, toggle scope, reopen. Existing waiting/answered/se
 
 ## Log
 
+### 2026-10-18 — first full-suite failure and deterministic fixture diagnosis
+
+Attempt b128ef609d54b16545d71033a29d85f7 completed with 478 PASS files and
+one failure: single_source_sweeps_spec rejected attention.toggle_scope as a
+help_only key outside a _mappings table. No other failure; compatibility was
+not reached because make test stopped after that integration phase. Retained
+.git/sdlc/test-stats/failed/b128ef609d54b16545d71033a29d85f7.log, sha256
+2711aed44af52e5f846373e147de51135a600ef890ddd4cff32c3a1515c2b6cc.
+Corrected the config path to attention_finder_mappings.toggle_scope, keeping
+the guard unchanged and including it in the targeted map.
+
+The targeted fix run separately timed out the existing typeahead fixture.
+Diagnostics led to a deterministic scorer reproduction: q+ matches
+"beta.md /tmp/qzfixture" with score 162 because approximate prefix matching
+accepts qz. Thus a random temp path token starting q admitted the third row;
+it was not slow typeahead. Added a failing scorer fixture, then replaced the
+query and matching filenames with punctuation-only +++. It has no word-token
+prefix match and no subsequence in an alphanumeric temp path. Pinned positive
+and negative scorer cases and an adversarial qzbeta row. No production matcher
+or deadline change; no unrelated-flake retry used. Fresh verification follows.
+
 ### 2026-10-18 — close review SHIP; recorded suite pending
 
 Close round 1 returned SHIP with no blocking findings. The independent
@@ -120,3 +141,13 @@ it now records implemented tests/docs, completed real-profile evidence and the
 scheduled suite. The full recorded pass, close verdict and actual landing stay
 mandatory workflow gates; a checked implementation row does not claim those
 pending results. No scope or behavior change, and no gate exemption requested.
+
+### 2026-10-18 — honor the existing picker-mapping declaration contract
+
+The first recorded full run found the new help_only action declared under
+attention.toggle_scope, which violates the existing _mappings-table guard.
+Move only its configuration path to attention_finder_mappings.toggle_scope,
+retaining the registered Ctrl+A action and behavior. Add that architecture
+spec to the attention targeted map. Do not weaken the guard. This is a small
+correction to the approved implementation, not a new state or mechanism;
+fresh focused tests, a new recorded suite and re-close review precede landing.

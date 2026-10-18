@@ -135,7 +135,7 @@ files it had when you submitted it. A seen entry leaves the list `attention.seen
 [attention finder](atlas/ui/attention_finder.md).
 
 In Couch, the list defaults to submits from this pane’s slot. **Ctrl+A** toggles current/all slots
-(`attention.toggle_scope`); the title shows the scope. Legacy entries without a slot appear everywhere,
+(`attention_finder_mappings.toggle_scope`); the title shows the scope. Legacy entries without a slot appear everywhere,
 and outside Couch the finder shows all slots. A file belongs to its latest submitting slot; new side docs inherit their parent’s slot.
 
 ## Learn by chatting

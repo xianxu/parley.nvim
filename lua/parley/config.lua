@@ -649,6 +649,8 @@ local config = {
 	-- leaves the finder this many minutes later.
 	attention = {
 		seen_grace_minutes = 60,
+	},
+	attention_finder_mappings = {
 		toggle_scope = { shortcut = "<C-a>" },
 	},
 

@@ -1028,7 +1028,7 @@ M.entries = {
 	},
 	{
 		id = "attention_scope",
-		config_key = "attention.toggle_scope",
+		config_key = "attention_finder_mappings.toggle_scope",
 		default_key = "<C-a>",
 		default_modes = { "n", "i" },
 		scope = "attention_finder",
