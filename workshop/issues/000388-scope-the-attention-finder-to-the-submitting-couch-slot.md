@@ -55,4 +55,21 @@ Actions: submit, open finder, toggle scope, reopen. Existing waiting/answered/se
 
 ## Log
 
+### 2026-10-18 — implementation and red/green evidence
+
+The original implementation failed the new current-slot picker, scope-filter,
+submit-origin, store round-trip and counted membership tests. Added an optional
+slot to the existing model/store, taking it from the accepted receipt's sender.
+The existing per-file identity remains: latest submit sets its slot/breadcrumb;
+older pending IDs remain. New discovered side docs inherit the parent's slot.
+No store split, new watcher or probe lifecycle was added. The model membership
+pass reads each entry's slot exactly once at 16 and 32 entries before sorting.
+The picker uses the existing own_slot/query seam, registered configurable
+Ctrl+A, latest state on repaint and explicit current/all title. Its failed
+resolution fallback is all slots with a reopen warning. Real-picker fake-Couch
+coverage exercises pane lookup, the installed key and retained typed query.
+Nested keybinding configuration uses the registry's existing shortcut-table
+contract; remapping/disable coverage exposed and corrected the initial string
+fixture. No architectural scope change.
+
 ### 2026-10-18

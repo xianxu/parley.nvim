@@ -649,6 +649,7 @@ local config = {
 	-- leaves the finder this many minutes later.
 	attention = {
 		seen_grace_minutes = 60,
+		toggle_scope = { shortcut = "<C-a>" },
 	},
 
 	-- memory preferences: per-tag user preference profiles from chat history

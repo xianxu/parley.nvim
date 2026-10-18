@@ -124,7 +124,7 @@ their history; Back can also establish the displayed file as their root.
 See [file navigation](atlas/ui/keybindings.md#file-history-back)
 for the command and configuration.
 
-Press **Alt+Space** or **Ctrl+Y Space** (`:ParleyAttention`) to list every file you submitted with
+Press **Alt+Space** or **Ctrl+Y Space** (`:ParleyAttention`) to list files you submitted with
 Alt+Return, newest first: **waiting** while the agent still owes it, **answered**
 once the agent has folded the submit, and **seen**, dimmed, once you have looked
 at it after the answer: opened it from the finder, or focused, moved or scrolled
@@ -133,6 +133,10 @@ folder appear too, as answered (`↳`). Opening an entry restores the trail of
 files it had when you submitted it. A seen entry leaves the list `attention.seen_grace_minutes` later
 (default 60); a new submit makes it waiting again. See the
 [attention finder](atlas/ui/attention_finder.md).
+
+In Couch, the list defaults to submits from this pane’s slot. **Ctrl+A** toggles current/all slots
+(`attention.toggle_scope`); the title shows the scope. Legacy entries without a slot appear everywhere,
+and outside Couch the finder shows all slots. A file belongs to its latest submitting slot; new side docs inherit their parent’s slot.
 
 ## Learn by chatting
 

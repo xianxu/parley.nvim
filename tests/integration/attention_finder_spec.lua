@@ -45,6 +45,7 @@ local function fake_picker()
                 picker.items, picker.updates = items, picker.updates + 1
             end,
             selected = function() return picker.items[1] end,
+            set_title = function(title) picker.title = title end,
         }
     end
     picker.rows = function()
@@ -81,11 +82,13 @@ describe("attention finder", function()
         Couch.write(root, root .. "/sent", root .. "/argv")
         saved = { path = vim.env.PATH, registry = vim.env.FAKE_COUCH_REGISTRY, mode = vim.env.FAKE_COUCH_REGISTRY_MODE,
             status = vim.env.FAKE_COUCH_STATUS, state_dir = p.config.state_dir, warning = logger.warning,
-            attention = p.config.attention }
+            attention = p.config.attention, scope = vim.env.COUCH_THREAD_SCOPE, tag = vim.env.COUCH_THREAD_TAG,
+            actors = vim.env.FAKE_COUCH_ACTORS }
         vim.env.PATH = root .. "/bin:" .. vim.env.PATH
         vim.env.FAKE_COUCH_REGISTRY, vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_STATUS = registry, nil, nil
         p.config.state_dir = root .. "/state"
         p.config.attention = { seen_grace_minutes = 60 }
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = nil, nil
         warnings = {}
         logger.warning = function(message) warnings[#warnings + 1] = message end
         now = 1000
@@ -94,8 +97,88 @@ describe("attention finder", function()
         vim.env.PATH, vim.env.FAKE_COUCH_REGISTRY = saved.path, saved.registry
         vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_STATUS = saved.mode, saved.status
         p.config.state_dir, logger.warning, p.config.attention = saved.state_dir, saved.warning, saved.attention
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG, vim.env.FAKE_COUCH_ACTORS = saved.scope, saved.tag, saved.actors
         vim.cmd("silent! %bwipeout!")
         vim.fn.delete(root, "rf")
+    end)
+
+    it("toggles current/all scope and keeps that scope after late probe updates", function()
+        local a, b, legacy = submitted("here.md", "m1"), submitted("there.md", "m2"), submitted("legacy.md", "m3")
+        apply({ type = "submitted", path = a, id = "m1", slot = "ops:0" })
+        apply({ type = "submitted", path = b, id = "m2", slot = "echo:0" })
+        local picker, callbacks = fake_picker(), {}
+        Attention.open({ picker = picker, store = { now = now },
+            own_slot = function(cb) cb({}, { Binding = { Slot = "ops:0" } }) end,
+            run = function(argv, cb) callbacks[argv[#argv]] = cb end })
+        await(function() return picker.opened and callbacks[a] and callbacks[b] and callbacks[legacy] end, "finder did not open/probe")
+        local function paths() return vim.tbl_map(function(i) return i.value end, picker.items) end
+        assert.same({ a, legacy }, paths())
+        assert.matches("ops:0", picker.opened.title, 1, true)
+        local toggle = picker.opened.mappings[1]
+        assert.same({ "<C-a>" }, toggle.key)
+        toggle.fn()
+        assert.same({ a, legacy, b }, paths())
+        assert.equals("Attention — all slots", picker.title)
+        callbacks[b]({ Status = { Owed = {} } })
+        await(function() return Model.state_of(Store.load().entries[b]) == "answered" end, "probe did not land")
+        assert.equals(3, #picker.items)
+        toggle.fn()
+        assert.equals("Attention — ops:0", picker.title)
+        assert.same({ a, legacy }, paths())
+        callbacks[a]({ Status = { Owed = {} } })
+        callbacks[legacy]({ Status = { Owed = {} } })
+        await(function() return Model.state_of(Store.load().entries[a]) == "answered" end, "late probe did not land")
+        assert.same({ a, legacy }, paths())
+    end)
+
+    it("shows all outside Couch and warns when a live pane cannot be resolved", function()
+        local a, b = submitted("a.md", "m1"), submitted("b.md", "m2")
+        apply({ type = "submitted", path = b, id = "m2", slot = "echo:0" })
+        local picker = fake_picker()
+        open({ picker = picker, own_slot = function(cb) cb(nil) end })
+        assert.equals(2, #picker.items)
+        assert.equals(0, #picker.opened.mappings)
+        open({ picker = picker, own_slot = function(cb) cb({}, nil) end })
+        assert.equals(2, #picker.items)
+        assert.matches("slot unavailable", warnings[#warnings])
+        assert.is_truthy(Store.load().entries[a])
+    end)
+
+    it("resolves the pane with real Couch queries and installs the real picker toggle", function()
+        local a, b = submitted("q+here.md", "m1"), submitted("q+there.md", "m2")
+        apply({ type = "submitted", path = a, id = "m1", slot = "ops:0" })
+        apply({ type = "submitted", path = b, id = "m2", slot = "echo:0" })
+        vim.env.COUCH_THREAD_SCOPE, vim.env.COUCH_THREAD_TAG = "scope-attention", "tag-attention"
+        vim.env.FAKE_COUCH_ACTORS = vim.json.encode({ Code = "ok", Actors = {
+            { Binding = { Slot = "echo:0", Scope = "other", Tag = "other" } },
+            { Binding = { Slot = "ops:0", Scope = "scope-attention", Tag = "tag-attention" } },
+        } })
+        local refreshed
+        Attention.open({ store = { now = now }, on_refreshed = function() refreshed = true end })
+        await(function() return refreshed end, "real finder never resolved/refreshed")
+        local prompt = vim.api.nvim_get_current_buf()
+        assert.equals("prompt", vim.bo[prompt].buftype)
+        local function rows()
+            for _, win in ipairs(vim.api.nvim_list_wins()) do
+                local config = vim.api.nvim_win_get_config(win)
+                local buf = vim.api.nvim_win_get_buf(win)
+                if config.relative ~= "" and vim.bo[buf].buftype ~= "prompt" then
+                    return vim.tbl_filter(function(line) return line:match("%S") end,
+                        vim.api.nvim_buf_get_lines(buf, 0, -1, false)), config.title
+                end
+            end
+        end
+        assert.equals(1, #rows())
+        vim.api.nvim_buf_set_lines(prompt, 0, -1, false, { "> q+" })
+        vim.api.nvim_exec_autocmds("TextChanged", { buffer = prompt })
+        local toggle = vim.api.nvim_buf_call(prompt, function() return vim.fn.maparg("<C-a>", "i", false, true).callback end)
+        assert.is_function(toggle)
+        toggle()
+        assert.equals(2, #rows())
+        assert.equals("> q+", vim.api.nvim_buf_get_lines(prompt, 0, 1, false)[1])
+        toggle()
+        assert.equals(1, #rows())
+        vim.api.nvim_buf_call(prompt, function() vim.fn.maparg("<Esc>", "n", false, true).callback() end)
     end)
 
     it("lists entries at once, then shows a folded submit as answered", function()

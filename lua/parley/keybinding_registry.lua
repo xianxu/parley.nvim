@@ -24,6 +24,7 @@ M.scope_parent = {
 	chat_finder = nil,
 	note_finder = nil,
 	issue_finder = nil,
+	attention_finder = nil,
 }
 
 -- Display labels for help section headers
@@ -39,6 +40,7 @@ M.scope_labels = {
 	chat_finder = "Chat Finder",
 	note_finder = "Note Finder",
 	issue_finder = "Issue Finder",
+	attention_finder = "Attention Finder",
 }
 
 -- Display order for scopes in help output
@@ -54,6 +56,7 @@ M.scope_display_order = {
 	"chat_finder",
 	"note_finder",
 	"issue_finder",
+	"attention_finder",
 }
 
 --- Walk from a leaf scope up to root, returning all ancestor scopes
@@ -64,7 +67,8 @@ M.scope_display_order = {
 function M.get_ancestor_scopes(context)
 	-- Normalize unknown contexts to "global"
 	if M.scope_parent[context] == nil and context ~= "global"
-		and context ~= "chat_finder" and context ~= "note_finder" and context ~= "issue_finder" then
+		and context ~= "chat_finder" and context ~= "note_finder" and context ~= "issue_finder"
+		and context ~= "attention_finder" then
 		context = "global"
 	end
 	local scopes = {}
@@ -1023,6 +1027,15 @@ M.entries = {
 		help_only = true,
 	},
 	{
+		id = "attention_scope",
+		config_key = "attention.toggle_scope",
+		default_key = "<C-a>",
+		default_modes = { "n", "i" },
+		scope = "attention_finder",
+		desc = "Toggle current/all Couch slots",
+		help_only = true,
+	},
+	{
 		id = "if_delete",
 		config_key = "issue_finder_mappings.delete",
 		default_key = "<C-d>",
@@ -1295,6 +1308,7 @@ function M.help_lines(context, config)
 		chat_finder = " (Chat Finder)",
 		note_finder = " (Note Finder)",
 		issue_finder = " (Issue Finder)",
+		attention_finder = " (Attention Finder)",
 		vision = " (Vision)",
 		repo = " (Repo)",
 	}
@@ -1334,7 +1348,7 @@ function M.help_lines(context, config)
 		end
 	end
 
-	if context == "chat_finder" or context == "note_finder" or context == "issue_finder" then
+	if context == "chat_finder" or context == "note_finder" or context == "issue_finder" or context == "attention_finder" then
 		table.insert(lines, "Finder prompt")
 		for _, row in ipairs(M.picker_basics) do
 			add_entry(row.keys, row.desc)
