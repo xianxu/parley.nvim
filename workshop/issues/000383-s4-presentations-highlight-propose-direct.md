@@ -66,12 +66,13 @@ total: 2.16
 
 Durable plan: [workshop/plans/000383-s4-presentations-plan.md](../plans/000383-s4-presentations-plan.md). Coding waits for pair#661 M1 (the hub, 10-18).
 
-- [ ] Task 1: the Couch fake keeps a round (`round --json`, `--round` seed, `Cleared` after a submit)
-- [ ] Task 2: `presentation` (pure): the key, and a round's spans placed or re-anchored
-- [ ] Task 3: `skill_render.publish_round` / `clear_round`, a round kind beside footnotes
-- [ ] Task 4: `edit_round` + `document_registry.request("round")`, generation-guarded
-- [ ] Task 5: hooks: reload, attach, confirmed submit (`release_and_send`)
-- [ ] Task 6: the `→ [proposal]` link spec, the real/fake conformance case, atlas, suite, live check
+- [x] Task 1: the Couch fake keeps a round (`round --json`, `--round` seed, `Cleared` after a submit)
+- [x] Task 2: `presentation` (pure): the key, and a round's spans placed or re-anchored
+- [x] Task 3: `skill_render.publish_round` / `clear_round`, a round kind beside footnotes
+- [x] Task 4: `edit_round` + `document_registry.request("round")`, generation-guarded
+- [x] Task 5: hooks: reload, attach, confirmed submit (`release_and_send`)
+- [x] Task 6: the `→ [proposal]` link spec, the real/fake conformance case, atlas, suite; live check deferred to the operator's Couch restart (hub), steps in the Log
+- [x] Task 7: review export v2 and v3, no default `deletions` (scope addition)
 
 ## Log
 
