@@ -38,3 +38,4 @@ flow: {kind: quick, provenance: inferred, spec: "b6c6c2c9", done: "8a6356d2"}
 ## Log
 
 ### 2026-10-18
+- 2026-10-18: closed — Comment-only change: the M.dismiss doc comment in lua/parley/skill_render.lua now says it clears the review skill decorations and that the agent round (#383) stays until the next confirmed submit, matching clear_decorations since #383. Full suite green on bf27b054.; review verdict: SHIP
