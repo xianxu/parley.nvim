@@ -117,7 +117,7 @@ end
 --- @param buf number
 function M.clear(buf)
     generation[buf] = (generation[buf] or 0) + 1
-    attached[buf] = nil
+    attached[buf], pending[buf] = nil, nil
     skill_render.clear_round(buf)
 end
 

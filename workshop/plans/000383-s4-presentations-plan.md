@@ -214,3 +214,10 @@ The issue's Done when: on a document under the default presentation, an agent `a
   4. the `on_lines` coalescing envelope with a counted N/2N spec and a 200-span cap (Integration points, Task 4).
 - 2026-10-18 (hub): the span cap must be visible. Past 200 spans, one WARN notice per round, `showing 200 of N agent changes`, instead of only a debug log.
 - 2026-10-18 (hub, ariadne:1): scope addition, Task 7: load universal-review export v2 and v3, never defaulting a missing `deletions` to propose-strike.
+- 2026-10-18 (close review): the shipped design differs from the Spec text in four places.
+  - `ParleyAgentChange` links to `DiffAdd` rather than `DiffChange`, so a round reads apart from footnotes, which use DiffChange.
+  - Clearing goes through `edit_round.clear` → `skill_render.clear_round`, not `clear_decorations`, because the latter would wipe footnotes.
+  - A deletion is placed only on a matching hash: the round carries no context to re-find it by.
+  - The proposal-link regression lives in `agentic_document_side_inherit_spec.lua`.
+
+  The review also found that `attach_diagnostics` replaced the namespace wholesale and dropped round diagnostics; it now restores them. And `edit_round.clear` now resets `pending`.

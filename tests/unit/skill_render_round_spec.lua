@@ -58,6 +58,12 @@ describe("skill_render round", function()
         assert.equals(0, #round_marks())
     end)
 
+    it("keeps the round's diagnostics when a skill round sets its own", function()
+        skill_render.publish_round(buf, decorations)
+        skill_render.attach_diagnostics(buf, { { pos = 0, explain = "skill edit" } }, "# Title\n")
+        assert.same({ "parley-skill", "round", "round" }, kinds())
+    end)
+
     it("re-derives the diagnostics from where the marks moved", function()
         skill_render.publish_round(buf, decorations)
         vim.api.nvim_buf_set_lines(buf, 0, 0, false, { "inserted" })

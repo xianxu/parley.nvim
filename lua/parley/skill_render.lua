@@ -236,6 +236,8 @@ function M.attach_diagnostics(buf, edits, original_content)
         })
     end
     vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+    -- The namespace was replaced wholesale; put the round kind back (#383).
+    if round_marks[buf] then set_round_diagnostics(buf) end
 end
 
 --- Highlight edited regions with DiffChange.
