@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "ae4ba6ed", done: "86c723f3"}
 ---
 
 # Document mover skips pending side-doc links inside proposal markers
