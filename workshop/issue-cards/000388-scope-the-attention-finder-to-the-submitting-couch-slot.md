@@ -1,6 +1,6 @@
 ---
 id: 000388
-status: codecomplete
+status: done
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 8bd03ed0d49c1f3d2c037d83523134dc0e344487
         evidence_commit: 14c224b06e424558ad333bc1ff5063e385efda65
+        landed_commit: 735b922bc48b04b8745372d4763669a72ac0f9b5
 ---
 
 # Scope the attention finder to the submitting Couch slot
