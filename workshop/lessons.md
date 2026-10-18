@@ -793,3 +793,5 @@ point as well as internal helpers before calling the family complete.
 - A compatibility fix that adds even a rare bounded synchronous utility must update the explicit process census and run its architecture guard. Check the call frequency: #373's SHA utility is once per fresh move's NUL budget lease, not per save or keypress.
 
 - Finalization is part of the replay protocol. A successful editor handoff followed by failed journal deletion must not destroy the protection that retained recovery still needs. Write the intended lock after-state before release, recognize each owned before/after state on replay, and finish durable effects before retiring the journal. Fault-inject after successful effects, not only before them.
+
+- Preflight effect geometry as one relation set: an earlier directory rename must never relocate a later source or create an uncaptured source. Check every declared side/orphan root against both documents and other roots, including absent roots, before saves or protection. A per-case guard for targets inside the source folder misses the reverse extraction case.

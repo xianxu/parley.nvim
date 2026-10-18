@@ -280,6 +280,67 @@ rounds:
       isolation: fenced
       reviewed: e2d99474a999f66a196818ce72ccc88d0e527b76
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 4f0f0cba-eab4-49f4-b54f-40d574480977
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 7
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/c89ff574d82da946
+            reviewed_head: e3be73356c6bff50b6dbcb1612d2880ed9d16217
+            slot: parley.nvim:1
+            requested_at: "2026-10-18T02:08:11.381859Z"
+          phase: finished
+          pid: 82244
+          started_at: "2026-10-18T02:08:11.489592Z"
+          finished_at: "2026-10-18T02:12:15.564866Z"
+          session_id: 01a14cc4-3df5-7a92-9099-ede2ed0798ca
+          outcome: returned
+      "n": 7
+      timestamp: "2026-10-17T19:12:21-07:00"
+      dispatched: "2026-10-17T19:08:11-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Paragraph-wide code masks and both rewrite APIs' multiline-code regression cases preserve the covered bytes; mapped tests pass.
+          round: 7
+        - id: BR-2
+          disposition: addressed
+          note: read_output checks every expected leaf and ancestor before mutation; the exhaustive leaf-directory and ancestor-file regressions pass.
+          round: 7
+        - id: BR-3
+          disposition: addressed
+          note: Destination scanning uses disjoint token spans; complete-rewrite malformed-opener scale tests pass.
+          round: 7
+        - id: BR-4
+          disposition: addressed
+          note: markdown_blocks supplies shared boundaries for link scanning and code masks; boundary and continuation regressions pass.
+          round: 7
+        - id: BR-5
+          disposition: addressed
+          note: atlas/modes/session_sync.md:273 documents supplied observations, ordered effects, orphan_destination, and refusal rules, matching document_move_plan.project.
+          round: 7
+        - id: BR-6
+          disposition: addressed
+          note: Finalization intent and protection checkpoints precede journal retirement. Fresh/recovered unlink regressions pass at HEAD; restoring pre-fix production files makes both behavioral recovery checks fail.
+          round: 7
+      findings:
+        - kind: defect
+          id: BR-7
+          severity: Critical
+          title: Orphan displacement can relocate OLD and strand its migration
+          detail: 'lua/parley/document_move_plan.lua:363 checks only targets inside the source side tree. Moving /repo/parent.side/child.md to /repo/parent.md admits /repo/parent.side as an orphan, then document_move.lua:1093 renames it to parent_1.side before moving OLD. A pinned-HEAD filesystem reproduction moved both child.md and an unrelated sibling into that suffix, left OLD and NEW absent, and stopped in document with "owned document rename has no matching inode witness"; recover then refused "recovery paths changed". This is the 2nd finding in family output-preflight-before-mutation. State and enforce the rule across all planned document/side/orphan path relationships: an earlier effect must not relocate a later source. Reject unsafe overlaps before effects, or explicitly support their relocated witnesses and recovery. Add pure and filesystem regressions, including nested OLD with and without its own side tree and both owned/native entry paths. ARCH-PURPOSE, ARCH-ORDER.'
+          family: output-preflight-before-mutation
+          round: 7
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#373 (boundary-review)
@@ -348,6 +409,22 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - BR-6 — addressed — document_move.lua:695-746 persists release authority and retirement progress before journal unlink; editor adoption follows unlink. Fresh/recovered unlink regressions pass at HEAD. Restoring pre-fix production files in disposable checkouts makes both regressions fail, including recovery completion after removing journal-shape assertions.
 
+## Round 7 — 2026-10-17T19:12:21-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Paragraph-wide code masks and both rewrite APIs' multiline-code regression cases preserve the covered bytes; mapped tests pass.
+- BR-2 — addressed — read_output checks every expected leaf and ancestor before mutation; the exhaustive leaf-directory and ancestor-file regressions pass.
+- BR-3 — addressed — Destination scanning uses disjoint token spans; complete-rewrite malformed-opener scale tests pass.
+- BR-4 — addressed — markdown_blocks supplies shared boundaries for link scanning and code masks; boundary and continuation regressions pass.
+- BR-5 — addressed — atlas/modes/session_sync.md:273 documents supplied observations, ordered effects, orphan_destination, and refusal rules, matching document_move_plan.project.
+- BR-6 — addressed — Finalization intent and protection checkpoints precede journal retirement. Fresh/recovered unlink regressions pass at HEAD; restoring pre-fix production files makes both behavioral recovery checks fail.
+
+### Raised
+
+- **BR-7** [Critical] `output-preflight-before-mutation` (kind: defect) Orphan displacement can relocate OLD and strand its migration
+  lua/parley/document_move_plan.lua:363 checks only targets inside the source side tree. Moving /repo/parent.side/child.md to /repo/parent.md admits /repo/parent.side as an orphan, then document_move.lua:1093 renames it to parent_1.side before moving OLD. A pinned-HEAD filesystem reproduction moved both child.md and an unrelated sibling into that suffix, left OLD and NEW absent, and stopped in document with "owned document rename has no matching inode witness"; recover then refused "recovery paths changed". This is the 2nd finding in family output-preflight-before-mutation. State and enforce the rule across all planned document/side/orphan path relationships: an earlier effect must not relocate a later source. Reject unsafe overlaps before effects, or explicitly support their relocated witnesses and recovery. Add pure and filesystem regressions, including nested OLD with and without its own side tree and both owned/native entry paths. ARCH-PURPOSE, ARCH-ORDER.
+
 ## Open findings
 
-(none — every finding has been disposed)
+- **BR-7** [Critical] `output-preflight-before-mutation` (kind: defect) Orphan displacement can relocate OLD and strand its migration
