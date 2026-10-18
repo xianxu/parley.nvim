@@ -79,4 +79,48 @@ describe("arch: harness scratch stays out of the repo tree", function()
         assert.equals(1, #found)
         assert.matches("^%$HOME", found[1])
     end)
+
+    -- #381 (#342's rule): a temp dir is made under $TMPDIR, never a fixed
+    -- /tmp. Inside an agent's sandbox /tmp is denied, so a script or test that
+    -- pins it fails on every Neovim version, and it bypasses the isolated
+    -- TEST_ENV_ROOT. Shell `${TMPDIR:-/tmp}` and Python's `os.environ.get("TMPDIR")
+    -- or "/tmp"` fall back to /tmp only when TMPDIR is unset, which is fine.
+    local FIXED_TMP = {
+        { lang = "python", pattern = "dir%s*=%s*['\"]/tmp['\"]" },
+        { lang = "shell", pattern = "mktemp[^\n]-%s['\"]?/tmp/" },
+    }
+    local function fixed_tmp_roots(files)
+        local found = {}
+        for _, path in ipairs(files) do
+            local ok, lines = pcall(vim.fn.readfile, path)
+            for n, line in ipairs(ok and lines or {}) do
+                for _, rule in ipairs(FIXED_TMP) do
+                    if line:find(rule.pattern) then found[#found + 1] = ("%s:%d: %s"):format(path, n, vim.trim(line)) end
+                end
+            end
+        end
+        return found
+    end
+
+    it("no tracked script or test roots a temp dir at a fixed /tmp", function()
+        local files = vim.fn.systemlist({ "git", "ls-files", "--", "tests", "scripts", "Makefile*" })
+        assert.equals(0, vim.v.shell_error, "git ls-files failed")
+        assert.is_true(#files > 50, "the scan found almost no files")
+        assert.same({}, fixed_tmp_roots(files))
+    end)
+
+    it("the /tmp guard sees both forms it refuses, and passes the fallbacks", function()
+        local dir = vim.fn.tempname()
+        vim.fn.mkdir(dir, "p")
+        -- Spelled in pieces, so this spec's own source never matches the scan.
+        local tmp = "/" .. "tmp"
+        vim.fn.writefile({ "tempfile.TemporaryDirectory(prefix='x-', dir='" .. tmp .. "')",
+            'with tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR") or "' .. tmp .. '"):' }, dir .. "/a.py")
+        vim.fn.writefile({ "d=$(mktemp -d " .. tmp .. "/x.XXXXXX)", 'd=$(mktemp -d "${TMPDIR:-' .. tmp .. '}/x.XXXXXX")' }, dir .. "/b.sh")
+        local found = fixed_tmp_roots({ dir .. "/a.py", dir .. "/b.sh" })
+        vim.fn.delete(dir, "rf")
+        assert.equals(2, #found, vim.inspect(found))
+        assert.matches("a%.py:1:", found[1])
+        assert.matches("b%.sh:1:", found[2])
+    end)
 end)

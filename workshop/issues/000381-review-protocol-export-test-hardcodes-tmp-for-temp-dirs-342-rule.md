@@ -1,13 +1,21 @@
 ---
 id: 000381
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '757bbc501419d845a14fc5c1c96c5aaff9b9ef6a' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '79810cc83ec765840f6973a7c190b92aef698147' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-17T18:13:34-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # review_protocol_export_test hardcodes /tmp for temp dirs (#342 rule)
@@ -27,8 +35,11 @@ Use `TMPDIR` (as `scripts/check-sdlc-resolve-conformance.py` does: `dir=os.envir
 
 ## Plan
 
-- [ ]
+- [x] Sweep every fixed `/tmp` temp-dir root in tracked `tests/`, `scripts/` and `Makefile*`. The search covered Python `TemporaryDirectory`/`mkdtemp`/`mkstemp`/`NamedTemporaryFile` and shell `mktemp`, plus any Lua write under a literal `/tmp`. It found 7 instances: `tests/unit/review_protocol_export_test.py` at 78, 110, 269, 297, 308 and 328, and `scripts/check-spell-compatibility.sh:10`. Every other `/tmp` hit is a path string that never touches disk, or the `${TMPDIR:-/tmp}` / `os.environ.get("TMPDIR") or "/tmp"` fallback.
+- [x] Python: drop `dir=`, since `tempfile` honours `TMPDIR` itself. Shell: `mktemp -d "${TMPDIR:-/tmp}/…" || exit 1`, matching the sibling scripts.
+- [x] Guard: `tests/arch/scratch_placement_spec.lua` scans the same files for both forms, with a fixture case showing it flags each form and passes the fallbacks. The class cannot come back unnoticed (ARCH-PURPOSE).
 
 ## Log
 
 ### 2026-10-17
+- Verified from a sandboxed agent shell. review_protocol_bundle_spec passes, and failed before this change. scratch_placement passes 10/10. Mutation check: putting `dir='/tmp'` back at :308 fails both review_protocol_bundle (the sandbox denies /tmp) and the new guard.
