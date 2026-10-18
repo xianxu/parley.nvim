@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "e7cc7b68", done: "65c8fe29"}
 ---
 
 # Fake-registry setup answers unavailable when owned_move and side_inherit specs run under load
