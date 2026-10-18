@@ -792,6 +792,7 @@ atlas:
       - lua/parley/document_session.lua
       - lua/parley/document_registry.lua
       - lua/parley/document_move_plan.lua
+      - lua/parley/document_move_state.lua
       - lua/parley/document_move.lua
       - lua/parley/document_lease.lua
       - lua/parley/couch.lua
@@ -807,6 +808,9 @@ atlas:
       - tests/integration/window_views_spec.lua
       - tests/unit/document_session_spec.lua
       - tests/unit/document_move_plan_spec.lua
+      - tests/unit/document_move_state_spec.lua
+      - tests/arch/document_move_owner_spec.lua
+      - tests/integration/document_move_shared_spec.lua
       - tests/unit/helper_io_spec.lua
       - tests/integration/session_sync_spec.lua
       - tests/integration/session_sync_native_spec.lua

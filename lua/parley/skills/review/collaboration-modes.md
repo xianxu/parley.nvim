@@ -76,13 +76,19 @@ Each ready 🤖 marker is an ask. Classify it, then act:
   edit, or names the section collaboration.
 - **When unsure, open a side doc.** It never changes the document unasked, and folding it in later costs one
   marker. "The retry story feels off" opens a side doc that proposes what is off.
-- **A fold-in asked from the parent** (🤖[fold in] beside a `→ [discussion](…)` link) is an imperative: edit the
-  parent from what the side doc concluded, and mark the link `(folded <date>)`. It is the same fold-in as an
-  approval written in the side doc (below), with a second trigger, and it writes only the parent: the folded mark is
-  the record. A fold-in written beside an already-folded link
-  is honored again, so a fold whose proposals the operator rejected can be redone. If the side doc holds no settled
-  proposal to fold, append a one-line `{which: …?}` turn instead, as for an unclear approval. The `discussions:`
-  index, closing a thread and renames are a later slice.
+- **Fold-in is asked from the parent:** a 🤖[fold in] at or beside a `→ [discussion](…)` link is the one trigger.
+  It is an imperative: edit the parent at the link's spot from what the side doc settled (its `Decided (operator): …`
+  line, or its single proposal), through the parent's own write; mark the link `(folded <date>)`; and add a closing
+  note at the end of the side doc, `Folded into the parent on <date>: <what was applied>.` The fold adds no index entry (§4, "The index"): the
+  parent's changed text is its record, as a `Decided (operator): …` line when the side doc settled a decision.
+  - **A fold-in beside an already-folded link** is honored again, so a fold whose proposals the operator rejected
+    can be redone.
+  - **One level per fold:** a 🤖[fold in] by 06's link in side doc 02 folds 06 into 02 only; folding 02 into its
+    own parent takes a 🤖[fold in] by 02's link there.
+  - **Ask instead of guessing**, with a one-line `{…}` turn on the operator's marker: when the side doc settled
+    nothing (no Decided line and no single proposal: `{which: …?}`), when the text around the link has changed so
+    much that the outcome no longer fits, or when the link is an `→ [answer](…)`: a chat item is the operator's text
+    and an answer doc never folds into it.
 
 **Instructions that only act are honored, never branched.** The carve-out is for an instruction whose only effect is
 an action, never for a question that needs continued discussion. These usually appear in a side doc:
@@ -90,25 +96,24 @@ an action, never for a question that needs continued discussion. These usually a
 | The operator writes (in a side doc) | You do |
 |---|---|
 | **an edit to this doc** ("shorten point 2") | edit the side doc |
-| **an approval** ("ok", "accept", "go with 2", "agreed") | apply what this side doc proposed to the **parent**; append ` (folded <date>)` to the parent's link to this side doc; and replace the marker with its Decided line (below), ending `; folded into the parent.` |
+| **an approval** ("ok", "accept", "go with 2", "agreed") | replace the marker with its Decided line (below). The parent is not touched: the reply says to fold in from the parent, with a 🤖[fold in] by its link to this side doc |
 | **an action elsewhere** ("file this", "tell parley.nvim:4") | do it, remove the marker, and add a closing record at the end of the side doc: what was done and where (the issue filed, the message sent) |
 
 - **Unclear what an approval approves** (the side doc proposed two things): append a one-line `{which: …?}` turn
   to the marker rather than guessing.
 - **A fold-in is an edit**, made under the parent's review mode. Under `deletions: propose-strike` its replacements
-  and deletions are proposals in the parent; the link is still marked `(folded <date>)` in that same write, and an
-  approval's Decided line ends `; proposed in the parent, to accept or reject.` instead.
+  and deletions are proposals in the parent; the link is still marked `(folded <date>)` in that same write, and the
+  side doc's closing note reads `Proposed in the parent on <date>: …`, to accept or reject there.
 
 **A decision is recorded in one line.** Wherever the operator writes a decision or an approval, replace the marker
-with one line at its spot, `Decided (operator): <the decision, restated>.`, and carry it out (an edit, a fold). The
-line is the record, and it keeps the text clean:
+with one line at its spot, `Decided (operator): <the decision, restated>.`, and carry it out when it asks for an edit
+in this document. The line is the record, and it keeps the text clean:
 - **Anything you add beyond the decision** (why it works, a consequence, a caveat, what you filed or dispatched)
   goes in a new side doc (§4) linked from that line: `Decided (operator): … → [notes](<path>)`. Its `marker:` is the
   operator's decision as written.
 - **A bare acknowledgement** ("ok", "sounds good", with nothing for you to add) gets the one line and nothing else:
   no side doc, and no reply prose about it.
-- **An approval changes the parent through the parent's own write**, under its lock, like any edit (the adapter),
-  and before the side doc's write (§4, "Writes and retries").
+- **A decision in a side doc stays in the side doc.** It is what a later fold-in from the parent applies.
 
 ### collaboration
 
@@ -136,9 +141,9 @@ Each **item** of the section is an ask, not each marker.
   rewording a linked item is a follow-up.
 - **A linked item's doc is wherever its link points**, an older `qa/…` file included: a follow-up extends that
   file, never a new one in `<name>.side/`, and leaves an older file's frontmatter as it is.
-- **A deleted item** closes its answer doc: never reopen or extend it. A later follow-up on that topic is a new item.
-  One exception until a later slice adds a "closed" mark: a deleted item re-added word for word matches its old doc
-  by `parent:`, `marker:` and section, and is unlinked, so it is relinked (§4).
+- **A deleted item** leaves its answer doc in place, and its index entry goes with the link (§4, "The index"). The
+  doc is written to again only when a later ask reaches it: a deleted item re-added word for word matches its old doc
+  by `parent:`, `marker:` and section, and is unlinked, so it is relinked (§4). A new item on the topic is a new ask.
 - **Never** edit, reorder or delete the operator's items, or add 🤖 markers to them. Your only write to the section
   is the appended link.
 - **Items are always answered**, whatever the review mode's `scope` or `frontier`: they are the operator's asks,
@@ -149,8 +154,9 @@ Each **item** of the section is an ask, not each marker.
 
 A discussion's side doc and a chat item's answer doc are both **side docs**; only their names and link text differ.
 
-**Lifetime:** a side doc is one small file per ask. No round prunes one: the operator deletes a side doc they are
-done with (with its link), and a later slice adds closing. The folder grows by one file per question or chat item.
+**Lifetime:** a side doc is one small file per ask, and it has no closed state. No round deletes, marks or locks
+one: only its references in the parent come and go (below, "The index"). The folder grows by one file per question
+or chat item, and moves with its document (§5).
 
 **Where:** every side doc of `<name>.md` lives in `<name>.side/`, beside it: one flat folder per document. A side
 doc opened from another side doc goes in the **same folder**, with `parent:` naming the side doc it came from. Never
@@ -199,9 +205,9 @@ to the item's last line. The path is relative to the parent. Swapping a marker f
 link is applied directly, even under `deletions: propose-strike`: it removes only the marker, like any answered
 marker, so it is never shown as a strike-through proposal.
 
-**Writes and retries.** Each document a round changes gets one write, through the adapter. An approval's fold
-changes two: the parent it folds into, and the side doc holding the approval, whose marker becomes its Decided line.
-Write in this order:
+**Writes and retries.** Each document a round changes gets one write, through the adapter. A fold-in changes two:
+the parent it folds into, and the side doc that gets the closing note. A new side doc's index entry rides the
+parent's write, in the same round as its link. Write in this order:
 1. Before allocating a name, look for a side doc to reuse: one in the folder whose `parent:` and `marker:` equal
    this ask's, whose backlink names this ask's section, and that **no link in the parent points to**. If one
    exists, link it and write no other, and the reply says it was relinked. It is usually a refused round's
@@ -212,16 +218,71 @@ Write in this order:
 2. Write the new side docs.
 3. Write the parent a fold changes. A stale write is recomputed, as the adapter says. If the operator holds the
    parent's lock, stop there and write nothing else: the ask is answered again after the operator's next submit.
-4. Write the remaining documents: the side doc that records a fold, and the submitted document if it is not the
-   parent. If a write is refused, the new side docs stay on disk, unlinked, and step 1 finds them next round. If the
-   parent's write had landed, the next round finds the parent's link already marked `(folded <date>)` today while
-   the side doc still holds the approval: replace the marker with its Decided line, and don't fold again.
+4. Write the remaining documents: the side doc that gets a fold's closing note, and the submitted document if it is
+   not the parent. If a write is refused, the new side docs stay on disk, unlinked, and step 1 finds them next round;
+   that round adds both the link and the entry. If the parent's write had landed, the next round finds the parent's
+   link already marked `(folded <date>)` today while the side doc has no closing note for it: add the note, and
+   don't fold again.
 5. A side doc that no link points to and whose marker or item is gone (a refused round wrote it, and the operator
    deleted or rewrote the ask meanwhile) is an **orphan**. Keep it: side docs are never pruned. Name it in the
-   reply, so the operator can link it or let it go. A closed doc, whose linked item the operator deleted, is not an
-   orphan: leave it and don't name it.
+   reply, so the operator can link it or let it go. A side doc whose link the operator deleted is not an orphan:
+   leave it and don't name it.
 
-## 5. States and actions
+### The index
+
+A side doc has one **attachment** and up to two **references** in its parent:
+
+| What | Where | What it means | When it is removed |
+|---|---|---|---|
+| **the attachment** | the side doc's own `parent:` and `marker:` | which document, and which ask, it belongs to | never: reuse (above) and moves (§5) key on it |
+| **the link** | `→ [discussion](…)`, `→ [answer](…)` or `→ [notes](…)` in the parent's text | where the thread sits | by the operator; you then drop its entry |
+| **the index entry** | the parent's `discussions:` frontmatter | the side doc waits for the operator's review | by the operator: reviewed; the link stays |
+
+```yaml
+discussions:
+  - doc: design.side/07-s3-side-docs.md
+```
+
+- **Which document's index:** the side doc's `parent:`, the document that holds its link. A side doc opened from a
+  side doc is listed in that side doc's index, not the top document's.
+- **Add an entry** when you write something the operator should read in that side doc: creating it with its answer,
+  appending a chat follow-up to an answer doc, or making an edit they asked for in it. Append it at the end; an entry
+  already listed stays where it is. A record that needs nothing from them adds none: a fold's closing note, or a note
+  of an action taken.
+- **The operator's removal of an entry means reviewed.** Add it back only when you next write something for them in
+  that side doc.
+- **The operator's removal of a link** (the `→ [discussion](…)`, or a chat item with its `→ [answer](…)`) tells you
+  to drop its entry, which you see in the changes since your last read. Deleting a link drops its entry; removing an
+  entry never touches the link. This one-way rule is what keeps an index from growing forever.
+- **Never remove a link** by your own edit. A fold that rewrites the paragraph holding a link keeps the link.
+- **An entry whose file is missing:** name it in the reply and leave it for the operator to remove.
+- **The write:** the index is the parent's frontmatter, so it changes in the parent's one write (above).
+- **Seen is not reviewed:** an editor's "seen" means the operator looked at the file; a side doc can be seen and
+  still listed, for a second read.
+
+## 5. Moves
+
+A side doc's folder belongs to its document: renaming or moving the document moves the whole `<name>.side/` tree
+with it. Archiving a document (sdlc moving an issue or plan to `workshop/history/`) is such a move. Every link is
+relative, so a move that keeps the file name keeps everything resolving. When you move or rename a document:
+
+1. Move the file and its `.side/` folder together; on a name change the folder takes the new name.
+2. Rewrite each side doc's `parent:` and backlink when they name the old file.
+3. On a name change, rewrite the parent's own links and its `discussions:` entries into the folder.
+4. If the file is registered with Couch, run `couch --session-sync rename OLD NEW`.
+
+- **A taken folder name:** when `spec.side/` already exists as you move a document to `spec.md`, it is an
+  **orphan** (its document is gone; a taken `spec.md` would stop the move). Rename the orphan to `spec_1.side/` (then
+  `_2`, … until free), and give the moving document `spec.side/`: every tool finds a document's side docs from its
+  file name. Name where the orphan went in the reply.
+- **A side doc keeps its name for life:** links and entries point at its `NN-slug`. Don't rename one inside the
+  folder. When you find a dangling link or entry, name it in the reply.
+- **Links into the folder from other documents** are not rewritten: side docs are local references.
+
+parley's mover follows the same steps on `:saveas` and its own move commands; the move examples are its fixtures
+too ([examples/](examples/), exported in `export.json`).
+
+## 6. States and actions
 
 The reference for what each situation produces. The examples in [examples/](examples/) show most rows as
 before/after documents.
@@ -234,22 +295,31 @@ before/after documents.
 | 4 | discussion | 🤖[add the numbers], with two readings | append `{the latency numbers or the cost numbers?}` | the marker, pending them |
 | 5 | discussion, unsure | 🤖[the retry story feels off] | treat it as a question: a side doc proposing what is off | a `→ [discussion]` link |
 | 6 | side doc | 🤖[a follow-up question] | open a further side doc in the same folder, `parent:` naming this one, and link it here | a link in the side doc; the parent untouched |
-| 7 | side doc | 🤖[ok] or 🤖[go with 2] | apply the proposal to the parent through the parent's write; mark the parent's link `(folded <date>)`; replace the marker with `Decided (operator): …; folded into the parent.` | the parent changed; the one Decided line in the side doc |
+| 7 | side doc | 🤖[ok] or 🤖[go with 2] | replace the marker with `Decided (operator): …`; leave the parent; the reply says to fold in from the parent's link | the one Decided line in the side doc |
 | 8 | side doc | 🤖[ok], when it proposed two things | append `{which: the rename or the strict rule?}` | the marker, pending them |
 | 9 | side doc | 🤖[file this as a parley issue] | file it; add a closing record at the end of the side doc | the side doc's record |
-| 10 | parent, after a discussion | 🤖[fold in] by the link | edit the parent from the discussion; mark the link `(folded <date>)` | the folded text |
+| 10 | parent, after a discussion | 🤖[fold in] by the link | edit the parent from what the side doc settled, through the parent's write; mark the link `(folded <date>)`; add a closing note to the side doc; add no entry | the folded text and the folded link |
 | 11 | collaboration | 🤖[why…?] | answer in place, folded into clean prose | the answer in the text |
 | 12 | chat | adds item `5. what does S4 cost?` | create `<name>.side/<date>-NN-s4-cost.md`; append ` → [answer](…)` to item 5 | the link at item 5's end |
 | 13 | chat | adds item `6. move #353 to :2` | do it; the answer doc records what was done and where; append the link | the link; the reply says it was done |
 | 14 | chat | edits a linked item, or one of its sub-items | append the follow-up and its answer to the item's answer doc; leave the link | the reply names the doc it extended |
-| 15 | chat | deletes an item | nothing: its answer doc is closed and never reopened | the item gone; the doc kept |
+| 15 | chat | deletes an item | drop its answer doc's index entry; the doc stays | the item and the entry gone; the doc kept |
 | 16 | any | a name in `collaboration-mode:` matches no heading | do the round with the default there; name the dangling entry in the reply | the reply line |
 | 17 | any | holds the lock past your write | defer to their next submit (the adapter's exit 3) | the locked state; past 30 minutes, a one-line ping |
 | 18 | any | (a previous round's write was refused) | link the side docs that round wrote, found by `parent:`, `marker:` and section among the unlinked ones; create no duplicates | the links, as if the first write had landed |
 | 19 | discussion | 🤖[why?] in a section, when an earlier 🤖[why?] elsewhere already has its linked side doc | open a new side doc: a linked doc is never reused | a new `→ [discussion]` link; the earlier discussion untouched |
 | 20 | discussion | 🤖[first in the section] answering a question in the text, or a bare 🤖[ok] | replace the marker with `Decided (operator): <the decision, restated>.` and carry it out; anything you add goes to a side doc linked `→ [notes](…)`; a bare acknowledgement gets only the line | one line in the text; the reasoning a click away |
+| 21 | parent | deletes a `→ [discussion]` link | drop its index entry; the side doc is unchanged | the link and the entry gone |
+| 22 | parent | removes an index entry | nothing: reviewed | the entry gone; the link stays |
+| 23 | chat, after 22 | edits the item whose answer doc they reviewed | append the follow-up to its answer doc; add the entry back | the entry back, at the end |
+| 24 | session file | deletes an Operator instructions item | drop its answer doc's index entry (`tl-lead status`) | the item and the entry gone |
+| 25 | parent | an ask whose marker matches a side doc whose link they deleted | relink that side doc (§4's reuse); add the entry back | the link and the entry back |
+| 26 | side doc 02, holding 06's link | 🤖[fold in] by 06's link | fold 06 into 02 only | 02 changed |
+| 27 | parent | renames `design.md` to `spec.md` in parley | (parley) move the folder to `spec.side/`; rewrite the side docs' backlinks, the parent's own links and its index; rename the registry entry | every link and entry still resolves |
+| 28 | any | asks you to move or archive a document | the steps of §5 | the same; the reply lists the rewrites |
+| 29 | any | a move whose target folder name is taken (an orphan `spec.side/`) | rename the orphan to `spec_1.side/` (then `_2`, …); the moving document takes `spec.side/` | the reply names where the orphan went |
 
-## 6. Older documents
+## 7. Older documents
 
 Documents with no `collaboration-mode:` are discussion, and nothing is migrated. In a chat section, an item that
 ends in `→ done: …` (the TL's older form of an answered instruction) counts as answered, like a linked one. A document whose

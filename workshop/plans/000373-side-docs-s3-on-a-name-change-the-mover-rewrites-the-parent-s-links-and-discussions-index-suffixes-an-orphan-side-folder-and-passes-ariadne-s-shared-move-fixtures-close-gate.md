@@ -1,0 +1,531 @@
+---
+gate: boundary-review
+issue: 373
+id_prefix: BR
+rounds:
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 2c0f9f4d-a166-42de-b6fa-36cd4b810334
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 1
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/287636a3e395e856
+            reviewed_head: e53020d4cceeb064d73331a91f03f5fd4c7f46f1
+            slot: parley.nvim:1
+            requested_at: "2026-10-17T18:05:59.354762Z"
+          phase: finished
+          pid: 47336
+          started_at: "2026-10-17T18:05:59.453754Z"
+          finished_at: "2026-10-17T18:09:52.939614Z"
+          session_id: 01a14b0a-c609-7112-bd51-31973620b709
+          outcome: returned
+      "n": 1
+      timestamp: "2026-10-17T11:09:53-07:00"
+      dispatched: "2026-10-17T11:05:59-07:00"
+      agent: codex
+      findings:
+        - kind: defect
+          id: BR-1
+          severity: Critical
+          title: Multiline inline code is rewritten as a live Markdown link
+          detail: lua/parley/document_move_plan.lua:123–129 builds code masks per line while markdown_spans recognizes multiline links. Input "`[example\nlabel](design.side/q.md)`\n" is changed to spec.side by rewrite_side_references; rewrite_parent likewise changes "../design.md" to "../spec.md" inside the same code shape. This violates unrelated-byte preservation and affects existing child-backlink callers (ARCH-PURPOSE). Mask inline code across paragraph lines and add failing preservation tests for both APIs.
+          family: markdown-code-preservation
+          round: 1
+        - kind: defect
+          id: BR-2
+          severity: Important
+          title: Expected file paths can pass preflight as directories and cause partial sync
+          detail: scripts/sync-review-protocol.py:156–158 recursively accepts directories without checking expected leaf types. Replacing examples/move-test/before/nested/old.md with an empty directory and making SKILL.md stale caused sync to replace SKILL.md before failing with IsADirectoryError. Validate every expected file and ancestor type before writing, with mutation-free failure regressions for both modes and fixtures (ARCH-SECURE).
+          family: output-preflight-before-mutation
+          round: 1
+        - kind: defect
+          id: BR-3
+          severity: Important
+          title: Complete parent rewriting retains a quadratic malformed-link scan
+          detail: lua/parley/document_move_plan.lua:150 copies and scans the remaining suffix for every unmatched "](" opener. Through rewrite_side_references, repeated "](" input measured approximately 0.025s/2KB, 0.095s/4KB, 0.374s/8KB, and 1.465s/16KB, despite accepting documents up to 4MiB. Use monotonic delimiter scanning and add complete-rewrite scale coverage; the existing opening-bracket test misses this path (ARCH-CONSTRAINTS).
+          family: bounded-reference-scanning
+          round: 1
+      boundary: M1
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: ac49aa83-3627-4b07-8c11-2adb16760667
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 2
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/585e79ecc387df91
+            reviewed_head: c8dddf5bf201a8194f5d6bedd4b20bc344844c08
+            slot: parley.nvim:1
+            requested_at: "2026-10-17T18:22:25.958047Z"
+          phase: finished
+          pid: 12166
+          started_at: "2026-10-17T18:22:26.058249Z"
+          finished_at: "2026-10-17T18:24:31.875707Z"
+          session_id: 01a14b19-d41d-7b32-b8ef-57054aa0d7f8
+          outcome: returned
+      "n": 2
+      timestamp: "2026-10-17T11:24:33-07:00"
+      dispatched: "2026-10-17T11:22:25-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Paragraph-wide preservation tests cover both rewrite APIs; restoring the previous line-local masker produces three failing tests.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: Expected leaves and ancestors are validated before mutation. Removing that validation produces 21 failing regression subtests across protocol files, modes, and fixtures.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: Complete-rewrite scale coverage passes for both APIs. Restoring suffix scanning makes the malformed-destination regression fail.
+          round: 2
+      findings:
+        - kind: defect
+          id: BR-4
+          severity: Critical
+          title: Inline-code masks cross block boundaries and leave live links pointing at the old path
+          detail: 'lua/parley/document_move_plan.lua:110 ends code-mask paragraphs only at blank lines or fences. Input "` unmatched\n# Heading\n[live](design.side/q.md) `\n" remains unchanged when design.md becomes spec.md, although the heading separates the backticks and the live destination must become spec.side/q.md. Both rewrite APIs fail equivalent probes across headings, thematic breaks, blockquotes, and list starts: eight failures. This is the 2nd finding in family `markdown-code-preservation`. Do NOT fix only this instance: state and enforce the block-boundary rule across the supported Markdown structures, sharing segmentation with reference_candidates.markdown_spans where appropriate, and test both APIs. ARCH-DRY and ARCH-PURPOSE.'
+          family: markdown-code-preservation
+          round: 2
+      boundary: M1
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 315dee3a-1a63-451f-a7f6-4d3104d6ec13
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 3
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/4630b9b589dfe37b
+            reviewed_head: 3485d3a5300a44300b1a93219e3549b8630acc22
+            slot: parley.nvim:1
+            requested_at: "2026-10-17T18:55:37.554347Z"
+          phase: finished
+          pid: 63203
+          started_at: "2026-10-17T18:55:37.642889Z"
+          finished_at: "2026-10-17T18:57:13.930791Z"
+          session_id: 01a14b38-378e-7720-8013-ea0d87c3fbd8
+          outcome: returned
+      "n": 3
+      timestamp: "2026-10-17T11:57:17-07:00"
+      dispatched: "2026-10-17T11:55:37-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Multiline-code preservation regressions remain present and pass through both rewrite APIs.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: Snapshot-wide leaf/ancestor preflight remains implemented; all 23 exporter contracts pass.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: Complete-rewrite malformed-delimiter scale tests remain present and pass.
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: Both rewrite APIs consume shared markdown_blocks segmentation. The boundary regression passes at HEAD; restoring the pre-fix document_move_plan.lua in a disposable checkout produces 43 passes and one failure at the heading-separated live-link assertion.
+          round: 3
+      findings:
+        - kind: defect
+          id: BR-5
+          severity: Important
+          title: Atlas update appears missing for the expanded move projection contract
+          detail: lua/parley/document_move_plan.lua:284 introduces rewrite_side_references, while :366 and :438 add orphan-displacement and parent-rewrite effects. The atlas changes describe fixture export only; atlas/modes/session_sync.md:237 still describes the projection as side/backlink effects. Document the new observations, effect ordering, refusal rules and orphan_destination result, explicitly distinguishing M1 projection support from M2 runtime execution.
+          family: architecture-documentation
+          round: 3
+      boundary: M1
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 03bad37a-66c1-45bd-beab-76164b8f931d
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 4
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/32eb3c4dd265a4e8
+            reviewed_head: 2d1b280e0fdf980aa904c41476d795db59cbd948
+            slot: parley.nvim:1
+            requested_at: "2026-10-17T18:59:11.141652Z"
+          phase: finished
+          pid: 95463
+          started_at: "2026-10-17T18:59:11.235995Z"
+          finished_at: "2026-10-17T19:00:09.436209Z"
+          session_id: 01a14b3b-79e5-7683-9cfa-468659429bca
+          outcome: returned
+      "n": 4
+      timestamp: "2026-10-17T12:00:09-07:00"
+      dispatched: "2026-10-17T11:59:11-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Retained disposition; paragraph-wide inline-code preservation regressions pass through both rewrite APIs.
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: Retained disposition; expected-file and ancestor preflight regressions pass and verify no mutation on refusal.
+          round: 4
+        - id: BR-3
+          disposition: addressed
+          note: Retained disposition; malformed destination scale regressions pass through both complete rewrites.
+          round: 4
+        - id: BR-4
+          disposition: addressed
+          note: Retained disposition; both scanners consume markdown_blocks, and boundary-preservation regressions pass.
+          round: 4
+        - id: BR-5
+          disposition: addressed
+          note: atlas/modes/session_sync.md:245–276 now documents observations, ordered effects, refusal rules, orphan_destination, and the M1/M2 distinction; these match document_move_plan.lua:284–444 and the existing runtime call at document_move.lua:368.
+          round: 4
+      boundary: M1
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 2d1b280e0fdf980aa904c41476d795db59cbd948
+      blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: e43725cd-bf48-4ced-8d9f-1504592838e2
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 1
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/5c2b202540809e47
+            reviewed_head: 140d8e541dc74626616f496f1d2acf49c7d51d7d
+            slot: parley.nvim:1
+            requested_at: "2026-10-18T01:15:47.419434Z"
+          phase: finished
+          pid: 40843
+          started_at: "2026-10-18T01:15:47.796452Z"
+          finished_at: "2026-10-18T01:24:11.101548Z"
+          session_id: 01a14c94-466a-77e1-b674-8fdf41abf9fb
+          outcome: returned
+      "n": 5
+      timestamp: "2026-10-17T18:24:12-07:00"
+      dispatched: "2026-10-17T18:15:47-07:00"
+      agent: codex
+      findings:
+        - id: BR-6
+          severity: Critical
+          title: Recovery releases protection before journal retirement is safely recoverable
+          detail: 'lua/parley/document_move.lua:1084 calls the recovery finish hook before unlinking the journal. That hook releases the synthetic destination lock at lua/parley/agentic_document.lua:859, but the retained complete journal still requires that lock. A targeted fault-injection test confirmed that failing journal unlink after successful handoff leaves the journal permanently interrupted on reopening with "destination protection changed". ARCH-ORDER/ARCH-FUNERAL: model and persist partial finalization so lock release and journal retirement remain safely replayable; enumerate failures and crashes across these effects and add real editor recovery regressions.'
+          family: replayable-local-finalization
+          round: 5
+      boundary: M2
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: eaf92ded-3b0c-49ca-a1c7-715d8386bfc6
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 2
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/814ab84b1132503e
+            reviewed_head: e2d99474a999f66a196818ce72ccc88d0e527b76
+            slot: parley.nvim:1
+            requested_at: "2026-10-18T02:05:04.925828Z"
+          phase: finished
+          pid: 50776
+          started_at: "2026-10-18T02:05:05.04447Z"
+          finished_at: "2026-10-18T02:07:49.802395Z"
+          session_id: 01a14cc1-65e0-7bf3-9cd7-b1382106a530
+          outcome: returned
+      "n": 6
+      timestamp: "2026-10-17T19:07:50-07:00"
+      dispatched: "2026-10-17T19:05:04-07:00"
+      agent: codex
+      dispose:
+        - id: BR-6
+          disposition: addressed
+          note: document_move.lua:695-746 persists release authority and retirement progress before journal unlink; editor adoption follows unlink. Fresh/recovered unlink regressions pass at HEAD. Restoring pre-fix production files in disposable checkouts makes both regressions fail, including recovery completion after removing journal-shape assertions.
+          round: 6
+      boundary: M2
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: e2d99474a999f66a196818ce72ccc88d0e527b76
+      blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 4f0f0cba-eab4-49f4-b54f-40d574480977
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 7
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/c89ff574d82da946
+            reviewed_head: e3be73356c6bff50b6dbcb1612d2880ed9d16217
+            slot: parley.nvim:1
+            requested_at: "2026-10-18T02:08:11.381859Z"
+          phase: finished
+          pid: 82244
+          started_at: "2026-10-18T02:08:11.489592Z"
+          finished_at: "2026-10-18T02:12:15.564866Z"
+          session_id: 01a14cc4-3df5-7a92-9099-ede2ed0798ca
+          outcome: returned
+      "n": 7
+      timestamp: "2026-10-17T19:12:21-07:00"
+      dispatched: "2026-10-17T19:08:11-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Paragraph-wide code masks and both rewrite APIs' multiline-code regression cases preserve the covered bytes; mapped tests pass.
+          round: 7
+        - id: BR-2
+          disposition: addressed
+          note: read_output checks every expected leaf and ancestor before mutation; the exhaustive leaf-directory and ancestor-file regressions pass.
+          round: 7
+        - id: BR-3
+          disposition: addressed
+          note: Destination scanning uses disjoint token spans; complete-rewrite malformed-opener scale tests pass.
+          round: 7
+        - id: BR-4
+          disposition: addressed
+          note: markdown_blocks supplies shared boundaries for link scanning and code masks; boundary and continuation regressions pass.
+          round: 7
+        - id: BR-5
+          disposition: addressed
+          note: atlas/modes/session_sync.md:273 documents supplied observations, ordered effects, orphan_destination, and refusal rules, matching document_move_plan.project.
+          round: 7
+        - id: BR-6
+          disposition: addressed
+          note: Finalization intent and protection checkpoints precede journal retirement. Fresh/recovered unlink regressions pass at HEAD; restoring pre-fix production files makes both behavioral recovery checks fail.
+          round: 7
+      findings:
+        - kind: defect
+          id: BR-7
+          severity: Critical
+          title: Orphan displacement can relocate OLD and strand its migration
+          detail: 'lua/parley/document_move_plan.lua:363 checks only targets inside the source side tree. Moving /repo/parent.side/child.md to /repo/parent.md admits /repo/parent.side as an orphan, then document_move.lua:1093 renames it to parent_1.side before moving OLD. A pinned-HEAD filesystem reproduction moved both child.md and an unrelated sibling into that suffix, left OLD and NEW absent, and stopped in document with "owned document rename has no matching inode witness"; recover then refused "recovery paths changed". This is the 2nd finding in family output-preflight-before-mutation. State and enforce the rule across all planned document/side/orphan path relationships: an earlier effect must not relocate a later source. Reject unsafe overlaps before effects, or explicitly support their relocated witnesses and recovery. Add pure and filesystem regressions, including nested OLD with and without its own side tree and both owned/native entry paths. ARCH-PURPOSE, ARCH-ORDER.'
+          family: output-preflight-before-mutation
+          round: 7
+      recipe: milestone-review
+      isolation: fenced
+      blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: cc8cdccd-dd91-4ccf-aa3d-1100cbd273eb
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 8
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/5f6af2146bf7b05e
+            reviewed_head: 06304d247169c708ac43a457c25ca76fc6e4d120
+            slot: parley.nvim:1
+            requested_at: "2026-10-18T02:40:10.726331Z"
+          phase: finished
+          pid: 59908
+          started_at: "2026-10-18T02:40:10.819665Z"
+          finished_at: "2026-10-18T02:44:04.648888Z"
+          session_id: 01a14ce1-8733-7cc3-a591-5360f311d2d1
+          outcome: returned
+      "n": 8
+      timestamp: "2026-10-17T19:44:11-07:00"
+      dispatched: "2026-10-17T19:40:10-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Paragraph-wide exact-width code masks are shared by both rewrite APIs; preservation regressions pass.
+          round: 8
+        - id: BR-2
+          disposition: addressed
+          note: read_output preflights expected regular-file leaves and directory ancestors before mutation; Python regressions pass.
+          round: 8
+        - id: BR-3
+          disposition: addressed
+          note: Malformed destination scanning advances through disjoint tokens; complete-rewrite scale regressions pass.
+          round: 8
+        - id: BR-4
+          disposition: addressed
+          note: Code containment and reference scanning share markdown_blocks; boundary and continuation regressions pass.
+          round: 8
+        - id: BR-5
+          disposition: addressed
+          note: atlas/modes/session_sync.md:274 documents supplied observations, effect ordering and orphan_destination, matching document_move_plan.project.
+          round: 8
+        - id: BR-6
+          disposition: addressed
+          note: Finalization persists protection intent before release and retires disk effects before unlink; interruption and legacy recovery regressions pass.
+          round: 8
+        - id: BR-7
+          disposition: addressed
+          note: Shared validate_geometry rejects interfering document/side/orphan relationships before effects and during journal validation. Disabling it independently produces 2 pure, 4 mover and 16 frontend failures; pinned-head regressions pass, including nested OLD with/without its side tree through owned/native paths.
+          round: 8
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 06304d247169c708ac43a457c25ca76fc6e4d120
+      blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 99603697-415e-4943-8063-600218ddfaee
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: fix-review
+            round: 9
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/4861a43fa861b0e3
+            reviewed_head: 2af674c93083b7e2253ba0fd6d45991a07a87e3a
+            slot: parley.nvim:1
+            requested_at: "2026-10-18T03:43:10.751848Z"
+          phase: finished
+          pid: 47505
+          started_at: "2026-10-18T03:43:10.864934Z"
+          finished_at: "2026-10-18T03:43:49.353804Z"
+          session_id: 01a14d1b-34fd-78c3-87b2-83c0da777838
+          outcome: returned
+      "n": 9
+      timestamp: "2026-10-17T20:43:49-07:00"
+      dispatched: "2026-10-17T20:43:10-07:00"
+      agent: codex
+      recipe: fix-review
+      isolation: fenced
+      reviewed: 2af674c93083b7e2253ba0fd6d45991a07a87e3a
+      blocked: false
+---
+
+# Gate ledger — parley.nvim#373 (boundary-review)
+
+Findings this gate raised, the stable ids the binary assigned them, and how
+later rounds disposed of them. Generated — edit the gate, not this file.
+
+## Round 1 — 2026-10-17T11:09:53-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-1** [Critical] `markdown-code-preservation` (kind: defect) Multiline inline code is rewritten as a live Markdown link
+  lua/parley/document_move_plan.lua:123–129 builds code masks per line while markdown_spans recognizes multiline links. Input "`[example\nlabel](design.side/q.md)`\n" is changed to spec.side by rewrite_side_references; rewrite_parent likewise changes "../design.md" to "../spec.md" inside the same code shape. This violates unrelated-byte preservation and affects existing child-backlink callers (ARCH-PURPOSE). Mask inline code across paragraph lines and add failing preservation tests for both APIs.
+- **BR-2** [Important] `output-preflight-before-mutation` (kind: defect) Expected file paths can pass preflight as directories and cause partial sync
+  scripts/sync-review-protocol.py:156–158 recursively accepts directories without checking expected leaf types. Replacing examples/move-test/before/nested/old.md with an empty directory and making SKILL.md stale caused sync to replace SKILL.md before failing with IsADirectoryError. Validate every expected file and ancestor type before writing, with mutation-free failure regressions for both modes and fixtures (ARCH-SECURE).
+- **BR-3** [Important] `bounded-reference-scanning` (kind: defect) Complete parent rewriting retains a quadratic malformed-link scan
+  lua/parley/document_move_plan.lua:150 copies and scans the remaining suffix for every unmatched "](" opener. Through rewrite_side_references, repeated "](" input measured approximately 0.025s/2KB, 0.095s/4KB, 0.374s/8KB, and 1.465s/16KB, despite accepting documents up to 4MiB. Use monotonic delimiter scanning and add complete-rewrite scale coverage; the existing opening-bracket test misses this path (ARCH-CONSTRAINTS).
+
+## Round 2 — 2026-10-17T11:24:33-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Paragraph-wide preservation tests cover both rewrite APIs; restoring the previous line-local masker produces three failing tests.
+- BR-2 — addressed — Expected leaves and ancestors are validated before mutation. Removing that validation produces 21 failing regression subtests across protocol files, modes, and fixtures.
+- BR-3 — addressed — Complete-rewrite scale coverage passes for both APIs. Restoring suffix scanning makes the malformed-destination regression fail.
+
+### Raised
+
+- **BR-4** [Critical] `markdown-code-preservation` (kind: defect) Inline-code masks cross block boundaries and leave live links pointing at the old path
+  lua/parley/document_move_plan.lua:110 ends code-mask paragraphs only at blank lines or fences. Input "` unmatched\n# Heading\n[live](design.side/q.md) `\n" remains unchanged when design.md becomes spec.md, although the heading separates the backticks and the live destination must become spec.side/q.md. Both rewrite APIs fail equivalent probes across headings, thematic breaks, blockquotes, and list starts: eight failures. This is the 2nd finding in family `markdown-code-preservation`. Do NOT fix only this instance: state and enforce the block-boundary rule across the supported Markdown structures, sharing segmentation with reference_candidates.markdown_spans where appropriate, and test both APIs. ARCH-DRY and ARCH-PURPOSE.
+
+## Round 3 — 2026-10-17T11:57:17-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Multiline-code preservation regressions remain present and pass through both rewrite APIs.
+- BR-2 — addressed — Snapshot-wide leaf/ancestor preflight remains implemented; all 23 exporter contracts pass.
+- BR-3 — addressed — Complete-rewrite malformed-delimiter scale tests remain present and pass.
+- BR-4 — addressed — Both rewrite APIs consume shared markdown_blocks segmentation. The boundary regression passes at HEAD; restoring the pre-fix document_move_plan.lua in a disposable checkout produces 43 passes and one failure at the heading-separated live-link assertion.
+
+### Raised
+
+- **BR-5** [Important] `architecture-documentation` (kind: defect) Atlas update appears missing for the expanded move projection contract
+  lua/parley/document_move_plan.lua:284 introduces rewrite_side_references, while :366 and :438 add orphan-displacement and parent-rewrite effects. The atlas changes describe fixture export only; atlas/modes/session_sync.md:237 still describes the projection as side/backlink effects. Document the new observations, effect ordering, refusal rules and orphan_destination result, explicitly distinguishing M1 projection support from M2 runtime execution.
+
+## Round 4 — 2026-10-17T12:00:09-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Retained disposition; paragraph-wide inline-code preservation regressions pass through both rewrite APIs.
+- BR-2 — addressed — Retained disposition; expected-file and ancestor preflight regressions pass and verify no mutation on refusal.
+- BR-3 — addressed — Retained disposition; malformed destination scale regressions pass through both complete rewrites.
+- BR-4 — addressed — Retained disposition; both scanners consume markdown_blocks, and boundary-preservation regressions pass.
+- BR-5 — addressed — atlas/modes/session_sync.md:245–276 now documents observations, ordered effects, refusal rules, orphan_destination, and the M1/M2 distinction; these match document_move_plan.lua:284–444 and the existing runtime call at document_move.lua:368.
+
+## Round 5 — 2026-10-17T18:24:12-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-6** [Critical] `replayable-local-finalization` Recovery releases protection before journal retirement is safely recoverable
+  lua/parley/document_move.lua:1084 calls the recovery finish hook before unlinking the journal. That hook releases the synthetic destination lock at lua/parley/agentic_document.lua:859, but the retained complete journal still requires that lock. A targeted fault-injection test confirmed that failing journal unlink after successful handoff leaves the journal permanently interrupted on reopening with "destination protection changed". ARCH-ORDER/ARCH-FUNERAL: model and persist partial finalization so lock release and journal retirement remain safely replayable; enumerate failures and crashes across these effects and add real editor recovery regressions.
+
+## Round 6 — 2026-10-17T19:07:50-07:00 (codex) — passed
+
+### Disposed
+
+- BR-6 — addressed — document_move.lua:695-746 persists release authority and retirement progress before journal unlink; editor adoption follows unlink. Fresh/recovered unlink regressions pass at HEAD. Restoring pre-fix production files in disposable checkouts makes both regressions fail, including recovery completion after removing journal-shape assertions.
+
+## Round 7 — 2026-10-17T19:12:21-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Paragraph-wide code masks and both rewrite APIs' multiline-code regression cases preserve the covered bytes; mapped tests pass.
+- BR-2 — addressed — read_output checks every expected leaf and ancestor before mutation; the exhaustive leaf-directory and ancestor-file regressions pass.
+- BR-3 — addressed — Destination scanning uses disjoint token spans; complete-rewrite malformed-opener scale tests pass.
+- BR-4 — addressed — markdown_blocks supplies shared boundaries for link scanning and code masks; boundary and continuation regressions pass.
+- BR-5 — addressed — atlas/modes/session_sync.md:273 documents supplied observations, ordered effects, orphan_destination, and refusal rules, matching document_move_plan.project.
+- BR-6 — addressed — Finalization intent and protection checkpoints precede journal retirement. Fresh/recovered unlink regressions pass at HEAD; restoring pre-fix production files makes both behavioral recovery checks fail.
+
+### Raised
+
+- **BR-7** [Critical] `output-preflight-before-mutation` (kind: defect) Orphan displacement can relocate OLD and strand its migration
+  lua/parley/document_move_plan.lua:363 checks only targets inside the source side tree. Moving /repo/parent.side/child.md to /repo/parent.md admits /repo/parent.side as an orphan, then document_move.lua:1093 renames it to parent_1.side before moving OLD. A pinned-HEAD filesystem reproduction moved both child.md and an unrelated sibling into that suffix, left OLD and NEW absent, and stopped in document with "owned document rename has no matching inode witness"; recover then refused "recovery paths changed". This is the 2nd finding in family output-preflight-before-mutation. State and enforce the rule across all planned document/side/orphan path relationships: an earlier effect must not relocate a later source. Reject unsafe overlaps before effects, or explicitly support their relocated witnesses and recovery. Add pure and filesystem regressions, including nested OLD with and without its own side tree and both owned/native entry paths. ARCH-PURPOSE, ARCH-ORDER.
+
+## Round 8 — 2026-10-17T19:44:11-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Paragraph-wide exact-width code masks are shared by both rewrite APIs; preservation regressions pass.
+- BR-2 — addressed — read_output preflights expected regular-file leaves and directory ancestors before mutation; Python regressions pass.
+- BR-3 — addressed — Malformed destination scanning advances through disjoint tokens; complete-rewrite scale regressions pass.
+- BR-4 — addressed — Code containment and reference scanning share markdown_blocks; boundary and continuation regressions pass.
+- BR-5 — addressed — atlas/modes/session_sync.md:274 documents supplied observations, effect ordering and orphan_destination, matching document_move_plan.project.
+- BR-6 — addressed — Finalization persists protection intent before release and retires disk effects before unlink; interruption and legacy recovery regressions pass.
+- BR-7 — addressed — Shared validate_geometry rejects interfering document/side/orphan relationships before effects and during journal validation. Disabling it independently produces 2 pure, 4 mover and 16 frontend failures; pinned-head regressions pass, including nested OLD with/without its side tree through owned/native paths.
+
+## Round 9 — 2026-10-17T20:43:49-07:00 (codex) — passed
+
+## Open findings
+
+(none — every finding has been disposed)

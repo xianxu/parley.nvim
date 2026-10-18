@@ -75,9 +75,15 @@ Quiet owners with owed deliveries are pinged after `session_sync_ping_minutes`
 (default 15); unsent edits become stale after `session_sync_stale_minutes`
 (default 5). Unknown offline membership stays editable with `Couch unavailable:
 agentic state unknown`, while known attached/cached documents keep turn
-protection. Supported moves retain identity and migrate existing `.side/`
-backlinks through a forward-only recovery journal. Outside a Couch pane, the
-existing [document review](atlas/modes/review.md) flow remains.
+protection. Supported moves retain identity, carry their `.side/` folder, and
+update the parent's links/discussions index and side-doc backlinks. If the new
+name has an orphan `.side/` folder and no document, the orphan is retained at the
+first free `_N.side/` name; a notice gives its path. The loaded parent receives
+the rewritten references before Couch confirms the move. A move is moving,
+done, or interrupted: an interrupted move names the reason and asks you to
+reopen to finish. Changed or unknown bytes are preserved; reopening never
+forces an overwrite. Outside a Couch pane, the existing
+[document review](atlas/modes/review.md) flow remains.
 
 In a Couch pane, **Alt+Return** sends only `submitted: ABSOLUTE_PATH` through
 the registered document flow. The agent's shared `xx-universal-review` skill

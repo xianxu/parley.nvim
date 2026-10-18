@@ -772,6 +772,29 @@ point as well as internal helpers before calling the family complete.
   across three subagents, each given disjoint files and the same rule. Fill in a
   prompt's placeholders before sending it: one went out with a literal
   LIST_PLACEHOLDER, and the agent rightly refused to guess.
+
+## 2026-10-17 (#373 — complete-consumer preservation and preflight)
+
+- When a scanner admits wrapped syntax, containment must cover the same span. Per-line code masks cannot protect multiline Markdown links; use exact-width backtick spans across soft breaks and test both new and existing rewrite consumers.
+- Recursive output scans cannot distinguish missing files from empty directories at expected leaves. Validate expected file and ancestor types for the whole generated snapshot before the first write; make an earlier output stale so a failure test proves absence of partial mutation.
+- Benchmark the complete consumer with every malformed delimiter family, not only its shared scanner. Removing one backtracking pattern left a fallback that copied and resolved each remaining suffix. Use disjoint token spans and exercise both callers.
+
+- The #373 re-review found the sibling failure after paragraph-wide masks: pairing backticks across a heading or list boundary hid live links. Share the scanner’s existing block segmentation rather than introducing a second notion of paragraph; test live rewrites across every boundary as well as preservation within a block.
+
+- A milestone that introduces pure effect vocabulary needs its atlas map at that boundary, even when its IO consumer is deferred. Document inputs, outputs, refusals and which effects do not execute yet; importing fixture documentation alone does not map the projection contract.
+
+- Native rereads need an expected editor postimage as well as a modified flag. A real BufReadPost callback changed parent text during #373's rewrite read, but Neovim cleared modified afterward; the move falsely succeeded. Derive normalized expected lines through the same pure rewrite, compare their hash, and mark differing text unsaved before interrupting. Exercise actual autocmds rather than only wrapping buffer APIs.
+- Checkpoint cleanup owns bytes, not names: a recorded future temp path can still point inside an undisplaced orphan or at a foreign file. Validate the publication stage and expected content/inode before deleting; reconstruct a complete unpublished journal checkpoint from fresh witnesses instead of accepting merely well-shaped JSON.
+
+- Run live checks with the operator runtime, not just the preferred test runtime. #373 passed on suite-selected Neovim 0.12.5, then PATH 0.11.7 rejected the existing NUL lease namespace as a Blob. Keep raw identity digests byte-identical across versions: re-encoding them would split the kernel ownership key. Fixed-vector tests on both runtimes guard the boundary; #379 owns systematic version coverage. PARLEY_TEST_NVIM must be in make's environment to affect the shell-based runtime selection, not merely a make command-line assignment.
+
+- Apply native-read postimage checks to recovery handoffs as well as fresh moves. A second read can destroy an autocmd edit even when the first read cleared modified; test both journal versions with real callbacks. Prove raw bytes before invoking an editor hook that reads them: detecting a mismatch afterward cannot restore the buffer the read already replaced.
+
+- A compatibility fix that adds even a rare bounded synchronous utility must update the explicit process census and run its architecture guard. Check the call frequency: #373's SHA utility is once per fresh move's NUL budget lease, not per save or keypress.
+
+- Finalization is part of the replay protocol. A successful editor handoff followed by failed journal deletion must not destroy the protection that retained recovery still needs. Write the intended lock after-state before release, recognize each owned before/after state on replay, and finish durable effects before retiring the journal. Fault-inject after successful effects, not only before them.
+
+- Preflight effect geometry as one relation set: an earlier directory rename must never relocate a later source or create an uncaptured source. Check every declared side/orphan root against both documents and other roots, including absent roots, before saves or protection. A per-case guard for targets inside the source folder misses the reverse extraction case.
 - A key remap (#377) has to sweep every spelling users read, not just `<M-x>`:
   `option+i`, `Option+i`, Alt+i and ⌥i in tutorials, READMEs and in-repo
   copies. `git grep -E` has no `\b`, so a pattern that relies on it quietly

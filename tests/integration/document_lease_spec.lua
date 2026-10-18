@@ -79,6 +79,30 @@ describe('kernel document migration lease', function()
         assert.equals('invalid', select(2, acquire('', 'id')).kind)
     end)
 
+    it('keeps binary namespace and key digests byte-identical on the operator Neovim', function()
+        local ok, held, err = pcall(acquire, 'ns\0migration-journal-budget', 'id\0binary')
+        assert.is_true(ok, tostring(held))
+        assert.is_not_nil(held, vim.inspect(err))
+        -- Independent SHA-256 vectors over raw NUL bytes, not escaped text.
+        assert.equals(root .. '/document-leases/28f80e66ea6fa0e7fbb37d65983b42b0bc10c98eb03c1974fa99d1a3dc6ec000/'
+            .. '6a763704ff81d7905cdc3db50a90a0c4a7932625f3378fb193f66fe56f23a452.lock', held.path)
+        assert.equals('busy', select(2, acquire('ns\0migration-journal-budget', 'id\0binary')).kind)
+    end)
+
+    it('refuses binary leases before allocation when an older Neovim has no hashing utility', function()
+        -- This compatibility branch is exercised by the explicit 0.11 run.
+        if pcall(vim.fn.sha256, 'probe\0') then return end
+        local path = vim.env.PATH
+        vim.env.PATH = root
+        local ok, held, err = pcall(acquire, 'ns\0migration-journal-budget', 'id')
+        vim.env.PATH = path
+        assert.is_true(ok, tostring(held))
+        assert.is_nil(held)
+        assert.equals('unavailable', err.kind)
+        assert.truthy(err.message:find('sha256sum or shasum', 1, true))
+        assert.equals(0, vim.fn.isdirectory(root .. '/document-leases'))
+    end)
+
     it('retries a replaced inode before granting effects', function()
         local fs, replacements = setmetatable({}, { __index = uv }), 0
         fs.fs_fstat = function(fd)
