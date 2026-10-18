@@ -1,6 +1,6 @@
 ---
 id: 000378
-status: codecomplete
+status: done
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: d4ecabfb8cd3d7cd39c8e720e81d6c87e9d63adb
         evidence_commit: 3b391eb6e5891c28850b471c34db865e61c7f16f
+        landed_commit: af28d839886c7496221a9b01b369c93d69ca42d3
 ---
 
 # Side documents inherit parent ownership
