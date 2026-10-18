@@ -1,6 +1,6 @@
 ---
 id: 000381
-status: working
+status: codecomplete
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.19
+tracker:
+    version: 1
+    completion:
+        token: close-a1ee5dbab4fb
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 74f9a4582ba9608a5bcd2648f6879951fb29b089
+        evidence_commit: e747024fb881401e38eb94942cf194583d8860eb
 ---
 
 # review_protocol_export_test hardcodes /tmp for temp dirs (#342 rule)
