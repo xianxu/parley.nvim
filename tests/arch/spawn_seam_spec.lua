@@ -60,6 +60,7 @@ local OUTSIDE = {
         why = "a pandoc export and revealing its output, user-invoked, each reporting its own exit" },
     ["lua/parley/clipboard_image.lua"] = { bounded = 1 },
     ["lua/parley/image_shrink.lua"] = { sync = 1 },
+    ["lua/parley/document_lease.lua"] = { sync = 1 },
     ["lua/parley/init.lua"] = { sync = 1 },
     ["lua/parley/render_buffer.lua"] = { sync = 1 },
     ["lua/parley/log_emit.lua"] = { sync = 1 },
