@@ -852,7 +852,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 					-- today's behavior rather than hold the chat leg open
 					-- forever. `settle` is once-only, so this cannot double-fire
 					-- with a late retry/give_up.
-					vim.defer_fn(function()
+					require("parley.helper").defer_deadline(function()
 						settle("give_up", provider .. ": recovery timed out")
 					end, D.recovery_timeout_ms)
 					return

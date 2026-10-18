@@ -1133,7 +1133,7 @@ M.authenticate = function(config, provider, callback)
 
     -- Timeout: close server after 30 seconds if no auth response received
     local timeout_timer = uv.new_timer()
-    timeout_timer:start(30000, 0, function()
+    require("parley.helper").start_deadline(timeout_timer, 30000, function()
         if not server:is_closing() then
             logger.warning(M._get_provider_display_name(provider) .. ": authentication timed out after 30 seconds")
             server:close()
