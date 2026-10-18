@@ -146,3 +146,66 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"3cd6c706-b875-41c1-9b5d-ac8454cc5e58","repository":"github.com/xianxu/parley.nvim","issue_id":"000382","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/4412e6b24f2344d9","reviewed_head":"036cae07964a017a0491d22147a6c9fc8a1696bc","slot":"parley.nvim:4","requested_at":"2026-10-18T06:15:48.398081Z"},"phase":"finished","pid":46814,"started_at":"2026-10-18T06:15:48.493189Z","finished_at":"2026-10-18T06:16:59.847216Z","session_id":"2a56fec3-2cc5-49dc-aea3-c4d8a004159e","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T23:20:01-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 382 — Fake-registry setup answers unavailable when owned_move and side_inherit specs run under load |
+| repo | parley.nvim |
+| issue file | workshop/issues/000382-fake-registry-setup-answers-unavailable-when-owned-move-and-side-inherit-specs-run-under-load.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | de57aa2d8452c4c7b6f0592b70fc6b5ba5356266..50cb93e46dc57bc449d2667e192049344968b039 |
+| command | sdlc close --issue 382 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-17T23:20:01-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Looking for where the fake registry handles its delay variable, then I'll run the spec and a revert check.
+
+Still finding how the repo runs a single spec; once found I'll run it at head and with the wiring reverted.
+
+No output from the grep; rerunning to see the raw output.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+BR-2 is fixed. Everything this window adds to the test file is in `tests/integration/document_registry_spec.lua:73-95`. The test now sends a real `request("rename", …)` with the submit deadline set to 1000 ms. The fake holds only `rename` replies, for 2 s. That is past one deadline (1 s) and inside three (3 s). The test asserts the rename still comes back `registered`. The config change, the arithmetic assert and the request all run inside a `pcall`. Config and the three fake-delay variables are restored before the result is asserted. I ran the spec at head and all 9 tests pass. I then changed `lua/parley/document_registry.lua:95` back to `config_ms("agentic_submit_timeout_ms")`. The spec went red (8 passed, 1 failed), and the failure was this test. I restored the checkout afterwards. The fake does support `FAKE_COUCH_REGISTRY_DELAY_OPS` (`tests/fixtures/fake_couch_registry.py:84-88`). The other two files in the window are generated gate and review ledgers. They don't change `## Spec`, `## Revisions` or `## Done when`, and the window resolves no conflicts.
+
+1. **Strengths**
+   - **The test now checks that `request()` uses the helper, not only the helper's arithmetic.** Removing the wiring turns it red (verified above).
+   - **Setup and cleanup are safe.** The file is registered before config changes, so setup uses the normal deadline. The `pcall` plus restore stops a failure from leaking the 1000 ms deadline or the delay variables into later tests. This also fixes the cleanup gap the earlier round mentioned.
+   - **The timing margins are reasonable.** 2 s sits 1 s away from both edges, so the test isn't fragile under load.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings:** none.
+
+5. **Test coverage notes:** `document_registry_spec` passes 9/9 at head. Reverting the timer wiring fails exactly the new test, so the regression the finding described is now caught.
+
+6. **Architecture (interdiff only)**
+   - **ARCH-DRY: pass.** The new code is test-only. It uses the same save/`pcall`/restore pattern as the test just above it.
+   - **ARCH-PURE: pass.** The production code doesn't change.
+   - **ARCH-PURPOSE: pass.** The finding asked for a test that checks `request()` uses the helper, and the test now does. The family `regression-test-pins-wiring` gets no new instance.
+
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The spec now sends a rename through request() with a 1000 ms submit deadline against a fake that holds renames 2 s, all inside a pcall that restores config and env. 9/9 at head; reverting document_registry.lua:95 to config_ms(...) fails that test (8/1), verified and restored.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"431461a9-4dc4-4b2c-a610-485c749b09a7","repository":"github.com/xianxu/parley.nvim","issue_id":"000382","recipe":"fix-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/45242f9a35f2e5b1","reviewed_head":"50cb93e46dc57bc449d2667e192049344968b039","slot":"parley.nvim:4","requested_at":"2026-10-18T06:18:03.983788Z"},"phase":"finished","pid":62956,"started_at":"2026-10-18T06:18:04.079916Z","finished_at":"2026-10-18T06:19:49.015207Z","session_id":"8f9f7110-b412-4a19-9b16-88838558b5e1","outcome":"returned"}] -->

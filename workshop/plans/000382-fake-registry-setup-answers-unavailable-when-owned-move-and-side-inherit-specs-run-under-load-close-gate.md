@@ -166,6 +166,87 @@ rounds:
       isolation: fenced
       reviewed: 036cae07964a017a0491d22147a6c9fc8a1696bc
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 431461a9-4dc4-4b2c-a610-485c749b09a7
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000382"
+            recipe: fix-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/45242f9a35f2e5b1
+            reviewed_head: 50cb93e46dc57bc449d2667e192049344968b039
+            slot: parley.nvim:4
+            requested_at: "2026-10-18T06:18:03.983788Z"
+          phase: finished
+          pid: 62956
+          started_at: "2026-10-18T06:18:04.079916Z"
+          finished_at: "2026-10-18T06:19:49.015207Z"
+          session_id: 8f9f7110-b412-4a19-9b16-88838558b5e1
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-queue-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 50cb93e46dc57bc449d2667e192049344968b039
+        tracker_head: 98280587f156bf9d35998c97ef0c723e706464b7
+        branch_point: 6e571cf4a8f0c46687f0329c0c3721f586748742
+        since: "2026-10-17T22:18:10-07:00"
+        until: "2026-10-17T23:17:48-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-17T22:18:10-07:00"
+              end: "2026-10-17T23:17:48-07:00"
+              began: "2026-10-17T22:18:10-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+        sources:
+            - harness: claude
+              id: af31f906-121a-4f29-b30d-46e8e1b30d2a
+              slot: parley.nvim:4
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+              digest: 4d30c4c619c9d80ccd98e737f3da1a0817c7630cf2297792f74289794be2d8e3
+              started: "2026-10-16T00:42:14.062Z"
+              spawned: false
+              bytes: 41252873
+              windows:
+                - start: "2026-10-17T22:18:10-07:00"
+                  end: "2026-10-17T23:17:48-07:00"
+        queue_waits:
+            - attempt_id: 98340b6962a023c03fbfc9eb0bbf9e1b
+              slot: parley.nvim:4
+              record_digest: cdd93e682948bca4dbbe4a06a0859c1ed9255e0788efb3484860e58ed6ee7384
+              start: "2026-10-18T05:41:20.987737Z"
+              end: "2026-10-18T06:06:37.339353Z"
+              queue_seconds: 1516.351616
+              raw_seconds: 1516.351616
+              exact: true
+        cuts:
+            - dispatched: "2026-10-17T23:11:06-07:00"
+              finalized: "2026-10-17T23:13:46-07:00"
+              finalizing: true
+            - dispatched: "2026-10-17T23:15:48-07:00"
+              finalized: "2026-10-17T23:17:01-07:00"
+              finalizing: true
+      "n": 3
+      timestamp: "2026-10-17T23:20:01-07:00"
+      dispatched: "2026-10-17T23:18:03-07:00"
+      agent: claude
+      dispose:
+        - id: BR-2
+          disposition: addressed
+          note: The spec now sends a rename through request() with a 1000 ms submit deadline against a fake that holds renames 2 s, all inside a pcall that restores config and env. 9/9 at head; reverting document_registry.lua:95 to config_ms(...) fails that test (8/1), verified and restored.
+          round: 3
+      recipe: fix-review
+      isolation: fenced
+      reviewed: 50cb93e46dc57bc449d2667e192049344968b039
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#382 (boundary-review)
@@ -191,6 +272,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-2** [Minor] `regression-test-pins-wiring` (kind: defect) The default_deadline_ms test stays green when request() stops using the helper
   I reverted document_registry.lua:95 to config_ms("agentic_submit_timeout_ms") and document_registry_spec still passed 9/9, because the new test only checks the helper's arithmetic. Add a request()-level check, such as a rename against a fake slower than 1x but faster than 3x of a short submit deadline, and restore config inside a pcall.
 
+## Round 3 — 2026-10-17T23:20:01-07:00 (claude) — passed
+
+### Disposed
+
+- BR-2 — addressed — The spec now sends a rename through request() with a 1000 ms submit deadline against a fake that holds renames 2 s, all inside a pcall that restores config and env. 9/9 at head; reverting document_registry.lua:95 to config_ms(...) fails that test (8/1), verified and restored.
+
 ## Open findings
 
-- **BR-2** [Minor] `regression-test-pins-wiring` (kind: defect) The default_deadline_ms test stays green when request() stops using the helper
+(none — every finding has been disposed)
