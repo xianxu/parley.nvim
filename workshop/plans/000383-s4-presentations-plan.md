@@ -73,7 +73,7 @@
   - The fake `--send-to` already calls `--owe`, so a real Alt+Return in a spec clears the round with no extra wiring.
   - `fake_couch.lua` gains `M.round(registry, path, round_table)`.
 
-**Contract agreed with pair:2 (2026-10-18), building M1:** positions are 0-based `[line, col]` with `col` a **byte** offset within the line (what `nvim_buf_set_extmark` takes). A deletion has `start == end`. A missing sidecar gives `Round = null, Cleared = false`, which draws nothing. A malformed one gives `Code = "round-invalid"`, which parley treats as `unavailable`: nothing is drawn and the case is logged at debug. Open with pair:2: whether `result_hash` covers the exact bytes (parley's buffer hash matches only for LF files ending in a newline; otherwise parley re-anchors, which is harmless), and the format of `at` (the fake compares it to the submit time as ISO-8601 strings).
+**Contract agreed with pair:2 (2026-10-18), building M1:** positions are 0-based `[line, col]` with `col` a **byte** offset within the line (what `nvim_buf_set_extmark` takes). A deletion has `start == end`. A missing sidecar gives `Round = null, Cleared = false`, which draws nothing. A malformed one gives `Code = "round-invalid"`, which parley treats as `unavailable`: nothing is drawn and the case is logged at debug. Confirmed by pair:2: `result_hash` is `hex(sha256(exact file bytes)[:8])`, the `read --all` function, and Couch normalizes nothing. parley's newline-joined buffer hash matches for LF files that end in a newline, and re-anchoring covers the rest. **Timestamps are compared as instants, never as strings:** the round's `at` is RFC3339 UTC (`Z`), while the ledger's submit `At` is RFC3339Nano with a local offset (for example `-07:00`). The fake parses both with `datetime.fromisoformat` (after mapping `Z` to `+00:00` and cutting the nanoseconds to microseconds) and compares the instants. Task 1's spec includes a submit stamped with a local offset that is earlier as text but later as a time.
 
 **Original contract assumption:** the reply envelope is `{Code, Error, Round, Cleared}`, and `Round` follows the design's sidecar: `{base_hash, result_hash, at, presentation, spans:[{start:[l,c], end:[l,c], old, new, explain?}]}`, with 0-based positions in the result. `result_hash` is Couch's whole-file hash, `hex(sha256(bytes)[:8])`, so parley computes the same over the buffer's lines joined with `\n` plus the final newline. If M1 differs, the fake and Task 1 change together. `scripts/check-couch-registry-conformance.py` then gains a `round` case against the real binary (Task 6), which is the drift guard.
 
@@ -101,7 +101,7 @@
 - [ ] Implement:
   - in `owe_or_fold` on `--owe`, `status["LastSubmit"] = At`;
   - a `--round PATH FILE` branch storing `state["rounds"][key]`;
-  - the `round` op, computing `Cleared` from `LastSubmit > Round["at"]` (ISO strings compare lexically);
+  - the `round` op, computing `Cleared` as `instant(LastSubmit) > instant(Round["at"])`, parsed as above, never compared as strings;
   - `M.round` in `fake_couch.lua`.
 - [ ] Run until green, then commit `#383: the Couch fake keeps a round and clears it on submit`.
 
