@@ -73,9 +73,8 @@ local function render_propose_edits(buf, call, original, new_content)
                 pos = pos,
                 explain = e.explain,
                 new_string = e.new_string,
-                -- A pure deletion (empty new_string) is oriented by its gutter
-                -- "why" diagnostic, not a highlight (skill_render skips it). #133
-                kind = (e.new_string == nil or e.new_string == "") and "delete" or "edit",
+                -- #387: a pure deletion leaves no trace (skill_render skips it).
+                kind = require("parley.presentation").kind(e.old_string, e.new_string),
             })
         end
     end

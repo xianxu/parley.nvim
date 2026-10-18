@@ -309,6 +309,7 @@ atlas:
       - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/integration/highlight_groups_spec.lua
+      - tests/unit/color_spec.lua
       - tests/integration/highlight_typing_spec.lua
       - tests/arch/performance_line_reader_spec.lua
       - tests/integration/chat_pending_spec.lua
@@ -1236,6 +1237,7 @@ atlas:
       - lua/parley/render.lua
       - lua/parley/highlighter.lua
       - lua/parley/highlight_groups.lua
+      - lua/parley/color.lua
       - lua/parley/timezone_diagnostics.lua
       - lua/parley/init.lua
       - lua/parley/copy.lua
@@ -1244,6 +1246,7 @@ atlas:
       - tests/integration/chat_treesitter_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/integration/highlight_groups_spec.lua
+      - tests/unit/color_spec.lua
       - tests/integration/highlight_typing_spec.lua
       - tests/unit/timezone_diagnostics_spec.lua
       - tests/unit/render_spec.lua

@@ -38,7 +38,7 @@ one-keystroke lookup.
    and inserts/updates a final managed footnote footer via one buffer rewrite
    (`define.apply_definition_footnote`) — a single undo entry that anchors
    everything; **(b)** highlights the selected term/reference span with
-   `ParleyEditChange` (`skill_render.highlight_span`); **(c)** refreshes persisted
+   `ParleyEditAdd` (`skill_render.highlight_span`, kind `add`: the reference replaces nothing, #387); **(c)** refreshes persisted
    footnote diagnostics (`skill_render.refresh_footnote_diagnostics`), which
    parses the managed footer and sets INFO `vim.diagnostic` entries on matching
    inline `term[^id]` spans with canonical, unwrapped messages from
@@ -149,7 +149,7 @@ tool-call args (`result.calls[1].input`), read in `on_done`.
 ## Notes
 
 - The fresh define highlight spans the selected text plus immediate `[^id]`
-  reference; rehydrated diagnostics do not recreate the ParleyEditChange highlight.
+  reference; rehydrated diagnostics do not recreate the ParleyEditAdd highlight.
 - `skill_render.refresh_footnote_diagnostics` owns only diagnostics tagged
   `parley-footnote` and preserves other `parley_skill` diagnostics, so review
   diagnostics are not cleared by markdown footnote refresh.

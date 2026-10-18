@@ -12,9 +12,9 @@ processed, `{}` ones skipped, and pending markers surface via the **on-save**
 quickfix (`BufWritePost`), not at submission. The resubmit loop re-runs only
 while a *ready* marker remains and the ready count shrank, so a whole-doc mode
 round is effectively one-shot (inserting `{}` findings is not "stuck"). Applied
-edits are oriented by `ParleyEditChange` span highlights (#386: the changed text only, never the whole line) + INFO gutter diagnostics that
-**ride** subsequent edits until the next round or an explicit dismiss; pure
-deletions show only the gutter "why" (no highlight).
+edits are oriented by span highlights (#386: the edited text only, never the whole line; #387: `ParleyEditChange`, or `ParleyEditAdd` for an edit whose old text is empty, by `presentation.kind`) + INFO gutter diagnostics that
+**ride** subsequent edits until the next round or an explicit dismiss; a pure
+deletion leaves no trace — no highlight and no diagnostic (#387).
 
 The same marker family is also used inside chat buffers for
 [drill-in discussions](../chat/drill_in.md) (different keybindings + a chat-
@@ -172,7 +172,7 @@ Review is implemented as a **skill** in the unified skill system (see the [skill
 - **Stateless**: Each submit sends full document; markers carry conversation history
 - **Tool**: `propose_edits` tool with `{old_string, new_string, explain}` triples (forced via `tool_choice`)
 - **Edits**: Applied to file on disk via the `propose_edits` builtin, buffer reloaded via `:edit!`
-- **Feedback**: Highlights on edited spans (`ParleyEditChange`), diagnostics from explain fields (INFO), quickfix for pending agent questions
+- **Feedback**: Highlights on edited spans (`ParleyEditAdd` / `ParleyEditChange`), diagnostics from explain fields (INFO), quickfix for pending agent questions
 - **Provider**: Requires a client tool wire: Anthropic or an OpenAI-compatible provider, including CLIProxyAPI routes. Direct Google AI has no wire. Agent choice follows the [skill agent cascade](../skills/skill-system.md).
 
 ## Review Modes
