@@ -68,6 +68,14 @@ fixture is retained to avoid random temp-path typo matches.
 
 ### 2026-10-18
 
+### 2026-10-18 — recorded landing suite
+
+Recorded suite 91d3fb2818b0d4b7fec9346094a3129e passed exit 0 on
+75e98e4e (code identical to the SHIP close), preferred 0.12.5 plus stock 0.11.7.
+960 spec-file executions passed, lint clean, no surviving test processes.
+Execution 4m58s after 881s queue. Saved suite.log SHA-256:
+5dc42be19a6885d4e70ff6073faae43597bfd77c351221e93a882b66031da615.
+
 ## Revisions
 
 ### 2026-10-18 — review while suite queues
