@@ -7,6 +7,27 @@ local active, queue, handles = 0, {}, {}
 local MAX_ACTIVE, MAX_QUEUE = 4, 64
 local pump
 
+--- A positive millisecond setting: the user's config, else the shipped default.
+--- One owner for agentic deadlines (#382); agentic_document reads it too.
+--- @param key string
+--- @return number
+function M.config_ms(key)
+    local value = (require("parley").config or {})[key]
+    if type(value) == "number" and value > 0 then return value end
+    return require("parley.config")[key]
+end
+
+--- The deadline a request gets when its caller names none (#382). A rename
+--- gets three submit deadlines before its reply counts as lost: the file has
+--- already moved, so waiting costs nothing (#359). That holds for the native
+--- rename and for document_move's journaled ones alike.
+--- @param operation string
+--- @return number
+function M.default_deadline_ms(operation)
+    local submit = M.config_ms("agentic_submit_timeout_ms")
+    return operation == "rename" and 3 * submit or submit
+end
+
 local function unavailable(message)
     return { kind = "unavailable", error = message }
 end
@@ -15,7 +36,8 @@ function M.request(operation, args, witness, callback, options)
     options = options or {}
     args = vim.deepcopy(args or {})
     witness = vim.deepcopy(witness or {})
-    local item = { callback = callback, done = false, running = false }
+    local uv = vim.uv or vim.loop
+    local item = { callback = callback, done = false, running = false, queued_at = uv.hrtime() }
     local function finish(result)
         if item.done then return end
         item.done = true
@@ -23,6 +45,10 @@ function M.request(operation, args, witness, callback, options)
         if item.running then active = active - 1 end
         handles[item] = nil
         result.witness = witness
+        -- #382: how long it queued and ran, so a refusal names its cause.
+        local now = uv.hrtime()
+        result.queued_ms = math.floor(((item.started_at or now) - item.queued_at) / 1e6)
+        if item.started_at then result.ran_ms = math.floor((now - item.started_at) / 1e6) end
         vim.schedule(function() callback(result) end)
         pump()
     end
@@ -47,9 +73,15 @@ function M.request(operation, args, witness, callback, options)
     if operation == "register" then vim.list_extend(argv, { "--owner", args[2] }) end
     if operation == "rename" then argv[#argv + 1] = args[2] end
     argv[#argv + 1] = "--json"
+    -- The deadline bounds the child's lifetime, from spawn (#382), as the
+    -- header says: time spent queued behind MAX_ACTIVE others is not Couch
+    -- being slow, and a request that never started has no unknown outcome.
+    -- The queue itself is bounded by MAX_QUEUE.
+    local deadline_ms = options.timeout_ms or M.default_deadline_ms(operation)
     function item.start()
         if item.done then return end
         item.running = true
+        item.started_at = uv.hrtime()
         active = active + 1
         item.child = couch.run(argv, function(obj)
             if item.done then return end
@@ -57,21 +89,26 @@ function M.request(operation, args, witness, callback, options)
             local result = model.classify_reply(operation, obj.code, ok and data or nil, vim.NIL)
             if result.kind == "registered" then
                 local expected = operation == "rename" and args[2] or args[1]
-                local canonical = (vim.uv or vim.loop).fs_realpath(expected) or vim.fs.normalize(expected)
+                local canonical = uv.fs_realpath(expected) or vim.fs.normalize(expected)
                 if result.registration.File ~= canonical then result = unavailable("registry path mismatch") end
+            end
+            if result.kind ~= "registered" and result.kind ~= "absent" then
+                result.exit, result.stderr = obj.code, (obj.stderr or ""):sub(1, 400)
             end
             finish(result)
         end, options.env and { env = options.env } or nil)
+        if item.done then return end
+        item.timer = uv.new_timer()
+        require("parley.helper").start_deadline(item.timer, deadline_ms, vim.schedule_wrap(function()
+            if item.child then pcall(item.child.kill, item.child, 15) end
+            finish(unavailable(("Couch registry deadline exceeded after %d ms; mutation outcome may be unknown")
+                :format(deadline_ms)))
+        end))
     end
     if #queue >= MAX_QUEUE and active >= MAX_ACTIVE then
         finish(unavailable("registry request queue full")); return item
     end
     handles[item] = true
-    item.timer = (vim.uv or vim.loop).new_timer()
-    item.timer:start(options.timeout_ms or 2500, 0, vim.schedule_wrap(function()
-        if item.child then pcall(item.child.kill, item.child, 15) end
-        finish(unavailable("Couch registry deadline exceeded; mutation outcome may be unknown"))
-    end))
     queue[#queue + 1] = item
     pump()
     return item

@@ -63,4 +63,15 @@ function M.fold(registry, path, id)
     ledger(registry, "--fold", id, path)
 end
 
+--- Why a document_registry request did not register (#382): its refusal code
+--- and error, the child's exit status and stderr, and how long it queued and
+--- ran. "unavailable" alone cannot tell a deadline from a malformed reply, a
+--- failed spawn or a path mismatch.
+--- @param result table a document_registry result
+--- @return string
+function M.explain(result)
+    return vim.inspect({ kind = result.kind, code = result.code, error = result.error, exit = result.exit,
+        stderr = result.stderr, queued_ms = result.queued_ms, ran_ms = result.ran_ms })
+end
+
 return M

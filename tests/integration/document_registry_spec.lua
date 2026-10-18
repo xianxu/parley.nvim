@@ -45,6 +45,100 @@ describe("document registry process boundary", function()
         vim.fn.delete(root, "rf")
     end)
 
+    -- #382: a caller that names no deadline used to get a 2.5 s literal, which
+    -- a loaded suite's couch spawn missed (spec setups failed as `deadline
+    -- exceeded`) and which document_move's journaled renames ran on in
+    -- production. It now gets the product's submit deadline, read from config.
+    it("gives a request that names no deadline the configured submit deadline", function()
+        local file = root .. "/slow.md"
+        vim.fn.writefile({ "plain" }, file)
+        local config = require("parley").config
+        local configured = config.agentic_submit_timeout_ms
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "3"
+        local ok, err = pcall(function()
+            -- 3 s is past the old 2.5 s default and inside the 15 s one
+            assert.equals("absent", request("lookup", { file }).kind)
+            config.agentic_submit_timeout_ms = 1000
+            local late = request("lookup", { file })
+            assert.equals("unavailable", late.kind)
+            assert.matches("deadline exceeded", late.error)
+        end)
+        config.agentic_submit_timeout_ms = configured
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = nil, nil
+        assert.is_true(ok, tostring(err))
+    end)
+
+    -- #382: one rule for every caller that names no deadline. A rename, native
+    -- or document_move's journaled one, waits three submit deadlines (#359).
+    it("derives every default deadline from the submit deadline, a rename's from three", function()
+        local old, new = root .. "/before.md", root .. "/after.md"
+        vim.fn.writefile({ "plain" }, old)
+        assert.equals("registered", request("register", { old, "ops:0" }).kind)
+        vim.fn.rename(old, new)
+        local config = require("parley").config
+        local configured = config.agentic_submit_timeout_ms
+        local ok, err = pcall(function()
+            config.agentic_submit_timeout_ms = 1000
+            local got = {}
+            for _, op in ipairs({ "lookup", "register", "forget", "rename" }) do got[op] = client.default_deadline_ms(op) end
+            assert.same({ lookup = 1000, register = 1000, forget = 1000, rename = 3000 }, got)
+            -- and request() uses it: a rename the fake holds 2 s, past one
+            -- deadline and inside three, is still answered
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "rename"
+            assert.equals("registered", request("rename", { old, new }).kind)
+        end)
+        config.agentic_submit_timeout_ms = configured
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = nil, nil
+        vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = nil
+        assert.is_true(ok, tostring(err))
+    end)
+
+    -- #382: the deadline bounds the child from spawn. Time queued behind
+    -- MAX_ACTIVE others is not Couch being slow: eight lookups the fake answers
+    -- in 0.6 s each, with a 1 s deadline, all answer, though the last four
+    -- finish about 1.2 s after they were asked.
+    it("starts a request's deadline when its child spawns, not when it queues", function()
+        local file = root .. "/queued.md"
+        vim.fn.writefile({ "plain" }, file)
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "0.6"
+        local results, count = {}, 0
+        for n = 1, 8 do
+            client.request("lookup", { file }, {}, function(result) results[n] = result; count = count + 1 end,
+                { timeout_ms = 1000 })
+        end
+        local done = vim.wait(arrival.MS, function() return count == 8 end, 10)
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = nil, nil
+        assert.is_true(done)
+        local queued = 0
+        for n = 1, 8 do
+            assert.equals("absent", results[n].kind, n .. ": " .. vim.inspect(results[n]))
+            if results[n].queued_ms >= 300 then queued = queued + 1 end
+        end
+        assert.is_true(queued >= 4, "the later lookups never waited in the queue: " .. vim.inspect(results))
+    end)
+
+    -- #382: "unavailable" names its cause. A refusal carries the child's exit
+    -- status and stderr and how long it queued and ran; a deadline says its
+    -- length.
+    it("says why a request was refused", function()
+        local file = root .. "/why.md"
+        vim.fn.writefile({ "plain" }, file)
+        vim.env.FAKE_COUCH_REGISTRY_MODE = "unsupported"
+        local refused = request("lookup", { file })
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+        local late = request("lookup", { file }, { timeout_ms = 300 })
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = nil, nil
+        assert.equals("unavailable", refused.kind)
+        assert.equals(2, refused.exit)
+        assert.matches("unknown session%-sync verb", refused.stderr)
+        assert.is_number(refused.queued_ms); assert.is_number(refused.ran_ms)
+        assert.matches("deadline exceeded after 300 ms", late.error)
+        -- libuv compares expiry against a millisecond-truncated loop clock and
+        -- ran_ms is floored, so a correct 300 ms deadline can read 299.
+        assert.is_true(late.ran_ms >= 290, vim.inspect(late))
+    end)
+
     it("preserves null-only absence and persisted identity across register and rename replay", function()
         local old, new = root .. "/a space;note.md", root .. "/new.md"
         vim.fn.writefile({ "plain" }, old)

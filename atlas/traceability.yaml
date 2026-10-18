@@ -702,6 +702,7 @@ atlas:
       - tests/helpers/spec_progress.lua
       - tests/helpers/spec_child.lua
       - tests/helpers/jit_watch.lua
+      - lua/parley/jit_tuning.lua
       - tests/helpers/jit_tuning.lua
       - tests/helpers/reachability.lua
       - scripts/test-nvim.sh
@@ -823,6 +824,7 @@ atlas:
       - tests/integration/document_band_spec.lua
       - tests/unit/document_band_model_spec.lua
       - tests/integration/document_registry_spec.lua
+      - tests/unit/start_deadline_spec.lua
       - tests/integration/document_lease_spec.lua
       - tests/integration/document_move_spec.lua
       - tests/integration/sidecar_degrade_spec.lua

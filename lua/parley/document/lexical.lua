@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Shared pure lexical grammar. Native full-line predicates stay optimized;
 -- the resumable recognizer below handles bounded slices of very long lines.
 

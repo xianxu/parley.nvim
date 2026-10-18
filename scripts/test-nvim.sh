@@ -1,7 +1,7 @@
 #!/bin/sh
 # Print the directory of the nvim `make test` runs (#294): the first candidate
 # whose LuaJIT has the arm64 mcode placement fix, as decided by
-# tests/helpers/jit_tuning.lua (one owner for the version rule and why it
+# lua/parley/jit_tuning.lua (one owner for the version rule and why it
 # matters). Without the fix a spec process can flush its compiled code
 # millions of times: one 25s probe ran 173s.
 #
@@ -17,8 +17,8 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
 has_mcode_fix() {
     PARLEY_ROOT="$ROOT" "$1" --clean --headless \
-        -c 'lua package.path = vim.env.PARLEY_ROOT .. "/?.lua;" .. package.path' \
-        -c 'lua io.stdout:write(require("tests.helpers.jit_tuning").has_mcode_fix(jit.version) and "yes" or "no")' \
+        -c 'lua package.path = vim.env.PARLEY_ROOT .. "/lua/?.lua;" .. package.path' \
+        -c 'lua io.stdout:write(require("parley.jit_tuning").has_mcode_fix(jit.version) and "yes" or "no")' \
         -c 'qa!' 2>/dev/null | grep -q '^yes$'
 }
 

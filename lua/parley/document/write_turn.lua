@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Pure write-turn decision (#266 M1).
 --
 -- One generation may mutate a document at a time. Eligibility order is admission

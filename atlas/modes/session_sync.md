@@ -280,7 +280,17 @@ Code: `agentic_document.lua` owns admission, cached knowledge and native move
 hooks and the public Parley movers. Owned file moves journal intent before an
 atomic no-replace rename; native saveas waits for its successful write witness.
 `document_session.lua` owns the pure lifecycle; `document_registry.lua`
-uses the shared `couch.run` transport. `document_move_plan.lua` projects pure
+uses the shared `couch.run` transport and owns the default registry deadline
+(`default_deadline_ms`, read through `config_ms`). A request that names none
+gets `agentic_submit_timeout_ms`, and a rename, native or journaled, gets three
+of them; there is no hidden literal (#382). Only the inline `:saveas!` check
+names its own, shorter deadline. A deadline bounds the child from its spawn, not
+from when it queued behind the four running ones. The queue is bounded by count
+(64), not time; a caller that needs a wall-clock bound sets its own, as the
+inline `:saveas!` check does. Every result carries `queued_ms`/`ran_ms`, and a
+refusal the child's `exit` and `stderr`. Each such deadline refreshes the loop
+clock before it starts (`helper.start_deadline`), since libuv measures a timer
+from cached time. `document_move_plan.lua` projects pure
 side/backlink effects and the [S3 projection contract](#s3-move-projection-and-execution-373).
 `document_move.lua` dispatches and recovers the journal through the pure
 `document_move_state.lua` reducer; `document_lease.lua` owns kernel leases, and

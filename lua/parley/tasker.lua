@@ -246,9 +246,9 @@ schedule_reconcile=function(record)
         record.timer=timer
     end
     local delay=math.max(1,math.ceil(record.state.reconcile_due-clock()))
-    local ok=pcall(function()record.timer:start(delay,0,function()
+    local ok=pcall(function()require("parley.helper").start_deadline(record.timer,delay,function()
         vim.schedule(function()if records[record.state.attempt_id]==record then M.reconcile_step()end end)
-    end)end)
+    end,record.runtime)end)
     if not ok then record.state.timer_error=true;close_reconcile(record)end
 end
 -- Reconciliation probes liveness, and sends SIGKILL once a stop's grace has run
@@ -592,14 +592,14 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
     if record.state.exited and not handle:is_closing() then handle:close() end
     if opts.deadline_ms and attempt.is_unresolved(record.state) then
         local ok,timer=pcall(record.runtime.new_timer)
-        if ok and timer and pcall(function()timer:start(opts.deadline_ms,0,function()
+        if ok and timer and pcall(function()require("parley.helper").start_deadline(timer,opts.deadline_ms,function()
             vim.schedule(function()
                 -- One-shot: closed as it fires, so a record then held forever
                 -- keeps no handle; retire closes one that never fired.
                 if record.deadline==timer then close_timer(timer);record.deadline=nil end
                 if records[id]==record then stop_matching(function(state)return state.attempt_id==id end,15,'deadline')end
             end)
-        end)end)then record.deadline=timer
+        end,record.runtime)end)then record.deadline=timer
         elseif ok and timer then close_timer(timer)end
     end
     snapshot()

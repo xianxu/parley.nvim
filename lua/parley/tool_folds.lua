@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Native folds are a presentation of confirmed document sections. Neovim moves
 -- them on ordinary edits; only structural deltas schedule reconciliation.
 local M={}
