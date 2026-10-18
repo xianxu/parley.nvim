@@ -1,6 +1,6 @@
 ---
 id: 000380
-status: codecomplete
+status: done
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: e4fd6fb1734bcc2be5546291877c8870dbdf16a6
         evidence_commit: 54cd27156133093f271b47b497f2ca89bd14cac6
+        landed_commit: 68ad7c6f9a1286224749b038dac55f40707e13cd
 ---
 
 # document_session: one tagged inheritance stage instead of three flags (#378 review, ARCH-ORDER)
