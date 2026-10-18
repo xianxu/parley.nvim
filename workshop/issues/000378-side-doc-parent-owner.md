@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "1e667b75", done: "9bd9b927"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # Side documents inherit parent ownership
@@ -87,6 +87,8 @@ Open question for the TL: should inheritance also require the side doc's `type: 
 ## Log
 
 ### 2026-10-17
+- 2026-10-17: closed — BR-6 via TL-approved re-plan: the pure model owns the queued press (queue_submit; admits = attach lookup, confirm_parent, inherited register/re-lookup) and every dispatch settles it in one place, emitting exactly one flush_queued (registration, or plain-doc submit with no inheritance) or drop_queued (any other inheritance ending, pending, detach); the shell submits only on flush_queued, tail flush and s.queued_submit removed. Table test walks 22 endings x 6 starts: one decision each, stale witness decides nothing, no second decision; always-flush mutation fails it. Integration: reload during inheritance (detach ending) and forgotten/re-owned parent each 0 sends; always-flush mutation fails all 3. document_session 46, side_inherit 9, agentic_document 47, session_sync 64; full suite passed on d4ecabfb (record failed: api.github.com unreachable). (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
+- 2026-10-17: flow upgraded quick → full — 122 added lines in code files (limit 100)
 
 Deterministic fake-only reproduction through the actual opener: register parent.md to ops:0, select pane actor parley.nvim:1, open [side](parent.side/child.md) with OpenFileUnderCursor. Navigation issued exactly couch --session-sync lookup ABS_CHILD --json. Child phase was plain, identity null, registry entry absent, send count zero. Parent registration retained Owner and RegisteredOwner ops:0. Scratch removed and process census clean. Local evidence: /tmp/parley-373-side-open-gap.log; runner /tmp/parley-373-side-open-gap.lua, invoked by make -f /tmp/parley-373-side-open-gap.mk test-373-side-open-gap. The observed argv and state above are the durable evidence; temporary paths are not required to understand the failure.
 - The TL approved the plan and answered the open question: folder membership only, so a hand-made side doc with no frontmatter still inherits. The band is short and says how to retry: "navigate again".
