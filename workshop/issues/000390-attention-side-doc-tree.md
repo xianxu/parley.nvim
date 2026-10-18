@@ -38,15 +38,14 @@ Group side docs beneath their listed parent, recursively, with two spaces indent
 
 ## Plan
 
-- [ ] Build a pure attention_rows forest from already scoped/sorted entries, then render preorder with two leading spaces per level. Preserve sibling order; missing parents become roots and visited-node tracking breaks cycles deterministically without dropping entries.
-- [ ] Add one optional pure filter_items hook to float_picker, default behavior unchanged. Attention supplies its pure filter: score every item through the existing scorer, retain matching rows plus ancestors once, return forest order. Query, selection and live-update paths reuse the hook (ARCH-DRY / ARCH-PURE).
-- [ ] Red/green nested/orphan/cycle/order tests and counted N/2N traversal/filter tests; real-picker child-search, scope-toggle and late-update regressions; existing architecture guards, dual-runtime focused tests, atlas/README and recorded suite before landing.
+- [x] Build a pure attention_rows forest from already scoped/sorted entries, then render preorder with two leading spaces per level. Preserve sibling order; missing parents become roots and visited-node tracking breaks cycles deterministically without dropping entries.
+- [x] Add one optional pure filter_items hook to float_picker, default behavior unchanged. Attention supplies its pure filter: score every item through the existing scorer, retain matching rows plus ancestors once, return forest order. Query, selection and live-update paths reuse the hook (ARCH-DRY / ARCH-PURE).
+- [x] Red/green nested/orphan/cycle/order tests and counted N/2N traversal/filter tests; real-picker child-search, scope-toggle and late-update regressions; existing architecture guards, dual-runtime focused tests, atlas/README; schedule the recorded suite for the landing gate.
 
 Indentation emission also costs O(B) output bytes (B <= 65,280 spaces for a maximal 256-node chain); the counted bound concerns node/edge traversal, not the required output.
 
 No durable state or new actions: existing open/select/type/Ctrl+A continue. A missing/filtered parent displays as a root; malformed cycles display one deterministic root per component; both require no repair and lose nothing. Picker snapshots die on close; store, probes and seen tracking are unchanged. Each layout visits O(N) entries/edges; each search scores N rows once and walks at most N newly retained ancestor edges (plus existing fuzzy-score cost), bounded by the existing 256-entry store. Count parent-field accesses / scorer calls at N and 2N. A disposable real-profile check will be requested from the hub once green.
 
-- [ ]
 
 ## Log
 
@@ -66,3 +65,26 @@ new action, watcher or probe lifecycle. Prior #388 punctuation-only search
 fixture is retained to avoid random temp-path typo matches.
 
 ### 2026-10-18
+
+## Revisions
+
+### 2026-10-18 — review while suite queues
+
+The focused and disposable live checks are complete. The recorded suite remains
+a mandatory landing gate; schedule it before close so the review can overlap
+the machine queue rather than making queue completion a plan checkbox.
+
+### 2026-10-18 — verification and disposable stage
+
+317 focused cases passed on each of Neovim 0.12.5 and stock 0.11.7; lint passed
+805 files with zero warnings/errors. Recorded suite c089ff0b4d6e13aee06d0413bf4e1d11
+is queued on f13e2f12. The hub-approved disposable real-profile check used stock
+0.11.7, /Users/xianxu/.config/nvim/init.lua and the staged plugin on :0, with a
+temporary state directory and five fixture files only. It passed root ordering,
+two/four-space nesting, scoped orphan promotion and all-slot reattachment,
+ancestor search and Ctrl+A query retention. The first check script counted
+blank picker padding as results; counting nonblank rows fixed the assertion,
+with no product change. Evidence: /tmp/parley-390-live-result.json and
+/tmp/parley-390-live.log. Scratch files/state were removed and the stage cleared.
+Attention now visibly opens anchored at the top, so parents appear above their
+children. The hub requested this visible change in the landing report.
