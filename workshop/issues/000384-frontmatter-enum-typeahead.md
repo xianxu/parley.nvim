@@ -41,25 +41,24 @@ In a markdown buffer, typing on a `collaboration-mode:` line in the frontmatter 
 
 Quick flow (about 80 code lines). One source per key (ARCH-DRY); the pure part is unit-tested with no buffer.
 
-- [ ] `lua/parley/frontmatter_enum.lua`, pure core:
+- [x] `lua/parley/frontmatter_enum.lua`, pure core:
   - `M.declare(key, { values = fn, applies = fn(path)? })` and `M.keys()`.
   - `M.context(lines, row, col)` returns `{ key, start, partial }` when the cursor is on a `key: <value>` line strictly inside the opening `---` block (via `frontmatter.parse`'s `lnum`/`close`), for a declared key; otherwise nil.
   - `M.candidates(key, partial, path)` returns the declared values starting with `partial`, or `{}` when `applies(path)` is false.
-- [ ] Declarations, each at its owner:
+- [x] Declarations (values from each owner; the declaration lines live in `frontmatter_enum.lua`):
   - `skills/review/collaboration.lua` exports `M.modes = { "discussion", "collaboration", "chat" }`, builds `known` from it, and declares `collaboration-mode`.
   - `issues.lua` declares `status` from `vocab():status_values()`, with `applies` = issue files (its `issues_dir`). The dead one-off `M.omnifunc` / `setup_issue_completion` are deleted: `setup_issue_completion` has no caller, so status typeahead never worked.
   - #383 later adds `presentation` the same way.
-- [ ] Integration:
-  - `frontmatter_enum.attach(buf)` from the generic markdown setup (`init.lua`, beside `comment.attach` / `session_sync.attach`).
-  - It sets `omnifunc` when the buffer has none.
-  - When nvim-cmp is loaded, it registers a `parley_frontmatter` source once (`is_available` = cursor inside a frontmatter value) and appends it to the buffer's current sources (`cmp.get_config().sources`), never replacing them.
-  - `neighborhood`'s chat source list (`cmp_path_sources`) includes it too, so chat buffers keep it.
-- [ ] Specs:
-  - `tests/unit/frontmatter_enum_spec.lua`: context on, before and after the frontmatter, on an undeclared key, and with no closing `---`; prefix filtering; `applies`.
-  - The collaboration values equal the resolver's `known` (one source).
-  - `tests/integration/frontmatter_enum_cmp_spec.lua`: with a stub `cmp` table, attaching appends the source and keeps an existing one; its `complete` yields the modes on a `collaboration-mode:` line and nothing in the body; omnifunc gives the same.
-- [ ] Atlas: a line in the markdown-editing page on frontmatter typeahead and how a key joins.
+- [x] Integration (revised while building, see Log): `frontmatter_enum.attach(buf)` from both the markdown setup (`init.lua`, beside `comment.attach`) and the chat setup (`prep_chat`) adds a buffer-local TextChangedI popup through `helper.complete_noselect`, the mechanism the issue `status:` popup already used. That `init.lua` block is deleted.
+- [x] Specs:
+  - `tests/unit/frontmatter_enum_spec.lua`: context on, before and after the frontmatter, on an undeclared key, and with no closing `---`; prefix filtering; `applies`; the collaboration values are exactly the resolver's (one source).
+  - `tests/integration/frontmatter_enum_popup_spec.lua`: TextChangedI offers the modes, filtered; quiet on a full value, an undeclared key and the body; one attach; status only in issue files; attached by parley's markdown setup.
+- [x] Atlas: a line in the markdown-editing page on frontmatter typeahead and how a key joins.
 
 ## Log
 
 ### 2026-10-18
+
+- Built. The integration changed from the posted plan, a simplification: issue files already had a working `status:` typeahead, a TextChangedI popup in `init.lua` calling `helper.complete_noselect`, which needs no completion plugin. The `omnifunc` in `issues.lua` was dead code (`setup_issue_completion` had no caller). So the popup is generalized into `frontmatter_enum.attach`, and no nvim-cmp source or omnifunc is added: one mechanism, which works whether or not cmp is installed (ARCH-DRY).
+- `collaboration.lua` exports `M.modes`. Its `known` set and its bad-mode message are built from it.
+- Mutation checks: dropping the markdown attach fails "is attached by parley's markdown buffer setup", and a hardcoded `known` missing `chat` fails "draws collaboration-mode from the resolver's own list".

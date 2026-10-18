@@ -999,29 +999,4 @@ M.cmd_issue_goto = function()
     _parley.logger.info("Parent issue: " .. parent.id .. " " .. (parent.title or ""))
 end
 
--- Omnifunc for issue files: provides status value completion on the status: line.
--- Set as omnifunc on issue buffers via setup_issue_completion().
-M.omnifunc = function(findstart, base)
-    if findstart == 1 then
-        local line = vim.api.nvim_get_current_line()
-        -- Only complete on status: lines
-        if not line:match("^status:") then
-            return -3 -- cancel completion
-        end
-        -- Find start of the value after "status: "
-        local col = line:find(":%s*") -- find ": "
-        if col then
-            return col + (line:sub(col + 1, col + 1) == " " and 1 or 0)
-        end
-        return -3
-    end
-
-    return M.complete_frontmatter_values("status", base)
-end
-
--- Attach omnifunc to an issue buffer for status field typeahead
-M.setup_issue_completion = function(buf)
-    vim.api.nvim_buf_set_option(buf, "omnifunc", "v:lua.require'parley.issues'.omnifunc")
-end
-
 return M
