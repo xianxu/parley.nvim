@@ -58,6 +58,7 @@ weakening what it bounds (pump work over a full queue of maximum-width chains).
 ## Log
 
 ### 2026-10-17 — final full verification green
+- 2026-10-17: closed — Stock Neovim 0.11.7 full suite: 469/469 files, exit 0; preferred 0.12.5 recorded suite c83da5529448660148145c8a4b3d874a: 469/469, exit 0, status on code-identical 18dac2ef. One unchanged-code rerun after tracked unrelated #382 setup failure. Scoped 0.11 D.drain stress 16/16: global JIT enabled, zero mcode allocation aborts or flushes; unrelated code still compiles. Tool-resources stress 64/64 per runtime, unchanged superlinear negative control fails; active-JIT storage oracle proves compilation. Fifteen targeted files per runtime pass; lint and orphan checks clean. Atlas updated. Exact historical deadline failure not reproduced; allocator storm and multi-minute drain stalls measured and eliminated.; review verdict: SHIP
 
 The one unchanged-code retry c83da5529448660148145c8a4b3d874a completed
 exit 0 in 3m37s on 18dac2ef (code/tests identical to b8b171a9). All 469 spec
