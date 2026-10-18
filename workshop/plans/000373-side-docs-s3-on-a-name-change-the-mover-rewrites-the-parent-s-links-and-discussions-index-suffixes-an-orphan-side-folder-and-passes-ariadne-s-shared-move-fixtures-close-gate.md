@@ -341,6 +341,64 @@ rounds:
       recipe: milestone-review
       isolation: fenced
       blocked: true
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: cc8cdccd-dd91-4ccf-aa3d-1100cbd273eb
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: milestone-review
+            round: 8
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/5f6af2146bf7b05e
+            reviewed_head: 06304d247169c708ac43a457c25ca76fc6e4d120
+            slot: parley.nvim:1
+            requested_at: "2026-10-18T02:40:10.726331Z"
+          phase: finished
+          pid: 59908
+          started_at: "2026-10-18T02:40:10.819665Z"
+          finished_at: "2026-10-18T02:44:04.648888Z"
+          session_id: 01a14ce1-8733-7cc3-a591-5360f311d2d1
+          outcome: returned
+      "n": 8
+      timestamp: "2026-10-17T19:44:11-07:00"
+      dispatched: "2026-10-17T19:40:10-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Paragraph-wide exact-width code masks are shared by both rewrite APIs; preservation regressions pass.
+          round: 8
+        - id: BR-2
+          disposition: addressed
+          note: read_output preflights expected regular-file leaves and directory ancestors before mutation; Python regressions pass.
+          round: 8
+        - id: BR-3
+          disposition: addressed
+          note: Malformed destination scanning advances through disjoint tokens; complete-rewrite scale regressions pass.
+          round: 8
+        - id: BR-4
+          disposition: addressed
+          note: Code containment and reference scanning share markdown_blocks; boundary and continuation regressions pass.
+          round: 8
+        - id: BR-5
+          disposition: addressed
+          note: atlas/modes/session_sync.md:274 documents supplied observations, effect ordering and orphan_destination, matching document_move_plan.project.
+          round: 8
+        - id: BR-6
+          disposition: addressed
+          note: Finalization persists protection intent before release and retires disk effects before unlink; interruption and legacy recovery regressions pass.
+          round: 8
+        - id: BR-7
+          disposition: addressed
+          note: Shared validate_geometry rejects interfering document/side/orphan relationships before effects and during journal validation. Disabling it independently produces 2 pure, 4 mover and 16 frontend failures; pinned-head regressions pass, including nested OLD with/without its side tree through owned/native paths.
+          round: 8
+      recipe: milestone-review
+      isolation: fenced
+      reviewed: 06304d247169c708ac43a457c25ca76fc6e4d120
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#373 (boundary-review)
@@ -425,6 +483,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-7** [Critical] `output-preflight-before-mutation` (kind: defect) Orphan displacement can relocate OLD and strand its migration
   lua/parley/document_move_plan.lua:363 checks only targets inside the source side tree. Moving /repo/parent.side/child.md to /repo/parent.md admits /repo/parent.side as an orphan, then document_move.lua:1093 renames it to parent_1.side before moving OLD. A pinned-HEAD filesystem reproduction moved both child.md and an unrelated sibling into that suffix, left OLD and NEW absent, and stopped in document with "owned document rename has no matching inode witness"; recover then refused "recovery paths changed". This is the 2nd finding in family output-preflight-before-mutation. State and enforce the rule across all planned document/side/orphan path relationships: an earlier effect must not relocate a later source. Reject unsafe overlaps before effects, or explicitly support their relocated witnesses and recovery. Add pure and filesystem regressions, including nested OLD with and without its own side tree and both owned/native entry paths. ARCH-PURPOSE, ARCH-ORDER.
 
+## Round 8 — 2026-10-17T19:44:11-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Paragraph-wide exact-width code masks are shared by both rewrite APIs; preservation regressions pass.
+- BR-2 — addressed — read_output preflights expected regular-file leaves and directory ancestors before mutation; Python regressions pass.
+- BR-3 — addressed — Malformed destination scanning advances through disjoint tokens; complete-rewrite scale regressions pass.
+- BR-4 — addressed — Code containment and reference scanning share markdown_blocks; boundary and continuation regressions pass.
+- BR-5 — addressed — atlas/modes/session_sync.md:274 documents supplied observations, effect ordering and orphan_destination, matching document_move_plan.project.
+- BR-6 — addressed — Finalization persists protection intent before release and retires disk effects before unlink; interruption and legacy recovery regressions pass.
+- BR-7 — addressed — Shared validate_geometry rejects interfering document/side/orphan relationships before effects and during journal validation. Disabling it independently produces 2 pure, 4 mover and 16 frontend failures; pinned-head regressions pass, including nested OLD with/without its side tree through owned/native paths.
+
 ## Open findings
 
-- **BR-7** [Critical] `output-preflight-before-mutation` (kind: defect) Orphan displacement can relocate OLD and strand its migration
+(none — every finding has been disposed)

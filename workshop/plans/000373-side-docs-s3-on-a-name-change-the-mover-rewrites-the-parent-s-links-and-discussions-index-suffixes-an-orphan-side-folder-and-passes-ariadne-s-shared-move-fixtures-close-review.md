@@ -99,3 +99,98 @@ findings:
    Add a `## Revisions` entry defining the path-interference invariant, the supported or refused overlap relationships, and tests proving refusal occurs before any filesystem or protection effects.
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"4f0f0cba-eab4-49f4-b54f-40d574480977","repository":"github.com/xianxu/parley.nvim","issue_id":"000373","recipe":"milestone-review","round":7,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/c89ff574d82da946","reviewed_head":"e3be73356c6bff50b6dbcb1612d2880ed9d16217","slot":"parley.nvim:1","requested_at":"2026-10-18T02:08:11.381859Z"},"phase":"finished","pid":82244,"started_at":"2026-10-18T02:08:11.489592Z","finished_at":"2026-10-18T02:12:15.564866Z","session_id":"01a14cc4-3df5-7a92-9099-ede2ed0798ca","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T19:44:10-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 373 — side docs S3: on a name change the mover rewrites the parent's links and discussions index, suffixes an orphan .side folder, and passes ariadne's shared move fixtures |
+| repo | parley.nvim |
+| issue file | workshop/issues/000373-side-docs-s3-on-a-name-change-the-mover-rewrites-the-parent-s-links-and-discussions-index-suffixes-an-orphan-side-folder-and-passes-ariadne-s-shared-move-fixtures.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | f34baf2c691eaa841ce9f74f056e28958e03024a..06304d247169c708ac43a457c25ca76fc6e4d120 |
+| command | sdlc close --issue 373 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-17T19:44:10-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies the issue’s Spec and revised Plan. BR-7 is addressed by a shared, reachable geometry guard, with independently verified regression failures when disabled. No new blocking findings remain.
+
+1. **Strengths**
+
+   - Geometry validation covers document, side-root, and selected orphan relationships before frontend saves or direct admission (`document_move_plan.lua:41`, `document_move.lua:52`, `agentic_document.lua:746`).
+   - Shared fixtures exercise both pure projection and filesystem execution through the persistent registry fake (`document_move_shared_spec.lua:137`).
+   - Fresh and recovered moves share checkpointed finalization, preserving protection authority until journal retirement (`document_move.lua:705`).
+   - README and atlas document the new surface. Issue #378 records the permitted Alt+o registration follow-up.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - All 21 session-sync mapped specs passed after rerunning one spec interrupted by my overlapping harness invocation.
+   - All 18 review mapped specs, 20 reference-candidate cases, and 23 Python export tests passed.
+   - Lint passed across 786 files; range whitespace checks passed.
+   - Negative control: disabling only `validate_geometry` produced **2 pure, 4 mover, and 16 frontend failures**, including the original stranded-source scenario. The temporary copy was removed.
+   - The reviewed checkout is clean.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** one geometry predicate serves projection, admission, and journal validation.
+   - **ARCH-PURE — pass:** projection and transition logic remain pure; filesystem fixture loading is classified as integration.
+   - **ARCH-PURPOSE — pass:** parent references, orphan displacement, shared fixtures, and the registration audit are delivered.
+   - **ARCH-MOCK — pass:** registry tests use the existing stateful fake behind the production transport seam.
+   - **ARCH-CONSTRAINTS — pass:** file, tree, journal, and suffix bounds remain explicit; malformed-input scale regressions pass.
+   - **ARCH-SECURE — pass:** persisted authority and path relationships are validated; unknown bytes are preserved.
+   - **ARCH-ORDER — pass:** the reducer owns v2 progression; publication, checkpoint, recovery, and stale-event cases are exercised.
+   - **ARCH-FUNERAL — pass:** journal/temp retirement is explicit; displaced orphan content is retained deliberately.
+
+7. **Plan revision recommendations:** None. The existing BR-7 revision states the implemented rule and its regression matrix.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Paragraph-wide exact-width code masks are shared by both rewrite APIs; preservation regressions pass.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      read_output preflights expected regular-file leaves and directory ancestors before mutation; Python regressions pass.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Malformed destination scanning advances through disjoint tokens; complete-rewrite scale regressions pass.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Code containment and reference scanning share markdown_blocks; boundary and continuation regressions pass.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      atlas/modes/session_sync.md:274 documents supplied observations, effect ordering and orphan_destination, matching document_move_plan.project.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Finalization persists protection intent before release and retires disk effects before unlink; interruption and legacy recovery regressions pass.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Shared validate_geometry rejects interfering document/side/orphan relationships before effects and during journal validation. Disabling it independently produces 2 pure, 4 mover and 16 frontend failures; pinned-head regressions pass, including nested OLD with/without its side tree through owned/native paths.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"cc8cdccd-dd91-4ccf-aa3d-1100cbd273eb","repository":"github.com/xianxu/parley.nvim","issue_id":"000373","recipe":"milestone-review","round":8,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/5f6af2146bf7b05e","reviewed_head":"06304d247169c708ac43a457c25ca76fc6e4d120","slot":"parley.nvim:1","requested_at":"2026-10-18T02:40:10.726331Z"},"phase":"finished","pid":59908,"started_at":"2026-10-18T02:40:10.819665Z","finished_at":"2026-10-18T02:44:04.648888Z","session_id":"01a14ce1-8733-7cc3-a591-5360f311d2d1","outcome":"returned"}] -->
