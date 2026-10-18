@@ -9,7 +9,9 @@ plugin installations. See [the starter profile](starter.md) for app defaults and
 
 ## Install as a Neovim plugin
 
-For an existing Neovim configuration, a minimal lazy.nvim entry is:
+Parley needs Neovim 0.11 or newer; `setup()` on an older editor refuses with one
+message (#379, `lua/parley/version_support.lua`). For an existing Neovim
+configuration, a minimal lazy.nvim entry is:
 
 ```lua
 {

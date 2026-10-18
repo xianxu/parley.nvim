@@ -106,6 +106,13 @@ find it through `PATH`. `PARLEY_TEST_JITSTAT=1 make test` adds each spec
 process's final LuaJIT line (VM states and trace flushes, grandchildren
 included) under its `PASS`/`FAIL`. Why and how: `atlas/infra/test_harness.md`.
 
+Parley supports Neovim 0.11 or newer (`lua/parley/version_support.lua`). When the
+`nvim` first on your `PATH` is a different version from the one the suite ran,
+`make test` ends with a compat pass that runs unit and integration again on
+yours, so a break only your editor has still fails the suite. It is skipped when
+they match. `make test-compat` runs the pass alone, without the machine-wide
+suite lock, so use it only for a quick check.
+
 ## Orphaned test processes
 
 Test targets reap processes left by an interrupted earlier run before starting,

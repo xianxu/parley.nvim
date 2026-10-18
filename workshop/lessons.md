@@ -801,9 +801,16 @@ point as well as internal helpers before calling the family complete.
   matches nothing; use `git grep -P`. Tutorial prose is now checked against the
   registry in `keybinding_agreement_spec`.
 - State that belongs to one in-flight operation lives on that operation's record, not in a parallel field cleared "when its event arrives" (#380 REWORK). The parallel field drifted from the operation through `pending` and `retry`, and a non-terminal matching event cleared it under a live operation. On the record, it is copied, carried and dropped with the operation, with nothing to keep in sync.
+- A new spec must pass `tests/arch/*` and `tests/unit/arch_helper_spec.lua` before the recorded suite runs. They police spec authoring: listing files through `arch_helper.worktree_files` (#381) and `vim.wait` taking `arrival.MS`, not a literal (#382). Twice in one session, a new spec cost a full recorded suite run because only its own file had been run.
 
 ## 2026-10-17 (#267 — compiler workarounds have a scope)
 
 - Neovim's JIT engine belongs to the whole editor. Protect affected module chunks recursively before their functions compile; never use a plugin's allocator workaround to disable other plugins' JIT. Verify an unrelated function still compiles in the same VM, alongside the protected work.
 - A safety policy can make an active-compiler regression pass without exercising its oracle. Count completed traces from the code that matters, then keep any intentional policy opt-out inside that regression's disposable child.
 - A diagnostic copy loses path-specific harness settings. Preserve the original corpus budget when moving a spec for instrumentation, and distinguish diagnostic setup failures from the production failure being investigated.
+
+## Probing a working tree against the installed plugin (#384)
+
+- To test working-tree Lua inside a session that already loaded the installed plugin, prepend the checkout to `runtimepath`, not `package.path`. Neovim's runtimepath searcher runs before `package.path`, so a module present in both resolves to the installed copy. In #384 that happened silently: `collaboration.modes` came back nil and the probe looked like a product bug.
+- Reload only the modules under test. Clearing every `parley.*` entry from `package.loaded` breaks the installed plugin's already-wired autocmds, and the result is noise.
+- Checking an interaction with a completion plugin means measuring both menus at once, Vim's (`pumvisible()`) and the plugin's own view (`cmp.core.view:visible()`). `cmp.visible()` counts Vim's popup as cmp's.

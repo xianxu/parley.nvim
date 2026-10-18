@@ -84,13 +84,6 @@ function IssueVocabulary:sort_rank(status)
     return self._sort_rank[status] or (#self._status_values + 1)
 end
 
-function IssueVocabulary:enumerable_values(field)
-    if field == "status" then
-        return self:status_values()
-    end
-    return {}
-end
-
 M.from_table = function(raw)
     if type(raw) ~= "table" then
         error("issue vocabulary must be a table")

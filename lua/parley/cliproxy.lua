@@ -2390,7 +2390,7 @@ function M.update(cb)
                 local out = rel.restart_outcome(plan.message, plan.target, o)
                 finish(out.ok, out.message, out.warn)
             end
-            vim.defer_fn(function()
+            require("parley.helper").defer_deadline(function()
                 answer({ timeout = true })
             end, _update_restart_deadline_ms)
             return M.restart_managed(function()

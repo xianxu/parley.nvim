@@ -706,6 +706,7 @@ atlas:
       - tests/helpers/jit_tuning.lua
       - tests/helpers/reachability.lua
       - scripts/test-nvim.sh
+      - lua/parley/version_support.lua
       - tests/helpers/fixture_process.lua
       - tests/helpers/exit_with_parent.lua
       - scripts/reap-test-orphans.py
@@ -718,6 +719,7 @@ atlas:
       - tests/perf/chat_typing.lua
     tests:
       - tests/unit/test_isolation_spec.lua
+      - tests/unit/version_support_spec.lua
       - tests/integration/test_isolation_spec.lua
       - tests/unit/golden_fixture_spec.lua
       - tests/integration/fresh_clone_spec.lua
@@ -822,6 +824,7 @@ atlas:
       - tests/integration/document_band_spec.lua
       - tests/unit/document_band_model_spec.lua
       - tests/integration/document_registry_spec.lua
+      - tests/unit/start_deadline_spec.lua
       - tests/integration/document_lease_spec.lua
       - tests/integration/document_move_spec.lua
       - tests/integration/sidecar_degrade_spec.lua
@@ -1409,3 +1412,10 @@ atlas:
     tests:
       - tests/unit/display_text_spec.lua
       - tests/unit/document_band_model_spec.lua
+  ui/frontmatter_typeahead:
+    code:
+      - lua/parley/frontmatter_enum.lua
+      - scripts/check-frontmatter-cmp.lua
+    tests:
+      - tests/unit/frontmatter_enum_spec.lua
+      - tests/integration/frontmatter_enum_popup_spec.lua
