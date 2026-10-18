@@ -278,6 +278,7 @@ describe("keybinding registry vs. reality (#214 M2)", function()
         -- and nothing else came along for the ride
         assert.is_nil(live[canon("<C-g><C-g>")], "the default set came back too")
         assert.is_nil(live[canon("<M-i>")], "the default set came back too")
+        assert.is_nil(live[canon("<M-b>")], "the default set came back too")
     end)
 
     it("and the help float shows exactly the key that survived", function()
@@ -658,11 +659,72 @@ describe("published shortcut reference agrees with bindings (#206, #214 BR-61)",
         end
         for k in pairs(reg.native_overrides) do bound[canon(k)] = true end
         local reference = assert(require("parley.help").read("atlas/ui/keybindings"))
-        for _, key in ipairs({ "<M-q>", "<M-CR>", "<M-i>", "<M-p>", "<C-g>?", "gf" }) do
+        for _, key in ipairs({ "<M-q>", "<M-CR>", "<M-i>", "<M-b>", "<M-p>", "<C-g>?", "gf" }) do
             assert.is_truthy(reference:find("`" .. key .. "`", 1, true),
                 key .. " is missing from the published shortcut reference")
             assert.is_true(bound[canon(key)] == true, key .. " resolves to no binding")
         end
+    end)
+
+    -- #377: the shipped tutorials spell keys as prose (`option+i`, Alt+i), which
+    -- nothing tied to the registry, so a remap left them teaching dead keys.
+    -- Every Alt/Option letter they name must be bound, and the two lines that
+    -- teach image paste and sub-chat creation must name that action's key.
+    it("the shipped tutorials name only bound alt keys, the right one per action", function()
+        -- The tutorials ship with the starter app, so resolve under its options.
+        setup(require("parley.starter_config").options({
+            data = base_tmp_dir .. "/data", state = base_tmp_dir .. "/state",
+        }))
+        local bound, by_id = {}, {}
+        for _, e in ipairs(reg.entries) do
+            local keys = reg.resolve_keys(e, parley.config) or {}
+            by_id[e.id] = keys
+            for _, k in ipairs(keys) do bound[canon(k)] = true end
+        end
+        local files = vim.fn.glob("packaging/tutorials/*.md", false, true)
+        -- Every file that teaches keys in prose: the README and the in-repo
+        -- tutorial copies too, not only what the app packages.
+        vim.list_extend(files, vim.fn.glob("workshop/parley/*.md", false, true))
+        vim.list_extend(files, { "packaging/starter-config/README.md", "README.md" })
+        -- `option+i` → <M-i>, Alt+Shift+O → <M-O>; Alt+Enter and the like are
+        -- not letters and are skipped. Each key comes with the text after it.
+        local function alt_keys(line)
+            local out = {}
+            for mod, rest, after in line:gmatch("(%a+)%+([%a%+]+)()") do
+                mod, rest = mod:lower(), rest:lower()
+                local key
+                if mod == "option" or mod == "alt" then
+                    local shifted = rest:match("^shift%+(%a)$")
+                    if shifted then
+                        key = "<M-" .. shifted:upper() .. ">"
+                    elseif rest:match("^%a$") then
+                        key = "<M-" .. rest .. ">"
+                    end
+                end
+                if key then out[#out + 1] = { key = key, after = line:sub(after):lower() } end
+            end
+            return out
+        end
+        local paste, branch = by_id.paste_image[1], by_id.branch_ref[1]
+        local seen = 0
+        for _, f in ipairs(files) do
+            for n, line in ipairs(vim.fn.readfile(f)) do
+                for _, hit in ipairs(alt_keys(line)) do
+                    local key = hit.key
+                    seen = seen + 1
+                    local where = ("%s:%d"):format(f, n)
+                    assert.is_true(bound[canon(key)] == true, where .. " teaches " .. key .. ", which nothing binds")
+                    -- "press Alt+i to attach it", "press `option+b`. Parley
+                    -- creates and opens a linked chat": the action follows the key.
+                    if hit.after:find("attach", 1, true) then
+                        assert.equals(paste, key, where .. " teaches image paste on the wrong key")
+                    elseif hit.after:find("linked chat", 1, true) then
+                        assert.equals(branch, key, where .. " teaches sub-chat creation on the wrong key")
+                    end
+                end
+            end
+        end
+        assert.is_true(seen > 10, "the scan found almost no alt keys; the pattern broke")
     end)
 end)
 

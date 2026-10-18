@@ -35,7 +35,7 @@ end
 describe("chat context over a real chat tree (#233)", function()
     local root, aside, nested, later
     before_each(function()
-        -- root: R1, an inline <M-i> aside in R1's answer, then R2 with a 🌿: branch.
+        -- root: R1, an inline <M-b> aside in R1's answer, then R2 with a 🌿: branch.
         root = write_chat("2026-10-16.09-00-00.001.md", {
             "💬: R1", "", "🤖:[A]", "answer one, see [🌿:aside](2026-10-16.09-01-00.002.md)", "",
             "💬: R2", "", "🤖:[A]", "answer two", "",

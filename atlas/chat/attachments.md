@@ -8,7 +8,7 @@ the key segment; `assets.resolve_path` validates and decodes it exactly once
 for both send-budget stat and bounded reads.
 
 ## Surface
-- `<M-v>` (`paste_image`, `parley_buffer` scope, n/i): reads a PNG off the
+- `<M-i>` (`paste_image`, `parley_buffer` scope, n/i): reads a PNG off the
   clipboard, saves it as `assets/<ts>/<stamp>.<png|jpg>`, inserts
   `![<stamp>.<ext>](assets/<ts>/<stamp>.<ext>)` on its own line after the cursor
   line (the alt is the file name so markdown conceal shows a label rather than

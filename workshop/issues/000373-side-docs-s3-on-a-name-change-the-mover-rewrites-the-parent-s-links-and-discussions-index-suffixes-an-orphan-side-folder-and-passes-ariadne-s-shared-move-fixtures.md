@@ -179,6 +179,8 @@ BR-7 candidate4f97e1bc91c3b9a691e17fdbf2aad73fc03b4911 live acceptance PASS on r
 
 BR-7 recorded fullsuite578bcb3aa1693673fc8926eb9a4d262c on4f97e1bc91c3b9a691e17fdbf2aad73fc03b4911 passed and status recorded: exit0,2m21s after752s queue, logSHA256723e7f80c764, clean census. No code/main integration after this pass. Proceeding whole-close round2.
 
+Landing integration of main d293e6ec3b878a060f4d02f0c8e0c51a54d4cd8d conflicted only in review_protocol_export_test.py: #381 removes hardcoded /tmp while this branch canonicalizes fixture paths. Resolution preserves BOTH: default tempfile placement honoring TMPDIR, plus Path(tmp).resolve() for canonical exporter inputs, applied to new tests too. All23 Python contracts pass (4.339s); whitespace clean. Other main changes merged automatically. Required integrated recorded suite and --fixed-then-ship conflict review precede retrying sdlc merge; no validation waiver.
+
 ## Revisions
 
 - 2026-10-17 18:27 PDT — BR-6 finalization revision approved by TL (8ec6ff5a-0ad5-4972-9c30-2601508f8496). One existing journal and dispatcher own idempotent complete subprogress: handoff → protection → retire. Persist intended exact lock after-state before release; fresh and recovery share finalization. Finish all disk/protection effects before journal unlink; only volatile identity adoption/UI/watch resumption follows. A retained journal recognizes its captured before-state or authorized after-state, never foreign lock bytes or changed raw/editor contents. Keep v1 journals readable; without persisted release intent an absent NEW lock is never guessed owned. Test process-death/failure after each step/checkpoint, held turns and foreign replacements; operator states/actions unchanged. No rollback or repair menu.

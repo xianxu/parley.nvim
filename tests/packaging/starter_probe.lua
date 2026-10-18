@@ -91,7 +91,7 @@ local ok, why = pcall(function()
         assert(vim.wo.conceallevel == 0)
         local map = vim.fn.maparg('<M-CR>', 'n', false, true)
         assert(next(map) ~= nil)
-        for _, lhs in ipairs({ '<C-g><C-g>', '<C-g>t', '<M-t>', '<M-v>' }) do
+        for _, lhs in ipairs({ '<C-g><C-g>', '<C-g>t', '<M-t>', '<M-i>' }) do
             assert(next(vim.fn.maparg(lhs, 'i', false, true)) ~= nil, 'missing chat shortcut: ' .. lhs)
         end
     end

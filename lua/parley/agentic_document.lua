@@ -337,9 +337,12 @@ local function execute(s, effects)
     for _, effect in ipairs(effects) do
         if not valid(s) then return end
         local kind = effect.kind
-        if kind == "lookup" or kind == "register" then
-            local args = kind == "register" and { effect.witness.path, effect.owner } or { effect.witness.path }
-            s.request = registry.request(kind, args, effect.witness, completed(s, function(result)
+        if kind == "lookup" or kind == "register" or kind == "confirm_parent" then
+            -- confirm_parent (#378) is a lookup of the parent, read from Couch now
+            -- rather than from what the parent's buffer last saw.
+            local args = kind == "register" and { effect.witness.path, effect.owner }
+                or { kind == "confirm_parent" and effect.parent.path or effect.witness.path }
+            s.request = registry.request(kind == "confirm_parent" and "lookup" or kind, args, effect.witness, completed(s, function(result)
                 if not valid(s) then return end
                 s.request = nil
                 if kind == "register" and not effect.resume_only and s.saved_hash and hash(s.buf) ~= s.saved_hash then
@@ -348,11 +351,10 @@ local function execute(s, effects)
                 if kind == "lookup" and result.kind == "absent" then cache(s, nil, true) end
                 dispatch(s, { type = "reply", witness = effect.witness, result = result })
                 if s.model.snapshot().phase == "unknown" then ensure_retry() end
-                if s.queued_submit and not s.model.snapshot().operation then
-                    s.queued_submit = false
-                    M.submit(s.buf)
-                end
             end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
+        elseif kind == "flush_queued" then
+            -- #378: the model released a press it held; drop_queued needs nothing.
+            M.submit(s.buf)
         elseif kind == "save" then
             local ss = require("parley.session_sync")
             local ok, err
@@ -528,6 +530,21 @@ function M.attach(buf)
     return true
 end
 
+--- #378: `buf` was opened from `parent_buf`. A side doc (a file directly in
+--- the parent's `.side/` folder, the mover's and the finder's rule) takes the
+--- parent's effective owner, which the model confirms with Couch first. With no
+--- parent identity there is nothing to inherit, and the pane's actor is never
+--- consulted. Returns whether the inheritance was asked for.
+function M.inherit(buf, parent_buf)
+    local parent = M.identity(parent_buf)
+    if not parent or buf == parent_buf or not M.attach(buf) then return false end
+    local s = states[buf]
+    if s.reading or not valid(s) then return false end
+    if vim.fs.dirname(s.path) ~= require("parley.document_move_plan").side_path(parent.File) then return false end
+    dispatch(s, { type = "inherit", parent = { path = parent.File, id = parent.ID, owner = parent.Owner } })
+    return true
+end
+
 function M.identity(buf)
     local s = states[buf]
     return s and s.model.snapshot().registration or nil
@@ -567,8 +584,8 @@ function M.submit(buf)
             show_feedback(s, s.submitting.overdue and "submitting… still waiting for Couch" or "submitting…", false)
             return true
         end
-        if not snapshot.registration and snapshot.phase == "probing" and snapshot.operation.witness.operation == "lookup"
-            and not snapshot.operation.args.submit then s.queued_submit = true end
+        -- The model decides whether this operation may hold the press (#378).
+        dispatch(s, { type = "queue_submit" })
         return true
     end
     local revision = s.revision
@@ -615,7 +632,7 @@ end
 local function migration_busy(s)
     local snapshot = s.model.snapshot()
     local operation = snapshot.operation
-    return s.reading or s.move or s.recovery_pending or s.resolving or s.queued_submit
+    return s.reading or s.move or s.recovery_pending or s.resolving or snapshot.queued
         or snapshot.phase == "pending"
         or (operation and (operation.witness.operation ~= "lookup" or operation.args.submit))
 end

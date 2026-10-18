@@ -98,7 +98,7 @@ class ExportTest(unittest.TestCase):
 
     def test_fixture_corruption_refuses_before_any_output(self):
         self.add_move_fixtures()
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
@@ -117,7 +117,7 @@ class ExportTest(unittest.TestCase):
 
     def test_recursive_fixture_output_preflight_and_stale_refusal(self):
         self.add_move_fixtures()
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
@@ -154,7 +154,7 @@ class ExportTest(unittest.TestCase):
         self.add_collaboration_modes()
         self.add_move_fixtures()
         expected = self.api.render_snapshot(self.manifest, self.content)
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             for index, name in enumerate(sorted(expected)):
@@ -182,7 +182,7 @@ class ExportTest(unittest.TestCase):
         expected = self.api.render_snapshot(self.manifest, self.content)
         ancestors = sorted({str(parent) for name in expected for parent in Path(name).parents
                             if str(parent) != '.'})
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             for index, name in enumerate(ancestors):
@@ -201,7 +201,7 @@ class ExportTest(unittest.TestCase):
                         self.assertIn(name, result.stderr)
 
     def test_output_ancestor_symlink_refuses_missing_and_existing_destinations(self):
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             real = base / 'real'
@@ -242,7 +242,7 @@ class ExportTest(unittest.TestCase):
 
     def test_collaboration_modes_cli_sync_and_check_track_owned_output(self):
         path = self.add_collaboration_modes()
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             (source / 'examples').mkdir()
@@ -274,7 +274,7 @@ class ExportTest(unittest.TestCase):
 
     def test_collaboration_modes_corruption_and_output_symlinks_refuse_before_writes(self):
         path = self.add_collaboration_modes()
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
@@ -433,7 +433,7 @@ class ExportTest(unittest.TestCase):
                 for p in root.rglob('*') if p.is_file()}
 
     def test_real_cli_check_never_writes_and_sync_preserves_local_files(self):
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
@@ -461,7 +461,7 @@ class ExportTest(unittest.TestCase):
             self.assertEqual('local', (output / 'local-adapter.md').read_text())
 
     def test_old_v1_cli_reports_absent_collaboration_modes(self):
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
@@ -473,7 +473,7 @@ class ExportTest(unittest.TestCase):
                               'the synced prompt has no collaboration modes', result.stderr)
 
     def test_cli_refuses_corrupt_source_and_unsafe_output_without_writes(self):
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'
@@ -493,7 +493,7 @@ class ExportTest(unittest.TestCase):
             self.assertFalse((output / 'SKILL.md').exists())
 
     def test_cli_requires_canonical_resolved_grammar_and_preserves_existing_output(self):
-        with tempfile.TemporaryDirectory(prefix='review-export-', dir='/tmp') as tmp:
+        with tempfile.TemporaryDirectory(prefix='review-export-') as tmp:
             base = Path(tmp).resolve()
             source = self.make_source(base)
             output = base / 'bundle'

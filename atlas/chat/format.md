@@ -40,7 +40,7 @@ See [parsing](parsing.md) for the validation boundary.
 
 ## Branch Links
 - First `🌿:` before the first user question = parent back-link; other branch references are child forward-links
-- `<M-i>` (legacy `<C-g>i`) creates and opens a sub-chat in a chat buffer; `<M-o>` / `<C-g>o` navigates a reference
+- `<M-b>` (legacy `<C-g>i`) creates and opens a sub-chat in a chat buffer; `<M-o>` / `<C-g>o` navigates a reference
 - Inline variant: `[🌿:text](file.md)` — see `inline_branch_links.md`
 
 ## Attachments (#231)

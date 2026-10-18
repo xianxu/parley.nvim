@@ -817,6 +817,7 @@ atlas:
       - tests/integration/agentic_document_spec.lua
       - tests/integration/agentic_document_owned_move_spec.lua
       - tests/integration/agentic_document_lifetime_spec.lua
+      - tests/integration/agentic_document_side_inherit_spec.lua
       - tests/integration/document_band_spec.lua
       - tests/unit/document_band_model_spec.lua
       - tests/integration/document_registry_spec.lua

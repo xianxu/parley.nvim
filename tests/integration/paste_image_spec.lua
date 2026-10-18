@@ -1,8 +1,9 @@
 -- tests/integration/paste_image_spec.lua
 --
--- The <M-v> paste flow (#231) end-to-end through the config seam: the
--- fixture stands in for osascript. One case per row of the plan's ordering
--- table (State and ordering), plus the key's registry resolution.
+-- The <M-i> paste flow (#231; <M-v> until #377) end-to-end through the
+-- config seam: the fixture stands in for osascript. One case per row of the
+-- plan's ordering table (State and ordering), plus the key's registry
+-- resolution.
 local arrival = require("tests.helpers.arrival")
 local root = vim.fn.tempname() .. "-parley-paste"
 vim.fn.mkdir(root, "p")
@@ -95,15 +96,18 @@ describe("paste image (#231)", function()
         assert.equals(vim.fn.resolve(path), vim.fn.resolve(vim.api.nvim_buf_get_name(buf)))
     end)
 
-    it("Alt+v pastes into session and nested QA markdown sidecars", function()
+    it("Alt+i pastes into session and nested QA markdown sidecars", function()
         vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. png
         for _, name in ipairs({ "tl-status-xian-xu.md", "teams/qa/answer (QA).md" }) do
             vim.fn.mkdir(vim.fs.dirname(root .. "/" .. name), "p")
             local buf, path = open_chat(name, { "## Operator instructions", "my question", "next question" })
             vim.api.nvim_win_set_cursor(0, { 2, 0 })
-            local mapping = vim.fn.maparg("<M-v>", "n", false, true)
+            local mapping = vim.fn.maparg("<M-i>", "n", false, true)
             assert.is_function(mapping.callback, "normal markdown mapping installed")
-            assert.is_function(vim.fn.maparg("<M-v>", "i", false, true).callback)
+            assert.is_function(vim.fn.maparg("<M-i>", "i", false, true).callback)
+            -- #377: <M-v> was the paste key until it moved; nothing binds it now.
+            assert.same({}, vim.fn.maparg("<M-v>", "n", false, true))
+            assert.same({}, vim.fn.maparg("<M-v>", "i", false, true))
             mapping.callback()
             assert.is_true(wait_for(function() return line_count(buf) == 4 end), "link inserted through key")
             local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -401,7 +405,7 @@ describe("paste image (#231)", function()
         assert.same({ "older.png" }, vim.fn.readdir(folder), "only the rolled-back file is gone")
     end)
 
-    it("<M-v> is a parley_buffer entry resolving to n/i through the registry", function()
+    it("<M-i> is a parley_buffer entry resolving to n/i through the registry", function()
         local reg = require("parley.keybinding_registry")
         local entry
         for _, e in ipairs(reg.entries) do
@@ -410,7 +414,7 @@ describe("paste image (#231)", function()
         assert.is_not_nil(entry)
         assert.equals("parley_buffer", entry.scope)
         local keys, modes = reg.resolve_keys(entry, parley.config)
-        assert.same({ "<M-v>" }, keys)
+        assert.same({ "<M-i>" }, keys)
         assert.same({ "n", "i" }, modes)
     end)
 end)

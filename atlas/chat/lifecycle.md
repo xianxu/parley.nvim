@@ -306,7 +306,7 @@ A request's context is the chat tree in depth-first pre-order, cut at the
 exchange being submitted (#233, `lua/parley/chat_tree.lua`). Every file emits
 its exchanges in order. After exchange k, every branch whose `after_exchange` is
 k (a `🌿:` line or an inline `[🌿:text](file)` link in that answer) is emitted as
-a whole subtree, in line order, before exchange k+1. So an `<M-i>` aside is part
+a whole subtree, in line order, before exchange k+1. So an `<M-b>` aside is part
 of every later question's context, in the order the operator read it. The cut
 is the submitted question alone: its answer, branches hanging off it (the
 children of an exchange being regenerated), later siblings and later ancestor

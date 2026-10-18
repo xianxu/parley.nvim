@@ -73,7 +73,7 @@ After sending the rainbow question below, try this:
    side questions AI *should* suggest. 
 2. Select the text where you have question, or just select the AI suggested
    side question.
-3. Press `option+i`. Parley creates and opens a linked chat with selected text
+3. Press `option+b`. Parley creates and opens a linked chat with selected text
    as part of questions. If no text is selected, the linked chat is inserted in
    the next line. 
 4. The child opens ready for your question with previous selected text quoted.

@@ -186,7 +186,7 @@ line opens the link, and the entity picker retains it as one reference.
 
 ## Paste screenshots into Markdown
 
-Press **Alt+v** in Normal or Insert mode to paste a clipboard image after the
+Press **Alt+i** in Normal or Insert mode to paste a clipboard image after the
 current line in any named Markdown file. Parley inserts an image link and saves
 it beside that file at `assets/<file-stem>/<timestamp>.<png|jpg>`. Chat files keep
 their existing timestamp asset folders. Spaces and punctuation in stems are

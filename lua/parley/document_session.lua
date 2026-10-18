@@ -40,6 +40,11 @@ function M.classify_reply(operation, exit_code, decoded, null_sentinel)
     return { kind = "registered", registration = copy(decoded.Registration), changed = decoded.Changed }
 end
 
+-- #378: the band a side doc shows when it could not take its parent's owner.
+-- The retry comes first: a side doc of a hub-owned parent usually wants the hub.
+-- Short enough for an 80-column band, which cuts longer text at its end.
+M.NOT_INHERITED = "not inherited · reopen from parent to retry, or Alt+Return here"
+
 local function finite(value)
     return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
 end
@@ -146,7 +151,50 @@ function M.new(context)
         return copy(state)
     end
 
+    local step
+
+    -- An operation that may hold an Alt+Return pressed before the document's
+    -- owner is known: the attach lookup, and every step of an inheritance.
+    local function admits(operation)
+        if not operation then return false end
+        local kind, args = operation.witness.operation, operation.args
+        return (kind == "lookup" and not args.submit) or kind == "confirm_parent"
+            or (kind == "register" and args.inherited == true)
+    end
+    local function inheriting(operation)
+        local args = operation and operation.args or {}
+        return state.inherit ~= nil or args.inherit ~= nil or args.inherited == true
+            or (operation ~= nil and operation.witness.operation == "confirm_parent")
+    end
+
+    -- #378: the model owns the queued press. Every dispatch settles it here, so
+    -- once the operation holding it ends, by any event, exactly one of
+    -- flush_queued or drop_queued is emitted. It flushes into a registration, or
+    -- into the plain-doc submit when no inheritance was involved; an inheritance
+    -- that ends any other way (refused, unavailable, cancelled, pending,
+    -- detached) drops it, so it is never re-aimed at the pane's actor.
     function controller.dispatch(event)
+        if event.type == "queue_submit" then
+            if not state.queued and not state.registration and admits(state.operation) then
+                state.queued = { inheriting = inheriting(state.operation) }
+            end
+            return {}
+        end
+        local effects = step(event)
+        local queued = state.queued
+        if not queued then return effects end
+        if admits(state.operation) then
+            queued.inheriting = queued.inheriting or inheriting(state.operation)
+            return effects
+        end
+        state.queued = nil
+        local release = (state.phase == "registered" and state.registration ~= nil)
+            or (not queued.inheriting and (state.phase == "plain" or state.phase == "unknown"))
+        effects[#effects + 1] = { kind = release and "flush_queued" or "drop_queued" }
+        return effects
+    end
+
+    step = function(event)
         if state.phase == "detached" then return {} end
         if event.type == "invalidate_confirmation" then
             state.confirmation = nil
@@ -157,12 +205,13 @@ function M.new(context)
             local effects = state.operation and { { kind = "cancel", witness = copy(state.operation.witness) } } or {}
             state.generation = state.generation + 1
             state.operation, state.phase, state.receipt, state.confirmation = nil, "detached", nil, nil
+            state.inherit = nil
             return effects
         end
         if event.type == "changed" then
             local changed_context = (event.path ~= nil and event.path ~= state.path)
                 or (event.namespace ~= nil and event.namespace ~= state.namespace)
-            state.confirmation = nil
+            state.confirmation, state.inherit = nil, nil
             if changed_context then state.receipt = nil end
             state.generation = state.generation + 1
             state.path = event.path or state.path
@@ -210,6 +259,22 @@ function M.new(context)
             if state.operation or state.pending then return {} end
             state.phase = "probing"
             return { issue("lookup") }
+        end
+        if event.type == "inherit" then
+            -- #378: a side doc opened from a registered parent takes the parent's
+            -- effective owner once Couch confirms both halves: the child is
+            -- absent, and the parent still holds this registration. A registered
+            -- or pending child keeps what it has; nothing is sent.
+            local parent = event.parent
+            if state.registration or state.pending or type(parent) ~= "table" or not nonempty(parent.path)
+                or not nonempty(parent.id) or not nonempty(parent.owner) then return {} end
+            if state.operation then
+                -- The attach lookup is still out: its absence will do.
+                if state.operation.witness.operation == "lookup" then state.inherit = copy(parent) end
+                return {}
+            end
+            state.phase = "probing"
+            return { issue("lookup", { inherit = copy(parent) }) }
         end
         if event.type == "submit" then
             if state.operation or state.pending then return {} end
@@ -301,8 +366,20 @@ function M.new(context)
             state.operation = nil
             return { issue("rename", operation.args) }
         end
-        if event.type ~= "reply" or (kind ~= "lookup" and kind ~= "register" and kind ~= "rename") then return {} end
+        if event.type ~= "reply" or (kind ~= "lookup" and kind ~= "register" and kind ~= "rename"
+            and kind ~= "confirm_parent") then return {} end
         local result = event.result or { kind = "unavailable" }
+        if kind == "confirm_parent" then
+            state.operation = nil
+            local parent, reg = operation.args.parent, result.registration
+            if result.kind == "registered" and valid_registration(reg) and reg.File == parent.path
+                and reg.ID == parent.id and reg.Owner == parent.owner then
+                state.phase = "busy"
+                return { issue("register", { owner = parent.owner, resume_only = true, inherited = true }) }
+            end
+            state.phase = "plain"
+            return { { kind = "band", message = M.NOT_INHERITED } }
+        end
         local valid = result.kind == "registered" and valid_registration(result.registration)
         if valid then
             local expected_path = kind == "rename" and operation.args.new_path or operation.witness.path
@@ -312,6 +389,8 @@ function M.new(context)
         end
         if kind == "lookup" then
             state.operation = nil
+            local inherit = operation.args.inherit or state.inherit
+            state.inherit = nil
             if state.registration and (result.kind == "absent"
                 or (valid and result.registration.ID ~= state.registration.ID)) then
                 state.phase = "busy"
@@ -326,12 +405,23 @@ function M.new(context)
                 return effects
             end
             if result.kind == "absent" and not state.registration then
+                if inherit then
+                    state.phase = "probing"
+                    return { issue("confirm_parent", { parent = inherit }) }
+                end
                 state.phase = "plain"
+                if operation.args.inherited then return { { kind = "band", message = M.NOT_INHERITED } } end
                 return { { kind = "band", message = "" } }
             end
             state.phase = stable_phase()
             if operation.args.submit then return notify(result.error or "Registered owner could not be confirmed") end
             return state.registration and {} or { { kind = "band", message = "Couch unavailable: agentic state unknown" } }
+        end
+        if not valid and operation.args.inherited and result.kind == "unavailable" then
+            -- Refused or lost (another owner registered it first, or the deadline
+            -- passed): a fresh lookup says what is there, and that is adopted.
+            state.operation, state.phase = nil, "probing"
+            return { issue("lookup", { inherited = true }) }
         end
         if not valid then return pending(operation, result.error, result.code) end
         state.operation, state.pending = nil, nil

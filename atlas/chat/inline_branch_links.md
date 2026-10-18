@@ -3,7 +3,7 @@
 ## Syntax
 - `[🌿:display text](file.md)` — inline within any line (vs full-line `🌿:` on its own line)
 
-## Creation (`<M-i>`, `<C-g>i`)
+## Creation (`<M-b>`, `<C-g>i`)
 One implementation — `branch_inserters(buf, abs_link)` in `init.lua`, with the
 pure line editing in `lua/parley/branch_ref.lua`. It replaced four
 near-identical functions that had drifted (#214).
@@ -24,9 +24,9 @@ parent was opened from an extra chat root. It is not necessarily beside its
 parent. The stored link is resolved across configured roots. The target filename
 is timestamped; later topic updates may add its slug.
 
-### What `<M-i>` does (#214 M3)
+### What `<M-b>` does (#214 M3)
 
-`<M-i>` / `<C-g>i` are one binding. The chord **inserts a branch
+`<M-b>` / `<C-g>i` are one binding. The chord **inserts a branch
 reference at the cursor** and creates the child it points at:
 
 | context | what happens | the child gets |
@@ -51,7 +51,7 @@ See [Chat Parsing](parsing.md).
 **How far the `<M-CR>` parallel goes.** Both keys gather through the same
 `drill_in.chat_gather_opts`, so the marker removal and the `[…]` span marking are
 identical and follow `mark_reference_span` (they did not before #214 BR-60 —
-`<M-i>` hardcoded brackets on). The **scope** deliberately differs: `<M-i>`
+`<M-i>`, now `<M-b>`, hardcoded brackets on). The **scope** deliberately differs: `<M-b>`
 gathers every pending quote in the buffer, while `<M-CR>` with the cursor inside
 an exchange gathers only that exchange's and does not fall through to the
 whole-buffer path. Branching is a "take all of this elsewhere" gesture; responding

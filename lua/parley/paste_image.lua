@@ -1,13 +1,13 @@
 -- lua/parley/paste_image.lua
 --
--- The <M-v> flow (#231, decision 12): read the clipboard image through
--- clipboard_image, save it through assets (THE writer), insert the link on
--- its own line after the cursor line. Asynchronous and anchored: the cursor
--- line is captured as an extmark handle before the spawn, so typing meanwhile
--- cannot misplace the link; the editor never blocks. One paste per buffer at
--- a time; a closed buffer discards the image — no bytes without a transcript
--- line. The chat path is re-read at completion so a rename or move that
--- finished meanwhile is honoured. The cursor row comes from the CURRENT
+-- The <M-i> flow (#231, decision 12; <M-v> until #377): read the clipboard
+-- image through clipboard_image, save it through assets (THE writer), insert
+-- the link on its own line after the cursor line. Asynchronous and anchored:
+-- the cursor line is captured as an extmark handle before the spawn, so typing
+-- meanwhile cannot misplace the link; the editor never blocks. One paste per
+-- buffer at a time; a closed buffer discards the image — no bytes without a
+-- transcript line. The chat path is re-read at completion so a rename or move
+-- that finished meanwhile is honoured. The cursor row comes from the CURRENT
 -- window, which the key guarantees is showing `buf`. In insert mode the key
 -- does NOT stopinsert (helper.set_keymap does not, unlike register_global):
 -- the row is still the right one, and a stopinsert here would pull the cursor

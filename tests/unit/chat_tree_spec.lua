@@ -37,7 +37,7 @@ local function walk(files, name, cut, loads)
 end
 
 describe("chat_tree.linearize (#233)", function()
-    it("sends an <M-i> aside to the next question in the parent: R1, A1, R2", function()
+    it("sends an <M-b> aside to the next question in the parent: R1, A1, R2", function()
         local files = {
             ["root.md"] = file({ "R1", { branch = "a.md" }, "R2" }),
             ["a.md"] = file({ "A1" }, "root.md"),

@@ -123,7 +123,7 @@ try the following:
 1. Copy an image to the clipboard, such as a screenshot or a diagram. On Mac
    you can do this easily with `shift+control+command+4` then drag select.
 2. Type a question: "Tell me what's in the picture".
-3. Put the cursor in that question and press `option+v`.
+3. Put the cursor in that question and press `option+i`.
 4. Parley saves the image and inserts a Markdown image link into the question.
 5. Choose a model that supports images, then press `option+return` to send.
 
