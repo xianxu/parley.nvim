@@ -10,6 +10,23 @@ local function failure(kind, message)
     return nil, { kind = kind, message = tostring(message) }
 end
 
+local function digest(value)
+    local ok, result = pcall(vim.fn.sha256, value)
+    if ok then return result end
+    if not value:find('\0', 1, true) then return nil, 'cannot hash lease identity' end
+    -- Neovim 0.11 rejects a Lua NUL string as a Blob; 0.12 hashes it.
+    -- Hash the same raw stdin bytes with the platform utility, so mixed-version
+    -- editors still contend on exactly the same permanent lease inode.
+    local command
+    if vim.fn.executable('sha256sum') == 1 then command = { 'sha256sum' }
+    elseif vim.fn.executable('shasum') == 1 then command = { 'shasum', '-a', '256' }
+    else return nil, 'binary lease identities require sha256sum or shasum on this Neovim' end
+    local ran, output = pcall(function() return vim.system(command, { stdin = value, text = true }):wait(2500) end)
+    local sum = ran and output.code == 0 and (output.stdout or ''):match('^(%x+)')
+    if type(sum) ~= 'string' or #sum ~= 64 then return nil, 'cannot hash binary lease identity' end
+    return sum:lower()
+end
+
 local function native()
     if native_backend then return native_backend end
     local ok, backend = pcall(function()
@@ -103,14 +120,18 @@ function M.acquire(namespace, key, options)
     if not backend then backend, backend_err = native() end
     if not backend then return failure('unavailable', backend_err) end
     local fs = options.fs or uv
-    local directory = root:gsub('/$', '') .. '/document-leases/' .. vim.fn.sha256(namespace)
+    local namespace_hash, namespace_error = digest(namespace)
+    if not namespace_hash then return failure('unavailable', namespace_error) end
+    local key_hash, key_error = digest(key)
+    if not key_hash then return failure('unavailable', key_error) end
+    local directory = root:gsub('/$', '') .. '/document-leases/' .. namespace_hash
     if not mkdir(fs, directory) then return failure('unavailable', 'cannot create document lease directory') end
 
     -- This stable guard serializes namespace count/create across editors. A
     -- bounded scan outside the guard would allow concurrent overflow.
     local allocation, allocation_err = open_locked(fs, backend, directory .. '/.allocation')
     if not allocation then return nil, allocation_err end
-    local path = directory .. '/' .. vim.fn.sha256(key) .. '.lock'
+    local path = directory .. '/' .. key_hash .. '.lock'
     local exists = fs.fs_stat(path)
     if not exists then
         local scan, scan_err = fs.fs_scandir(directory)

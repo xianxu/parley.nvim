@@ -69,7 +69,9 @@ describe("review skill source composition", function()
         assert.truthy(body:find("scope: whole-doc\ndeletions: apply-with-gutter-why\nfrontier: off", 1, true))
         assert.truthy(body:find("tighten the intro", 1, true))
         assert.truthy(body:find("propose_edits", adapter, true))
-        assert.falsy(body:find("couch --session-sync", 1, true))
+        -- Canonical S3 prose names registry rename; the Couch adapter itself
+        -- must remain excluded from local composition.
+        assert.falsy(body:find("# Adapter: editing the file", 1, true))
     end)
 
     it("includes every selected body and only the first mode flags", function()

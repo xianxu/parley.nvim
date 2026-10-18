@@ -4,10 +4,22 @@ local M = {}
 local uv = vim.uv or vim.loop
 local leases = require('parley.document_lease')
 local projection = require('parley.document_move_plan')
+local model = require('parley.document_move_state')
 local helper = require('parley.helper')
 local MAX_JOURNAL, MAX_PENDING = 256 * 1024, 32
 local MAX_FILE = 4 * 1024 * 1024
+local validate, validate_finalization
 
+local function finalization_of(journal)
+    local record
+    if journal.version == 2 then record = journal.state and journal.state.finalization
+    else record = journal.finalization end
+    return type(record) == 'table' and record or nil
+end
+function M.finalization(operation)
+    local record = operation and operation.journal and finalization_of(operation.journal)
+    return record and vim.deepcopy(record) or nil
+end
 local function failure(kind, message)
     return nil, { kind = kind, error = tostring(message), message = tostring(message) }
 end
@@ -33,6 +45,56 @@ local function canonical(fs, path)
     local resolved = fs.fs_realpath(path)
     if resolved then return resolved == path end
     return fs.fs_realpath(dirname(path)) == dirname(path)
+end
+-- Read-only admission shared by editor entry points and begin. A caller may
+-- retain this descriptor across its save; a changed suffix then refuses rather
+-- than silently selecting a different root after that save.
+function M.preflight_geometry(old, new, options)
+    options = options or {}
+    local valid, err = projection.validate_geometry(old, new)
+    if not valid then return nil, err end
+    local expected = options.geometry_preflight
+    local function refuse(message) return nil, message .. '; move to another name first' end
+    if expected ~= nil then
+        if type(expected) ~= 'table' or expected.old ~= old or expected.new ~= new then return refuse('move preflight does not match the document paths') end
+        valid, err = projection.validate_geometry(old, new, expected.orphan_destination)
+        if not valid then return nil, err end
+    end
+    local fs = options.fs or options.adapter or uv
+    if not canonical(fs, old) or not canonical(fs, new) then return refuse('move paths are not canonical') end
+    local function inspect(path)
+        local stat, inspect_err, code = fs.fs_lstat(path)
+        if stat then return stat end
+        if code == 'ENOENT' then return false end
+        return nil, inspect_err or 'cannot inspect move path'
+    end
+    local old_stat, old_err = inspect(old)
+    if old_stat == nil then return nil, old_err end
+    local new_stat, new_err = inspect(new)
+    if new_stat == nil then return nil, new_err end
+    local source, target = side(old), side(new)
+    local source_stat, source_err = inspect(source)
+    if source_stat == nil then return nil, source_err end
+    local target_stat, target_err = source_stat, nil
+    if source ~= target then target_stat, target_err = inspect(target) end
+    if target_stat == nil then return nil, target_err end
+    local candidates, orphan = {}, nil
+    if source ~= target and target_stat and not new_stat then
+        if target_stat.type ~= 'directory' or fs.fs_realpath(target) ~= target then return refuse('destination side folder is not a real directory') end
+        for suffix = 1, 4096 do
+            local candidate = target:sub(1, -6) .. '_' .. suffix .. '.side'
+            local occupied, occupied_err = inspect(candidate)
+            if occupied == nil then return nil, occupied_err end
+            candidates[#candidates + 1] = occupied ~= false
+            if occupied == false then orphan = candidate; break end
+        end
+        if not orphan then return refuse('side folder suffix search limit reached') end
+    end
+    if expected ~= nil and expected.orphan_destination ~= orphan then return refuse('side folder destination changed since preflight') end
+    valid, err = projection.validate_geometry(old, new, orphan)
+    if not valid then return nil, err end
+    return { old = old, new = new, old_stat = old_stat, new_stat = new_stat,
+        source_stat = source_stat, target_stat = target_stat, orphan_candidates = candidates, orphan_destination = orphan }
 end
 local function mkdir(fs, path)
     local info = fs.fs_stat(path)
@@ -190,6 +252,28 @@ local function persist(operation, bootstrap)
     local bytes, err = encode(operation.journal)
     if not bytes then return nil, err end
     local temporary = bootstrap and operation.journal_path or operation.journal.temps[1]
+    if not bootstrap and operation.journal.version == 2 and operation.fs.fs_lstat(temporary) then
+        -- Reconstruct the prospective checkpoint from fresh witnesses, rather
+        -- than accepting arbitrary valid JSON at an operation-shaped path.
+        local residue, residue_err, stat = read(operation.fs, temporary, MAX_JOURNAL)
+        if not residue then return nil, residue_err end
+        local decoded, candidate = pcall(vim.json.decode, residue, { luanil = { object = true, array = true } })
+        local valid = decoded and validate(candidate, operation.namespace, operation.id, operation.journal_path)
+        if not valid or not vim.deep_equal(candidate, operation.journal) then
+            return nil, 'unpublished journal temporary does not match the reobserved checkpoint'
+        end
+        local current, current_err, current_stat = read(operation.fs, operation.journal_path, MAX_JOURNAL)
+        if not current or hash(current) ~= operation.disk_hash or not canonical(operation.fs, operation.journal_path)
+            or not canonical(operation.fs, temporary) then return nil, current_err or 'journal preimage changed' end
+        local again, again_err, again_stat = read(operation.fs, temporary, MAX_JOURNAL)
+        if not again or hash(again) ~= hash(residue) or not same_file(again_stat, stat)
+            or not same_file(operation.fs.fs_lstat(temporary), stat)
+            or not same_file(operation.fs.fs_lstat(operation.journal_path), current_stat) then
+            return nil, again_err or 'unpublished journal temporary changed'
+        end
+        local removed, remove_err = operation.fs.fs_unlink(temporary)
+        if not removed then return nil, remove_err end
+    end
     local saved, save_err = helper.write_file_atomic(bytes, operation.journal_path,
         writer(operation, temporary, bootstrap, operation.disk_hash))
     if saved then operation.disk_hash = hash(bytes) end
@@ -242,7 +326,7 @@ local function valid_witness(value, kind)
 end
 
 -- Validate all persisted authority before looking at temporary paths or effects.
-local function validate(journal, namespace, id, path)
+local function validate_v1(journal, namespace, id, path)
     if type(journal) ~= 'table' or journal.version ~= 1 or journal.namespace ~= namespace or journal.id ~= id
         or not plain_path(journal.old) or not plain_path(journal.new) or journal.old == journal.new
         or type(journal.registration) ~= 'table' or journal.registration.ID ~= id
@@ -259,6 +343,8 @@ local function validate(journal, namespace, id, path)
         or (journal.new_witness ~= false and (not valid_witness(journal.new_witness, 'file')
             or not valid_digest(journal.new_witness.hash)))
         or (journal.old_witness and not valid_digest(journal.old_hash)) then return nil, 'invalid migration journal schema' end
+    local geometry, geometry_err = projection.validate_geometry(journal.old, journal.new)
+    if not geometry then return nil, geometry_err end
     if journal.document_move then
         if not journal.old_witness then return nil, 'owned migration requires an OLD witness' end
         if journal.steps.document_moved then
@@ -298,6 +384,101 @@ local function validate(journal, namespace, id, path)
     for relative, done in pairs(journal.steps.rewritten) do
         if not seen[relative] or done ~= true then return nil, 'invalid rewrite checkpoint' end
     end
+    if journal.finalization ~= nil and journal.finalization ~= false then
+        if type(journal.finalization) ~= 'table' then return nil, 'invalid legacy finalization record' end
+        local valid, err = validate_finalization(journal)
+        if not valid then return nil, err end
+    end
+    return true
+end
+validate_finalization = function(journal)
+    local record = finalization_of(journal)
+    if not record then return true end
+    local current = journal.new_witness and journal.new_witness.hash
+    local valid, err = model.validate_finalization(record, current)
+    if not valid or not valid_digest(record.document_hash) or not valid_digest(record.editor_hash) then
+        return nil, err or 'invalid finalization hashes'
+    end
+    local protection = journal.protection
+    if record.old_lock_before ~= (protection.old_lock or false)
+        or record.new_lock_before ~= (protection.new_lock or false) then return nil, 'finalization lock intent disagrees with admission' end
+    local confirmed = journal.confirmation
+    local registration = type(confirmed) == 'table' and confirmed.registration
+    if type(confirmed) ~= 'table' or confirmed.kind ~= 'registered' or type(registration) ~= 'table'
+        or registration.ID ~= journal.id or registration.File ~= journal.new
+        or type(registration.Owner) ~= 'string' or registration.Owner == '' then return nil, 'unconfirmed finalization identity' end
+    if journal.version == 1 and not journal.steps.metadata then return nil, 'finalization precedes metadata acknowledgement' end
+    return true
+end
+
+validate = function(journal, namespace, id, path)
+    if type(journal) ~= 'table' or journal.version ~= 2 then return validate_v1(journal, namespace, id, path) end
+    local state, err = model.restore(journal.state)
+    if not state then return nil, err end
+    if journal.steps ~= nil or journal.finalization ~= nil or state.op_id ~= journal.token or state.id ~= id or state.new ~= journal.new
+        or state.generation ~= 1 or type(journal.parent) ~= 'table'
+        or not valid_digest(journal.parent.before) or not valid_digest(journal.parent.after)
+        or type(journal.entries) ~= 'table' or type(journal.temps) ~= 'table'
+        or type(journal.editor_captured) ~= 'boolean'
+        or not journal.editor_captured and (state.phase ~= 'prepared' or journal.parent.editor_before_hash ~= false)
+        or journal.document_move and (not journal.captured or journal.parent.before ~= journal.old_hash)
+        or (journal.parent.editor_before_hash ~= false and not valid_digest(journal.parent.editor_before_hash))
+        or type(journal.captured) ~= 'boolean' or not journal.captured and state.phase ~= 'prepared' then return nil, 'invalid v2 migration authority' end
+    if state.document.before ~= journal.parent.before or state.document.after ~= journal.parent.before
+        or not vim.deep_equal(state.parent, { before = journal.parent.before, after = journal.parent.after }) then
+        return nil, 'parent state disagrees with captured hashes'
+    end
+    local shadow = vim.deepcopy(journal)
+    shadow.version, shadow.state = 1, nil
+    shadow.steps = { document_moved = false, side_moved = false, rewritten = {}, metadata = false }
+    shadow.new_witness = false
+    if shadow.document_move then
+        -- v1 common validation checks intent only; v2 progress belongs to state.
+        shadow.parent = nil
+    end
+    table.remove(shadow.temps)
+    local valid, common_err = validate_v1(shadow, namespace, id, path)
+    if not valid then return nil, common_err end
+    local orphan = journal.orphan
+    if orphan ~= false then
+        if type(orphan) ~= 'table' or not valid_witness(orphan.witness, 'directory')
+            or type(orphan.suffix) ~= 'number' or orphan.suffix < 1 or orphan.suffix > 4096 or orphan.suffix % 1 ~= 0
+            or orphan.path ~= side(journal.new):sub(1, -6) .. '_' .. orphan.suffix .. '.side'
+            or side(journal.old) == side(journal.new)
+            or not vim.deep_equal(state.orphan, { before = orphan.witness, after = orphan.witness }) then
+            return nil, 'invalid orphan authority'
+        end
+    elseif state.orphan ~= false then return nil, 'unexpected orphan state' end
+    local geometry, geometry_err = projection.validate_geometry(journal.old, journal.new, orphan and orphan.path or nil)
+    if not geometry then return nil, geometry_err end
+    local expected_side = journal.side_witness and { before = journal.side_witness, after = journal.side_witness } or false
+    if not vim.deep_equal(state.side, expected_side) then return nil, 'invalid side state' end
+    local expected_children = {}
+    for _, entry in ipairs(journal.entries or {}) do
+        if entry.before and entry.before ~= entry.after then
+            expected_children[#expected_children + 1] = { id = entry.relative, before = entry.before, after = entry.after }
+        end
+    end
+    if not vim.deep_equal(state.children, expected_children) then return nil, 'invalid child state' end
+    if journal.temps[#journal.temps] ~= new_temp(journal.new, journal.token) then return nil, 'invalid parent temporary' end
+    if journal.new_witness ~= false and (not valid_witness(journal.new_witness, 'file')
+        or not valid_digest(journal.new_witness.hash) or journal.new_witness.hash ~= state.document_witness) then
+        return nil, 'invalid current parent witness'
+    end
+    if state.phase == 'complete' or state.phase == 'retired' then
+        local confirmed = journal.confirmation
+        local registration = type(confirmed) == 'table' and confirmed.registration
+        if type(confirmed) ~= 'table' or confirmed.kind ~= 'registered' or type(registration) ~= 'table'
+            or registration.ID ~= journal.id or registration.File ~= journal.new
+            or type(registration.Owner) ~= 'string' or registration.Owner == '' then
+            return nil, 'missing confirmed registration authority'
+        end
+    elseif journal.confirmation ~= false then return nil, 'confirmation precedes metadata acknowledgement' end
+    local finalized, finalization_err = validate_finalization(journal)
+    if not finalized then return nil, finalization_err end
+    if state.phase ~= 'prepared' and state.phase ~= 'orphan' and state.phase ~= 'document' and not journal.new_witness then
+        return nil, 'missing current document witness'
+    end
     return true
 end
 local function load(fs, path, namespace, id)
@@ -313,12 +494,41 @@ local function load(fs, path, namespace, id)
     return journal, nil, hash(bytes)
 end
 local function cleanup(operation)
-    for _, temporary in ipairs(operation.journal.temps) do
-        local stat = operation.fs.fs_lstat(temporary)
-        if stat then
-            if stat.type ~= 'file' then return nil, 'unexpected temporary type' end
-            local removed, err = operation.fs.fs_unlink(temporary)
-            if not removed then return nil, err end
+    local journal, fs = operation.journal, operation.fs
+    local phase = journal.version == 2 and journal.state.phase
+    local children_ready = phase == 'children' or phase == 'parent' or phase == 'editor'
+        or phase == 'metadata' or phase == 'complete' or phase == 'retired'
+    local parent_ready = phase == 'parent' or phase == 'editor' or phase == 'metadata'
+        or phase == 'complete' or phase == 'retired'
+    for index, temporary in ipairs(journal.temps) do
+        local eligible = journal.version ~= 2 or index ~= 1
+            and (index == #journal.temps and parent_ready or index < #journal.temps and children_ready)
+        -- An unpublished journal candidate is consumed only by persist when it
+        -- exactly matches a dispatcher checkpoint reconstructed from witnesses.
+        -- Future tree temps may still name files inside the captured orphan.
+        if eligible then
+            local stat = fs.fs_lstat(temporary)
+            if stat then
+                if stat.type ~= 'file' then return nil, 'unexpected temporary type' end
+                if journal.version == 2 then
+                    local expected = index == #journal.temps and journal.parent.after or nil
+                    if not expected then
+                        for _, entry in ipairs(journal.entries) do
+                            if entry.before and entry.before ~= entry.after
+                                and temporary == new_temp(side(journal.new) .. '/' .. entry.relative, journal.token) then
+                                expected = entry.after; break
+                            end
+                        end
+                    end
+                    local bytes, err, opened = read(fs, temporary)
+                    if not bytes or not expected or hash(bytes) ~= expected or not canonical(fs, temporary)
+                        or not same_file(fs.fs_lstat(temporary), opened) then
+                        return nil, err or 'temporary bytes are not a proven migration publication'
+                    end
+                end
+                local removed, err = fs.fs_unlink(temporary)
+                if not removed then return nil, err end
+            end
         end
     end
     return true
@@ -336,6 +546,8 @@ function M.begin(namespace, registration, new_path, options)
     end
     local fs, root = options.fs or options.adapter or uv, root_of(options)
     if type(root) ~= 'string' or root == '' then return failure('unavailable', 'state directory is missing') end
+    local admitted, admission_err = M.preflight_geometry(registration.File, new_path, options)
+    if not admitted then return failure('unavailable', admission_err) end
     local lease, lease_err = acquire(namespace, registration.ID, root, options)
     if not lease then return nil, lease_err end
     local function refuse(kind, message) lease.release(); return failure(kind, message) end
@@ -353,21 +565,35 @@ function M.begin(namespace, registration, new_path, options)
         return refuse('unavailable', 'destination registration must be confirmed absent or left to Couch')
     end
     local old = registration.File
-    if not canonical(fs, old) or not canonical(fs, new_path) then return refuse('unavailable', 'migration paths are not canonical') end
-    local old_stat, new_stat = fs.fs_lstat(old), fs.fs_lstat(new_path)
+    local current, current_err = M.preflight_geometry(old, new_path, { fs = fs, geometry_preflight = admitted })
+    if not current then return refuse('unavailable', current_err) end
+    local old_stat, new_stat = current.old_stat, current.new_stat
     if options.move_document and (not old_stat or new_stat) then
         return refuse('unavailable', 'owned document move requires existing OLD and absent NEW')
     end
     if old_stat and old_stat.type ~= 'file' or new_stat and new_stat.type ~= 'file' then return refuse('unavailable', 'invalid document file type') end
     local source, target = side(old), side(new_path)
-    local source_stat, target_stat = fs.fs_lstat(source), fs.fs_lstat(target)
+    local source_stat, target_stat = current.source_stat, current.target_stat
     if source_stat and (source_stat.type ~= 'directory' or fs.fs_realpath(source) ~= source) then return refuse('unavailable', 'invalid source side directory') end
     local entries, scan_err = {}, nil
     if source_stat then entries, scan_err = scan_tree(fs, source) end
     if not entries then return refuse('unavailable', scan_err) end
+    local parent_bytes, parent_err = options.parent_bytes, nil
+    if parent_bytes == nil then parent_bytes, parent_err = read(fs, old) end
+    if type(parent_bytes) ~= 'string' or #parent_bytes > MAX_FILE then return refuse('unavailable', parent_err or 'invalid parent bytes') end
+    if options.move_document and options.parent_bytes ~= nil then
+        local syntax, syntax_err = projection.rewrite_side_references(parent_bytes, old, new_path)
+        if not syntax then return refuse('unavailable', syntax_err) end
+        parent_bytes, parent_err = read(fs, old)
+        if not parent_bytes then return refuse('unavailable', parent_err) end
+    end
+    local parent_after, parent_rewrite_err = projection.rewrite_side_references(parent_bytes, old, new_path)
+    if not parent_after then return refuse('unavailable', parent_rewrite_err) end
+    local orphan_candidates = current.orphan_candidates
     local projected, project_err = projection.project(old, new_path, {
-        id = registration.ID, old_exists = old_stat ~= nil, new_exists = new_stat ~= nil, new_written = false,
-        destination_registered = destination, side_exists = source_stat ~= nil, target_side_exists = target_stat ~= nil, entries = entries,
+        id = registration.ID, old_exists = old_stat ~= false, new_exists = new_stat ~= false, new_written = false,
+        destination_registered = destination, side_exists = source_stat ~= false, target_side_exists = target_stat ~= false, entries = entries,
+        parent_bytes = parent_bytes, new_absent_at_admission = new_stat == false, orphan_candidates = orphan_candidates,
     })
     if not projected then return refuse('unavailable', project_err) end
     local token = hash(tostring(uv.hrtime()) .. ':' .. tostring(vim.fn.getpid()) .. ':' .. registration.ID)
@@ -397,7 +623,30 @@ function M.begin(namespace, registration, new_path, options)
         end
         journal.entries[#journal.entries + 1] = recorded
     end
+    journal.version, journal.steps = 2, nil
+    journal.parent = { before = hash(parent_bytes), after = hash(parent_after), editor_before_hash = false }
+    journal.editor_captured, journal.confirmation = false, false
+    journal.captured = options.move_document == true
+    journal.orphan = projected.orphan_destination and { path = projected.orphan_destination,
+        suffix = #orphan_candidates, witness = witness(target_stat) } or false
+    journal.temps[#journal.temps + 1] = new_temp(new_path, token)
+    local children = {}
+    for _, entry in ipairs(journal.entries) do
+        if entry.before and entry.before ~= entry.after then
+            children[#children + 1] = { id = entry.relative, before = entry.before, after = entry.after }
+        end
+    end
+    local initial_state, initial_err = model.initial({ op_id = token, id = journal.id, new = new_path,
+        generation = 1, document_generation = 1,
+        document = { before = journal.parent.before, after = journal.parent.before },
+        parent = { before = journal.parent.before, after = journal.parent.after },
+        orphan = journal.orphan and { before = journal.orphan.witness, after = journal.orphan.witness } or false,
+        side = journal.side_witness and { before = journal.side_witness, after = journal.side_witness } or false,
+        children = children })
+    if not initial_state then return refuse('limit', initial_err) end
+    journal.state = initial_state
     local operation = operation_for(namespace, journal, path, lease, options)
+    operation.orphan_destination = journal.orphan and journal.orphan.path or nil
     local encoded, encode_err = encode(journal)
     if not encoded then return refuse('limit', encode_err) end
     local budget, budget_err = leases.acquire(namespace .. '\0migration-journal-budget', 'allocation', { root = root })
@@ -439,6 +688,132 @@ local function verify_tree(operation, base, after_move)
         elseif not same_inode(entry.witness, expected.witness) then return nil, 'side directory changed' end
     end
     return true
+end
+
+-- Shared v1/v2 finalization IO. The caller owns checkpoint replacement; the
+-- pure reducer owns handoff -> protection -> retire for both journal versions.
+local function observe_document(operation)
+    local j, fs = operation.journal, operation.fs
+    local bytes, err, stat = read(fs, j.new)
+    if not bytes then return nil, err end
+    if not canonical(fs, j.new) or j.document_move and fs.fs_lstat(j.old) then return nil, 'document paths changed' end
+    if j.new_witness and (hash(bytes) ~= j.new_witness.hash or not same_file(stat, j.new_witness)) then
+        return nil, 'NEW changed since its last recorded write'
+    end
+    return bytes, nil, stat
+end
+local function finalize(operation, result, progress)
+    local function prove()
+        local bytes, err = observe_document(operation)
+        if not bytes then return nil, err end
+        local intent = finalization_of(operation.journal)
+        if intent and hash(bytes) ~= intent.document_hash then return nil, 'finalization document generation changed' end
+        return bytes
+    end
+    local options = operation.options
+    local protocol = options.finalization_snapshot ~= nil or options.prepare_finalization ~= nil or options.finish_retired ~= nil
+    if protocol and (type(options.finalization_snapshot) ~= 'function' or type(options.prepare_finalization) ~= 'function'
+        or type(options.finish_retired) ~= 'function') then return nil, 'incomplete finalization hooks' end
+    local function snapshot()
+        local bytes, err = prove()
+        if not bytes then return nil, err end
+        local captured, record = hook(operation, 'finalization_snapshot')
+        if not captured then return nil, record or 'finalization snapshot unavailable' end
+        if type(record) ~= 'table' then return nil, 'invalid finalization snapshot' end
+        local intent = vim.deepcopy(record)
+        intent.stage, intent.document_hash = 'handoff', hash(bytes)
+        local valid, validation_err = model.validate_finalization(intent, hash(bytes))
+        if not valid or not valid_digest(intent.editor_hash)
+            or intent.old_lock_before ~= (operation.journal.protection.old_lock or false)
+            or intent.new_lock_before ~= (operation.journal.protection.new_lock or false) then
+            return nil, validation_err or 'finalization snapshot disagrees with protection'
+        end
+        local current, current_err = prove()
+        if not current then return nil, current_err end
+        return valid
+    end
+    local bytes, raw_err = prove()
+    if not bytes then return nil, raw_err end
+    if protocol then
+        local intent = finalization_of(operation.journal)
+        if not intent then
+            local captured, capture_err = snapshot()
+            if not captured then return nil, capture_err end
+            local saved, save_err = progress('finalization_started', captured)
+            if not saved then return nil, save_err end
+            intent = finalization_of(operation.journal)
+        end
+        if intent.stage == 'handoff' then
+            -- Only the recorded original lock states may authorize release.
+            -- A held NEW also proves the existing legacy OLD-cleaned case.
+            local current, current_err = snapshot()
+            if not current or not vim.deep_equal(current, intent) then return nil, current_err or 'handoff proof changed' end
+            local saved, save_err = progress('finalization_authorized')
+            if not saved then return nil, save_err end
+            intent = finalization_of(operation.journal)
+        end
+        if intent.stage == 'protection' then
+            local current, current_err = prove()
+            if not current then return nil, current_err end
+            local prepared, prepare_err = hook(operation, 'prepare_finalization', vim.deepcopy(intent), result)
+            if not prepared then return nil, prepare_err or 'protection finalization interrupted' end
+            current, current_err = prove()
+            if not current then return nil, current_err end
+            local saved, save_err = progress('finalization_released')
+            if not saved then return nil, save_err end
+            intent = finalization_of(operation.journal)
+        end
+        if intent.stage ~= 'retire' then return nil, 'finalization is not ready to retire' end
+        -- Retire is a proof state, not permission to release an original lock
+        -- again: the adapter requires the exact declared AFTER state here.
+        local prepared, prepare_err = hook(operation, 'prepare_finalization', vim.deepcopy(intent), result)
+        if not prepared then return nil, prepare_err or 'retirement protection changed' end
+    else
+        if finalization_of(operation.journal) then return nil, 'finalization adapter is required for recovery' end
+        -- Callers without a protection adapter retain their original no-op
+        -- finish seam. No release intent is inferred from absent callbacks.
+        local finished, finish_err = hook(operation, 'finish', result)
+        if not finished then return nil, finish_err or 'local handoff is pending' end
+    end
+    local current, current_err = prove()
+    if not current then return nil, current_err end
+    local clean, clean_err = cleanup(operation)
+    if not clean then return nil, clean_err end
+    local j = operation.journal
+    local encoded, encoded_err = read(operation.fs, operation.journal_path, MAX_JOURNAL)
+    if not encoded or hash(encoded) ~= operation.disk_hash or not canonical(operation.fs, operation.journal_path) then
+        return nil, encoded_err or 'finalization journal preimage changed'
+    end
+    -- A leftover exact checkpoint must be consumed by its owner before the
+    -- journal can disappear. Unknown residue remains visible and preserved.
+    if operation.fs.fs_lstat(j.temps[1]) then
+        local saved, save_err = persist(operation)
+        if not saved then return nil, save_err end
+    end
+    local removed, remove_err = operation.fs.fs_unlink(operation.journal_path)
+    if not removed then return nil, remove_err end
+    operation.retired = true
+    if protocol then
+        local adopted, adopt_err = hook(operation, 'finish_retired', result)
+        if not adopted then result.local_warning = tostring(adopt_err or 'local adoption interrupted') .. '; reopen to refresh local state' end
+    end
+    result.orphan_destination = operation.orphan_destination
+    return true
+end
+local function finalize_v1(operation, result)
+    local function progress(kind, intent)
+        local j = operation.journal
+        local next_record, err = model.finalization_step(j.finalization, kind, intent, j.new_witness.hash)
+        if not next_record then return nil, err end
+        local previous = vim.deepcopy(j)
+        j.finalization = next_record
+        local valid, validation_err = validate(j, operation.namespace, operation.id, operation.journal_path)
+        if not valid then operation.journal = previous; return nil, validation_err end
+        local saved, save_err = persist(operation)
+        if not saved then operation.journal = previous end
+        return saved, save_err
+    end
+    return finalize(operation, result, progress)
 end
 
 local function advance_document(operation)
@@ -494,7 +869,7 @@ end
 --- out (#359): make that write the journal's witness for NEW, so a recovery
 --- after a refused or lost rename proves the move against the bytes they saved.
 --- Only for an owned move whose document already moved.
-function M.record_write(operation)
+local function record_write_v1(operation)
     local journal = operation and operation.journal
     if not journal or not journal.document_move or not journal.steps.document_moved or operation.released then
         return nil, 'no moved document to record'
@@ -507,7 +882,7 @@ function M.record_write(operation)
     return persist(operation)
 end
 
-function M.advance(operation, callback)
+local function advance_v1(operation, callback)
     local function pending(message)
         operation.running = false
         callback({ kind = 'pending', error = tostring(message), operation = operation })
@@ -520,6 +895,12 @@ function M.advance(operation, callback)
     if not valid then pending(valid_err); return end
     local reconciled, reconcile_err = hook(operation, 'reconcile')
     if not reconciled then pending(reconcile_err or 'OLD reconciliation is pending'); return end
+    if finalization_of(journal) then
+        local result = vim.deepcopy(journal.confirmation)
+        local finished, finish_err = finalize_v1(operation, result)
+        if not finished then pending(finish_err); return end
+        operation.running = false; operation.release(); callback(result); return
+    end
     if journal.document_move then
         local moved, move_err = advance_document(operation)
         if not moved then pending(move_err); return end
@@ -595,12 +976,11 @@ function M.advance(operation, callback)
             pending(type(result) == 'table' and result.error or 'metadata confirmation is uncertain'); return
         end
         journal.steps.metadata = true
+        journal.confirmation = { kind = 'registered', registration = vim.deepcopy(registration), changed = result.changed == true }
         local saved, save_err = persist(operation)
         if not saved then pending(save_err); return end
-        local finished, finish_err = hook(operation, 'finish', result)
-        if not finished then pending(finish_err or 'local handoff is pending'); return end
-        local removed, remove_err = fs.fs_unlink(operation.journal_path)
-        if not removed then pending(remove_err); return end
+        local finished, finish_err = finalize_v1(operation, result)
+        if not finished then pending(finish_err); return end
         operation.running = false
         operation.release()
         callback(result)
@@ -614,6 +994,324 @@ function M.advance(operation, callback)
         operation.request = registry.request('rename', { journal.old, journal.new },
             { id = journal.id, old = journal.old, new = journal.new }, metadata_done, operation.options.registry_options)
     end
+end
+
+-- The sole v2 checkpoint owner. Disk observations authorize reducer events;
+-- publication is never inferred from a checkpoint alone.
+local function dispatch(operation, callback, saved_write)
+    local fs, j = operation.fs, operation.journal
+    local function checkpoint(event, change)
+        event.op_id, event.generation = j.state.op_id, j.state.generation
+        local next_state, outcome = model.step(j.state, event)
+        if not next_state or outcome.kind == 'pending' or outcome.kind == 'ignored' then
+            return nil, outcome.reason or 'migration transition refused'
+        end
+        local previous = vim.deepcopy(j)
+        if change then change() end
+        j.state = next_state
+        local ok, err = persist(operation)
+        if not ok then operation.journal = previous; j = previous; return nil, err end
+        return true
+    end
+    local function observed(proof, value, child)
+        return checkpoint({ kind = 'observed', phase = j.state.phase, proof = proof, witness = value, child_id = child })
+    end
+    local function authorize(value, child)
+        if j.state.phase ~= 'editor' and j.state.phase ~= 'metadata' and fs.fs_lstat(j.temps[1]) then
+            local saved, save_err = persist(operation)
+            if not saved then return nil, save_err end
+        end
+        local _, outcome = model.step(j.state, { kind = 'observed', op_id = j.state.op_id,
+            generation = j.state.generation, phase = j.state.phase, proof = 'before', witness = value, child_id = child })
+        return outcome.kind == 'effect', outcome.reason or 'migration effect not authorized'
+    end
+    if saved_write then
+        if j.state.phase ~= 'metadata' or operation.released then return nil, 'editor synchronization required before save' end
+        local bytes, err, stat = read(fs, j.new)
+        if not bytes then return nil, err end
+        local current = witness(stat); current.hash = hash(bytes)
+        return checkpoint({ kind = 'saved', document_generation = j.state.document_generation + 1,
+            witness = current.hash }, function() j.new_witness = current end)
+    end
+    local function pending(reason)
+        operation.running = false
+        callback({ kind = 'pending', error = tostring(reason), operation = operation,
+            orphan_destination = j.orphan and j.state.phase ~= 'prepared' and j.state.phase ~= 'orphan'
+                and operation.orphan_destination or nil })
+    end
+    if operation.released then pending('migration lease has been released'); return end
+    if operation.running then callback({ kind = 'pending', error = 'migration already running', operation = operation }); return end
+    operation.running = true
+    local valid, err = validate(j, operation.namespace, operation.id, operation.journal_path)
+    if not valid then pending(err); return end
+    local reconciled, reconcile_err = hook(operation, 'reconcile')
+    if not reconciled then pending(reconcile_err or 'OLD reconciliation is pending'); return end
+    local function document_bytes() return observe_document(operation) end
+    local function notify_document()
+        if not j.document_move or operation.document_notified then return true end
+        local named, name_err = hook(operation, 'document_moved')
+        if not named then return nil, name_err or 'buffer name handoff is pending' end
+        operation.document_notified = true
+        return true
+    end
+    -- Prove raw NEW before a recovered name handoff can read it into an
+    -- editor. Parent publication gaps use the existing parent before/after
+    -- proof below, then hand off at editor with the updated raw witness.
+    if not finalization_of(j) and (operation.recovering or j.document_move and not operation.document_notified)
+        and j.state.phase ~= 'prepared' and j.state.phase ~= 'orphan'
+        and j.state.phase ~= 'document' and j.state.phase ~= 'parent' then
+        local bytes, read_err = document_bytes()
+        if not bytes then pending(read_err); return end
+        local named, name_err = notify_document()
+        if not named then pending(name_err); return end
+        if operation.recovering and (j.state.phase == 'metadata' or j.state.phase == 'complete') then
+            local synced, sync_err = hook(operation, 'parent_rewritten', {
+                path = j.new, before_hash = j.parent.before, after_hash = j.parent.after,
+                current_hash = hash(bytes), document_generation = j.state.document_generation, recovering = true,
+                before_editor_hash = j.parent.editor_before_hash })
+            if not synced then pending(sync_err or 'editor synchronization is pending'); return end
+            local current, current_err = document_bytes()
+            if not current then pending(current_err); return end
+        end
+    end
+    local clean, clean_err = cleanup(operation)
+    if not clean then pending(clean_err); return end
+    if j.side_witness and j.state.phase ~= 'prepared' and j.state.phase ~= 'orphan'
+        and j.state.phase ~= 'document' and j.state.phase ~= 'side' then
+        local proven, proof_err = verify_tree(operation, side(j.new), true)
+        if not proven or not same_inode(fs.fs_lstat(side(j.new)), j.side_witness) then
+            pending(proof_err or 'side directory changed'); return
+        end
+        for _, id in ipairs(j.state.completed) do
+            local bytes, read_err = read(fs, side(j.new) .. '/' .. id)
+            local after
+            for _, child in ipairs(j.state.children) do if child.id == id then after = child.after; break end end
+            if not bytes or hash(bytes) ~= after then pending(read_err or 'completed backlink changed'); return end
+        end
+    end
+    for _ = 1, 1100 do
+        local phase, ok, phase_err = j.state.phase
+        if phase == 'prepared' then
+            if not j.captured then
+                local bytes, read_err, stat = read(fs, j.new)
+                if not bytes then pending(read_err or 'NEW successful write is required'); return end
+                if fs.fs_lstat(j.old) and j.old_hash then
+                    local old_bytes = read(fs, j.old)
+                    if not old_bytes or hash(old_bytes) ~= j.old_hash then pending('OLD changed before migration'); return end
+                end
+                local after, rewrite_err = projection.rewrite_side_references(bytes, j.old, j.new)
+                if not after then pending(rewrite_err); return end
+                local intent = { op_id = j.token, id = j.id, new = j.new, generation = 1,
+                    document_generation = 1, document = { before = hash(bytes), after = hash(bytes) },
+                    parent = { before = hash(bytes), after = hash(after) },
+                    orphan = j.state.orphan, side = j.state.side, children = j.state.children }
+                -- Intent completion precedes any effect and still belongs to this dispatcher.
+                local previous = vim.deepcopy(j)
+                local initial_state, initial_err = model.initial(intent)
+                if not initial_state then pending(initial_err); return end
+                j.parent, j.captured, j.state = vim.deepcopy(intent.parent), true, initial_state
+                j.parent.editor_before_hash = false
+                j.new_witness = witness(stat); j.new_witness.hash = hash(bytes)
+                ok, phase_err = persist(operation)
+                if not ok then operation.journal = previous; pending(phase_err); return end
+            end
+            if not j.editor_captured then
+                local editor_hash = false
+                if operation.options.editor_snapshot then
+                    local snapshot, snapshot_err = hook(operation, 'editor_snapshot')
+                    if not valid_digest(snapshot) then pending(snapshot_err or 'invalid editor snapshot'); return end
+                    editor_hash = snapshot
+                end
+                local previous = vim.deepcopy(j)
+                j.parent.editor_before_hash, j.editor_captured = editor_hash, true
+                ok, phase_err = persist(operation)
+                if not ok then operation.journal = previous; pending(phase_err); return end
+            end
+            ok, phase_err = checkpoint({ kind = 'journal_saved' })
+        elseif phase == 'orphan' then
+            if not j.orphan then ok, phase_err = observed('after', false)
+            else
+                local target, displaced = fs.fs_lstat(side(j.new)), fs.fs_lstat(j.orphan.path)
+                if not target and same_inode(displaced, j.orphan.witness) and canonical(fs, j.orphan.path) then
+                    ok, phase_err = observed('after', j.orphan.witness)
+                elseif not displaced and same_inode(target, j.orphan.witness) and canonical(fs, side(j.new)) then
+                    ok, phase_err = authorize(j.orphan.witness)
+                    if not ok then pending(phase_err); return end
+                    ok, phase_err = rename_noreplace(fs, side(j.new), j.orphan.path)
+                    if ok then ok, phase_err = observed('after', j.orphan.witness) end
+                else phase_err = 'captured orphan or reserved suffix changed' end
+            end
+        elseif phase == 'document' then
+            if j.document_move then
+                local from, to = fs.fs_lstat(j.old), fs.fs_lstat(j.new)
+                if from then
+                    local bytes, read_err, stat = read(fs, j.old)
+                    if to or not bytes or hash(bytes) ~= j.old_hash or not same_inode(stat, j.old_witness)
+                        or not canonical(fs, j.old) or not canonical(fs, j.new) then
+                        pending(read_err or 'captured OLD changed before owned rename'); return
+                    end
+                    ok, phase_err = authorize(j.parent.before)
+                    if not ok then pending(phase_err); return end
+                    ok, phase_err = rename_noreplace(fs, j.old, j.new)
+                    if not ok then pending(phase_err); return end
+                end
+                if fs.fs_lstat(j.old) or not same_inode(fs.fs_lstat(j.new), j.old_witness) then
+                    pending('owned document rename has no matching inode witness'); return
+                end
+            end
+            local bytes, read_err, stat = read(fs, j.new)
+            if not bytes or hash(bytes) ~= j.parent.before then pending(read_err or 'NEW changed before migration'); return end
+            local current = witness(stat); current.hash = hash(bytes)
+            ok, phase_err = checkpoint({ kind = 'observed', phase = phase, proof = 'after', witness = j.parent.before },
+                function() j.new_witness = current end)
+            if ok then
+                local named, name_err = notify_document()
+                if not named then pending(name_err); return end
+            end
+        elseif phase == 'side' then
+            local source, target = side(j.old), side(j.new)
+            if not j.side_witness then
+                if fs.fs_lstat(target) then pending('unexpected destination side directory'); return end
+                ok, phase_err = observed('after', false)
+            else
+                local from, to = fs.fs_lstat(source), fs.fs_lstat(target)
+                if source ~= target and not (not from and same_inode(to, j.side_witness)) then
+                    if to or not same_inode(from, j.side_witness) then pending('side rename cannot be proven'); return end
+                    local unchanged, tree_err = verify_tree(operation, source, false)
+                    if not unchanged then pending(tree_err); return end
+                    ok, phase_err = authorize(j.side_witness)
+                    if not ok then pending(phase_err); return end
+                    ok, phase_err = rename_noreplace(fs, source, target)
+                    if not ok then pending(phase_err); return end
+                elseif not same_inode(to, j.side_witness) then pending('shared side directory changed'); return end
+                local unchanged, tree_err = verify_tree(operation, target, true)
+                if not unchanged then pending(tree_err); return end
+                ok, phase_err = observed('after', j.side_witness)
+            end
+        elseif phase == 'children' then
+            local complete = {}; for _, id in ipairs(j.state.completed) do complete[id] = true end
+            local next_child
+            for _, child in ipairs(j.state.children) do if not complete[child.id] then next_child = child; break end end
+            if not next_child then ok, phase_err = observed('after', false)
+            else
+                local path = side(j.new) .. '/' .. next_child.id
+                local bytes, read_err = read(fs, path)
+                if not bytes then pending(read_err); return end
+                if hash(bytes) ~= next_child.after then
+                    if hash(bytes) ~= next_child.before then pending('backlink changed before rewrite'); return end
+                    local after, rewrite_err = projection.rewrite_parent(bytes,
+                        { old = side(j.old) .. '/' .. next_child.id, new = path }, { old = j.old, new = j.new })
+                    if not after or hash(after) ~= next_child.after then pending(rewrite_err or 'backlink projection changed'); return end
+                    ok, phase_err = authorize(next_child.before, next_child.id)
+                    if not ok then pending(phase_err); return end
+                    ok, phase_err = helper.write_file_atomic(after, path,
+                        writer(operation, new_temp(path, j.token), false, next_child.before))
+                    if not ok then pending(phase_err); return end
+                end
+                ok, phase_err = observed('after', next_child.after, next_child.id)
+            end
+        elseif phase == 'parent' then
+            local bytes, read_err, stat = read(fs, j.new)
+            if not bytes then pending(read_err); return end
+            if (hash(bytes) ~= j.parent.after or j.parent.before == j.parent.after)
+                and not same_file(stat, j.new_witness) then pending('current parent inode changed before rewrite'); return end
+            if hash(bytes) ~= j.parent.after then
+                if hash(bytes) ~= j.parent.before then pending('parent changed before rewrite'); return end
+                local after, rewrite_err = projection.rewrite_side_references(bytes, j.old, j.new)
+                if not after or hash(after) ~= j.parent.after then pending(rewrite_err or 'parent projection changed'); return end
+                ok, phase_err = authorize(j.parent.before)
+                if not ok then pending(phase_err); return end
+                ok, phase_err = helper.write_file_atomic(after, j.new,
+                    writer(operation, new_temp(j.new, j.token), false, j.parent.before))
+                if not ok then pending(phase_err); return end
+                bytes, read_err, stat = read(fs, j.new)
+                if not bytes or hash(bytes) ~= j.parent.after then pending(read_err or 'parent publication changed'); return end
+            end
+            local current = witness(stat); current.hash = hash(bytes)
+            ok, phase_err = checkpoint({ kind = 'observed', phase = phase, proof = 'after', witness = j.parent.after },
+                function() j.new_witness = current end)
+        elseif phase == 'editor' then
+            local bytes, read_err = document_bytes()
+            if not bytes then pending(read_err); return end
+            local named, name_err = notify_document()
+            if not named then pending(name_err); return end
+            ok, phase_err = authorize(j.state.document_witness)
+            if not ok then pending(phase_err); return end
+            local synced, protection = hook(operation, 'parent_rewritten', { path = j.new, before_hash = j.parent.before,
+                after_hash = j.parent.after, current_hash = hash(bytes), document_generation = j.state.document_generation,
+                recovering = operation.recovering == true, before_editor_hash = j.parent.editor_before_hash })
+            if not synced then pending(protection or 'editor synchronization is pending'); return end
+            local current, current_err = document_bytes()
+            if not current then pending(current_err); return end
+            if protection ~= nil and (type(protection) ~= 'table' or protection.old_lock ~= j.protection.old_lock
+                or protection.new_lock ~= j.protection.new_lock
+                or protection.baseline ~= nil and type(protection.baseline) ~= 'string') then
+                pending('invalid editor protection acknowledgement'); return
+            end
+            ok, phase_err = checkpoint({ kind = 'editor_synced', document_generation = j.state.document_generation }, function()
+                if protection then j.protection = vim.deepcopy(protection) end
+            end)
+            if ok and protection then operation.baseline = protection.baseline end
+        elseif phase == 'metadata' then
+            local bytes, read_err = document_bytes()
+            if not bytes then pending(read_err); return end
+            ok, phase_err = authorize(j.state.document_witness)
+            if not ok then pending(phase_err); return end
+            local consumed = false
+            local function done(result)
+                if consumed or operation.released then return end
+                consumed = true
+                j = operation.journal
+                local reg = type(result) == 'table' and result.registration
+                if type(result) ~= 'table' or result.kind ~= 'registered' or type(reg) ~= 'table'
+                    or reg.ID ~= j.id or reg.File ~= j.new or type(reg.Owner) ~= 'string' or reg.Owner == '' then
+                    pending(type(result) == 'table' and result.error or 'metadata confirmation is uncertain'); return
+                end
+                local saved, save_err = checkpoint({ kind = 'metadata_reply', ok = true, id = reg.ID, new = reg.File }, function()
+                    j.confirmation = { kind = 'registered', registration = vim.deepcopy(reg), changed = result.changed == true }
+                end)
+                if not saved then pending(save_err); return end
+                operation.running = false
+                operation.metadata_result = result
+                dispatch(operation, callback)
+            end
+            if operation.options.metadata then
+                local called, request_err = pcall(operation.options.metadata, operation, done)
+                if not called and not consumed then consumed = true; pending(request_err) end
+            else
+                local registry = operation.options.registry or require('parley.document_registry')
+                operation.request = registry.request('rename', { j.old, j.new }, { id = j.id, old = j.old, new = j.new },
+                    done, operation.options.registry_options)
+            end
+            return
+        elseif phase == 'complete' then
+            local result = operation.metadata_result or vim.deepcopy(j.confirmation)
+            local finished, finish_err = finalize(operation, result, function(kind, intent)
+                return checkpoint({ kind = kind, finalization = intent })
+            end)
+            if not finished then pending(finish_err); return end
+            local retired = assert(model.step(j.state, { kind = 'cleanup_done', op_id = j.state.op_id, generation = j.state.generation }))
+            j.state = retired
+            operation.running = false; operation.release(); callback(result); return
+        else pending('invalid migration phase'); return end
+        if not ok then pending(phase_err or 'migration proof unavailable'); return end
+    end
+    pending('migration transition limit exceeded')
+end
+
+function M.document_ready(operation)
+    local journal = operation and operation.journal
+    if not journal then return false end
+    if journal.version == 1 then return journal.steps.document_moved == true end
+    return journal.state.phase == 'metadata' or journal.state.phase == 'complete' or journal.state.phase == 'retired'
+end
+function M.record_write(operation)
+    if operation and operation.journal.version == 2 then return dispatch(operation, nil, true) end
+    return record_write_v1(operation)
+end
+function M.advance(operation, callback)
+    if operation.journal.version == 2 then return dispatch(operation, callback) end
+    return advance_v1(operation, callback)
 end
 
 -- Observation only: listings do not authorize recovery or acquire leases. A
@@ -642,7 +1340,8 @@ function M.pending(namespace, options)
             local journal, err = load(fs, path, namespace)
             if not journal then return failure('pending', err) end
             summaries[#summaries + 1] = {
-                id = journal.id, old = journal.old, new = journal.new,
+                id = journal.id, old = journal.old, new = journal.new, version = journal.version,
+                finalization = finalization_of(journal) and vim.deepcopy(finalization_of(journal)) or nil,
                 registration = vim.deepcopy(journal.registration), protection = vim.deepcopy(journal.protection),
                 new_witness = vim.deepcopy(journal.new_witness), document_move = journal.document_move == true, journal_path = path,
             }
@@ -667,6 +1366,8 @@ function M.recover(namespace, id, options, callback)
     if not canonical(fs, journal.old) or not canonical(fs, journal.new) then lease.release(); return failure('pending', 'recovery paths changed') end
     local operation = operation_for(namespace, journal, path, lease, options)
     operation.disk_hash = disk_hash
+    operation.recovering = true
+    operation.orphan_destination = journal.orphan and journal.orphan.path or nil
     if not journal.document_move and not journal.new_witness and (options.new_written ~= true
         or options.old_path ~= journal.old or options.new_path ~= journal.new) then
         operation.release(); return failure('pending', 'successful NEW write and exact tuple have not been witnessed')

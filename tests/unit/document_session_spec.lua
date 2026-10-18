@@ -704,6 +704,12 @@ describe("document_session inherit", function()
                 plain(s); answer(s, to_confirm(s) and parent_ok)
                 answer(s, { kind = "unavailable", code = "owner-conflict" })
             end,
+            -- #380: an inherited register that went pending and was retried is
+            -- still the inheritance's register.
+            retried = function(s)
+                plain(s); answer(s, to_confirm(s) and parent_ok)
+                answer(s, { kind = "uncertain", error = "lost" }); s.dispatch({ type = "retry" })
+            end,
         }
         local endings = {
             { "attach", "registered", function(s) answer(s, outcome("registered")) end, "flush_queued" },
@@ -735,6 +741,13 @@ describe("document_session inherit", function()
             { "relookup", "adopted", function(s) answer(s, child_ok("ops:7")) end, "flush_queued" },
             { "relookup", "absent", function(s) answer(s, absent) end, "drop_queued" },
             { "relookup", "unavailable", function(s) answer(s, down) end, "drop_queued" },
+            { "retried", "inherited", function(s) answer(s, child_ok("ops:0")) end, "flush_queued" },
+            { "retried", "refused, adopted", function(s)
+                answer(s, { kind = "unavailable", code = "owner-conflict" }); answer(s, child_ok("ops:7"))
+            end, "flush_queued" },
+            { "retried", "refused, absent", function(s)
+                answer(s, { kind = "unavailable", code = "owner-conflict" }); answer(s, absent)
+            end, "drop_queued" },
         }
         for _, case in ipairs(endings) do
             local start, name, finish, expected = case[1], case[2], case[3], case[4]
@@ -764,6 +777,109 @@ describe("document_session inherit", function()
             s.dispatch({ type = "changed" })
             assert.same({ expected }, decisions, label .. ": settled twice")
         end
+    end)
+
+    -- #380: the inheritance is one tagged stage. Walk every stage through every
+    -- event that can reach it and check the stage it leaves, that an inherit
+    -- arriving mid-inheritance (or on a registered or pending child) changes
+    -- nothing, and that no operation carries an inheritance flag of its own.
+    it("moves the inheritance stage only along its transitions", function()
+        local absent, down = { kind = "absent" }, { kind = "unavailable", error = "down" }
+        local parent_ok = { kind = "registered", registration = parent_registration() }
+        local function child_ok(owner) return { kind = "registered", registration = child_registration(owner) } end
+        -- The stage rides on the operation (or the pending one) it is a step of.
+        local function stage(s)
+            local snap = s.snapshot()
+            local holder = snap.operation or snap.pending
+            return holder and holder.inheritance and holder.inheritance.stage or nil
+        end
+        local function op(s) return s.snapshot().operation end
+        local function answer(s, result) return reply(s, { witness = op(s).witness }, result) end
+        local reach = {
+            hinted = function(s) s.dispatch({ type = "open" }); s.dispatch({ type = "inherit", parent = parent }) end,
+            looking = function(s) plain(s); s.dispatch({ type = "inherit", parent = parent }) end,
+            confirming = function(s) plain(s); to_confirm(s) end,
+            registering = function(s) plain(s); answer(s, to_confirm(s) and parent_ok) end,
+            relooking = function(s)
+                plain(s); answer(s, to_confirm(s) and parent_ok); answer(s, { kind = "unavailable", code = "owner-conflict" })
+            end,
+        }
+        local changed = function(s) s.dispatch({ type = "changed" }) end
+        local detach = function(s) s.dispatch({ type = "detach" }) end
+        local transitions = {
+            hinted = { { "absent", absent, "confirming" }, { "child registered", outcome("registered"), nil },
+                { "unavailable", down, nil }, { "changed", changed, nil }, { "detach", detach, nil } },
+            looking = { { "absent", absent, "confirming" }, { "child registered", child_ok("ops:7"), nil },
+                { "unavailable", down, nil }, { "changed", changed, nil }, { "detach", detach, nil } },
+            confirming = { { "parent confirmed", parent_ok, "registering" },
+                { "parent re-owned", { kind = "registered", registration = parent_registration({ Owner = "ops:9" }) }, nil },
+                { "parent absent", absent, nil }, { "parent unavailable", down, nil },
+                { "changed", changed, nil }, { "detach", detach, nil } },
+            -- A pending register is still the inheritance's register: the stage
+            -- waits on state.pending and resumes with the retry.
+            registering = { { "registered", child_ok("ops:0"), nil },
+                { "refused", { kind = "unavailable", code = "owner-conflict" }, "relooking" },
+                { "uncertain", { kind = "uncertain", error = "lost" }, "registering" },
+                { "uncertain, retried", function(s)
+                    answer(s, { kind = "uncertain", error = "lost" }); s.dispatch({ type = "retry" })
+                end, "registering" },
+                { "uncertain, retried, refused", function(s)
+                    answer(s, { kind = "uncertain", error = "lost" }); s.dispatch({ type = "retry" })
+                    answer(s, { kind = "unavailable", code = "owner-conflict" })
+                end, "relooking" },
+                { "uncertain, retried, registered", function(s)
+                    answer(s, { kind = "uncertain", error = "lost" }); s.dispatch({ type = "retry" })
+                    answer(s, child_ok("ops:0"))
+                end, nil },
+                -- a mutation outlives a change: still the inheritance's register
+                { "changed", changed, "registering" }, { "detach", detach, nil } },
+            relooking = { { "adopted", child_ok("ops:7"), nil }, { "absent", absent, nil },
+                { "unavailable", down, nil }, { "changed", changed, nil }, { "detach", detach, nil } },
+        }
+        local walked = 0
+        for from, rows in pairs(transitions) do
+            for _, row in ipairs(rows) do
+                local name, event, to = row[1], row[2], row[3]
+                local label = from .. " → " .. name
+                local s = session()
+                reach[from](s)
+                assert.equals(from, stage(s), label .. ": did not reach the stage")
+                -- rejected: a second inherit and a stale reply leave it where it is
+                assert.same({}, s.dispatch({ type = "inherit", parent = parent }), label)
+                reply(s, { witness = { token = -1 } }, absent)
+                assert.equals(from, stage(s), label .. ": a rejected event moved the stage")
+                if type(event) == "function" then event(s) else answer(s, event) end
+                assert.equals(to, stage(s), label)
+                local current = op(s)
+                if current then
+                    assert.is_nil(current.args.inherit, label .. ": an operation carries args.inherit")
+                    assert.is_nil(current.args.inherited, label .. ": an operation carries args.inherited")
+                end
+                walked = walked + 1
+            end
+        end
+        assert.equals(29, walked)
+        -- A matching event that does not end the operation (here a stray
+        -- `saved` for confirm_parent's witness) leaves the stage in place, and
+        -- the real reply still completes the step.
+        local stray = session(); reach.confirming(stray)
+        assert.same({}, stray.dispatch({ type = "saved", witness = op(stray).witness, ok = true }))
+        assert.equals("confirming", stage(stray))
+        assert.equals("register", answer(stray, parent_ok)[1].kind)
+        assert.equals("registering", stage(stray))
+        -- a registered or pending child never starts an inheritance
+        local registered = session(); attached(registered)
+        assert.same({}, registered.dispatch({ type = "inherit", parent = parent }))
+        assert.is_nil(stage(registered))
+        local pending = session(); plain(pending)
+        answer(pending, to_confirm(pending) and parent_ok)
+        answer(pending, { kind = "uncertain", error = "lost" })
+        assert.equals("pending", pending.snapshot().phase)
+        local other = { path = "/q.md", id = "parent-2", owner = "ops:5" }
+        assert.same({}, pending.dispatch({ type = "inherit", parent = other }))
+        -- the pending register keeps its own inheritance; the new hint is refused
+        assert.equals("registering", stage(pending))
+        assert.equals("ops:0", pending.snapshot().pending.inheritance.parent.owner)
     end)
 
     it("ignores a malformed hint and a detached document", function()

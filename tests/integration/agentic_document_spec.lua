@@ -156,8 +156,8 @@ describe("agentic markdown admission", function()
             with_timeouts(1000, 500)
             registered()
             local target = root .. "/moved.md"
-            -- The rename outlasts the 1 s deadline (the band says so) and lands
-            -- within its own three deadlines.
+            -- The rename outlasts the 1 s deadline and lands within its own
+            -- three deadlines; v2 keeps the single moving/wait view throughout.
             vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
             vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "rename"
             local started = vim.uv.hrtime()
@@ -168,7 +168,10 @@ describe("agentic markdown admission", function()
             assert.equals(0, vim.fn.filereadable(file))
             assert.equals(1, vim.fn.filereadable(target))
             assert.truthy(band():find("moving: confirming with Couch", 1, true), band())
-            await(function() return band():find("move not confirmed: finishing in the background", 1, true) ~= nil end)
+            -- Observe past the configured 1 s deadline while the fake rename is
+            -- still out: this elapsed wait tests stable presentation, not arrival.
+            vim.wait(1100)
+            assert.truthy(band():find("moving: confirming with Couch", 1, true), band())
             await(function()
                 local identity = document.identity(buf)
                 return identity and identity.File == vim.fn.resolve(target) and not document.status(buf).operation
@@ -268,7 +271,7 @@ describe("agentic markdown admission", function()
             assert.equals(vim.fn.resolve(target), moved, tostring(err))
         end)
 
-        it("a stale registration at NEW: the move lands, the band names the forget command, and reopening finishes it (row 6)", function()
+        it("a stale registration at NEW interrupts with one reopen action and recovers after external repair (row 6)", function()
             with_timeouts(15000, 500)
             registered()
             local target = root .. "/stale.md"
@@ -281,12 +284,14 @@ describe("agentic markdown admission", function()
             assert.is_true(handled)
             assert.equals(vim.fn.resolve(target), moved, tostring(err))
             assert.equals(1, vim.fn.filereadable(target))
-            local command = "Run: couch --session-sync forget " .. vim.fn.resolve(target) .. ", then reopen"
             local notified, native_notify = {}, vim.notify
             vim.notify = function(message, ...) notified[#notified + 1] = message; return native_notify(message, ...) end
-            await(function() return band():find("move not confirmed: the destination is registered", 1, true) ~= nil end)
+            await(function() return band():find("move interrupted: reopen to finish", 1, true) ~= nil end)
             vim.notify = native_notify
-            assert.truthy(table.concat(notified, "\n"):find(command, 1, true), vim.inspect(notified))
+            assert.truthy(band():find("destination registered", 1, true), band())
+            assert.is_nil(table.concat(notified, "\n"):find("Run:", 1, true))
+            -- A separate actor repairs the conflicting registry; reopening is
+            -- still the only recovery action exposed by the v2 move.
             local forgot = vim.system({ "couch", "--session-sync", "forget", vim.fn.resolve(target) }, { text = true }):wait(10000)
             assert.equals(0, forgot.code, forgot.stderr)
             document.detach(buf)

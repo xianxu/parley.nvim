@@ -36,6 +36,38 @@ end
 
 local function dirname(path) return path:match('^(.*)/[^/]+$') end
 local function contained(path, root) return path:sub(1, #root + 1) == root .. '/' end
+-- Every declared side root remains independent, including an absent source.
+-- A shared S==T is the existing extension-only case, not an orphan move.
+function M.validate_geometry(old, new, orphan)
+    local function refuse(reason) return nil, reason .. '; move to another name first' end
+    if not canonical(old) or not canonical(new) or old == new then return refuse('invalid document move paths') end
+    local source, target = M.side_path(old), M.side_path(new)
+    if not canonical(source) or not canonical(target) then return refuse('invalid side folder paths') end
+    local roots = { source }
+    if source ~= target then roots[#roots + 1] = target end
+    if orphan ~= nil then
+        if source == target then return refuse('a shared side folder cannot also be displaced') end
+        if not canonical(orphan) then return refuse('invalid displaced folder path') end
+        local prefix = target:sub(1, -6) .. '_'
+        local suffix = orphan:sub(1, #prefix) == prefix and orphan:sub(#prefix + 1):match('^(%d+)%.side$')
+        local number = suffix and tonumber(suffix)
+        if not number or number < 1 or number > 4096 or tostring(number) ~= suffix then
+            return refuse('invalid displaced folder name')
+        end
+        roots[#roots + 1] = orphan
+    end
+    for index, root in ipairs(roots) do
+        if old == root or new == root or contained(old, root) or contained(new, root) then
+            return refuse('a document is inside a side folder involved in the move')
+        end
+        for other = index + 1, #roots do
+            if root == roots[other] or contained(root, roots[other]) or contained(roots[other], root) then
+                return refuse('the side folders involved in the move overlap')
+            end
+        end
+    end
+    return true
+end
 local function normalize(path)
     local parts = {}
     for component in path:gmatch('[^/]+') do
@@ -79,19 +111,148 @@ local function escaped(line, pos)
     while pos > 1 and line:sub(pos - 1, pos - 1) == '\\' do count = count + 1; pos = pos - 1 end
     return count % 2 == 1
 end
-local function code_mask(line)
-    local mask, i = {}, 1
-    while i <= #line do
-        if line:sub(i, i) == '`' and not escaped(line, i) then
-            local run = line:match('^`+', i)
-            local ending = line:find(run, i + #run, true)
-            if ending then
-                for j = i, ending + #run - 1 do mask[j] = true end
-                i = ending + #run
-            else i = i + #run end
-        else i = i + 1 end
+-- Backtick spans may cross soft line breaks, but not a paragraph/fence boundary.
+-- Index the next exact-width run once; unmatched runs never rescan a suffix.
+local function code_masks(lines, blocks, first_row)
+    local masks, tokens = {}, {}
+    local function finish_paragraph()
+        local next_run, following = {}, {}
+        for i = #tokens, 1, -1 do
+            local token = tokens[i]
+            following[i] = next_run[token.width]
+            next_run[token.width] = i
+        end
+        local i = 1
+        while i <= #tokens do
+            local opening, closing = tokens[i], tokens[following[i]]
+            if closing and not escaped(lines[opening.row], opening.first) then
+                for row = opening.row, closing.row do
+                    local first = row == opening.row and opening.first or 1
+                    local last = row == closing.row and closing.last or #lines[row]
+                    for column = first, last do masks[row][column] = true end
+                end
+                i = following[i] + 1
+            else i = i + 1 end
+        end
+        tokens = {}
     end
-    return mask
+    for row = first_row, #lines do
+        local line = lines[row]
+        masks[row] = {}
+        local block = blocks[row]
+        if block.before or block.excluded then finish_paragraph() end
+        if not block.excluded then
+            local pos = 1
+            while true do
+                local first, last = line:find('`+', pos)
+                if not first then break end
+                tokens[#tokens + 1] = { row = row, first = first, last = last, width = last - first + 1 }
+                pos = last + 1
+            end
+        end
+        if block.after then finish_paragraph() end
+    end
+    finish_paragraph()
+    return masks
+end
+
+-- Apply disjoint byte spans in one assembly rather than copying a large
+-- document once per link. Offsets refer to the original preimage.
+local function apply_edits(bytes, edits)
+    table.sort(edits, function(a, b) return a.first < b.first end)
+    local chunks, next_byte = {}, 1
+    for _, edit in ipairs(edits) do
+        if edit.first < next_byte then return nil, 'overlapping reference edits' end
+        chunks[#chunks + 1] = bytes:sub(next_byte, edit.first - 1)
+        chunks[#chunks + 1] = edit.value
+        next_byte = edit.last + 1
+    end
+    chunks[#chunks + 1] = bytes:sub(next_byte)
+    return table.concat(chunks)
+end
+
+local function rewrite_links(lines, positions, fm_end, target, edits)
+    local in_code, fence, width, covered = {}, nil, nil, {}
+    for row = fm_end + 1, #lines do
+        local line = lines[row]
+        local marker_width = structure.is_fence_delim(line, true)
+        in_code[row] = fence ~= nil or marker_width ~= nil
+        if marker_width then
+            local kind = structure.is_fence_delim(line) and '`' or '~'
+            if not fence then fence, width = kind, marker_width
+            elseif kind == fence and marker_width >= width then fence, width = nil, nil end
+        end
+        covered[row] = {}
+    end
+    local blocks = references.markdown_blocks(lines, { first = fm_end + 1, last = #lines },
+        { in_code = in_code, transcript = false })
+    local masks = code_masks(lines, blocks, fm_end + 1)
+    for _, link in ipairs(references.markdown_spans(lines, { first = fm_end + 1, last = #lines },
+        { in_code = in_code, transcript = false })) do
+        local row, first = link.fallback_row, link.fallback_col + 1
+        covered[row][first] = true
+        if not masks[link.row][link.col + 1] and not escaped(lines[link.row], link.col + 1) then
+            local candidate = link.target:match('^([^%s]+)') or ''
+            if target(candidate) ~= candidate and candidate ~= link.target then
+                return nil, 'ambiguous Markdown parent destination'
+            end
+            local changed = target(link.target)
+            if changed ~= link.target then
+                if changed:find('[%s()]') then return nil, 'unsupported Markdown parent destination' end
+                edits[#edits + 1] = { first = positions[row] + first - 1,
+                    last = positions[link.end_row] + link.end_col - 2, value = changed }
+            end
+        end
+    end
+    for row = fm_end + 1, #lines do
+        if not in_code[row] then
+            local line, pos = lines[row], 1
+            while true do
+                local opening = line:find('](', pos, true)
+                if not opening then break end
+                local first = opening + 2
+                if not covered[row][first] and not masks[row][opening] and not escaped(line, opening) then
+                    -- An opening parenthesis also ends an unsupported destination.
+                    -- Token spans are disjoint, so malformed openers cannot copy
+                    -- and resolve the entire remaining line repeatedly.
+                    local stop = line:find('[%s()]', first) or (#line + 1)
+                    local value = line:sub(first, stop - 1)
+                    if target(value) ~= value then return nil, 'malformed Markdown parent link' end
+                end
+                pos = first
+            end
+        end
+    end
+    return true
+end
+
+local function scalar_span(raw)
+    local quote = raw:sub(1, 1)
+    if quote == '"' or quote == "'" then
+        local span = frontmatter.quoted_span(raw)
+        if not span then return nil, 'malformed reference scalar' end
+        local tail = raw:sub(#span + 1)
+        if not tail:match('^%s*$') and not tail:match('^%s+#') then return nil, 'ambiguous reference scalar' end
+        -- The shared flat reader handles only literal quote/backslash escapes;
+        -- refuse other YAML escapes rather than resolving a different path.
+        if quote == '"' and span:gsub('\\[\\"]', ''):find('\\', 1, true) then
+            return nil, 'unsupported reference scalar escape'
+        end
+        return span, frontmatter.unquote(span), quote
+    end
+    local comment = raw:find('%s#')
+    local last = comment and comment - 1 or #raw
+    while last > 0 and raw:sub(last, last):match('%s') do last = last - 1 end
+    local span = raw:sub(1, last)
+    if span == '' or frontmatter.needs_quote(span) then return nil, 'malformed reference scalar' end
+    return span, span
+end
+
+local function quoted_replacement(value, quote)
+    if quote == '"' then return frontmatter.quote(value) end
+    if quote == "'" then return "'" .. value:gsub("'", "''") .. "'" end
+    if frontmatter.needs_quote(value) then return nil, 'reference scalar needs quoting' end
+    return value
 end
 
 --- Rewrite only existing supported parent scalars and simple Markdown links.
@@ -125,69 +286,94 @@ function M.rewrite_parent(bytes, child_paths, parent_paths)
                 if seen or prefix ~= '' then return nil, 'ambiguous parent field' end
                 seen = true
                 local first = #lines[row] - #raw + 1
-                local span, value, quote
-                if raw:sub(1, 1) == '"' or raw:sub(1, 1) == "'" then
-                    span = frontmatter.quoted_span(raw)
-                    if not span then return nil, 'malformed parent scalar' end
-                    local tail = raw:sub(#span + 1)
-                    if not tail:match('^%s*$') and not tail:match('^%s+#') then return nil, 'ambiguous parent scalar' end
-                    value, quote = frontmatter.unquote(span), raw:sub(1, 1)
-                else
-                    span = raw:gsub('%s+#.*$', ''):gsub('%s+$', '')
-                    value = span
-                    if value == '' or frontmatter.needs_quote(value) then return nil, 'malformed parent scalar' end
-                end
+                local span, value, quote = scalar_span(raw)
+                if not span then return nil, value end
                 local changed = target(value)
                 if changed ~= value then
-                    if quote == '"' then changed = frontmatter.quote(changed)
-                    elseif quote == "'" then changed = "'" .. changed:gsub("'", "''") .. "'"
-                    elseif frontmatter.needs_quote(changed) then return nil, 'parent needs quoting' end
+                    local rendered, err = quoted_replacement(changed, quote)
+                    if not rendered then return nil, err end
+                    changed = rendered
                     add(row, first, first + #span - 1, changed)
                 end
             end
         end
     end
-    local fence, width
-    for row = fm_end + 1, #lines do
-        local line = lines[row]
-        local marker_width = structure.is_fence_delim(line, true)
-        if marker_width then
-            local marker_kind = structure.is_fence_delim(line) and '`' or '~'
-            if not fence then fence, width = marker_kind, marker_width
-            elseif marker_kind == fence and marker_width >= width then fence, width = nil, nil end
-        elseif not fence then
-            local mask, covered = code_mask(line), {}
-            for _, link in ipairs(references.markdown_links(line)) do
-                local first = link.end_col - #link.url
-                for j = first, link.end_col do covered[j] = true end
-                if not mask[link.start_col] and not escaped(line, link.start_col) then
-                    local candidate = link.url:match('^([^%s]+)') or ''
-                    if target(candidate) ~= candidate and candidate ~= link.url then
-                        return nil, 'ambiguous Markdown parent destination'
-                    end
-                    local changed = target(link.url)
-                    if changed ~= link.url then
-                        if changed:find('[%s()]') then return nil, 'unsupported Markdown parent destination' end
-                        add(row, first, link.end_col - 1, changed)
-                    end
-                end
+    local ok, err = rewrite_links(lines, positions, fm_end, target, edits)
+    if not ok then return nil, err end
+    return apply_edits(bytes, edits)
+end
+
+--- Rewrite a moving document's own side-folder links and block index.
+--- Only scalar byte spans change; ambiguous YAML never authorizes a partial edit.
+function M.rewrite_side_references(bytes, old, new)
+    if type(bytes) ~= 'string' or #bytes > 4 * 1024 * 1024 or not canonical(old) or not canonical(new) then
+        return nil, 'invalid parent reference input'
+    end
+    local source, destination = M.side_path(old), M.side_path(new)
+    if source == destination then return bytes end
+    local function target(value)
+        local path, fragment = value:match('^([^#]*)(.*)$')
+        local resolved = resolve(path, old)
+        if not resolved or not contained(resolved, source) then return value end
+        local changed = destination .. resolved:sub(#source + 1)
+        if path:sub(1, 1) ~= '/' then
+            changed = relative(changed, new)
+            if path:sub(1, 2) == './' then changed = './' .. changed end
+        end
+        return changed .. fragment
+    end
+    local lines, positions = split(bytes)
+    local edits, fm_end = {}, 0
+    if lines[1] == '---' then
+        local fm = frontmatter.parse(lines)
+        if not fm then return nil, 'unclosed frontmatter' end
+        fm_end = fm.close
+        local root_indent = 0
+        for row = 2, fm_end - 1 do
+            if lines[row]:match('%S') and not lines[row]:match('^%s*#') then
+                root_indent = #lines[row]:match('^ *'); break
             end
-            local pos = 1
-            while true do
-                local opening = line:find('](', pos, true)
-                if not opening then break end
-                local first = opening + 2
-                if not covered[first] and not mask[opening] and not escaped(line, opening) then
-                    local value = line:sub(first):match('^([^%s)]*)') or ''
-                    if target(value) ~= value then return nil, 'malformed Markdown parent link' end
+        end
+        local active, seen = false, false
+        for row = 2, fm_end - 1 do
+            local original = lines[row]
+            if original:match('%S') and not original:match('^%s*#')
+                and #original:match('^ *') < root_indent then return nil, 'inconsistent frontmatter indentation' end
+            local line = original:sub(root_indent + 1)
+            local root_key, root_raw = line:match('^([%w_-]+):%s*(.*)$')
+            if root_key then
+                active = root_key == 'discussions'
+                if active then
+                    if seen then return nil, 'duplicate discussions field' end
+                    seen = true
+                    if root_raw ~= '' and not root_raw:match('^#') and not root_raw:match('^%[%]%s*$') and not root_raw:match('^%[%]%s+#') then
+                        return nil, 'unsupported discussions structure'
+                    end
+                    if root_raw:match('^%[%]') then active = false end
                 end
-                pos = first
+            elseif line:match('^%S') and not line:match('^#') then
+                return nil, 'ambiguous frontmatter key'
+            elseif active and line:match('%S') and not line:match('^%s*#') then
+                local head, raw = line:match('^( +%- +doc: *)(.*)$')
+                if not head or #head - #head:gsub('^ +', '') ~= 2 then
+                    return nil, 'unsupported discussions entry'
+                end
+                local span, value, quote = scalar_span(raw)
+                if not span then return nil, value end
+                local changed = target(value)
+                if changed ~= value then
+                    local rendered, err = quoted_replacement(changed, quote)
+                    if not rendered then return nil, err end
+                    changed = rendered
+                    edits[#edits + 1] = { first = positions[row] + root_indent + #head,
+                        last = positions[row] + root_indent + #head + #span - 1, value = changed }
+                end
             end
         end
     end
-    table.sort(edits, function(a, b) return a.first > b.first end)
-    for _, edit in ipairs(edits) do bytes = bytes:sub(1, edit.first - 1) .. edit.value .. bytes:sub(edit.last + 1) end
-    return bytes
+    local ok, err = rewrite_links(lines, positions, fm_end, target, edits)
+    if not ok then return nil, err end
+    return apply_edits(bytes, edits)
 end
 
 --- observations: id, old_exists/new_exists/new_written, side_exists/
@@ -205,10 +391,37 @@ function M.project(old, new, observations)
             return nil, 'missing move observation: ' .. key
         end
     end
+    local geometry, geometry_err = M.validate_geometry(old, new)
+    if not geometry then return nil, geometry_err end
     local source, destination = M.side_path(old), M.side_path(new)
-    if contained(destination, source) or contained(new, source) then return nil, 'move target inside source side directory' end
     if source == destination and o.side_exists ~= o.target_side_exists then return nil, 'inconsistent shared side observation' end
-    if o.destination_registered == true or (source ~= destination and o.target_side_exists) then return nil, 'occupied move destination' end
+    if o.destination_registered == true then return nil, 'occupied move destination' end
+    local orphan
+    if source ~= destination and o.target_side_exists then
+        if o.new_absent_at_admission ~= true or type(o.orphan_candidates) ~= 'table' then
+            return nil, 'occupied move destination'
+        end
+        local count = #o.orphan_candidates
+        if count == 0 or count > 4096 then return nil, 'orphan suffix search limit' end
+        local observed = 0
+        for index, occupied in pairs(o.orphan_candidates) do
+            if type(index) ~= 'number' or index % 1 ~= 0 or index < 1 or index > count
+                or type(occupied) ~= 'boolean' then return nil, 'invalid orphan suffix observations' end
+            observed = observed + 1
+        end
+        if observed ~= count then return nil, 'sparse orphan suffix observations' end
+        for index, occupied in ipairs(o.orphan_candidates) do
+            if type(occupied) ~= 'boolean' then return nil, 'unknown orphan suffix observation' end
+            if not occupied then
+                if index ~= count then return nil, 'observations after free orphan suffix' end
+                orphan = destination:sub(1, -6) .. '_' .. index .. '.side'
+                break
+            end
+        end
+        if not orphan then return nil, 'orphan suffix search has no free destination' end
+    end
+    geometry, geometry_err = M.validate_geometry(old, new, orphan)
+    if not geometry then return nil, geometry_err end
     local count, markdown, seen, entries = 0, 0, {}, {}
     for index, entry in pairs(o.entries) do
         count = count + 1
@@ -225,12 +438,22 @@ function M.project(old, new, observations)
     end
     for i = 1, count do if o.entries[i] == nil then return nil, 'sparse side entries' end end
     if not o.side_exists and count > 0 then return nil, 'entries without source side directory' end
-    local result = { old = old, new = new, id = o.id, effects = {} }
+    local parent_after
+    if o.parent_bytes ~= nil then
+        local err
+        parent_after, err = M.rewrite_side_references(o.parent_bytes, old, new)
+        if not parent_after then return nil, err end
+    end
+    local result = { old = old, new = new, id = o.id, effects = {}, orphan_destination = orphan }
     if not o.new_written then
         result.effects[1] = { kind = 'wait_new_write', path = new }
         return result
     end
     if not o.new_exists then return nil, 'new write has no destination file' end
+    if orphan then
+        result.orphan_destination = orphan
+        result.effects[#result.effects + 1] = { kind = 'move_orphan', old = destination, new = orphan }
+    end
     if o.side_exists then
         if source ~= destination then
             result.effects[#result.effects + 1] = { kind = 'move_side', old = source, new = destination }
@@ -245,6 +468,11 @@ function M.project(old, new, observations)
                     result.effects[#result.effects + 1] = { kind = 'rewrite_parent', path = path, before = entry.bytes, after = after }
                 end
             end
+        end
+    end
+    if o.parent_bytes ~= nil then
+        if parent_after ~= o.parent_bytes then
+            result.effects[#result.effects + 1] = { kind = 'rewrite_document', path = new, before = o.parent_bytes, after = parent_after }
         end
     end
     result.effects[#result.effects + 1] = { kind = 'rename_metadata', id = o.id, old = old, new = new }
@@ -290,6 +518,15 @@ end
 function M.move_outcome(outcome)
     local result = outcome.result
     if result and result.kind == 'registered' then return { state = 'done', band = '', action = 'none' } end
+    if outcome.forward_only then
+        if outcome.moved and not result then
+            return { state = 'moving', band = M.MOVE_TEXT.confirming, action = 'wait' }
+        end
+        local reason = result and (result.error or result.code)
+        if type(reason) ~= 'string' or reason == '' then reason = 'move could not be confirmed' end
+        return { state = 'interrupted', action = 'reopen', warning = true,
+            band = 'move interrupted: reopen to finish; ' .. reason }
+    end
     if outcome.moved and not result then
         if outcome.overdue then
             return { state = 'background', band = M.MOVE_TEXT.background, action = 'none', warning = true }
