@@ -791,3 +791,5 @@ point as well as internal helpers before calling the family complete.
 - Apply native-read postimage checks to recovery handoffs as well as fresh moves. A second read can destroy an autocmd edit even when the first read cleared modified; test both journal versions with real callbacks. Prove raw bytes before invoking an editor hook that reads them: detecting a mismatch afterward cannot restore the buffer the read already replaced.
 
 - A compatibility fix that adds even a rare bounded synchronous utility must update the explicit process census and run its architecture guard. Check the call frequency: #373's SHA utility is once per fresh move's NUL budget lease, not per save or keypress.
+
+- Finalization is part of the replay protocol. A successful editor handoff followed by failed journal deletion must not destroy the protection that retained recovery still needs. Write the intended lock after-state before release, recognize each owned before/after state on replay, and finish durable effects before retiring the journal. Fault-inject after successful effects, not only before them.
