@@ -69,6 +69,8 @@ A span is classified from its record: empty old text means added, anything else 
 
 ## Log
 
+
+- 2026-10-18: closed — sdlc-local/suite green on 2842873c (6m19s). The first suite run on dc3788a3 failed only skill_invoke_spec, which still expected the old edit kind; fixed in 2842873c (log saved). Focused specs: color_spec (blend), presentation_spec (kind rule, deletions yield nothing, add/change), skill_render specs (round by kind, review edits add/change, deletion gets no diagnostic or highlight, snapshot keeps the kind), highlighting/define (the define term is add), and highlight_groups_spec (tints derived from Normal, re-derived on ColorScheme, fallback by background, overrides).; review verdict: SHIP
 - 2026-10-18: plan posted to the hub, "proceeding unless you object" (quick flow).
 - The empty-old rule has one owner, `presentation.kind(old, new)`, which the round and the review skill's edit records (skill_invoke) both use (ARCH-DRY). It returns delete, add or change.
 - `highlight_span` now has one form, `(buf, lnum0, col, end_lnum0, end_col, kind)`. The four-argument same-line form had no production caller.
