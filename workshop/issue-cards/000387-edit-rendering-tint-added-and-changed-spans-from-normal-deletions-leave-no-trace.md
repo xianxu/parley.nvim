@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.15
+actual_hours: 0.18
 tracker:
     version: 1
     completion:
-        token: close-f47b87a4bc61
+        token: close-1984d96b829e
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 2842873c3b0e939612c75a5088fe77221a1712c4
-        evidence_commit: 29a8bd1e6ac3b09bbba80d01d1d9581d204cd67b
+        reviewed_head: 6a3660d606f4b8ec358e602192d7776ae7520a28
+        evidence_commit: 58efb0db2e16719e3e53cc0a37482831266f2c82
 ---
 
 # Edit rendering: tint added and changed spans from Normal; deletions leave no trace
