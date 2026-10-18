@@ -22,7 +22,12 @@ describe("lock leave reminder", function()
         dest = vim.api.nvim_create_buf(true, false)
         vim.api.nvim_buf_set_name(dest, root .. "/destination.md")
         saved = { poll = ss.POLL_MS, notify = vim.notify, set = vim.api.nvim_set_option_value,
-            pulse = band.PULSE_MS, timer = vim.uv.new_timer }
+            pulse = band.PULSE_MS, timer = vim.uv.new_timer, path = vim.env.PATH,
+            registry = vim.env.FAKE_COUCH_REGISTRY }
+        -- Attaching asks Couch for the document's round (#383): the fake answers.
+        require("tests.helpers.fake_couch").write(root, root .. "/sent", root .. "/argv")
+        vim.env.PATH = root .. "/bin:" .. vim.env.PATH
+        vim.env.FAKE_COUCH_REGISTRY = root .. "/registry.json"
         ss.POLL_MS, band.PULSE_MS = 100000, 15
         ss.attach(source, { File = root .. "/held.md", Owner = "ops:0", ID = "fixture" })
         red, messages, timers, painted = 0, {}, {}, {}
@@ -61,6 +66,7 @@ describe("lock leave reminder", function()
         vim.cmd("silent only")
         vim.wait(50)
         ss.POLL_MS, band.PULSE_MS = saved.poll, saved.pulse
+        vim.env.PATH, vim.env.FAKE_COUCH_REGISTRY = saved.path, saved.registry
         vim.notify, vim.api.nvim_set_option_value, vim.uv.new_timer = saved.notify, saved.set, saved.timer
         vim.fn.delete(root, "rf")
     end)
