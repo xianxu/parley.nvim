@@ -1,6 +1,6 @@
 ---
 id: 000381
-status: codecomplete
+status: done
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 4d29297e2e121189e49cc8a26ecdc5765bb0eeb1
         evidence_commit: 18b252d5d7f65e0c37c03a00b1e2f3fbd4803ccc
+        landed_commit: 04778522a9f9b6af3bd6a06be764b1c47573c4d3
 ---
 
 # review_protocol_export_test hardcodes /tmp for temp dirs (#342 rule)
