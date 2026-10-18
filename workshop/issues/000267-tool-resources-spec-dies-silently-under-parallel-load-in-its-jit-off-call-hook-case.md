@@ -53,9 +53,20 @@ weakening what it bounds (pump work over a full queue of maximum-width chains).
 
 ## Plan
 
-- [ ] Reproduce, isolate the dying call, fix, stress.
+- [x] Reproduce, isolate the dying call, fix, stress.
 
 ## Log
+
+### 2026-10-17 — final full verification green
+
+The one unchanged-code retry c83da5529448660148145c8a4b3d874a completed
+exit 0 in 3m37s on 18dac2ef (code/tests identical to b8b171a9). All 469 spec
+files passed, including owned-move; lint and orphan censuses were clean.
+The runner recorded sdlc-local/suite on 18dac2ef. Log:
+.git/sdlc/local-checks/18dac2ef65ad445c3239bfde2efbf7a5c3bbaa87/suite.log,
+sha256 81daf344f2a07d85d167267cd4ba4dbeee93c47d9dcbdf069b66dc6e497279da.
+Together with the recorded manual stock-0.11 result below, both full runtime
+passes are green. No second retry, deadline change or complexity relaxation.
 
 ### 2026-10-17 — first recorded 0.12 result and known #382 retry
 
