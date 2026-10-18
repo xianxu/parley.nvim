@@ -71,13 +71,27 @@ describe("document registry process boundary", function()
     -- #382: one rule for every caller that names no deadline. A rename, native
     -- or document_move's journaled one, waits three submit deadlines (#359).
     it("derives every default deadline from the submit deadline, a rename's from three", function()
+        local old, new = root .. "/before.md", root .. "/after.md"
+        vim.fn.writefile({ "plain" }, old)
+        assert.equals("registered", request("register", { old, "ops:0" }).kind)
+        vim.fn.rename(old, new)
         local config = require("parley").config
         local configured = config.agentic_submit_timeout_ms
-        config.agentic_submit_timeout_ms = 2000
-        local got = {}
-        for _, op in ipairs({ "lookup", "register", "forget", "rename" }) do got[op] = client.default_deadline_ms(op) end
+        local ok, err = pcall(function()
+            config.agentic_submit_timeout_ms = 1000
+            local got = {}
+            for _, op in ipairs({ "lookup", "register", "forget", "rename" }) do got[op] = client.default_deadline_ms(op) end
+            assert.same({ lookup = 1000, register = 1000, forget = 1000, rename = 3000 }, got)
+            -- and request() uses it: a rename the fake holds 2 s, past one
+            -- deadline and inside three, is still answered
+            vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = "delay", "2"
+            vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = "rename"
+            assert.equals("registered", request("rename", { old, new }).kind)
+        end)
         config.agentic_submit_timeout_ms = configured
-        assert.same({ lookup = 2000, register = 2000, forget = 2000, rename = 6000 }, got)
+        vim.env.FAKE_COUCH_REGISTRY_MODE, vim.env.FAKE_COUCH_REGISTRY_DELAY = nil, nil
+        vim.env.FAKE_COUCH_REGISTRY_DELAY_OPS = nil
+        assert.is_true(ok, tostring(err))
     end)
 
     it("preserves null-only absence and persisted identity across register and rename replay", function()
