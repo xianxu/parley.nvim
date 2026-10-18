@@ -15,6 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "e3ef1dc9", done: "7a1e190c"}
 ---
 
 # tool_resources_spec dies silently under parallel load in its JIT-off call-hook case
