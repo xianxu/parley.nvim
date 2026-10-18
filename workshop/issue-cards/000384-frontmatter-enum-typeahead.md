@@ -1,6 +1,6 @@
 ---
 id: 000384
-status: working
+status: codecomplete
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.52
+tracker:
+    version: 1
+    completion:
+        token: close-28a611142e54
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 9e3ea59d8048877d821f8b18a8af690530a5c02b
+        evidence_commit: e8cdcdc4b0909a13a42288e51cddf35b0b815631
 ---
 
 # Frontmatter typeahead for enum values (collaboration-mode first, generic registry)
