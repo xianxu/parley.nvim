@@ -1,13 +1,13 @@
 ---
 id: 000384
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '01cf914ccbc6b47ca2c65d48da5087054e8fad6b' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '26f85826dcda7dbe4834cdabbb7bd39d6373274c' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-18T00:28:57-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 0.52
 ---
 
 # Frontmatter typeahead for enum values (collaboration-mode first, generic registry)
