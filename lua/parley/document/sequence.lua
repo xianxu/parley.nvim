@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Metadata-only AVL rope. Coordinates are zero-based, half-open row ranges.
 -- Bytes are caller-supplied additive sizes (including separators if desired).
 -- An opaque span stores aggregate sizes, never one allocation per unread row.

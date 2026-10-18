@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Native manual folds, walked in one guarded Lua→VimL crossing per slice (#264).
 -- Moved from tool_folds so the walk has one home; `tool_folds` owns *what* the
 -- folds should be, this module owns how Neovim's native folds are read and changed.

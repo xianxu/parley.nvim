@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Channel-partitioned conservative dependencies. Stable handles remain the
 -- position authority; no suffix coordinate sweep follows an edit.
 local M = {}

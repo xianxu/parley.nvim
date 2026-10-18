@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Private append cursors. The document validates grants; the editor proves
 -- exact delivery before any prepared lexical descriptor is published.
 local Lex=require('parley.document.lexical')

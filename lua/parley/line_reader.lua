@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Observable, buffer-scoped seam for performance-sensitive text reads.
 
 local M = {}

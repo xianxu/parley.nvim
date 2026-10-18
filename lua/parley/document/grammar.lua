@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Pure semantic transitions over the shared lexical grammar. Lookahead belongs
 -- to the index: a missing fact never means a negative result.
 local M = {}

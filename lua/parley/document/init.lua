@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Buffer coordination only: text stays in the editor, indexed facts in
 -- Structure, and write authority in State. Every callback observes State first.
 local Editor=require('parley.document.editor')

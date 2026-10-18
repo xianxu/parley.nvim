@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Bounded authority only. The coordinator supplies live sequence identity proofs;
 -- this module neither owns document text nor treats coordinates as identity.
 local M = {}
