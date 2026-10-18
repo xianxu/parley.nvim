@@ -64,7 +64,11 @@ traversal roots — has no false-positive problem. It asserts the produced paths
 rather than the env vars on purpose: nvim's tempdir fallback chain ends at the
 cwd, so an unwritable `$TMPDIR` would silently put scratch back in-tree.
 (`PREP_TEST_ENV`'s `mkdir -p` aborts a `make` run before that, but the guard
-does not depend on that failure being loud.)
+does not depend on that failure being loud.) It also scans every script and
+test (#381) for a temp dir rooted at a fixed `/tmp`, through Python's `dir=` or
+shell `mktemp`. Inside an agent sandbox `/tmp` is denied, so such a test fails
+on every Neovim version. Temp dirs follow `$TMPDIR`; the `${TMPDIR:-/tmp}`
+fallback is allowed.
 
 **Specs never run against the operator's real state (#342).** `TEST_ENV`
 exports `PARLEY_TEST_ENV_ROOT`, and `tests/minimal_init.vim` (loaded by the
