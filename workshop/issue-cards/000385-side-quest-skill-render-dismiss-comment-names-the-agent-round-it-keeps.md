@@ -1,6 +1,6 @@
 ---
 id: 000385
-status: working
+status: codecomplete
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.01
+tracker:
+    version: 1
+    completion:
+        token: close-701ca77a7f26
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: bf27b054c65b62a19fc8d50ac3b7c64e9bc8c44a
+        evidence_commit: 2f0eb3c8d0bc410b9af1311b8519301be20688a6
 ---
 
 # side-quest: skill_render dismiss comment names the agent round it keeps
