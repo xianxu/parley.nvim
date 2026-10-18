@@ -207,18 +207,6 @@ M.is_terminal_status = function(status)
     return model and model:is_terminal(status) or false
 end
 
-M.complete_frontmatter_values = function(field, partial)
-    partial = partial or ""
-    local matches = {}
-    local model = vocab()
-    for _, value in ipairs(model and model:enumerable_values(field) or {}) do
-        if value:sub(1, #partial) == partial then
-            table.insert(matches, value)
-        end
-    end
-    return matches
-end
-
 -- Find the next runnable issue: oldest open issue whose deps are all done.
 -- issues: list of {id, status, deps, ...}
 -- current_id: optional, if provided skips to the issue after this one (cycles)
@@ -997,31 +985,6 @@ M.cmd_issue_goto = function()
 
     vim.cmd("edit " .. vim.fn.fnameescape(parent.path))
     _parley.logger.info("Parent issue: " .. parent.id .. " " .. (parent.title or ""))
-end
-
--- Omnifunc for issue files: provides status value completion on the status: line.
--- Set as omnifunc on issue buffers via setup_issue_completion().
-M.omnifunc = function(findstart, base)
-    if findstart == 1 then
-        local line = vim.api.nvim_get_current_line()
-        -- Only complete on status: lines
-        if not line:match("^status:") then
-            return -3 -- cancel completion
-        end
-        -- Find start of the value after "status: "
-        local col = line:find(":%s*") -- find ": "
-        if col then
-            return col + (line:sub(col + 1, col + 1) == " " and 1 or 0)
-        end
-        return -3
-    end
-
-    return M.complete_frontmatter_values("status", base)
-end
-
--- Attach omnifunc to an issue buffer for status field typeahead
-M.setup_issue_completion = function(buf)
-    vim.api.nvim_buf_set_option(buf, "omnifunc", "v:lua.require'parley.issues'.omnifunc")
 end
 
 return M

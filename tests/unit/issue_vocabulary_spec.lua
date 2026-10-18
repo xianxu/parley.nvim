@@ -52,11 +52,10 @@ describe("issue_vocabulary", function()
         assert.is_true(model:sort_rank("unknown") > model:sort_rank("punt"))
     end)
 
-    it("exposes status as an enumerable frontmatter field", function()
+    it("exposes the status values in vocabulary order", function()
         local model = vocab.from_table(sample_vocab())
 
-        assert.are.same({ "open", "working", "blocked", "done", "wontfix", "punt" }, model:enumerable_values("status"))
-        assert.are.same({}, model:enumerable_values("deps"))
+        assert.are.same({ "open", "working", "blocked", "done", "wontfix", "punt" }, model:status_values())
     end)
 
     it("loads the generated issue vocabulary from the repo", function()
@@ -77,12 +76,9 @@ describe("issue_vocabulary", function()
             completed[transition.from] = true
         end
 
-        local completions = issues.complete_frontmatter_values("status", "")
         assert.are.same(model:status_values(), issues.status_values())
-        assert.are.same(model:status_values(), completions)
 
         for _, status in ipairs(model:status_values()) do
-            assert.is_true(issues.complete_frontmatter_values("status", status)[1] == status)
             assert.is_true(model:sort_rank(status) < model:sort_rank("unknown"))
             assert.is_true(completed[status] or model:is_terminal(status))
         end
