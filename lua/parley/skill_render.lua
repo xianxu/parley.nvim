@@ -220,14 +220,14 @@ end
 --- Attach INFO diagnostics from edit explanations. Each diagnostic spans the
 --- edit's line range (lnum..end_lnum) so "cursor in the region" matches, and its
 --- message remains semantic; each consumer wraps it to its actual display width.
+--- A pure deletion (kind "delete") leaves no trace, so it gets none (#387).
 --- @param buf number
---- A pure deletion (empty new_string) leaves no trace, so it gets none (#387).
---- @param edits table[]  applied edits with {pos, explain, new_string?}
+--- @param edits table[]  applied edits with {pos, explain, new_string?, kind}
 --- @param original_content string  file content before edits
 function M.attach_diagnostics(buf, edits, original_content)
     ensure_namespaces()
     local diagnostics = {}
-    for _, edit in ipairs(vim.tbl_filter(function(e) return e.kind ~= "delete" and e.new_string ~= "" end, edits)) do
+    for _, edit in ipairs(vim.tbl_filter(function(e) return e.kind ~= "delete" end, edits)) do
         local line_num = 0
         for _ in original_content:sub(1, edit.pos):gmatch("\n") do
             line_num = line_num + 1
@@ -265,11 +265,8 @@ end
 function M.highlight_edits(buf, edits, new_content)
     ensure_namespaces()
     for _, edit in ipairs(edits) do
-        -- A pure deletion has no new text and leaves no trace (#387); `find("")`
-        -- would also return 1 and mark line 0.
-        local new_pos = edit.kind ~= "delete" and edit.new_string and edit.new_string ~= ""
-            and new_content:find(edit.new_string, 1, true)
-            or nil
+        -- A pure deletion has no new text and leaves no trace (#387).
+        local new_pos = edit.kind ~= "delete" and new_content:find(edit.new_string, 1, true) or nil
         if new_pos then
             local row, col = position_of(new_content, new_pos)
             local end_row, end_col = position_of(new_content, new_pos + #edit.new_string)

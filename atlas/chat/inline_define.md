@@ -149,7 +149,8 @@ tool-call args (`result.calls[1].input`), read in `on_done`.
 ## Notes
 
 - The fresh define highlight spans the selected text plus immediate `[^id]`
-  reference; rehydrated diagnostics do not recreate the ParleyEditAdd highlight.
+  reference; reloading persisted footnotes (`publish_footnotes`) redraws the same
+  ParleyEditAdd span over each matching inline `term[^id]`.
 - `skill_render.refresh_footnote_diagnostics` owns only diagnostics tagged
   `parley-footnote` and preserves other `parley_skill` diagnostics, so review
   diagnostics are not cleared by markdown footnote refresh.

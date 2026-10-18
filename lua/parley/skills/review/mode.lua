@@ -5,7 +5,9 @@
 -- A mode's flags drive how parley treats the LLM's result:
 --   scope     whole-doc | markers-only   — edit the whole document, or only
 --                                          text referenced by 🤖 markers.
---   deletions apply-with-gutter-why       — apply removals, explain in the gutter
+--   deletions apply-with-gutter-why       — apply removals; the why goes in the
+--                                          agent's reply, since a deletion leaves
+--                                          no mark in the buffer (#387)
 --             | propose-strike            — propose removals as 🤖~old~{new}
 --             | apply                      — apply silently (mechanical modes)
 --             Optional, with no default: the universal-review export v3

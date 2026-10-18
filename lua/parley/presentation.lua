@@ -98,8 +98,9 @@ function M.decorations(round, lines, current_hash)
     local matched = current_hash == round.result_hash
     for i = 1, math.min(#round.spans, M.MAX_SPANS) do
         local span = round.spans[i]
-        if type(span) == "table" and type(span.old) == "string" and type(span.new) == "string"
-            and M.kind(span.old, span.new) ~= "delete" then
+        local kind = type(span) == "table" and type(span.old) == "string" and type(span.new) == "string"
+            and M.kind(span.old, span.new)
+        if kind and kind ~= "delete" then
             local from = offset_of(span.start, lines, starts)
             local to = offset_of(span["end"], lines, starts)
             local placed
@@ -112,7 +113,7 @@ function M.decorations(round, lines, current_hash)
                 local lnum, col = position_of(placed, starts)
                 local end_lnum, end_col = position_of(placed + #span.new, starts)
                 out[#out + 1] = { lnum = lnum, col = col, end_lnum = end_lnum, end_col = end_col,
-                    message = message(span), kind = M.kind(span.old, span.new) }
+                    message = message(span), kind = kind }
             end
         end
     end
