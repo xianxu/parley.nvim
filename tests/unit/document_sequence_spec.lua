@@ -655,6 +655,16 @@ describe("document sequence", function()
         -- can hide the retention defect. Do not flush traces before measuring.
         local source=[=[
             jit.opt.start('hotloop=1','hotexit=1')
+            -- This child deliberately tests retention by compiled sequence code,
+            -- including on old allocators. Ordinary editor/harness drains use
+            -- the production guard; replacing it here preserves this oracle.
+            package.loaded['parley.jit_tuning'] = { protect_chunk = function() end }
+            local own, compiled = {}, 0
+            jit.attach(function(what, trace, fn)
+                if what == 'start' then
+                    own[trace] = debug.getinfo(fn, 'S').source:find('/document/sequence.lua', 1, true) ~= nil
+                elseif what == 'stop' and own[trace] then compiled = compiled + 1 end
+            end, 'trace')
             local S=require('parley.document.sequence')
             local G=require('parley.document.grammar')
             collectgarbage('collect')
@@ -672,7 +682,7 @@ describe("document sequence", function()
             S.splice(seq,0,50000,{{rows=1,bytes=1,opaque=true}})
             collectgarbage('collect'); collectgarbage('collect')
             print(vim.json.encode({retained=collectgarbage('count')-baseline,
-                allocated=attached-baseline,valid=S.validate_certificate(seq,certificate)}))
+                allocated=attached-baseline,valid=S.validate_certificate(seq,certificate),compiled=compiled}))
         ]=]
         local path=vim.fn.tempname()..'.lua'
         vim.fn.writefile(vim.split(source,'\n',{plain=true}),path)
@@ -684,6 +694,7 @@ describe("document sequence", function()
         assert.equals(0,status,output)
         local result=vim.json.decode(output)
         assert.is_false(result.valid)
+        assert.is_true(result.compiled > 0, 'the active-JIT reclamation oracle must compile sequence code')
         -- A pinned tree keeps tens of MiB; allocator/JIT bookkeeping may keep
         -- a few MiB. The coarse ratio avoids platform-sensitive byte equality.
         assert.is_true(result.retained<result.allocated*0.3+2048,

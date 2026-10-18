@@ -263,3 +263,44 @@ protection fails to remove the abort storm, stop and report to the TL for an
 operator decision; do not broaden to a global production setting. Explicit
 active-JIT storage tests keep their compilation oracle, including any necessary
 fixture-local exemption confined to that independent child.
+
+
+Implementation boundary refinement: keep global VM effects in the existing
+**test-only** jit_tuning adapter; the production module exports only the pure
+version predicate and chunk-scoped protection. It has no global-off entry
+point. The helper's caller requires a non-nil function before any effect, so a
+bad chunk cannot accidentally become a global jit.off call. One shared version
+rule still serves script selection, harness behavior and scoped editor guards.
+
+Scoped control: 0.11 16/16 passes in 58.74–62.33 s with global_jit=true,
+mcode_aborts=0, flushes=0 after the heavy drain; fixed 0.12 control 16/16 in
+32.40–37.68 s. The first disposable-copy control incorrectly inherited the
+50 s generic budget instead of this corpus's 180 s path-specific budget;
+its 16 deadline exits are diagnostic setup errors, not a production failure
+or accepted evidence. Repeated with the original corpus budget, all passed.
+No shipped deadline was changed. Independent active-JIT storage oracle first
+failed its new compiled-sequence assertion as expected under protection;
+the intentionally unprotected child then passed 36/36 sequence cases on 0.11.
+
+
+### 2026-10-17 — pre-suite validation
+
+- Red/green: five new policy cases failed against the previous helper; scoped
+  real-VM regression observed 155403 document trace starts before chunk guards
+  and zero after. Nil chunk refused before any global JIT effect (red/green).
+- Real fresh-child scope regression passes on 0.11 and 0.12: global enabled,
+  completed unrelated-plugin trace, zero protected document trace starts,
+  successful drain. Active-JIT storage child now explicitly asserts completed
+  sequence traces; observed the assertion fail under protection, then pass with
+  its fixture-only opt-out.
+- Fifteen targeted spec files pass on each runtime (30/30): policy, sequence,
+  resource admission, dependencies, fold batches/retirement/uncertainty,
+  ownership/document/chat typing/highlight performance, and tight reference,
+  move-plan, collaboration/value parser CPU bounds. No sentinel hits.
+- Original tool_resources stress: 64/64 at sixteen-way concurrency on each
+  runtime (128/128 runs). A disposable superlinear pump mutation (queue pairs
+  x both claim widths) fails specifically at the unchanged bounded call budget;
+  no assertion or workload was relaxed.
+- make lint: 0 warnings / 0 errors across 788 files; git diff --check clean.
+- Next: full stock-0.11 suite and recorded default-0.12 suite on the pushed
+  implementation head, then the binary's close review and landing.

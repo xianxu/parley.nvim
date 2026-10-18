@@ -325,8 +325,22 @@ all use it. It prefers a LuaJIT with upstream 68354f4447 (2025-11): on arm64
 macOS the OS ignores mcode placement hints, and older LuaJIT (Neovim 0.11.7
 bundles one) can only flush and retry. That was #293's "random 15x"
 slowdown: once 2.9M flushes for one 25s probe. `PARLEY_TEST_NVIM` overrides
-the choice. `tests/helpers/jit_tuning.lua` owns the version rule and gives such
-processes one 1MB mcode area (catastrophic on the old allocator, so gated).
+the choice. `lua/parley/jit_tuning.lua` owns the version rule. Repaired test VMs keep
+one 1MB mcode area (catastrophic on the old allocator, so gated). On arm64
+macOS, old or unrecognized LuaJIT allocators run the isolated harness in
+interpreter mode instead of repeatedly attempting failed mcode allocations.
+The installed Neovim API is still tested; corpora, work-count assertions and
+deadlines are unchanged. A deliberate active-JIT storage-reclamation child
+opts out of this protection and asserts that sequence code actually compiled,
+so that regression continues to test live trace retention.
+
+In the editor, the same predicate protects only Parley's document, fold,
+line-reader and resource-admission module chunks with `jit.off(chunk, true)`.
+Nested private functions inherit the opt-out before compilation. It never
+disables the VM globally or changes other plugins' compilation. The harness
+and real editor share the allocator predicate, not the scope of the effect.
+Fresh-child tests verify global JIT remains enabled, unrelated code compiles,
+and the complete document pipeline does not start traces under protection.
 `PARLEY_TEST_JITSTAT=1 make test` prints each spec process's LuaJIT VM states
 and trace flushes (`tests/helpers/jit_watch.lua`), grandchildren included.
 

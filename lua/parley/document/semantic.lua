@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Pure bounded semantic repair. Call before_splice/after_splice around TEXT
 -- edits; lexical materialization and semantic projection are not text edits.
 local S=require('parley.document.sequence')

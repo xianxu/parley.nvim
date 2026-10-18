@@ -801,3 +801,9 @@ point as well as internal helpers before calling the family complete.
   matches nothing; use `git grep -P`. Tutorial prose is now checked against the
   registry in `keybinding_agreement_spec`.
 - State that belongs to one in-flight operation lives on that operation's record, not in a parallel field cleared "when its event arrives" (#380 REWORK). The parallel field drifted from the operation through `pending` and `retry`, and a non-terminal matching event cleared it under a live operation. On the record, it is copied, carried and dropped with the operation, with nothing to keep in sync.
+
+## 2026-10-17 (#267 — compiler workarounds have a scope)
+
+- Neovim's JIT engine belongs to the whole editor. Protect affected module chunks recursively before their functions compile; never use a plugin's allocator workaround to disable other plugins' JIT. Verify an unrelated function still compiles in the same VM, alongside the protected work.
+- A safety policy can make an active-compiler regression pass without exercising its oracle. Count completed traces from the code that matters, then keep any intentional policy opt-out inside that regression's disposable child.
+- A diagnostic copy loses path-specific harness settings. Preserve the original corpus budget when moving a spec for instrumentation, and distinguish diagnostic setup failures from the production failure being investigated.

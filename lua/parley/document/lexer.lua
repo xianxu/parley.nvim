@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Bounded lexical materialization of a metadata-only sequence. Readers remain
 -- outside: responses belong to the coordinates of their matching request.
 local sequence=require('parley.document.sequence')

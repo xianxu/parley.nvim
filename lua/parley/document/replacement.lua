@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Finite replacement owns only an immutable payload and bounded authority.
 -- Text remains native; exact receipts, never equivalent text, advance the cursor.
 local State=require('parley.document.state')

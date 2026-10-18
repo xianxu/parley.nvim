@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Pure process-wide resource admission. Canonicalization belongs to path policy;
 -- this reducer only compares canonical keys and owns no IO or global registry.
 local M={}

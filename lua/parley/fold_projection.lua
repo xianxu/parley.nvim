@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Pure projection of semantic exchange blocks into buffer fold ranges.
 
 local M = {}

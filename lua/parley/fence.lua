@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- The canonical fenced-block grammar for tool bodies.
 --
 -- A tool body opens on a run of >= 3 backticks, optionally followed by an info

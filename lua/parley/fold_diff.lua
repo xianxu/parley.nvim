@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Pure diff of the native folds a window has against the folds the confirmed
 -- projection wants (#264). Exact matches are left out entirely, so an unchanged
 -- fold is never touched. Every changed fold is grouped with everything it
