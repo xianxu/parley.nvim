@@ -527,6 +527,46 @@ describe('durable leased document migration', function()
         assert.equals(root .. '/new_1.side', operation.orphan_destination)
     end)
 
+    it('moves the pending proposal, discussions index, side folder and child backlink together (#389)', function()
+        local marker = '🤖{ → \\[proposal\\](old.side/child.md)}'
+        local before = '---\ndiscussions:\n  - doc: old.side/child.md\n---\n' .. marker .. '\n'
+        write(old, before)
+        local operation, err = begin({ move_document = true })
+        assert(operation, err and err.error)
+        assert.equals('registered', advance(operation).kind)
+        assert.equals(before:gsub('old%.side/', 'new.side/'), read(new))
+        assert.is_nil(uv.fs_stat(side))
+        assert.equals('---\nparent: ../new.md\n---\n[parent](../new.md#anchor)\nunchanged\n',
+            read(root .. '/new.side/child.md'))
+        local destination = assert(read(new):match('%]%(([^)]+)%)'))
+        assert.equals('new.side/child.md', destination)
+        assert.truthy(uv.fs_stat(root .. '/' .. destination))
+    end)
+
+    it('scans pending-link documents once at N and 2N rather than once per link (#389)', function()
+        local references = require('parley.reference_candidates')
+        local original = references.markdown_spans
+        local calls, scanned
+        references.markdown_spans = function(lines, range, opts)
+            calls = calls + 1
+            for _, line in ipairs(lines) do scanned = scanned + #line + 1 end
+            return original(lines, range, opts)
+        end
+        local ok, problem = pcall(function()
+            local link = '🤖{ → ' .. string.char(92) .. '[proposal' .. string.char(92) .. '](old.side/child.md)}'
+            for _, count in ipairs({ 8, 16 }) do
+                calls, scanned = 0, 0
+                local before = string.rep(link .. '\n', count)
+                local after = assert(require('parley.document_move_plan').rewrite_side_references(before, old, new))
+                assert.equals(before:gsub('old%.side/', 'new.side/'), after)
+                assert.equals(1, calls)
+                assert.equals(#before, scanned)
+            end
+        end)
+        references.markdown_spans = original
+        assert.is_true(ok, tostring(problem))
+    end)
+
     it('captures native NEW raw bytes rather than predicting save serialization', function()
         local operation = assert(begin({ parent_bytes = '[draft](old.side/child.md)\n' }))
         write(new, '\239\187\191[draft](old.side/child.md)\r\n')

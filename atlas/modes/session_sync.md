@@ -222,7 +222,10 @@ retained folder; it adds no recovery choice. An overwrite of an existing NEW
 never authorizes orphan displacement.
 
 The moving parent's Markdown links into its side tree and block `discussions:`
-entries are rewritten. Existing side-doc `parent:` fields and backlinks to the
+entries are rewritten. Pending Pair insertion proposals containing an escaped
+`→ [proposal](…)` or `→ [discussion](…)` side-doc link use the same destination
+rewrite while preserving the marker's bracket escaping. Escaped prose outside
+that complete one-line proposal and fenced/inline code remain literal. Existing side-doc `parent:` fields and backlinks to the
 old parent are rewritten relative to each moved child. Nested side docs retain
 their own parent relationship, and incoming links from other documents stay
 unchanged. Quoting, comments, fragments and unrelated bytes are preserved;

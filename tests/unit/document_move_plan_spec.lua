@@ -271,6 +271,28 @@ describe('moving parent side references', function()
         assert.equals(after, projection.rewrite_side_references(before, from, to))
         assert.equals(after, projection.rewrite_side_references(after, from, to))
     end)
+    for _, count in ipairs({ 1, 2 }) do
+        it('rewrites pending proposal bytes with ' .. count .. ' bracket escape bytes', function()
+            local slash = string.rep('\\', count)
+            for _, label in ipairs({ 'proposal', 'discussion' }) do
+                local marker = '🤖{ → ' .. slash .. '[' .. label .. slash .. '](design.side/01-release.md#why)}'
+                local before = '---\r\ndiscussions:\r\n  - doc: design.side/01-release.md\r\n---\r\nprefix ' .. marker .. ' tail\r\n'
+                local expected = before:gsub('design%.side/', 'spec.side/')
+                assert.equals(expected, projection.rewrite_side_references(before, from, to))
+                assert.equals(expected, projection.rewrite_side_references(expected, from, to))
+            end
+        end)
+    end
+    it('keeps escaped prose, code and incomplete or unrelated marker bodies unchanged', function()
+        local link = '\\[proposal\\](design.side/q.md)'
+        for _, before in ipairs({ link, '`🤖{ → ' .. link .. '}`',
+            '```md\n🤖{ → ' .. link .. '}\n```', '~~~md\n🤖{ → ' .. link .. '}\n~~~',
+            '🤖{ → ' .. link, 'plain { → ' .. link .. '}',
+            '🤖{unrelated ' .. link .. '}', '\\🤖{ → ' .. link .. '}',
+        }) do
+            assert.equals(before, projection.rewrite_side_references(before, from, to), before)
+        end
+    end)
     it('keeps code and unrelated frontmatter fields byte identical', function()
         local before = '---\ndoc: design.side/q.md\nnotes: |\n  discussions:\n    - doc: design.side/q.md\n---\n'
             .. '```md\n[q](design.side/q.md)\n```\n`[q](design.side/q.md)`\n\\[q](design.side/q.md)\n'
