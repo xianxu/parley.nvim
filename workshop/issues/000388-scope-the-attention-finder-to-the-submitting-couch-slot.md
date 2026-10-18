@@ -57,6 +57,7 @@ Actions: submit, open finder, toggle scope, reopen. Existing waiting/answered/se
 ## Log
 
 ### 2026-10-18 — first full-suite failure and deterministic fixture diagnosis
+- 2026-10-18: closed — Corrected the architecture-guard failure by using attention_finder_mappings.toggle_scope; existing guard unchanged and now mapped into focused tests. All 220 focused cases pass, lint clean in 803 files. Deterministic red/green scorer fixture proves old q+ typo-matched q-prefixed temp tokens; replacement +++ and adversarial qzbeta pin row filtering without changing production matcher or timeout. First recorded run b128ef609d54b16545d71033a29d85f7: 478 PASS files, only mapping-schema guard failed, log retained; no unrelated-flake retry. Fresh recorded suite running on 8bd03ed0. Prior dual-runtime 191-case and disposable real-profile/live-Couch check remain documented; default Ctrl+A behavior unchanged. Hub allows review overlap; fresh recorded dual-runtime full pass is mandatory before landing. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 Attempt b128ef609d54b16545d71033a29d85f7 completed with 478 PASS files and
 one failure: single_source_sweeps_spec rejected attention.toggle_scope as a
