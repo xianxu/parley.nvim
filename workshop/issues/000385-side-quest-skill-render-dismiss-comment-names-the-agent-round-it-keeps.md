@@ -1,13 +1,13 @@
 ---
 id: 000385
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '10051facccb5d6d1fc4c0d07bc6c8f90503df64d' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'c3312baf5d7fbbb21059020b7e90bc79b423b6d7' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-18T06:48:17-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "b6c6c2c9", done: "8a6356d2"}
+actual_hours: 0.01
 ---
 
 # side-quest: skill_render dismiss comment names the agent round it keeps
