@@ -70,14 +70,18 @@ function M.new(context)
         return state.registration and "registered" or "unknown"
     end
 
-    local function issue(operation, args, captured)
+    -- inheritance (#380): the stage this operation is a step of, held on the
+    -- operation record itself, never in the effect, so it lives and dies with
+    -- the operation: copied into state.pending, carried by retry, gone when
+    -- the operation ends.
+    local function issue(operation, args, captured, inheritance)
         serial = serial + 1
         local witness = copy(captured or {
             path = state.path, namespace = state.namespace,
             incarnation = state.incarnation, generation = state.generation,
         })
         witness.token, witness.operation = serial, operation
-        state.operation = { witness = witness, args = copy(args or {}) }
+        state.operation = { witness = witness, args = copy(args or {}), inheritance = copy(inheritance) }
         local effect = copy(args or {})
         effect.kind, effect.witness = operation, copy(witness)
         return effect
@@ -153,20 +157,22 @@ function M.new(context)
 
     local step
 
-    -- #380: a side doc's inheritance (#378) is one tagged stage, alive exactly
-    -- as long as the operation it names. It is cleared when that operation's
-    -- event arrives, and set again only by the step that issues the next one:
+    -- #380: a side doc's inheritance (#378) is one tagged stage on the
+    -- operation that is its current step (see issue), so its lifetime is that
+    -- operation's: it survives pending and retry, and a cancel, refusal or
+    -- reply that ends the operation ends it too. Each step names the next:
     --   hinted      a hint that met the attach lookup in flight
     --   looking     the inherit lookup, from plain or unknown
     --   confirming  confirm_parent: the parent re-read from Couch
     --   registering the register to the parent's owner
     --   relooking   the lookup after that register was refused or lost
-    -- Every other ending (adopted, attached, refused, unavailable, pending,
-    -- changed, detach) leaves it nil.
     local STAGES = { hinted = true, looking = true, confirming = true, registering = true, relooking = true }
     local function inherit_as(stage, parent)
         assert(STAGES[stage], "unknown inheritance stage " .. tostring(stage))
-        state.inheritance = { stage = stage, parent = copy(parent) }
+        return { stage = stage, parent = copy(parent) }
+    end
+    local function stage_of(operation)
+        return operation and operation.inheritance and operation.inheritance.stage or nil
     end
 
     -- An operation that may hold an Alt+Return pressed before the document's
@@ -175,10 +181,10 @@ function M.new(context)
         if not operation then return false end
         local kind = operation.witness.operation
         return (kind == "lookup" and not operation.args.submit) or kind == "confirm_parent"
-            or (kind == "register" and state.inheritance ~= nil and state.inheritance.stage == "registering")
+            or (kind == "register" and stage_of(operation) == "registering")
     end
     local function inheriting()
-        return state.inheritance ~= nil
+        return stage_of(state.operation) ~= nil
     end
 
     -- #378: the model owns the queued press. Every dispatch settles it here, so
@@ -219,13 +225,12 @@ function M.new(context)
             local effects = state.operation and { { kind = "cancel", witness = copy(state.operation.witness) } } or {}
             state.generation = state.generation + 1
             state.operation, state.phase, state.receipt, state.confirmation = nil, "detached", nil, nil
-            state.inheritance = nil
             return effects
         end
         if event.type == "changed" then
             local changed_context = (event.path ~= nil and event.path ~= state.path)
                 or (event.namespace ~= nil and event.namespace ~= state.namespace)
-            state.confirmation, state.inheritance = nil, nil
+            state.confirmation = nil
             if changed_context then state.receipt = nil end
             state.generation = state.generation + 1
             state.path = event.path or state.path
@@ -267,7 +272,7 @@ function M.new(context)
             args.resubmit = (event.submit and operation == "register") or nil
             local witness = copy(previous.witness)
             witness.generation = state.generation
-            return { issue(operation, args, witness) }
+            return { issue(operation, args, witness, previous.inheritance) }
         end
         if event.type == "open" then
             if state.operation or state.pending then return {} end
@@ -280,18 +285,17 @@ function M.new(context)
             -- absent, and the parent still holds this registration. A registered
             -- or pending child keeps what it has; nothing is sent.
             local parent = event.parent
-            if state.registration or state.pending or state.inheritance or type(parent) ~= "table"
+            if state.registration or state.pending or stage_of(state.operation) or type(parent) ~= "table"
                 or not nonempty(parent.path) or not nonempty(parent.id) or not nonempty(parent.owner) then return {} end
             if state.operation then
                 -- The attach lookup is still out: its absence will do.
                 if state.operation.witness.operation == "lookup" and not state.operation.args.submit then
-                    inherit_as("hinted", parent)
+                    state.operation.inheritance = inherit_as("hinted", parent)
                 end
                 return {}
             end
             state.phase = "probing"
-            inherit_as("looking", parent)
-            return { issue("lookup") }
+            return { issue("lookup", nil, nil, inherit_as("looking", parent)) }
         end
         if event.type == "submit" then
             if state.operation or state.pending then return {} end
@@ -317,8 +321,7 @@ function M.new(context)
         end
         if not matching(event.witness) then return {} end
         local operation = state.operation
-        local inheritance = state.inheritance
-        state.inheritance = nil
+        local inheritance = operation.inheritance
         local kind = operation.witness.operation
         if event.type == "sent" and kind == "send" then
             local current = live(operation.witness)
@@ -394,8 +397,8 @@ function M.new(context)
             if result.kind == "registered" and valid_registration(reg) and reg.File == parent.path
                 and reg.ID == parent.id and reg.Owner == parent.owner then
                 state.phase = "busy"
-                inherit_as("registering", parent)
-                return { issue("register", { owner = parent.owner, resume_only = true }) }
+                return { issue("register", { owner = parent.owner, resume_only = true }, nil,
+                    inherit_as("registering", parent)) }
             end
             state.phase = "plain"
             return { { kind = "band", message = M.NOT_INHERITED } }
@@ -426,8 +429,8 @@ function M.new(context)
             if result.kind == "absent" and not state.registration then
                 if stage == "hinted" or stage == "looking" then
                     state.phase = "probing"
-                    inherit_as("confirming", inheritance.parent)
-                    return { issue("confirm_parent", { parent = copy(inheritance.parent) }) }
+                    return { issue("confirm_parent", { parent = copy(inheritance.parent) }, nil,
+                        inherit_as("confirming", inheritance.parent)) }
                 end
                 state.phase = "plain"
                 if stage == "relooking" then return { { kind = "band", message = M.NOT_INHERITED } } end
@@ -441,8 +444,7 @@ function M.new(context)
             -- Refused or lost (another owner registered it first, or the deadline
             -- passed): a fresh lookup says what is there, and that is adopted.
             state.operation, state.phase = nil, "probing"
-            inherit_as("relooking", inheritance.parent)
-            return { issue("lookup") }
+            return { issue("lookup", nil, nil, inherit_as("relooking", inheritance.parent)) }
         end
         if not valid then return pending(operation, result.error, result.code) end
         state.operation, state.pending = nil, nil
