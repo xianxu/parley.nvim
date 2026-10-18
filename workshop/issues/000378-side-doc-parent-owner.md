@@ -1,13 +1,13 @@
 ---
 id: 000378
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '24d98dc86127fdb0cdf4433ce1f52d348c754f2a' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '5f354dc7e9a536929b331d9a99a8e7f3e2ec2d38' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T14:45:11-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: 0.69
 ---
 
 # Side documents inherit parent ownership
