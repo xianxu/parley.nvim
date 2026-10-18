@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "b6c6c2c9", done: "8a6356d2"}
 ---
 
 # side-quest: skill_render dismiss comment names the agent round it keeps
