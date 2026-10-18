@@ -82,3 +82,83 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"c1adf78d-20d4-4558-97dc-52518d8b7210","repository":"github.com/xianxu/parley.nvim","issue_id":"000381","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/46b50fb03b13ee79","reviewed_head":"74f9a4582ba9608a5bcd2648f6879951fb29b089","slot":"parley.nvim:4","requested_at":"2026-10-18T01:35:27.87627Z"},"phase":"finished","pid":81263,"started_at":"2026-10-18T01:35:27.96949Z","finished_at":"2026-10-18T01:37:17.665019Z","session_id":"aeb6da83-7251-49ab-9215-f79ead0d23c4","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T18:43:57-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 381 — review_protocol_export_test hardcodes /tmp for temp dirs (#342 rule) |
+| repo | parley.nvim |
+| issue file | workshop/issues/000381-review-protocol-export-test-hardcodes-tmp-for-temp-dirs-342-rule.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a15f10d013fc2d662459aeb9c2d4e8ad3a6162f7..105a962570783575e9bdd540b6e6cedb37547f06 |
+| command | sdlc close --issue 381 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-17T18:43:57-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Running the guard spec at the pinned head to check the broadened patterns.
+
+Still trying to run the guard spec through the make harness; next I'll find the right SPEC key.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The fix for BR-1 is in place. `FIXED_TMP` now catches every spelling the finding listed:
+- Python: `dir='/tmp/'`, `dir='/tmp/sub'` and `dir=Path('/tmp')`.
+- Shell: `mktemp -p /tmp` and `mktemp --tmpdir=/tmp`.
+- Lua: writes to a literal `/tmp` through `io.open`, `mkdir` or `writefile`.
+
+The fixture case covers each spelling with its own line. It counts the hits it expects, and it also checks that no allowed line is flagged: the `TMPDIR` fallbacks, and a `/tmp` that only appears inside content or a path suffix. I ran `make test-spec SPEC=infra/test_harness` at the pinned head. Both `/tmp` guard cases pass: the scan of the real tree and the every-spelling fixture case.
+
+The other 8 cases in `scratch_placement_spec` fail in this checkout. That comes from the review environment: `TMPDIR` points inside the repo at `.sdlc-review/tmp`, which is the same thing the earlier review saw. It is not caused by this diff.
+
+The window changes no Spec or scope; the only other changes are the generated gate and review records. I found one new Minor issue: the new per-language scoping narrows what the shell rules scan.
+
+1. **Strengths**
+   - `tests/arch/scratch_placement_spec.lua:132-161`: the fixture case is table-driven, with one line per refused spelling. It checks the hit count and also checks that every hit falls on a refused line, so a pattern that is too broad fails too, not just one that misses.
+   - The `dir=` rule no longer falsely matches Lua path strings, because rules are scoped by language (`lang_of`, `:102-106`).
+   - The scan is still the pure `fixed_tmp_roots(files)` function, tested separately from listing the files (ARCH-PURE: pass).
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - `scratch_placement_spec.lua:102-114`: `lang_of` sends `.py` and `.lua` files only to their own language's rules. Before this change, every rule ran on every file. So a shell command inside Lua or Python is no longer checked, for example `vim.fn.system("mktemp -d /tmp/x.XXXXXX")` or `subprocess.run(["mktemp", "-p", "/tmp"])`. The tree has none of these today (`git grep mktemp -- '*.lua' '*.py'` only finds this spec).
+
+5. **Test coverage notes:** every new pattern has a fixture line, so taking any one pattern out makes the expected count fail. Both guard cases pass under the harness at the pinned head.
+
+6. **Architecture**
+   - ARCH-DRY: pass.
+   - ARCH-PURE: pass.
+   - ARCH-PURPOSE: pass. The finding's whole list of spellings was swept in one round, not just the one site it named.
+
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Every listed spelling (py dir='/tmp/', '/tmp/sub', Path('/tmp'); sh -p, --tmpdir=; lua io.open/mkdir/writefile) now has a FIXED_TMP rule and a fixture line; both guard cases pass under make test-spec at the pinned head.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: fixed-tmp-temp-root
+    title: |
+      Language scoping stops the shell mktemp rules from scanning shell commands inside Lua or Python
+    detail: |
+      This is the 2nd finding in family fixed-tmp-temp-root. lang_of (scratch_placement_spec.lua:102-114) sends .lua and .py files only to their own language's rules. So vim.fn.system("mktemp -d /tmp/...") or subprocess mktemp -p /tmp now gets past the guard, though it was caught before this interdiff (prevalence today: 0 in the tree). The rule that covers the class: scope a pattern by file type only when it would otherwise give false positives (the Python dir= keyword). Shell command patterns stay unscoped, because those commands can appear inside any language. Add one fixture line for embedded mktemp.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"4124250a-7ed5-4eeb-9f5c-272df4f70272","repository":"github.com/xianxu/parley.nvim","issue_id":"000381","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/03d18069c602a4ab","reviewed_head":"105a962570783575e9bdd540b6e6cedb37547f06","slot":"parley.nvim:4","requested_at":"2026-10-18T01:41:14.08744Z"},"phase":"finished","pid":25545,"started_at":"2026-10-18T01:41:14.469804Z","finished_at":"2026-10-18T01:43:54.14943Z","session_id":"00e49820-77af-431d-8063-bad951c99124","outcome":"returned"}] -->
