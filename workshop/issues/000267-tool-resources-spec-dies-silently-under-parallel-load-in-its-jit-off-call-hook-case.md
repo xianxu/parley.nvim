@@ -15,7 +15,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "bc1bba02", done: "7a1e190c"}
+flow: {kind: quick, provenance: inferred, spec: "e2389806", done: "1df0bf0a"}
 ---
 
 # tool_resources_spec dies silently under parallel load in its JIT-off call-hook case
@@ -42,6 +42,14 @@ weakening what it bounds (pump work over a full queue of maximum-width chains).
 
 - `tool_resources_spec` passes 64/64 under 16-way parallel stress.
 - The bounded-work assertion still fails when `R.pump` goes super-linear.
+- On stock 0.11, the full fold-batch corpus under sixteen-way load completes
+  with global JIT enabled and no mcode-allocation abort storm in D.drain;
+  unrelated code still compiles. Fixed runtimes and other platforms keep
+  their compilation behavior.
+- The implicated corpus and full suite pass on installed 0.11.7 and preferred
+  0.12.5 without changing deadlines, corpus sizes or work-count assertions.
+- The storage-reclamation child proves sequence code actually compiled, so
+  scoped protection cannot make its active-JIT oracle vacuous.
 
 ## Plan
 
@@ -312,3 +320,9 @@ cannot count another function as the unrelated compiled function. The queued
 recorded run was cancelled through local-check cancel before it took a suite
 slot and is restarted on this final test observer. The manual 0.11 suite is
 still queued and will read the same final checkout when admitted.
+
+
+Done-when clarification records the approved scope and measured runtime
+contract explicitly alongside the original two oracles; no original acceptance
+condition was removed. Full suite code head is b8b171a9. Both complete suites
+are queued behind the machine-wide budget; no test deadline was adjusted.
