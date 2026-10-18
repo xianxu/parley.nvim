@@ -207,18 +207,6 @@ M.is_terminal_status = function(status)
     return model and model:is_terminal(status) or false
 end
 
-M.complete_frontmatter_values = function(field, partial)
-    partial = partial or ""
-    local matches = {}
-    local model = vocab()
-    for _, value in ipairs(model and model:enumerable_values(field) or {}) do
-        if value:sub(1, #partial) == partial then
-            table.insert(matches, value)
-        end
-    end
-    return matches
-end
-
 -- Find the next runnable issue: oldest open issue whose deps are all done.
 -- issues: list of {id, status, deps, ...}
 -- current_id: optional, if provided skips to the issue after this one (cycles)

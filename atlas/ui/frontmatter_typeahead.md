@@ -20,3 +20,6 @@ It works in Insert mode, in any markdown or chat buffer. There is one menu, neve
   #383).
 - **Scope:** the scalar form `key: value` only. The mapping form of `collaboration-mode` (`default:` and per-mode
   heading lists) gets no typeahead.
+- **Live check:** `nvim --headless -c "luafile scripts/check-frontmatter-cmp.lua" </dev/null` runs the working tree's
+  code against your real nvim-cmp. It exits 0 when only cmp's menu opens, holding only the value; 1 on a mismatch;
+  2 without cmp. The integration spec covers the same path with a stub cmp.

@@ -1412,6 +1412,7 @@ atlas:
   ui/frontmatter_typeahead:
     code:
       - lua/parley/frontmatter_enum.lua
+      - scripts/check-frontmatter-cmp.lua
     tests:
       - tests/unit/frontmatter_enum_spec.lua
       - tests/integration/frontmatter_enum_popup_spec.lua

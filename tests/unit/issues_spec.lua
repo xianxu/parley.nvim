@@ -377,10 +377,6 @@ describe("cycle_status_value", function()
         assert.are.same(issue_vocabulary.default():status_values(), issues.status_values())
     end)
 
-    it("completes status frontmatter values from the vocabulary", function()
-        assert.are.same({ "working", "wontfix" }, issues.complete_frontmatter_values("status", "wo"))
-    end)
-
     it("surfaces newly generated statuses without Lua enum edits", function()
         issue_vocabulary.set_default_for_tests(fake_issue_vocab({
             "open",
@@ -392,7 +388,6 @@ describe("cycle_status_value", function()
             "archived",
         }))
 
-        assert.are.same({ "archived" }, issues.complete_frontmatter_values("status", "ar"))
         assert.equals("archived", issues.status_values()[7])
     end)
 

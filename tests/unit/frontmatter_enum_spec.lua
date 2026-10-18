@@ -13,6 +13,11 @@ describe("frontmatter_enum (#384)", function()
         })
     end)
 
+    after_each(function()
+        enum.undeclare("test-mode")
+        enum.undeclare("test-scoped")
+    end)
+
     it("finds the value of a declared key inside the frontmatter", function()
         local ctx = enum.context(lines, 2, #"collaboration-mode: dis")
         assert.same({ key = "collaboration-mode", start = #"collaboration-mode: ", partial = "dis" }, ctx)
@@ -57,8 +62,43 @@ describe("frontmatter_enum (#384)", function()
         assert.is_not_nil(err)
     end)
 
-    it("declares the issue status, for issue files only", function()
-        assert.is_true(vim.tbl_contains(enum.keys(), "status"))
-        assert.same({}, enum.candidates("status", "", "/repo/notes/a.md"))
+    it("leaves no test key behind after teardown", function()
+        enum.undeclare("test-mode")
+        assert.is_false(vim.tbl_contains(enum.keys(), "test-mode"))
+        assert.same({}, enum.candidates("test-mode", "", "/any.md"))
+    end)
+
+    describe("the issue status", function()
+        local issues = require("parley.issues")
+        local issue_vocabulary = require("parley.issue_vocabulary")
+        local saved_dir, root
+
+        before_each(function()
+            saved_dir = issues.get_issues_dir
+            root = vim.fn.resolve(vim.fn.tempname())
+            vim.fn.mkdir(root .. "/repo/workshop/issues", "p")
+            issues.get_issues_dir = function() return root .. "/repo/workshop/issues" end
+        end)
+        after_each(function()
+            issues.get_issues_dir = saved_dir
+            issue_vocabulary.reset_for_tests()
+            vim.fn.delete(root, "rf")
+        end)
+
+        it("completes the vocabulary's statuses in issue files only", function()
+            local issue = root .. "/repo/workshop/issues/000001-x.md"
+            assert.same({ "working", "wontfix" }, enum.candidates("status", "wo", issue))
+            assert.same(issues.status_values(), enum.candidates("status", "", issue))
+            assert.same({}, enum.candidates("status", "", root .. "/repo/notes/a.md"))
+            assert.same({}, enum.candidates("status", "", root .. "/repo/workshop/issues-old/a.md"))
+            assert.same({}, enum.candidates("status", "", ""))
+        end)
+
+        it("matches an issue file reached through a symlinked workspace", function()
+            vim.uv.fs_symlink(root .. "/repo", root .. "/link")
+            assert.same({ "working", "wontfix" }, enum.candidates("status", "wo", root .. "/link/workshop/issues/000001-x.md"))
+            issues.get_issues_dir = function() return root .. "/link/workshop/issues" end
+            assert.same({ "working", "wontfix" }, enum.candidates("status", "wo", root .. "/repo/workshop/issues/000001-x.md"))
+        end)
     end)
 end)

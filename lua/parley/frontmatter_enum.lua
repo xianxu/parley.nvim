@@ -1,7 +1,8 @@
 -- parley.frontmatter_enum — typeahead for frontmatter keys with a fixed set of
 -- values (#384). A key joins by one declaration below; its values always come
 -- from the module that enforces them, never from a second list here.
--- context/candidates are PURE; attach wires them to omnifunc and nvim-cmp.
+-- context/candidates are PURE; attach wires them to Vim's popup, or to an
+-- nvim-cmp source when cmp is active in the buffer.
 local M = {}
 local frontmatter = require("parley.frontmatter")
 
@@ -14,21 +15,33 @@ function M.declare(key, spec)
     declared[key] = spec
 end
 
+--- Remove a declaration (tests' teardown).
+function M.undeclare(key)
+    if not declared[key] then return end
+    declared[key] = nil
+    order = vim.tbl_filter(function(k) return k ~= key end, order)
+end
+
 function M.keys()
     return vim.deepcopy(order)
+end
+
+-- A path with symlinks resolved, so a workspace reached through a link still
+-- matches its own issues directory.
+local function real(path)
+    return vim.fn.resolve(vim.fn.fnamemodify(path, ":p")):gsub("/$", "")
 end
 
 M.declare("collaboration-mode", {
     values = function() return require("parley.skills.review.collaboration").modes end,
 })
 M.declare("status", {
-    values = function()
-        local model = require("parley.issue_vocabulary").default()
-        return model and model:status_values() or {}
-    end,
+    values = function() return require("parley.issues").status_values() end,
     applies = function(path)
         local ok, dir = pcall(function() return require("parley.issues").get_issues_dir() end)
-        return ok and type(dir) == "string" and dir ~= "" and path:sub(1, #dir + 1) == dir .. "/"
+        if not ok or type(dir) ~= "string" or dir == "" or path == "" then return false end
+        dir = real(dir)
+        return real(path):sub(1, #dir + 1) == dir .. "/"
     end,
 })
 

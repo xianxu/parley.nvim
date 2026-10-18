@@ -30,7 +30,7 @@ Frontmatter keys with a fixed set of values (`collaboration-mode:` today, `prese
 - One registry of frontmatter enum keys: each declares its key and a function returning its allowed values (and optionally which files it applies to). A key joins by declaring itself; nothing else changes.
 - `collaboration-mode` takes its values from the list `skills/review/collaboration.lua` enforces (`discussion`, `collaboration`, `chat`), which becomes an exported list that the resolver's `known` set is built from. That gives one source.
 - The existing one-off issue `status:` omnifunc (`issues.lua`, vocabulary-backed) moves onto the registry, applying to issue files only.
-- Typeahead triggers only inside the frontmatter block, on the value of a registered key (the scalar form `key: <here>`), and offers the values matching what is typed. It is available through nvim-cmp (a `parley_frontmatter` source added to the buffer's existing sources, not replacing them) and through omnifunc as a fallback, on every markdown buffer.
+- Typeahead triggers only inside the frontmatter block, on the value of a registered key (the scalar form `key: <here>`), and offers the values matching what is typed, on every markdown and chat buffer. Only one menu ever opens: nvim-cmp's when cmp is active in the buffer (a `parley_frontmatter` source added ahead of the buffer's own sources, never replacing them), else Vim's popup (see Revisions).
 - Out of scope: the mapping form of `collaboration-mode` (`default:` and per-mode heading lists), and `presentation`'s entry, which #383 adds by declaring it.
 
 ## Done when
@@ -54,7 +54,10 @@ Quick flow (about 80 code lines). One source per key (ARCH-DRY); the pure part i
   - `skills/review/collaboration.lua` exports `M.modes = { "discussion", "collaboration", "chat" }`, builds `known` from it, and declares `collaboration-mode`.
   - `issues.lua` declares `status` from `vocab():status_values()`, with `applies` = issue files (its `issues_dir`). The dead one-off `M.omnifunc` / `setup_issue_completion` are deleted: `setup_issue_completion` has no caller, so status typeahead never worked.
   - #383 later adds `presentation` the same way.
-- [x] Integration (revised while building, see Log): `frontmatter_enum.attach(buf)` from both the markdown setup (`init.lua`, beside `comment.attach`) and the chat setup (`prep_chat`) adds a buffer-local TextChangedI popup through `helper.complete_noselect`, the mechanism the issue `status:` popup already used. That `init.lua` block is deleted.
+- [x] Integration (revised twice, see Revisions): `frontmatter_enum.attach(buf)` from both the markdown setup (`init.lua`, beside `comment.attach`) and the chat setup (`prep_chat`) adds a buffer-local TextChangedI handler.
+  - With nvim-cmp loaded and enabled for the buffer, the values are a `parley_frontmatter` cmp source. It is in its own group sorted before the buffer's sources, available only on a frontmatter value, and re-added on change.
+  - Otherwise it is Vim's popup through `helper.complete_noselect`, the mechanism the old issue `status:` popup used. That `init.lua` block is deleted. There is no omnifunc.
+  - `scripts/check-frontmatter-cmp.lua` is the opt-in live check against the real nvim-cmp.
 - [x] Specs:
   - `tests/unit/frontmatter_enum_spec.lua`: context on, before and after the frontmatter, on an undeclared key, and with no closing `---`; prefix filtering; `applies`; the collaboration values are exactly the resolver's (one source).
   - `tests/integration/frontmatter_enum_popup_spec.lua`: TextChangedI offers the modes, filtered; quiet on a full value, an undeclared key and the body; one attach; status only in issue files; attached by parley's markdown setup.
@@ -71,4 +74,16 @@ Quick flow (about 80 code lines). One source per key (ARCH-DRY); the pure part i
   - **Before:** the two **fight**. Vim's popup opened (`pumvisible=1`, 1 item) **and** cmp's own menu opened at the same time (3 entries: buffer words like `discussing`, `dialog`).
   - **Fix:** when cmp is loaded and enabled for the buffer, the built-in popup is suppressed and the values become a `parley_frontmatter` cmp source. It goes in its own group sorted before the buffer's sources, is available only on a frontmatter value, is re-added on each change because buffer sources get reset, and calls `cmp.complete()` once when it was just added. Where cmp is disabled for the buffer, the Vim popup is kept.
   - **After:** `pumvisible=0`, and cmp's menu is open with 1 entry, the value. Spec'd with a stub cmp (source first, no Vim popup, body unaffected, fallback when disabled).
+
+## Revisions
+
+- **2026-10-18, while building (hub-approved).** The integration became Vim's TextChangedI popup, generalized from the issue `status:` popup that already worked, instead of a new cmp source plus an omnifunc. The omnifunc fallback was dropped, because the popup covers the no-cmp case.
+- **2026-10-18, the hub's cmp check.** Measured against the operator's real nvim-cmp: the popup and cmp's menu opened at once. With cmp active the values are therefore a `parley_frontmatter` cmp source, in its own first group, and the Vim popup is the fallback when cmp is absent or disabled for the buffer. The Spec's integration bullet was reworded to match.
+- **2026-10-18, close review round 1.**
+  - BR-1: `status`'s `applies` resolves symlinks on both sides, as the deleted `init.lua` block did, with a symlinked-workspace spec.
+  - BR-2: this section, the reworded Spec bullet and the header comment.
+  - Minor findings:
+    - `issues.complete_frontmatter_values` and the now-orphaned `IssueVocabulary:enumerable_values` are deleted, and their tests moved onto `status_values()` and the registry;
+    - test keys are torn down with a new `undeclare`;
+    - `scripts/check-frontmatter-cmp.lua` is the opt-in conformance check for the cmp stub. It passes against the real cmp, and fails with the cmp branch removed, reproducing the two menus.
 
