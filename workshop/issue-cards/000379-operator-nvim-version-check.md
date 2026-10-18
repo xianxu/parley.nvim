@@ -1,8 +1,8 @@
 ---
 id: 000379
-status: codecomplete
+status: done
 created: 2026-10-17
-updated: 2026-10-17
+updated: 2026-10-18
 estimate_hours:
 github_issue:
 started: 2026-10-17T17:27:55-07:00
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 9d14002faac5989a513086a70facc27869593ef5
         evidence_commit: 31b98a329caf673c6d74f6fff35ee549c7fd1cab
+        landed_commit: 7125357492c019dab1dd2a5af3ebc61ea0fa6b82
 ---
 
 # Check operator Neovim compatibility
