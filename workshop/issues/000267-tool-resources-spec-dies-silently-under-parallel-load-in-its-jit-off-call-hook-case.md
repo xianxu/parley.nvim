@@ -1,12 +1,20 @@
 ---
 id: 000267
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-18
-updated: 2026-09-18
+updated: 2026-10-17
 estimate_hours:
-card_mirror: '5dc6b9119faa5dfd250611308a73b6e21d59b673' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '55467888519e1841ad65599e2c7406c26608ea2f' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-17T22:17:23-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:1
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # tool_resources_spec dies silently under parallel load in its JIT-off call-hook case
@@ -115,3 +123,88 @@ Shared writable state is worth ruling out for each one before looking at the JIT
   died on the 2nd run on #261's base tree (91f296b5). `document_fold_batches_spec`
   hung there after 4 of its 5 cases. `document_fold_uncertainty_retirement_spec`
   dies under load only. None of them touches #261's code.
+
+
+## Revisions
+
+### 2026-10-17 — reopened investigation for #379's stock 0.11 compatibility pass
+
+The original call-hook attribution was only a last-output location, not a proven
+cause. The current blocking sample is main's failed suite
+`c2a80924993e69f8b0acfab8f82b0969`: fold-batches passes on 0.12, then the
+installed 0.11.7 stalls after four cases (235 s total, 213625 ms idle).
+Investigate the stall itself; keep case-progress deadlines and bounded-work
+assertions unchanged. Cover stock 0.11.7 and preferred 0.12.5 under parallel
+load, including the original tool-resources case.
+
+Investigation evidence (before implementation):
+
+- Claimed from an unowned open card; start-plan based on main `6e571cf4`.
+- Sixteen parallel fold-batches workers with **private HOME/XDG/TMPDIR per
+  process**, existing JITSTAT enabled: 0.11 passes 16/16 in 33.24–96.23 s;
+  0.12 passes 16/16 in 34.67–37.89 s. This reproduces the unstable 0.11
+  slowdown, not yet the original deadline failure. Example 0.11 worker:
+  9,125 trace-cache flushes, 71% sampled JIT-compiler time; the corresponding
+  0.12 worker has 3 flushes, 2% compiler time.
+- A disposable spec copy wraps document attach/drain and fold setup/flush.
+  Slow workers spend the long interval inside the fifth fixture's D.drain,
+  **before F.setup**, and record 4,274 / 4,528 JIT aborts with reason 27,
+  `failed to allocate mcode memory`. Native sample confirms trace recording,
+  assembly, mcode allocation and exception-unwind work rather than a blocked
+  native fold call. This matches the pre-fix allocator described by #294 and
+  upstream LuaJIT commit 68354f4447.
+- Runtime identities: 0.11.7 has LuaJIT 2.1.1741730670; 0.12.5 has
+  LuaJIT 2.1.1788856981; both arm64 OSX. The existing harness tunes only the
+  repaired runtime and currently leaves the old allocator enabled.
+- Interpreter-only disposable 0.11 copies pass 4/4 under concurrent stress,
+  with 1 explicit startup flush and 0% JIT compiler samples. Their 70–77 s
+  wall times overlap a separate sixteen-worker batch, so they are a mechanism
+  check, not an apples-to-apples speed comparison.
+- Unprofiled 0.11 stress remains in flight; collect it before finalizing the
+  diagnosis. Temporary scripts/logs are in TMPDIR/parley-267-* and /tmp;
+  preserve the results here, then remove scratch trees once no worker needs them.
+
+Proposed quick-flow implementation plan — **awaiting TL approval**:
+
+- [ ] Finish the unprofiled baseline and matched control on both runtimes;
+  distinguish allocator churn from any remaining algorithmic or teardown stall.
+  Reproduce the original tool-resources case at 16-way load as well.
+- [ ] Extend the existing pure runtime policy in tests/helpers/jit_tuning.lua:
+  on arm64 macOS LuaJIT builds older than the known allocator repair, run the
+  compatibility harness in interpreter mode; repaired builds retain the existing
+  large-mcode tuning, other platforms retain their current behavior. Apply this
+  once through the existing minimal_init entry point, before specs load. Do not
+  change production startup, choose another Neovim API version, disable a case,
+  shrink a corpus, relax a work bound, or raise a deadline.
+- [ ] Add policy matrix and actual-child startup regressions, including threshold
+  versions and non-arm64/non-macOS cases. Verify the original pump call-count
+  oracle still rejects superlinear work. Its existing jit.status restore already
+  preserves an interpreter-only entry state. Keep profiling independent of the
+  policy so JITSTAT remains an observation, not a mitigation.
+- [ ] Repeat the implicated corpus (fold-batches, dependency navigation, fold
+  retirement/uncertainty, typing/ownership and original tool-resources) on both
+  versions, then require original tool-resources 64/64 at sixteen-way load and
+  fold-batches stress on both versions. Run the complete recorded suite with
+  the installed-version compatibility pass, review, and land.
+- [ ] Update the harness atlas with the runtime envelope and the reason the
+  compatibility pass does not exercise an allocator known to livelock.
+
+Design constraints / alternatives:
+
+ARCH-DRY/PURE: the existing version threshold and apply function own the policy;
+no second runtime detector or per-spec workaround. ARCH-PURPOSE: sweep the whole
+load-sensitive corpus, preserve structural work oracles, and keep actual Neovim
+0.11 API coverage. A runtime-policy fake records JIT settings/enabled state while
+real-child tests check the integration (ARCH-MOCK). ARCH-CONSTRAINTS: this is
+batch-only harness initialization, O(1) in corpus size, with no new keystroke,
+save or production process cost. Corpus growth is still defended by counted
+work, independent of JIT speed. No pending state, recovery menu or durable
+runtime artifact is introduced: each process chooses its policy once and ends
+with its existing supervisor (ARCH-STATE/ARCH-FUNERAL). Test outcomes remain
+pass/fail/stalled with the same existing action and deadlines.
+
+The alternatives are rebuilding and distributing 0.11 against repaired LuaJIT
+(which would stop testing the operator's installed binary), or a dynamic
+trace-abort fallback (extra per-trace state and callback ordering). Prefer the
+small explicit runtime policy if the matched controls confirm the mechanism.
+This is a proposal, not permission to hide an unexplained residual stall.
