@@ -2,7 +2,11 @@
 local M = {}
 local values = require('parley.skills.review.collaboration_value')
 local frontmatter = require('parley.frontmatter')
-local known = { discussion = true, collaboration = true, chat = true }
+-- The collaboration modes, in the order the skill lists them. The one source:
+-- the resolver's set and frontmatter typeahead (#384) both read it.
+M.modes = { 'discussion', 'collaboration', 'chat' }
+local known = {}
+for _, mode in ipairs(M.modes) do known[mode] = true end
 local function trim(s)
     local first, last = 1, #s
     while first <= last and s:sub(first, first):match('%s') do first = first + 1 end
@@ -27,7 +31,7 @@ function M.normalize(s)
     return s
 end
 local function bad_mode(name)
-    return 'unknown collaboration mode ' .. tostring(name) .. '; choose discussion, collaboration, chat'
+    return 'unknown collaboration mode ' .. tostring(name) .. '; choose ' .. table.concat(M.modes, ', ')
 end
 local function fence(line)
     local indent, run, tail = line:match('^( *)([`~]+)(.*)$')

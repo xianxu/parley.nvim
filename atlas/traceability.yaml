@@ -1410,3 +1410,10 @@ atlas:
     tests:
       - tests/unit/display_text_spec.lua
       - tests/unit/document_band_model_spec.lua
+  ui/frontmatter_typeahead:
+    code:
+      - lua/parley/frontmatter_enum.lua
+      - scripts/check-frontmatter-cmp.lua
+    tests:
+      - tests/unit/frontmatter_enum_spec.lua
+      - tests/integration/frontmatter_enum_popup_spec.lua

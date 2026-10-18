@@ -1111,37 +1111,6 @@ M.setup = function(opts)
 	-- #308: amber tracker values beside stale card-owned fields in issue files
 	require("parley.issue_tracker_buffer").setup()
 
-	-- Set up typeahead completion for status: field in issue files
-	vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
-		pattern = "*.md",
-		callback = function(ev)
-			local issues_dir = M.config.issues_dir
-			if not issues_dir or issues_dir == "" then return end
-			local git_root = M.project_root()
-			if git_root == "" then git_root = vim.fn.getcwd() end
-			local abs_issues = vim.fn.resolve(git_root .. "/" .. issues_dir)
-			local file_dir = vim.fn.resolve(vim.fn.fnamemodify(ev.file, ":p:h"))
-			if file_dir:sub(1, #abs_issues) == abs_issues then
-				vim.api.nvim_create_autocmd("TextChangedI", {
-					buffer = ev.buf,
-					callback = function()
-						local line = vim.api.nvim_get_current_line()
-						local row = vim.api.nvim_win_get_cursor(0)[1]
-						-- Only complete within frontmatter on status: lines
-						if row > 10 or not line:match("^status:%s*") then return end
-						local prefix_end = line:find(":%s*")
-						if not prefix_end then return end
-						local col = prefix_end + (line:sub(prefix_end + 1, prefix_end + 1) == " " and 1 or 0)
-						local partial = line:sub(col + 1)
-						local matches = issues_mod.complete_frontmatter_values("status", partial)
-						if #matches == 0 then return end
-						require("parley.helper").complete_noselect(col + 1, matches)
-					end,
-				})
-			end
-		end,
-	})
-
 	-- Read-repair, on exactly one trigger: the cursor resting on a reference
 	-- (#224). CursorHold, not CursorMoved — cursor motion is a keystroke path
 	-- and a glob across the chat roots per motion is the repeated expensive
@@ -2759,6 +2728,7 @@ M.prep_chat = function(buf, file_name)
 	require("parley.tool_folds").setup(buf)
 
 	require("parley.neighborhood").attach_completion(buf)
+	require("parley.frontmatter_enum").attach(buf) -- #384: chats declare collaboration-mode too
 
 	if M.config.chat_prompt_buf_type then
 		vim.api.nvim_set_option_value("buftype", "prompt", { buf = buf })
@@ -3205,6 +3175,8 @@ M.setup_markdown_keymaps = function(buf)
 
 	-- #312: compact 🤖 markers (conceal + cursor snap), same as chat buffers.
 	require("parley.comment").attach(buf)
+	-- #384: typeahead for frontmatter enum values (collaboration-mode, …).
+	require("parley.frontmatter_enum").attach(buf)
 	session_sync.attach(buf)
 	require("parley.agentic_document").attach(buf)
 	if review_cbs.review_next then

@@ -16,7 +16,7 @@ IDs are sequential integers (e.g., `000066`, `000067`). Sub-ticket IDs must NOT 
 
 Status values, categories, and lifecycle transitions are loaded at runtime from
 `construct/generated/vocabulary/issue.json`, which is generated from ariadne's
-`construct/vocabulary/issue.cue`. Parley uses that model for status completion,
+`construct/vocabulary/issue.cue`. Parley uses that model for status completion ([frontmatter typeahead](../ui/frontmatter_typeahead.md)),
 picker active filtering, status sorting, and status cycling — and (M2 #116) for
 the issue **home**: `config.issues_dir` is seeded at setup from the cue
 `discovery.home` (precedence: explicit user override > cue home > built-in
