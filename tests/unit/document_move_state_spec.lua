@@ -212,4 +212,35 @@ describe('pure document move state', function()
             assert.equals('retired', through(state, 'retired').phase)
         end
     end)
+    it('owns handoff protection and retirement progress inside complete', function()
+        local state = through(assert(model.initial(intent())), 'complete')
+        local record = { stage = 'handoff', old_lock_before = 'old', new_lock_before = 'new', new_lock_after = false,
+            document_hash = state.document_witness, editor_hash = string.rep('e', 64) }
+        local next_state, outcome = model.step(state, event(state, 'finalization_started', { finalization = record }))
+        assert.equals('advanced', outcome.kind); assert.equals('handoff', next_state.finalization.stage)
+        local premature, refused = model.step(next_state, event(next_state, 'cleanup_done'))
+        assert.equals('pending', refused.kind); assert.equals('complete', premature.phase)
+        next_state = assert(model.step(next_state, event(next_state, 'finalization_authorized')))
+        assert.equals('protection', next_state.finalization.stage)
+        next_state = assert(model.step(next_state, event(next_state, 'finalization_released')))
+        assert.equals('retire', next_state.finalization.stage)
+        assert.equals('retired', assert(model.step(next_state, event(next_state, 'cleanup_done'))).phase)
+        assert.is_not_nil(model.restore(vim.json.decode(vim.json.encode(next_state))))
+    end)
+
+    it('refuses forged finalization authority and progress before metadata', function()
+        local state = through(assert(model.initial(intent())), 'complete')
+        local record = { stage = 'handoff', old_lock_before = 'old', new_lock_before = 'new', new_lock_after = false,
+            document_hash = state.document_witness, editor_hash = string.rep('e', 64) }
+        for _, mutate in ipairs({ function(f) f.document_hash = 'foreign' end,
+            function(f) f.new_lock_after = 'foreign' end, function(f) f.stage = 'retire' end,
+            function(f) f.extra = true end }) do
+            local forged = vim.deepcopy(record); mutate(forged)
+            local same, refused = model.step(state, event(state, 'finalization_started', { finalization = forged }))
+            assert.equals('pending', refused.kind); assert.same(state, same)
+        end
+        local early = through(assert(model.initial(intent())), 'metadata')
+        assert.equals('pending', select(2, model.step(early, event(early, 'finalization_started', { finalization = record }))).kind)
+    end)
+
 end)

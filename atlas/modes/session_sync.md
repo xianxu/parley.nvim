@@ -240,7 +240,15 @@ recovery. Recovery rechecks witnesses under the same lease and resumes the
 same tuple; an unprovable partial effect stays interrupted for reopening.
 Metadata-only Couch rename must confirm the same ID and destination, returning
 the current effective owner; an idempotent replay succeeds. Only then is the
-matching OLD lock removed and the completed journal deleted.
+matching OLD lock removed. Finalization stays inside the same journal with
+internal handoff, protection and retirement progress. Before releasing a
+synthetic NEW lock it records the exact intended after-state; a held unsent
+operator turn remains held. Fresh moves and recovery use this same path.
+Reopening recognizes captured-before or authorized-after lock states with
+matching document/editor witnesses; foreign lock bytes and changed contents
+remain interrupted. Every disk/protection effect finishes before journal
+unlink, and the session engine resumes only afterward. A failed unlink or
+process death between steps therefore retains replayable authority.
 Unresolved journals are never aged out. Lease files are bounded to 4096 IDs per
 namespace and remain allocated; deleting a live lease pathname would split
 execution ownership. Lease digests preserve raw identity bytes across Neovim

@@ -775,4 +775,140 @@ describe('durable leased document migration', function()
         end)
     end
 
+    local function finalization_fixture(fault)
+        local old_lock, new_lock = root .. '/old.lock', root .. '/new.lock'
+        local before_old, before_new, editor = 'old protection', 'new protection', string.rep('e', 64)
+        write(old_lock, before_old); write(new_lock, before_new)
+        local fired, snapshots, applied, retired = false, 0, 0, 0
+        local function lock(path) return uv.fs_lstat(path) and read(path) or false end
+        local fs = setmetatable({}, { __index = uv })
+        fs.fs_unlink = function(path)
+            if fault == 'unlink' and path:match('%.json$') and not fired then fired = true; return nil, 'retirement interrupted' end
+            return uv.fs_unlink(path)
+        end
+        fs.fs_rename = function(from, to)
+            if fault and fault:match('^checkpoint:') and to:match('%.json$') and not fired then
+                local candidate = vim.json.decode(read(from))
+                local f = candidate.state and candidate.state.finalization or candidate.finalization
+                local stage, after = fault:match('^checkpoint:([^:]+):([^:]+)$')
+                if f and f.stage == stage then
+                    fired = true
+                    if after == 'after' then assert(uv.fs_rename(from, to)) end
+                    return nil, 'finalization checkpoint interrupted'
+                end
+            end
+            return uv.fs_rename(from, to)
+        end
+        local options = { fs = fs, move_document = true, old_lock = before_old, new_lock = before_new,
+            finalization_snapshot = function()
+                snapshots = snapshots + 1
+                if lock(new_lock) ~= before_new or lock(old_lock) ~= before_old and lock(old_lock) ~= false then
+                    return nil, 'snapshot protection changed'
+                end
+                return true, { old_lock_before = before_old, new_lock_before = before_new,
+                    new_lock_after = false, editor_hash = editor }
+            end,
+            prepare_finalization = function(op, intent)
+                applied = applied + 1
+                if intent.document_hash ~= vim.fn.sha256(read(new)) or intent.editor_hash ~= editor then return nil, 'finalization content changed' end
+                local old_value, new_value = lock(old_lock), lock(new_lock)
+                if intent.stage == 'retire' then
+                    if old_value ~= false or new_value ~= false then return nil, 'retired protection changed' end
+                elseif (old_value ~= before_old and old_value ~= false) or (new_value ~= before_new and new_value ~= false) then
+                    return nil, 'finalization protection changed'
+                end
+                if old_value then assert(uv.fs_unlink(old_lock)) end
+                if fault == 'old' and not fired then fired = true; return nil, 'OLD cleanup interrupted' end
+                if new_value then assert(uv.fs_unlink(new_lock)) end
+                if fault == 'new' and not fired then fired = true; return nil, 'NEW cleanup interrupted' end
+                assert.is_truthy(uv.fs_lstat(op.journal_path), 'journal must survive all protection effects')
+                return true
+            end,
+            finish_retired = function(op)
+                retired = retired + 1
+                assert.is_nil(uv.fs_lstat(op.journal_path)); assert.is_false(lock(old_lock)); assert.is_false(lock(new_lock))
+                return true
+            end,
+        }
+        return options, function() return { snapshots = snapshots, applied = applied, retired = retired,
+            old = lock(old_lock), new = lock(new_lock) } end,
+            function(value) editor = value end
+    end
+
+    it('persists finalization intent before protection effects and retires before volatile adoption', function()
+        local options, observed = finalization_fixture()
+        local operation = assert(begin(options))
+        assert.equals('registered', advance(operation).kind)
+        local seen = observed(); assert.is_true(seen.snapshots > 0); assert.is_true(seen.applied > 0)
+        assert.equals(1, seen.retired); assert.is_false(seen.old); assert.is_false(seen.new)
+    end)
+    for _, fault in ipairs({ 'old', 'new', 'unlink', 'checkpoint:handoff:before', 'checkpoint:handoff:after',
+        'checkpoint:protection:before', 'checkpoint:protection:after', 'checkpoint:retire:before', 'checkpoint:retire:after' }) do
+        it('replays finalization after ' .. fault .. ' without guessing released protection', function()
+            local options, observed = finalization_fixture(fault)
+            local operation = assert(begin(options)); assert.equals('pending', advance(operation).kind)
+            assert.is_truthy(uv.fs_lstat(operation.journal_path)); assert.equals(0, observed().retired)
+            local disk = vim.json.decode(read(operation.journal_path))
+            operation.release()
+            if disk.state and type(disk.state.finalization) == 'table' or type(disk.finalization) == 'table' then
+                options.document_moved = function() error('finalization must not reread the document') end
+                options.parent_rewritten = options.document_moved
+            end
+            local result = assert(recover(options)); assert.equals('registered', result.kind, result.error)
+            assert.equals(1, observed().retired); assert.is_false(observed().old); assert.is_false(observed().new)
+        end)
+    end
+    for _, changed in ipairs({ 'raw', 'editor', 'old-lock', 'new-lock' }) do
+        it('preserves unknown ' .. changed .. ' during interrupted finalization', function()
+            local options, observed, set_editor = finalization_fixture('old')
+            local operation = assert(begin(options)); assert.equals('pending', advance(operation).kind); operation.release()
+            if changed == 'raw' then write(new, 'foreign raw bytes')
+            elseif changed == 'editor' then set_editor(string.rep('f', 64))
+            elseif changed == 'old-lock' then write(root .. '/old.lock', 'foreign protection')
+            else write(root .. '/new.lock', 'foreign protection') end
+            local result = assert(recover(options)); assert.equals('pending', result.kind)
+            assert.equals(0, observed().retired)
+            if changed == 'raw' then assert.equals('foreign raw bytes', read(new)) end
+            if changed == 'new-lock' then assert.equals('foreign protection', read(root .. '/new.lock')) end
+            if changed == 'old-lock' then assert.equals('foreign protection', read(root .. '/old.lock')) end
+        end)
+    end
+
+    it('replays the same finalizer from a version-one journal after NEW protection cleanup', function()
+        local options, observed = finalization_fixture('new')
+        local prepared = assert(begin(options)); prepared.release()
+        local legacy = vim.json.decode(read(prepared.journal_path))
+        legacy.version, legacy.state, legacy.parent, legacy.captured, legacy.editor_captured, legacy.orphan = 1, nil, nil, nil, nil, nil
+        legacy.confirmation = nil; table.remove(legacy.temps)
+        legacy.steps = { document_moved = false, side_moved = false, rewritten = {}, metadata = false }
+        write(prepared.journal_path, vim.json.encode(legacy))
+        local result, operation = recover(options)
+        assert.equals('pending', result.kind); assert.is_false(observed().old); assert.is_false(observed().new)
+        assert.equals(1, operation.journal.version); assert.equals('protection', move().finalization(operation).stage)
+        local summaries = assert(move().pending('ns', { root = root .. '/state' }))
+        assert.equals('protection', summaries[1].finalization.stage)
+        operation.release()
+        options.document_moved = function() error('legacy finalization must not repeat editor handoff') end
+        assert.equals('registered', assert(recover(options)).kind); assert.equals(1, observed().retired)
+    end)
+
+    it('reports volatile retirement failure without inventing a pending durable migration', function()
+        local options, observed = finalization_fixture()
+        options.finish_retired = function() return nil, 'volatile adoption fault' end
+        local operation = assert(begin(options)); local result = advance(operation)
+        assert.equals('registered', result.kind); assert.matches('reopen', result.local_warning)
+        assert.is_nil(uv.fs_lstat(operation.journal_path)); assert.is_true(operation.released)
+        assert.is_false(observed().old); assert.is_false(observed().new)
+    end)
+
+    it('does not infer missing NEW protection from a handoff intent that never authorized release', function()
+        local options, observed = finalization_fixture('checkpoint:protection:before')
+        local operation = assert(begin(options)); assert.equals('pending', advance(operation).kind)
+        assert.equals('handoff', move().finalization(operation).stage); operation.release()
+        assert(uv.fs_unlink(root .. '/new.lock'))
+        local result = assert(recover(options)); assert.equals('pending', result.kind)
+        assert.equals('old protection', observed().old); assert.equals(0, observed().applied)
+        assert.equals(0, observed().retired)
+    end)
+
 end)

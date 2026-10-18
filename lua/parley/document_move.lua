@@ -8,8 +8,18 @@ local model = require('parley.document_move_state')
 local helper = require('parley.helper')
 local MAX_JOURNAL, MAX_PENDING = 256 * 1024, 32
 local MAX_FILE = 4 * 1024 * 1024
-local validate
+local validate, validate_finalization
 
+local function finalization_of(journal)
+    local record
+    if journal.version == 2 then record = journal.state and journal.state.finalization
+    else record = journal.finalization end
+    return type(record) == 'table' and record or nil
+end
+function M.finalization(operation)
+    local record = operation and operation.journal and finalization_of(operation.journal)
+    return record and vim.deepcopy(record) or nil
+end
 local function failure(kind, message)
     return nil, { kind = kind, error = tostring(message), message = tostring(message) }
 end
@@ -322,13 +332,38 @@ local function validate_v1(journal, namespace, id, path)
     for relative, done in pairs(journal.steps.rewritten) do
         if not seen[relative] or done ~= true then return nil, 'invalid rewrite checkpoint' end
     end
+    if journal.finalization ~= nil and journal.finalization ~= false then
+        if type(journal.finalization) ~= 'table' then return nil, 'invalid legacy finalization record' end
+        local valid, err = validate_finalization(journal)
+        if not valid then return nil, err end
+    end
     return true
 end
+validate_finalization = function(journal)
+    local record = finalization_of(journal)
+    if not record then return true end
+    local current = journal.new_witness and journal.new_witness.hash
+    local valid, err = model.validate_finalization(record, current)
+    if not valid or not valid_digest(record.document_hash) or not valid_digest(record.editor_hash) then
+        return nil, err or 'invalid finalization hashes'
+    end
+    local protection = journal.protection
+    if record.old_lock_before ~= (protection.old_lock or false)
+        or record.new_lock_before ~= (protection.new_lock or false) then return nil, 'finalization lock intent disagrees with admission' end
+    local confirmed = journal.confirmation
+    local registration = type(confirmed) == 'table' and confirmed.registration
+    if type(confirmed) ~= 'table' or confirmed.kind ~= 'registered' or type(registration) ~= 'table'
+        or registration.ID ~= journal.id or registration.File ~= journal.new
+        or type(registration.Owner) ~= 'string' or registration.Owner == '' then return nil, 'unconfirmed finalization identity' end
+    if journal.version == 1 and not journal.steps.metadata then return nil, 'finalization precedes metadata acknowledgement' end
+    return true
+end
+
 validate = function(journal, namespace, id, path)
     if type(journal) ~= 'table' or journal.version ~= 2 then return validate_v1(journal, namespace, id, path) end
     local state, err = model.restore(journal.state)
     if not state then return nil, err end
-    if journal.steps ~= nil or state.op_id ~= journal.token or state.id ~= id or state.new ~= journal.new
+    if journal.steps ~= nil or journal.finalization ~= nil or state.op_id ~= journal.token or state.id ~= id or state.new ~= journal.new
         or state.generation ~= 1 or type(journal.parent) ~= 'table'
         or not valid_digest(journal.parent.before) or not valid_digest(journal.parent.after)
         or type(journal.entries) ~= 'table' or type(journal.temps) ~= 'table'
@@ -385,6 +420,8 @@ validate = function(journal, namespace, id, path)
             return nil, 'missing confirmed registration authority'
         end
     elseif journal.confirmation ~= false then return nil, 'confirmation precedes metadata acknowledgement' end
+    local finalized, finalization_err = validate_finalization(journal)
+    if not finalized then return nil, finalization_err end
     if state.phase ~= 'prepared' and state.phase ~= 'orphan' and state.phase ~= 'document' and not journal.new_witness then
         return nil, 'missing current document witness'
     end
@@ -606,6 +643,132 @@ local function verify_tree(operation, base, after_move)
     return true
 end
 
+-- Shared v1/v2 finalization IO. The caller owns checkpoint replacement; the
+-- pure reducer owns handoff -> protection -> retire for both journal versions.
+local function observe_document(operation)
+    local j, fs = operation.journal, operation.fs
+    local bytes, err, stat = read(fs, j.new)
+    if not bytes then return nil, err end
+    if not canonical(fs, j.new) or j.document_move and fs.fs_lstat(j.old) then return nil, 'document paths changed' end
+    if j.new_witness and (hash(bytes) ~= j.new_witness.hash or not same_file(stat, j.new_witness)) then
+        return nil, 'NEW changed since its last recorded write'
+    end
+    return bytes, nil, stat
+end
+local function finalize(operation, result, progress)
+    local function prove()
+        local bytes, err = observe_document(operation)
+        if not bytes then return nil, err end
+        local intent = finalization_of(operation.journal)
+        if intent and hash(bytes) ~= intent.document_hash then return nil, 'finalization document generation changed' end
+        return bytes
+    end
+    local options = operation.options
+    local protocol = options.finalization_snapshot ~= nil or options.prepare_finalization ~= nil or options.finish_retired ~= nil
+    if protocol and (type(options.finalization_snapshot) ~= 'function' or type(options.prepare_finalization) ~= 'function'
+        or type(options.finish_retired) ~= 'function') then return nil, 'incomplete finalization hooks' end
+    local function snapshot()
+        local bytes, err = prove()
+        if not bytes then return nil, err end
+        local captured, record = hook(operation, 'finalization_snapshot')
+        if not captured then return nil, record or 'finalization snapshot unavailable' end
+        if type(record) ~= 'table' then return nil, 'invalid finalization snapshot' end
+        local intent = vim.deepcopy(record)
+        intent.stage, intent.document_hash = 'handoff', hash(bytes)
+        local valid, validation_err = model.validate_finalization(intent, hash(bytes))
+        if not valid or not valid_digest(intent.editor_hash)
+            or intent.old_lock_before ~= (operation.journal.protection.old_lock or false)
+            or intent.new_lock_before ~= (operation.journal.protection.new_lock or false) then
+            return nil, validation_err or 'finalization snapshot disagrees with protection'
+        end
+        local current, current_err = prove()
+        if not current then return nil, current_err end
+        return valid
+    end
+    local bytes, raw_err = prove()
+    if not bytes then return nil, raw_err end
+    if protocol then
+        local intent = finalization_of(operation.journal)
+        if not intent then
+            local captured, capture_err = snapshot()
+            if not captured then return nil, capture_err end
+            local saved, save_err = progress('finalization_started', captured)
+            if not saved then return nil, save_err end
+            intent = finalization_of(operation.journal)
+        end
+        if intent.stage == 'handoff' then
+            -- Only the recorded original lock states may authorize release.
+            -- A held NEW also proves the existing legacy OLD-cleaned case.
+            local current, current_err = snapshot()
+            if not current or not vim.deep_equal(current, intent) then return nil, current_err or 'handoff proof changed' end
+            local saved, save_err = progress('finalization_authorized')
+            if not saved then return nil, save_err end
+            intent = finalization_of(operation.journal)
+        end
+        if intent.stage == 'protection' then
+            local current, current_err = prove()
+            if not current then return nil, current_err end
+            local prepared, prepare_err = hook(operation, 'prepare_finalization', vim.deepcopy(intent), result)
+            if not prepared then return nil, prepare_err or 'protection finalization interrupted' end
+            current, current_err = prove()
+            if not current then return nil, current_err end
+            local saved, save_err = progress('finalization_released')
+            if not saved then return nil, save_err end
+            intent = finalization_of(operation.journal)
+        end
+        if intent.stage ~= 'retire' then return nil, 'finalization is not ready to retire' end
+        -- Retire is a proof state, not permission to release an original lock
+        -- again: the adapter requires the exact declared AFTER state here.
+        local prepared, prepare_err = hook(operation, 'prepare_finalization', vim.deepcopy(intent), result)
+        if not prepared then return nil, prepare_err or 'retirement protection changed' end
+    else
+        if finalization_of(operation.journal) then return nil, 'finalization adapter is required for recovery' end
+        -- Callers without a protection adapter retain their original no-op
+        -- finish seam. No release intent is inferred from absent callbacks.
+        local finished, finish_err = hook(operation, 'finish', result)
+        if not finished then return nil, finish_err or 'local handoff is pending' end
+    end
+    local current, current_err = prove()
+    if not current then return nil, current_err end
+    local clean, clean_err = cleanup(operation)
+    if not clean then return nil, clean_err end
+    local j = operation.journal
+    local encoded, encoded_err = read(operation.fs, operation.journal_path, MAX_JOURNAL)
+    if not encoded or hash(encoded) ~= operation.disk_hash or not canonical(operation.fs, operation.journal_path) then
+        return nil, encoded_err or 'finalization journal preimage changed'
+    end
+    -- A leftover exact checkpoint must be consumed by its owner before the
+    -- journal can disappear. Unknown residue remains visible and preserved.
+    if operation.fs.fs_lstat(j.temps[1]) then
+        local saved, save_err = persist(operation)
+        if not saved then return nil, save_err end
+    end
+    local removed, remove_err = operation.fs.fs_unlink(operation.journal_path)
+    if not removed then return nil, remove_err end
+    operation.retired = true
+    if protocol then
+        local adopted, adopt_err = hook(operation, 'finish_retired', result)
+        if not adopted then result.local_warning = tostring(adopt_err or 'local adoption interrupted') .. '; reopen to refresh local state' end
+    end
+    result.orphan_destination = operation.orphan_destination
+    return true
+end
+local function finalize_v1(operation, result)
+    local function progress(kind, intent)
+        local j = operation.journal
+        local next_record, err = model.finalization_step(j.finalization, kind, intent, j.new_witness.hash)
+        if not next_record then return nil, err end
+        local previous = vim.deepcopy(j)
+        j.finalization = next_record
+        local valid, validation_err = validate(j, operation.namespace, operation.id, operation.journal_path)
+        if not valid then operation.journal = previous; return nil, validation_err end
+        local saved, save_err = persist(operation)
+        if not saved then operation.journal = previous end
+        return saved, save_err
+    end
+    return finalize(operation, result, progress)
+end
+
 local function advance_document(operation)
     local fs, journal = operation.fs, operation.journal
     local from, to = fs.fs_lstat(journal.old), fs.fs_lstat(journal.new)
@@ -685,6 +848,12 @@ local function advance_v1(operation, callback)
     if not valid then pending(valid_err); return end
     local reconciled, reconcile_err = hook(operation, 'reconcile')
     if not reconciled then pending(reconcile_err or 'OLD reconciliation is pending'); return end
+    if finalization_of(journal) then
+        local result = vim.deepcopy(journal.confirmation)
+        local finished, finish_err = finalize_v1(operation, result)
+        if not finished then pending(finish_err); return end
+        operation.running = false; operation.release(); callback(result); return
+    end
     if journal.document_move then
         local moved, move_err = advance_document(operation)
         if not moved then pending(move_err); return end
@@ -760,12 +929,11 @@ local function advance_v1(operation, callback)
             pending(type(result) == 'table' and result.error or 'metadata confirmation is uncertain'); return
         end
         journal.steps.metadata = true
+        journal.confirmation = { kind = 'registered', registration = vim.deepcopy(registration), changed = result.changed == true }
         local saved, save_err = persist(operation)
         if not saved then pending(save_err); return end
-        local finished, finish_err = hook(operation, 'finish', result)
-        if not finished then pending(finish_err or 'local handoff is pending'); return end
-        local removed, remove_err = fs.fs_unlink(operation.journal_path)
-        if not removed then pending(remove_err); return end
+        local finished, finish_err = finalize_v1(operation, result)
+        if not finished then pending(finish_err); return end
         operation.running = false
         operation.release()
         callback(result)
@@ -831,13 +999,7 @@ local function dispatch(operation, callback, saved_write)
     if not valid then pending(err); return end
     local reconciled, reconcile_err = hook(operation, 'reconcile')
     if not reconciled then pending(reconcile_err or 'OLD reconciliation is pending'); return end
-    local function document_bytes()
-        local bytes, read_err, stat = read(fs, j.new)
-        if not bytes then return nil, read_err end
-        if not canonical(fs, j.new) or j.document_move and fs.fs_lstat(j.old) then return nil, 'document paths changed' end
-        if j.new_witness and (hash(bytes) ~= j.new_witness.hash or not same_file(stat, j.new_witness)) then return nil, 'NEW changed since its last recorded write' end
-        return bytes, nil, stat
-    end
+    local function document_bytes() return observe_document(operation) end
     local function notify_document()
         if not j.document_move or operation.document_notified then return true end
         local named, name_err = hook(operation, 'document_moved')
@@ -848,7 +1010,7 @@ local function dispatch(operation, callback, saved_write)
     -- Prove raw NEW before a recovered name handoff can read it into an
     -- editor. Parent publication gaps use the existing parent before/after
     -- proof below, then hand off at editor with the updated raw witness.
-    if (operation.recovering or j.document_move and not operation.document_notified)
+    if not finalization_of(j) and (operation.recovering or j.document_move and not operation.document_notified)
         and j.state.phase ~= 'prepared' and j.state.phase ~= 'orphan'
         and j.state.phase ~= 'document' and j.state.phase ~= 'parent' then
         local bytes, read_err = document_bytes()
@@ -1076,16 +1238,11 @@ local function dispatch(operation, callback, saved_write)
             end
             return
         elseif phase == 'complete' then
-            ok, phase_err = authorize(j.state.document_witness)
-            if not ok then pending(phase_err); return end
-            local current, current_err = document_bytes()
-            if not current then pending(current_err); return end
             local result = operation.metadata_result or vim.deepcopy(j.confirmation)
-            local finished, finish_err = hook(operation, 'finish', result)
-            if not finished then pending(finish_err or 'local handoff is pending'); return end
-            local removed, remove_err = fs.fs_unlink(operation.journal_path)
-            if not removed then pending(remove_err); return end
-            result.orphan_destination = operation.orphan_destination
+            local finished, finish_err = finalize(operation, result, function(kind, intent)
+                return checkpoint({ kind = kind, finalization = intent })
+            end)
+            if not finished then pending(finish_err); return end
             local retired = assert(model.step(j.state, { kind = 'cleanup_done', op_id = j.state.op_id, generation = j.state.generation }))
             j.state = retired
             operation.running = false; operation.release(); callback(result); return
@@ -1137,6 +1294,7 @@ function M.pending(namespace, options)
             if not journal then return failure('pending', err) end
             summaries[#summaries + 1] = {
                 id = journal.id, old = journal.old, new = journal.new, version = journal.version,
+                finalization = finalization_of(journal) and vim.deepcopy(finalization_of(journal)) or nil,
                 registration = vim.deepcopy(journal.registration), protection = vim.deepcopy(journal.protection),
                 new_witness = vim.deepcopy(journal.new_witness), document_move = journal.document_move == true, journal_path = path,
             }

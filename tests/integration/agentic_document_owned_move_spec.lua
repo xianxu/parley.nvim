@@ -149,6 +149,49 @@ describe("registered ordinary Markdown through Parley move doors", function()
         assert.equals("", vim.fn.glob(root .. "/state/document-moves/*/*.json"))
     end)
 
+    for _, recovery in ipairs({false, true}) do
+        it("replays finalization after journal unlink failure on recovery=" .. tostring(recovery), function()
+            local target = recovery and interrupted_editor_move() or destination .. "/finalized.md"
+            if recovery then document.detach(buf) end
+            local mover = require("parley.document_move")
+            local key = recovery and "recover" or "begin"
+            local original, injected = mover[key], false
+            mover[key] = function(namespace, identity, path_or_options, options_or_callback)
+                local options = recovery and path_or_options or options_or_callback
+                options.fs = setmetatable({ fs_unlink = function(path)
+                    if not injected and path:find("/document-moves/", 1, true) and path:match("%.json$") then
+                        injected = true
+                        return nil, "injected journal retirement failure"
+                    end
+                    return uv.fs_unlink(path)
+                end }, {__index=uv})
+                return original(namespace, identity, path_or_options, options_or_callback)
+            end
+            local called, result, err
+            if recovery then called, result = pcall(document.attach, buf)
+            else called, result, err = pcall(document.move_path, file, target) end
+            mover[key] = original
+            assert.is_true(called, tostring(result)); assert.is_truthy(result, tostring(err))
+            await(function() return injected end)
+            assert.equals(0, vim.fn.filereadable(target .. ".lock"), "declared synthetic release precedes retirement")
+            assert.equals(0, vim.fn.filereadable(file .. ".lock"))
+            local journal_path=vim.fn.glob(root .. "/state/document-moves/*/*.json")
+            assert.is_not.equals("",journal_path)
+            local record=vim.json.decode(table.concat(vim.fn.readfile(journal_path),"\n"))
+            assert.equals("retire",record.state.finalization.stage)
+            assert.is_false(record.state.finalization.new_lock_after)
+            assert.is_nil(require("parley.session_sync").begin_move(buf), "engine remains suspended while journal exists")
+            document.detach(buf)
+            assert.is_true(document.attach(buf))
+            await(function()
+                local identity=document.identity(buf)
+                return identity and identity.File==target and vim.fn.filereadable(journal_path)==0
+            end)
+            assert.equals(0,vim.fn.filereadable(target .. ".lock"))
+            assert.equals(registration.ID,document.identity(buf).ID)
+        end)
+    end
+
     it("preserves an operator edit made during the recovered name read", function()
         local target = interrupted_editor_move()
         document.detach(buf)

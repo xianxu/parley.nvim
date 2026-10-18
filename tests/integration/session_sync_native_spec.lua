@@ -453,6 +453,149 @@ describe("session-sync native edits", function()
         end)
     end
 
+    it("journals finalization intent before cleanup and resumes only after retirement", function()
+        rewritten_move(false)
+        local destination = root .. "/synchronized.md"
+        exec([[
+            local destination = ...
+            local ss = require("parley.session_sync")
+            local synced, protection = ss.synchronize_move(0, sync_token, sync_before); assert(synced, protection)
+            assert(type(ss.move_finalization_snapshot) == "function", "missing replayable finalization API")
+            local ok, intent = ss.move_finalization_snapshot(0, sync_token); assert(ok, intent)
+            assert(intent.new_lock_after == false)
+            intent.stage = "protection"
+            assert(ss.prepare_move_finalization(0, sync_token, intent))
+            assert(ss.prepare_move_finalization(0, sync_token, intent), "cleanup replay must be idempotent")
+            local stream=assert(io.open(destination .. ".lock","wb"));assert(stream:write(sync_token.lock));stream:close()
+            intent.stage="retire"
+            assert(not ss.prepare_move_finalization(0,sync_token,intent), "retire must require exact after-state")
+            assert(vim.fn.filereadable(destination .. ".lock")==1, "retire refusal cannot remove captured before-state")
+            intent.stage="protection"
+            assert(ss.prepare_move_finalization(0,sync_token,intent))
+            assert(vim.fn.filereadable(destination .. ".lock") == 0)
+            assert(not ss.begin_move(0), "engine must stay suspended before journal retirement")
+            assert(not ss.release_if_baseline(0))
+            local identity=ss.identity(0);identity.File=destination
+            assert(ss.retire_move(0,sync_token,identity))
+        ]], destination)
+        file = destination
+        keys("x"); locked()
+    end)
+
+    it("replays persisted finalization after both cleanup effects and editor death", function()
+        rewritten_move(false)
+        local destination = root .. "/synchronized.md"
+        exec([[
+            local destination = ...
+            local ss = require("parley.session_sync")
+            local synced, protection = ss.synchronize_move(0,sync_token,sync_before); assert(synced,protection)
+            assert(type(ss.move_finalization_snapshot) == "function", "missing replayable finalization API")
+            local ok, intent=ss.move_finalization_snapshot(0,sync_token);assert(ok,intent)
+            local identity=ss.identity(0)
+            intent.stage="protection"
+            assert(ss.prepare_move_finalization(0,sync_token,intent))
+            ss.detach(0)
+            assert(not ss.restore_move(0,identity,destination,protection), "absence without intent must refuse")
+            intent.stage="handoff"
+            assert(not ss.restore_move(0,identity,destination,protection,intent), "handoff has not authorized cleanup")
+            intent.stage="protection"
+            local restored=assert(ss.restore_move(0,identity,destination,protection,intent))
+            assert(ss.prepare_move_finalization(0,restored,intent))
+            identity.File=destination
+            assert(ss.retire_move(0,restored,identity))
+        ]], destination)
+        assert.is_nil(vim.uv.fs_stat(file .. ".lock"))
+        assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))
+    end)
+
+    it("replays partial OLD cleanup and preserves foreign NEW protection", function()
+        rewritten_move(false)
+        local destination = root .. "/synchronized.md"
+        exec([[
+            local destination = ...
+            local ss = require("parley.session_sync")
+            assert(ss.synchronize_move(0,sync_token,sync_before))
+            assert(type(ss.move_finalization_snapshot) == "function", "missing replayable finalization API")
+            local ok,intent=ss.move_finalization_snapshot(0,sync_token);assert(ok,intent);intent.stage="protection"
+            local remove=os.remove
+            os.remove=function(path)
+                if path==destination .. ".lock" then return nil,"injected NEW cleanup failure" end
+                return remove(path)
+            end
+            local called,finished,reason=pcall(ss.prepare_move_finalization,0,sync_token,intent)
+            os.remove=remove
+            assert(called and finished==false and reason, "NEW failure must remain replayable")
+            assert(vim.fn.filereadable(sync_token.old_path .. ".lock")==0)
+            vim.fn.writefile({"foreign lock"},destination .. ".lock")
+            assert(not ss.prepare_move_finalization(0,sync_token,intent))
+            assert(vim.fn.readfile(destination .. ".lock")[1]=="foreign lock")
+            local stream=assert(io.open(destination .. ".lock","wb"));assert(stream:write(sync_token.lock));stream:close()
+            assert(ss.prepare_move_finalization(0,sync_token,intent))
+        ]], destination)
+        assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))
+    end)
+
+    it("admits finalization for a legacy complete handoff with OLD already removed", function()
+        rewritten_move(false)
+        local destination = root .. "/synchronized.md"
+        exec([[
+            local destination=...
+            local ss=require("parley.session_sync")
+            local ok,protection=ss.synchronize_move(0,sync_token,sync_before);assert(ok,protection)
+            local identity=ss.identity(0)
+            assert(os.remove(sync_token.old_path .. ".lock"))
+            ss.detach(0)
+            local restored=assert(ss.restore_move(0,identity,destination,protection))
+            local captured,intent=ss.move_finalization_snapshot(0,restored);assert(captured,intent)
+            assert(intent.old_lock_before==protection.old_lock)
+            intent.stage="handoff"
+            ss.detach(0)
+            restored=assert(ss.restore_move(0,identity,destination,protection,intent))
+            intent.stage="protection"
+            assert(ss.prepare_move_finalization(0,restored,intent))
+            identity.File=destination
+            assert(ss.retire_move(0,restored,identity))
+        ]], destination)
+        assert.is_nil(vim.uv.fs_stat(destination .. ".lock"))
+    end)
+
+    it("refuses a non-file NEW lock without treating it as completed cleanup", function()
+        rewritten_move(false)
+        local destination = root .. "/synchronized.md"
+        exec([[
+            local destination=...
+            local ss=require("parley.session_sync")
+            assert(ss.synchronize_move(0,sync_token,sync_before))
+            local captured,intent=ss.move_finalization_snapshot(0,sync_token);assert(captured,intent)
+            intent.stage="protection"
+            assert(os.remove(destination .. ".lock"))
+            vim.fn.mkdir(destination .. ".lock")
+            local finished,reason=ss.prepare_move_finalization(0,sync_token,intent)
+            assert(finished==false and type(reason)=="string", "unknown protection is not absence")
+            assert(vim.fn.filereadable(sync_token.old_path .. ".lock")==1, "refusal must preserve OLD too")
+            assert(vim.fn.isdirectory(destination .. ".lock")==1)
+        ]], destination)
+    end)
+
+    it("retains outstanding operator protection through replayable finalization", function()
+        rewritten_move(true)
+        local destination = root .. "/synchronized.md"
+        exec([[
+            local destination = ...
+            local ss=require("parley.session_sync")
+            assert(ss.synchronize_move(0,sync_token,sync_before))
+            assert(type(ss.move_finalization_snapshot) == "function", "missing replayable finalization API")
+            local ok,intent=ss.move_finalization_snapshot(0,sync_token);assert(ok,intent)
+            assert(intent.new_lock_after==intent.new_lock_before and type(intent.new_lock_after)=="string")
+            intent.stage="protection"
+            assert(ss.prepare_move_finalization(0,sync_token,intent))
+            local identity=ss.identity(0);identity.File=destination
+            assert(ss.retire_move(0,sync_token,identity))
+            assert(not ss.release_if_baseline(0))
+        ]], destination)
+        assert.is_not_nil(vim.uv.fs_stat(destination .. ".lock"))
+    end)
+
     it("aborts a no-effect move when the buffer name aliases its canonical registry path", function()
         make_plain()
         local alias = root .. "/alias.md"

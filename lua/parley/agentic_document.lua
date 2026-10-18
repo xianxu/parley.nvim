@@ -382,13 +382,8 @@ local function execute(s, effects)
             end), { timeout_ms = 3 * config_ms("agentic_submit_timeout_ms") })
         elseif kind == "finish_move" then
             local moving = s.move
-            local ok, err = require("parley.session_sync").finish_move(s.buf, moving.token, effect.registration)
-            if not ok then notify(err); return end
-            cache(s, nil, true)
-            s.path = effect.new_path
-            cache(s, effect.registration)
-            s.loaded, s.content = mtime(s.path), hash(s.buf)
-            require("parley.session_sync").release_if_baseline(s.buf)
+            -- Registry confirmation advances the journal, not editor ownership.
+            -- The dispatcher retires protection and the journal before resuming.
             if moving.metadata_done then moving.metadata_done({ kind = "registered", registration = effect.registration }) end
         elseif kind == "send" then
             require("parley.session_sync").send_registered(s.buf, effect.registration, completed(s, function(result)
@@ -714,6 +709,35 @@ function M.move_membership(path)
     return nil, decision.message
 end
 
+-- One finalization path serves fresh moves and recovery. The dispatcher owns
+-- persisted intent; the session engine stays suspended until journal retirement.
+local function with_finalization(options, s, moving)
+    options.finalization_snapshot = function()
+        if states[s.buf] ~= s then return false, "document editor incarnation changed" end
+        return require("parley.session_sync").move_finalization_snapshot(s.buf, moving.token)
+    end
+    options.prepare_finalization = function(operation, intent, result)
+        if states[s.buf] ~= s then return false, "document editor incarnation changed" end
+        local prepared, prepare_error = require("parley.session_sync").prepare_move_finalization(s.buf, moving.token, intent)
+        if not prepared then return false, prepare_error end
+        -- Cache writes are advisory, but belong before journal retirement too.
+        cache({ namespace = s.namespace, path = operation.journal.old }, nil, true)
+        cache({ namespace = s.namespace, path = operation.journal.new }, result.registration)
+        moving.loaded = mtime(operation.journal.new)
+        return true
+    end
+    options.finish_retired = function(_, result)
+        if states[s.buf] ~= s then return true end
+        local retired, retire_error = require("parley.session_sync").retire_move(s.buf, moving.token, result.registration)
+        if not retired then return false, retire_error end
+        s.path, s.loaded, s.content = result.registration.File, moving.loaded, hash(s.buf)
+        reseed(s, result.registration, s.model.snapshot().receipt)
+        band(s, "")
+        return true
+    end
+    return options
+end
+
 function M.move_path(old_path, new_path)
     local member, identity = M.move_membership(old_path)
     if member == nil then return true, nil, identity end
@@ -743,7 +767,7 @@ function M.move_path(old_path, new_path)
     local moving = { token = token, lease = lease, old_path = old_path, new_path = new_path,
         identity = identity, content = hash(buf) }
     s.move = moving
-    local operation, err = require("parley.document_move").begin(s.namespace, identity, new_path, {
+    local operation, err = require("parley.document_move").begin(s.namespace, identity, new_path, with_finalization({
         -- Couch's rename is the authority on NEW (#359): no lookup first.
         root = state_root(), lease = lease, destination_registered = "authority", move_document = true,
         old_lock = token.lock, new_lock = token.lock, baseline = token.baseline,
@@ -754,7 +778,7 @@ function M.move_path(old_path, new_path)
         editor_snapshot = editor_snapshot(s, moving),
         parent_rewritten = parent_rewritten(s, moving),
         metadata = moving_metadata(s, moving),
-    })
+    }, s, moving))
     if not operation then
         moving.error, moving.journal_pending = err.message, err.kind == "pending"
         if not moving.journal_pending then
@@ -785,6 +809,7 @@ advance_move = function(s)
             moving.orphan_notified = true
             notify("Retained side documents at " .. result.orphan_destination)
         end
+        if result.local_warning then notify(result.local_warning) end
         if result.kind == "registered" then
             moving.answered = true
             if moving.new_path then show_move(s, moving, result) end
@@ -823,13 +848,13 @@ recover_migration = function(s, fresh_write)
     local ss, token = require("parley.session_sync"), nil
     local content = hash(s.buf)
     local moving = { new_path = journal.new, content = content, version = journal.version }
-    local operation, err = mover.recover(s.namespace, journal.id, {
+    local operation, err = mover.recover(s.namespace, journal.id, with_finalization({
         root = state_root(), old_path = journal.old, new_path = journal.new,
         new_written = fresh_write == true,
         reconcile = function()
             if token then return true end
             local restore_error
-            token, restore_error = ss.restore_move(s.buf, journal.registration, journal.new, journal.protection)
+            token, restore_error = ss.restore_move(s.buf, journal.registration, journal.new, journal.protection, journal.finalization)
             moving.token = token
             return token ~= nil, restore_error
         end,
@@ -849,18 +874,9 @@ recover_migration = function(s, fresh_write)
         end,
         editor_snapshot = editor_snapshot(s, moving),
         parent_rewritten = parent_rewritten(s, moving),
-        finish = function(_, result)
-            local ok, finish_error = ss.finish_move(s.buf, token, result.registration)
-            if not ok then return false, finish_error end
-            cache({ namespace = s.namespace, path = journal.old }, nil, true)
-            band(s, "")
-            reseed(s, result.registration, s.model.snapshot().receipt)
-            cache(s, result.registration)
-            ss.release_if_baseline(s.buf)
-            return true
-        end,
-    }, function(result)
+    }, s, moving), function(result)
         if states[s.buf] ~= s then return end
+        if result.local_warning then notify(result.local_warning) end
         s.recovering = false
         if result.kind == "registered" then
             if result.orphan_destination then notify("Retained side documents at " .. result.orphan_destination) end
@@ -972,7 +988,7 @@ install_migration_hooks = function(s)
             end
             if target.kind ~= "absent" then moving.error = "destination membership is occupied or unknown"; refuse(moving.error) end
         end
-        local operation, err = require("parley.document_move").begin(s.namespace, moving.identity, moving.new_path, {
+        local operation, err = require("parley.document_move").begin(s.namespace, moving.identity, moving.new_path, with_finalization({
             root = state_root(), lease = moving.lease, destination_registered = overwrite and false or "authority",
             parent_bytes = table.concat(vim.api.nvim_buf_get_lines(s.buf, 0, -1, false), "\n"),
             old_lock = moving.token.lock, new_lock = moving.token.lock, baseline = moving.token.baseline,
@@ -980,7 +996,7 @@ install_migration_hooks = function(s)
             editor_snapshot = editor_snapshot(s, moving),
             parent_rewritten = parent_rewritten(s, moving),
             metadata = moving_metadata(s, moving),
-        })
+        }, s, moving))
         if not operation then
             moving.error, moving.journal_pending = err.message, err.kind == "pending"
             if not moving.journal_pending then

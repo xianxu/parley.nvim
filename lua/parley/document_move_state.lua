@@ -7,7 +7,10 @@
 -- proof ('before'/'after'/'unknown'), exact witness, and child_id for children.
 -- editor_synced carries document_generation; saved carries a strictly newer
 -- document_generation and witness; metadata_reply carries ok/id/new.
--- journal_saved, effect_failed (phase/reason), cleanup_done complete the protocol.
+-- journal_saved and effect_failed (phase/reason) complete the move protocol.
+-- In complete, finalization_started captures exact protection/hash intent;
+-- finalization_authorized and finalization_released prove handoff -> protection
+-- -> retire. Only then may cleanup_done retire a protected operation.
 -- step returns a detached snapshot plus {kind,phase,...}: advanced, effect,
 -- pending, ignored or done. An effect is a request, never proof of publication.
 -- In editor/metadata/complete, observed before with the current document witness
@@ -22,7 +25,7 @@ local successors = { prepared = 'orphan', orphan = 'document', document = 'side'
     metadata = 'complete', complete = 'retired' }
 local fields = { version = true, op_id = true, id = true, new = true, generation = true,
     document_generation = true, orphan = true, document = true, side = true, parent = true,
-    children = true, phase = true, completed = true, editor_generation = true, document_witness = true }
+    children = true, phase = true, completed = true, editor_generation = true, document_witness = true, finalization = true }
 local function integer(v) return type(v) == 'number' and v >= 1 and v <= 9007199254740991 and v % 1 == 0 end
 local function text(v) return type(v) == 'string' and #v > 0 and #v <= 4096 and not v:find('%z') end
 local function dense(t, limit)
@@ -95,6 +98,37 @@ local function pair(p, optional)
     return optional and p == false or keys(p, { before = true, after = true })
         and p.before ~= nil and p.after ~= nil
 end
+local function finalization(record, document_witness)
+    local allowed = { stage = true, old_lock_before = true, new_lock_before = true, new_lock_after = true,
+        document_hash = true, editor_hash = true }
+    local function lock(value) return value == false or type(value) == 'string' and #value <= 65536 end
+    return json(record) and keys(record, allowed)
+        and (record.stage == 'handoff' or record.stage == 'protection' or record.stage == 'retire')
+        and lock(record.old_lock_before) and lock(record.new_lock_before) and lock(record.new_lock_after)
+        and (record.new_lock_after == false or record.new_lock_after == record.new_lock_before)
+        and text(record.document_hash) and equal(record.document_hash, document_witness) and text(record.editor_hash)
+end
+function M.validate_finalization(record, document_witness)
+    if not finalization(record, document_witness) then return nil, 'invalid finalization record' end
+    return copy(record)
+end
+function M.finalization_step(record, kind, intent_record, document_witness)
+    if kind == 'finalization_started' then
+        if record ~= nil and record ~= false then return nil, 'finalization already started' end
+        if not finalization(intent_record, document_witness) or intent_record.stage ~= 'handoff' then
+            return nil, 'invalid finalization intent'
+        end
+        return copy(intent_record)
+    end
+    local expected = kind == 'finalization_authorized' and 'handoff'
+        or kind == 'finalization_released' and 'protection'
+    if not expected or not finalization(record, document_witness) or record.stage ~= expected then
+        return nil, 'finalization step out of order'
+    end
+    local next_record = copy(record)
+    next_record.stage = expected == 'handoff' and 'protection' or 'retire'
+    return next_record
+end
 local function validate(s)
     if not json(s) or not keys(s, fields) or s.version ~= 2 or not phases[s.phase]
         or not text(s.op_id) or not text(s.id) or not text(s.new)
@@ -130,12 +164,18 @@ local function validate(s)
     elseif s.editor_generation ~= s.document_generation then
         return nil, 'editor generation disagrees with document generation'
     end
+    if s.finalization ~= nil and s.finalization ~= false
+        and (phase < phases.complete or not finalization(s.finalization, s.document_witness)) then
+        return nil, 'finalization disagrees with completed document generation'
+    end
     return true
 end
 function M.restore(record)
     local valid, err = validate(record)
     if not valid then return nil, err end
-    return copy(record)
+    local restored = copy(record)
+    if restored.finalization == nil then restored.finalization = false end
+    return restored
 end
 function M.initial(intent)
     local allowed = { op_id = true, id = true, new = true, generation = true, document_generation = true,
@@ -143,6 +183,7 @@ function M.initial(intent)
     if not json(intent) or not keys(intent, allowed) then return nil, 'invalid move intent' end
     local state = copy(intent)
     state.version, state.phase, state.completed, state.editor_generation = 2, 'prepared', {}, false
+    state.finalization = false
     if type(state.document) ~= 'table' then return nil, 'missing document witnesses' end
     state.document_witness = copy(state.document.before)
     return M.restore(state)
@@ -196,8 +237,16 @@ function M.step(record, event)
         end
         return advance()
     end
+    if event.kind == 'finalization_started' or event.kind == 'finalization_authorized' or event.kind == 'finalization_released' then
+        if state.phase ~= 'complete' then return result('pending', 'metadata acknowledgement required before finalization') end
+        local next_record, finalization_err = M.finalization_step(state.finalization, event.kind, event.finalization, state.document_witness)
+        if not next_record then return result('pending', finalization_err) end
+        state.finalization = next_record
+        return result('advanced')
+    end
     if event.kind == 'cleanup_done' then
         if state.phase ~= 'complete' then return result('ignored', 'stale cleanup event') end
+        if state.finalization and state.finalization.stage ~= 'retire' then return result('pending', 'protection finalization incomplete') end
         return advance()
     end
     if event.kind ~= 'observed' then return result('pending', 'unknown event') end

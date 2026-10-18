@@ -906,9 +906,26 @@ M.begin_move = function(buf)
     return token
 end
 
+-- Finalization can authorize an absent lock as an after-state. Only ENOENT
+-- proves absence: unreadable files, directories and symlinks remain unknown.
+local function finalization_lock(path)
+    local st, stat_error, code = vim.uv.fs_lstat(path)
+    if not st then
+        if code == "ENOENT" then return true, nil end
+        return false, stat_error or "lock state is unknown"
+    end
+    if st.type ~= "file" then return false, "lock is not a regular file" end
+    local stream, open_error = io.open(path, "rb")
+    if not stream then return false, open_error end
+    local bytes, read_error = stream:read("*a")
+    local closed, close_error = stream:close()
+    if not bytes or not closed then return false, read_error or close_error or "lock could not be read" end
+    return true, bytes
+end
+
 -- Recovery runs only under the caller's validated journal and ID lease.
 -- Matching persisted bytes prove the turn; neither path is overwritten here.
-M.restore_move = function(buf, old_identity, new_path, protection)
+M.restore_move = function(buf, old_identity, new_path, protection, finalization)
     buf = buffer_id(buf)
     if not old_identity or type(old_identity.ID) ~= "string" or type(old_identity.File) ~= "string"
         or old_identity.File:sub(1, 1) ~= "/" or type(new_path) ~= "string" or new_path:sub(1, 1) ~= "/"
@@ -922,16 +939,44 @@ M.restore_move = function(buf, old_identity, new_path, protection)
     end
     local old_lock = lock_bytes(old_identity.File .. ".lock")
     local new_lock = lock_bytes(new_path .. ".lock")
-    if new_lock ~= protection.new_lock then return nil, "destination protection changed" end
-    if old_lock ~= protection.old_lock then
-        -- OLD cleanup can precede a crash after metadata confirmation. Only a
-        -- matching held NEW proof permits resuming that forward-only handoff.
-        if old_lock ~= nil or not protection.new_lock or new_lock ~= protection.new_lock then
+    if finalization then
+        local old_ok, new_ok
+        old_ok, old_lock = finalization_lock(old_identity.File .. ".lock")
+        new_ok, new_lock = finalization_lock(new_path .. ".lock")
+        if not old_ok then return nil, old_lock end
+        if not new_ok then return nil, new_lock end
+        local after = finalization.stage == "protection" or finalization.stage == "retire"
+        if finalization.stage ~= "handoff" and not after
+            or finalization.old_lock_before ~= (protection.old_lock or false)
+            or finalization.new_lock_before ~= (protection.new_lock or false)
+            or finalization.new_lock_after ~= false and finalization.new_lock_after ~= finalization.new_lock_before
+            or type(finalization.editor_hash) ~= "string" or content_hash(buf) ~= finalization.editor_hash
+            or protection.new_lock and finalization.new_lock_after == false
+                and (vim.bo[buf].modified or protection.baseline ~= finalization.editor_hash) then
+            return nil, "invalid finalization recovery proof"
+        end
+        local held_new = protection.new_lock ~= nil and new_lock == protection.new_lock
+        if finalization.stage == "retire" and old_lock ~= nil
+            or old_lock ~= protection.old_lock and not (old_lock == nil and (after or held_new)) then
             return nil, "source protection changed"
         end
-    end
-    if M.turn(protection.old_lock) == "operator" and M.turn(new_lock) ~= "operator" then
-        return nil, "destination operator protection missing"
+        local expected_after = finalization.new_lock_after ~= false and finalization.new_lock_after or nil
+        if finalization.stage == "retire" and new_lock ~= expected_after
+            or new_lock ~= protection.new_lock and not (after and new_lock == expected_after) then
+            return nil, "destination protection changed"
+        end
+    else
+        if new_lock ~= protection.new_lock then return nil, "destination protection changed" end
+        if old_lock ~= protection.old_lock then
+            -- OLD cleanup can precede a crash after metadata confirmation. Only a
+            -- matching held NEW proof permits resuming that forward-only handoff.
+            if old_lock ~= nil or not protection.new_lock or new_lock ~= protection.new_lock then
+                return nil, "source protection changed"
+            end
+        end
+        if M.turn(protection.old_lock) == "operator" and M.turn(new_lock) ~= "operator" then
+            return nil, "destination operator protection missing"
+        end
     end
     local s = state[buf]
     if s and (s.moving or s.identity.ID ~= old_identity.ID
@@ -1013,6 +1058,91 @@ M.synchronize_move = function(buf, token, expected_before_content_hash)
     s.content = content
     s.attach_edits()
     return true, { old_lock = moving.lock, new_lock = moving.new_lock, baseline = baseline }
+end
+
+-- Persist the returned intent in the move journal before invoking cleanup.
+-- A synthetic turn can be released only at its current acquisition baseline.
+M.move_finalization_snapshot = function(buf, token)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    local moving = s and s.moving
+    if not moving or moving.token ~= token then return false, "stale move token" end
+    if not vim.api.nvim_buf_is_loaded(buf) then return false, "move buffer is unloaded" end
+    local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p")
+    if (vim.uv.fs_realpath(path) or path) ~= moving.new_path then return false, "reopen " .. tostring(moving.new_path) .. " to finish this move" end
+    local old_ok, old = finalization_lock(moving.old_path .. ".lock")
+    local new_ok, new = finalization_lock(moving.new_path .. ".lock")
+    if not old_ok then return false, old end
+    if not new_ok then return false, new end
+    if new ~= moving.new_lock or old ~= moving.lock and not (old == nil and moving.new_lock ~= nil) then
+        return false, "move protection changed before finalization intent"
+    end
+    local content = content_hash(buf)
+    local release = not vim.bo[buf].modified and s.baseline == content and s.owned_lock == moving.new_lock
+    return true, { old_lock_before = moving.lock or false, new_lock_before = moving.new_lock or false,
+        new_lock_after = not release and moving.new_lock or false, editor_hash = content }
+end
+
+-- The journal has published its protection stage. Absence is an after-witness,
+-- never permission to remove different bytes. Keep watchers suspended throughout.
+M.prepare_move_finalization = function(buf, token, intent)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    local moving = s and s.moving
+    if not moving or moving.token ~= token then return false, "stale move token" end
+    if type(intent) ~= "table" or intent.stage ~= "protection" and intent.stage ~= "retire"
+        or intent.old_lock_before ~= (moving.lock or false) or intent.new_lock_before ~= (moving.new_lock or false)
+        or intent.new_lock_after ~= false and intent.new_lock_after ~= intent.new_lock_before
+        or not vim.api.nvim_buf_is_loaded(buf) or content_hash(buf) ~= intent.editor_hash then
+        return false, "invalid finalization proof or changed editor content"
+    end
+    local path = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p")
+    if (vim.uv.fs_realpath(path) or path) ~= moving.new_path then return false, "reopen " .. tostring(moving.new_path) .. " to finish this move" end
+    if moving.new_lock and intent.new_lock_after == false
+        and (vim.bo[buf].modified or s.baseline ~= intent.editor_hash or s.owned_lock ~= moving.new_lock) then
+        return false, "operator turn changed before finalization"
+    end
+    local old_ok, old = finalization_lock(moving.old_path .. ".lock")
+    local new_ok, new = finalization_lock(moving.new_path .. ".lock")
+    if not old_ok then return false, old end
+    if not new_ok then return false, new end
+    local after = intent.new_lock_after ~= false and intent.new_lock_after or nil
+    if intent.stage == "retire" and (old ~= nil or new ~= after)
+        or old ~= nil and old ~= moving.lock or new ~= moving.new_lock and new ~= after then
+        return false, "move protection changed during finalization"
+    end
+    if old then
+        local ok, err = os.remove(moving.old_path .. ".lock")
+        if not ok then return false, err end
+    end
+    if new and after == nil then
+        local ok, err = os.remove(moving.new_path .. ".lock")
+        if not ok then return false, err end
+    end
+    moving.finalized = true
+    local st = vim.uv.fs_stat(moving.new_path)
+    moving.finalized_loaded = st and (st.mtime.sec .. "." .. st.mtime.nsec) or ""
+    return true
+end
+
+-- Journal retirement already owns every filesystem effect. This acknowledgment
+-- only resumes the editor; it never removes a lock or rewrites a document.
+M.retire_move = function(buf, token, identity)
+    buf = buffer_id(buf)
+    local s = state[buf]
+    local moving = s and s.moving
+    if not moving or moving.token ~= token or not moving.finalized then return false, "move finalization incomplete" end
+    if not identity or identity.ID ~= s.identity.ID or identity.File ~= moving.new_path then
+        return false, "move identity mismatch"
+    end
+    s.identity = vim.deepcopy(identity)
+    s.loaded, s.content = moving.finalized_loaded, content_hash(buf)
+    s.foreign, s.unkept, s.moving = nil, nil, nil
+    s.probed, s.probing = nil, false
+    s.attach_edits()
+    refresh(buf)
+    restart_idle(buf)
+    return true
 end
 
 M.finish_move = function(buf, token, identity)
