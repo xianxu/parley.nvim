@@ -156,11 +156,7 @@ end
 
 -- A deadline from the operator's config, else the shipped default (config.lua
 -- is the one place the numbers live).
-local function config_ms(key)
-    local value = (require("parley").config or {})[key]
-    if type(value) == "number" and value > 0 then return value end
-    return require("parley.config")[key]
-end
+local config_ms = registry.config_ms
 
 local function band(s, message, highlight)
     if message == "" then s.renderer.clear()
@@ -215,7 +211,7 @@ local function moving_metadata(s, moving)
         dispatch(s, { type = "moved", witness = moving.witness, ok = true })
         if s.move ~= moving then return end
         show_move(s, moving)
-        vim.defer_fn(function()
+        require("parley.helper").defer_deadline(function()
             if states[s.buf] ~= s or s.move ~= moving or moving.answered then return end
             moving.overdue = true
             show_move(s, moving)
@@ -320,7 +316,7 @@ local function begin_submit(s)
     s.submitting = submitting
     show_feedback(s, "submitting…", false)
     local ms = config_ms("agentic_submit_timeout_ms")
-    submitting.timer:start(ms, 0, vim.schedule_wrap(function()
+    require("parley.helper").start_deadline(submitting.timer, ms, vim.schedule_wrap(function()
         if s.submitting ~= submitting or not valid(s) then return end
         submitting.overdue = true
         show_feedback(s, NOT_CONFIRMED .. " · Couch did not answer within " .. math.ceil(ms / 1000) .. " s", true)
@@ -351,7 +347,7 @@ local function execute(s, effects)
                 if kind == "lookup" and result.kind == "absent" then cache(s, nil, true) end
                 dispatch(s, { type = "reply", witness = effect.witness, result = result })
                 if s.model.snapshot().phase == "unknown" then ensure_retry() end
-            end), { timeout_ms = config_ms("agentic_submit_timeout_ms") })
+            end))
         elseif kind == "flush_queued" then
             -- #378: the model released a press it held; drop_queued needs nothing.
             M.submit(s.buf)
@@ -377,11 +373,11 @@ local function execute(s, effects)
             if s.move then s.move.witness = effect.witness end
         elseif kind == "rename" then
             -- The band says "finishing in the background" at the submit deadline;
-            -- the rename itself gets three of them before its reply counts as
-            -- lost (#359: the file already moved, so waiting costs nothing).
+            -- the rename itself gets the registry's rename deadline, three of
+            -- them (document_registry.default_deadline_ms, #359, #382).
             s.request = registry.request("rename", { effect.old_path, effect.new_path }, effect.witness, completed(s, function(result)
                 if valid(s) then dispatch(s, { type = "reply", witness = effect.witness, result = result }) end
-            end), { timeout_ms = 3 * config_ms("agentic_submit_timeout_ms") })
+            end))
         elseif kind == "finish_move" then
             local moving = s.move
             -- Registry confirmation advances the journal, not editor ownership.
@@ -697,7 +693,7 @@ local function ask_in_background(ns, key, loaded, operation, owner)
             prune_answers()
             answered[slot] = uv.now() + M.ANSWER_TTL_MS
         end
-    end, { timeout_ms = config_ms("agentic_submit_timeout_ms") })
+    end)
 end
 
 -- Public Parley movers must reserve the identity before touching OLD. A plain

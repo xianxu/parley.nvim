@@ -63,7 +63,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
         local admitted
         require("parley.document_registry").request("register", {file,"ops:0"}, {}, function(value) admitted = value end)
         await(function() return admitted ~= nil end)
-        assert.equals("registered", admitted.kind)
+        assert.equals("registered", admitted.kind, "setup register refused: " .. require("tests.helpers.fake_couch").explain(admitted))
         registration = admitted.registration
         vim.cmd("edit " .. vim.fn.fnameescape(file))
         buf = vim.api.nvim_get_current_buf()
@@ -129,7 +129,7 @@ describe("registered ordinary Markdown through Parley move doors", function()
         local admitted
         require("parley.document_registry").request("register", {file,"ops:0"}, {}, function(value) admitted=value end)
         await(function() return admitted~=nil end)
-        assert.equals("registered", admitted.kind); registration=admitted.registration
+        assert.equals("registered", admitted.kind, "setup register refused: " .. require("tests.helpers.fake_couch").explain(admitted)); registration=admitted.registration
         vim.cmd("edit " .. vim.fn.fnameescape(file)); buf=vim.api.nvim_get_current_buf()
         p.setup_markdown_keymaps(buf)
         await(function() local status=document.status(buf); return document.identity(buf) and not status.operation end)
