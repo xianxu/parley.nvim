@@ -304,3 +304,11 @@ the intentionally unprotected child then passed 36/36 sequence cases on 0.11.
 - make lint: 0 warnings / 0 errors across 788 files; git diff --check clean.
 - Next: full stock-0.11 suite and recorded default-0.12 suite on the pushed
   implementation head, then the binary's close review and landing.
+
+
+The fresh-child foreign-trace observer also clears its identity on abort/flush
+and replaces it at every new trace start, so reuse of an aborted trace ID
+cannot count another function as the unrelated compiled function. The queued
+recorded run was cancelled through local-check cancel before it took a suite
+slot and is restarted on this final test observer. The manual 0.11 suite is
+still queued and will read the same final checkout when admitted.

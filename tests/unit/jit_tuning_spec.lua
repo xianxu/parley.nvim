@@ -94,10 +94,11 @@ describe("module-scoped compiler protection in a real VM", function()
             local foreign_trace
             jit.attach(function(what, trace, fn)
                 if what == 'stop' and trace == foreign_trace then starts.foreign = starts.foreign + 1 end
+                if what == 'abort' or what == 'flush' then foreign_trace = nil end
                 if what ~= 'start' then return end
                 local source = debug.getinfo(fn, 'S').source
                 if source:find('/lua/parley/document/', 1, true) then starts.own = starts.own + 1 end
-                if source == '@unrelated-plugin' then foreign_trace = trace end
+                foreign_trace = source == '@unrelated-plugin' and trace or nil
             end, 'trace')
             local foreign = assert(loadstring('local sum=0; for i=1,10000 do sum=sum+i end; return sum', '@unrelated-plugin'))
             local sum = foreign()
