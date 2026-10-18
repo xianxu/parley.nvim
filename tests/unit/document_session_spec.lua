@@ -766,6 +766,79 @@ describe("document_session inherit", function()
         end
     end)
 
+    -- #380: the inheritance is one tagged stage. Walk every stage through every
+    -- event that can reach it and check the stage it leaves, that an inherit
+    -- arriving mid-inheritance (or on a registered or pending child) changes
+    -- nothing, and that no operation carries an inheritance flag of its own.
+    it("moves the inheritance stage only along its transitions", function()
+        local absent, down = { kind = "absent" }, { kind = "unavailable", error = "down" }
+        local parent_ok = { kind = "registered", registration = parent_registration() }
+        local function child_ok(owner) return { kind = "registered", registration = child_registration(owner) } end
+        local function stage(s) local i = s.snapshot().inheritance; return i and i.stage end
+        local function op(s) return s.snapshot().operation end
+        local function answer(s, result) return reply(s, { witness = op(s).witness }, result) end
+        local reach = {
+            hinted = function(s) s.dispatch({ type = "open" }); s.dispatch({ type = "inherit", parent = parent }) end,
+            looking = function(s) plain(s); s.dispatch({ type = "inherit", parent = parent }) end,
+            confirming = function(s) plain(s); to_confirm(s) end,
+            registering = function(s) plain(s); answer(s, to_confirm(s) and parent_ok) end,
+            relooking = function(s)
+                plain(s); answer(s, to_confirm(s) and parent_ok); answer(s, { kind = "unavailable", code = "owner-conflict" })
+            end,
+        }
+        local changed = function(s) s.dispatch({ type = "changed" }) end
+        local detach = function(s) s.dispatch({ type = "detach" }) end
+        local transitions = {
+            hinted = { { "absent", absent, "confirming" }, { "child registered", outcome("registered"), nil },
+                { "unavailable", down, nil }, { "changed", changed, nil }, { "detach", detach, nil } },
+            looking = { { "absent", absent, "confirming" }, { "child registered", child_ok("ops:7"), nil },
+                { "unavailable", down, nil }, { "changed", changed, nil }, { "detach", detach, nil } },
+            confirming = { { "parent confirmed", parent_ok, "registering" },
+                { "parent re-owned", { kind = "registered", registration = parent_registration({ Owner = "ops:9" }) }, nil },
+                { "parent absent", absent, nil }, { "parent unavailable", down, nil },
+                { "changed", changed, nil }, { "detach", detach, nil } },
+            registering = { { "registered", child_ok("ops:0"), nil },
+                { "refused", { kind = "unavailable", code = "owner-conflict" }, "relooking" },
+                { "uncertain", { kind = "uncertain", error = "lost" }, nil },
+                { "changed", changed, nil }, { "detach", detach, nil } },
+            relooking = { { "adopted", child_ok("ops:7"), nil }, { "absent", absent, nil },
+                { "unavailable", down, nil }, { "changed", changed, nil }, { "detach", detach, nil } },
+        }
+        local walked = 0
+        for from, rows in pairs(transitions) do
+            for _, row in ipairs(rows) do
+                local name, event, to = row[1], row[2], row[3]
+                local label = from .. " → " .. name
+                local s = session()
+                reach[from](s)
+                assert.equals(from, stage(s), label .. ": did not reach the stage")
+                -- rejected: a second inherit and a stale reply leave it where it is
+                assert.same({}, s.dispatch({ type = "inherit", parent = parent }), label)
+                reply(s, { witness = { token = -1 } }, absent)
+                assert.equals(from, stage(s), label .. ": a rejected event moved the stage")
+                if type(event) == "function" then event(s) else answer(s, event) end
+                assert.equals(to, stage(s), label)
+                local current = op(s)
+                if current then
+                    assert.is_nil(current.args.inherit, label .. ": an operation carries args.inherit")
+                    assert.is_nil(current.args.inherited, label .. ": an operation carries args.inherited")
+                end
+                walked = walked + 1
+            end
+        end
+        assert.equals(26, walked)
+        -- a registered or pending child never starts an inheritance
+        local registered = session(); attached(registered)
+        assert.same({}, registered.dispatch({ type = "inherit", parent = parent }))
+        assert.is_nil(stage(registered))
+        local pending = session(); plain(pending)
+        answer(pending, to_confirm(pending) and parent_ok)
+        answer(pending, { kind = "uncertain", error = "lost" })
+        assert.equals("pending", pending.snapshot().phase)
+        assert.same({}, pending.dispatch({ type = "inherit", parent = parent }))
+        assert.is_nil(stage(pending))
+    end)
+
     it("ignores a malformed hint and a detached document", function()
         local s = session(); plain(s)
         assert.same({}, s.dispatch({ type = "inherit", parent = { path = "/p.md", id = "", owner = "ops:0" } }))

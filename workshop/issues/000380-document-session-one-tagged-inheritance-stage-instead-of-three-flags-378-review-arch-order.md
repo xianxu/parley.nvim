@@ -1,13 +1,21 @@
 ---
 id: 000380
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '7367672cef28647dce6a70f5748db495f5d8678c' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '4007a0284dcdae916763606fea5c07218f63bba4' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-17T19:05:38-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:4
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # document_session: one tagged inheritance stage instead of three flags (#378 review, ARCH-ORDER)
@@ -33,8 +41,11 @@ Collapse the flags into one tagged inheritance stage carried by the model: none,
 
 ## Plan
 
-- [ ]
+- [x] Replace `state.inherit`, `args.inherit`, `args.inherited` and the `confirm_parent` kind check with one `state.inheritance = {stage, parent}`. The stages are hinted, looking, confirming, registering and relooking (`inherit_as` refuses any other). Each stage lives exactly as long as the operation it names: it is cleared when that operation's matching event arrives, and set again only by the step that issues the next one. `admits`, `inheriting` and the register-refusal branch read the stage (ARCH-ORDER).
+- [x] Unit tests: #378's settle table, unchanged, passes. A new transition table walks 26 rows (stage × event → next stage), checks that a second inherit and a stale reply move nothing, and checks that no operation carries an inheritance flag. A registered or pending child never starts one.
 
 ## Log
 
 ### 2026-10-17
+- Plan posted to the hub, proceeding unless it objected. Built as planned; no shell change was needed, because agentic_document never read the flags.
+- Targeted runs pass: document_session 47, which includes the settle table unchanged and the new 26-row transition table; side_inherit 9; agentic_document 47; owned_move 16; lifetime 10. Mutation check: with `changed` no longer clearing the stage, the transition table fails (relooking → changed).
