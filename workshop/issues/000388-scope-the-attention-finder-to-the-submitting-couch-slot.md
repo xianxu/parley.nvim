@@ -56,6 +56,17 @@ Actions: submit, open finder, toggle scope, reopen. Existing waiting/answered/se
 
 ## Log
 
+### 2026-10-18 — close review SHIP; recorded suite pending
+
+Close round 1 returned SHIP with no blocking findings. The independent
+reviewer reran all 191 focused cases on each installed runtime and confirmed
+sender identity, scope/legacy behavior, side-doc inheritance and shared state.
+One Minor advisory remains: ID and sender currently parse the same receipt
+format independently; consolidate on the next receipt-parser change. Recorded
+that prevention rule in lessons. Code is unchanged from queued 3da98e74.
+Full recorded suite b128ef609d54b16545d71033a29d85f7 remains a landing gate;
+its live runner is healthy and retains its queue place.
+
 ### 2026-10-18 — focused verification and disposable live check
 - 2026-10-18: closed — 191 focused cases pass on preferred Neovim 0.12.5 and stock 0.11.7; lint 0 warnings/errors in 803 files. Red/green covers sender instead of recipient, latest resubmit, inherited side-doc slot, typed store/legacy, O(N) membership counts at 16/32, current/all toggle and late probes, real picker query retention, remapping/disable. Hub-authorized disposable real-profile/live-Couch check on staged :0 passed current+legacy 2/all 3/back 2/outside 3; scratch removed, stage cleared and :0 clean exactly at origin/main. Atlas and README updated. Recorded full suite b128ef609d54b16545d71033a29d85f7 is queued on code-identical 3da98e74; hub explicitly allows review overlap, and a recorded pass remains mandatory before landing. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
