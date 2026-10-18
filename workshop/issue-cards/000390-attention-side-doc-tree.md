@@ -1,6 +1,6 @@
 ---
 id: 000390
-status: codecomplete
+status: done
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 75e98e4e6d57a55fb69c21b27b89f65d004c6b2c
         evidence_commit: a2c81125fefbccb9b8b7eb540cba5a51f5f68c44
+        landed_commit: 3747541962f28cea3a4c9ee272769d1355572d73
 ---
 
 # Show side-document trees in the attention finder
