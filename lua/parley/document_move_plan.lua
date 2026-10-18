@@ -171,8 +171,23 @@ local function apply_edits(bytes, edits)
     return table.concat(chunks)
 end
 
-local function rewrite_links(lines, positions, fm_end, target, edits)
-    local in_code, fence, width, covered = {}, nil, nil, {}
+-- Pair quotes literal brackets inside its one-line insertion proposal. Keep
+-- raw offsets/escaping; only authorize the link's existing destination span.
+local function pending_openers(line)
+    local openers = {}
+    for first, body in line:gmatch('()🤖{([^{}]*)}') do
+        if not escaped(line, first) then
+            local left, label, right = body:match([=[^%s*→%s*(\+)%[([%a]+)(\+)%]%([^%s()]+%)%s*$]=])
+            if left == right and (label == 'proposal' or label == 'discussion') then
+                openers[first + #'🤖{' + body:find('[', 1, true) - 1] = true
+            end
+        end
+    end
+    return openers
+end
+
+local function rewrite_links(lines, positions, fm_end, target, edits, pending)
+    local in_code, fence, width, covered, proposals = {}, nil, nil, {}, {}
     for row = fm_end + 1, #lines do
         local line = lines[row]
         local marker_width = structure.is_fence_delim(line, true)
@@ -183,6 +198,7 @@ local function rewrite_links(lines, positions, fm_end, target, edits)
             elseif kind == fence and marker_width >= width then fence, width = nil, nil end
         end
         covered[row] = {}
+        proposals[row] = pending and not in_code[row] and pending_openers(line) or {}
     end
     local blocks = references.markdown_blocks(lines, { first = fm_end + 1, last = #lines },
         { in_code = in_code, transcript = false })
@@ -191,7 +207,8 @@ local function rewrite_links(lines, positions, fm_end, target, edits)
         { in_code = in_code, transcript = false })) do
         local row, first = link.fallback_row, link.fallback_col + 1
         covered[row][first] = true
-        if not masks[link.row][link.col + 1] and not escaped(lines[link.row], link.col + 1) then
+        if not masks[link.row][link.col + 1]
+            and (not escaped(lines[link.row], link.col + 1) or proposals[link.row][link.col + 1]) then
             local candidate = link.target:match('^([^%s]+)') or ''
             if target(candidate) ~= candidate and candidate ~= link.target then
                 return nil, 'ambiguous Markdown parent destination'
@@ -371,7 +388,7 @@ function M.rewrite_side_references(bytes, old, new)
             end
         end
     end
-    local ok, err = rewrite_links(lines, positions, fm_end, target, edits)
+    local ok, err = rewrite_links(lines, positions, fm_end, target, edits, true)
     if not ok then return nil, err end
     return apply_edits(bytes, edits)
 end
