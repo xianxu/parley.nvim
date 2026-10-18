@@ -822,3 +822,23 @@ A seeded fuzz loop in presentation_spec passed with its guard removed, because a
 ## A fix's claim is as wide as its enumeration (#386)
 
 The first ColorScheme fix re-ran only `setup_highlights`, while the atlas said "every group". Five other modules define Parley groups on their own (session_sync, attention, issue_tracker, float_picker, diag_display), and an attached session-sync band lost its color. Rule: before writing "every X" in an atlas or Log, list the X with a grep (`nvim_set_hl(0,`), fix them all through one owner, and add a spec that walks the same grep. Here that is `highlight_groups.keep` plus a guard that fails on an unregistered module. A related trap: an autocmd callback that returns a truthy value deletes the autocmd, so a definer that returns its namespace id can't be passed bare.
+
+## 2026-10-18 (#388 — extract process receipts once)
+
+- When a consumer needs a second field from an external receipt, extend one
+  pure parser to return the receipt's fields and keep compatibility wrappers.
+  Independent full-format patterns for ID and sender can drift when the
+  producer changes its grammar. #388's close review recorded this as a minor,
+  non-blocking cleanup in attention.record / parse_message_id.
+
+- New picker key knobs belong under a `<picker>_mappings` table, matching
+  the architecture guard for resolver-installed `help_only` actions. Include
+  single_source_sweeps_spec in targeted verification when adding one: key
+  behavior/help tests alone do not enforce its installation declaration.
+
+- A punctuation suffix alone does not make a short fuzzy fixture selective:
+  q+ typo-matches an alphanumeric path token starting q (distance 1).
+  Punctuation-only +++ uses exact subsequence matching and cannot typo-prefix
+  any word token. Pin negative and positive scorer results on an adversarial
+  path before asserting picker row counts; #388 reproduced the old failure
+  deterministically without changing the timeout or production matcher.

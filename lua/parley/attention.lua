@@ -64,7 +64,8 @@ function M.record(path, breadcrumb, send_result, options, on_done)
         logger.warning("attention: no message ID in Couch's reply; the submit of " .. tostring(path) .. " is not tracked")
         return on_done(nil, "no message id")
     end
-    apply({ type = "submitted", path = path, id = id, breadcrumb = breadcrumb }, options, on_done)
+    local slot = send_result.stdout:match("^%S+%s+(%S+)%s+%->%s+%S+")
+    apply({ type = "submitted", path = path, id = id, breadcrumb = breadcrumb, slot = slot }, options, on_done)
 end
 
 -- The real seams; `open` and `refresh` take replacements for tests.
@@ -261,7 +262,7 @@ end
 --- Open the finder: sweep, add the side docs the agent wrote, list the
 --- stored entries at once, then probe the waiting ones and repaint as their
 --- results land.
----@param options table|nil # { run, picker, history, limit, store, home } for tests
+---@param options table|nil # { run, picker, history, limit, store, home, own_slot } for tests
 function M.open(options)
     local seam = seams(options)
     local home = (options and options.home) or vim.env.HOME
@@ -270,29 +271,46 @@ function M.open(options)
     -- The file in the current window is already in front of the operator.
     local current = vim.api.nvim_buf_get_name(0)
     current = current ~= "" and vim.fn.fnamemodify(current, ":p") or nil
+    local slot, all_slots, latest
     local function items(state)
-        local shown = vim.tbl_filter(function(entry) return entry.path ~= current end, Model.list(state))
+        local shown = vim.tbl_filter(function(entry) return entry.path ~= current end, Model.list(state, not all_slots and slot or nil))
         return Rows.items(shown, { home = home })
     end
     local function show(state)
+        latest = state
         local handle
-        handle = seam.picker.open({
-            title = "Attention",
-            items = items(state),
-            on_select = function(item) select(item.value, seam, options and options.on_selected) end,
-        })
-        M.refresh(options, function(next_state)
+        local function title()
+            return "Attention — " .. (all_slots and "all slots" or slot)
+        end
+        local function repaint()
             if not handle then return end
             local selected = handle.selected and handle.selected()
-            handle.update(items(next_state), nil, selected and selected.value or nil)
-        end, options and options.on_refreshed)
+            handle.update(items(latest), nil, selected and selected.value or nil)
+            if handle.set_title then handle.set_title(title()) end
+        end
+        local config = (package.loaded.parley or {}).config or require("parley.config")
+        handle = seam.picker.open({
+            title = title(),
+            items = items(state),
+            mappings = slot and { { key = require("parley.keybinding_registry").keys_for("attention_scope", config),
+                fn = function() all_slots = not all_slots; repaint() end } } or {},
+            on_select = function(item) select(item.value, seam, options and options.on_selected) end,
+        })
+        M.refresh(options, function(next_state) latest = next_state; repaint() end, options and options.on_refreshed)
     end
-    apply({ type = "sweep", grace = Store.grace_seconds() }, seam.store, function(swept)
-        local state = swept or Store.load()
-        local events = M.discover(state)
-        if #events == 0 then return show(state) end
-        apply({ type = "batch", events = events }, seam.store, function(found)
-            show(found or Store.load())
+    local couch = require("parley.couch")
+    local own_slot = options and options.own_slot or couch.own_slot
+    own_slot(function(actors, own)
+        slot = couch.slot(own)
+        all_slots = slot == nil
+        if actors and not slot then logger.warning("attention: slot unavailable; showing all slots, reopen to retry") end
+        apply({ type = "sweep", grace = Store.grace_seconds() }, seam.store, function(swept)
+            local state = swept or Store.load()
+            local events = M.discover(state)
+            if #events == 0 then return show(state) end
+            apply({ type = "batch", events = events }, seam.store, function(found)
+                show(found or Store.load())
+            end)
         end)
     end)
 end
