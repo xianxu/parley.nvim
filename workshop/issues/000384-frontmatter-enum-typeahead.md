@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "48ec21bb", done: "797d45fc"}
 ---
 
 # Frontmatter typeahead for enum values (collaboration-mode first, generic registry)
