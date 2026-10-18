@@ -218,6 +218,26 @@ unrelated bytes are preserved; missing backlinks are not invented. Escaping
 symlinks, malformed/ambiguous relevant data and changed backlink preimages
 refuse before overwrite. Side scans stop at 4096 entries / 512 Markdown files.
 
+**Side docs inherit the parent's owner (#378).** Alt+o from a registered parent
+onto a file directly in its `.side/` folder (the mover's rule; no frontmatter
+needed) registers an absent child to the parent's effective owner, never to the
+pane's actor, and sends nothing. The model confirms both halves with Couch
+first: the child is absent, and the parent still holds the registration the
+parent buffer showed. A registered child keeps its owner; if another actor
+registers the child first, the child adopts that registration. Anything
+unconfirmed registers nothing: a parent Couch no longer confirms (stale, gone,
+unavailable) shows `not inherited · reopen from parent to retry, or Alt+Return
+here`, and a child lookup Couch cannot answer shows the usual `Couch
+unavailable` band. A parent with no registration offers nothing to inherit.
+Other Markdown links never inherit. An Alt+Return pressed while inheritance is
+under way is authorized only by it: a registration means one submit to that
+owner, anything else drops the press, so it is never re-aimed at the pane's
+actor. Pressing again on the plain doc is the deliberate fallback. The pure
+model owns the held press: `queue_submit` asks it to hold one, and every
+dispatch settles it, so whichever event ends the holding operation (reply,
+refusal, `changed`, pending, detach) emits exactly one `flush_queued` or
+`drop_queued`. The shell submits only on `flush_queued`.
+
 Journals live in configured `state_dir`, partitioned by Couch namespace and
 stable ID, at most 32 pending journals / 256 KiB each. They record the exact tuple,
 path/content witnesses and completed effects, not document snapshots. Recovery
