@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Captured user intent owns text provenance, never an output grant.
 local S=require('parley.document.structure')
 local M={}

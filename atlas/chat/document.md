@@ -8,6 +8,14 @@ acquire document grants before asynchronous preparation. Provider text, tool
 blocks, completion prompts, and automatic topics use those scoped operations;
 the materialized exchange model supplies request input only.
 
+On arm64 macOS with the old LuaJIT mcode allocator, these module chunks and
+their nested functions opt out of compilation through
+`parley.jit_tuning.protect_chunk`. This avoids compiler allocation/retry storms
+during large synchronous drains while leaving the editor's global JIT state
+and other plugins alone. Repaired runtimes retain normal compilation. The
+[harness map](../infra/test_harness.md#deadlines-load-and-the-neovim-under-test-294)
+explains the shared version rule and independent active-JIT regression.
+
 ## Ownership and data flow
 
 | Module | Responsibility |

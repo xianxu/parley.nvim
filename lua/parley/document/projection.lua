@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Derived semantic summaries live in the sequence, never in a consumer cache.
 local M = {}
 local S = require('parley.document.sequence')

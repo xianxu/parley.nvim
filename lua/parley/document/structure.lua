@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Incremental metadata publication. Neovim text remains outside this module.
 local sequence = require("parley.document.sequence")
 local grammar = require("parley.document.grammar")

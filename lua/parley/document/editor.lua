@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- One buffer callback owner. Authority belongs to the document coordinator.
 local M = {}
 local Editor = {}

@@ -1,3 +1,4 @@
+require("parley.jit_tuning").protect_chunk(debug.getinfo(1, "f").func)
 -- Pure indexed lookahead. Completed component proofs retain earlier evidence
 -- while a bounded selective cursor searches the next component.
 local M = {}
