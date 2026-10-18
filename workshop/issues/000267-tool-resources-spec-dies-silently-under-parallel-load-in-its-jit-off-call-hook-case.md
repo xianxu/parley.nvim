@@ -1,12 +1,12 @@
 ---
 id: 000267
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-18
 updated: 2026-10-17
 estimate_hours:
-card_mirror: '55467888519e1841ad65599e2c7406c26608ea2f' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'be8e1c4abf08002749c5c677077266fd57716d3d' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T22:17:23-07:00
 claimant:
     operator: Xian Xu
@@ -16,6 +16,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "e2389806", done: "1df0bf0a"}
+actual_hours: 1.05
 ---
 
 # tool_resources_spec dies silently under parallel load in its JIT-off call-hook case
