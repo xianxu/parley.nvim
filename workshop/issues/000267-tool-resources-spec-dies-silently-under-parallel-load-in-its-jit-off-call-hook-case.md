@@ -238,3 +238,28 @@ Baseline completed: unprofiled 0.11 fold-batches 64/64 passes at sixteen-way
 load, 37.07–185.65 s. The exact failed-suite deadline event remains unreproduced;
 the compiler/allocator churn and multi-minute no-case-progress interval are
 reproduced. Do not describe those green samples as timeout failures.
+
+
+### 2026-10-17 — preserve the operator VM's global JIT state
+
+TL correction supersedes the preceding production protect() proposal: never
+call global jit.off() from Parley. Production opt-in uses
+jit.off(module_chunk, true), before nested functions execute. The shared helper
+accepts the caller's own chunk explicitly. No package loader/searcher patch,
+global require wrapper, or traversal into foreign plugin functions.
+
+Enumerate the measured pipeline: document/*.lua (including lazily loaded
+semantic/facts modules), line_reader, tool_folds, fold_native, fold_projection,
+fold_diff, fence, and tools/resources. These module chunks opt in at their
+start. The helper shares the version predicate with the harness, whose
+apply() may still disable its test VM globally. Fixed builds and other
+platforms keep their existing compilation behavior.
+
+Prove the scope with a fresh global-JIT-enabled child: the protected chunk's
+nested functions do not compile, an unrelated hot function still compiles,
+and jit.status() remains enabled. Stress D.drain with JIT globally enabled,
+measure mcode aborts/flushes, and compare the full fifth-case corpus. If scoped
+protection fails to remove the abort storm, stop and report to the TL for an
+operator decision; do not broaden to a global production setting. Explicit
+active-JIT storage tests keep their compilation oracle, including any necessary
+fixture-local exemption confined to that independent child.
