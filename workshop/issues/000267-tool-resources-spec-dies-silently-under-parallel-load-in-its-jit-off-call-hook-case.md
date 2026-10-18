@@ -57,6 +57,22 @@ weakening what it bounds (pump work over a full queue of maximum-width chains).
 
 ## Log
 
+### 2026-10-17 — first recorded 0.12 result and known #382 retry
+
+Attempt 688bc1df2febd311acf4fd3bee7fe196 on b8b171a9 completed all phases:
+468 PASS files, one error in agentic_document_owned_move_spec before_each
+line 66, admitted.kind unavailable instead of registered for the case at line
+480. Its 33 other cases passed. This is the existing #382 fake-registry setup
+failure, not a stalled drain. Every #267-family file passed. Suite exit 2,
+2m25s execution; log .git/sdlc/test-stats/failed/688bc1df2febd311acf4fd3bee7fe196.log,
+sha256 3fcd052486401a5180e4d79924890c0340e588d71d37ec97e008ef0f74504156.
+
+Taking tl-worker's one unchanged-code rerun for a tracked unrelated flake.
+The binary refuses --rev b8 because the docs-only PR update moved origin's
+branch tip; that refusal ran no suite. Push current docs and retry the tip,
+whose production code and tests are identical to b8. If that rerun fails on
+another unrelated flake, stop and ask the TL before any further rerun.
+
 ### 2026-10-17 — full stock-0.11 result
 
 PARLEY_TEST_NVIM=/opt/homebrew/bin/nvim make -k test exited 0. Confirmed
