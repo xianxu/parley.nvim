@@ -38,9 +38,9 @@ Record the submitting pane's Couch slot on each attention entry. Default the fin
 
 ## Plan
 
-- [ ] Extend the existing submitted/discovered transitions and typed store with optional slot. Use the accepted receipt's sender, never its recipient; the latest submit owns the existing per-file entry, like its breadcrumb. New side entries inherit their current parent's slot.
-- [ ] Resolve this pane through couch.own_slot on open; filter in the pure model, repaint from the latest store snapshot, and add a registered Ctrl+A toggle with a scope label. Outside Couch shows all; failed in-Couch resolution shows all with an explicit warning.
-- [ ] Red/green model, store, both submit paths and picker toggle/late-refresh tests; atlas update, full suite, close and land. Ask the hub to sequence the real-pane smoke check.
+- [x] Extend the existing submitted/discovered transitions and typed store with optional slot. Use the accepted receipt's sender, never its recipient; the latest submit owns the existing per-file entry, like its breadcrumb. New side entries inherit their current parent's slot.
+- [x] Resolve this pane through couch.own_slot on open; filter in the pure model, repaint from the latest store snapshot, and add a registered Ctrl+A toggle with a scope label. Outside Couch shows all; failed in-Couch resolution shows all with an explicit warning.
+- [x] Red/green model, store, both submit paths and picker toggle/late-refresh tests; atlas update, record the hub-authorized real-profile check, and schedule the mandatory full suite.
 
 Actions: submit, open finder, toggle scope, reopen. Existing waiting/answered/seen states and global seen/saved tracking remain unchanged (ARCH-DRY, ARCH-PURE). Filtering is one O(N) pass per repaint, N <= 256; counted N/2N regression pins it. Slot adds one bounded scalar per existing entry, removed by the existing sweep/eviction.
 
@@ -96,3 +96,14 @@ contract; remapping/disable coverage exposed and corrected the initial string
 fixture. No architectural scope change.
 
 ### 2026-10-18
+
+## Revisions
+
+### 2026-10-18 — separate implementation completion from landing validation
+
+The hub authorized close review to overlap the queued full suite. Correct the
+last Plan checkbox, which accidentally included close and landing themselves:
+it now records implemented tests/docs, completed real-profile evidence and the
+scheduled suite. The full recorded pass, close verdict and actual landing stay
+mandatory workflow gates; a checked implementation row does not claim those
+pending results. No scope or behavior change, and no gate exemption requested.
