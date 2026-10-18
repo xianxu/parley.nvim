@@ -39,7 +39,11 @@ Design: `ops:teams/devinfra/projects/universal-agent-input-interface/design.side
 
 ## Done when
 
-On a document under the default presentation, an agent `apply` round shows each edit highlighted with its reason, a `write` round shows its changed lines highlighted ("changed by the agent"), the highlights follow the operator's edits, and they clear on the next confirmed submit and stay cleared on reopen. Under `presentation: propose` the same request shows per-line accept/reject markers, and a large rewrite shows as a followable `→ [proposal]` link. `direct` draws nothing. The behavior is covered by specs against the Couch fake, plus a live check on a real document.
+- Under the default presentation, an agent `apply` round shows each edit highlighted with its reason, and a `write` round shows its changed lines highlighted ("changed by the agent").
+- The highlights follow the operator's edits, clear on the next confirmed submit, and stay cleared on reopen.
+- Under `presentation: propose` the same request shows per-line accept/reject markers, and a large rewrite shows as a followable `→ [proposal]` link.
+- `direct` draws nothing.
+- Specs against the Couch fake cover the behavior, plus a live check on a real document.
 
 ## Plan
 
