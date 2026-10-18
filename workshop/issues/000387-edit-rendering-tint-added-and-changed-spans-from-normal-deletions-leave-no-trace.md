@@ -1,13 +1,22 @@
 ---
 id: 000387
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '1bd8174f4a8e59867381e6559e4efe1b0d179fae' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '245650f67ee64eb6fb3eade0c59ddf53e7fd0e2a' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-18T11:13:01-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "e47b51e1", done: "f377f425"}
 ---
 
 # Edit rendering: tint added and changed spans from Normal; deletions leave no trace
@@ -41,22 +50,28 @@ A span is classified from its record: empty old text means added, anything else 
 
 ## Plan
 
-- [ ] `highlighter.setup_highlights`:
+- [x] `highlighter.setup_highlights`:
   - a pure `blend(bg, tint, alpha)` in `lua/parley/color.lua` (new, unit-tested);
   - `ParleyEditAdd` = blend(Normal.bg, green, 0.15) and `ParleyEditChange` = blend(Normal.bg, blue, 0.15), unless a user override is set.
-- [ ] `presentation.decorations`:
+- [x] `presentation.decorations`:
   - drop deletion spans;
   - replace the `deletion` flag with `kind = "add" | "change"`;
   - drop the deletion message.
-- [ ] `skill_render`:
+- [x] `skill_render`:
   - `publish_round` takes the group from `kind`;
   - `highlight_span` gains an optional group (default change), and define passes add;
   - `highlight_edits` takes the group from each edit's kind;
   - `attach_diagnostics` skips deletions;
   - snapshot spans carry `hl_group`.
-- [ ] `skill_invoke`: the edit's kind is `delete` (empty new), `add` (empty old) or `change`.
-- [ ] Specs: color blend, the groups (derived, recomputed on colorscheme, overridden), presentation kinds and no deletions, round marks, review edit kinds, deletion diagnostics gone, snapshot group.
-- [ ] Atlas: ui/highlights, modes/review, modes/session_sync, chat/inline_define. README: the presentation paragraph.
+- [x] `skill_invoke`: the edit's kind is `delete` (empty new), `add` (empty old) or `change`.
+- [x] Specs: color blend, the groups (derived, recomputed on colorscheme, overridden), presentation kinds and no deletions, round marks, review edit kinds, deletion diagnostics gone, snapshot group.
+- [x] Atlas: ui/highlights, modes/review, modes/session_sync, chat/inline_define. README: the presentation paragraph.
 
 ## Log
 
+- 2026-10-18: plan posted to the hub, "proceeding unless you object" (quick flow).
+- The empty-old rule has one owner, `presentation.kind(old, new)`, which the round and the review skill's edit records (skill_invoke) both use (ARCH-DRY). It returns delete, add or change.
+- `highlight_span` now has one form, `(buf, lnum0, col, end_lnum0, end_col, kind)`. The four-argument same-line form had no production caller.
+- Snapshot spans carry `kind`, so undo/redo keeps add and change apart.
+- The tints are 15% toward 0x3fb950 for add and 0x58a6ff for change. A `'background'` change reloads the colorscheme, which fires ColorScheme, so the highlight_groups registry re-derives the tints there too. The fallback spec sets `'background'` before clearing Normal for that reason.
+- Without 'termguicolors', a gui bg has no effect, so the spans show no tint. Parley's other bg groups behave the same way.
