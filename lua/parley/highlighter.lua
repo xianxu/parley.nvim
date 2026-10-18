@@ -69,8 +69,8 @@ local function forget_structure(buf)
     subscriptions[buf] = nil
 end
 
--- #312: 🤖 review markers render compactly — comment/view.layout owns what is
--- hidden (conceal) and what stays visible (highlighted anchor); a marker that
+-- #312: 🤖 review markers render in full (#386: nothing is hidden) —
+-- comment/view.layout owns the anchor and turn colors; a marker that
 -- doesn't close on its line paints whole as ParleyReviewBroken. Callers skip
 -- fenced code, where a marker is an example, not a comment.
 local function push_marker_decorations(result, row, line)
@@ -89,9 +89,6 @@ local function push_marker_decorations(result, row, line)
             -- Shown as themselves, over treesitter's shortcut-link conceal.
             for _, b in ipairs(m.brackets) do
                 table.insert(result[row], { conceal = b[2], col_start = b[1], col_end = b[1] + 1 })
-            end
-            for _, h in ipairs(m.hidden) do
-                table.insert(result[row], { conceal = h[3], col_start = h[1], col_end = h[2] })
             end
         end
     end
@@ -674,6 +671,11 @@ M.setup_highlights = function()
         vim.api.nvim_set_hl(0, "ParleyDraftBlock", { link = "CursorLine" })
     end
 
+    -- Edited regions (#386): the review skill's edits, a define footnote's
+    -- term and the agent's round (#383) mark only the changed span, quietly —
+    -- unchanged text keeps its own color. Override via config.highlight.edit_change.
+    vim.api.nvim_set_hl(0, "ParleyEditChange", user_highlights.edit_change or { underline = true })
+
     -- Review markers — 🤖[user comment] in markdown files
     vim.api.nvim_set_hl(0, "ParleyReviewUser", { link = "DiagnosticWarn" })
     -- Review markers — {agent question} in 🤖 marker chains
@@ -686,8 +688,8 @@ M.setup_highlights = function()
     -- the visual cue per the review-convention target. Markdown's native
     -- strikethrough is disabled buffer-wide (see disable_strikethrough)
     -- so this is the only place strikethrough renders.
-    -- #312: the struck text is also the marker's visible anchor (the chain is
-    -- concealed), so it is reversed like a quoted anchor as well as struck.
+    -- #312: the struck text is the marker's anchor, so it is reversed like a
+    -- quoted anchor as well as struck.
     vim.api.nvim_set_hl(0, "ParleyReviewStrike", { strikethrough = true, reverse = true })
     -- #312: a 🤖 marker that doesn't close on its own line (markers are
     -- single-line; a #125 multi-line one, or one an edit just broke). Rendered
@@ -1063,6 +1065,7 @@ M.setup_buf_handler = function()
     -- during Neovim's redraw cycle using ephemeral extmarks, just like
     -- built-in syntax highlighting. Zero flicker, always up-to-date.
     local decor_ns = M.setup_highlights()
+    require("parley.highlight_groups").keep("highlighter", M.setup_highlights)
     decoration_caches = {}
     local _decor_cache = decoration_caches
     vim.api.nvim_create_autocmd("WinClosed", {

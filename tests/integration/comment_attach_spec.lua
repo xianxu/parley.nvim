@@ -1,7 +1,7 @@
--- #312: a real markdown buffer gets compact-marker window options and a cursor
--- that never rests on a hidden marker byte, in normal and insert mode.
+-- #312/#386: a real markdown buffer shows its text literally (conceallevel
+-- 0, links included); a chat buffer keeps 2 for parley's own conceals. The
+-- cursor is never moved off a marker: nothing is hidden for it to avoid.
 local parley = require("parley")
-local view = require("parley.comment.view")
 
 local base = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-comment-attach-" .. os.time()
 
@@ -22,72 +22,42 @@ local function move(buf, col)
     return vim.api.nvim_win_get_cursor(0)[2]
 end
 
-describe("comment.attach (#312)", function()
-    local line = "ab 🤖<X>[c] z"
-    local m = view.layout(line)[1]
+describe("comment.attach (#386)", function()
+    local line = "ab 🤖<X>[c]{d} z"
 
-    it("keeps markers hidden on their line in every mode, nowhere else", function()
+    it("a markdown buffer shows markers and links literally", function()
+        vim.wo.conceallevel = 2 -- LazyVim's global default
         vim.wo.concealcursor = "n" -- the user's own value
-        local buf = open_markdown({ line, "a [link](http://x) line" })
-        assert.equals(2, vim.wo.conceallevel)
-        vim.api.nvim_win_set_cursor(0, { 1, 0 })
-        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-        assert.equals("nvic", vim.wo.concealcursor)
-        vim.api.nvim_win_set_cursor(0, { 2, 0 })
-        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-        assert.equals("n", vim.wo.concealcursor, "other conceals keep the user's setting")
-        vim.api.nvim_win_set_cursor(0, { 1, 0 })
-        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-        vim.api.nvim_exec_autocmds("BufLeave", { buffer = buf })
-        assert.equals("n", vim.wo.concealcursor, "leaving the buffer restores it")
+        open_markdown({ line, "a [link](http://x) line" })
+        assert.equals(0, vim.wo.conceallevel)
+        assert.equals("n", vim.wo.concealcursor, "concealcursor is the user's")
     end)
 
-    it("keeps a later change to the window's own value", function()
-        vim.wo.concealcursor = ""
-        local buf = open_markdown({ line, "plain" })
-        vim.api.nvim_win_set_cursor(0, { 2, 0 })
-        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-        vim.wo.concealcursor = "nc" -- user changes it later
-        vim.api.nvim_win_set_cursor(0, { 1, 0 })
-        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-        assert.equals("nvic", vim.wo.concealcursor)
-        vim.api.nvim_win_set_cursor(0, { 2, 0 })
-        vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-        assert.equals("nc", vim.wo.concealcursor)
-    end)
-
-    it("snaps the normal-mode cursor out of hidden bytes", function()
-        local buf = open_markdown({ line })
-        move(buf, 0)
-        -- moving right onto 🤖 (hidden) lands on X
-        assert.equals(m.visible[1], move(buf, m.hidden[1][1]))
-        -- moving right onto the hidden `>` lands on the visible `[`
-        assert.equals(m.hidden[2][2], move(buf, m.hidden[2][1]))
-        -- moving left onto it lands back on X
-        assert.equals(m.visible[2] - 1, move(buf, m.hidden[2][1]))
-    end)
-
-    it("snaps in insert mode too", function()
-        local buf = open_markdown({ line })
-        move(buf, 0)
-        vim.cmd("startinsert")
-        vim.api.nvim_win_set_cursor(0, { 1, m.hidden[1][1] + 2 })
-        vim.api.nvim_exec_autocmds("CursorMovedI", { buffer = buf })
-        local col = vim.api.nvim_win_get_cursor(0)[2]
-        vim.cmd("stopinsert")
-        assert.is_nil(view.snap(view.layout(line), col, col, #line, line, true),
-            "rests on an allowed insertion point: " .. col)
-    end)
-
-    it("does not snap when the window shows markers literally (conceallevel 0)", function()
-        local buf = open_markdown({ line })
+    it("a chat buffer keeps conceallevel 2 for parley's own conceals", function()
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(buf)
         vim.wo.conceallevel = 0
-        move(buf, 0)
-        assert.equals(m.hidden[1][1] + 1, move(buf, m.hidden[1][1] + 1))
+        require("parley.comment").attach(buf, "chat")
+        assert.equals(2, vim.wo.conceallevel)
+        assert.has_error(function() require("parley.comment").attach(buf, "other") end)
     end)
 
-    it("leaves a marker-free line alone", function()
-        local buf = open_markdown({ "plain text" })
-        assert.equals(4, move(buf, 4))
+    it("never moves the cursor on a marker line", function()
+        local buf = open_markdown({ line })
+        for col = 0, #line - 1 do
+            if vim.str_utf_start(line, col + 1) == 0 then
+                assert.equals(col, move(buf, col))
+            end
+        end
+    end)
+
+    -- Typing inside a turn lands where it was typed (the old insert-mode snap
+    -- moved the cursor under completion plugins such as nvim-cmp).
+    it("insert-mode typing inside a turn lands where typed", function()
+        local buf = open_markdown({ line })
+        local at = line:find("[c]", 1, true) -- 1-based `[` is the 0-based col of `c`
+        vim.api.nvim_win_set_cursor(0, { 1, at })
+        vim.api.nvim_feedkeys(vim.keycode("ixy<Esc>"), "xt", false)
+        assert.equals("ab 🤖<X>[xyc]{d} z", vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1])
     end)
 end)

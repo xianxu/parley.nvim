@@ -80,7 +80,7 @@ function M.record_empty_for(buf, base_content)
     local s = bufstate(buf)
     local h = vim.fn.sha256(base_content or "")
     if s.records[h] == nil then
-        put(s, h, { hl_lines = {}, diags = {} })
+        put(s, h, { hl_spans = {}, diags = {} })
     end
 end
 

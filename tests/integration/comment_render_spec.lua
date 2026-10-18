@@ -1,7 +1,8 @@
--- #312: 🤖 markers render compactly through the decoration provider — the
--- chain is concealed, the anchor highlighted, a marker that doesn't close on
--- its line painted broken — in markdown and chat buffers, never inside fenced
--- code, and at a cost bounded by the viewport.
+-- #312: 🤖 markers render through the decoration provider — in full (#386:
+-- nothing concealed but each bracket re-asserted as itself), the anchor and
+-- turns colored, a marker that doesn't close on its line painted broken — in
+-- markdown and chat buffers, never inside fenced code, and at a cost bounded
+-- by the viewport.
 local highlighter = require("parley.highlighter")
 local Document = require("parley.document")
 local parley = require("parley")
@@ -33,17 +34,17 @@ describe("comment rendering (#312)", function()
         if buf and vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
     end)
 
-    it("conceals a quoted chain and highlights the anchor in markdown", function()
+    it("shows a quoted chain in full and highlights the anchor in markdown", function()
         local line = "x 🤖<A>[c] y"
         local map = render(0, 0, setup({ line }))
         local quoted = find(map[0], function(e) return e.hl_group == "ParleyReviewQuoted" end)
         assert.equals(1, #quoted)
         assert.equals("A", line:sub(quoted[1].col_start + 1, quoted[1].col_end))
-        local hidden = find(map[0], function(e) return e.conceal == "" end)
-        assert.equals(2, #hidden)
-        assert.equals("🤖<", line:sub(hidden[1].col_start + 1, hidden[1].col_end))
-        assert.equals(">", line:sub(hidden[2].col_start + 1, hidden[2].col_end))
-        -- the last human turn stays visible and editable, colored as the human's
+        -- nothing is concealed except as itself (#386)
+        assert.same({}, find(map[0], function(e)
+            return e.conceal ~= nil and e.conceal ~= line:sub(e.col_start + 1, e.col_end)
+        end))
+        -- the human turn is colored as the human's
         local user = find(map[0], function(e) return e.hl_group == "ParleyReviewUser" end)
         assert.equals("[c]", line:sub(user[1].col_start + 1, user[1].col_end))
     end)
@@ -79,9 +80,13 @@ describe("comment rendering (#312)", function()
         end
     end)
 
-    it("conceals markers in chat answers too", function()
-        local map = render(0, 2, setup({ "💬: q", "", "🤖: see 🤖[why]{because}" }, "chat"))
-        assert.equals(2, #find(map[2], function(e) return e.conceal == "…" end))
+    it("shows markers in chat answers in full too", function()
+        local line = "🤖: see 🤖[why]{because}"
+        local map = render(0, 2, setup({ "💬: q", "", line }, "chat"))
+        assert.equals(2, #find(map[2], function(e) return e.hl_group == "ParleyReviewUser" or e.hl_group == "ParleyReviewAgent" end))
+        assert.same({}, find(map[2], function(e)
+            return e.conceal ~= nil and e.conceal ~= line:sub(e.col_start + 1, e.col_end)
+        end))
     end)
 
     -- Done-when evidence: re-render is viewport-bounded, never a whole-buffer
@@ -105,11 +110,11 @@ describe("comment rendering (#312)", function()
             print(("#312 layout calls: first frame %d, after edit %d (buffer 5000 rows)"):format(first, calls))
             assert.is_true(first <= 41 + 20, "first frame: " .. first)
             assert.is_true(calls <= 41 + 20, "after edit: " .. calls)
-            local concealed = false
+            local colored = false
             for _, d in ipairs(drawn) do
-                if d.row == 10 and d.conceal == "…" then concealed = true end
+                if d.row == 10 and d.hl_group == "ParleyReviewAgent" then colored = true end
             end
-            assert.is_true(concealed, "edited row carries its new conceal")
+            assert.is_true(colored, "edited row carries its new turn color")
         end)
         view.layout = layout
         assert.is_true(ok, tostring(err))

@@ -67,8 +67,13 @@ M.subscribe = function(root, subscriber)
     st.subscribers[#st.subscribers + 1] = subscriber
 end
 
-M.ensure_highlight = function()
+local function define_highlight()
     vim.api.nvim_set_hl(0, issue_cards.HIGHLIGHT, { fg = "#FFBF00", default = true })
+end
+
+M.ensure_highlight = function()
+    require("parley.highlight_groups").keep("issue_tracker", define_highlight)
+    define_highlight()
 end
 
 -- Card directory, tracker branch and card-owned field names, all from the

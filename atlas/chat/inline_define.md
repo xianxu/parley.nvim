@@ -38,7 +38,7 @@ one-keystroke lookup.
    and inserts/updates a final managed footnote footer via one buffer rewrite
    (`define.apply_definition_footnote`) — a single undo entry that anchors
    everything; **(b)** highlights the selected term/reference span with
-   `DiffChange` (`skill_render.highlight_span`); **(c)** refreshes persisted
+   `ParleyEditChange` (`skill_render.highlight_span`); **(c)** refreshes persisted
    footnote diagnostics (`skill_render.refresh_footnote_diagnostics`), which
    parses the managed footer and sets INFO `vim.diagnostic` entries on matching
    inline `term[^id]` spans with canonical, unwrapped messages from
@@ -60,8 +60,8 @@ reuses: `render_definition` calls `projection.record_empty_for(buf, original)`
 highlight + diagnostic), `ensure_watch(buf)`. Undoing the footnote edit lands on
 the pre-footnote content-hash → the empty snapshot renders → both decorations clear;
 `<C-r>` re-renders. `skill_render.snapshot`/`apply_snapshot` preserve span
-highlights (`hl_spans`) and diagnostic `col`/`end_col`, while still accepting
-legacy whole-line `hl_lines`. `set_applying` guards the edit so a prior define's
+highlights (`hl_spans`) and diagnostic `col`/`end_col` (#386 dropped the
+whole-line `hl_lines`; records live in memory, so none predate it). `set_applying` guards the edit so a prior define's
 watcher doesn't mistake it for a user edit.
 
 ## Pure core vs IO shell (ARCH-PURE)
@@ -149,7 +149,7 @@ tool-call args (`result.calls[1].input`), read in `on_done`.
 ## Notes
 
 - The fresh define highlight spans the selected text plus immediate `[^id]`
-  reference; rehydrated diagnostics do not recreate the DiffChange highlight.
+  reference; rehydrated diagnostics do not recreate the ParleyEditChange highlight.
 - `skill_render.refresh_footnote_diagnostics` owns only diagnostics tagged
   `parley-footnote` and preserves other `parley_skill` diagnostics, so review
   diagnostics are not cleared by markdown footnote refresh.

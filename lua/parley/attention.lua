@@ -265,6 +265,7 @@ end
 function M.open(options)
     local seam = seams(options)
     local home = (options and options.home) or vim.env.HOME
+    require("parley.highlight_groups").keep("attention", define_highlights)
     define_highlights()
     -- The file in the current window is already in front of the operator.
     local current = vim.api.nvim_buf_get_name(0)

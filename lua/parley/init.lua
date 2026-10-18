@@ -1385,9 +1385,6 @@ M.setup = function(opts)
 		fg = st.fg or st.foreground,
 		bold = false,
 	})
-	vim.api.nvim_set_hl(0, "ParleyPickerApproximateMatch", {
-		link = "IncSearch",
-	})
 
 	-- Prewarm finder caches in the background (deferred, non-blocking)
 	chat_finder_mod.prewarm()
@@ -1956,7 +1953,7 @@ end
 -- Inline term definition (#161 + R1, #166). render_definition is the on_done IO
 -- seam. On a successful lookup it stores the definition as a durable markdown
 -- footnote (ONE undo entry — the anchor), highlights the selected term/reference
--- span (DiffChange), and shows the definition as an ephemeral INFO
+-- span (ParleyEditChange), and shows the definition as an ephemeral INFO
 -- diagnostic. Undo/redo coherence reuses review's projection watcher: undoing
 -- the footnote edit lands on the pre-edit content-hash → the empty snapshot
 -- renders → both decorations clear.
@@ -2939,11 +2936,10 @@ M.prep_chat = function(buf, file_name)
 		M.helpers.set_keymap
 	)
 
-	-- conceallevel=2 for inline branch links, model header params and 🤖
-	-- markers. #312: concealcursor is the window's own ("" here) except on a
-	-- line carrying a marker, where it is "nvic" so the chain stays hidden.
+	-- conceallevel=2 for inline branch links and model header params (#386:
+	-- 🤖 markers are no longer concealed).
 	vim.opt_local.concealcursor = ""
-	require("parley.comment").attach(buf)
+	require("parley.comment").attach(buf, "chat")
 
 	-- conceal parameters in model header so it's not distracting
 	if M.config.chat_conceal_model_params then
@@ -3180,8 +3176,8 @@ M.setup_markdown_keymaps = function(buf)
 		M.helpers.set_keymap
 	)
 
-	-- #312: compact 🤖 markers (conceal + cursor snap), same as chat buffers.
-	require("parley.comment").attach(buf)
+	-- #312: 🤖 marker threads on <CR>; #386: conceallevel 0, text shows literally.
+	require("parley.comment").attach(buf, "markdown")
 	-- #384: typeahead for frontmatter enum values (collaboration-mode, …).
 	require("parley.frontmatter_enum").attach(buf)
 	session_sync.attach(buf)

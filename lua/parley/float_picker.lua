@@ -31,6 +31,12 @@
 
 local M = {}
 
+local function define_tag_highlights()
+    vim.api.nvim_set_hl(0, "ParleyTagOn",     { bold = true, default = true })
+    vim.api.nvim_set_hl(0, "ParleyTagOff",    { link = "Comment", default = true })
+    vim.api.nvim_set_hl(0, "ParleyTagAction", { reverse = true, default = true })
+end
+
 -- In-memory map of recall_key → last confirmed item.value, used to restore
 -- cursor position across reopens of the same picker within a session.
 M._last_selection = {}
@@ -808,9 +814,8 @@ function M.open(opts)
                 vim.wo[tag_bar_win].number = false
                 vim.wo[tag_bar_win].relativenumber = false
                 vim.wo[tag_bar_win].signcolumn = "no"
-                vim.api.nvim_set_hl(0, "ParleyTagOn",     { bold = true, default = true })
-                vim.api.nvim_set_hl(0, "ParleyTagOff",    { link = "Comment", default = true })
-                vim.api.nvim_set_hl(0, "ParleyTagAction", { reverse = true, default = true })
+                require("parley.highlight_groups").keep("float_picker", define_tag_highlights)
+                define_tag_highlights()
             else
                 vim.api.nvim_win_set_config(tag_bar_win, {
                     relative = "editor",

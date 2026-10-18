@@ -12,7 +12,7 @@ processed, `{}` ones skipped, and pending markers surface via the **on-save**
 quickfix (`BufWritePost`), not at submission. The resubmit loop re-runs only
 while a *ready* marker remains and the ready count shrank, so a whole-doc mode
 round is effectively one-shot (inserting `{}` findings is not "stuck"). Applied
-edits are oriented by `DiffChange` highlights + INFO gutter diagnostics that
+edits are oriented by `ParleyEditChange` span highlights (#386: the changed text only, never the whole line) + INFO gutter diagnostics that
 **ride** subsequent edits until the next round or an explicit dismiss; pure
 deletions show only the gutter "why" (no highlight).
 
@@ -43,36 +43,36 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 - `<text>` disambiguates "which text the marker refers to" — use it whenever the surrounding-text rule would be ambiguous (added in #123)
 - (Legacy, #125 — superseded for writers by single-line markers, #312) `<>`/`[]`/`{}` sections may span **multiple lines**, each bounded to ~50 lines (per-section budget) so a stray opener can't swallow the document; `~D~` strike stays single-line (added in #125). `parse_markers` parses over the whole buffer joined (offset→line/col map) rather than line-by-line; `find_matching_bracket` takes an optional `{budget, is_excluded}` so the shared `_parse_marker_sections` (highlighter, drill_in) keeps its single-text behavior. Unterminated openers fall back to silent non-recognition.
 
-## Compact rendering (#312)
+## Marker rendering (#312, #386)
 
-Markers render compactly in every parley markdown and chat buffer; the file's
-bytes never change, only the view. Markers are **single-line** in the view and
-in everything parley writes (a newline inside a turn is `<br>`, see
-`comment/codec.lua`); the parser still tolerates #125 multi-line markers so old
-documents keep resolving.
+Markers render in full in every parley markdown and chat buffer (#386; #312's
+compact view hid each turn behind `…`, which left near-empty lines because
+Neovim can't shrink a line whose text it hides). The file's bytes never change,
+only the colors. Markers are **single-line** in everything parley writes (a
+newline inside a turn is `<br>`, see `comment/codec.lua`); the parser still
+tolerates #125 multi-line markers so old documents keep resolving.
 
-| Raw | Shown as |
+| Raw | Colored |
 |---|---|
-| `🤖[H]{R}[last]` | `🤖[…]{…}[last]` — every turn collapses but a last human one, which stays editable inline |
-| `🤖[H]{R}` | `🤖[…]{…}` |
-| `🤖<X>[H]{R}[more]` | `X[…]{…}[more]`, `X` highlighted `ParleyReviewQuoted` |
-| `🤖~D~{N}` | `D{…}`, `D` struck (`ParleyReviewStrike`) |
-| doesn't close on its line | raw, `ParleyReviewBroken` |
+| `🤖[H]{R}` | each turn by speaker (`ParleyReviewUser` / `ParleyReviewAgent`) |
+| `🤖<X>[H]` | `X` with `ParleyReviewQuoted` |
+| `🤖~D~{N}` | `D` struck (`ParleyReviewStrike`) |
+| doesn't close on its line | `ParleyReviewBroken` |
 
-Turn brackets are colored by speaker (`ParleyReviewUser` / `ParleyReviewAgent`).
-
-- **Geometry**: `lua/parley/comment/view.lua` (pure) — `layout(line)` says what is
-  hidden (with which conceal char) and what is visible; the highlighter's
-  decoration provider turns it into ephemeral `conceal` extmarks (viewport-bounded,
-  fenced code skipped), the cursor snap and the `<CR>` lookup read the same layout.
-- **Edit protection**: `lua/parley/comment/init.lua` `attach` sets
-  `conceallevel=2`, switches `concealcursor` to `nvic` only while the cursor is on
-  a marker line (the window's own value elsewhere, so other conceals behave as
-  before), and snaps the cursor so it never rests on hidden marker text — in
-  normal mode no hidden byte; in insert mode only the points before the 🤖, after
-  the marker, inside the visible anchor, or inside the editable last human turn. An edit that still breaks a marker from a
-  visible edge renders it raw + broken; `u` restores (fail visible, no revert
-  guard).
+- **Geometry**: `lua/parley/comment/view.lua` (pure) — `layout(line)` gives each
+  marker's extent, anchor and turns; the highlighter's decoration provider turns
+  it into ephemeral extmarks (viewport-bounded, fenced code skipped), and the
+  `<CR>` lookup reads the same layout. Each turn bracket is re-asserted as itself,
+  so treesitter's shortcut-link conceal (`[text]`) never eats it where
+  conceallevel is above 0.
+- **conceallevel**: `lua/parley/comment/init.lua` `attach(buf, kind)` sets it per
+  buffer kind. A markdown buffer gets 0, so it shows literally, links included,
+  overriding a global 2 such as LazyVim's. A chat buffer gets 2, for parley's own
+  inline branch links and model-header params. Treesitter is stopped in chats
+  unless `chat_treesitter = true` (#294), so markdown links there show in full
+  by default. With it on they conceal under the chat's 2. Nothing moves the
+  cursor: with nothing hidden, #312's cursor snap and `concealcursor` forcing are
+  gone.
 
 - **Thread float**: `lua/parley/comment/float.lua` opens the chain like a
   parley chat (`comment/thread.lua`, pure): `💬: ` human turns, `🤖: ` robot
@@ -172,7 +172,7 @@ Review is implemented as a **skill** in the unified skill system (see the [skill
 - **Stateless**: Each submit sends full document; markers carry conversation history
 - **Tool**: `propose_edits` tool with `{old_string, new_string, explain}` triples (forced via `tool_choice`)
 - **Edits**: Applied to file on disk via the `propose_edits` builtin, buffer reloaded via `:edit!`
-- **Feedback**: Highlights on edits (DiffChange), diagnostics from explain fields (INFO), quickfix for pending agent questions
+- **Feedback**: Highlights on edited spans (`ParleyEditChange`), diagnostics from explain fields (INFO), quickfix for pending agent questions
 - **Provider**: Requires a client tool wire: Anthropic or an OpenAI-compatible provider, including CLIProxyAPI routes. Direct Google AI has no wire. Agent choice follows the [skill agent cascade](../skills/skill-system.md).
 
 ## Review Modes
