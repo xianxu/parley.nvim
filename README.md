@@ -139,6 +139,7 @@ files it had when you submitted it. A seen entry leaves the list `attention.seen
 In Couch, the list defaults to submits from this pane’s slot. **Ctrl+A** toggles current/all slots
 (`attention_finder_mappings.toggle_scope`); the title shows the scope. Legacy entries without a slot appear everywhere,
 and outside Couch the finder shows all slots. A file belongs to its latest submitting slot; new side docs inherit their parent’s slot.
+Side docs appear beneath their parents, indented two spaces per level. Searching a child keeps its parent chain visible; children whose parents are absent appear at the top level.
 
 ## Learn by chatting
 

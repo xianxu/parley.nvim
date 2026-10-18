@@ -292,6 +292,8 @@ function M.open(options)
         handle = seam.picker.open({
             title = title(),
             items = items(state),
+            filter_items = Rows.filter,
+            anchor = "top", -- forest preorder must put parents physically above children
             mappings = slot and { { key = require("parley.keybinding_registry").keys_for("attention_scope", config),
                 fn = function() all_slots = not all_slots; repaint() end } } or {},
             on_select = function(item) select(item.value, seam, options and options.on_selected) end,

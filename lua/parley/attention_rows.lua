@@ -1,5 +1,5 @@
 -- parley.attention_rows — the attention finder's rows (#354). Pure: model
--- entries, in the order given, become float_picker items; each row is
+-- scoped/sorted entries become preorder forest items; each row is
 -- highlighted whole in its state's group.
 
 local Model = require("parley.attention_model")
@@ -20,6 +20,48 @@ local function basename(path)
     return path:match("([^/]*)$")
 end
 
+-- One ordered forest from already scoped/sorted entries. Cyclic components
+-- have no root: the final pass promotes their first entry and visits each once.
+local function tree(entries)
+    local by_path, children, roots, result, seen = {}, {}, {}, {}, {}
+    for _, entry in ipairs(entries) do by_path[entry.path] = entry end
+    for _, entry in ipairs(entries) do
+        local parent = entry.kind == "side" and by_path[entry.parent]
+        if parent then
+            children[parent.path] = children[parent.path] or {}
+            table.insert(children[parent.path], entry)
+        else roots[#roots + 1] = entry end
+    end
+    local function visit(entry, depth, parent)
+        if seen[entry.path] then return end
+        seen[entry.path] = true
+        result[#result + 1] = { entry = entry, depth = depth, parent = parent }
+        for _, child in ipairs(children[entry.path] or {}) do visit(child, depth + 1, entry.path) end
+    end
+    for _, entry in ipairs(roots) do visit(entry, 0) end
+    for _, entry in ipairs(entries) do visit(entry, 0) end
+    return result
+end
+
+--- Matching rows plus ancestor context, in the original forest order.
+--- `score(query, text)` is the picker's existing scorer; no duplicate grammar.
+function M.filter(items, query, score)
+    if query == "" then return items end
+    local by_value, keep, result = {}, {}, {}
+    for _, item in ipairs(items) do by_value[item.value] = item end
+    for _, item in ipairs(items) do
+        if score(query, item.search_text or item.display) then
+            local cursor = item
+            while cursor and not keep[cursor.value] do
+                keep[cursor.value] = true
+                cursor = by_value[cursor.parent_value]
+            end
+        end
+    end
+    for _, item in ipairs(items) do if keep[item.value] then result[#result + 1] = item end end
+    return result
+end
+
 --- `entries` as float_picker items: `<state> <marker> <name>  <dir>  <HH:MM>`.
 --- The marker is `?` for an entry whose last probe failed, `↳` for a side doc
 --- the agent wrote (searchable by its parent's name). options: { home, clock }
@@ -29,7 +71,8 @@ function M.items(entries, options)
     local home = options.home
     local clock = options.clock or function(t) return os.date("%H:%M", t) end
     local items = {}
-    for _, entry in ipairs(entries) do
+    for _, node in ipairs(tree(entries)) do
+        local entry = node.entry
         local state = Model.state_of(entry)
         local dir = dirname(entry.path)
         local shown = dir
@@ -37,11 +80,12 @@ function M.items(entries, options)
             shown = "~" .. dir:sub(#home + 1)
         end
         local marker = entry.unknown and "?" or (entry.kind == "side" and "↳" or " ")
-        local display = ("%-8s %s %s  %s  %s"):format(state, marker,
+        local display = string.rep("  ", node.depth) .. ("%-8s %s %s  %s  %s"):format(state, marker,
             basename(entry.path), shown, clock(entry.submitted_at))
         items[#items + 1] = {
             display = display,
             value = entry.path,
+            parent_value = node.parent,
             search_text = basename(entry.path) .. " " .. dir .. (entry.parent and (" " .. basename(entry.parent)) or ""),
             highlights = { { 0, #display, M.GROUPS[state] } },
         }

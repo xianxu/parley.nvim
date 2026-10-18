@@ -1267,6 +1267,7 @@ atlas:
       - lua/parley/attention_store.lua
       - lua/parley/attention.lua
       - lua/parley/attention_rows.lua
+      - lua/parley/float_picker.lua
       - lua/parley/session_sync.lua
       - lua/parley/keybinding_registry.lua
       - lua/parley/config.lua
@@ -1274,6 +1275,8 @@ atlas:
       - tests/unit/attention_model_spec.lua
       - tests/unit/attention_store_spec.lua
       - tests/unit/attention_rows_spec.lua
+      - tests/unit/float_picker_spec.lua
+      - tests/unit/arch_helper_spec.lua
       - tests/integration/attention_record_spec.lua
       - tests/integration/attention_finder_spec.lua
       - tests/unit/keybindings_spec.lua

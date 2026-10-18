@@ -42,10 +42,27 @@ Group side docs beneath their listed parent, recursively, with two spaces indent
 - [ ] Add one optional pure filter_items hook to float_picker, default behavior unchanged. Attention supplies its pure filter: score every item through the existing scorer, retain matching rows plus ancestors once, return forest order. Query, selection and live-update paths reuse the hook (ARCH-DRY / ARCH-PURE).
 - [ ] Red/green nested/orphan/cycle/order tests and counted N/2N traversal/filter tests; real-picker child-search, scope-toggle and late-update regressions; existing architecture guards, dual-runtime focused tests, atlas/README and recorded suite before landing.
 
+Indentation emission also costs O(B) output bytes (B <= 65,280 spaces for a maximal 256-node chain); the counted bound concerns node/edge traversal, not the required output.
+
 No durable state or new actions: existing open/select/type/Ctrl+A continue. A missing/filtered parent displays as a root; malformed cycles display one deterministic root per component; both require no repair and lose nothing. Picker snapshots die on close; store, probes and seen tracking are unchanged. Each layout visits O(N) entries/edges; each search scores N rows once and walks at most N newly retained ancestor edges (plus existing fuzzy-score cost), bounded by the existing 256-entry store. Count parent-field accesses / scorer calls at N and 2N. A disposable real-profile check will be requested from the hub once green.
 
 - [ ]
 
 ## Log
+
+### 2026-10-18 — implementation and red/green
+
+Added tests failed the original flat implementation for grouping, nesting,
+cycles, ancestor search and counted traversal. Pure rows now build a forest
+from already scoped entries and retain matched ancestors in tree order.
+The shared picker has one optional pure filter_items callback, using its
+existing scorer; no attention-specific logic entered the picker. The actual
+picker integration exposed its default bottom anchor reversing visual order:
+attention now uses the existing top anchor so parents appear above children.
+Existing side-doc assertions were updated to parent-first order while retaining
+all seen/retirement behavior checks. Added real child selection across scope
+and late repaint, plus scoped orphan promotion/reattachment. No store migration,
+new action, watcher or probe lifecycle. Prior #388 punctuation-only search
+fixture is retained to avoid random temp-path typo matches.
 
 ### 2026-10-18
