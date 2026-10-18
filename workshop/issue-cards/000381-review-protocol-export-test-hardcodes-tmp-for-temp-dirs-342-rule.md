@@ -13,14 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
-actual_hours: 0.19
+actual_hours: 0.25
 tracker:
     version: 1
     completion:
-        token: close-a1ee5dbab4fb
+        token: close-70a7dbb73b5d
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 74f9a4582ba9608a5bcd2648f6879951fb29b089
-        evidence_commit: e747024fb881401e38eb94942cf194583d8860eb
+        reviewed_head: 105a962570783575e9bdd540b6e6cedb37547f06
+        evidence_commit: c4ee804dd7130c527406edd7300dbc03702e5151
 ---
 
 # review_protocol_export_test hardcodes /tmp for temp dirs (#342 rule)
