@@ -280,7 +280,9 @@ Code: `agentic_document.lua` owns admission, cached knowledge and native move
 hooks and the public Parley movers. Owned file moves journal intent before an
 atomic no-replace rename; native saveas waits for its successful write witness.
 `document_session.lua` owns the pure lifecycle; `document_registry.lua`
-uses the shared `couch.run` transport. `document_move_plan.lua` projects pure
+uses the shared `couch.run` transport and owns the agentic deadlines
+(`config_ms`). A request that names no deadline gets `agentic_submit_timeout_ms`,
+never a hidden literal (#382). `document_move_plan.lua` projects pure
 side/backlink effects and the [S3 projection contract](#s3-move-projection-and-execution-373).
 `document_move.lua` dispatches and recovers the journal through the pure
 `document_move_state.lua` reducer; `document_lease.lua` owns kernel leases, and
