@@ -7,7 +7,7 @@ created: 2026-10-17
 updated: 2026-10-17
 estimate_hours: 5.53
 collaboration-mode: collaboration
-card_mirror: 'af0351fa31e36e37e02743b2f03f607db2616a18' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '74fd907e2324eb75ea99ea05a296ef4f3ad34aad' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T06:40:08-07:00
 claimant:
     operator: Xian Xu
