@@ -1,6 +1,6 @@
 ---
 id: 000380
-status: working
+status: codecomplete
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.15
+tracker:
+    version: 1
+    completion:
+        token: close-af41b5c4c8f4
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: e4fd6fb1734bcc2be5546291877c8870dbdf16a6
+        evidence_commit: 54cd27156133093f271b47b497f2ca89bd14cac6
 ---
 
 # document_session: one tagged inheritance stage instead of three flags (#378 review, ARCH-ORDER)
