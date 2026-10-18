@@ -52,7 +52,7 @@ Reproduce first: run the pair in parallel under load, with the registry's error 
 - [x] Reproduce, capturing the error text. The setup assertions in both specs now include `code` and `error`.
 - [x] Fix at the cause. `document_registry.request` no longer falls back to a 2.5 s literal; a caller that names no deadline gets `agentic_submit_timeout_ms`. `config_ms` moves into `document_registry` as the one owner of agentic deadlines (ARCH-DRY), `agentic_document` uses it, and its two calls that passed that same value explicitly drop it.
 - [x] Regression: a `document_registry_spec` case. A lookup with no deadline against a 3 s-slow fake answers; a configured 1 s deadline fails it with "deadline exceeded". With the 2.5 s literal put back, the case fails.
-- [ ] Re-run the loaded reproduction, then the full suite.
+- [x] Re-run the loaded reproduction, then the full suite.
 
 ## Log
 
@@ -64,3 +64,4 @@ Reproduce first: run the pair in parallel under load, with the registry's error 
   - `document_move.lua` contains no `vim.wait` or other synchronous wait. Its rename completes through the `metadata_done` / `done` callbacks, on the asynchronous #359 move path, driven by `agentic_document`'s `advance(..., callback)`.
   - The only synchronous registry wait in the product is `agentic_document.bounded_request`, the BufFilePost check before a `:saveas!` overwrite. It already passes its own explicit, shorter deadline (`agentic_move_timeout_ms + 1000`, waited for `agentic_move_timeout_ms`), so this change does not touch it.
   - `git grep vim.wait -- lua` finds only that call plus two unrelated ones, in cliproxy and starter.
+- After the fix, the same 6-round loaded reproduction gave 0 deadline hits in either spec (side_inherit 9/9 and owned_move 43/43 in every round), against 3 of 6 rounds before. document_registry_spec passes 8/8.
