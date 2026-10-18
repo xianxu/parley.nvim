@@ -800,3 +800,4 @@ point as well as internal helpers before calling the family complete.
   copies. `git grep -E` has no `\b`, so a pattern that relies on it quietly
   matches nothing; use `git grep -P`. Tutorial prose is now checked against the
   registry in `keybinding_agreement_spec`.
+- State that belongs to one in-flight operation lives on that operation's record, not in a parallel field cleared "when its event arrives" (#380 REWORK). The parallel field drifted from the operation through `pending` and `retry`, and a non-terminal matching event cleared it under a live operation. On the record, it is copied, carried and dropped with the operation, with nothing to keep in sync.
