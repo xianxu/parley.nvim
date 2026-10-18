@@ -1235,6 +1235,7 @@ atlas:
     code:
       - lua/parley/render.lua
       - lua/parley/highlighter.lua
+      - lua/parley/highlight_groups.lua
       - lua/parley/timezone_diagnostics.lua
       - lua/parley/init.lua
       - lua/parley/copy.lua

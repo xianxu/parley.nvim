@@ -1385,9 +1385,6 @@ M.setup = function(opts)
 		fg = st.fg or st.foreground,
 		bold = false,
 	})
-	vim.api.nvim_set_hl(0, "ParleyPickerApproximateMatch", {
-		link = "IncSearch",
-	})
 
 	-- Prewarm finder caches in the background (deferred, non-blocking)
 	chat_finder_mod.prewarm()

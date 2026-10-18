@@ -564,6 +564,7 @@ M.attach = function(buf, identity, observed)
     local s = { stale = false, identity = vim.deepcopy(identity), epoch = 0,
         previous_autoread = vim.bo[buf].autoread }
     state[buf] = s
+	require("parley.highlight_groups").keep("session_sync", define_highlights)
 	define_highlights()
 	-- With autoread an unmodified buffer reloads on :checktime without
 	-- FileChangedShell: an agent write under the lock right after an

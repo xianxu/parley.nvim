@@ -47,6 +47,11 @@ local function close_float()
     float_owner_buf = nil
 end
 
+local function define_highlights()
+    vim.api.nvim_set_hl(0, HEADER_HL, { link = "DiagnosticInfo" })
+    vim.api.nvim_set_hl(0, MESSAGE_HL, { link = "DiagnosticFloatingInfo" })
+end
+
 local function ensure_display()
     if not display_ns_id then
         display_ns_id = vim.api.nvim_create_namespace(DISPLAY_NS)
@@ -54,8 +59,8 @@ local function ensure_display()
     if not display_augroup then
         display_augroup = vim.api.nvim_create_augroup(DISPLAY_AUGROUP, { clear = true })
     end
-    vim.api.nvim_set_hl(0, HEADER_HL, { link = "DiagnosticInfo" })
-    vim.api.nvim_set_hl(0, MESSAGE_HL, { link = "DiagnosticFloatingInfo" })
+    require("parley.highlight_groups").keep("diag_display", define_highlights)
+    define_highlights()
 end
 
 local function clear(buf)

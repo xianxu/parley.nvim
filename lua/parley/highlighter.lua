@@ -1065,9 +1065,7 @@ M.setup_buf_handler = function()
     -- during Neovim's redraw cycle using ephemeral extmarks, just like
     -- built-in syntax highlighting. Zero flicker, always up-to-date.
     local decor_ns = M.setup_highlights()
-    -- :colorscheme runs :hi clear, which drops every Parley group (#386). The
-    -- wrapper discards setup_highlights' return: a truthy one deletes the autocmd.
-    vim.api.nvim_create_autocmd("ColorScheme", { group = gid, callback = function() M.setup_highlights() end })
+    require("parley.highlight_groups").keep("highlighter", M.setup_highlights)
     decoration_caches = {}
     local _decor_cache = decoration_caches
     vim.api.nvim_create_autocmd("WinClosed", {
