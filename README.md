@@ -109,7 +109,7 @@ accept/reject markers instead, and a rewrite too large for them arrives as a
 drawn. A round past 200 changes highlights the first 200 and says so. This
 needs a Couch with the `round` verb (pair#661). An older one shows nothing.
 Changed text is underlined, and nothing else about it changes color. To restyle
-it, set `highlight.edit_change`, or the `ParleyEditChange` group. In Markdown
+it, set `highlight.edit_change`. In Markdown
 documents, 🤖 markers and links show in full. In chats, Parley still hides its
 own branch links and model params. Markdown links there show in full too,
 unless you set `chat_treesitter = true`, which conceals them.

@@ -818,3 +818,7 @@ point as well as internal helpers before calling the family complete.
 ## A random sweep must prove it reaches its adversarial class (#383)
 
 A seeded fuzz loop in presentation_spec passed with its guard removed, because a hand-rolled LCG (`seed * 1103515245 + 12345 mod 2^31`, then `seed % n`) correlates its low bits and never produced the malformed inputs. Rule: a randomized spec counts how often it hits the class it exists for and asserts a floor, and a mutation that removes the guard must turn it red before the spec counts as evidence. Use `math.random` with a fixed `math.randomseed`, not a hand-rolled generator.
+
+## A fix's claim is as wide as its enumeration (#386)
+
+The first ColorScheme fix re-ran only `setup_highlights`, while the atlas said "every group". Five other modules define Parley groups on their own (session_sync, attention, issue_tracker, float_picker, diag_display), and an attached session-sync band lost its color. Rule: before writing "every X" in an atlas or Log, list the X with a grep (`nvim_set_hl(0,`), fix them all through one owner, and add a spec that walks the same grep. Here that is `highlight_groups.keep` plus a guard that fails on an unregistered module. A related trap: an autocmd callback that returns a truthy value deletes the autocmd, so a definer that returns its namespace id can't be passed bare.
