@@ -55,6 +55,29 @@ Actions: submit, open finder, toggle scope, reopen. Existing waiting/answered/se
 
 ## Log
 
+### 2026-10-18 — focused verification and disposable live check
+
+All 191 focused cases passed on both preferred 0.12.5 and stock 0.11.7;
+make lint reports 0 warnings / 0 errors across 803 files. Full recorded suite
+b128ef609d54b16545d71033a29d85f7 is queued on pushed code head
+3da98e74b8ef7c41dfbbd7b1847c8e73f128da6b; preserve its queue place.
+PR #309: https://github.com/xianxu/parley.nvim/pull/309.
+
+Hub-authorized stage of that head on parley.nvim:0, then a new headless
+operator-profile Neovim 0.11.7 (/Users/xianxu/.config/nvim/init.lua), loading
+attention.lua from /Users/xianxu/workspace/parley.nvim. A pre-init config set
+state_dir/log_file to disposable scratch; no live attention store or real
+document was used. Real couch.own_slot resolved parley.nvim:1. Fixture rows:
+current+legacy 2, actual Ctrl+A all 3, back 2, outside Couch 3. All passed.
+Initial check assertions compared /var with its canonical /private spelling;
+correcting the scratch assertion (no production change) admitted the check.
+No submits or registry writes were made. Removed all scratch fixture files
+and their temporary store; evidence /tmp/parley-388-live-result.json and
+/tmp/parley-388-live.log. Cleared the stage, then fast-forwarded :0's main
+(the clear restored its prior main) to origin/main as the hub requested;
+exact Git equality is recorded in the report. Full-suite result is pending;
+close review may overlap the queue, but landing requires a recorded pass.
+
 ### 2026-10-18 — implementation and red/green evidence
 
 The original implementation failed the new current-slot picker, scope-filter,
