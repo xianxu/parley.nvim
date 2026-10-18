@@ -1,0 +1,20 @@
+---
+id: 000380
+status: open
+created: 2026-10-17
+updated: 2026-10-17
+estimate_hours:
+github_issue:
+---
+
+# document_session: one tagged inheritance stage instead of three flags (#378 review, ARCH-ORDER)
+
+## Problem
+
+The #378 close review (round 4, a Minor under ARCH-ORDER) noted that `document_session` tracks a side doc's inheritance with three flags and an operation kind:
+- `state.inherit`, the hint stashed while the attach lookup is out;
+- `args.inherit`, on the inherit lookup;
+- `args.inherited`, on the inherited register and its re-lookup;
+- the `confirm_parent` operation kind.
+
+The legal combinations are not written down anywhere. The settle step and the `admits`/`inheriting` helpers read these flags back to decide whether a held Alt+Return flushes or drops. In the same review, a lookup's or confirm_parent's `not live` branch was noted as practically unreachable, and no fixture enters it.
