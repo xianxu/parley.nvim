@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "e47b51e1", done: "f377f425"}
+flow: {kind: full, provenance: inferred}
 actual_hours: 0.15
 ---
 
@@ -71,6 +71,10 @@ A span is classified from its record: empty old text means added, anything else 
 ## Log
 
 
+
+
+- 2026-10-18: closed — Tints derived from Normal bg (15% toward 0x3fb950 add / 0x58a6ff change), recomputed on ColorScheme via highlight_groups.keep, overridable via highlight.edit_add/edit_change; deletions yield no mark or diagnostic; kind from presentation.kind is the single rule. Specs cover blend, kinds, tint derivation/re-derivation/fallback/override. Full suite green on 6a3660d6 (sdlc-local/suite, exit 0, 4m51s).; review verdict: SHIP
+- 2026-10-18: flow upgraded quick → full — 102 added lines in code files (limit 100)
 - 2026-10-18: closed — sdlc-local/suite green on 2842873c (6m19s). The first suite run on dc3788a3 failed only skill_invoke_spec, which still expected the old edit kind; fixed in 2842873c (log saved). Focused specs: color_spec (blend), presentation_spec (kind rule, deletions yield nothing, add/change), skill_render specs (round by kind, review edits add/change, deletion gets no diagnostic or highlight, snapshot keeps the kind), highlighting/define (the define term is add), and highlight_groups_spec (tints derived from Normal, re-derived on ColorScheme, fallback by background, overrides).; review verdict: SHIP
 - 2026-10-18: plan posted to the hub, "proceeding unless you object" (quick flow).
 - The empty-old rule has one owner, `presentation.kind(old, new)`, which the round and the review skill's edit records (skill_invoke) both use (ARCH-DRY). It returns delete, add or change.
