@@ -134,7 +134,9 @@ describe("document registry process boundary", function()
         assert.matches("unknown session%-sync verb", refused.stderr)
         assert.is_number(refused.queued_ms); assert.is_number(refused.ran_ms)
         assert.matches("deadline exceeded after 300 ms", late.error)
-        assert.is_true(late.ran_ms >= 300, vim.inspect(late))
+        -- libuv compares expiry against a millisecond-truncated loop clock and
+        -- ran_ms is floored, so a correct 300 ms deadline can read 299.
+        assert.is_true(late.ran_ms >= 290, vim.inspect(late))
     end)
 
     it("preserves null-only absence and persisted identity across register and rename replay", function()
