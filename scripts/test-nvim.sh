@@ -27,11 +27,15 @@ case "$1" in
         installed=$(command -v nvim) && dirname "$installed"
         exit 0 ;;
     --supported)
-        PARLEY_ROOT="$ROOT" "$2/nvim" --clean --headless \
+        # Fail closed: nvim exits 0 after a -c Lua error, so only an explicit
+        # "yes" passes (like has_mcode_fix); anything else is a refusal.
+        verdict=$(PARLEY_ROOT="$ROOT" "$2/nvim" --clean --headless \
             -c 'lua package.path = vim.env.PARLEY_ROOT .. "/lua/?.lua;" .. package.path' \
-            -c 'lua local s = require("parley.version_support"); if not s.supported(vim.version()) then io.stderr:write(s.refusal(vim.version()) .. "\n"); vim.cmd("cquit 1") end' \
-            -c 'qa!'
-        exit $? ;;
+            -c 'lua local ok, s = pcall(require, "parley.version_support"); io.stdout:write(not ok and "could not load parley.version_support" or s.supported(vim.version()) and "yes" or s.refusal(vim.version()))' \
+            -c 'qa!' 2>/dev/null)
+        [ "$verdict" = yes ] && exit 0
+        echo "${verdict:-$2/nvim did not answer the version check}" >&2
+        exit 1 ;;
 esac
 
 if [ -n "$PARLEY_TEST_NVIM" ]; then

@@ -82,3 +82,7 @@ Filed unclaimed on TL instruction (receipt 4b20a07a-3975-44a4-8087-b941a0d31569)
   - Docs: README, TOOLING.md, atlas/infra/config.md and test_harness.md. traceability.yaml maps the new module and spec.
 - Running `make test-compat` alone skips the machine suite lock, which is taken only for the `test` goal. The real check therefore goes through `make test`, and TOOLING.md says so.
 - Filed #381 (unclaimed) for the hardcoded `/tmp` in review_protocol_export_test.py.
+- Recorded suite on 3f6ec814, after integrating #373 (merge 4bd385dd): it printed "compat: also testing the installed NVIM v0.11.7", logged 940 PASS lines covering both runtimes and 0 FAIL, in 5m14s. Close review: SHIP, with three Minors, all fixed:
+  - probe-fail-open: nvim exits 0 after a `-c` Lua error, so an erroring `--supported` check passed. It now fails closed, printing a verdict that is accepted only as an exact `yes`, like `has_mcode_fix`. Checked: 0.11.7 passes; a missing nvim and a check that throws (mutation) each exit 1; raising MINIMUM to 0.12 prints the refusal and exits 1.
+  - `help-parley` now lists `make test-compat`.
+  - version_support_spec restores `parley._setup_called`.

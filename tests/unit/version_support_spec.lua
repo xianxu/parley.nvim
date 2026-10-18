@@ -28,15 +28,16 @@ describe("version_support", function()
 
     it("makes setup() refuse an older editor before installing anything", function()
         local parley = require("parley")
-        local real_version, real_notify = vim.version, vim.notify
+        local real_version, real_notify, real_called = vim.version, vim.notify, parley._setup_called
         local notices = {}
         vim.version = setmetatable({}, { __call = function() return v(0, 10, 4) end, __index = real_version })
         vim.notify = function(msg, level) notices[#notices + 1] = { msg = msg, level = level } end
         parley._setup_called = nil
         local ok, err = pcall(parley.setup, {})
-        vim.version, vim.notify = real_version, real_notify
+        local called = parley._setup_called
+        vim.version, vim.notify, parley._setup_called = real_version, real_notify, real_called
         assert.is_true(ok, tostring(err))
-        assert.is_nil(parley._setup_called, "setup ran past the version check")
+        assert.is_nil(called, "setup ran past the version check")
         assert.same({ { msg = "parley needs Neovim 0.11.0 or newer (this is 0.10.4)", level = vim.log.levels.ERROR } }, notices)
     end)
 end)
