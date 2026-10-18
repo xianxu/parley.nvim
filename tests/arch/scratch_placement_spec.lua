@@ -102,9 +102,8 @@ describe("arch: harness scratch stays out of the repo tree", function()
         return found
     end
 
-    it("no tracked script or test roots a temp dir at a fixed /tmp", function()
-        local files = vim.fn.systemlist({ "git", "ls-files", "--", "tests", "scripts", "Makefile*" })
-        assert.equals(0, vim.v.shell_error, "git ls-files failed")
+    it("no script or test roots a temp dir at a fixed /tmp", function()
+        local files = require("tests.arch.arch_helper").worktree_files({ "tests", "scripts", "Makefile*" })
         assert.is_true(#files > 50, "the scan found almost no files")
         assert.same({}, fixed_tmp_roots(files))
     end)

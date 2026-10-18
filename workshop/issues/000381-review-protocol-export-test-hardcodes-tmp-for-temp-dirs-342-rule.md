@@ -44,3 +44,4 @@ Use `TMPDIR` (as `scripts/check-sdlc-resolve-conformance.py` does: `dir=os.envir
 
 ### 2026-10-17
 - Verified from a sandboxed agent shell. review_protocol_bundle_spec passes, and failed before this change. scratch_placement passes 10/10. Mutation check: putting `dir='/tmp'` back at :308 fails both review_protocol_bundle (the sandbox denies /tmp) and the new guard.
+- The first recorded suite on c058cde3 failed in `tests/unit/arch_helper_spec.lua`: every file-set guard must list files through `arch_helper.worktree_files`, because `git ls-files` cannot see untracked files. The new guard now uses it. That spec passes 9/9 and scratch_placement 10/10.
