@@ -743,6 +743,8 @@ function M.move_path(old_path, new_path)
     if member == nil then return true, nil, identity end
     if not member then return false end
     old_path, new_path = canonical(old_path), canonical(new_path)
+    local geometry, geometry_error = require("parley.document_move").preflight_geometry(old_path, new_path)
+    if not geometry then return true, nil, geometry_error end
     local buf = require("parley.helper").buffer_for(old_path, true)
     if not buf then buf = vim.fn.bufadd(old_path); vim.fn.bufload(buf) end
     if not M.attach(buf) then return true, nil, "registered document could not be attached" end
@@ -770,6 +772,7 @@ function M.move_path(old_path, new_path)
     local operation, err = require("parley.document_move").begin(s.namespace, identity, new_path, with_finalization({
         -- Couch's rename is the authority on NEW (#359): no lookup first.
         root = state_root(), lease = lease, destination_registered = "authority", move_document = true,
+        geometry_preflight = geometry,
         old_lock = token.lock, new_lock = token.lock, baseline = token.baseline,
         install_new = function() return ss.install_move_lock(buf, token, new_path) end,
         document_moved = function()
@@ -928,26 +931,27 @@ install_migration_hooks = function(s)
                     legacy and legacy.Owner)
                 refuse(decision.message)
             end
-            if s.request then s.request.cancel(); s.request = nil end
-            -- New model witnesses must never alias a cancelled open probe.
-            reseed(s, known)
-            adopt(s, known)
             identity = known
         end
-        if s.model.snapshot().operation then refuse("document operation is still in progress") end
-        local lease, lease_err = require("parley.document_lease").acquire(s.namespace, identity.ID,
-            { root = state_root() })
-        if not lease then refuse(lease_err.message) end
-        -- Protect a free-to-free handoff too: registry publication and local
-        -- completion are different process events. This synthetic turn is
-        -- released after confirmation only if no edit left its baseline.
-        if vim.fn.filereadable(identity.File .. ".lock") == 0 then
-            local acquired, acquire_error = ss.acquire_observed(s.buf, { baseline = hash(s.buf), outstanding = true })
-            if not acquired then lease.release(); refuse(acquire_error or "cannot protect migration") end
+        local active = s.model.snapshot().operation
+        if active and (M.identity(s.buf) or active.witness.operation ~= "lookup") then
+            refuse("document operation is still in progress")
         end
-        local token, err = ss.begin_move(s.buf)
-        if not token then lease.release(); refuse(err) end
-        s.move = { token = token, lease = lease, old_path = s.path, identity = identity }
+        -- BufFilePre exposes OLD, including <afile>; NEW is authoritative only
+        -- in BufFilePost, still before the native write. Reserve no protection yet.
+        local moving = { old_path = s.path, identity = identity, preflight_pending = true }
+        s.move = moving
+        vim.schedule(function()
+            -- Another BufFilePre/Post observer can abort the native command.
+            -- This intent owns no filesystem effects and must not block retries.
+            if states[s.buf] ~= s or s.move ~= moving or not moving.preflight_pending then return end
+            if moving.lease then moving.lease.release() end
+            s.owned_renaming = true
+            local restored, restore_error = pcall(vim.api.nvim_buf_set_name, s.buf, moving.old_path)
+            s.owned_renaming = nil
+            s.move = nil
+            if not restored then notify("reopen " .. moving.old_path .. ": " .. tostring(restore_error)) end
+        end)
     end })
     vim.api.nvim_create_autocmd("BufFilePost", { group = s.group, buffer = s.buf, callback = function()
         if s.owned_renaming then return end
@@ -961,6 +965,34 @@ install_migration_hooks = function(s)
             return
         end
         moving.new_path = canonical(vim.api.nvim_buf_get_name(s.buf))
+        if moving.preflight_pending then
+            local geometry, geometry_error = require("parley.document_move").preflight_geometry(moving.old_path, moving.new_path)
+            if not geometry then
+                s.owned_renaming = true
+                local restored, restore_error = pcall(vim.api.nvim_buf_set_name, s.buf, moving.old_path)
+                s.owned_renaming = nil
+                s.move = nil
+                if not restored then refuse(geometry_error .. "; reopen " .. moving.old_path .. ": " .. tostring(restore_error)) end
+                refuse(geometry_error)
+            end
+            moving.geometry_preflight = geometry
+            if not M.identity(s.buf) then
+                if s.request then s.request.cancel(); s.request = nil end
+                reseed(s, moving.identity)
+                adopt(s, moving.identity)
+            end
+            local lease, lease_error = require("parley.document_lease").acquire(s.namespace, moving.identity.ID,
+                {root=state_root()})
+            if not lease then refuse(lease_error.message) end
+            moving.lease = lease
+            if vim.fn.filereadable(moving.identity.File .. ".lock") == 0 then
+                local acquired, acquire_error = ss.acquire_observed(s.buf, {baseline=hash(s.buf), outstanding=true})
+                if not acquired then refuse(acquire_error or "cannot protect migration") end
+            end
+            local token, token_error = ss.begin_move(s.buf)
+            if not token then refuse(token_error) end
+            moving.token, moving.preflight_pending = token, nil
+        end
         if moving.cancel_attempt then
             moving.cancel_attempt = nil
             if moving.new_path ~= moving.old_path then refuse("return to " .. moving.old_path .. " before retrying this refused move") end
@@ -990,6 +1022,7 @@ install_migration_hooks = function(s)
         end
         local operation, err = require("parley.document_move").begin(s.namespace, moving.identity, moving.new_path, with_finalization({
             root = state_root(), lease = moving.lease, destination_registered = overwrite and false or "authority",
+            geometry_preflight = moving.geometry_preflight,
             parent_bytes = table.concat(vim.api.nvim_buf_get_lines(s.buf, 0, -1, false), "\n"),
             old_lock = moving.token.lock, new_lock = moving.token.lock, baseline = moving.token.baseline,
             install_new = function() return ss.install_move_lock(s.buf, moving.token, moving.new_path) end,

@@ -85,6 +85,101 @@ describe("registered ordinary Markdown through Parley move doors", function()
         vim.fn.delete(root, "rf")
     end)
 
+    local function complete_tree(path)
+        local result = {}
+        local function visit(directory, relative)
+            local scan = assert(uv.fs_scandir(directory))
+            while true do
+                local name, kind = uv.fs_scandir_next(scan)
+                if not name then break end
+                local child, key = directory .. "/" .. name, relative .. name
+                if kind == "directory" then result[key .. "/"] = "directory"; visit(child, key .. "/")
+                elseif kind == "link" then result[key] = "link:" .. assert(uv.fs_readlink(child))
+                else
+                    local stream = assert(io.open(child, "rb"))
+                    result[key] = assert(stream:read("*a")); stream:close()
+                end
+            end
+        end
+        visit(path, "")
+        return result
+    end
+    local function overlapping_move_fixture(kind, children)
+        document.detach(buf); vim.api.nvim_buf_delete(buf, {force=true})
+        local old, target
+        if kind == "old-in-target-side" then
+            old, target = source .. "/parent.side/child.md", source .. "/parent.md"
+            vim.fn.mkdir(source .. "/parent.side", "p")
+            vim.fn.writefile({"unrelated sibling"}, source .. "/parent.side/sibling.md")
+            if children then
+                vim.fn.mkdir(source .. "/parent.side/child.side", "p")
+                vim.fn.writefile({"nested side child"}, source .. "/parent.side/child.side/nested.md")
+            end
+        elseif kind == "new-in-source-side" then
+            old, target = file, source .. "/ordinary.side/target.md"
+            seed_side()
+        else
+            old, target = source .. "/parent_1.md", source .. "/parent.md"
+            vim.fn.mkdir(source .. "/parent.side", "p")
+            vim.fn.writefile({"orphan content"}, source .. "/parent.side/older.md")
+            assert.equals(0, vim.fn.isdirectory(source .. "/parent_1.side"), "selected suffix must equal absent source root")
+        end
+        file = old
+        vim.fn.writefile({"---", "topic: Overlap", "---", "# Body", "original"}, file)
+        local admitted
+        require("parley.document_registry").request("register", {file,"ops:0"}, {}, function(value) admitted=value end)
+        await(function() return admitted~=nil end)
+        assert.equals("registered", admitted.kind); registration=admitted.registration
+        vim.cmd("edit " .. vim.fn.fnameescape(file)); buf=vim.api.nvim_get_current_buf()
+        p.setup_markdown_keymaps(buf)
+        await(function() local status=document.status(buf); return document.identity(buf) and not status.operation end)
+        return target
+    end
+    for _, shape in ipairs({
+        {name="old-in-target-side",children=false}, {name="old-in-target-side",children=true},
+        {name="new-in-source-side",children=true}, {name="suffix-equals-source-side",children=false},
+    }) do
+        for _, native in ipairs({false,true}) do
+            for _, modified in ipairs({false,true}) do
+                it("refuses overlapping geometry before any effects: " .. shape.name .. " children=" .. tostring(shape.children)
+                    .. " native=" .. tostring(native) .. " modified=" .. tostring(modified), function()
+                    local target=overlapping_move_fixture(shape.name,shape.children)
+                    if modified then vim.api.nvim_buf_set_lines(buf,4,5,false,{"unsaved operator bytes"}) end
+                    local before=complete_tree(root)
+                    local lines=vim.api.nvim_buf_get_lines(buf,0,-1,false)
+                    local message
+                    if native then
+                        local accepted,reason=pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target))
+                        assert.is_false(accepted,"unsafe native move must refuse"); message=tostring(reason)
+                    else
+                        local handled,moved,reason=document.move_path(file,target)
+                        assert.is_true(handled); assert.is_nil(moved); message=tostring(reason)
+                    end
+                    assert.truthy(message:find("move to another name first",1,true),message)
+                    assert.equals(file,vim.api.nvim_buf_get_name(buf))
+                    assert.same(lines,vim.api.nvim_buf_get_lines(buf,0,-1,false))
+                    assert.equals(modified,vim.bo[buf].modified)
+                    assert.same(before,complete_tree(root),"refusal must preserve every file, directory, lock, journal and cache byte")
+                end)
+            end
+        end
+    end
+
+    it("clears a volatile native move when another pre observer aborts the command", function()
+        local target=destination .. "/after-abort.md"
+        local before=complete_tree(root)
+        vim.api.nvim_create_autocmd("BufFilePre", {buffer=buf,once=true,callback=function()
+            error("injected later native pre observer failure")
+        end})
+        local ok,reason=pcall(vim.cmd,"saveas " .. vim.fn.fnameescape(target))
+        assert.is_false(ok);assert.truthy(tostring(reason):find("injected later native pre observer failure",1,true))
+        local resumed=false;vim.schedule(function() resumed=true end);await(function() return resumed end)
+        assert.equals(file,vim.api.nvim_buf_get_name(buf))
+        assert.same(before,complete_tree(root),"aborted volatile admission must create no protection or lease residue")
+        vim.cmd("saveas " .. vim.fn.fnameescape(target))
+        await(function() local identity=document.identity(buf);return identity and identity.File==target end)
+    end)
+
     it("renames side references in disk and the loaded buffer before releasing a synthetic turn", function()
         local before = s3_parent()
         local target = destination .. "/spec.md"

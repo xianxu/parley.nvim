@@ -46,6 +46,56 @@ local function canonical(fs, path)
     if resolved then return resolved == path end
     return fs.fs_realpath(dirname(path)) == dirname(path)
 end
+-- Read-only admission shared by editor entry points and begin. A caller may
+-- retain this descriptor across its save; a changed suffix then refuses rather
+-- than silently selecting a different root after that save.
+function M.preflight_geometry(old, new, options)
+    options = options or {}
+    local valid, err = projection.validate_geometry(old, new)
+    if not valid then return nil, err end
+    local expected = options.geometry_preflight
+    local function refuse(message) return nil, message .. '; move to another name first' end
+    if expected ~= nil then
+        if type(expected) ~= 'table' or expected.old ~= old or expected.new ~= new then return refuse('move preflight does not match the document paths') end
+        valid, err = projection.validate_geometry(old, new, expected.orphan_destination)
+        if not valid then return nil, err end
+    end
+    local fs = options.fs or options.adapter or uv
+    if not canonical(fs, old) or not canonical(fs, new) then return refuse('move paths are not canonical') end
+    local function inspect(path)
+        local stat, inspect_err, code = fs.fs_lstat(path)
+        if stat then return stat end
+        if code == 'ENOENT' then return false end
+        return nil, inspect_err or 'cannot inspect move path'
+    end
+    local old_stat, old_err = inspect(old)
+    if old_stat == nil then return nil, old_err end
+    local new_stat, new_err = inspect(new)
+    if new_stat == nil then return nil, new_err end
+    local source, target = side(old), side(new)
+    local source_stat, source_err = inspect(source)
+    if source_stat == nil then return nil, source_err end
+    local target_stat, target_err = source_stat, nil
+    if source ~= target then target_stat, target_err = inspect(target) end
+    if target_stat == nil then return nil, target_err end
+    local candidates, orphan = {}, nil
+    if source ~= target and target_stat and not new_stat then
+        if target_stat.type ~= 'directory' or fs.fs_realpath(target) ~= target then return refuse('destination side folder is not a real directory') end
+        for suffix = 1, 4096 do
+            local candidate = target:sub(1, -6) .. '_' .. suffix .. '.side'
+            local occupied, occupied_err = inspect(candidate)
+            if occupied == nil then return nil, occupied_err end
+            candidates[#candidates + 1] = occupied ~= false
+            if occupied == false then orphan = candidate; break end
+        end
+        if not orphan then return refuse('side folder suffix search limit reached') end
+    end
+    if expected ~= nil and expected.orphan_destination ~= orphan then return refuse('side folder destination changed since preflight') end
+    valid, err = projection.validate_geometry(old, new, orphan)
+    if not valid then return nil, err end
+    return { old = old, new = new, old_stat = old_stat, new_stat = new_stat,
+        source_stat = source_stat, target_stat = target_stat, orphan_candidates = candidates, orphan_destination = orphan }
+end
 local function mkdir(fs, path)
     local info = fs.fs_stat(path)
     if info then return info.type == 'directory' end
@@ -293,6 +343,8 @@ local function validate_v1(journal, namespace, id, path)
         or (journal.new_witness ~= false and (not valid_witness(journal.new_witness, 'file')
             or not valid_digest(journal.new_witness.hash)))
         or (journal.old_witness and not valid_digest(journal.old_hash)) then return nil, 'invalid migration journal schema' end
+    local geometry, geometry_err = projection.validate_geometry(journal.old, journal.new)
+    if not geometry then return nil, geometry_err end
     if journal.document_move then
         if not journal.old_witness then return nil, 'owned migration requires an OLD witness' end
         if journal.steps.document_moved then
@@ -397,6 +449,8 @@ validate = function(journal, namespace, id, path)
             return nil, 'invalid orphan authority'
         end
     elseif state.orphan ~= false then return nil, 'unexpected orphan state' end
+    local geometry, geometry_err = projection.validate_geometry(journal.old, journal.new, orphan and orphan.path or nil)
+    if not geometry then return nil, geometry_err end
     local expected_side = journal.side_witness and { before = journal.side_witness, after = journal.side_witness } or false
     if not vim.deep_equal(state.side, expected_side) then return nil, 'invalid side state' end
     local expected_children = {}
@@ -492,6 +546,8 @@ function M.begin(namespace, registration, new_path, options)
     end
     local fs, root = options.fs or options.adapter or uv, root_of(options)
     if type(root) ~= 'string' or root == '' then return failure('unavailable', 'state directory is missing') end
+    local admitted, admission_err = M.preflight_geometry(registration.File, new_path, options)
+    if not admitted then return failure('unavailable', admission_err) end
     local lease, lease_err = acquire(namespace, registration.ID, root, options)
     if not lease then return nil, lease_err end
     local function refuse(kind, message) lease.release(); return failure(kind, message) end
@@ -509,14 +565,15 @@ function M.begin(namespace, registration, new_path, options)
         return refuse('unavailable', 'destination registration must be confirmed absent or left to Couch')
     end
     local old = registration.File
-    if not canonical(fs, old) or not canonical(fs, new_path) then return refuse('unavailable', 'migration paths are not canonical') end
-    local old_stat, new_stat = fs.fs_lstat(old), fs.fs_lstat(new_path)
+    local current, current_err = M.preflight_geometry(old, new_path, { fs = fs, geometry_preflight = admitted })
+    if not current then return refuse('unavailable', current_err) end
+    local old_stat, new_stat = current.old_stat, current.new_stat
     if options.move_document and (not old_stat or new_stat) then
         return refuse('unavailable', 'owned document move requires existing OLD and absent NEW')
     end
     if old_stat and old_stat.type ~= 'file' or new_stat and new_stat.type ~= 'file' then return refuse('unavailable', 'invalid document file type') end
     local source, target = side(old), side(new_path)
-    local source_stat, target_stat = fs.fs_lstat(source), fs.fs_lstat(target)
+    local source_stat, target_stat = current.source_stat, current.target_stat
     if source_stat and (source_stat.type ~= 'directory' or fs.fs_realpath(source) ~= source) then return refuse('unavailable', 'invalid source side directory') end
     local entries, scan_err = {}, nil
     if source_stat then entries, scan_err = scan_tree(fs, source) end
@@ -532,21 +589,11 @@ function M.begin(namespace, registration, new_path, options)
     end
     local parent_after, parent_rewrite_err = projection.rewrite_side_references(parent_bytes, old, new_path)
     if not parent_after then return refuse('unavailable', parent_rewrite_err) end
-    local orphan_candidates = {}
-    if source ~= target and target_stat then
-        if new_stat or target_stat.type ~= 'directory' or fs.fs_realpath(target) ~= target then
-            return refuse('unavailable', 'occupied move destination is not an admitted orphan')
-        end
-        for suffix = 1, 4096 do
-            local occupied = fs.fs_lstat(target:sub(1, -6) .. '_' .. suffix .. '.side') ~= nil
-            orphan_candidates[#orphan_candidates + 1] = occupied
-            if not occupied then break end
-        end
-    end
+    local orphan_candidates = current.orphan_candidates
     local projected, project_err = projection.project(old, new_path, {
-        id = registration.ID, old_exists = old_stat ~= nil, new_exists = new_stat ~= nil, new_written = false,
-        destination_registered = destination, side_exists = source_stat ~= nil, target_side_exists = target_stat ~= nil, entries = entries,
-        parent_bytes = parent_bytes, new_absent_at_admission = new_stat == nil, orphan_candidates = orphan_candidates,
+        id = registration.ID, old_exists = old_stat ~= false, new_exists = new_stat ~= false, new_written = false,
+        destination_registered = destination, side_exists = source_stat ~= false, target_side_exists = target_stat ~= false, entries = entries,
+        parent_bytes = parent_bytes, new_absent_at_admission = new_stat == false, orphan_candidates = orphan_candidates,
     })
     if not projected then return refuse('unavailable', project_err) end
     local token = hash(tostring(uv.hrtime()) .. ':' .. tostring(vim.fn.getpid()) .. ':' .. registration.ID)

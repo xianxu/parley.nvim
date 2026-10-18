@@ -36,6 +36,38 @@ end
 
 local function dirname(path) return path:match('^(.*)/[^/]+$') end
 local function contained(path, root) return path:sub(1, #root + 1) == root .. '/' end
+-- Every declared side root remains independent, including an absent source.
+-- A shared S==T is the existing extension-only case, not an orphan move.
+function M.validate_geometry(old, new, orphan)
+    local function refuse(reason) return nil, reason .. '; move to another name first' end
+    if not canonical(old) or not canonical(new) or old == new then return refuse('invalid document move paths') end
+    local source, target = M.side_path(old), M.side_path(new)
+    if not canonical(source) or not canonical(target) then return refuse('invalid side folder paths') end
+    local roots = { source }
+    if source ~= target then roots[#roots + 1] = target end
+    if orphan ~= nil then
+        if source == target then return refuse('a shared side folder cannot also be displaced') end
+        if not canonical(orphan) then return refuse('invalid displaced folder path') end
+        local prefix = target:sub(1, -6) .. '_'
+        local suffix = orphan:sub(1, #prefix) == prefix and orphan:sub(#prefix + 1):match('^(%d+)%.side$')
+        local number = suffix and tonumber(suffix)
+        if not number or number < 1 or number > 4096 or tostring(number) ~= suffix then
+            return refuse('invalid displaced folder name')
+        end
+        roots[#roots + 1] = orphan
+    end
+    for index, root in ipairs(roots) do
+        if old == root or new == root or contained(old, root) or contained(new, root) then
+            return refuse('a document is inside a side folder involved in the move')
+        end
+        for other = index + 1, #roots do
+            if root == roots[other] or contained(root, roots[other]) or contained(roots[other], root) then
+                return refuse('the side folders involved in the move overlap')
+            end
+        end
+    end
+    return true
+end
 local function normalize(path)
     local parts = {}
     for component in path:gmatch('[^/]+') do
@@ -359,8 +391,9 @@ function M.project(old, new, observations)
             return nil, 'missing move observation: ' .. key
         end
     end
+    local geometry, geometry_err = M.validate_geometry(old, new)
+    if not geometry then return nil, geometry_err end
     local source, destination = M.side_path(old), M.side_path(new)
-    if contained(destination, source) or contained(new, source) then return nil, 'move target inside source side directory' end
     if source == destination and o.side_exists ~= o.target_side_exists then return nil, 'inconsistent shared side observation' end
     if o.destination_registered == true then return nil, 'occupied move destination' end
     local orphan
@@ -387,6 +420,8 @@ function M.project(old, new, observations)
         end
         if not orphan then return nil, 'orphan suffix search has no free destination' end
     end
+    geometry, geometry_err = M.validate_geometry(old, new, orphan)
+    if not geometry then return nil, geometry_err end
     local count, markdown, seen, entries = 0, 0, {}, {}
     for index, entry in pairs(o.entries) do
         count = count + 1

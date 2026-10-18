@@ -10,6 +10,21 @@ describe('durable leased document migration', function()
         vim.fn.mkdir(vim.fn.fnamemodify(path, ':h'), 'p')
         local f = assert(io.open(path, 'wb')); assert(f:write(bytes)); assert(f:close())
     end
+    local function tree(base)
+        local result = {}
+        local function walk(directory)
+            local scan = assert(uv.fs_scandir(directory))
+            while true do
+                local name = uv.fs_scandir_next(scan); if not name then break end
+                local path = directory .. '/' .. name; local info = assert(uv.fs_lstat(path))
+                local item = { type = info.type, inode = info.ino }
+                if info.type == 'file' then item.bytes = read(path) end
+                result[path:sub(#base + 2)] = item
+                if info.type == 'directory' then walk(path) end
+            end
+        end
+        walk(base); return result
+    end
     local function registration(path) return { ID = 'stable-id', File = path, Owner = 'owner', RegisteredOwner = 'owner', RegisteredAt = 'now' } end
     local function move() return require('parley.document_move') end
     local function begin(options, target)
@@ -909,6 +924,88 @@ describe('durable leased document migration', function()
         local result = assert(recover(options)); assert.equals('pending', result.kind)
         assert.equals('old protection', observed().old); assert.equals(0, observed().applied)
         assert.equals(0, observed().retired)
+    end)
+
+    it('leaves the complete document protection and journal tree identical for every geometry refusal', function()
+        local cases = {
+            { name = 'OLD under target without own side', old = 'parent.side/child.md', new = 'parent.md' },
+            { name = 'OLD under target with own side', old = 'parent.side/child.md', new = 'parent.md', own_side = true },
+            { name = 'NEW under source', old = 'source.md', new = 'source.side/nested/new.md', own_side = true },
+            { name = 'suffix equals absent source', old = 'parent_1.md', new = 'parent.md', orphan = true },
+            { name = 'document equals own side root', old = 'doc.side', new = 'new.md' },
+            { name = 'destination equals side root', old = 'doc.md', new = 'doc.side' },
+            { name = 'forged suffix outside target family', old = 'plain.md', new = 'next.md', orphan = true, forged = true },
+            { name = 'shared root forged as distinct orphan', old = 'same.md', new = 'same.markdown', orphan = true, forged = true },
+            { name = 'frozen suffix raced into absent source', old = 'parent_2.md', new = 'parent.md', orphan = true, frozen = true },
+            { name = 'opaque suffix observation', old = 'plain.md', new = 'next.md', orphan = true, opaque = true },
+        }
+        for index, case in ipairs(cases) do
+            local base = root .. '/geometry-' .. index
+            old, new = base .. '/' .. case.old, base .. '/' .. case.new
+            write(old, 'operator parent bytes\n')
+            write(base .. '/protection.lock', 'opaque protection\0bytes')
+            write(base .. '/retained-journals/previous.json', 'opaque journal bytes')
+            if case.own_side then write(require('parley.document_move_plan').side_path(old) .. '/child.md', 'side child bytes') end
+            if case.orphan then write(require('parley.document_move_plan').side_path(new) .. '/orphan.md', 'orphan bytes') end
+            local installed = 0
+            local options = { move_document = true, install_new = function() installed = installed + 1; return true end }
+            if case.forged then options.geometry_preflight = { old = old, new = new, orphan_destination = base .. '/outside.side' } end
+            if case.frozen then
+                options.geometry_preflight = assert(move().preflight_geometry(old, new))
+                write(options.geometry_preflight.orphan_destination .. '/racing.md', 'foreign suffix bytes')
+            end
+            if case.opaque then
+                local fs = setmetatable({}, { __index = uv })
+                local candidate = require('parley.document_move_plan').side_path(new):sub(1, -6) .. '_1.side'
+                fs.fs_lstat = function(path)
+                    if path == candidate then return nil, 'opaque suffix observation', 'EACCES' end
+                    return uv.fs_lstat(path)
+                end
+                options.fs = fs
+            end
+            local before = tree(root)
+            local operation, err = begin(options)
+            if operation then operation.release() end
+            assert.is_nil(operation, case.name)
+            assert.matches(case.opaque and 'opaque suffix observation' or 'move to another name first', err.error, 1, true)
+            assert.equals(0, installed, case.name); assert.same(before, tree(root), case.name)
+        end
+    end)
+
+    for _, version in ipairs({ 1, 2 }) do
+        it('refuses unsafe prepared version-' .. version .. ' geometry before recovery effects', function()
+            local operation = assert(begin({ move_document = true })); operation.release()
+            local journal = vim.json.decode(read(operation.journal_path))
+            local unsafe_old = root .. '/new.side/nested.md'
+            write(unsafe_old, 'parent\n')
+            journal.old, journal.registration.File = unsafe_old, unsafe_old
+            journal.old_witness = assert(uv.fs_stat(unsafe_old))
+            if version == 1 then
+                journal.version, journal.state, journal.parent, journal.captured, journal.editor_captured, journal.orphan = 1, nil, nil, nil, nil, nil
+                journal.confirmation = nil; table.remove(journal.temps)
+                journal.steps = { document_moved = false, side_moved = false, rewritten = {}, metadata = false }
+            end
+            write(operation.journal_path, vim.json.encode(journal))
+            local before = tree(root)
+            local result, err = recover()
+            assert.is_nil(result); assert.matches('move to another name first', err.error, 1, true)
+            assert.same(before, tree(root))
+        end)
+    end
+    it('refuses a forged orphan suffix that aliases an uncaptured source during recovery', function()
+        write(root .. '/new.side/orphan.md', 'orphan bytes')
+        local operation = assert(begin({ move_document = true })); operation.release()
+        local journal = vim.json.decode(read(operation.journal_path))
+        local unsafe_old = root .. '/new_1.md'; write(unsafe_old, 'parent\n')
+        journal.old, journal.registration.File = unsafe_old, unsafe_old
+        journal.old_witness = assert(uv.fs_stat(unsafe_old))
+        journal.side_witness, journal.entries, journal.state.side, journal.state.children = false, {}, false, {}
+        journal.temps = { journal.temps[1], journal.temps[#journal.temps] }
+        write(operation.journal_path, vim.json.encode(journal))
+        local before = tree(root)
+        local result, err = recover()
+        assert.is_nil(result); assert.matches('move to another name first', err.error, 1, true)
+        assert.same(before, tree(root)); assert.is_nil(uv.fs_lstat(root .. '/new_1.side'))
     end)
 
 end)

@@ -430,4 +430,39 @@ describe('moving parent side references', function()
         assert.same({ kind = 'rewrite_document', path = new, before = o.parent_bytes,
             after = '[q](renamed.side/q.md)' }, r.effects[1])
     end)
+    it('refuses interfering declared roots before generating any move effect', function()
+        for _, case in ipairs({
+            { '/repo/parent.side/child.md', '/repo/parent.md', false },
+            { '/repo/parent.side/child.md', '/repo/parent.md', true },
+            { '/repo/source.md', '/repo/source.side/nested/next.md', true },
+            { '/repo/parent_1.md', '/repo/parent.md', false, { false } },
+            { '/repo/doc.side', '/repo/new.md', false },
+            { '/repo/doc.md', '/repo/doc.side', false },
+        }) do
+            local o = observations(); o.entries = {}; o.side_exists = case[3]
+            o.target_side_exists = case[4] ~= nil or case[1]:find('parent.side/', 1, true) ~= nil
+            o.new_absent_at_admission, o.new_exists, o.new_written = true, false, false
+            o.orphan_candidates = case[4] or { false }
+            local value, err = plan.project(case[1], case[2], o)
+            assert.is_nil(value, case[1] .. ' -> ' .. case[2]); assert.matches('move to another name first', err, 1, true)
+        end
+    end)
+    it('shares one pure geometry predicate with canonical suffix and shared-root rules', function()
+        assert.is_function(plan.validate_geometry)
+        for _, case in ipairs({
+            { '/repo/parent_1.md', '/repo/parent.md', '/repo/parent_1.side' },
+            { '/repo/old.md', '/repo/new.md', '/else/foreign.side' },
+            { '/repo/old.md', '/repo/new.md', '/repo/new_0.side' },
+            { '/repo/old.md', '/repo/new.md', '/repo/new_4097.side' },
+            { '/repo/old.md', '/repo/old.markdown', '/repo/old_1.side' },
+        }) do
+            assert.is_nil(plan.validate_geometry(unpack(case)))
+        end
+        for _, case in ipairs({
+            { '/repo/old.md', '/repo/old.markdown' },
+            { '/repo/old.md', '/repo/archive/new.md', '/repo/archive/new_1.side' },
+            { '/repo/old.md', '/repo/old.sidecar/new.md' },
+        }) do assert.is_true(plan.validate_geometry(unpack(case))) end
+    end)
+
 end)

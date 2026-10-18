@@ -279,6 +279,11 @@ folder needs `new_absent_at_admission = true` and dense `orphan_candidates`:
 occupied suffixes followed by the first free suffix, at most 4096 observations.
 An existing NEW document, unknown suffix, exhausted search, escaping/duplicate
 entry or ambiguous relevant syntax cannot authorize orphan displacement.
+The shared pure geometry check also rejects interfering side/orphan roots:
+distinct roots cannot contain one another or either document, including an
+absent source-side root. A shared identical side root remains one resource.
+Frontend and direct mover admission use read-only suffix preflight before save
+or protection; unsafe moves explain the conflict and ask for another name first.
 
 Before a successful NEW write, the result is `wait_new_write`; supplied parent
 syntax is validated before that result. Afterwards effects are ordered:
