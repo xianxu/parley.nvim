@@ -1,6 +1,6 @@
 ---
 id: 000383
-status: working
+status: codecomplete
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours: 2.16
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 2.57
+tracker:
+    version: 1
+    completion:
+        token: close-434891c85b89
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 845884bcc17313d4415e4935b8da9dc67bf786d9
+        evidence_commit: 52ff641564d0213fe857ec94a41c1bd0996e461b
 ---
 
 # S4 presentations: highlight agent rounds from Couch's round sidecar, propose and direct
