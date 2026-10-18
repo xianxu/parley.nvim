@@ -7,7 +7,7 @@ created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'e18bc585114246d61125a9d036c2506f8639cf3e' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '36f8ee7ce38e135355f51b38ec68e98b3b0413a6' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T22:18:10-07:00
 claimant:
     operator: Xian Xu
@@ -17,7 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "e7cc7b68", done: "65c8fe29"}
-actual_hours: 0.42
+actual_hours: 0.49
 ---
 
 # Fake-registry setup answers unavailable when owned_move and side_inherit specs run under load
