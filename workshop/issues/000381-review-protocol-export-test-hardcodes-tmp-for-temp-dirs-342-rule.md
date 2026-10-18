@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "d23ddeb8", done: "d768b4e3"}
 ---
 
 # review_protocol_export_test hardcodes /tmp for temp dirs (#342 rule)
