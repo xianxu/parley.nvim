@@ -90,15 +90,18 @@ describe("arch: harness scratch stays out of the repo tree", function()
     -- -p or --tmpdir; Lua opening or making a literal /tmp path.
     local FIXED_TMP = {
         { lang = "python", pattern = "dir%s*=%s*[%w_.]*%(?%s*['\"]/tmp[/'\"]" },
-        { lang = "shell", pattern = "mktemp[^\n]-%s['\"]?/tmp/" },
-        { lang = "shell", pattern = "mktemp[^\n]-%s%-p%s*['\"]?/tmp" },
-        { lang = "shell", pattern = "mktemp[^\n]-%-%-tmpdir=['\"]?/tmp" },
+        -- A mktemp command can sit inside any language (vim.fn.system,
+        -- subprocess), so these read every file.
+        -- Quotes and commas may separate the words (a Python argv list).
+        { pattern = "mktemp.-[%s'\",]/tmp/" },
+        { pattern = "mktemp.-%-p[%s'\",]*/tmp" },
+        { pattern = "mktemp.-%-%-tmpdir[=%s'\",]*/tmp" },
         { lang = "lua", pattern = "io%.open%(%s*['\"]/tmp/" },
         { lang = "lua", pattern = "mkdir%(%s*['\"]/tmp" },
         { lang = "lua", pattern = "writefile%(.-,%s*['\"]/tmp/" },
     }
-    -- Each rule reads only its own language: Lua's `dir = f("/tmp/…")` is a
-    -- path string, not Python's dir= keyword.
+    -- A rule is scoped to a language only where it would otherwise misfire:
+    -- Lua's `dir = f("/tmp/…")` is a path string, not Python's dir= keyword.
     local function lang_of(path)
         if path:match("%.py$") then return "python" end
         if path:match("%.lua$") then return "lua" end
@@ -111,7 +114,7 @@ describe("arch: harness scratch stays out of the repo tree", function()
             local lang = lang_of(path)
             for n, line in ipairs(ok and lines or {}) do
                 for _, rule in ipairs(FIXED_TMP) do
-                    if rule.lang == lang and line:find(rule.pattern) then
+                    if (rule.lang == nil or rule.lang == lang) and line:find(rule.pattern) then
                         found[#found + 1] = ("%s:%d: %s"):format(path, n, vim.trim(line))
                     end
                 end
@@ -134,11 +137,11 @@ describe("arch: harness scratch stays out of the repo tree", function()
         local refused = {
             py = { "tempfile.TemporaryDirectory(prefix='x-', dir='" .. tmp .. "')",
                 "tempfile.mkdtemp(dir='" .. tmp .. "/')", "tempfile.mkdtemp(dir='" .. tmp .. "/sub')",
-                "tempfile.mkdtemp(dir=Path('" .. tmp .. "'))" },
+                "tempfile.mkdtemp(dir=Path('" .. tmp .. "'))", "subprocess.run(['mktemp', '-d', '-p', '" .. tmp .. "'])" },
             sh = { "d=$(mktemp -d " .. tmp .. "/x.XXXXXX)", "d=$(mktemp -d -p " .. tmp .. " x.XXXXXX)",
                 "d=$(mktemp -d --tmpdir=" .. tmp .. " x.XXXXXX)" },
             lua = { 'io.open("' .. tmp .. '/x", "w")', 'vim.fn.mkdir("' .. tmp .. '/x", "p")',
-                'vim.fn.writefile({ "a" }, "' .. tmp .. '/x")' },
+                'vim.fn.writefile({ "a" }, "' .. tmp .. '/x")', 'vim.fn.system("mktemp -d ' .. tmp .. '/x.XXXXXX")' },
         }
         local allowed = {
             py = { 'tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR") or "' .. tmp .. '")' },
