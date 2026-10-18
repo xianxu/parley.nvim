@@ -88,3 +88,18 @@ with no product change. Evidence: /tmp/parley-390-live-result.json and
 /tmp/parley-390-live.log. Scratch files/state were removed and the stage cleared.
 Attention now visibly opens anchored at the top, so parents appear above their
 children. The hub requested this visible change in the landing report.
+
+### 2026-10-18 — BR-1 cycle descendants
+
+Review reproduced a descendant arriving before its cyclic ancestors: promoting
+each unvisited entry detached it from its listed parent. Resolve the remaining
+component to a cycle member, then traverse children, breaking only one cycle
+edge. Cover self-cycle children, multi-node cycle children and nested descendant
+chains with parentage, ancestor search, uniqueness and N/2N traversal bounds.
+The original queued suite was cancelled unchanged before execution; run a fresh
+recorded suite on the correction. ARCH-PURPOSE: preserve every non-cycle edge.
+
+BR-1 verification: all four new regression cases failed the reviewed code;
+after cycle-member promotion all 321 focused cases pass on each of 0.12.5 and
+0.11.7. Lint remains clean across 805 files. No IO, state, picker or live-profile
+behavior changed in the correction.

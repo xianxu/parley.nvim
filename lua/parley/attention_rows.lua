@@ -21,12 +21,13 @@ local function basename(path)
 end
 
 -- One ordered forest from already scoped/sorted entries. Cyclic components
--- have no root: the final pass promotes their first entry and visits each once.
+-- have no root: follow parents to a cycle member, breaking only a cycle edge.
 local function tree(entries)
-    local by_path, children, roots, result, seen = {}, {}, {}, {}, {}
+    local by_path, parents, children, roots, result, seen = {}, {}, {}, {}, {}, {}
     for _, entry in ipairs(entries) do by_path[entry.path] = entry end
     for _, entry in ipairs(entries) do
         local parent = entry.kind == "side" and by_path[entry.parent]
+        parents[entry.path] = parent
         if parent then
             children[parent.path] = children[parent.path] or {}
             table.insert(children[parent.path], entry)
@@ -39,7 +40,16 @@ local function tree(entries)
         for _, child in ipairs(children[entry.path] or {}) do visit(child, depth + 1, entry.path) end
     end
     for _, entry in ipairs(roots) do visit(entry, 0) end
-    for _, entry in ipairs(entries) do visit(entry, 0) end
+    for _, entry in ipairs(entries) do
+        if not seen[entry.path] then
+            local cursor, walked = entry, {}
+            while not walked[cursor.path] do
+                walked[cursor.path] = true
+                cursor = parents[cursor.path]
+            end
+            visit(cursor, 0)
+        end
+    end
     return result
 end
 

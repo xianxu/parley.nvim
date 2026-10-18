@@ -67,6 +67,52 @@ describe("attention tree rows", function()
         assert.is_nil(rows[3].parent_value)
     end)
 
+    for _, shape in ipairs({
+        { name = "self-cycle child", input = { { "leaf", "a" }, { "a", "a" } }, order = { "a", "leaf" } },
+        { name = "multi-node cycle child", input = { { "leaf", "a" }, { "a", "b" }, { "b", "a" } },
+            order = { "a", "leaf", "b" } },
+        { name = "nested cycle descendants", input = { { "leaf", "child" }, { "child", "a" }, { "a", "b" }, { "b", "a" } },
+            order = { "a", "child", "leaf", "b" } },
+    }) do
+        it("preserves parentage and search context for a " .. shape.name, function()
+            local input = {}
+            for _, pair in ipairs(shape.input) do input[#input + 1] = side("/" .. pair[1], "/" .. pair[2]) end
+            local rows = Rows.items(input, options)
+            local expected = vim.tbl_map(function(name) return "/" .. name end, shape.order)
+            assert.same(expected, values(rows)) -- also proves every entry appears exactly once
+            local by_value = {}
+            for _, row in ipairs(rows) do by_value[row.value] = row end
+            assert.is_nil(by_value["/a"].parent_value)
+            for _, pair in ipairs(shape.input) do
+                if pair[1] ~= "a" then assert.equals("/" .. pair[2], by_value["/" .. pair[1]].parent_value) end
+            end
+            local context = #shape.input == 4 and { "/a", "/child", "/leaf" } or { "/a", "/leaf" }
+            assert.same(context, values(Rows.filter(rows, "leaf", function(_, text)
+                return text:match("^leaf ") and 1 or nil
+            end)))
+        end)
+    end
+
+    it("bounds cycle recovery with newest descendants at N and 2N", function()
+        for _, n in ipairs({ 16, 32 }) do
+            local input, reads = {}, 0
+            for i = n, 1, -1 do
+                local parent = "/" .. (i == 1 and 1 or i - 1)
+                input[#input + 1] = setmetatable(entry("/" .. i, { kind = "side" }), {
+                    __index = function(_, key) if key == "parent" then reads = reads + 1; return parent end end,
+                })
+            end
+            local rows = Rows.items(input, options)
+            assert.equals(n, #rows)
+            assert.is_true(reads <= 4 * n, "cycle parent walks repeated")
+            local roots = 0
+            for _, row in ipairs(rows) do if not row.parent_value then roots = roots + 1 end end
+            assert.equals(1, roots)
+            local found = Rows.filter(rows, "leaf", function(_, text) return text:match("^" .. n .. " ") and 1 end)
+            assert.equals(n, #found)
+        end
+    end)
+
     it("retains matching descendants and ancestors once in tree order", function()
         assert.is_function(Rows.filter)
         local rows = Rows.items({ entry("/root"), side("/child", "/root"), side("/leaf", "/child"),
