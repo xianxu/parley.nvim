@@ -74,3 +74,75 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"d387f071-c04f-4f43-a8ed-5bcccd9a5cd5","repository":"github.com/xianxu/parley.nvim","issue_id":"000382","recipe":"small-diff-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/329bdd0a4d33e763","reviewed_head":"09ca797618c2e5807a1621f51ebceab46fe5f733","slot":"parley.nvim:4","requested_at":"2026-10-18T06:11:06.171933Z"},"phase":"finished","pid":55361,"started_at":"2026-10-18T06:11:06.27156Z","finished_at":"2026-10-18T06:13:45.624522Z","session_id":"ee85d8e9-5e16-4db9-b5f1-f0d7eba939ec","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T23:17:00-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 382 — Fake-registry setup answers unavailable when owned_move and side_inherit specs run under load |
+| repo | parley.nvim |
+| issue file | workshop/issues/000382-fake-registry-setup-answers-unavailable-when-owned-move-and-side-inherit-specs-run-under-load.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | ed9ee0df88ad3b2b8488369e67ad99fca2e42a5b..036cae07964a017a0491d22147a6c9fc8a1696bc |
+| command | sdlc close --issue 382 |
+| reviewer | claude |
+| isolation | fenced |
+| timestamp | 2026-10-17T23:17:00-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking how this repo runs its test suite, so I can run the registry spec at head.
+
+Spec passes 9/9. Now checking whether the new test would catch the timer wiring being reverted.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+BR-1 is fixed for the whole class, not just the sites it named. `document_registry.default_deadline_ms(operation)` (`lua/parley/document_registry.lua:26`) is now the one place the rename rule lives: three submit deadlines for a rename, one for anything else. `request()` uses it whenever the caller names no deadline (`:95`). The native rename at `agentic_document.lua:378` stopped passing its own `3 * config_ms(...)`. The two journaled renames in `document_move.lua` (lines 994 and 1284) pass `registry_options`, which nothing sets, so they now get the same 3× deadline. The atlas and the `config.lua` comment now describe what the code does, and they name the inline `:saveas!` check (`agentic_document.lua:618`, `ms + 1000`) as the one call that sets its own deadline. I ran `document_registry_spec` at head and it passes 9/9. I then put the timer back to `config_ms("agentic_submit_timeout_ms")` and it still passed 9/9 (I restored the checkout afterwards). So the new test checks the helper's arithmetic but not that `request()` uses it. That gap is Minor and doesn't block. The window doesn't change `## Spec`, `## Revisions` or `## Done when`, and it has no conflict resolutions.
+
+1. **Strengths**
+   - **Fixed for the class.** Every `registry.request` caller now either names its own deadline (only `agentic_document.lua:618`, the inline saveas) or gets it from `default_deadline_ms`: `agentic_document.lua:341`, `:378`, `:682` and `document_move.lua:994`, `:1284`. No caller keeps its own 3× rule.
+   - **The atlas claim is now accurate.** `atlas/modes/session_sync.md:283-287` says the registry owns the *default* deadline and names the one exception.
+   - **The helper is pure.** `default_deadline_ms` is a small deterministic function, and the new test checks it for all four operations without starting a process.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings**
+   - **The new test doesn't check that `request()` uses the helper.** At `tests/integration/document_registry_spec.lua:73`, reverting `document_registry.lua:95` to the flat submit deadline stays green (verified). If that happened, every rename would quietly drop back to 1×. Fix sketch: assert the timer value through `request()` itself. For example, set a short submit deadline, run a `rename` against a fake that's slower than 1× but faster than 3×, and assert it isn't `unavailable`.
+   - **Config restore isn't protected.** The new test (`:76-79`) resets `config.agentic_submit_timeout_ms` without a `pcall`, unlike the test just above it. If the helper throws, the 2000 ms value leaks into later tests.
+
+5. **Test coverage notes:** At head, `document_registry_spec` passes 9/9. The helper's arithmetic is covered. Nothing checks that `request()` actually calls the helper, and no test checks the rename deadline from a `document_move` journaled rename end to end.
+
+6. **Architecture (interdiff only)**
+   - **ARCH-DRY: pass.** The 3× rule now exists once, in `document_registry.lua:28`, and the copy in `agentic_document` is gone.
+   - **ARCH-PURE: pass.** The helper is pure apart from reading config through `config_ms`, which fits this thin seam.
+   - **ARCH-PURPOSE: pass.** I swept all six callers (listed above). Each one gets its deadline from the registry or is the documented saveas exception.
+
+7. **Plan revision recommendations:** none.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      document_registry.default_deadline_ms (3x for rename) now covers the native rename (agentic_document.lua:378) and both journaled renames (document_move.lua:994, :1284); the atlas and config.lua describe it accurately; spec 9/9 at head.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: regression-test-pins-wiring
+    title: |
+      The default_deadline_ms test stays green when request() stops using the helper
+    detail: |
+      I reverted document_registry.lua:95 to config_ms("agentic_submit_timeout_ms") and document_registry_spec still passed 9/9, because the new test only checks the helper's arithmetic. Add a request()-level check, such as a rename against a fake slower than 1x but faster than 3x of a short submit deadline, and restore config inside a pcall.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"3cd6c706-b875-41c1-9b5d-ac8454cc5e58","repository":"github.com/xianxu/parley.nvim","issue_id":"000382","recipe":"fix-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/4412e6b24f2344d9","reviewed_head":"036cae07964a017a0491d22147a6c9fc8a1696bc","slot":"parley.nvim:4","requested_at":"2026-10-18T06:15:48.398081Z"},"phase":"finished","pid":46814,"started_at":"2026-10-18T06:15:48.493189Z","finished_at":"2026-10-18T06:16:59.847216Z","session_id":"2a56fec3-2cc5-49dc-aea3-c4d8a004159e","outcome":"returned"}] -->
