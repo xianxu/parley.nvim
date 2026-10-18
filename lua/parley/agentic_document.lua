@@ -373,11 +373,11 @@ local function execute(s, effects)
             if s.move then s.move.witness = effect.witness end
         elseif kind == "rename" then
             -- The band says "finishing in the background" at the submit deadline;
-            -- the rename itself gets three of them before its reply counts as
-            -- lost (#359: the file already moved, so waiting costs nothing).
+            -- the rename itself gets the registry's rename deadline, three of
+            -- them (document_registry.default_deadline_ms, #359, #382).
             s.request = registry.request("rename", { effect.old_path, effect.new_path }, effect.witness, completed(s, function(result)
                 if valid(s) then dispatch(s, { type = "reply", witness = effect.witness, result = result }) end
-            end), { timeout_ms = 3 * config_ms("agentic_submit_timeout_ms") })
+            end))
         elseif kind == "finish_move" then
             local moving = s.move
             -- Registry confirmation advances the journal, not editor ownership.

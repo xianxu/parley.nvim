@@ -17,6 +17,17 @@ function M.config_ms(key)
     return require("parley.config")[key]
 end
 
+--- The deadline a request gets when its caller names none (#382). A rename
+--- gets three submit deadlines before its reply counts as lost: the file has
+--- already moved, so waiting costs nothing (#359). That holds for the native
+--- rename and for document_move's journaled ones alike.
+--- @param operation string
+--- @return number
+function M.default_deadline_ms(operation)
+    local submit = M.config_ms("agentic_submit_timeout_ms")
+    return operation == "rename" and 3 * submit or submit
+end
+
 local function unavailable(message)
     return { kind = "unavailable", error = message }
 end
@@ -81,7 +92,7 @@ function M.request(operation, args, witness, callback, options)
     -- A caller that names no deadline gets the product's (#382). It used to be
     -- a 2.5 s literal: under suite load the couch spawn missed it, and
     -- document_move's journaled renames, which name none, ran on it too.
-    item.timer:start(options.timeout_ms or M.config_ms("agentic_submit_timeout_ms"), 0, vim.schedule_wrap(function()
+    item.timer:start(options.timeout_ms or M.default_deadline_ms(operation), 0, vim.schedule_wrap(function()
         if item.child then pcall(item.child.kill, item.child, 15) end
         finish(unavailable("Couch registry deadline exceeded; mutation outcome may be unknown"))
     end))

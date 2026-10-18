@@ -68,6 +68,18 @@ describe("document registry process boundary", function()
         assert.is_true(ok, tostring(err))
     end)
 
+    -- #382: one rule for every caller that names no deadline. A rename, native
+    -- or document_move's journaled one, waits three submit deadlines (#359).
+    it("derives every default deadline from the submit deadline, a rename's from three", function()
+        local config = require("parley").config
+        local configured = config.agentic_submit_timeout_ms
+        config.agentic_submit_timeout_ms = 2000
+        local got = {}
+        for _, op in ipairs({ "lookup", "register", "forget", "rename" }) do got[op] = client.default_deadline_ms(op) end
+        config.agentic_submit_timeout_ms = configured
+        assert.same({ lookup = 2000, register = 2000, forget = 2000, rename = 6000 }, got)
+    end)
+
     it("preserves null-only absence and persisted identity across register and rename replay", function()
         local old, new = root .. "/a space;note.md", root .. "/new.md"
         vim.fn.writefile({ "plain" }, old)
