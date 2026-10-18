@@ -57,6 +57,32 @@ weakening what it bounds (pump work over a full queue of maximum-width chains).
 
 ## Log
 
+### 2026-10-17 — current verification checkpoint
+
+Implementation code head: b8b171a9660a45fae9de215821f65b639d0bbea7;
+later acceptance-fingerprint changes are docs-only. Draft PR #303:
+https://github.com/xianxu/parley.nvim/pull/303 (server merge-check and both
+local-gates checks passed). Fifteen targeted files on each runtime, 64/64
+resource-admission stress per runtime, scoped global-JIT-enabled 0.11 drain
+16/16 with zero allocation aborts/flushes, and lint are green.
+
+Full verification is still pending behind the shared suite budget:
+- Recorded default-0.12 suite, local-check attempt
+  688bc1df2febd311acf4fd3bee7fe196, on b8b171a9;
+  .git/sdlc/test-stats/inflight/688bc1df2febd311acf4fd3bee7fe196/run.log.
+- Stock 0.11 full suite: PARLEY_TEST_NVIM=/opt/homebrew/bin/nvim make -k test;
+  log /tmp/parley-267-full-011.log, from this checkout. Both runs remain live;
+  preserve their queue places. Do not close before their results.
+
+Completed diagnostic scratch roots were removed after preserving results and
+representative raw logs/native sample in
+/var/folders/07/b9wcwwld4_v2w9r3hk525bm80000gn/T/parley-267-evidence.onWZVi.
+Its summary includes positive and intentional negative/setup-control runs, not
+312 green runs. Keep this compact evidence through the review, then retire it;
+the reproducible regressions and recorded full-suite evidence remain in Git
+and sdlc. No production deadline, corpus or complexity oracle was changed.
+
+
 ### 2026-09-18
 
 Found while closing parley#266 M2; not caused by it — the module and spec are
