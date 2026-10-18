@@ -1,13 +1,13 @@
 ---
 id: 000380
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '4007a0284dcdae916763606fea5c07218f63bba4' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'e8d3d0d8c237960a89b1cdf03f5690637b2ec9d4' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T19:05:38-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "50734f5c", done: "55a076a8"}
+actual_hours: 0.15
 ---
 
 # document_session: one tagged inheritance stage instead of three flags (#378 review, ARCH-ORDER)
