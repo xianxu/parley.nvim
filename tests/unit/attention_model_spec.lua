@@ -393,3 +393,45 @@ describe("attention_model.scan: an agent write is an mtime the operator's editor
         assert.equals("500.10", state.saved["/a.side/newer.md"])
     end)
 end)
+
+
+describe("attention slot scope", function()
+    it("keeps the latest submitter and gives new side docs their parent's slot", function()
+        local state = Model.transition(Model.empty(), { type = "submitted", path = "/a.md", id = "m1", slot = "ops:0" }, 1)
+        local before = vim.deepcopy(state)
+        state = Model.transition(state, { type = "submitted", path = "/a.md", id = "m2", slot = "echo:0" }, 2)
+        assert.equals("ops:0", before.entries["/a.md"].slot)
+        assert.equals("echo:0", state.entries["/a.md"].slot)
+        assert.same({ m1 = 1, m2 = 2 }, state.entries["/a.md"].pending)
+        state = Model.transition(state, { type = "discovered", path = "/a.side/q.md", parent = "/a.md", at = 3 }, 4)
+        assert.equals("echo:0", state.entries["/a.side/q.md"].slot)
+        state = Model.transition(state, { type = "submitted", path = "/a.md", id = "m3" }, 5)
+        assert.is_nil(state.entries["/a.md"].slot)
+    end)
+
+    it("includes legacy entries in scoped lists and all entries without scope", function()
+        local state = Model.empty()
+        for i, slot in ipairs({ "ops:0", "echo:0", false }) do
+            state = Model.transition(state, { type = "submitted", path = "/" .. i, id = "m", slot = slot or nil }, i)
+        end
+        local function paths(slot) return vim.tbl_map(function(e) return e.path end, Model.list(state, slot)) end
+        assert.same({ "/3", "/1" }, paths("ops:0"))
+        assert.same({ "/3", "/2" }, paths("echo:0"))
+        assert.same({ "/3", "/2", "/1" }, paths(nil))
+    end)
+
+    it("reads slot membership once per entry at N and 2N", function()
+        for _, n in ipairs({ 16, 32 }) do
+            local reads, state = 0, Model.empty()
+            for i = 1, n do
+                state.entries[tostring(i)] = setmetatable({ path = tostring(i), submitted_at = i }, {
+                    __index = function(_, key)
+                        if key == "slot" then reads = reads + 1; return "ops:0" end
+                    end,
+                })
+            end
+            assert.equals(n, #Model.list(state, "ops:0"))
+            assert.equals(n, reads)
+        end
+    end)
+end)

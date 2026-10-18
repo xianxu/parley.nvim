@@ -74,6 +74,7 @@ describe("attention: an agentic document's Alt+Return", function()
         await(function() return entry(file) ~= nil end, "the submit was never recorded")
         assert.same({ "msg-1" }, vim.tbl_keys(entry(file).pending))
         assert.equals("waiting", Model.state_of(entry(file)))
+        assert.equals("parley.nvim:9", entry(file).slot)
         -- The fake's ledger owes that ID until the agent folds it.
         local function owed()
             local result = vim.system({ "couch", "--session-sync", "status", "--json", file }, { text = true }):wait()
@@ -131,6 +132,7 @@ describe("attention: a session-sync file's Alt+Return", function()
         await(function() return entry(file) ~= nil end, "the submit was never recorded")
         assert.same({ "msg-1" }, vim.tbl_keys(entry(file).pending))
         assert.same({ version = 1, paths = { "/root.md", file } }, entry(file).breadcrumb)
+        assert.equals("parley.nvim:9", entry(file).slot)
     end)
 
     for _, seam in ipairs({ "real", "unavailable" }) do

@@ -46,6 +46,17 @@ describe("attention_store", function()
         assert.same({}, warnings)
     end)
 
+    it("round-trips optional slots and accepts legacy entries", function()
+        apply({ type = "submitted", path = "/a.md", id = "m1", slot = "ops:0" }, { now = 10 })
+        apply(submitted("/legacy.md", "m2"), { now = 11 })
+        local loaded = Store.load()
+        assert.equals("ops:0", loaded.entries["/a.md"].slot)
+        assert.is_nil(loaded.entries["/legacy.md"].slot)
+        loaded.entries["/a.md"].slot = 42
+        assert.is_nil(Store.parse(loaded).entries["/a.md"].slot)
+        assert.equals(1, #warnings)
+    end)
+
     it("sweeps seen entries past the grace on every apply", function()
         apply(submitted("/a.md", "m1"), { now = 10 })
         apply({ type = "observed", path = "/a.md", probed_ids = { "m1" }, owed_ids = {} }, { now = 20 })

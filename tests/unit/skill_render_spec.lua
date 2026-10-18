@@ -60,6 +60,15 @@ describe("skill_render", function()
         assert.same({ { 1, 4, 2, 3, "ParleyEditChange" } }, spans(buf))
     end)
 
+    it("an edit that replaced nothing is added; any other is changed (#387)", function()
+        local buf = scratch({ "a NEW b", "c OLD d" })
+        skill_render.highlight_edits(buf, {
+            { new_string = "NEW", kind = "add" },
+            { new_string = "OLD", kind = "change" },
+        }, "a NEW b\nc OLD d")
+        assert.same({ { 0, 2, 0, 5, "ParleyEditAdd" }, { 1, 2, 1, 5, "ParleyEditChange" } }, spans(buf))
+    end)
+
     it("an edit ending in a newline ends at the start of the next line", function()
         local content = "a\nb\nc"
         local buf = scratch(vim.split(content, "\n"))
@@ -67,18 +76,16 @@ describe("skill_render", function()
         assert.same({ { 1, 0, 2, 0, "ParleyEditChange" } }, spans(buf))
     end)
 
-    it("a deletion (empty new_string) gets a gutter diagnostic but no highlight", function()
+    -- #387: a deletion leaves no trace — no highlight and no diagnostic.
+    it("a deletion (empty new_string) gets neither a diagnostic nor a highlight", function()
         local buf = scratch({ "keep this", "delete me", "keep this too" })
         local original = "keep this\ndelete me\nkeep this too"
         local new_content = "keep this\nkeep this too"
         local pos = original:find("delete me", 1, true)
-        local edits = { { pos = pos, explain = "removed redundant line", new_string = "" } }
+        local edits = { { pos = pos, explain = "removed redundant line", new_string = "", kind = "delete" } }
         skill_render.attach_diagnostics(buf, edits, original)
         skill_render.highlight_edits(buf, edits, new_content)
-        -- gutter "why" is present (deletion orientation)
-        local diags = vim.diagnostic.get(buf)
-        assert.are.equal(1, #diags)
-        assert.matches("removed redundant line", diags[1].message)
+        assert.are.equal(0, #vim.diagnostic.get(buf))
         -- no highlight: empty new_string is skipped (would've spuriously hit line 0)
         local hl_ns = vim.api.nvim_create_namespace("parley_skill_hl")
         local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, {})
@@ -117,7 +124,7 @@ describe("skill_render", function()
         skill_render.highlight_edits(buf, { { new_string = "line two" } }, content)
         skill_render.attach_diagnostics(buf, { { pos = content:find("two"), explain = "why two" } }, content)
         local snap = skill_render.snapshot(buf)
-        assert.same({ { lnum = 1, col = 0, end_lnum = 1, end_col = 8 } }, snap.hl_spans)
+        assert.same({ { lnum = 1, col = 0, end_lnum = 1, end_col = 8, kind = "change" } }, snap.hl_spans)
         assert.is_nil(snap.hl_lines)
         assert.is_true(#snap.diags >= 1)
         -- clear → empty, then restore from the snapshot
@@ -136,7 +143,7 @@ describe("skill_render", function()
         local hl_ns = vim.api.nvim_create_namespace("parley_skill_hl")
         local diag_ns = skill_render.diag_namespace()
 
-        skill_render.highlight_span(buf, 0, 8, 19)
+        skill_render.highlight_span(buf, 0, 8, 0, 19, "add")
         vim.diagnostic.set(diag_ns, buf, { {
             lnum = 0,
             col = 8,
@@ -157,6 +164,7 @@ describe("skill_render", function()
         assert.are.equal(8, marks[1][3])
         assert.are.equal(0, marks[1][4].end_row)
         assert.are.equal(19, marks[1][4].end_col)
+        assert.are.equal("ParleyEditAdd", marks[1][4].hl_group, "the span keeps its kind through a snapshot (#387)")
 
         local diags = vim.diagnostic.get(buf, { namespace = diag_ns })
         assert.are.equal(1, #diags)

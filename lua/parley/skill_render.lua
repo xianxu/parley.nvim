@@ -3,8 +3,9 @@
 -- The diagnostics/highlights rendering salvaged out of skill_runner (#128 M3),
 -- now the single source used by the skill_invoke driver (skill_runner was
 -- deleted in M4). Thin vim-API/UI wrapper (not pure): INFO diagnostics from each
--- edit's `explain`, and ParleyEditChange (#386) on each edited span only —
--- never a whole line, so unchanged text keeps its own color.
+-- edit's `explain`, and a tint on each edited span only (#386, #387) —
+-- ParleyEditAdd for added text, ParleyEditChange for changed text, never a
+-- whole line, so unchanged text keeps its own color. A deletion leaves no trace.
 
 local M = {}
 
@@ -14,8 +15,9 @@ local FOOTNOTE_HL_NS = "parley_footnote_hl"
 local FOOTNOTE_SOURCE = "parley-footnote"
 local ROUND_HL_NS = "parley_round_hl"
 local ROUND_SOURCE = "parley-round"
--- The one group for every edited span (defined in highlighter.setup_highlights).
-local EDIT_HL = "ParleyEditChange"
+-- Each edited span's group by kind (defined in highlighter.setup_highlights):
+-- "add" when the edit replaced nothing, "change" otherwise (#387).
+local EDIT_HL = { add = "ParleyEditAdd", change = "ParleyEditChange" }
 
 local diag_ns_id
 local hl_ns_id
@@ -101,7 +103,7 @@ local function highlight_footnote_span(buf, lnum0, col_start, end_lnum0, col_end
     vim.api.nvim_buf_set_extmark(buf, footnote_hl_ns_id, lnum0, col_start, {
         end_row = end_lnum0,
         end_col = col_end,
-        hl_group = EDIT_HL,
+        hl_group = EDIT_HL.add, -- a define adds its [^id] reference, replacing nothing
         strict = false,
     })
 end
@@ -174,10 +176,10 @@ local function set_round_diagnostics(buf)
 end
 
 --- Draw the agent's last round (#383): presentation.decorations as
---- highlights, a deletion as a zero-width mark, each with an INFO diagnostic.
---- Replaces any round drawn before; other kinds are kept.
+--- highlights by kind (#387), each with an INFO diagnostic. Replaces any round
+--- drawn before; other kinds are kept.
 --- @param buf number
---- @param decorations table[] {lnum, col, end_lnum, end_col, message, deletion}, 0-based
+--- @param decorations table[] {lnum, col, end_lnum, end_col, message, kind}, 0-based
 function M.publish_round(buf, decorations)
     ensure_namespaces()
     vim.api.nvim_buf_clear_namespace(buf, round_hl_ns_id, 0, -1)
@@ -186,7 +188,7 @@ function M.publish_round(buf, decorations)
         local id = vim.api.nvim_buf_set_extmark(buf, round_hl_ns_id, d.lnum, d.col, {
             end_row = d.end_lnum,
             end_col = d.end_col,
-            hl_group = not d.deletion and EDIT_HL or nil,
+            hl_group = EDIT_HL[d.kind] or EDIT_HL.change,
             strict = false,
         })
         said[id] = d
@@ -218,19 +220,19 @@ end
 --- Attach INFO diagnostics from edit explanations. Each diagnostic spans the
 --- edit's line range (lnum..end_lnum) so "cursor in the region" matches, and its
 --- message remains semantic; each consumer wraps it to its actual display width.
+--- A pure deletion (kind "delete") leaves no trace, so it gets none (#387).
 --- @param buf number
---- @param edits table[]  applied edits with {pos, explain, new_string?}
+--- @param edits table[]  applied edits with {pos, explain, new_string?, kind}
 --- @param original_content string  file content before edits
 function M.attach_diagnostics(buf, edits, original_content)
     ensure_namespaces()
     local diagnostics = {}
-    for _, edit in ipairs(edits) do
+    for _, edit in ipairs(vim.tbl_filter(function(e) return e.kind ~= "delete" end, edits)) do
         local line_num = 0
         for _ in original_content:sub(1, edit.pos):gmatch("\n") do
             line_num = line_num + 1
         end
-        -- end_lnum spans the edit's own lines (newlines in the new text); a pure
-        -- deletion (no new_string) stays a single-line anchor.
+        -- end_lnum spans the edit's own lines (newlines in the new text).
         local span = 0
         for _ in (edit.new_string or ""):gmatch("\n") do
             span = span + 1
@@ -256,50 +258,46 @@ local function position_of(content, pos)
     return row, pos - line_start
 end
 
---- Highlight each edit's new text, as one span.
+--- Highlight each edit's new text, as one span of its kind.
 --- @param buf number
---- @param edits table[]  applied edits with {new_string}
+--- @param edits table[]  applied edits with {new_string, kind = "add"|"change"|"delete"}
 --- @param new_content string  file content after edits
 function M.highlight_edits(buf, edits, new_content)
     ensure_namespaces()
     for _, edit in ipairs(edits) do
-        -- Skip pure deletions: new_string is "" and `find("")` returns 1, which
-        -- would spuriously highlight line 0. Deletions are oriented by their
-        -- INFO gutter diagnostic (the "why") via attach_diagnostics, not a
-        -- highlight (there's no new text to mark). #133.
-        local new_pos = (edit.new_string and edit.new_string ~= "")
-            and new_content:find(edit.new_string, 1, true)
-            or nil
+        -- A pure deletion has no new text and leaves no trace (#387).
+        local new_pos = edit.kind ~= "delete" and new_content:find(edit.new_string, 1, true) or nil
         if new_pos then
             local row, col = position_of(new_content, new_pos)
             local end_row, end_col = position_of(new_content, new_pos + #edit.new_string)
-            M.highlight_span(buf, row, col, end_row, end_col)
+            M.highlight_span(buf, row, col, end_row, end_col, edit.kind)
         end
     end
 end
 
---- Highlight a column span with ParleyEditChange on the hl namespace. The four-arg
---- form is same-line: (buf, lnum0, col_start, col_end). The five-arg form spans
---- rows: (buf, lnum0, col_start, end_lnum0, col_end).
+--- Highlight a span on the hl namespace with its kind's group (#387).
 --- @param buf number
 --- @param lnum0 number 0-based start line
 --- @param col_start number 0-based start column
---- @param end_lnum0_or_col_end number 0-based end line, or end column
---- @param col_end number|nil 0-based exclusive end column
-function M.highlight_span(buf, lnum0, col_start, end_lnum0_or_col_end, col_end)
+--- @param end_lnum0 number 0-based end line
+--- @param col_end number 0-based exclusive end column
+--- @param kind "add"|"change"|nil  default "change"
+function M.highlight_span(buf, lnum0, col_start, end_lnum0, col_end, kind)
     ensure_namespaces()
-    local end_lnum0 = lnum0
-    if col_end == nil then
-        col_end = end_lnum0_or_col_end
-    else
-        end_lnum0 = end_lnum0_or_col_end
-    end
     vim.api.nvim_buf_set_extmark(buf, hl_ns_id, lnum0, col_start, {
         end_row = end_lnum0,
         end_col = col_end,
-        hl_group = EDIT_HL,
+        hl_group = EDIT_HL[kind] or EDIT_HL.change,
         strict = false,
     })
+end
+
+-- The kind an extmark's group stands for, so a snapshot can redraw it.
+local function kind_of(hl_group)
+    for kind, group in pairs(EDIT_HL) do
+        if group == hl_group then return kind end
+    end
+    return "change"
 end
 
 --- Capture the current decoration set as redrawable data (for the undo/redo
@@ -315,6 +313,7 @@ function M.snapshot(buf)
             col = m[3],
             end_lnum = details.end_row or m[2],
             end_col = details.end_col or m[3],
+            kind = kind_of(details.hl_group),
         })
     end
     local diags = {}
@@ -341,7 +340,7 @@ function M.apply_snapshot(buf, snap)
     M.clear_decorations(buf)
     snap = snap or {}
     for _, span in ipairs(snap.hl_spans or {}) do
-        M.highlight_span(buf, span.lnum, span.col or 0, span.end_lnum or span.lnum, span.end_col)
+        M.highlight_span(buf, span.lnum, span.col or 0, span.end_lnum or span.lnum, span.end_col, span.kind)
     end
     if snap.diags and #snap.diags > 0 then
         local diagnostics = {}

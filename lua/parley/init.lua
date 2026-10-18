@@ -1953,7 +1953,7 @@ end
 -- Inline term definition (#161 + R1, #166). render_definition is the on_done IO
 -- seam. On a successful lookup it stores the definition as a durable markdown
 -- footnote (ONE undo entry — the anchor), highlights the selected term/reference
--- span (ParleyEditChange), and shows the definition as an ephemeral INFO
+-- span (ParleyEditAdd), and shows the definition as an ephemeral INFO
 -- diagnostic. Undo/redo coherence reuses review's projection watcher: undoing
 -- the footnote edit lands on the pre-edit content-hash → the empty snapshot
 -- renders → both decorations clear.
@@ -2015,7 +2015,8 @@ local function render_definition(buf, capture, phrase, result)
 	end
 
 	local diag_span = e.diagnostic_span
-	skill_render.highlight_span(buf, diag_span.lnum, diag_span.col, diag_span.end_lnum, diag_span.end_col)
+	-- The term gains a [^id] reference and replaces nothing: added (#387).
+	skill_render.highlight_span(buf, diag_span.lnum, diag_span.col, diag_span.end_lnum, diag_span.end_col, "add")
 
 	-- Record projection states so undo/redo of the footnote edit clears/restores
 	-- the decorations (#133 M5 machinery, reused): pre-edit hash → empty

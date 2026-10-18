@@ -1,11 +1,13 @@
 -- #386: parley's highlight groups survive :colorscheme (which runs :hi clear)
--- through parley.highlight_groups, and ParleyEditChange — the one group for
--- edited spans — is a quiet underline by default, overridable through
--- config.highlight.edit_change.
+-- through parley.highlight_groups. #387: the edit groups are faint tints of
+-- the theme's Normal background — ParleyEditAdd toward green, ParleyEditChange
+-- toward blue — re-derived on every ColorScheme, overridable through
+-- config.highlight.edit_add / edit_change.
 local tmp_dir = vim.fn.tempname() .. "-parley-highlight-groups"
 vim.fn.mkdir(tmp_dir, "p")
 
 local parley = require("parley")
+local color = require("parley.color")
 
 local function setup(highlight)
     parley.setup({
@@ -17,23 +19,50 @@ local function setup(highlight)
     })
 end
 
--- An underline that sets no color, link or background of its own.
-local function assert_quiet_underline()
-    local hl = vim.api.nvim_get_hl(0, { name = "ParleyEditChange" })
-    assert.is_true(hl.underline)
-    assert.is_nil(hl.link)
-    assert.is_nil(hl.fg)
-    assert.is_nil(hl.bg)
+local function bg(name) return vim.api.nvim_get_hl(0, { name = name }).bg end
+
+-- The tints the groups must carry over a given Normal background.
+local function expect_tints(normal_bg)
+    assert.equals(color.blend(normal_bg, 0x3fb950, 0.15), bg("ParleyEditAdd"))
+    assert.equals(color.blend(normal_bg, 0x58a6ff, 0.15), bg("ParleyEditChange"))
+    for _, name in ipairs({ "ParleyEditAdd", "ParleyEditChange" }) do
+        local hl = vim.api.nvim_get_hl(0, { name = name })
+        assert.is_nil(hl.fg, name .. " keeps the text's own color")
+        assert.is_nil(hl.underline, name)
+    end
 end
 
-describe("highlight groups (#386)", function()
-    it("ParleyEditChange is an underline with no color of its own", function()
+describe("highlight groups (#386, #387)", function()
+    it("tints Normal's background green for added, blue for changed", function()
+        vim.api.nvim_set_hl(0, "Normal", { bg = 0x1e1e2e, fg = 0xcdd6f4 })
         setup()
-        assert_quiet_underline()
+        expect_tints(0x1e1e2e)
+        assert.are_not.equal(bg("ParleyEditAdd"), bg("ParleyEditChange"))
     end)
 
-    it("config.highlight.edit_change overrides it", function()
-        setup({ edit_change = { link = "Visual" } })
+    it("re-derives the tints when the theme's background changes", function()
+        setup()
+        vim.api.nvim_set_hl(0, "Normal", { bg = 0xfafafa, fg = 0x202020 })
+        vim.cmd("doautocmd ColorScheme")
+        expect_tints(0xfafafa)
+    end)
+
+    it("blends from black or white by 'background' when Normal has no bg", function()
+        setup()
+        local was = vim.o.background
+        -- Setting 'background' reloads the colorscheme, so clear Normal after it.
+        for _, mode in ipairs({ { "light", 0xffffff }, { "dark", 0x000000 } }) do
+            vim.o.background = mode[1]
+            vim.api.nvim_set_hl(0, "Normal", {})
+            vim.cmd("doautocmd ColorScheme")
+            expect_tints(mode[2])
+        end
+        vim.o.background = was
+    end)
+
+    it("config.highlight.edit_add / edit_change override them", function()
+        setup({ edit_add = { link = "DiffAdd" }, edit_change = { link = "Visual" } })
+        assert.same({ link = "DiffAdd" }, vim.api.nvim_get_hl(0, { name = "ParleyEditAdd" }))
         assert.same({ link = "Visual" }, vim.api.nvim_get_hl(0, { name = "ParleyEditChange" }))
         setup()
     end)
@@ -41,10 +70,11 @@ describe("highlight groups (#386)", function()
     it("survives :colorscheme, with every other parley group", function()
         setup()
         vim.cmd("colorscheme default")
-        assert_quiet_underline()
+        expect_tints(vim.api.nvim_get_hl(0, { name = "Normal" }).bg
+            or (vim.o.background == "light" and 0xffffff or 0x000000))
         assert.same({ link = "DiagnosticWarn" }, vim.api.nvim_get_hl(0, { name = "ParleyReviewUser" }))
         vim.cmd("colorscheme default") -- the autocmd outlives its first run
-        assert_quiet_underline()
+        assert.is_not_nil(bg("ParleyEditAdd"))
     end)
 
     it("keep re-runs each module's definer on every ColorScheme, one per name", function()

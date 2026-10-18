@@ -108,8 +108,10 @@ accept/reject markers instead, and a rewrite too large for them arrives as a
 `→ [proposal](…)` side-doc link that Alt+o follows. Under `direct`, nothing is
 drawn. A round past 200 changes highlights the first 200 and says so. This
 needs a Couch with the `round` verb (pair#661). An older one shows nothing.
-Changed text is underlined, and nothing else about it changes color. To restyle
-it, set `highlight.edit_change`. In Markdown
+Added text gets a faint green background, changed text a faint blue one. Both
+are tinted from your theme's own background, so they stay quiet in any color
+scheme, and a deletion leaves no mark. To restyle them, set
+`highlight.edit_add` and `highlight.edit_change`. In Markdown
 documents, 🤖 markers and links show in full. In chats, Parley still hides its
 own branch links and model params. Markdown links there show in full too,
 unless you set `chat_treesitter = true`, which conceals them.
@@ -124,7 +126,7 @@ their history; Back can also establish the displayed file as their root.
 See [file navigation](atlas/ui/keybindings.md#file-history-back)
 for the command and configuration.
 
-Press **Alt+Space** or **Ctrl+Y Space** (`:ParleyAttention`) to list every file you submitted with
+Press **Alt+Space** or **Ctrl+Y Space** (`:ParleyAttention`) to list files you submitted with
 Alt+Return, newest first: **waiting** while the agent still owes it, **answered**
 once the agent has folded the submit, and **seen**, dimmed, once you have looked
 at it after the answer: opened it from the finder, or focused, moved or scrolled
@@ -133,6 +135,10 @@ folder appear too, as answered (`↳`). Opening an entry restores the trail of
 files it had when you submitted it. A seen entry leaves the list `attention.seen_grace_minutes` later
 (default 60); a new submit makes it waiting again. See the
 [attention finder](atlas/ui/attention_finder.md).
+
+In Couch, the list defaults to submits from this pane’s slot. **Ctrl+A** toggles current/all slots
+(`attention_finder_mappings.toggle_scope`); the title shows the scope. Legacy entries without a slot appear everywhere,
+and outside Couch the finder shows all slots. A file belongs to its latest submitting slot; new side docs inherit their parent’s slot.
 
 ## Learn by chatting
 

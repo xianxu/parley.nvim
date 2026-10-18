@@ -30,19 +30,18 @@ describe("skill_render round", function()
     end)
 
     local decorations = {
-        { lnum = 1, col = 4, end_lnum = 1, end_col = 12, message = "why", deletion = false },
-        { lnum = 2, col = 0, end_lnum = 2, end_col = 0, message = "deleted: gone", deletion = true },
+        { lnum = 1, col = 4, end_lnum = 1, end_col = 12, message = "why", kind = "change" },
+        { lnum = 2, col = 0, end_lnum = 2, end_col = 4, message = "added", kind = "add" },
     }
 
-    it("draws each span with its message, a deletion as a zero-width mark on its line", function()
+    it("draws each span by its kind (#387), with its message", function()
         skill_render.publish_round(buf, decorations)
         local marks = round_marks()
         assert.equals(2, #marks)
         assert.same({ 1, 4, 1, 12 }, { marks[1][2], marks[1][3], marks[1][4].end_row, marks[1][4].end_col })
-        assert.equals("ParleyEditChange", marks[1][4].hl_group)
-        assert.is_nil(marks[2][4].hl_group)
+        assert.same({ "ParleyEditChange", "ParleyEditAdd" }, { marks[1][4].hl_group, marks[2][4].hl_group })
         local diagnostics = vim.diagnostic.get(buf, { namespace = skill_render.diag_namespace() })
-        assert.same({ "why", "deleted: gone" }, { diagnostics[1].message, diagnostics[2].message })
+        assert.same({ "why", "added" }, { diagnostics[1].message, diagnostics[2].message })
         assert.same({ "parley-round", "round" }, { diagnostics[1].source, diagnostics[1].user_data.parley_kind })
         assert.equals(2, diagnostics[2].lnum)
     end)
