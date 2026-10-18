@@ -1,13 +1,21 @@
 ---
 id: 000383
-status: open
+status: working
 deps: [pair#661]
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '0c9bfd9d6456457f8f90aac1615dbd8537b34441' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '013d1215bd2705cf24e6a7a461cf9d4ce17c09d3' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-18T00:03:53-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # S4 presentations: highlight agent rounds from Couch's round sidecar, propose and direct
@@ -34,8 +42,18 @@ On a document under the default presentation, an agent `apply` round shows each 
 
 ## Plan
 
-- [ ]
+Durable plan: [workshop/plans/000383-s4-presentations-plan.md](../plans/000383-s4-presentations-plan.md). Coding waits for pair#661 M1 (the hub, 10-18).
+
+- [ ] Task 1: the Couch fake keeps a round (`round --json`, `--round` seed, `Cleared` after a submit)
+- [ ] Task 2: `presentation` (pure): the key, and a round's spans placed or re-anchored
+- [ ] Task 3: `skill_render.publish_round` / `clear_round`, a round kind beside footnotes
+- [ ] Task 4: `edit_round` + `document_registry.request("round")`, generation-guarded
+- [ ] Task 5: hooks: reload, attach, confirmed submit (`release_and_send`)
+- [ ] Task 6: the `→ [proposal]` link spec, the real/fake conformance case, atlas, suite, live check
 
 ## Log
 
 ### 2026-10-18
+
+- Claimed and started plan-only (hub, 10-18): code waits for pair#661 M1 to land, so nothing builds against an unlanded Couch verb. The fake's round shape follows the design's sidecar; the plan names it as an assumption to confirm against M1 before Task 1.
+- Design choices: round diagnostics share skill_render's diagnostic namespace as a separate kind, as footnotes do, because `clear_decorations` would wipe footnotes on submit. The fetch reuses document_registry's bounded client (ARCH-DRY). A generation counter is the single guard against a stale reply (ARCH-concurrency). Clearing happens at `release_and_send`'s confirmed branch, the one send path for legacy and registered documents.
