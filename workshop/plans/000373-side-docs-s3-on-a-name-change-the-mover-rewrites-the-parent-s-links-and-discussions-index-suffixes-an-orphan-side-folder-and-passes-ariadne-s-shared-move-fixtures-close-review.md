@@ -194,3 +194,65 @@ dispose:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"cc8cdccd-dd91-4ccf-aa3d-1100cbd273eb","repository":"github.com/xianxu/parley.nvim","issue_id":"000373","recipe":"milestone-review","round":8,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/5f6af2146bf7b05e","reviewed_head":"06304d247169c708ac43a457c25ca76fc6e4d120","slot":"parley.nvim:1","requested_at":"2026-10-18T02:40:10.726331Z"},"phase":"finished","pid":59908,"started_at":"2026-10-18T02:40:10.819665Z","finished_at":"2026-10-18T02:44:04.648888Z","session_id":"01a14ce1-8733-7cc3-a591-5360f311d2d1","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-17T20:43:49-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 373 — side docs S3: on a name change the mover rewrites the parent's links and discussions index, suffixes an orphan .side folder, and passes ariadne's shared move fixtures |
+| repo | parley.nvim |
+| issue file | workshop/issues/000373-side-docs-s3-on-a-name-change-the-mover-rewrites-the-parent-s-links-and-discussions-index-suffixes-an-orphan-side-folder-and-passes-ariadne-s-shared-move-fixtures.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 955896049f49d0233a3c917c72e0ae0e081d358f..2af674c93083b7e2253ba0fd6d45991a07a87e3a |
+| command | sdlc close --issue 373 |
+| reviewer | codex |
+| isolation | fenced |
+| timestamp | 2026-10-17T20:43:49-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned interdiff preserves both sides of the test conflict resolution and introduces no production behavior or scope changes. No new defects found. Prior findings remain disposed; this narrow review does not reopen them.
+
+1. **Strengths**
+
+   - All 11 temporary-directory fixtures honor platform defaults and canonicalize paths before exporter checks (`tests/unit/review_protocol_export_test.py:101`).
+   - Conflict resolution retains collaboration-mode, corruption, symlink, and mutation-free preflight assertions.
+   - Issue Spec, Done-when, and implementation plan remain unchanged.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - All 23 export tests passed with default temporary-directory settings.
+   - All 23 passed again with `TMPDIR=/tmp`.
+   - Range whitespace checks passed; checkout remains clean at pinned HEAD.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** no duplicated production logic introduced.
+   - **ARCH-PURE — pass:** filesystem setup remains in integration tests; production separation is unchanged.
+   - **ARCH-PURPOSE — pass:** resolution preserves canonical-path safety and configurable temporary placement across every affected fixture.
+   - No new user-facing or architectural surface requires README or atlas updates.
+
+7. **Plan revision recommendations:** None.
+
+No pending prior findings require disposition, and no new findings were raised.
+
+```findings
+{}
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"99603697-415e-4943-8063-600218ddfaee","repository":"github.com/xianxu/parley.nvim","issue_id":"000373","recipe":"fix-review","round":9,"attempt":1,"agent":"codex","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/4861a43fa861b0e3","reviewed_head":"2af674c93083b7e2253ba0fd6d45991a07a87e3a","slot":"parley.nvim:1","requested_at":"2026-10-18T03:43:10.751848Z"},"phase":"finished","pid":47505,"started_at":"2026-10-18T03:43:10.864934Z","finished_at":"2026-10-18T03:43:49.353804Z","session_id":"01a14d1b-34fd-78c3-87b2-83c0da777838","outcome":"returned"}] -->

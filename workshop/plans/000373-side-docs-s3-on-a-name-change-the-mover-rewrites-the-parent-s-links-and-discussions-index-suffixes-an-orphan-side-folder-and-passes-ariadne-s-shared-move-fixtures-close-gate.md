@@ -399,6 +399,35 @@ rounds:
       isolation: fenced
       reviewed: 06304d247169c708ac43a457c25ca76fc6e4d120
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 99603697-415e-4943-8063-600218ddfaee
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000373"
+            recipe: fix-review
+            round: 9
+            attempt: 1
+            agent: codex
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/4861a43fa861b0e3
+            reviewed_head: 2af674c93083b7e2253ba0fd6d45991a07a87e3a
+            slot: parley.nvim:1
+            requested_at: "2026-10-18T03:43:10.751848Z"
+          phase: finished
+          pid: 47505
+          started_at: "2026-10-18T03:43:10.864934Z"
+          finished_at: "2026-10-18T03:43:49.353804Z"
+          session_id: 01a14d1b-34fd-78c3-87b2-83c0da777838
+          outcome: returned
+      "n": 9
+      timestamp: "2026-10-17T20:43:49-07:00"
+      dispatched: "2026-10-17T20:43:10-07:00"
+      agent: codex
+      recipe: fix-review
+      isolation: fenced
+      reviewed: 2af674c93083b7e2253ba0fd6d45991a07a87e3a
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#373 (boundary-review)
@@ -494,6 +523,8 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-5 — addressed — atlas/modes/session_sync.md:274 documents supplied observations, effect ordering and orphan_destination, matching document_move_plan.project.
 - BR-6 — addressed — Finalization persists protection intent before release and retires disk effects before unlink; interruption and legacy recovery regressions pass.
 - BR-7 — addressed — Shared validate_geometry rejects interfering document/side/orphan relationships before effects and during journal validation. Disabling it independently produces 2 pure, 4 mover and 16 frontend failures; pinned-head regressions pass, including nested OLD with/without its side tree through owned/native paths.
+
+## Round 9 — 2026-10-17T20:43:49-07:00 (codex) — passed
 
 ## Open findings
 
