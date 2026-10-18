@@ -55,7 +55,8 @@
 - **`edit_round`** has three entry points:
   - `refresh(buf)` is called after a reload and on attach. It reads `presentation.value`. For `direct` or `propose` it clears and returns; under `propose` the markers are already in the text. Otherwise it bumps `generation[buf]`, requests the round, and on the reply draws only if the generation is unchanged, the buffer is valid and `cleared` is false. It computes the decorations from the buffer's lines at reply time, never at request time, so an edit in between is handled by re-anchoring.
   - `clear(buf)` bumps the generation, which drops any reply in flight, and calls `skill_render.clear_round`.
-  - A buffer-local `on_lines` (debounced with `vim.schedule`) re-derives the diagnostics from the span extmarks, so a diagnostic follows its span while the operator edits (row 30). vim.diagnostic positions do not move with the text; extmarks do.
+  - A buffer-local `on_lines` re-derives the diagnostics from the span extmarks, so a diagnostic follows its span while the operator edits (row 30). vim.diagnostic positions do not move with the text; extmarks do.
+  - **Operating envelope (ARCH-CONSTRAINTS, plan-quality minor 4):** `on_lines` is a per-keystroke hot path. It coalesces: a `pending[buf]` flag means at most one scheduled re-derive per buffer, however many keystrokes arrive before it runs. A re-derive costs one `nvim_buf_get_extmarks` over the round namespace, O(spans), and it reads no buffer text. The growth drivers are keystrokes K and spans S. The cost is O(S) per scheduled run and O(1) per keystroke beyond the first. Re-anchoring runs only once per reply, not per keystroke, at O(S × document bytes) with plain `string.find`. The budget is S ≤ 200 spans and documents up to Couch's 4 MiB read cap. Past 200 spans, `refresh` draws the first 200 and logs the rest at debug, rather than stalling the editor. A counted spec (Task 4) feeds 8 and then 16 keystrokes before the scheduler runs and asserts exactly one re-derive each time.
   - **Injected into:** nothing pure. It is the shell around `presentation.decorations`.
 - **`document_registry.request("round", {path})`** adds one entry to `shapes` and its own reply classifier. The registry classifier `model.classify_reply` is specific to registrations, so round replies don't go through it. They still get the client's queue, child lifetime and deadline bounds (ARCH-DRY: one bounded Couch client, not a second `couch.run` with its own timer).
   - Its result is `{kind = "round", round = …, cleared = bool}`, `{kind = "absent"}` when there is no round yet, or `unavailable`.
@@ -99,7 +100,7 @@
   - A wrong argument shape returns `Code="usage"`.
 - [ ] Run it (`make test-spec SPEC=scratch` with a map naming the spec) and see it fail.
 - [ ] Implement:
-  - in `owe_or_fold` on `--owe`, `status["LastSubmit"] = At`;
+  - in `owe_or_fold` on `--owe`, `status["LastSubmit"] = At`, with `At` stamped at microsecond precision (`%Y-%m-%dT%H:%M:%S.%fZ`) instead of whole seconds. Specs also seed a round's `at` in the past, so the strict `>` can't tie within one second (plan-quality minor 1);
   - a `--round PATH FILE` branch storing `state["rounds"][key]`;
   - the `round` op, computing `Cleared` as `instant(LastSubmit) > instant(Round["at"])`, parsed as above, never compared as strings;
   - `M.round` in `fake_couch.lua`.
@@ -118,6 +119,7 @@
   - a deletion carries `deleted: <old>` (multi-line `old` cut to its first line plus "…");
   - a span without `explain` says "changed by the agent";
   - multi-line spans keep their `end_lnum`.
+- [ ] **Adversarial strategy (plan-quality minors 2, 3):** Couch's positions are untrusted input, even on a hash match. A seeded loop of 500 random rounds over random lines feeds `decorations` the risky class: spans that are malformed (not integer pairs, `end` before `start`) or out of range (a line past the end, a column past the line's length), multibyte content, CR bytes, and `new` text that is empty or repeats. The mechanical guard: `decorations` never raises, and every output position lies inside `lines` (`0 <= lnum < #lines`, `0 <= col <= #lines[lnum+1]`). A span that fails the check is dropped, never clamped into a wrong place. Drawing also passes `strict = false` to extmarks, as `highlight_footnote_span` does, as a second guard.
 - [ ] Watch them fail, then implement with plain string search over `table.concat(lines, "\n")` and byte-offset to (line, col) conversion. Keep the file under 120 lines, with no `vim.api`.
 - [ ] Get to green, then commit `#383: presentation reads the key and places a round's spans`.
 
@@ -130,7 +132,7 @@
   - A footnote diagnostic published before survives both `publish_round` and `clear_round`.
   - `clear_round` leaves the review-skill (`parley-skill`) diagnostics alone.
   - A deletion is a zero-width extmark with no highlight group, and its diagnostic sits on its line.
-- [ ] Implement, mirroring `publish_footnotes` (`skill_render.lua:75`), with an `is_round_diagnostic` next to `is_footnote_diagnostic`. Put the new functions **after** `clear_footnote_diagnostics`'s doc block and function, not between a `---` block and its function (lessons, #204/#340/#345).
+- [ ] Implement with `strict = false` on every extmark, mirroring `publish_footnotes` (`skill_render.lua:75`), with an `is_round_diagnostic` next to `is_footnote_diagnostic`. Put the new functions **after** `clear_footnote_diagnostics`'s doc block and function, not between a `---` block and its function (lessons, #204/#340/#345).
 - [ ] Get to green, then commit.
 
 ### Task 4: `edit_round` and the registry's `round`
@@ -149,6 +151,8 @@
   - **(32)** a seeded round that is already `Cleared` draws nothing.
   - **Race:** with `FAKE_COUCH_REGISTRY_REPLY_DELAY=1` and `_OPS=round`, `refresh` then `clear` leaves nothing drawn after the reply arrives. In the reverse order the draw happens.
   - **Stale:** the buffer is edited between the request and the reply, and the span is re-anchored.
+  - **Counted coalescing:** 8, then 16, keystrokes on a drawn buffer before the scheduler runs produce exactly one re-derive each time, counted through an exposed counter. That rejects a per-keystroke re-derive, which would count 8 and 16.
+  - **Span cap:** a round of 201 spans draws 200.
 - [ ] Implement `round` in `document_registry.request`:
   - add `shapes.round = 1`;
   - build the argv as for `lookup`;
@@ -188,3 +192,11 @@
 ## Done when
 
 The issue's Done when: on a document under the default presentation, an agent `apply` round shows each edit highlighted with its reason, a `write` round shows its changed lines highlighted ("changed by the agent"), the highlights follow the operator's edits, and they clear on the next confirmed submit and stay cleared on reopen. Under `presentation: propose` the same request shows per-line accept/reject markers, and a large rewrite shows as a followable `→ [proposal]` link. `direct` draws nothing. Specs against the Couch fake cover this, and there is a live check on a real document.
+
+## Revisions
+
+- 2026-10-18: change-code's plan-quality gate passed with 4 Minors, all folded in:
+  1. microsecond `LastSubmit` stamps and a past `at` in the fake (Task 1);
+  2. an adversarial seeded-random strategy for `presentation.decorations` (Task 2);
+  3. untrusted span positions are checked in the pure layer and extmarks use `strict = false` (Tasks 2, 3);
+  4. the `on_lines` coalescing envelope with a counted N/2N spec and a 200-span cap (Integration points, Task 4).

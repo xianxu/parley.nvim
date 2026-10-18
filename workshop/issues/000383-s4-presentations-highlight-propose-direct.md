@@ -5,9 +5,9 @@ deps: [pair#661]
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
-estimate_hours:
+estimate_hours: 2.16
 collaboration-mode: collaboration
-card_mirror: '013d1215bd2705cf24e6a7a461cf9d4ce17c09d3' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '466d2b4d1e82d1844778354d535e37881a3f063e' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-18T00:03:53-07:00
 claimant:
     operator: Xian Xu
@@ -44,6 +44,23 @@ Design: `ops:teams/devinfra/projects/universal-agent-input-interface/design.side
 - Under `presentation: propose` the same request shows per-line accept/reject markers, and a large rewrite shows as a followable `→ [proposal]` link.
 - `direct` draws nothing.
 - Specs against the Couch fake cover the behavior, plus a live check on a real document.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim           design=0.3 impl=0.4
+item: lua-neovim           design=0.3 impl=0.4
+item: smaller-go-module    design=0.05 impl=0.15
+item: real-api-discovery   design=0.0 impl=0.2
+item: atlas-docs           design=0.05 impl=0.05
+item: milestone-review     design=0.0 impl=0.15
+design-buffer: 0.15
+total: 2.16
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.* The calibration doc is tagged stale, so treat the numbers as provisional. The two `lua-neovim` items are pure `presentation` with its drawing, and `edit_round` with the session_sync hooks. Their design is v2's 1–3h at the ×0.2 spec discount, since the plan pre-resolves the decisions, and their impl is 40% of 0.5–1.5h. `smaller-go-module` is the closest slug for the Python fake's round verb. `real-api-discovery` is the conformance case against the real M1 binary. The design buffer is +15% because a thorough durable plan exists.
 
 ## Plan
 
