@@ -1,13 +1,13 @@
 ---
 id: 000373
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-17
 updated: 2026-10-17
 estimate_hours: 5.53
 collaboration-mode: collaboration
-card_mirror: '708f77f1bf3631014542da823bc712872d66717a' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'af0351fa31e36e37e02743b2f03f607db2616a18' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-17T06:40:08-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
+actual_hours: N/A
 ---
 
 # side docs S3: on a name change the mover rewrites the parent's links and discussions index, suffixes an orphan .side folder, and passes ariadne's shared move fixtures
