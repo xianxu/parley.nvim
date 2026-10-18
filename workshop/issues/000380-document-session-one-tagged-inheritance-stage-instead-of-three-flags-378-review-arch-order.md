@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:4
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot4/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "50734f5c", done: "55a076a8"}
 ---
 
 # document_session: one tagged inheritance stage instead of three flags (#378 review, ARCH-ORDER)
