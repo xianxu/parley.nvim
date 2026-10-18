@@ -1,6 +1,7 @@
 -- #382: a deadline is measured from when it is started, not from the loop's
 -- cached time. Without update_time, a 500 ms timer started after a 1 s
 -- synchronous block fired 6 ms later (measured on 0.11.7 and 0.12.5).
+local arrival = require("tests.helpers.arrival")
 local helper = require("parley.helper")
 local uv = vim.uv or vim.loop
 
@@ -17,7 +18,7 @@ describe("helper.start_deadline", function()
                 timer:close()
             end)
         end)
-        assert.is_true(vim.wait(5000, function() return fired_after ~= nil end, 5))
+        assert.is_true(vim.wait(arrival.MS, function() return fired_after ~= nil end, 5))
         assert.is_true(fired_after >= 290, ("a 300 ms deadline fired after %.0f ms"):format(fired_after))
     end)
 

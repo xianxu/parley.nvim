@@ -801,3 +801,4 @@ point as well as internal helpers before calling the family complete.
   matches nothing; use `git grep -P`. Tutorial prose is now checked against the
   registry in `keybinding_agreement_spec`.
 - State that belongs to one in-flight operation lives on that operation's record, not in a parallel field cleared "when its event arrives" (#380 REWORK). The parallel field drifted from the operation through `pending` and `retry`, and a non-terminal matching event cleared it under a live operation. On the record, it is copied, carried and dropped with the operation, with nothing to keep in sync.
+- A new spec must pass `tests/arch/*` and `tests/unit/arch_helper_spec.lua` before the recorded suite runs. They police spec authoring: listing files through `arch_helper.worktree_files` (#381) and `vim.wait` taking `arrival.MS`, not a literal (#382). Twice in one session, a new spec cost a full recorded suite run because only its own file had been run.
