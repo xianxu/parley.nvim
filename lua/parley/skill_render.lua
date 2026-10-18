@@ -79,9 +79,11 @@ function M.clear_decorations(buf)
     vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
 end
 
---- Dismiss the live round decorations (manual <dismiss> binding). Decorations
---- otherwise RIDE subsequent edits (behavior B, #133) and are cleared only at
---- the next round start; this lets the operator clear them on demand.
+--- Dismiss the review skill's live decorations (manual <dismiss> binding).
+--- Decorations otherwise RIDE subsequent edits (behavior B, #133) and are
+--- cleared only at the next round start; this lets the operator clear them on
+--- demand. The agent's round (#383) is not the skill's and stays: it clears
+--- on the next confirmed submit.
 M.dismiss = M.clear_decorations
 
 --- The review diagnostic namespace id — the single source other modules

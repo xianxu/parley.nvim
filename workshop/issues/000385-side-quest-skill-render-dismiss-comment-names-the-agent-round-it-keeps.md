@@ -1,13 +1,23 @@
 ---
 id: 000385
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'fa4bea4bac04a6ca2e5f9eee3771be3e8620e423' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'c3312baf5d7fbbb21059020b7e90bc79b423b6d7' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-18T06:48:17-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "b6c6c2c9", done: "8a6356d2"}
+actual_hours: 0.01
 ---
 
 # side-quest: skill_render dismiss comment names the agent round it keeps
@@ -29,3 +39,4 @@ card_mirror: 'fa4bea4bac04a6ca2e5f9eee3771be3e8620e423' # card fields mirrored f
 ## Log
 
 ### 2026-10-18
+- 2026-10-18: closed — Comment-only change: the M.dismiss doc comment in lua/parley/skill_render.lua now says it clears the review skill decorations and that the agent round (#383) stays until the next confirmed submit, matching clear_decorations since #383. Full suite green on bf27b054.; review verdict: SHIP
