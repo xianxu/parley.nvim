@@ -31,6 +31,70 @@ local function write(path, text)
     local file = assert(io.open(path, 'wb'))
     assert(file:write(text)); assert(file:close())
 end
+local function run(argv)
+    local result = vim.system(argv, { env = config.env, text = true, clear_env = true }):wait()
+    return result
+end
+-- What the supervisor's message service writes in a live store, done here by
+-- hand in the isolated one: the marker that it records deliveries, and one
+-- delivered `submitted: PATH` row for `slot`, stamped as Couch stamps it
+-- (RFC3339Nano with the local offset), `ahead` seconds from now.
+local function recording()
+    local dir = config.env.COUCH_STORE_DIR .. '/session-sync'
+    vim.fn.mkdir(dir, 'p')
+    write(dir .. '/recording.json', vim.json.encode({ PID = 1, Started = os.date('!%Y-%m-%dT%H:%M:%SZ') }))
+end
+local function delivered(slot, path, ahead)
+    local t = os.time() + ahead
+    local offset = os.date('%z', t):gsub('^([+-]%d%d)(%d%d)$', '%1:%2')
+    local row = vim.json.encode({ ID = 'conformance-1', From = 'parley.nvim:1',
+        At = os.date('%Y-%m-%dT%H:%M:%S', t) .. '.123456789' .. offset, Head = 'submitted: ' .. path })
+    local file = assert(io.open(config.env.COUCH_STORE_DIR .. '/session-sync/' .. slot:gsub(':', '%%3A') .. '.jsonl', 'ab'))
+    assert(file:write(row .. '\n')); assert(file:close())
+end
+-- #383: `round PATH --json` through the production request, real and fake
+-- alike: absent before any agent write; after one, a round whose spans and
+-- result_hash (parley's hash of the file's lines) are what the write did; after
+-- a later submit, cleared.
+local function round_case(path)
+    if not config.fake then
+        local refused = request('round', { path })
+        check(refused.kind == 'unavailable' and refused.code == 'not-recording',
+            'a store that records nothing must refuse, got ' .. vim.inspect(refused))
+        recording()
+    end
+    check(request('round', { path }).kind == 'absent', 'no write yet must mean no round')
+    write(path, '# Round\nold line\n')
+    if config.fake then
+        local seeded = vim.json.encode({ base_hash = 'x', result_hash = vim.fn.sha256('# Round\nnew line\n'):sub(1, 16),
+            at = os.date('!%Y-%m-%dT%H:%M:%SZ'), presentation = 'highlight',
+            spans = { { start = { 1, 0 }, ['end'] = { 1, 3 }, old = 'old', new = 'new' } } })
+        write(path, '# Round\nnew line\n')
+        check(run({ config.binary, '--round', path, seeded }).code == 0, 'fake round seed failed')
+    else
+        local read = run({ config.binary, '--session-sync', 'read', '--all', path, '--json' })
+        local hash = vim.json.decode(read.stdout).Read.Hash
+        local body = config.root .. '/round-body.md'
+        write(body, '# Round\nnew line\n')
+        local wrote = run({ config.binary, '--session-sync', 'write', '--all', body, path, '--if-hash', hash })
+        check(wrote.code == 0, 'real write --all failed: ' .. wrote.stdout .. wrote.stderr)
+    end
+    local reply = request('round', { path })
+    check(reply.kind == 'round' and not reply.cleared, 'a write must leave an uncleared round, got ' .. vim.inspect(reply))
+    local span = reply.round.spans[1]
+    check(#reply.round.spans == 1 and span.old == 'old' and span.new == 'new', 'span text mismatch')
+    check(vim.deep_equal(span.start, { 1, 0 }) and vim.deep_equal(span['end'], { 1, 3 }), 'span position mismatch')
+    local lines = vim.fn.readfile(path)
+    check(reply.round.result_hash == vim.fn.sha256(table.concat(lines, '\n') .. '\n'):sub(1, 16),
+        "result_hash must be parley's hash of the file's lines")
+    if config.fake then
+        check(run({ config.binary, '--owe', 'conformance-1', 'submitted: ' .. path }).code == 0, 'fake owe failed')
+    else
+        delivered('pair:5', path, 2)
+    end
+    reply = request('round', { path })
+    check(reply.kind == 'round' and reply.cleared, 'a later submit must clear the round, got ' .. vim.inspect(reply))
+end
 local function main()
     local old, new, target = config.root .. '/note.md', config.root .. '/moved.md', config.root .. '/target.md'
     write(old, '# Isolated registry conformance\n')
@@ -51,12 +115,13 @@ local function main()
     registered(request('lookup', { new }), new, id)
     registered(request('lookup', { target }), target, target_id)
     check(request('lookup', { config.root .. '/never.md' }).kind == 'absent', 'null lookup must mean absent')
+    round_case(target)
     if config.fake then
         for _, mode in ipairs({ 'missing', 'malformed', 'unsupported', 'wrong-path' }) do
             check(request('lookup', { new }, mode).kind == 'unavailable', mode .. ' must retain uncertainty')
         end
     end
-    print('PASS: production registry register/lookup/repeat/fs-rename/metadata-rename/replay/conflicts/null'
+    print('PASS: production registry register/lookup/repeat/fs-rename/metadata-rename/replay/conflicts/null/round'
         .. (config.fake and '/malformed/unsupported' or ''))
 end
 local ok, err = pcall(main)
