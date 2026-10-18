@@ -7,6 +7,21 @@ local logger = require("parley.logger")
 local _H = {}
 local LAST_CONTENT_LINE_CHUNK_SIZE = 256
 
+--- Start a one-shot deadline `ms` from now (#382). libuv measures a timer from
+--- the loop's cached time, which luv's timer:start does not refresh, so after
+--- synchronous work the deadline already counts that work: a 500 ms timer
+--- started after a 1 s block fired 6 ms later (0.11.7 and 0.12.5). Refresh the
+--- clock first. `runtime` is an injected uv (a test fake may lack update_time).
+--- @param timer userdata a uv timer
+--- @param ms integer
+--- @param callback function
+--- @param runtime table|nil defaults to vim.uv
+_H.start_deadline = function(timer, ms, callback, runtime)
+	local clock = runtime or vim.uv or vim.loop
+	if clock.update_time then clock.update_time() end
+	return timer:start(ms, 0, callback)
+end
+
 -- Navigation belongs in editing windows, never overlays such as Screenkey.
 _H.is_editing_window = function(win)
     if not vim.api.nvim_win_is_valid(win) then return false end

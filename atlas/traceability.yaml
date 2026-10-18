@@ -821,6 +821,7 @@ atlas:
       - tests/integration/document_band_spec.lua
       - tests/unit/document_band_model_spec.lua
       - tests/integration/document_registry_spec.lua
+      - tests/unit/start_deadline_spec.lua
       - tests/integration/document_lease_spec.lua
       - tests/integration/document_move_spec.lua
       - tests/integration/sidecar_degrade_spec.lua

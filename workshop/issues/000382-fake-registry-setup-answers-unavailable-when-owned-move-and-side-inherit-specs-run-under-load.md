@@ -78,3 +78,12 @@ Reproduce first: run the pair in parallel under load, with the registry's error 
   - Eight lookups against a 0.6 s fake, each with a 1 s deadline, all answer, and at least 4 of them queued 300 ms or more. Mutation check: counting the queue time (deadline minus queued time) fails it.
   - An unsupported verb returns `exit` 2, the fake's stderr, and `queued_ms`/`ran_ms`. A 300 ms deadline against a 2 s fake says "deadline exceeded after 300 ms", with `ran_ms` ≥ 300.
   Targeted runs pass: document_registry 11, side_inherit 9, owned_move 43, agentic_document 47, lifetime 10, document_move 76, document_band 32, session_sync 64.
+- Second hypothesis from parley.nvim:1, relayed by the hub: libuv timers start from the loop's cached time, and luv's `timer:start` does not refresh it. **Confirmed.** In headless nvim, after a 1 s synchronous block inside a callback, a 500 ms timer fired **6 ms** after it was started (`uv.now()` was 1 s stale). With `uv.update_time()` first, it fired at 500 ms. Identical on NVIM v0.12.5 and v0.11.7. So in the registry, synchronous work before `pump()` starts a child (spec setup, earlier callbacks) cut the deadline short by that much. It is a second contributor alongside the 2.5 s literal, and it also fits "fails only under load".
+- Fix at the cause, as a class. `helper.start_deadline(timer, ms, cb, runtime)` refreshes the loop clock (through an injected runtime's `update_time` when there is one; fakes may lack it) and then starts a one-shot timer. Every deadline whose expiry declares a failure now uses it:
+  - the registry child deadline;
+  - agentic_document's "not confirmed" submit band;
+  - oauth's 30 s login timeout;
+  - tasker's reconcile delay and its attempt deadline, both through the record's runtime.
+  Excluded after review: repeating timers (spinners, pulses, polls) and one-shot timers whose early firing only shifts a redraw or debounce and declares nothing (spell_blink debounce, session_sync idle, chat_pending, highlighter, interview, init).
+- New `tests/unit/start_deadline_spec.lua`. A 300 ms deadline started after a 600 ms block fires at ≥ 290 ms; with `update_time` removed (mutation) it fired after 5 ms and the spec fails. The injected-runtime path is covered with and without `update_time`. Mapped in traceability.yaml.
+- Targeted runs pass: start_deadline 2, document_registry 11, agentic_document 47, side_inherit 9, owned_move 43, tasker_run 43, tasker_supervision 30, tasker_unit 16, oauth 110, single_source_sweeps 28.

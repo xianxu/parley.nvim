@@ -316,7 +316,7 @@ local function begin_submit(s)
     s.submitting = submitting
     show_feedback(s, "submitting…", false)
     local ms = config_ms("agentic_submit_timeout_ms")
-    submitting.timer:start(ms, 0, vim.schedule_wrap(function()
+    require("parley.helper").start_deadline(submitting.timer, ms, vim.schedule_wrap(function()
         if s.submitting ~= submitting or not valid(s) then return end
         submitting.overdue = true
         show_feedback(s, NOT_CONFIRMED .. " · Couch did not answer within " .. math.ceil(ms / 1000) .. " s", true)

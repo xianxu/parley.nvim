@@ -99,7 +99,7 @@ function M.request(operation, args, witness, callback, options)
         end, options.env and { env = options.env } or nil)
         if item.done then return end
         item.timer = uv.new_timer()
-        item.timer:start(deadline_ms, 0, vim.schedule_wrap(function()
+        require("parley.helper").start_deadline(item.timer, deadline_ms, vim.schedule_wrap(function()
             if item.child then pcall(item.child.kill, item.child, 15) end
             finish(unavailable(("Couch registry deadline exceeded after %d ms; mutation outcome may be unknown")
                 :format(deadline_ms)))
