@@ -56,6 +56,20 @@ Actions: submit, open finder, toggle scope, reopen. Existing waiting/answered/se
 
 ## Log
 
+### 2026-10-18 — corrected head green; fresh recorded suite queued
+
+Code/test head 8bd03ed0d49c1f3d2c037d83523134dc0e344487: all 220 focused
+cases pass on both preferred 0.12.5 and stock 0.11.7, including the existing
+architecture guard; lint clean across 803 files. Close round 2 returned SHIP,
+no new findings (same Minor receipt-parser advisory retained). Reviewer also
+reran the mapped tests on both runtimes. Fresh recorded full-suite attempt
+bee326aaf54d2f6755bd4ab3754cc5ff is healthy and queued on that code head;
+log .git/sdlc/test-stats/inflight/bee326aaf54d2f6755bd4ab3754cc5ff/run.log.
+Keep its place. Later commits are documentation only, so its result will cover
+them. Do not land until this full run passes. No extra stage is needed for the
+configuration-key relocation: the default registered key and pane behavior
+checked live remain unchanged and are covered by the actual-picker tests.
+
 ### 2026-10-18 — first full-suite failure and deterministic fixture diagnosis
 - 2026-10-18: closed — Corrected the architecture-guard failure by using attention_finder_mappings.toggle_scope; existing guard unchanged and now mapped into focused tests. All 220 focused cases pass, lint clean in 803 files. Deterministic red/green scorer fixture proves old q+ typo-matched q-prefixed temp tokens; replacement +++ and adversarial qzbeta pin row filtering without changing production matcher or timeout. First recorded run b128ef609d54b16545d71033a29d85f7: 478 PASS files, only mapping-schema guard failed, log retained; no unrelated-flake retry. Fresh recorded suite running on 8bd03ed0. Prior dual-runtime 191-case and disposable real-profile/live-Couch check remain documented; default Ctrl+A behavior unchanged. Hub allows review overlap; fresh recorded dual-runtime full pass is mandatory before landing. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
