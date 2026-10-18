@@ -57,6 +57,18 @@ weakening what it bounds (pump work over a full queue of maximum-width chains).
 
 ## Log
 
+### 2026-10-17 — full stock-0.11 result
+
+PARLEY_TEST_NVIM=/opt/homebrew/bin/nvim make -k test exited 0. Confirmed
+/opt/homebrew/bin/nvim resolves to /opt/homebrew/opt/nvim-0.11/bin/nvim.
+All 469 spec files passed, zero failure/deadline blocks, both orphan censuses
+clean, lint 0 warnings/0 errors. The blocking fold-batches file passed in 35 s;
+retirement/uncertainty passed in 31/32 s. Final scope and active-JIT storage
+regressions passed (2 s / 3 s). Log /tmp/parley-267-full-011.log,
+sha256 f1ec0ec6e8bdc1dceb664811d122009a80ee05df7250bc43b2fae97259bcd2ad.
+Recorded default-0.12 suite has acquired its slot and is running; close remains
+pending that result.
+
 ### 2026-10-17 — current verification checkpoint
 
 Implementation code head: b8b171a9660a45fae9de215821f65b639d0bbea7;
