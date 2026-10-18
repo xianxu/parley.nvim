@@ -1,13 +1,13 @@
 ---
 id: 000388
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '05a61ba94b627bda4ba6682a95597c8208e6d183' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '42ac695636b184460859bf6662844ae1ff0fe123' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-18T12:01:44-07:00
 claimant:
     operator: Xian Xu
@@ -17,6 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: quick, provenance: inferred, spec: "41d35ac2", done: "41982362"}
+actual_hours: 0.17
 ---
 
 # Scope the attention finder to the submitting Couch slot
