@@ -208,3 +208,32 @@ The alternatives are rebuilding and distributing 0.11 against repaired LuaJIT
 trace-abort fallback (extra per-trace state and callback ordering). Prefer the
 small explicit runtime policy if the matched controls confirm the mechanism.
 This is a proposal, not permission to hide an unexplained residual stall.
+
+
+### 2026-10-17 — TL approval extends the allocator safeguard to the editor
+
+The TL approved the plan and required the real editor to use the same unsafe-
+allocator rule. Inspection finds no production JIT safeguard: only the harness
+has jit_tuning today. Promote that policy into lua/parley/jit_tuning.lua and
+call protect() at the beginning of parley initialization, before its other
+imports, plus from the harness apply(). Production protect() disables only
+old/unknown arm64 OSX JIT allocators; harness apply() additionally retains its
+existing options on repaired builds. This avoids adding unrelated large-mcode
+settings to the editor while keeping the allocator safety rule single-sourced
+(ARCH-DRY). Update script runtime detection and all existing consumers; remove
+the test-only owner. A build without JIT is a no-op.
+
+The VM-wide JIT state is a startup decision, not an asynchronous lifecycle.
+Unsafe allocator => interpreter, editor/test operation continues; repaired or
+other platform => preserve the operator's enabled state. The operator action
+remains ordinary editing; no retry or recovery menu. Disabling the VM affects
+all Lua in that editor, so the unchanged complexity and timing regressions,
+and installed-version suite, must verify the cost. No global jit.on is added.
+The deliberate active-JIT reclamation child keeps JIT enabled to preserve its
+oracle; watch it separately. Existing tool_resources restores only its entry
+jit.status(), so it already preserves interpreter startup.
+
+Baseline completed: unprofiled 0.11 fold-batches 64/64 passes at sixteen-way
+load, 37.07–185.65 s. The exact failed-suite deadline event remains unreproduced;
+the compiler/allocator churn and multi-minute no-case-progress interval are
+reproduced. Do not describe those green samples as timeout failures.
