@@ -880,3 +880,11 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   where it stands and write the current one beside it, citing the Revision.
   Readers and reviewers read the body first, so a body that still states the
   old design is a second, contradicting Spec.
+
+- #394: Read a flake's recorded numbers before blaming the code under test.
+  `queued_ms=0` with `ran_ms` equal to the deadline meant the request never
+  queued, so the queue invariant held and only the test's real-time slack
+  broke. Prove an ordering invariant with controlled scheduling, where a stub
+  answers only when the test says. Keep the real-process test for the
+  boundary, with a deadline load can only slow, and with lower bounds the
+  fixture enforces, not guesses.
