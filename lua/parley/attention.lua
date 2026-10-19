@@ -282,20 +282,25 @@ function M.open(options)
         local function title()
             return "Attention — " .. (all_slots and "all slots" or slot)
         end
-        local function repaint()
+        local function repaint(prefer_unread)
             if not handle then return end
             local selected = handle.selected and handle.selected()
-            handle.update(items(latest), nil, selected and selected.value or nil)
+            local shown, initial = items(latest)
+            local retarget = prefer_unread and (not handle.current_query or handle.current_query() == "")
+            handle.update(shown, nil, retarget and initial or (selected and selected.value or nil),
+                retarget and { ensure_visible = true } or nil)
             if handle.set_title then handle.set_title(title()) end
         end
         local config = (package.loaded.parley or {}).config or require("parley.config")
+        local shown, initial = items(state)
         handle = seam.picker.open({
             title = title(),
-            items = items(state),
+            items = shown,
+            initial_index = initial,
             filter_items = Rows.filter,
             anchor = "top", -- forest preorder must put parents physically above children
             mappings = slot and { { key = require("parley.keybinding_registry").keys_for("attention_scope", config),
-                fn = function() all_slots = not all_slots; repaint() end } } or {},
+                fn = function() all_slots = not all_slots; repaint(true) end } } or {},
             on_select = function(item) select(item.value, seam, options and options.on_selected) end,
         })
         M.refresh(options, function(next_state) latest = next_state; repaint() end, options and options.on_refreshed)

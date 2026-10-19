@@ -1256,7 +1256,7 @@ function M.open(opts)
                 ))
             end
         elseif initial_index and query == "" then
-            set_selection(initial_index)
+            set_selection(initial_index, { ensure_visible = true })
             if title:match("^Chat Files") then
                 local selected = get_selected_item()
                 logger.debug(string.format(
@@ -1735,8 +1735,9 @@ function M.open(opts)
     --- conversion is the widget's job precisely because callers cannot know it:
     --- an index that means one row in their list means a different row here the
     --- moment a query is active, which is when an async repaint is most likely to
-    --- move the cursor under the operator.
-    local function update(new_items, new_tag_bar_tags, next_selection)
+    --- move the cursor under the operator. Optional selection_opts can request
+    --- ensure_visible for an explicit operator-directed target; default keeps view.
+    local function update(new_items, new_tag_bar_tags, next_selection, selection_opts)
         if closed then return end
         local next_identity
         if type(next_selection) == "string" then
@@ -1771,7 +1772,7 @@ function M.open(opts)
         if next_identity then
             for i, item in ipairs(filtered) do
                 if recall_id_fn(item) == next_identity then
-                    set_selection(i, { preserve_view = true })
+                    set_selection(i, selection_opts or { preserve_view = true })
                     break
                 end
             end

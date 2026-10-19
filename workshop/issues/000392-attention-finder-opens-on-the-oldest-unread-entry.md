@@ -37,8 +37,8 @@ On open, place the cursor on the oldest unread entry: state `answered` (an answe
 
 ## Plan
 
-- [ ] Return an initial row index alongside the unchanged tree rows, choosing answered with earliest answered_at (legacy missing answer time falls back to submitted_at; ties keep tree order). Compute during the existing bounded row pass (ARCH-PURE, ARCH-DRY).
-- [ ] Apply it on open and empty-query scope toggles; preserve selection for async updates and typed filters. Ensure the selected row is visible through the picker's existing viewport rule, without changing row order.
+- [x] Return an initial row index alongside the unchanged tree rows, choosing answered with earliest answered_at (legacy missing answer time falls back to submitted_at; ties keep tree order). Compute during the existing bounded row pass (ARCH-PURE, ARCH-DRY).
+- [x] Apply it on open and empty-query scope toggles; preserve selection for async updates and typed filters. Ensure the selected row is visible through the picker's existing viewport rule, without changing row order.
 - [ ] Red/green pure and native picker tests cover answer vs submit order, ties, seen/waiting, no unread, side-child position, both scopes, a below-fold target, typed filtering and late updates. Run required suite before close; normal landing follows.
 
 Actions: open, toggle scope, type a filter, move selection, close. No new persisted state or lifecycle.
@@ -56,3 +56,8 @@ Choice costs one comparison per displayed entry, bounded by the store's256 entri
 ### 2026-10-18
 
 - Read atlas/ui/attention_finder.md first. Card was unclaimed, then claimed by parley.nvim:2. start-plan refreshed the ariadne tool build and was rerun as directed. Existing top-anchored picker always selects row1; existing row generation already receives scope-filtered entries, and async repaint preserves identity. Keep those owners; do not sort the forest to implement cursor preference.
+
+- RED `/tmp/parley392-red2.log` reproduces missing initial indices in three pure cases and the native picker staying at the top instead of the oldest child. The first native fixture needed its store directory created (`/tmp/parley392-red.log`); an intermediate GREEN hit a fixture assumption that the parent's probe was among the first four, corrected to complete an actually captured pending reply without changing production concurrency. Final `/tmp/parley392-green2.log` passes33 finder +18 rows +82 picker cases, zero failures/errors, no survivors. It checks below-fold initial visibility, exact forest order, both scoped preferences, typed filter retention through scope change and late observation, earliest answer vs submit time, ties/legacy fallback, no unread, and state reads8/16 for8/16 rows. Five-file luacheck and whitespace checks clean. Architecture guard replay and required suite follow.
+- Production uses the second result of Rows.items for initial selection and empty-query scope changes. Async repaint still supplies selected identity and default view preservation. The picker initial selection uses its existing ensure-visible path; update accepts an optional selection option for explicit scope changes. No persisted state, row reordering, extra IO or sorting.
+
+- Pre-suite architecture replay `/tmp/parley392-arch.log` passes all25 mapped architecture/helper spec files (144 cases), zero failures/errors, no survivors; includes the shared scanner and test-authoring guards.
