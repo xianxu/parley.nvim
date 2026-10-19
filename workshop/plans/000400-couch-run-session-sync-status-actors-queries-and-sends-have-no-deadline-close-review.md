@@ -191,3 +191,75 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"56294bd1-c2ca-44c7-8a11-7e23f60f7aa7","repository":"github.com/xianxu/parley.nvim","issue_id":"000400","recipe":"small-diff-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/5dff3a2815417e27","reviewed_head":"5b58f710009b8d7191052e9908c7b57da51fbbf8","slot":"parley.nvim:3","requested_at":"2026-10-19T20:16:23.456289Z"},"phase":"finished","pid":46937,"started_at":"2026-10-19T20:16:23.550931Z","finished_at":"2026-10-19T20:23:51.274626Z","session_id":"069186f2-920b-4347-9950-0286b567b407","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-19T13:26:01-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 400 — couch.run: session-sync status/actors queries and sends have no deadline |
+| repo | parley.nvim |
+| issue file | workshop/issues/000400-couch-run-session-sync-status-actors-queries-and-sends-have-no-deadline.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4de97dc37a92d11b9a806a4486693c44914b23f8..0167f8fadbe8886ac18a06c01d006d0c8f4e8126 |
+| command | sdlc close --issue 400 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | checkout |
+| timestamp | 2026-10-19T13:26:01-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking the legacy-submit message in session_sync. After that I'll write the verdict.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This window changes only documents and touches no code. It edits the issue body, adds an entry to `workshop/lessons.md`, and adds the close-gate and close-review records. It fixes BR-4: every replaced claim that finding listed is now struck where it stands, the current claim sits beside it, and each cites its Revision. I checked each new claim against the code at head and found no mismatch. The new agentic-submit row and the "(legacy and agentic submit)" label are not a scope change. They put in the body what the existing "after round 1" Revisions entry already says. That entry was hub-approved and did not change in this window, and `## Done when` did not change either. Nothing blocks SHIP.
+
+Done-when: current. Both bullets still hold under the 1x/3x design. Every `couch.run` caller gets a bounded deadline, either the default (`couch.lua:32`) or an explicit one (`couch.lua:72`, the send deadline). The test that a timed-out probe clears `s.probing` is unaffected.
+
+1. **Strengths**
+   - Every BR-4 instance is struck in place:
+     - Spec paragraph 1: `DEADLINE_MS` is now `deadline_ms()` / `send_deadline_ms()`.
+     - Caller table: both send rows now say send deadline (3x).
+     - Status row: the BR-1 correction.
+     - ARCH-CONSTRAINTS: 15 s for a query, 45 s for a send.
+     - Plan item 1: `deadline_ms()`, with `signal 15` struck.
+   - The struck-through text keeps the history readable and each new claim names its Revision.
+   - Each new claim matches the code:
+     - `couch.deadline_ms` reads the user setting on every call: `couch.lua:17-19` via `document_registry.config_ms` (`document_registry.lua:14-18`).
+     - The send deadline is 3x: `send_deadline_ms` returns `lost_ms` (`couch.lua:55-57`), which is `3 * config_ms(...)` (`document_registry.lua:25-27`).
+     - The agentic band text matches `agentic_document.lua:398`.
+     - The legacy message is assembled at `session_sync.lua:866` together with `couch.lua:67`.
+   - The lessons entry states the rule for the whole `spec-claim-diverges-from-code` family: strike the replaced claim where it stands. It does not just patch these instances, which is what ARCH-PURPOSE asks for.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings:** none new.
+
+5. **Test coverage:** no code changed, so no regression test is needed. These are prose corrections, and I checked each one against the code it describes (cited above).
+
+6. **Architecture (interdiff only)**
+   - ARCH-DRY: pass. The Spec points to `lost_ms` as the source of the send deadline instead of restating a number.
+   - ARCH-PURE: N/A, no code in the window.
+   - ARCH-PURPOSE: pass. The sweep covers every instance BR-4 listed. I also checked the rest of the body for stale claims and found none. The Log keeps its history as written, which is correct.
+   - ARCH-EVOLVE: N/A, no persisted format changed.
+
+7. **Plan revisions:** none. The plan now matches the code.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: addressed
+    note: |
+      All five listed instances are struck in place with the current claim beside each, citing its Revision (Spec para 1, both send rows, status row, ARCH-CONSTRAINTS, Plan item 1). Each was checked against couch.lua:17-72, document_registry.lua:14-27, agentic_document.lua:398 and session_sync.lua:866. The lessons.md entry records the rule for the family.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"b1b0837f-0ad5-4c32-bd44-a95954894222","repository":"github.com/xianxu/parley.nvim","issue_id":"000400","recipe":"fix-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/0c80eaee6e1e78f5","reviewed_head":"0167f8fadbe8886ac18a06c01d006d0c8f4e8126","slot":"parley.nvim:3","requested_at":"2026-10-19T20:25:17.757554Z"},"phase":"finished","pid":18327,"started_at":"2026-10-19T20:25:17.923746Z","finished_at":"2026-10-19T20:25:54.724354Z","session_id":"aea6bb4b-c811-45d3-ae6d-046f0ac4ad27","outcome":"returned"}] -->

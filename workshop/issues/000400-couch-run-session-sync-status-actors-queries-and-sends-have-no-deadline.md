@@ -89,6 +89,7 @@ ARCH-CONSTRAINTS: these are local Unix-socket calls on the UI's async path; the 
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — Docs-only delta after SHIP: the replaced Spec and Plan claims are struck where they stand, citing the Revisions (round-2 advisory), and a lessons rule is added. No lua or test change since 5b58f710. (fixed-then-ship) (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 - 2026-10-19: closed — Round-1 fixes plus the hub-approved send delta. The deadline reads the user setting on each call (unit test). Sends get 3x the submit deadline (document_registry.lost_ms); a killed send logs one line and the band shows it may have arrived (an agentic spec, red without the band line). The #357 join test passes inside the 3x window. couch.timed_out keys on code 124. The BR-1 Spec correction is under Revisions. make test-spec SPEC=modes/review and SPEC=modes/session_sync are green. Fake-backed only. The full suite is recorded on 5b58f710 via local-check. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 - The hub approved the plan, with two checks:
   - **The callback can't fire twice when a kill and a normal exit race.** `couch.run`'s `finish` drops a second report; a unit spec feeds two reports and gets one. vim.system itself reports once, after its pipes close.

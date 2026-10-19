@@ -171,6 +171,79 @@ rounds:
       isolation: checkout
       reviewed: 5b58f710009b8d7191052e9908c7b57da51fbbf8
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: b1b0837f-0ad5-4c32-bd44-a95954894222
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000400"
+            recipe: fix-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/0c80eaee6e1e78f5
+            reviewed_head: 0167f8fadbe8886ac18a06c01d006d0c8f4e8126
+            slot: parley.nvim:3
+            requested_at: "2026-10-19T20:25:17.757554Z"
+          phase: finished
+          pid: 18327
+          started_at: "2026-10-19T20:25:17.923746Z"
+          finished_at: "2026-10-19T20:25:54.724354Z"
+          session_id: aea6bb4b-c811-45d3-ae6d-046f0ac4ad27
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: 0167f8fadbe8886ac18a06c01d006d0c8f4e8126
+        tracker_head: dfc3e2c3a964f6d680a5859f056821e6b9c63aca
+        branch_point: f5afbf45bf761ff0249f1e6a9d345ebe44814b1d
+        since: "2026-10-19T12:01:16-07:00"
+        until: "2026-10-19T13:24:32-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-19T12:01:16-07:00"
+              end: "2026-10-19T13:24:32-07:00"
+              began: "2026-10-19T12:01:16-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 338ec900-e10b-4fe4-be14-0f0ef1bf7fbd
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 9288ebbf72605425acf990eb0a7e53d46bd850f7c26ffa2e5010cd77b71270e8
+              started: "2026-10-18T22:09:43.273Z"
+              spawned: false
+              bytes: 8639530
+              windows:
+                - start: "2026-10-19T12:01:16-07:00"
+                  end: "2026-10-19T13:24:32-07:00"
+        cuts:
+            - dispatched: "2026-10-19T12:36:39-07:00"
+              finalized: "2026-10-19T12:56:34-07:00"
+              finalizing: false
+            - dispatched: "2026-10-19T13:16:23-07:00"
+              finalized: "2026-10-19T13:24:00-07:00"
+              finalizing: true
+      "n": 3
+      timestamp: "2026-10-19T13:26:02-07:00"
+      dispatched: "2026-10-19T13:25:17-07:00"
+      agent: claude
+      reviewer: claude (anthropic; author anthropic)
+      dispose:
+        - id: BR-4
+          disposition: addressed
+          note: All five listed instances are struck in place with the current claim beside each, citing its Revision (Spec para 1, both send rows, status row, ARCH-CONSTRAINTS, Plan item 1). Each was checked against couch.lua:17-72, document_registry.lua:14-27, agentic_document.lua:398 and session_sync.lua:866. The lessons.md entry records the rule for the family.
+          round: 3
+      recipe: fix-review
+      isolation: checkout
+      reviewed: 0167f8fadbe8886ac18a06c01d006d0c8f4e8126
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#400 (boundary-review)
@@ -202,6 +275,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Minor] `spec-claim-diverges-from-code` (kind: defect) Spec and Plan body still state the round-1 design the Revisions replaced
   This is the 2nd finding in this family. The rule: when a Revision replaces a Spec or Plan claim, edit or strike the replaced sentence where it stands. Instances: Spec paragraph 1 (couch.DEADLINE_MS, shipped 15000); Spec table ping/violation and legacy-submit rows (default, but sends get 3x); status row (the band keeps its last owed state); ARCH-CONSTRAINTS (at most 15 s, but sends live up to 45 s); Plan item 1 (DEADLINE_MS, code 124 with signal 15).
 
+## Round 3 — 2026-10-19T13:26:02-07:00 (claude) — passed
+
+### Disposed
+
+- BR-4 — addressed — All five listed instances are struck in place with the current claim beside each, citing its Revision (Spec para 1, both send rows, status row, ARCH-CONSTRAINTS, Plan item 1). Each was checked against couch.lua:17-72, document_registry.lua:14-27, agentic_document.lua:398 and session_sync.lua:866. The lessons.md entry records the rule for the family.
+
 ## Open findings
 
-- **BR-4** [Minor] `spec-claim-diverges-from-code` (kind: defect) Spec and Plan body still state the round-1 design the Revisions replaced
+(none — every finding has been disposed)
