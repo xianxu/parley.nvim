@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "f5b376a7", done: "a66fdd31"}
 ---
 
 # spelling: the Blink corrections menu is off by default (underlines stay on)
