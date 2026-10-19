@@ -117,6 +117,9 @@ end
 -- keep reading it (`peek`).
 function M.display(win)
     win = window(win)
+    local parley = package.loaded["parley"]
+    local option = parley and parley.config and parley.config.breadcrumb
+    if option and option.enable == false then return nil, "breadcrumb disabled" end
     local trail, reason = M.peek(win)
     if not trail then return nil, reason end
     local current = shown[win]

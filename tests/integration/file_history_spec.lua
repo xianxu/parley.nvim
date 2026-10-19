@@ -79,6 +79,13 @@ describe("per-window file Back (#333)", function()
         vim.fn.writefile({ "# plan" }, nested)
         vim.cmd("edit " .. vim.fn.fnameescape(nested))
         assert.truthy(vim.wo.winbar:find(" notes › 2026 › plan%=", 1, true))
+        -- One config line opts out; Back keeps working.
+        parley.config.breadcrumb.enable = false
+        vim.cmd("edit " .. vim.fn.fnameescape(files.answer))
+        assert.equals("", vim.wo.winbar)
+        assert.is_true(back())
+        assert.equals(nested, path())
+        parley.config.breadcrumb.enable = true
     end)
 
     it("shows a side doc's tree path, not the trail that reached it, and keeps Back (#391)", function()
