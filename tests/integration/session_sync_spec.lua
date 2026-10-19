@@ -359,6 +359,23 @@ describe("session-sync buffer", function()
         assert.is_true(hl.bold)
     end)
 
+    it("keeps the editor's open descriptors flat across 200 agent writes and reloads (#399)", function()
+        local function fds() local n = 0 for _ in vim.fs.dir("/dev/fd") do n = n + 1 end return n end
+        local function settle() vim.wait(300, function() return false end) collectgarbage() collectgarbage() end
+        vim.env.FAKE_COUCH_STATUS = vim.json.encode({ Code = "ok", Status = { Owed = {}, LastWrite = "" } })
+        open(header)
+        settle()
+        local before = fds()
+        for i = 1, 200 do
+            agent_write("- write " .. i)
+            assert.is_true(vim.wait(arrival_ms(), function()
+                return vim.api.nvim_buf_get_lines(buf, 7, 8, false)[1] == "- write " .. i
+            end), "reload " .. i)
+        end
+        settle()
+        assert.equals(before, fds())
+    end)
+
     it("a free buffer follows the agent's writes on disk", function()
         open(header)
         local update = vim.deepcopy(header)
