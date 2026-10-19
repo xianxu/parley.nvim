@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "3bed86d6", done: "87a22e9a"}
 ---
 
 # Registry queue deadline flake
@@ -39,7 +40,7 @@ Remove the load-sensitive timing assumption while preserving the actual invarian
 
 Diagnosis: in the recorded failure, request 1 failed with `queued_ms=0` and `ran_ms=1000`. It never queued. Its own Python fake child took longer than the 1 s deadline under load. The queue invariant held; the test's 0.4 s of real-time slack is what broke. No registry code changes.
 
-- [ ] Deterministic regression (controlled scheduling). Stub `couch.run` so that no child answers until the test answers it.
+- [x] Deterministic regression (controlled scheduling). Stub `couch.run` so that no child answers until the test answers it.
   - Requests 1–4 take long deadlines (arrival.MS) and hold all four active slots.
   - Request 5 has a 300 ms deadline and waits in the queue.
   - Hold the queue for 900 ms, then answer request 1 with a null-registration reply. That frees a slot, and request 5 spawns.
@@ -47,7 +48,7 @@ Diagnosis: in the recorded failure, request 1 failed with `queued_ms=0` and `ran
   - Assert: request 5 is `absent` with `queued_ms >= 900`, and `couch.run` ran five times.
   - Why it's deterministic: a deadline started at admission would fire during the hold, because a timer never fires early. Request 5's real deadline never comes into play, because its answer arrives in the same call that starts it.
   - Red check: start the timer at admission and confirm the test fails.
-- [ ] Real process-boundary coverage stays, without the narrow slack.
+- [x] Real process-boundary coverage stays, without the narrow slack.
   - Eight lookups through the Python fake now sleep 0.2 s and take the arrival deadline, not 1 s.
   - All eight answer `absent`, and at least four queued for at least 150 ms. A queued request waits for a child that sleeps at least 0.2 s, so the lower bound is structural, not a timing guess.
 
@@ -56,3 +57,11 @@ Diagnosis: in the recorded failure, request 1 failed with `queued_ms=0` and `ran
 ### 2026-10-18
 
 Failed evidence: /Users/xianxu/workspace/parley.nvim/.git/sdlc/test-stats/failed/cb7588a68bab3b4b10fa36c1e134718c.log (SHA-256 prefix 1fb5f695372b). File: tests/integration/document_registry_spec.lua, case starts a request's deadline when its child spawns, not when it queues. Failure assertion line 115. The isolated unchanged run passed 11/11. Filed unclaimed for the hub; #393 will retain this failure and make one unchanged recorded rerun per the worker flake rule.
+
+### 2026-10-19
+
+- Request 1 failed with `queued_ms=0`, so its own child, not the queue, overran the deadline. The registry needed no change; the test's 0.4 s slack did.
+- The deterministic test stubs `couch.run`, holds request 5 in the queue for three times its deadline, then answers it in the call that starts it.
+- Red check: with the deadline timer armed at admission, the deterministic test fails, while the real-process test still passes (the red check is the deterministic test's job). With the real code, both pass.
+- `make test-spec SPEC=modes/session_sync` is green (28 files, 0 failed).
+
