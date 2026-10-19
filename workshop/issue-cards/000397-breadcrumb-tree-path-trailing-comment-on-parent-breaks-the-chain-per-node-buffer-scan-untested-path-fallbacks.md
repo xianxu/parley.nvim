@@ -1,6 +1,6 @@
 ---
 id: 000397
-status: working
+status: codecomplete
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
@@ -14,6 +14,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.24
+tracker:
+    version: 1
+    completion:
+        token: close-e104cbd88303
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 555ad10936db22758652a4a29f0a2ce861a8b1de
+        evidence_commit: fcc4a21d91be7041ab68a7c9d9ce4df078683185
 ---
 
 # breadcrumb tree path: trailing comment on parent: breaks the chain; per-node buffer scan; untested path fallbacks
