@@ -360,7 +360,7 @@ review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- submi
 - `lua/parley/agentic_document.lua` — named-document registration/admission and native rename hooks; see [session-sync](session_sync.md)
 - `lua/parley/skills/review/instruction.lua` — `process-instruction` grammar, mode expansion and neutral context (PURE)
 - `lua/parley/frontmatter.lua` — shared frontmatter reader (hyphenated keys, raw values, quoting; PURE)
-- `lua/parley/couch.lua` — the `couch` seam: send, query, this editor's own actor
+- `lua/parley/couch.lua` — the `couch` seam: send, query, this editor's own actor. Every child gets a deadline: a caller that names none gets `couch.DEADLINE_MS` (the shipped `agentic_submit_timeout_ms`), and expiry kills it and reports `couch.timed_out` (#400). Only `document_registry`, which runs its own deadline timer, opts out with `timeout = false`
 - `lua/parley/skills/review/projection.lua` — decoration projection: re-render style on undo/redo per content-state
 - `lua/parley/skills/review/diag_display.lua` — inline "why" display toggle (`:ParleyShowDiagnostics`, cursor-region auto-show)
 - `lua/parley/progress.lua` — detached progress bar (general reusable long-op feedback; review is the first user)

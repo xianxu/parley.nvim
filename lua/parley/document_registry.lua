@@ -111,7 +111,7 @@ function M.request(operation, args, witness, callback, options)
                 result.exit, result.stderr = obj.code, (obj.stderr or ""):sub(1, 400)
             end
             finish(result)
-        end, options.env and { env = options.env } or nil)
+        end, { env = options.env, timeout = false })
         if item.done then return end
         item.timer = uv.new_timer()
         require("parley.helper").start_deadline(item.timer, deadline_ms, vim.schedule_wrap(function()

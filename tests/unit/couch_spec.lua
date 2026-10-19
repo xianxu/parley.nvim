@@ -74,3 +74,58 @@ describe("couch.thread", function()
         assert.is_nil(couch.thread())
     end)
 end)
+
+-- #400: no couch child lives forever.
+describe("couch.run deadline", function()
+    local real_system, saved_deadline
+    local arrival = require("tests.helpers.arrival")
+    before_each(function() real_system, saved_deadline = vim.system, couch.DEADLINE_MS end)
+    after_each(function() vim.system, couch.DEADLINE_MS = real_system, saved_deadline end)
+
+    -- The options vim.system got for one run.
+    local function spawned_with(options)
+        local seen
+        vim.system = function(_, opts) seen = opts; return {} end
+        couch.run({ "couch", "--actors", "--json" }, function() end, options)
+        return seen
+    end
+
+    it("defaults to the submit budget, keeps an explicit one, and leaves a self-bounded caller alone", function()
+        assert.equals(require("parley.config").agentic_submit_timeout_ms, couch.DEADLINE_MS)
+        assert.equals(couch.DEADLINE_MS, spawned_with(nil).timeout)
+        assert.equals(couch.DEADLINE_MS, spawned_with({ env = { A = "1" } }).timeout)
+        assert.equals(5000, spawned_with({ timeout = 5000 }).timeout)
+        assert.is_nil(spawned_with({ timeout = false }).timeout)
+        assert.is_true(spawned_with(nil).text)
+    end)
+
+    it("kills a hung child at the deadline; the callback fires once, as timed out", function()
+        couch.DEADLINE_MS = 100
+        local results = {}
+        couch.run({ "sleep", "30" }, function(obj) results[#results + 1] = obj end)
+        assert.is_true(vim.wait(arrival.MS, function() return #results > 0 end))
+        vim.wait(200) -- absence: no second delivery
+        assert.equals(1, #results)
+        assert.is_true(couch.timed_out(results[1]))
+    end)
+
+    it("delivers once when the kill and a normal exit both report", function()
+        local results = {}
+        vim.system = function(_, _, on_exit)
+            on_exit({ code = 124, signal = 15 })
+            on_exit({ code = 0, signal = 0, stdout = "late" })
+            return {}
+        end
+        couch.run({ "couch", "--actors" }, function(obj) results[#results + 1] = obj end)
+        vim.wait(100) -- absence: the second report stays dropped
+        assert.equals(1, #results)
+        assert.equals(124, results[1].code)
+    end)
+
+    it("reads only a deadline kill as timed out", function()
+        assert.is_true(couch.timed_out({ code = 124, signal = 15 }))
+        assert.is_false(couch.timed_out({ code = 124, signal = 0 }))
+        assert.is_false(couch.timed_out({ code = 1, signal = 15 }))
+        assert.is_false(couch.timed_out({ code = 0, signal = 0 }))
+    end)
+end)

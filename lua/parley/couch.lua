@@ -9,7 +9,14 @@
 
 local M = {}
 
+-- No couch child lives forever (#400): a hung couch would hold its pipes and
+-- stall the caller's state. The budget a submit already gets.
+M.DEADLINE_MS = require("parley.config").agentic_submit_timeout_ms
+
 --- The one scheduled process seam. Returns the child for bounded cancellation.
+--- `options.timeout` defaults to M.DEADLINE_MS; expiry kills the child and cb
+--- gets code 124 (see M.timed_out). `timeout = false` is for a caller that
+--- bounds the child itself (document_registry's own deadline timer).
 M.run = function(argv, cb, options)
 	local delivered = false
 	local function finish(result)
@@ -17,10 +24,17 @@ M.run = function(argv, cb, options)
 		delivered = true
 		vim.schedule(function() cb(result) end)
 	end
-	local opts = vim.tbl_extend("force", { text = true }, options or {})
+	local opts = vim.tbl_extend("force", { text = true, timeout = M.DEADLINE_MS }, options or {})
+	if opts.timeout == false then opts.timeout = nil end
 	local ok, child = pcall(vim.system, argv, opts, finish)
 	if not ok then finish({ code = -1, stderr = tostring(child) }); return nil end
 	return child
+end
+
+--- Whether a run result is its deadline's kill: vim.system reports code 124
+--- and SIGTERM. The outcome is unknown; a send may already have been queued.
+M.timed_out = function(obj)
+	return obj.code == 124 and obj.signal == 15
 end
 
 -- A decoded JSON value as a list: anything but a table is empty.
