@@ -29,15 +29,15 @@ Some `parley.couch.run` callers give the child no deadline. `session_sync.probe`
 
 ## Spec
 
-`couch.run` (the one seam to the `couch` binary) applies a default deadline when its caller names none: `options.timeout` defaults to `couch.DEADLINE_MS`, which is `parley.config`'s shipped `agentic_submit_timeout_ms` (15000), the budget a submit already gets (ARCH-DRY). On expiry `vim.system` kills the child (SIGTERM), and the callback fires once with code 124. A caller that bounds the child itself passes `timeout = false`. Only `document_registry` does that: its own timer kills the child and reports the deadline with its own message (#382), and a second timer would race it.
+`couch.run` (the one seam to the `couch` binary) applies a default deadline when its caller names none: `options.timeout` defaults to ~~`couch.DEADLINE_MS`, which is `parley.config`'s shipped `agentic_submit_timeout_ms` (15000)~~ `couch.deadline_ms()`, the user's `agentic_submit_timeout_ms` read per call (default 15000; Revisions, BR-2), the budget a submit already gets (ARCH-DRY). A send gets `couch.send_deadline_ms()`, three of them (Revisions, 1x/3x). On expiry `vim.system` kills the child (SIGTERM), and the callback fires once with code 124. A caller that bounds the child itself passes `timeout = false`. Only `document_registry` does that: its own timer kills the child and reports the deadline with its own message (#382), and a second timer would race it.
 
 Callers and their deadline after this change (ARCH-PURPOSE sweep of every `couch.run` path):
 
 | Caller | Deadline |
 |---|---|
 | `session_sync.probe`: status, actors | default |
-| `session_sync`: violation and ping sends | default |
-| `session_sync.release_and_send` (legacy submit) | default |
+| `session_sync`: violation and ping sends | ~~default~~ send deadline (3x) |
+| `session_sync.release_and_send` (legacy and agentic submit) | ~~default~~ send deadline (3x) |
 | `couch.own_slot` (actors; also used by `agentic_document`) | default |
 | `attention`: status probe | its own `PROBE_TIMEOUT_MS` (5000), unchanged |
 | `document_registry` | `timeout = false`; its own timer, unchanged |
@@ -46,11 +46,12 @@ What a timeout means for each kind of call (ARCH-ORDER: a deadline is an unconfi
 
 | Call | After the deadline | Visible | Recovery | Possible loss |
 |---|---|---|---|---|
-| status or actors query | reads as no answer (nil): nothing owed, no ping, `s.probing` cleared | nothing; the band keeps its last owed state | the next poll probes again | one ping cycle is delayed |
+| status or actors query | reads as no answer (nil): nothing owed, no ping, `s.probing` cleared | nothing; ~~the band keeps its last owed state~~ the owed mark clears until the next probe answers, as for any failed status (Revisions, BR-1) | the next poll probes again | one ping cycle is delayed |
 | ping or violation send | ignored (fire-and-forget) | nothing | the next ping generation | one notice may be lost or late |
 | legacy submit send | the message may have been queued | `send to OWNER not confirmed within Ns; it may have arrived. Alt+Return resends` | Alt+Return | a possible duplicate if it did arrive |
+| agentic submit send (added in Revisions, 1x/3x) | the message may have been queued; one log line names the delivery | band: `not confirmed, it may have arrived · Alt+Return resends` | Alt+Return | a possible duplicate if it did arrive |
 
-ARCH-CONSTRAINTS: these are local Unix-socket calls on the UI's async path; the editor never waits on them. A child now lives at most 15 s instead of forever. ARCH-MOCK: the fake couch gains `$FAKE_COUCH_QUERY_SLEEP`, which delays `--actors` and `--session-sync` answers, so a hung query is reproducible. ARCH-SECURE and ARCH-EVOLVE: N/A; no new input, secret or persisted format. ARCH-FUNERAL: this creates nothing durable; it ends child lifetimes that were unbounded.
+ARCH-CONSTRAINTS: these are local Unix-socket calls on the UI's async path; the editor never waits on them. A child now lives at most ~~15 s~~ 15 s (a query) or 45 s (a send) by default, instead of forever. ARCH-MOCK: the fake couch gains `$FAKE_COUCH_QUERY_SLEEP`, which delays `--actors` and `--session-sync` answers, so a hung query is reproducible. ARCH-SECURE and ARCH-EVOLVE: N/A; no new input, secret or persisted format. ARCH-FUNERAL: this creates nothing durable; it ends child lifetimes that were unbounded.
 
 ## Done when
 
@@ -59,7 +60,7 @@ ARCH-CONSTRAINTS: these are local Unix-socket calls on the UI's async path; the 
 
 ## Plan
 
-- [x] `couch.run` defaults `timeout` to `DEADLINE_MS`, and `timeout = false` means the caller bounds the child itself. Add `couch.timed_out(obj)` (code 124, signal 15).
+- [x] `couch.run` defaults `timeout` to ~~`DEADLINE_MS`~~ `deadline_ms()` (`send` uses `send_deadline_ms()`), and `timeout = false` means the caller bounds the child itself. Add `couch.timed_out(obj)` (code 124~~, signal 15~~).
 - [x] `document_registry` passes `timeout = false`.
 - [x] The legacy submit send reports a timeout as unconfirmed (it may have arrived), not as failed.
 - [x] Fake: `$FAKE_COUCH_QUERY_SLEEP` delays query answers.

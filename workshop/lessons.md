@@ -874,3 +874,9 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   the first probe test passed without the fix, because duplicate attaches on
   open spawned a second, unhung probe. Key a test's wait on the mechanism's own
   evidence (a timed-out result), not on a count that something else can raise.
+
+- #400 close review: a Revisions entry doesn't retire the claim it replaces.
+  When a revision changes what the Spec or Plan says, strike the old sentence
+  where it stands and write the current one beside it, citing the Revision.
+  Readers and reviewers read the body first, so a body that still states the
+  old design is a second, contradicting Spec.
