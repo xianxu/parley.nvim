@@ -1429,9 +1429,13 @@ atlas:
       - lua/parley/document_band.lua
       - lua/parley/breadcrumb_model.lua
       - lua/parley/file_history.lua
+      - lua/parley/side_tree_model.lua
     tests:
       - tests/unit/display_text_spec.lua
       - tests/unit/document_band_model_spec.lua
+      - tests/unit/breadcrumb_model_spec.lua
+      - tests/unit/side_tree_model_spec.lua
+      - tests/integration/file_history_spec.lua
   ui/frontmatter_typeahead:
     code:
       - lua/parley/frontmatter_enum.lua

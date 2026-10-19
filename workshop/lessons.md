@@ -850,3 +850,13 @@ The first ColorScheme fix re-ran only `setup_highlights`, while the atlas said "
 ## 2026-10-19 (#392 — preserve viewport before the first repaint effect)
 
 Saving a picker view after refiltering saves the reset viewport. Capture it before reflow/refilter and use that same proof while resolving the selected identity. Test background success and failure before typing, with a selected row below the fold in each scope; a one-row filtered test cannot catch hidden selection.
+- #391: When a scope change widens a rule ("every file shows a path"), sweep
+  the old gates that encoded the narrower rule (the lone-root hide) and the
+  repaint triggers keyed on the old inputs (path change only). Every read of a
+  user file on an autocmd path is guarded: an unreadable file is data, not an
+  error out of BufEnter.
+
+- #397: A test added to a spec file proves nothing until you have watched that
+  file run. Check that the spec you run maps the test file
+  (`atlas/traceability.yaml`) before treating a green targeted run as evidence;
+  map a model's spec under the atlas spec that owns the model.

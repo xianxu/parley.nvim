@@ -34,7 +34,7 @@ function M.compose(view, trail, width, ops)
         return { winbar = "%#" .. highlight .. "# " .. escape(fit(view.label, math.max(0, width - 1), ops)) .. "%=",
             winhighlight = "StatusLine:" .. highlight }
     end
-    local has_trail = trail and #trail.paths > 1
+    local has_trail = trail_model.visible(trail)
     if view.state == "plain" and not has_trail and not view.feedback then return {} end
     local cell = labels[view.state] or "unknown"
     if view.state == "operator" and view.unsent then cell = cell .. " ●" end

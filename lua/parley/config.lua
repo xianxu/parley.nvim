@@ -315,11 +315,11 @@ local config = {
 	-- re-parses the whole chat on every edit (#294). `true` keeps it, with its
 	-- fenced-code injections and conceal, at that cost.
 	chat_treesitter = false,
-	-- Spell underlines and completion are independent. Blink is used only after
-	-- the host has configured it; legacy native typeahead remains explicit opt-in.
+	-- Spell underlines stay on; both correction menus are opt-in. Set blink=true
+	-- after the host configures Blink, or typeahead=true for the legacy menu.
 	chat_spell = {
 		enable = true,
-		blink = true,
+		blink = false,
 		debounce_ms = 180,
 		typeahead = false,
 		spelllang = "en_us",
@@ -697,6 +697,12 @@ local config = {
 		footnote = nil, -- highlight for managed definition-footnote footer lines (default: links to DiagnosticHint)
 		edit_add = nil, -- highlight for added spans: define terms, the agent's added text (default: Normal bg tinted green)
 		edit_change = nil, -- highlight for changed spans: review edits, the agent's changed text (default: Normal bg tinted blue)
+	},
+
+	-- winbar breadcrumb (#391): a side doc's tree path, else the file's own
+	-- path. false leaves file windows' winbar to the user unless a lock shows.
+	breadcrumb = {
+		enable = true,
 	},
 
 	-- lualine integration options

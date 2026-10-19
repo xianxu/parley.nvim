@@ -18,6 +18,7 @@ describe("session-sync buffer", function()
     end
 
     local function open(lines)
+        require("parley.file_history").setup()
         vim.fn.writefile(lines, file)
         vim.cmd("edit " .. vim.fn.fnameescape(file))
         buf = vim.api.nvim_get_current_buf()
@@ -66,7 +67,18 @@ describe("session-sync buffer", function()
         vim.fn.writefile(update, file)
     end
     local function holder() return vim.fn.readfile(file .. ".lock")[1] end
-    local function winbar() return vim.wo[vim.fn.bufwinid(buf)].winbar end
+    -- These specs read the lock cell; every file's own path (#391, ui/breadcrumb)
+    -- follows the nine-column cell and is removed here.
+    local function winbar()
+        local bar = vim.wo[vim.fn.bufwinid(buf)].winbar
+        local head, rest = bar:match("^(%%#[^#]*#)(.*)$")
+        if not head then return bar end
+        local cell, tail = vim.fn.strcharpart(rest, 0, 9), vim.fn.strcharpart(rest, 9)
+        local message = tail:match("^ .- · (%%#.*)$")
+        if message then return head .. cell .. " " .. message end
+        if tail:match("^ [^%%]*%%=$") then return head .. cell .. "%=" end
+        return bar
+    end
     local function winhl() return vim.wo[vim.fn.bufwinid(buf)].winhighlight end
 
     -- An edit as the operator makes it: BufModifiedSet fires from the main
@@ -957,11 +969,11 @@ describe("session-sync buffer", function()
 
     -- What <M-CR> does in plain markdown is review_send's (#316,
     -- tests/integration/review_send_spec.lua); here: no session-sync state.
-    it("plain markdown keeps <M-CR> and gets no lock or band", function()
+    it("plain markdown keeps <M-CR> and gets no lock, only its path band", function()
         open({ "# just notes" })
         assert.is_false(ss.is_session_sync(buf))
         assert.is_not_nil(keymap_cb("<M-CR>"))
         assert.is_false(exists(file .. ".lock"))
-        assert.equals("", winbar())
+        assert.equals("%#WinBar#         %=", winbar())
     end)
 end)

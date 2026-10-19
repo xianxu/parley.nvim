@@ -1,6 +1,7 @@
 local M = {}
 
 local MAX_PATHS, MAX_BYTES = 200, 1024 * 1024
+local MARKERS = { missing = "?", cycle = "↻", depth = "…" }
 
 local function path_ok(path)
     return type(path) == "string" and path:sub(1, 1) == "/" and not path:find("[%z\1-\31\127]")
@@ -148,10 +149,35 @@ local function fit_protected(labels, budget, ops)
     return table.concat(result, " › ")
 end
 
+-- A file outside any side-doc tree shows its own path (#391): one segment per
+-- directory below `base`, led by `prefix` (e.g. "~") when given.
+function M.path_value(path, base, prefix)
+    local relative = base ~= "/" and path:sub(1, #base + 1) == base .. "/" and path:sub(#base + 2) or path
+    local labels = prefix and { prefix } or {}
+    local segments = parts("/" .. relative)
+    for _, segment in ipairs(segments) do labels[#labels + 1] = segment end
+    return { version = 1, paths = { path }, omitted = 0, labels = labels }
+end
+
+-- Repo-relative under `root`, else home-relative under `home`, else absolute.
+function M.located(path, root, home)
+    if root then return M.path_value(path, root) end
+    if home and path:sub(1, #home + 1) == home .. "/" then return M.path_value(path, home, "~") end
+    return M.path_value(path, "/")
+end
+
+-- Every display value shows, a tree root and a repo-top file included: the
+-- navigation trail, the one value a lone root once hid, is never displayed.
+function M.visible(value)
+    return value ~= nil and #value.paths > 0
+end
+
 function M.project(value, budget, ops)
     budget = math.max(0, math.floor(budget))
-    if budget == 0 or not value or #value.paths <= 1 then return "" end
-    local labels = labels_for(value.paths)
+    if budget == 0 or not M.visible(value) then return "" end
+    local labels = value.labels and { unpack(value.labels) } or labels_for(value.paths)
+    -- A side-doc tree path that stopped early leads with why (#391).
+    if value.marker then table.insert(labels, 1, MARKERS[value.marker] or "?") end
     local display = {}
     for i, label in ipairs(labels) do
         display[#display + 1] = label

@@ -50,17 +50,20 @@ describe("per-window file Back (#333)", function()
     end)
 
     it("follows Alt+o down session/answer/side links and backs up file by file", function()
+        vim.fn.mkdir(root .. "/.git", "p")
         vim.fn.writefile({ "# Session", "", "[answer](" .. files.answer .. ")", "root text" }, files.session)
         vim.fn.writefile({ "# Answer", "", "[side](" .. files.side .. ")", "answer text" }, files.answer)
         vim.cmd("edit!")
         cursor(3, 2)
         keys("<M-o>")
         assert.equals(files.answer, path())
-        assert.truthy(vim.wo.winbar:find("session › answer", 1, true))
+        -- The winbar names the file, never the trail that reached it (#391).
+        assert.truthy(vim.wo.winbar:find(" answer%=", 1, true))
+        assert.is_nil(vim.wo.winbar:find("session", 1, true))
         cursor(3, 2)
         keys("<M-o>")
         assert.equals(files.side, path())
-        assert.truthy(vim.wo.winbar:find("session › answer › side", 1, true))
+        assert.truthy(vim.wo.winbar:find(" side%=", 1, true))
         keys("GggG")
         keys("<M-O>")
         assert.equals(files.answer, path())
@@ -68,7 +71,99 @@ describe("per-window file Back (#333)", function()
         keys("<M-O>")
         assert.equals(files.session, path())
         assert.same({ 3, 2 }, api.nvim_win_get_cursor(0))
+        assert.truthy(vim.wo.winbar:find(" session%=", 1, true))
         assert.is_nil(vim.wo.winbar:find("›", 1, true))
+        -- A nested file shows its repo-relative directories as segments.
+        local nested = root .. "/notes/2026/2026-10-18-plan.md"
+        vim.fn.mkdir(vim.fs.dirname(nested), "p")
+        vim.fn.writefile({ "# plan" }, nested)
+        vim.cmd("edit " .. vim.fn.fnameescape(nested))
+        assert.truthy(vim.wo.winbar:find(" notes › 2026 › plan%=", 1, true))
+        -- One config line opts out; Back keeps working.
+        parley.config.breadcrumb.enable = false
+        vim.cmd("edit " .. vim.fn.fnameescape(files.answer))
+        assert.equals("", vim.wo.winbar)
+        assert.is_true(back())
+        assert.equals(nested, path())
+        parley.config.breadcrumb.enable = true
+    end)
+
+    it("shows a side doc's tree path, not the trail that reached it, and keeps Back (#391)", function()
+        local tree = {}
+        local function doc(name, rel, front, body)
+            tree[name] = root .. "/" .. rel
+            vim.fn.mkdir(vim.fs.dirname(tree[name]), "p")
+            local lines = { "---" }
+            vim.list_extend(lines, front)
+            vim.list_extend(lines, { "---", "# " .. name })
+            vim.list_extend(lines, body or {})
+            vim.fn.writefile(lines, tree[name])
+        end
+        doc("A", "A.md", { "discussions:", "  - doc: A.side/B1.md" })
+        doc("B1", "A.side/B1.md", { "parent: ../A.md", "discussions:", "  - doc: B1.side/C1.md" })
+        doc("B2", "A.side/B2.md", { "parent: ../A.md" })
+        doc("C1", "A.side/B1.side/C1.md", { "parent: ../B1.md" })
+        doc("C2", "A.side/B2.side/C2.md", { "parent: \"../B2.md\"" }, { "[c1](" .. root .. "/A.side/B1.side/C1.md)" })
+        vim.cmd("edit " .. vim.fn.fnameescape(tree.C2))
+        parley.setup_markdown_keymaps(api.nvim_get_current_buf())
+        assert.truthy(vim.wo.winbar:find("A › B2 › C2", 1, true))
+        cursor(5, 2)
+        keys("<M-o>")
+        assert.equals(tree.C1, path())
+        assert.truthy(vim.wo.winbar:find("A › B1 › C1", 1, true))
+        assert.is_nil(vim.wo.winbar:find("C2", 1, true))
+        assert.same({ tree.C2, tree.C1 }, require("parley.file_history").snapshot(0).paths)
+        keys("<M-O>")
+        assert.equals(tree.C2, path())
+        assert.truthy(vim.wo.winbar:find("A › B2 › C2", 1, true))
+
+        -- A tree root shows itself.
+        vim.cmd("edit " .. vim.fn.fnameescape(tree.A))
+        assert.truthy(vim.wo.winbar:find(" A%=", 1, true))
+
+        -- An edited parent that no longer exists repaints with a marker on re-entry.
+        local c1 = vim.fn.bufnr(tree.C1)
+        vim.cmd("buffer " .. c1)
+        assert.truthy(vim.wo.winbar:find("A › B1 › C1", 1, true))
+        api.nvim_buf_set_lines(c1, 1, 2, false, { "parent: ../gone.md" })
+        local here = api.nvim_get_current_win()
+        vim.cmd("new")
+        local other = api.nvim_get_current_win()
+        api.nvim_set_current_win(here)
+        assert.truthy(vim.wo.winbar:find("? › C1", 1, true))
+        api.nvim_win_close(other, true)
+
+        -- An unreadable parent ends the chain the same way, without an error.
+        doc("E", "A.side/E.md", { "parent: ../A.md" })
+        doc("D", "A.side/D.md", { "parent: E.md" })
+        vim.uv.fs_chmod(tree.E, 0)
+        local ok, err = pcall(vim.cmd, "edit " .. vim.fn.fnameescape(tree.D))
+        vim.uv.fs_chmod(tree.E, 420)
+        assert.is_true(ok, err)
+        assert.truthy(vim.wo.winbar:find("? › D", 1, true))
+    end)
+
+    it("scans the buffer list once per tree path, whatever its depth (#397)", function()
+        local docs = {}
+        for i = 0, 8 do
+            docs[i] = root .. "/deep/" .. i .. ".md"
+            vim.fn.mkdir(vim.fs.dirname(docs[i]), "p")
+            vim.fn.writefile(i == 0 and { "---", "discussions:", "---" } or { "---", "parent: " .. (i - 1) .. ".md", "---" }, docs[i])
+            vim.cmd("edit " .. vim.fn.fnameescape(docs[i]))
+        end
+        local list_bufs, scans = api.nvim_list_bufs, 0
+        api.nvim_list_bufs = function() scans = scans + 1 return list_bufs() end
+        local function scans_for(path)
+            vim.cmd("edit " .. vim.fn.fnameescape(files.other))
+            scans = 0
+            vim.cmd("edit " .. vim.fn.fnameescape(path))
+            return scans
+        end
+        local ok, shallow, deep = pcall(function() return scans_for(docs[1]), scans_for(docs[8]) end)
+        api.nvim_list_bufs = list_bufs
+        assert.is_true(ok, shallow)
+        assert.truthy(vim.wo.winbar:find(" 0 › 1 › 2 › 3 › 4 › 5 › 6 › 7 › 8%=", 1, true))
+        assert.equals(shallow, deep)
     end)
 
     it("exports detached trails for real Alt+o and restores native roots on Back", function()

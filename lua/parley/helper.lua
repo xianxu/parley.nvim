@@ -710,6 +710,11 @@ _H.chat_lines = function(path)
 	return nil
 end
 
+local function buffer_key(n)
+	if n:match("^%a[%w+.-]*://") then return n end
+	return vim.fn.resolve(vim.fn.fnamemodify(n, ":p"))
+end
+
 --- The buffer named exactly `name`, or nil. `vim.fn.bufnr(name)` is a
 --- file-pattern match: `bufnr('/x/chat.md')` can return a loaded
 --- `/x/chat.md.bak`, and `bufnr('parley://system_prompt/foo')` returns the
@@ -721,18 +726,30 @@ end
 ---@param loaded_only boolean|nil # only a loaded buffer
 ---@return integer|nil
 _H.buffer_for = function(name, loaded_only)
-	local function key(n)
-		if n:match("^%a[%w+.-]*://") then return n end
-		return vim.fn.resolve(vim.fn.fnamemodify(n, ":p"))
-	end
-	local want = key(name)
+	local want = buffer_key(name)
 	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
 		local bname = vim.api.nvim_buf_get_name(buf)
-		if bname ~= "" and (not loaded_only or vim.api.nvim_buf_is_loaded(buf)) and key(bname) == want then
+		if bname ~= "" and (not loaded_only or vim.api.nvim_buf_is_loaded(buf)) and buffer_key(bname) == want then
 			return buf
 		end
 	end
 	return nil
+end
+
+--- Every loaded buffer by the name `buffer_for` compares (resolved absolute
+--- path, or a scheme name as written), first match winning as it does there.
+--- Built once for a caller that looks up many names in one pass (#397).
+---@return table<string, integer>
+_H.loaded_buffer_index = function()
+	local index = {}
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		local bname = vim.api.nvim_buf_get_name(buf)
+		if bname ~= "" and vim.api.nvim_buf_is_loaded(buf) then
+			local key = buffer_key(bname)
+			if index[key] == nil then index[key] = buf end
+		end
+	end
+	return index
 end
 
 --- Remove the temp files table_to_file_atomic leaves when a process dies

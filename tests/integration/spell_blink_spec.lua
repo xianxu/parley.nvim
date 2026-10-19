@@ -24,9 +24,10 @@ describe('Blink spell controller', function()
         controller.detach(buf)
         vim.api.nvim_buf_delete(buf, { force = true })
     end)
-    it('enables Blink by default independently of legacy typeahead', function()
+    it('ships both spelling menus off independently of underlines', function()
         local config = require('parley.config')
-        assert.is_true(config.chat_spell.blink)
+        assert.is_false(config.chat_spell.blink)
+        assert.is_true(config.chat_spell.enable)
         assert.is_false(config.chat_spell.typeahead)
         assert.equals(180, config.chat_spell.debounce_ms)
     end)
@@ -133,4 +134,56 @@ describe('Blink spell controller', function()
         fake.deliver()
         assert.is_false(fake.visible)
     end)
+end)
+
+-- Public setup + real chat attachment, using the existing stateful backend at
+-- the same readiness seam as installed Blink. The opt-in row is a positive
+-- control: an absent dependency must not make the default-off assertion pass.
+describe('chat spelling setup defaults (#393)', function()
+    local saved, path, chat, backend
+    local modules = { 'blink.cmp', 'blink.cmp.completion.trigger',
+        'blink.cmp.completion.list', 'blink.cmp.sources.lib' }
+    before_each(function()
+        saved, backend = {}, Fake.new()
+        for _, name in ipairs(modules) do saved[name] = package.loaded[name] end
+        package.loaded['blink.cmp'] = backend.cmp
+        package.loaded['blink.cmp.completion.trigger'] = { buffer_events = {} }
+        package.loaded['blink.cmp.completion.list'] = backend.list
+        package.loaded['blink.cmp.sources.lib'] = { get_enabled_provider_ids = backend.enabled_providers }
+    end)
+    after_each(function()
+        if chat and vim.api.nvim_buf_is_valid(chat) then vim.api.nvim_buf_delete(chat, { force = true }) end
+        if path then vim.fn.delete(path) end
+        for _, name in ipairs(modules) do package.loaded[name] = saved[name] end
+        chat, path = nil, nil
+    end)
+    for _, enabled in ipairs({ false, true }) do
+        it(enabled and 'opens corrections when setup explicitly opts in' or 'bare setup keeps underlines without opening a menu', function()
+            local parley = require('parley')
+            parley.setup(enabled and { chat_spell = { blink = true } } or nil)
+            vim.fn.mkdir(parley.config.chat_dir, 'p')
+            path = parley.config.chat_dir .. '/2026-10-18-spell-default.md'
+            local lines = { '---', 'topic: spelling', 'file: 2026-10-18-spell-default.md',
+                'model: test-model', 'provider: openai', '---', '', '💬: before teh after' }
+            vim.fn.writefile(lines, path)
+            chat = vim.api.nvim_create_buf(false, true)
+            vim.api.nvim_set_current_buf(chat)
+            vim.api.nvim_buf_set_name(chat, path)
+            vim.api.nvim_buf_set_lines(chat, 0, -1, false, lines)
+            parley.prep_chat(chat, path)
+            vim.api.nvim_win_set_cursor(0, { 8, 13 })
+            vim.api.nvim_exec_autocmds('CursorMoved', { buffer = chat })
+            if enabled then
+                assert.is_true(vim.wait(arrival.MS, function() return backend.visible end, 5), 'opt-in menu never opened')
+                assert.is_truthy(controller.source_target(chat))
+            else
+                assert.is_true(vim.wo.spell)
+                vim.wait(2 * parley.config.chat_spell.debounce_ms + 50) -- absence: span two debounce intervals
+                assert.equals(0, backend.shows)
+                assert.is_false(backend.cmp.is_menu_visible())
+                assert.equals(0, vim.fn.pumvisible())
+                assert.is_nil(controller.source_target(chat))
+            end
+        end)
+    end
 end)
