@@ -81,3 +81,14 @@ its digest change outside this issue's workflow artifacts. No atlas change is
 needed: the generated data refresh adds no architectural surface or new flow.
 The full recorded suite is scheduled before review; its pass and real PR CI
 remain mandatory before landing. No :0/editor staging applies to this CI/data repair.
+
+### 2026-10-19 — landing evidence
+
+Recorded suite c072245ceed7812df504ef94703d1ef9 passed on ef203913: 960 spec-file
+executions across preferred 0.12.5 and stock 0.11.7, lint clean, no survivors.
+Exit 0, execution 7m2s. suite.log SHA-256 5b573a09e8f3d2c023478ea73dd1779ac200dfbf86920ee1c9088973bd5aa709.
+PR #316 merge-check passed the exact previously failing composition step
+(run 39216876210); local-gates-guard passed. Close review returned SHIP on its
+first round with zero findings. Cold-fixture scratch and downloaded binary
+removed; bounded evidence logs remain under /tmp. No editor staging or gate
+configuration changes.
