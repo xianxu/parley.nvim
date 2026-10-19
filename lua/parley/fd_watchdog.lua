@@ -16,7 +16,9 @@ function M.crossed(count, threshold, fired)
     return not fired and threshold > 0 and count ~= nil and count > threshold
 end
 
--- Rows of `ps -o pid=,ppid=,command= -A` whose parent is `pid`.
+-- Rows of `ps -o pid=,ppid=,comm= -A` whose parent is `pid`. `comm` is the
+-- executable alone: a child's arguments can carry secrets (curl's
+-- Authorization and x-api-key headers), so the capture never asks for them.
 function M.children(ps_text, pid)
     local rows = {}
     for line in (ps_text or ""):gmatch("[^\n]+") do
@@ -64,7 +66,7 @@ end
 local state = { timer = nil, fired = false }
 
 -- This process's open descriptors; nil when even listing them fails.
-local function count()
+function M.count()
     local ok, n = pcall(function()
         local total = 0
         for _ in vim.fs.dir("/dev/fd") do total = total + 1 end
@@ -83,17 +85,18 @@ end
 local function capture(options, n)
     local pid = vim.fn.getpid()
     run({ options.lsof or "lsof", "-p", tostring(pid) }, function(lsof)
-        run({ options.ps or "ps", "-o", "pid=,ppid=,command=", "-A" }, function(ps)
+        run({ options.ps or "ps", "-o", "pid=,ppid=,comm=", "-A" }, function(ps)
             local stamp = os.date("%Y%m%d-%H%M%S")
-            vim.fn.mkdir(options.dir, "p")
+            local made = pcall(require("parley.fs").ensure_dir, options.dir)
             local path = ("%s/fd-%s-%d.txt"):format(options.dir, stamp, pid)
             local lines = M.report({ time = os.date("!%Y-%m-%dT%H:%M:%SZ"), pid = pid, count = n,
                 threshold = options.threshold, ps = ps, lsof = lsof })
-            local wrote = pcall(vim.fn.writefile, lines, path)
+            local wrote = made and pcall(vim.fn.writefile, lines, path)
             local names = {}
             for name in vim.fs.dir(options.dir) do names[#names + 1] = name end
             for _, name in ipairs(M.stale(names, M.KEEP)) do os.remove(options.dir .. "/" .. name) end
-            vim.notify(("parley: this editor holds %d open files (threshold %d; macOS stops at 256). %s")
+            local notify = options.notify or vim.notify
+            notify(("parley: this editor holds %d open files (threshold %d; macOS stops at 256). %s")
                 :format(n, options.threshold, wrote and ("Captured lsof and its children to " .. path)
                     or ("Could not write the capture to " .. path)), vim.log.levels.WARN)
         end)
@@ -101,17 +104,20 @@ local function capture(options, n)
 end
 
 local function tick(options)
-    local n = count()
+    local n = M.count()
     if not M.crossed(n, options.threshold, state.fired) then return end
+    -- Once per process: nothing re-arms it, and the timer has no further work.
     state.fired = true
+    M.stop()
     capture(options, n)
 end
 
 --- Start the watchdog. `options`: threshold, dir, interval_ms, and for specs
---- the `lsof` and `ps` executables. Re-running setup restarts it.
+--- the `lsof` and `ps` executables and `notify`. Re-running setup restarts the
+--- timer; after a capture it stays off for the rest of the process.
 function M.setup(options)
     M.stop()
-    if (options.threshold or 0) <= 0 then return end
+    if state.fired or (options.threshold or 0) <= 0 then return end
     state.timer = uv.new_timer()
     state.timer:start(options.interval_ms or M.INTERVAL_MS, options.interval_ms or M.INTERVAL_MS,
         vim.schedule_wrap(function() tick(options) end))
@@ -122,7 +128,13 @@ function M.stop()
         state.timer:stop()
         if not state.timer:is_closing() then state.timer:close() end
     end
-    state.timer, state.fired = nil, false
+    state.timer = nil
+end
+
+-- Specs only: forget a capture this process already made.
+function M._rearm()
+    M.stop()
+    state.fired = false
 end
 
 return M

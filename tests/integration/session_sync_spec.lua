@@ -360,7 +360,7 @@ describe("session-sync buffer", function()
     end)
 
     it("keeps the editor's open descriptors flat across 200 agent writes and reloads (#399)", function()
-        local function fds() local n = 0 for _ in vim.fs.dir("/dev/fd") do n = n + 1 end return n end
+        local fds = require("parley.fd_watchdog").count
         local function settle() vim.wait(300, function() return false end) collectgarbage() collectgarbage() end
         vim.env.FAKE_COUCH_STATUS = vim.json.encode({ Code = "ok", Status = { Owed = {}, LastWrite = "" } })
         open(header)
@@ -377,7 +377,7 @@ describe("session-sync buffer", function()
     end)
 
     it("keeps descriptors flat across a rename storm of registered docs (#399)", function()
-        local function fds() local n = 0 for _ in vim.fs.dir("/dev/fd") do n = n + 1 end return n end
+        local fds = require("parley.fd_watchdog").count
         local function settle() vim.wait(500, function() return false end) collectgarbage() collectgarbage() end
         local function couch(...)
             local r = vim.system({ "couch", "--session-sync", ... }, { text = true }):wait()
