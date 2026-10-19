@@ -17,10 +17,10 @@ actual_hours: 0.16
 tracker:
     version: 1
     completion:
-        token: close-22147d16ce15
+        token: close-dc6a36fda706
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 73da5e8a628d5ea970a8591ddb41e21f0088529e
-        evidence_commit: 1418abfab22c5866bbe8ecf3487e4bac28fda9e8
+        reviewed_head: 6ead4772405e93e115d7b6f86be3c3f907e16778
+        evidence_commit: c3b2909bbb83a5a96a08f4198593366c36b8e03c
 ---
 
 # Registry queue deadline flake
