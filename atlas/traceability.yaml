@@ -679,6 +679,13 @@ atlas:
     tests:
       - tests/unit/logger_spec.lua
 
+  infra/fd_watchdog:
+    code:
+      - lua/parley/fd_watchdog.lua
+    tests:
+      - tests/unit/fd_watchdog_spec.lua
+      - tests/integration/fd_watchdog_spec.lua
+
   infra/linting:
     code:
       - .luacheckrc

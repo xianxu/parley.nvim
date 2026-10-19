@@ -77,6 +77,7 @@ its feature pages, and the three tutorials without reading personal files.
 - [Configuration System](infra/config.md): App/plugin setup, defaults, overrides, and storage roots.
 - [Vault (Secret Management)](infra/vault.md)
 - [Logging System](infra/logging.md): Diagnostic messages and sensitive-data handling.
+- [Open-descriptor watchdog](infra/fd_watchdog.md): Captures lsof and live children when the editor nears the fd limit (#399).
 - [Raw-Mode Logging](infra/raw_logging.md): Opt-in transcript/request logs for debugging.
 - [Linting](infra/linting.md)
 - [Test Harness](infra/test_harness.md)

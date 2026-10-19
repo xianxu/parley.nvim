@@ -87,6 +87,13 @@ reopen to finish. Changed or unknown bytes are preserved; reopening never
 forces an overwrite. Outside a Couch pane, the existing
 [document review](atlas/modes/review.md) flow remains.
 
+A long-running editor watches its own open files. The first time it holds more
+than `fd_watchdog_threshold` (default 200; macOS stops a process at 256), it
+writes the open files (`lsof`) and the names of its running child programs to
+`<state_dir>/fd-captures/` and warns once, naming the file. Child arguments are
+never recorded. The newest five captures are kept; `0` turns the watchdog off.
+See [the open-descriptor watchdog](atlas/infra/fd_watchdog.md).
+
 In a Couch pane, **Alt+Return** sends only `submitted: ABSOLUTE_PATH` through
 the registered document flow. The agent's shared `xx-universal-review` skill
 reads the file's `process-instruction:` and changes since its last read.

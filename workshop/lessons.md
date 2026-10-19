@@ -860,3 +860,9 @@ Saving a picker view after refiltering saves the reset viewport. Capture it befo
   file run. Check that the spec you run maps the test file
   (`atlas/traceability.yaml`) before treating a green targeted run as evidence;
   map a model's spec under the atlas spec that owns the model.
+
+- #399: A diagnostic capture that persists process listings records argv, and
+  argv carries secrets (curl auth headers). Ask the OS for the executable alone
+  (`ps -o comm=`) so the secret is never read, rather than redacting after the
+  fact. Run the repo's arch guards (`prepare_dir_spec` and friends) before a
+  close: a targeted spec run doesn't include them.
