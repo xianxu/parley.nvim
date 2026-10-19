@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "c9f41e98", done: "943f0073"}
 ---
 
 # fd leak: embedded session-file nvim leaks a unix socket per session-sync reload/lease, hits the 256 limit overnight
