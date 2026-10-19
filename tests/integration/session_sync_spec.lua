@@ -246,7 +246,7 @@ describe("session-sync buffer", function()
         local couch = require("parley.couch")
         local real_system, real_notify, saved_deadline, spawns, notes, timeouts
         before_each(function()
-            real_system, real_notify, saved_deadline = vim.system, vim.notify, couch.DEADLINE_MS
+            real_system, real_notify, saved_deadline = vim.system, vim.notify, { couch.deadline_ms, couch.send_deadline_ms }
             spawns, notes, timeouts = {}, {}, 0
             vim.system = function(argv, opts, cb)
                 local on_exit = cb
@@ -264,7 +264,8 @@ describe("session-sync buffer", function()
             vim.notify = function(msg) notes[#notes + 1] = msg end
         end)
         after_each(function()
-            vim.system, vim.notify, couch.DEADLINE_MS = real_system, real_notify, saved_deadline
+            vim.system, vim.notify = real_system, real_notify
+            couch.deadline_ms, couch.send_deadline_ms = saved_deadline[1], saved_deadline[2]
             vim.env.FAKE_COUCH_QUERY_SLEEP = nil
         end)
         local function count(flag)
@@ -272,7 +273,7 @@ describe("session-sync buffer", function()
         end
 
         it("a probe whose status query hangs past the deadline probes again, then pings", function()
-            couch.DEADLINE_MS = 300
+            couch.deadline_ms = function() return 300 end
             vim.env.FAKE_COUCH_QUERY_SLEEP = "30"
             vim.env.FAKE_COUCH_STATUS = owed(6)
             open(header)
@@ -307,7 +308,9 @@ describe("session-sync buffer", function()
                 if s.registry then
                     assert.is_nil(s.timeout, vim.inspect(s)) -- one owner per deadline
                 else
-                    assert.is_true(type(s.timeout) == "number" and s.timeout > 0, vim.inspect(s))
+                    -- A send outlives the submit deadline; a query gets one (#400).
+                    local expected = s.argv[2] == "--send-to" and couch.send_deadline_ms() or couch.deadline_ms()
+                    assert.equals(expected, s.timeout, vim.inspect(s))
                 end
                 kinds[s.argv[2] == "--send-to" and s.argv[5]:match("^[%w -]+:") or s.argv[2]] = true
             end
@@ -318,7 +321,7 @@ describe("session-sync buffer", function()
         end)
 
         it("a submit send past the deadline is unconfirmed, not failed", function()
-            couch.DEADLINE_MS = 300
+            couch.send_deadline_ms = function() return 300 end
             vim.env.FAKE_COUCH_SLEEP = "30"
             open(header)
             edit("- slow")

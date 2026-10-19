@@ -863,8 +863,7 @@ local function release_and_send(buf, owner, callback)
         end
         if state[buf] ~= s or s.moving or s.epoch ~= epoch then return end
         if couch.timed_out(obj) then
-            notify(("send to %s not confirmed within %g s; it may have arrived. Alt+Return resends")
-                :format(owner, couch.DEADLINE_MS / 1000), vim.log.levels.WARN)
+            notify("send to " .. owner .. " " .. obj.stderr .. ". Alt+Return resends", vim.log.levels.WARN)
         elseif obj.code ~= 0 then
             notify("send to " .. owner .. " failed, Alt+Return resends: " .. vim.trim(obj.stderr or ""), vim.log.levels.ERROR)
         else

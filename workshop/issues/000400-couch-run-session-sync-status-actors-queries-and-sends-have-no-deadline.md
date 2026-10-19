@@ -68,6 +68,22 @@ ARCH-CONSTRAINTS: these are local Unix-socket calls on the UI's async path; the 
   - Every `couch` spawn on the submit, probe and ping path carries a positive timeout.
   - The legacy submit timeout message says the send is unconfirmed.
 
+## Revisions
+
+- 2026-10-19, close review round 1 (FIX-THEN-SHIP):
+  - BR-2: the default deadline is `couch.deadline_ms()`, read per call through `document_registry.config_ms`, so the user's `agentic_submit_timeout_ms` applies. `couch.DEADLINE_MS` (the shipped value read at load) is gone. The legacy submit's message names the deadline the call actually got.
+  - Minor: `couch.timed_out` keys on code 124 alone. vim.system sets 124 whenever its timer fired, so a child that traps TERM and exits 0 also counts.
+  - BR-1: the Spec's status-query row was wrong. A timed-out status reads like every other failed status (the probe's documented rule, pair#437: any failure reads as nothing owed), so the band's owed mark clears until the next probe answers. It doesn't keep its last state. Making only timeouts keep the mark would split the failure rule in two; the behavior stays, and the row is corrected here.
+
+- 2026-10-19, after round 1. The hub approved this design delta: queries get 1x, sends get 3x.
+  - The rerun broke #357's 'a press joins the in-flight send'. The agentic submit's send is never killed at the submit deadline, because a kill can't tell delivered from not.
+  - Queries keep 1x the submit deadline (`couch.deadline_ms`).
+  - Sends get 3x (`couch.send_deadline_ms`, which is `document_registry.lost_ms`: the same ceiling #359 gives a rename before its reply counts as lost; 45 s by default). Within that window a press still joins the send; past it, a wedged Couch's send is killed.
+  - The UI submit deadline is unchanged.
+  - A killed send logs one line naming the recipient and the message's first line, so a later duplicate can be explained. Its stderr reads 'not confirmed within N s; it may have arrived', and the agentic band shows 'not confirmed, it may have arrived · Alt+Return resends'.
+  - Accepted risk: a resend after a 45 s hang may duplicate a delivery that did land.
+  - The #357 slow-send test now sleeps 2 s, not 3 s: past the 1 s submit deadline and inside the send's 3 s.
+
 ## Log
 
 ### 2026-10-19

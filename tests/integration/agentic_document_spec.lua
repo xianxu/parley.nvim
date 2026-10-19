@@ -120,7 +120,8 @@ describe("agentic markdown admission", function()
             with_timeouts(1000, 5000)
             local before = registered()
             vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "second thought" })
-            vim.env.FAKE_COUCH_SLEEP = "3"
+            -- Past the 1 s submit deadline, inside the send's own three (#400).
+            vim.env.FAKE_COUCH_SLEEP = "2"
             submit()
             await(function() return band():find("not confirmed: submit again", 1, true) ~= nil end)
             submit() -- the operator presses again while the first send is still out
@@ -131,6 +132,31 @@ describe("agentic markdown admission", function()
             submit() -- same file, same content: the late success's receipt covers it
             await(function() return band():find("nothing to submit", 1, true) ~= nil end)
             assert.equals(before + 1, sends())
+        end)
+
+        -- #400: a wedged Couch's send dies at three submit deadlines; the band
+        -- and one log line say it may have arrived, and the next press resends.
+        it("a send past its own deadline is killed, logged, shown as maybe arrived, and resent", function()
+            with_timeouts(300, 5000)
+            local before = registered()
+            local logger, warn, logged = require("parley.logger"), nil, {}
+            warn, logger.warning = logger.warning, function(msg) logged[#logged + 1] = msg end
+            vim.api.nvim_buf_set_lines(buf, 4, 5, false, { "wedged" })
+            vim.env.FAKE_COUCH_SLEEP = "30"
+            local ok, err = pcall(function()
+                submit()
+                await(function() return band():find("not confirmed, it may have arrived", 1, true) ~= nil end)
+                assert.equals(before, sends())
+                assert.equals(1, #logged)
+                assert.truthy(logged[1]:find("couch send killed at its deadline: to=ops:0 message=\"submitted: " .. file, 1, true), logged[1])
+                assert.truthy(logged[1]:find("not confirmed within 0.9 s", 1, true), logged[1])
+                vim.env.FAKE_COUCH_SLEEP = nil
+                submit()
+                await(function() return sends() == before + 1 end)
+                await(function() return band():find("ops:0", 1, true) ~= nil and band():find("may have arrived", 1, true) == nil end)
+            end)
+            logger.warning = warn
+            assert(ok, err)
         end)
 
         it("a registry stage past the deadline keeps the operator's lock; the next press submits once", function()

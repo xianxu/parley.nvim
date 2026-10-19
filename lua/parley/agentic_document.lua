@@ -392,6 +392,11 @@ local function execute(s, effects)
                     -- A delivery the model doesn't announce (the body moved on
                     -- meanwhile) still ends this submit: its deadline is moot.
                     if s.submitting == submitting then end_submit(s) end
+                    -- Killed at its deadline (#400): the band, not only a notice,
+                    -- says the outcome is unknown.
+                    if couch.timed_out(result) then
+                        show_feedback(s, "not confirmed, it may have arrived · Alt+Return resends", true)
+                    end
                 end
             end))
         elseif kind == "feedback" then

@@ -17,15 +17,21 @@ function M.config_ms(key)
     return require("parley.config")[key]
 end
 
+--- How long an effect already under way gets before its reply counts as
+--- lost: three submit deadlines (#359). A rename's file has already moved and
+--- a send may already be delivered, so waiting costs nothing; killing early
+--- only turns a delivered effect into an unknown one (#400).
+--- @return number
+function M.lost_ms()
+    return 3 * M.config_ms("agentic_submit_timeout_ms")
+end
+
 --- The deadline a request gets when its caller names none (#382). A rename
---- gets three submit deadlines before its reply counts as lost: the file has
---- already moved, so waiting costs nothing (#359). That holds for the native
---- rename and for document_move's journaled ones alike.
+--- gets M.lost_ms(), native or journaled through document_move alike.
 --- @param operation string
 --- @return number
 function M.default_deadline_ms(operation)
-    local submit = M.config_ms("agentic_submit_timeout_ms")
-    return operation == "rename" and 3 * submit or submit
+    return operation == "rename" and M.lost_ms() or M.config_ms("agentic_submit_timeout_ms")
 end
 
 local function unavailable(message)

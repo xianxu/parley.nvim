@@ -9,12 +9,17 @@
 
 local M = {}
 
--- No couch child lives forever (#400): a hung couch would hold its pipes and
--- stall the caller's state. The budget a submit already gets.
-M.DEADLINE_MS = require("parley.config").agentic_submit_timeout_ms
+--- No couch child lives forever (#400): a hung couch would hold its pipes and
+--- stall the caller's state. A query gets the budget a submit already gets,
+--- the user's setting first, read per call through the one owner of agentic
+--- deadlines; a send gets longer (M.send_deadline_ms).
+--- @return number
+M.deadline_ms = function()
+	return require("parley.document_registry").config_ms("agentic_submit_timeout_ms")
+end
 
 --- The one scheduled process seam. Returns the child for bounded cancellation.
---- `options.timeout` defaults to M.DEADLINE_MS; expiry kills the child and cb
+--- `options.timeout` defaults to M.deadline_ms(); expiry kills the child and cb
 --- gets code 124 (see M.timed_out). `timeout = false` is for a caller that
 --- bounds the child itself (document_registry's own deadline timer).
 M.run = function(argv, cb, options)
@@ -24,7 +29,7 @@ M.run = function(argv, cb, options)
 		delivered = true
 		vim.schedule(function() cb(result) end)
 	end
-	local opts = vim.tbl_extend("force", { text = true, timeout = M.DEADLINE_MS }, options or {})
+	local opts = vim.tbl_extend("force", { text = true, timeout = M.deadline_ms() }, options or {})
 	if opts.timeout == false then opts.timeout = nil end
 	local ok, child = pcall(vim.system, argv, opts, finish)
 	if not ok then finish({ code = -1, stderr = tostring(child) }); return nil end
@@ -32,9 +37,10 @@ M.run = function(argv, cb, options)
 end
 
 --- Whether a run result is its deadline's kill: vim.system reports code 124
---- and SIGTERM. The outcome is unknown; a send may already have been queued.
+--- once its timer fired, whatever signal ended the child. The outcome is
+--- unknown; a send may already have been queued.
 M.timed_out = function(obj)
-	return obj.code == 124 and obj.signal == 15
+	return obj.code == 124
 end
 
 -- A decoded JSON value as a list: anything but a table is empty.
@@ -42,10 +48,28 @@ M.list = function(value)
 	return type(value) == "table" and value or {}
 end
 
---- One message; on_exit(obj) gets the result, in the main loop.
+--- How long a send's child lives (#400): a send may already be delivered, so
+--- it outlives the submit deadline, where #357 lets a press join it, until its
+--- reply counts as lost (document_registry.lost_ms).
+--- @return number
+M.send_deadline_ms = function()
+	return require("parley.document_registry").lost_ms()
+end
+
+--- One message; on_exit(obj) gets the result, in the main loop. A send killed
+--- at its deadline logs one line naming the delivery, so a later duplicate can
+--- be explained, and its stderr says it may have arrived.
 M.send = function(to, message, on_exit)
 	local argv = { "couch", "--send-to", to, "--message", message }
-	return M.run(argv, on_exit or function() end)
+	local deadline_ms = M.send_deadline_ms()
+	return M.run(argv, function(obj)
+		if M.timed_out(obj) then
+			obj.stderr = ("not confirmed within %g s; it may have arrived"):format(deadline_ms / 1000)
+			require("parley.logger").warning(("couch send killed at its deadline: to=%s message=%q %s")
+				:format(to, (message:match("[^\n]*")), obj.stderr))
+		end
+		if on_exit then on_exit(obj) end
+	end, { timeout = deadline_ms })
 end
 
 --- Run a couch query; cb(decoded) with nil unless it exited 0 with Code "ok".

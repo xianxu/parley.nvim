@@ -77,10 +77,16 @@ end)
 
 -- #400: no couch child lives forever.
 describe("couch.run deadline", function()
-    local real_system, saved_deadline
+    local real_system, saved_deadline, saved_config
     local arrival = require("tests.helpers.arrival")
-    before_each(function() real_system, saved_deadline = vim.system, couch.DEADLINE_MS end)
-    after_each(function() vim.system, couch.DEADLINE_MS = real_system, saved_deadline end)
+    local p = require("parley")
+    before_each(function()
+        p.config = p.config or {}
+        real_system, saved_deadline, saved_config = vim.system, couch.deadline_ms, p.config.agentic_submit_timeout_ms
+    end)
+    after_each(function()
+        vim.system, couch.deadline_ms, p.config.agentic_submit_timeout_ms = real_system, saved_deadline, saved_config
+    end)
 
     -- The options vim.system got for one run.
     local function spawned_with(options)
@@ -91,16 +97,24 @@ describe("couch.run deadline", function()
     end
 
     it("defaults to the submit budget, keeps an explicit one, and leaves a self-bounded caller alone", function()
-        assert.equals(require("parley.config").agentic_submit_timeout_ms, couch.DEADLINE_MS)
-        assert.equals(couch.DEADLINE_MS, spawned_with(nil).timeout)
-        assert.equals(couch.DEADLINE_MS, spawned_with({ env = { A = "1" } }).timeout)
+        p.config.agentic_submit_timeout_ms = nil
+        local shipped = require("parley.config").agentic_submit_timeout_ms
+        assert.equals(shipped, spawned_with(nil).timeout)
+        assert.equals(shipped, spawned_with({ env = { A = "1" } }).timeout)
         assert.equals(5000, spawned_with({ timeout = 5000 }).timeout)
         assert.is_nil(spawned_with({ timeout = false }).timeout)
         assert.is_true(spawned_with(nil).text)
     end)
 
+    it("follows the user's submit budget, read per call", function()
+        p.config.agentic_submit_timeout_ms = 40000
+        assert.equals(40000, spawned_with(nil).timeout)
+        p.config.agentic_submit_timeout_ms = 7000
+        assert.equals(7000, spawned_with(nil).timeout)
+    end)
+
     it("kills a hung child at the deadline; the callback fires once, as timed out", function()
-        couch.DEADLINE_MS = 100
+        couch.deadline_ms = function() return 100 end
         local results = {}
         couch.run({ "sleep", "30" }, function(obj) results[#results + 1] = obj end)
         assert.is_true(vim.wait(arrival.MS, function() return #results > 0 end))
@@ -122,9 +136,25 @@ describe("couch.run deadline", function()
         assert.equals(124, results[1].code)
     end)
 
+    it("gives a send three submit deadlines, and a killed send logs its delivery once", function()
+        p.config.agentic_submit_timeout_ms = 2000
+        local seen, logged, results = nil, {}, {}
+        vim.system = function(_, opts, on_exit) seen = opts; on_exit({ code = 124, signal = 15 }); return {} end
+        local logger = require("parley.logger")
+        local warn = logger.warning
+        logger.warning = function(msg) logged[#logged + 1] = msg end
+        couch.send("ops:0", "submitted: /x.md\nsecond line", function(obj) results[#results + 1] = obj end)
+        local ok = vim.wait(arrival.MS, function() return #results > 0 end)
+        logger.warning = warn
+        assert.is_true(ok)
+        assert.equals(6000, seen.timeout)
+        assert.same({ 'couch send killed at its deadline: to=ops:0 message="submitted: /x.md" not confirmed within 6 s; it may have arrived' }, logged)
+        assert.equals("not confirmed within 6 s; it may have arrived", results[1].stderr)
+    end)
+
     it("reads only a deadline kill as timed out", function()
         assert.is_true(couch.timed_out({ code = 124, signal = 15 }))
-        assert.is_false(couch.timed_out({ code = 124, signal = 0 }))
+        assert.is_true(couch.timed_out({ code = 124, signal = 0 })) -- trapped TERM, exited 0
         assert.is_false(couch.timed_out({ code = 1, signal = 15 }))
         assert.is_false(couch.timed_out({ code = 0, signal = 0 }))
     end)
