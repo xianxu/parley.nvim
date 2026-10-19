@@ -16,6 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "87ce7a81", done: "8dfa3369"}
 ---
 
 # breadcrumb winbar: show a side doc's tree path (parent chain), not the navigation path that reached it
