@@ -16,7 +16,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
-flow: {kind: quick, provenance: inferred, spec: "c9f41e98", done: "943f0073"}
+flow: {kind: full, provenance: inferred}
 ---
 
 # fd leak: embedded session-file nvim leaks a unix socket per session-sync reload/lease, hits the 256 limit overnight
@@ -51,6 +51,8 @@ Find the leaking spawn with a counted reproduction: open fds before and after N 
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — On 637d080c: infra/fd_watchdog exit 0 (unit crossed/children/report/stale; integration with real timer and stand-in lsof/ps: one WARN names fd-captures/fd-<stamp>-<pid>.txt holding the count, this pid child as executable only, SECRET-TOKEN absent though the stand-in ps offers it for any non-comm query, lsof -p pid, five captures kept, setup does not re-arm; quiet below threshold and at 0). modes/session_sync exit 0 incl. 200-write and 50-doc rename-storm fd guards using fd_watchdog.count. Lint 0. Full suite running on 637d080c.; review verdict: SHIP
+- 2026-10-19: flow upgraded quick → full — 150 added lines in code files (limit 100); an earlier round of this close already ran the full review
 - Measured flat (open fds before = after; /dev/fd count in-process, lsof for peers):
   - Core nvim 0.11.7 `vim.system`: callback, `:wait`, `stdin` string and `true` (closed or not), timeout expiry, `:kill`, `:wait(20)` timeout, a grandchild holding stdout, spawn failure; `jobstart` with/without callbacks, `jobstop` before/after exit (lualine's pattern); `vim.fn.system`.
   - Real `couch --session-sync status --json` and `couch --actors --json` through `parley.couch.run`, 30 each, with and without `timeout`.

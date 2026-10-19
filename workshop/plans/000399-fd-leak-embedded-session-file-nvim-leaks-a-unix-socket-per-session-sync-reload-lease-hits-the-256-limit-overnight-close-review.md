@@ -124,3 +124,115 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"e9a80961-6cdc-4405-81a1-bac791b74e8d","repository":"github.com/xianxu/parley.nvim","issue_id":"000399","recipe":"milestone-review","round":1,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/958cfbfc9d73b371","reviewed_head":"f5ba60ef647c77630c0dea439b370a21d5d14885","slot":"parley.nvim:3","requested_at":"2026-10-19T14:53:31.994595Z"},"phase":"finished","pid":18737,"started_at":"2026-10-19T14:53:32.242343Z","finished_at":"2026-10-19T14:58:59.504675Z","session_id":"144aab52-713d-4f01-ba5f-a0dc27d97a59","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-19T08:14:24-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 399 — fd leak: embedded session-file nvim leaks a unix socket per session-sync reload/lease, hits the 256 limit overnight |
+| repo | parley.nvim |
+| issue file | workshop/issues/000399-fd-leak-embedded-session-file-nvim-leaks-a-unix-socket-per-session-sync-reload-lease-hits-the-256-limit-overnight.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c631353ce8819de93750cc88a9c90322adedcf0e..637d080c05278db659d095dceb7b58ce5f8d174d |
+| command | sdlc close --issue 399 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | checkout |
+| timestamp | 2026-10-19T08:14:24-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking prior findings against the code now; next I'll run the watchdog specs a few times to test the flake fix.
+
+8 of 8 runs passed. Next I'll undo the BR-1 fix to confirm the regression test fails without it.
+
+With the BR-1 fix removed, the spec failed as expected. Now testing the BR-4 once-per-process fix the same way, on its own.
+
+Scope matches the documented hub rescope. One last check: running the two new session-sync fd guards.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+All five findings from round 1 are fixed. I checked each one against the code and, where a test was claimed, by removing the fix and re-running the tests.
+
+- **BR-1 (secrets in captures):** fixed. The capture now asks `ps` for `comm=`, which gives the program name without its arguments. When I swapped back to `command=`, the integration spec failed and showed the `SECRET-TOKEN` row.
+- **BR-2 (README):** fixed in README.md:90-95.
+- **BR-3 (flaky spec):** fixed. It passed 8 of 8 runs.
+- **BR-4 (once per process):** fixed.
+- **BR-5 (duplicated fd counting):** fixed. `M.count` is now public and the specs use it.
+
+The `modes/session_sync` suite passes, including both new #399 fd guards. The work matches the hub rescope recorded in the issue's Revisions (the issue became "detect and capture"). I found nothing new above Minor.
+
+1. **Strengths**
+   - `lua/parley/fd_watchdog.lua:19-22`: the capture never reads child arguments in the first place, rather than trying to strip secrets afterwards. That removes the whole class of leak, not just the curl case.
+   - The logic is cleanly split. The four decisions (`crossed`, `children`, `report`, `stale`) are pure and unit-tested without any IO. The timer, the two commands and the file writes are a thin layer on top, and `lsof`, `ps` and `notify` can be swapped in for tests.
+   - Leftover files are bounded: at most one capture per process, and only the newest five are kept (`KEEP`).
+   - The integration spec's stand-in `ps` returns a secret-bearing line whenever it is asked for anything but `comm=`. So the test checks the security property itself, not just the current code.
+   - Each test now collects warnings in its own table (`tests/integration/fd_watchdog_spec.lua:17-20`), so a late callback from one test can't land in another's results.
+
+2. **Critical:** none.
+
+3. **Important:** none.
+
+4. **Minor**
+   - The issue's `## Spec` paragraph (issue:32) still says "fix it at the root". Only the Revisions entry records the rescope, so the paragraph reads stale. This is a plan-text note only.
+   - In `M.setup`, the `state.fired` check is redundant for behaviour: `crossed(…, state.fired)` already blocks a second capture. With that check removed, the tests still pass. All it saves is an idle timer, which is fine.
+   - Each of the two session-sync guards defines its own `settle` helper. This is acceptable inside a spec file.
+
+5. **Test coverage**
+   - The unit tests pin the threshold and once-only rule, the parsing of `ps` rows, the handling of a failed command in the report, and the trimming of old captures.
+   - The integration test covers: firing past the threshold, a single warning, the file path, the program name without arguments, keeping five, no re-arming after setup runs again, and staying quiet below the threshold and at 0.
+   - The BR-1 fix fails its test when removed. For BR-4, the test fails if `stop()` resets the once-only flag again (that flag is what the test relies on); it does not cover the redundant setup check above.
+
+6. **Architecture**
+   - ARCH-DRY: pass; the fd count has one source, `M.count`.
+   - ARCH-PURE: pass.
+   - ARCH-PURPOSE: pass under the documented hub rescope. Filing the root cause as its own issue waits on the first real capture.
+   - ARCH-MOCK: pass. `lsof` and `ps` are injected, and they are one-shot queries, so stand-ins without state are enough. There is no live check that real `ps`/`lsof` output still matches the parser; that is acceptable for a diagnostic.
+   - ARCH-CONSTRAINTS: pass. The work is one directory listing a minute, the capture runs in the background, and each command has a 10 s deadline.
+   - ARCH-SECURE: pass after BR-1. The `lsof` output contains only file paths.
+   - ARCH-ORDER: pass. The state is just `{timer, fired}`, and the shutdown path is explicit.
+   - ARCH-FUNERAL: pass. Captures are capped at five on every write, and the timer stops after it fires.
+   - ARCH-EVOLVE: pass. The capture file is write-only and the config key is a pure addition.
+
+7. **Plan revisions:** optionally, make the issue's `## Spec` match the 2026-10-19 rescope.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      ps now asked for comm= (fd_watchdog.lua:85); reverting to command= turns the integration spec red with the SECRET-TOKEN row.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      README.md:90-95 documents fd_watchdog_threshold, default 200, 0 disables, warn once, state_dir/fd-captures, keep five, no child arguments.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Each test has its own collector, and the re-arm that let a slow real-lsof capture land late is gone (BR-4); 8 of 8 runs green.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      stop() no longer resets fired, the timer stops after firing, setup returns early when fired; the re-setup assertion covers it.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      M.count is public; session_sync_spec and fd_watchdog_spec use it, no copied /dev/fd loops remain.
+findings:
+  - id: new
+    severity: Minor
+    kind: defect
+    family: stale-spec-after-rescope
+    title: |
+      The issue's Spec paragraph still describes the root-cause fix the Revisions entry dropped
+    detail: |
+      Issue line 32 says to fix every child's stdio at the root; the 2026-10-19 hub rescope made it detect-and-capture. Rewrite the Spec to match.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ec9158f9-18ca-4e2d-ac06-1811435606e7","repository":"github.com/xianxu/parley.nvim","issue_id":"000399","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/371a869578589110","reviewed_head":"637d080c05278db659d095dceb7b58ce5f8d174d","slot":"parley.nvim:3","requested_at":"2026-10-19T15:07:24.015601Z"},"phase":"finished","pid":56590,"started_at":"2026-10-19T15:07:24.240501Z","finished_at":"2026-10-19T15:14:23.763048Z","session_id":"de19bc9c-25e5-4f82-a305-24c942a78042","outcome":"returned"}] -->
