@@ -1009,6 +1009,12 @@ M.setup = function(opts)
 	-- The attention finder (#354) counts a file as seen when the operator looks at it.
 	require("parley.attention").setup()
 
+	-- #399: a descriptor leak captures its own evidence before it kills the editor.
+	require("parley.fd_watchdog").setup({
+		threshold = M.config.fd_watchdog_threshold,
+		dir = M.config.state_dir .. "/fd-captures",
+	})
+
 	-- Register all global keymaps from the keybinding registry
 	kb_registry.register_global(
 		{ "global", "repo", "note", "issue", "vision", "chat" },

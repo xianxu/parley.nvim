@@ -494,6 +494,10 @@ local config = {
 	-- minutes holding the lock.
 	session_sync_stale_minutes = 5,
 	session_sync_ping_minutes = 15,
+	-- #399: past this many open descriptors (macOS stops a process at 256) the
+	-- editor captures `lsof` and its live children under state_dir/fd-captures
+	-- and warns once, naming the file. 0 turns the watchdog off.
+	fd_watchdog_threshold = 200,
 	-- #357: how long an Alt+Return submit (the registry stage and the send
 	-- together) may take before it shows "not confirmed: submit again". The
 	-- editor never waits for it; a busy machine's couch CLI can take seconds.

@@ -32,14 +32,20 @@ Find the leaking spawn with a counted reproduction: open fds before and after N 
 
 ## Done when
 
-- The counted fd regression is red before the fix and green after, over 200 cycles.
-- A live check: an embedded session-file nvim keeps a flat fd count across a busy hub session.
+- Past the threshold, the editor writes a capture holding the count, its live children and the full `lsof`, and warns once naming the file; a spec shows it with stand-in lsof and ps, and that it stays quiet below the threshold and at 0.
+- Two fake-backed guards keep parley's session-sync path flat over 200 agent writes and a 50-doc rename storm.
+- The root cause is filed as its own issue once the first capture (or the live sampler on pid 28410) records an onset. (Revised 2026-10-19; was a red-then-green 200-cycle regression of a reproduced leak.)
 
 ## Plan
 
-- [ ] Find the leaking spawn with evidence before changing code (the measured candidates below are all flat).
-- [ ] Fix it at the root, with a counted fd regression that is red before the fix.
-- [ ] `session_sync_spec`'s 200-write fd count stays as a guard on parley's own reload/probe path.
+- [x] Measure every candidate spawn path before changing code (all flat; see Log).
+- [x] Fake-backed guards in `session_sync_spec`: 200 agent writes with reloads and probes, and a rename storm of 50 registered docs.
+- [x] `lua/parley/fd_watchdog.lua`: past `fd_watchdog_threshold` (200) open descriptors, capture `lsof -p` and the live children to `<state_dir>/fd-captures/fd-<stamp>-<pid>.txt` and warn once naming it; keep the newest 5; pure `crossed`/`children`/`report`/`stale` with unit tests, the shell with an integration spec using stand-in lsof and ps.
+- [x] atlas/infra/fd_watchdog.md, index and traceability.
+
+## Revisions
+
+- 2026-10-19, hub rescope: #399 becomes "detect and capture". The overnight leak does not reproduce, so it ships the watchdog plus the two fake-backed guards; the root cause goes to a new issue opened from the first capture. Bounded `couch.run` deadlines moved to #400 (unclaimed). Done when below is revised: the original "red before, green after over 200 cycles" needs a reproduced leak.
 
 ## Log
 
