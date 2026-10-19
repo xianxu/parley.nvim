@@ -2,13 +2,15 @@
 
 Chat spelling uses Neovim's dictionaries and Blink's completion menu in Normal
 and Insert modes. The plugin and packaged app share the same controller.
-`chat_spell.blink = true` is the default; suggestions activate when Blink has
-finished setup. Parley does not install Blink or call its setup for plugin users.
+Spell underlines are on by default; both corrections menus are off. Opt back in
+with `require("parley").setup({ chat_spell = { blink = true, enable = true } })`
+to keep underlines and enable suggestions once Blink has finished setup. Parley
+does not install Blink or call its setup for plugin users.
 
 ## Behavior
 
-After a 180 ms pause, an eligible misspelling under the cursor offers whole-word
-corrections. Insert mode also recognizes the word immediately before the cursor
+With Blink spelling enabled, after a 180 ms pause an eligible misspelling under
+the cursor offers whole-word corrections. Insert mode also recognizes the word immediately before the cursor
 at its end, without crossing whitespace. Short words such as `teh` qualify;
 Blink spelling has no minimum word length. The app's separate buffer-word
 provider still starts after two typed characters.
@@ -45,12 +47,14 @@ old acceptance evidence; a delayed result cannot apply to a new target.
 
 ## Config
 
-`require('parley').setup({ chat_spell = { ... } })` merges these defaults:
+`require('parley').setup()` uses these defaults. A supplied `chat_spell` table
+replaces them, so include `enable = true` when opting into a menu to retain
+underlines:
 
 | Key | Default | Meaning |
 |---|---|---|
 | `enable` | `true` | Visible spell underlines, independently of either menu backend |
-| `blink` | `true` | Use ready Blink for Normal/Insert spelling suggestions |
+| `blink` | `false` | Use ready Blink for Normal/Insert spelling suggestions |
 | `debounce_ms` | `180` | Delay before a Blink spelling request; finite values are rounded down and clamped to 0–5000 ms |
 | `typeahead` | `false` | Opt into the legacy Insert-only popup when Blink is disabled or unavailable |
 | `spelllang` | `"en_us"` | Buffer dictionary language, also used with underlines disabled |
@@ -58,10 +62,11 @@ old acceptance evidence; a delayed result cannot apply to a new target.
 | `max_suggest` | `9` | Maximum suggestions; Blink clamps finite values to 1–20 |
 
 Non-finite or nonnumeric Blink debounce/maximum values use the defaults.
-Set `enable = false` to hide underlines while keeping suggestions. Set
+With a menu enabled, set `enable = false` to hide underlines while keeping
+suggestions. Set
 `blink = false, typeahead = false` to disable both suggestion backends while
 keeping underlines. A raw `spell.attach` call with neither popup flag enabled
-installs neither popup; the public setup defaults are merged before attachment.
+installs neither popup; bare public setup supplies the defaults before attachment.
 
 If Blink is absent, not set up, or incompatible, chats remain usable with native
 spell underlines. Legacy suggestions run only with explicit `typeahead = true`.

@@ -51,3 +51,17 @@ The existing spelling atlas is atlas/chat/spell_typeahead.md, not atlas/ui/.
 Update that source; README has no spelling-default claim. No new mechanism,
 state, actions, resources or growth drivers: only the existing setup default
 changes; blink=true opts back into the existing controller and ownership rules.
+
+### 2026-10-18 — default and regression
+
+The default assertion and bare-setup menu-count regression fail the original
+config; the explicit blink=true positive control still opens a menu. After the
+shared default changes to false, all mapped spelling cases pass. The regression
+uses real setup/prep_chat and the existing ready stateful Blink fake through
+the production readiness seam, with actual dictionary completions and underlines.
+Existing controller and keyboard-conformance tests already explicitly opt in.
+README contains no spelling-default claim. Atlas now also accurately notes that
+a supplied chat_spell table replaces the defaults, so its opt-in example includes
+enable=true. No setup merge behavior changed. Hub approved suite plus close
+review, no :0 staging; normal use after the hub's fast-forward/restart is smoke.
+Lint: zero warnings/errors across 805 files.
