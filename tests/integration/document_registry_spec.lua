@@ -97,8 +97,9 @@ describe("document registry process boundary", function()
     -- #382: the deadline bounds the child from spawn. Time queued behind
     -- MAX_ACTIVE others is not Couch being slow. Controlled scheduling (#394):
     -- no child answers until the test says, so the result can't depend on load.
-    -- A deadline started at admission would fire while request 5 waits, since a
-    -- timer never fires early; its spawn-time deadline never comes into play,
+    -- A deadline started at admission would be due about 300 ms into request 5's
+    -- 900 ms hold, so the hold's own event loop runs it (libuv's truncated clock
+    -- may fire it about 1 ms early). Its spawn-time deadline never comes into play,
     -- because its answer arrives in the call that starts it.
     it("starts a request's deadline when its child spawns, not when it queues", function()
         local file = root .. "/queued.md"
