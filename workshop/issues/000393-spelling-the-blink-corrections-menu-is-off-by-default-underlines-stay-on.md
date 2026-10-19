@@ -36,8 +36,8 @@ Change the default of `chat_spell.blink` from true to false. `enable` (underline
 
 ## Plan
 
-- [ ] Change only the shared Blink default/comment; document the default and explicit opt-in in the existing atlas (ARCH-DRY).
-- [ ] Red/green bare setup through prep_chat with a ready stateful Blink fake: underlines stay on, no menu; retain opt-in menu behavior coverage. Run mapped tests, architecture guards and recorded suite before landing.
+- [x] Change only the shared Blink default/comment; document the default and explicit opt-in in the existing atlas (ARCH-DRY).
+- [x] Red/green bare setup through prep_chat with a ready stateful Blink fake: underlines stay on, no menu; retain opt-in menu behavior coverage. Run mapped tests and architecture guards; schedule the recorded suite for the landing gate.
 
 ## Log
 
@@ -65,3 +65,12 @@ a supplied chat_spell table replaces the defaults, so its opt-in example include
 enable=true. No setup merge behavior changed. Hub approved suite plus close
 review, no :0 staging; normal use after the hub's fast-forward/restart is smoke.
 Lint: zero warnings/errors across 805 files.
+
+### 2026-10-18 — review overlaps queue
+
+The recorded suite is mandatory before landing, not before review. Scheduled
+cb7588a68bab3b4b10fa36c1e134718c on pushed d6e05403 (PR #314); code identical
+to this docs-only checkpoint. Close review overlaps the machine queue per the
+worker rules. Verification: 79 mapped cases on each of preferred 0.12.5 and
+stock 0.11.7; 144 architecture/helper cases, lint 805 files zero warnings/errors,
+and git diff --check. No :0 staging, per the hub's explicit approval.
