@@ -1433,6 +1433,7 @@ atlas:
     tests:
       - tests/unit/display_text_spec.lua
       - tests/unit/document_band_model_spec.lua
+      - tests/unit/breadcrumb_model_spec.lua
       - tests/unit/side_tree_model_spec.lua
       - tests/integration/file_history_spec.lua
   ui/frontmatter_typeahead:

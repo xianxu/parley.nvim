@@ -162,7 +162,7 @@ describe("per-window file Back (#333)", function()
         local ok, shallow, deep = pcall(function() return scans_for(docs[1]), scans_for(docs[8]) end)
         api.nvim_list_bufs = list_bufs
         assert.is_true(ok, shallow)
-        assert.truthy(vim.wo.winbar:find("0 › 1 › 2", 1, true) or vim.wo.winbar:find("0 › … › 7 › 8", 1, true))
+        assert.truthy(vim.wo.winbar:find(" 0 › 1 › 2 › 3 › 4 › 5 › 6 › 7 › 8%=", 1, true))
         assert.equals(shallow, deep)
     end)
 

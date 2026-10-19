@@ -40,7 +40,7 @@ Three Minor notes from #391's round-2 close review (archived close review for #3
 
 ## Plan
 
-- [ ]
+None written: the three fixes are small and recorded in the Log.
 
 ## Log
 
@@ -50,3 +50,4 @@ Three Minor notes from #391's round-2 close review (archived close review for #3
 - `parse` takes a quoted value as quoted, else the text before whitespace + `#` (a leading `#` included, so `parent: # none` is no parent); `a#b.md` keeps its `#`. The opener trims as `find_header_end` does.
 - Buffer lookup: one `helper.loaded_buffer_index` per chain, sharing `buffer_for`'s key function (ARCH-DRY). Revert check: with the old per-node `buffer_for`, the depth test counts 10 scans for depth 8 against 3 for depth 1; with the index both are equal.
 - Path form selection moved to pure `breadcrumb_model.located` (ARCH-PURE) and unit-tested for root, home, absolute and a home-prefix lookalike (`/hx`).
+- Close review round 1 (REWORK, BR-1): the `located()` test expected `lua › x` for `x.lua`, and only `.md` is stripped. I didn't see the failure because `breadcrumb_model_spec` was mapped only under `ui/keybindings`, so my `ui/breadcrumb` runs skipped it. Fixed the expectation, mapped the model spec under `ui/breadcrumb` (the spec that owns the model), and pinned the depth test's winbar to the exact 9-segment chain (Minor).
