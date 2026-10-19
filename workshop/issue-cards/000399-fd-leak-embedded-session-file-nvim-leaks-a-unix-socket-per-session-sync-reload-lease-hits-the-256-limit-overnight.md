@@ -1,6 +1,6 @@
 ---
 id: 000399
-status: codecomplete
+status: done
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: b1185fee8f6a52188254a6920db9a36871fe4ffe
         evidence_commit: f24974a280612bbd2b505bef29984bc2fc1c8a8d
+        landed_commit: 15e036d78c8f2550d175e31f4ee16778da80d47f
 ---
 
 # fd leak: embedded session-file nvim leaks a unix socket per session-sync reload/lease, hits the 256 limit overnight
