@@ -1,6 +1,6 @@
 ---
 id: 000400
-status: codecomplete
+status: done
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
@@ -22,6 +22,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 0167f8fadbe8886ac18a06c01d006d0c8f4e8126
         evidence_commit: a203fbd2cbb75b1192c449061dd8d5ffed455876
+        landed_commit: 070ed106d7a338b345a1278f52dd6d84ded69102
 ---
 
 # couch.run: session-sync status/actors queries and sends have no deadline
