@@ -47,6 +47,14 @@ Quick flow (display-only; ~80 code lines). The tree path is a display value besi
 
 Hot path: BufEnter/WinEnter per event; growth driver = tree depth d, cost d+1 frontmatter reads of ≤200 lines, bounded by cap 32 (counted test above). ARCH-FUNERAL: creates nothing durable; `trees[win]` dies with the window (WinClosed).
 
+## Revisions
+
+- 2026-10-18, hub refinement: cache each file's parsed frontmatter by path plus stamp (mtime and size, or changedtick for a loaded buffer), bounded at 256 entries and reset when full.
+- 2026-10-18, operator scope addition (hub-approved reading): no navigation trail in the winbar anywhere. A file outside any tree shows its own path as segments under the existing label and collapse rules, relative to the nearest `.git` root, else `~`, else `/`. Every file, including roots and repo-top files, shows a winbar. Back and snapshot/restore are unchanged. Delta: `breadcrumb_model.path_value` and `visible`; `file_history.display` returns the tree or file path, never the trail. The band, lock-leave and session-sync specs now treat the path band as every file's baseline: an operator's original winbar comes back only when the window stops showing a file.
+
 ## Log
 
 ### 2026-10-18
+- A loaded buffer is read as edited, not from disk, so a frontmatter edit shows before saving; that is why a buffer stamp is used instead of mtime.
+- Three gates each asked "is there a trail to show?" (`project`, `document_band_model.compose`, `document_band.refresh`); folded into one `breadcrumb_model.visible` (ARCH-DRY) after the third surfaced as a no-repaint bug.
+- Band specs had set operator options after the file opened. With a band on every file, the band reads those as overrides, so the specs set them before `:edit` or not at all.

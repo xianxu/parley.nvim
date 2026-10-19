@@ -15,7 +15,8 @@ describe("lock leave reminder", function()
     local function tick(timer) timer.callback(); vim.wait(1) end
     local function finish(timer) for _ = 1, 6 do tick(timer) end end
     before_each(function()
-        root = vim.fn.tempname(); vim.fn.mkdir(root, "p")
+        -- A repo root keeps each file's path band (#391) to its own name.
+        root = vim.fn.tempname(); vim.fn.mkdir(root .. "/.git", "p")
         vim.fn.writefile({ "body" }, root .. "/held.md")
         vim.cmd("edit " .. vim.fn.fnameescape(root .. "/held.md"))
         source, win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
@@ -184,12 +185,12 @@ describe("lock leave reminder", function()
         owner.render({ state = "free", hl = "ParleySessionSyncFree" })
         return owner
     end
-    it("retains destination lock and breadcrumb state through priority and coordinator pulses", function()
+    it("retains destination lock and path state through priority and coordinator pulses", function()
         local timer = destination_trail()
         local owner, coordinator = free_destination(), band.new(dest)
         tick(timer)
         assert.truthy(label():find("free     ", 1, true))
-        assert.truthy(label():find("held › destination", 1, true))
+        assert.truthy(label():find("destination", 1, true)); assert.is_nil(label():find("held ›", 1, true))
         assert.truthy(label():find("unsubmitted: Alt+Return", 1, true))
         owner.render({ state = "operator", unsent = true, hl = "ParleySessionSyncOperator" })
         coordinator.render({ overlay = true, state = "unknown", hl = "WarningMsg",
@@ -211,12 +212,12 @@ describe("lock leave reminder", function()
         assert.falsy(vim.wo[other].winbar:find("ParleySessionSyncLeave", 1, true))
         assert.truthy(vim.wo[other].winbar:find("free     ", 1, true))
         owner.render({ state = "free", hl = "ParleySessionSyncFree" })
-        assert.truthy(vim.wo[other].winbar:find("held › destination", 1, true))
+        assert.truthy(vim.wo[other].winbar:find("destination", 1, true)); assert.is_nil(vim.wo[other].winbar:find("held ›", 1, true))
         assert.truthy(label():find("ParleySessionSyncLeave", 1, true))
         for _ = 1, 5 do tick(timer) end
         owner.clear()
     end)
-    it("restores a new split beneath a red pulse and composes its inherited trail on state refresh", function()
+    it("restores a new split beneath a red pulse and keeps its inherited trail behind Back on state refresh", function()
         local timer = destination_trail()
         -- Exercise the attached destination's real BufWinEnter renderer, which
         -- follows WinNew's inherited history in the new editing window.
@@ -228,7 +229,7 @@ describe("lock leave reminder", function()
         local inherited = assert(require("parley.file_history").peek(other))
         assert.same({ vim.api.nvim_buf_get_name(source), vim.api.nvim_buf_get_name(dest) }, inherited.paths)
         assert.is_true(ss.set_submission_feedback(dest, "ok", false))
-        assert.truthy(vim.wo[other].winbar:find("held › destination", 1, true))
+        assert.truthy(vim.wo[other].winbar:find("destination", 1, true)); assert.is_nil(vim.wo[other].winbar:find("held ›", 1, true))
         assert.truthy(vim.wo[other].winbar:find("free     ", 1, true))
         assert.truthy(label():find("ParleySessionSyncLeave", 1, true))
         for _ = 1, 5 do tick(timer) end

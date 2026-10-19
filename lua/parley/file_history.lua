@@ -3,7 +3,10 @@ local M = {}
 local model = require("parley.file_history_model")
 local helpers = require("parley.helper")
 local breadcrumb = require("parley.breadcrumb_model")
-local histories, restoring, generations, presented = {}, {}, {}, {}
+local side_tree = require("parley.side_tree_model")
+local histories, restoring, generations, presented, shown = {}, {}, {}, {}, {}
+-- Parsed frontmatter by path, valid while its stamp holds; rebuilt past the bound.
+local parsed, parsed_count, PARSED_MAX = {}, 0, 256
 local origins = setmetatable({}, { __mode = "k" })
 local departing_window
 
@@ -27,6 +30,46 @@ local function observation(win)
     return { path = vim.fn.resolve(vim.fn.fnamemodify(name, ":p")), cursor = { row = pos[1], col = pos[2] } }
 end
 
+-- A loaded buffer is read as edited (changedtick); otherwise the file (mtime).
+local function read_node(path)
+    local buf = helpers.buffer_for(path, true)
+    local stamp
+    if buf then
+        stamp = "b" .. buf .. ":" .. vim.api.nvim_buf_get_changedtick(buf)
+    else
+        local stat = (vim.uv or vim.loop).fs_stat(path)
+        if not stat or stat.type ~= "file" then return nil end
+        stamp = stat.mtime.sec .. "." .. stat.mtime.nsec .. ":" .. stat.size
+    end
+    local hit = parsed[path]
+    if hit and hit.stamp == stamp then return hit.node end
+    local lines = buf and vim.api.nvim_buf_get_lines(buf, 0, 200, false) or vim.fn.readfile(path, "", 200)
+    local node = { tree = false }
+    local close = lines[1] == "---" and require("parley.chat_parser").find_header_end(lines)
+    for i = 2, (close or 1) - 1 do
+        local key, value = lines[i]:match("^([%w_-]+):%s*(.-)%s*$")
+        if key == "discussions" then node.tree = true end
+        value = value and (value:match('^"(.*)"$') or value:match("^'(.*)'$") or value)
+        if key == "parent" and value ~= "" then
+            local absolute = value:sub(1, 1) == "/" and value or vim.fs.dirname(path) .. "/" .. value
+            node.parent = vim.fn.resolve(vim.fs.normalize(absolute))
+        end
+    end
+    if not hit then parsed_count = parsed_count + 1 end
+    if parsed_count > PARSED_MAX then parsed, parsed_count = {}, 1 end
+    parsed[path] = { stamp = stamp, node = node }
+    return node
+end
+
+-- Repo-relative under the nearest .git, else home-relative, else absolute.
+local function path_display(path)
+    local base = vim.fs.root(path, ".git")
+    if base then return breadcrumb.path_value(path, vim.fn.resolve(base)) end
+    local home = vim.fn.resolve(vim.fn.expand("~"))
+    if path:sub(1, #home + 1) == home .. "/" then return breadcrumb.path_value(path, home, "~") end
+    return breadcrumb.path_value(path, "/")
+end
+
 local function observe(win, kind)
     if restoring[win] then return nil end
     local entry = observation(win)
@@ -43,6 +86,9 @@ local function observe(win, kind)
             generations[win] = (generations[win] or 0) + 1
         end
         histories[win] = model.transition(history, entry)
+        if kind == "visit" or not shown[win] or shown[win].path ~= entry.path then
+            shown[win] = { path = entry.path, value = side_tree.chain(entry.path, read_node) or path_display(entry.path) }
+        end
         if kind == "visit" and (changed or not vim.deep_equal(previous, presented[win])) then repaint(win) end
     elseif previous then
         repaint(win)
@@ -64,6 +110,18 @@ function M.peek(win)
     local current = history and history.entries[history.index]
     if not current or not current.trail then return nil, "window has no valid breadcrumb" end
     return breadcrumb.validate(current.trail)
+end
+
+-- What the band paints: a side doc's tree path, else the file's own path.
+-- The navigation trail is never displayed; Back, snapshots and restoration
+-- keep reading it (`peek`).
+function M.display(win)
+    win = window(win)
+    local trail, reason = M.peek(win)
+    if not trail then return nil, reason end
+    local current = shown[win]
+    if not current or current.path ~= trail.paths[#trail.paths] then return nil, "window has no observed path" end
+    return vim.deepcopy(current.value)
 end
 
 -- Snapshots contain values only; observers and callers cannot share mutable paths.
@@ -200,7 +258,7 @@ function M.setup()
     end })
     vim.api.nvim_create_autocmd("WinClosed", { group = group, callback = function(ev)
         local win = tonumber(ev.match)
-        histories[win], restoring[win], generations[win], presented[win] = nil, nil, nil, nil
+        histories[win], restoring[win], generations[win], presented[win], shown[win] = nil, nil, nil, nil, nil
         if departing_window == win then departing_window = nil end
     end })
     for _, win in ipairs(vim.api.nvim_list_wins()) do observe(win, "visit") end
