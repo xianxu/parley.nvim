@@ -1,13 +1,21 @@
 ---
 id: 000391
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: 'de5ab3608d1a304f77d9aabc1aa63eb4bd247328' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '7b313c4575cefab790d5991d4d3c3aa3f6776ccf' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-18T20:36:10-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
 ---
 
 # breadcrumb winbar: show a side doc's tree path (parent chain), not the navigation path that reached it
@@ -28,7 +36,15 @@ For a document in a side-doc tree (a `.side/` doc with `parent:` frontmatter, or
 
 ## Plan
 
-- [ ]
+Quick flow (display-only; ~80 code lines). The tree path is a display value beside the navigation trail, never a replacement for it: `snapshot`/`restore`/`origin`/`follow`/Back keep reading the trail, so Back and finder snapshots are unchanged.
+
+- [ ] `lua/parley/side_tree_model.lua` (pure): `chain(leaf, read, cap)`. `read(path)` returns `{ parent = abs|nil, tree = bool }` or nil (unreadable). A leaf with no `parent:` and no `discussions:` is outside any tree → nil (caller keeps the trail). Otherwise walk `parent:` up: a repeated path stops with `marker = "cycle"`, an unreadable parent stops with `marker = "missing"`, more than `cap` (32) ancestors keeps the nearest and sets `marker = "depth"`. Returns `{ version = 1, paths = root..leaf, omitted = 0, marker }`.
+- [ ] `breadcrumb_model.project`: a `marker` renders as a lead segment (`?` missing, `↻` cycle, `…` depth), and shows even with one path; `document_band_model.compose` treats a marked value as a trail.
+- [ ] `file_history.lua`: per-window `trees[win] = { path, value }`, recomputed in `observe` on every `visit` (BufEnter/WinEnter, so a frontmatter edit shows on re-entry) and whenever the observed path changes; cleared on WinClosed. Reader adapter: loaded buffer lines else `readfile(path, "", 200)`; frontmatter only when line 1 is `---`; `parent:` resolved against the doc's directory. New `M.display(win)` = `peek`'s proof check, then the tree value when present, else the trail; `document_band.trail_for` calls it. `peek` stays the trail (restore/snapshot contract).
+- [ ] Tests: unit `side_tree_model_spec` (chain, cycle, missing, depth cap, not-in-tree; counted reads: chain N reads N+1, 2N reads 2N+1); unit project marker; integration `file_history_spec`: A > B1 > C1 / A > B2 > C2, Alt+o C2 → C1 shows `A › B1 › C1`; Back from C1 still returns to C2; a non-tree file keeps `session › answer`.
+- [ ] atlas/ui/breadcrumb.md: tree-path rule + `display` vs `peek`.
+
+Hot path: BufEnter/WinEnter per event; growth driver = tree depth d, cost d+1 frontmatter reads of ≤200 lines, bounded by cap 32 (counted test above). ARCH-FUNERAL: creates nothing durable; `trees[win]` dies with the window (WinClosed).
 
 ## Log
 
