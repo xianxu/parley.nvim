@@ -7,7 +7,7 @@ created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
 collaboration-mode: collaboration
-card_mirror: '5e6649c1576e19d47f22b1742f4400273645c5a7' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '520f52ba6b24a61953bd01fb577f469e42b40001' # card fields mirrored from issue-cards; edit via sdlc
 started: 2026-10-19T07:21:18-07:00
 claimant:
     operator: Xian Xu
@@ -17,7 +17,7 @@ claimant:
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
 flow: {kind: full, provenance: inferred}
-actual_hours: 0.75
+actual_hours: 0.76
 ---
 
 # fd leak: embedded session-file nvim leaks a unix socket per session-sync reload/lease, hits the 256 limit overnight
