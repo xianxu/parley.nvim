@@ -76,3 +76,15 @@ to this docs-only checkpoint. Close review overlaps the machine queue per the
 worker rules. Verification: 79 mapped cases on each of preferred 0.12.5 and
 stock 0.11.7; 144 architecture/helper cases, lint 805 files zero warnings/errors,
 and git diff --check. No :0 staging, per the hub's explicit approval.
+
+### 2026-10-18 — issue-backed unchanged suite rerun
+
+First recorded suite cb7588a68bab3b4b10fa36c1e134718c failed only
+document_registry_spec's queue/deadline case: first Python fake request exceeded
+its 1000 ms deadline (queued_ms=0, ran_ms=1000). Preferred-runtime remaining
+specs passed; make stopped before compatibility. Log retained under test-stats/
+failed, SHA-256 prefix 1fb5f695372b. Registry code/spec are unchanged from main.
+The same spec passed 11/11 immediately alone (/tmp/parley-393-registry-alone.log).
+Filed unclaimed #394 with the narrow 0.6 s sleep / 1 s deadline evidence. One
+unchanged recorded rerun on d6e05403 is permitted by the worker flake rule; a
+second unrelated failure will be reported to the hub, not retried again.
