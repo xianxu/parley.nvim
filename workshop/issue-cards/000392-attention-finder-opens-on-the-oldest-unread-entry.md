@@ -1,8 +1,8 @@
 ---
 id: 000392
-status: working
+status: codecomplete
 created: 2026-10-18
-updated: 2026-10-18
+updated: 2026-10-19
 estimate_hours:
 github_issue:
 started: 2026-10-18T20:51:22-07:00
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:2
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot2/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.48
+tracker:
+    version: 1
+    completion:
+        token: close-6197bc1424ef
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 2302826c8848bb0eac245f1009d759112adb9d5d
+        evidence_commit: 6d811d540394adbaa1d5233a91c954f7ca885aac
 ---
 
 # attention finder opens on the oldest unread entry
