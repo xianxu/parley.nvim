@@ -1,6 +1,6 @@
 ---
 id: 000400
-status: working
+status: codecomplete
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
@@ -14,6 +14,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 1.24
+tracker:
+    version: 1
+    completion:
+        token: close-63ea18595ded
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 5b58f710009b8d7191052e9908c7b57da51fbbf8
+        evidence_commit: b0775d7737592c7ce7f252116363ee224a29b54c
 ---
 
 # couch.run: session-sync status/actors queries and sends have no deadline
