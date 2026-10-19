@@ -1,6 +1,6 @@
 ---
 id: 000397
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-10-19
@@ -8,7 +8,16 @@ updated: 2026-10-19
 estimate_hours:
 severity: low
 collaboration-mode: collaboration
-card_mirror: 'c46637faddc9193be6b261d89bb585fa733b4612' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: 'a6b5b8ec12063437d50ca290efe82359334a6687' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-19T01:00:46-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "3b5e5ccc"}
 ---
 
 # breadcrumb tree path: trailing comment on parent: breaks the chain; per-node buffer scan; untested path fallbacks
@@ -36,3 +45,8 @@ Three Minor notes from #391's round-2 close review (archived close review for #3
 ## Log
 
 ### 2026-10-19
+
+### 2026-10-19
+- `parse` takes a quoted value as quoted, else the text before whitespace + `#` (a leading `#` included, so `parent: # none` is no parent); `a#b.md` keeps its `#`. The opener trims as `find_header_end` does.
+- Buffer lookup: one `helper.loaded_buffer_index` per chain, sharing `buffer_for`'s key function (ARCH-DRY). Revert check: with the old per-node `buffer_for`, the depth test counts 10 scans for depth 8 against 3 for depth 1; with the index both are equal.
+- Path form selection moved to pure `breadcrumb_model.located` (ARCH-PURE) and unit-tested for root, home, absolute and a home-prefix lookalike (`/hx`).
