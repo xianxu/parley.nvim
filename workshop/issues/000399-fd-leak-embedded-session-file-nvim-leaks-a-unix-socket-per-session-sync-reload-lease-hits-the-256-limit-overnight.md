@@ -30,7 +30,7 @@ Prime suspect (unconfirmed): `lua/parley/document_lease.lua:24` runs `vim.system
 
 ## Spec
 
-Find the leaking spawn with a counted reproduction: open fds before and after N simulated external writes and reloads of a session-sync document must be equal. Fix it at the root: every child's stdin, stdout and stderr closed on every path, including timeout and kill. Add a regression that counts the nvim process's own fds across 200 reloads (or the lease calls) and fails if they grow.
+Rescoped 2026-10-19 (see Revisions): the leak does not reproduce, so this issue detects and captures. A watchdog captures `lsof` and the editor's live children (executable names only) the first time its open-descriptor count passes 200, and warns once naming the file. Two fake-backed guards keep parley's session-sync path flat. The root cause is a new issue opened from the first capture. The original spec (find the leaking spawn with a counted reproduction and fix it at the root) stands for that issue.
 
 ## Done when
 
