@@ -42,7 +42,7 @@ describe("fd_watchdog capture (#399)", function()
 *) echo '%d %d curl -H Authorization: Bearer SECRET-TOKEN';; esac]]):format(pid + 1, pid, pid + 1, pid))
         watchdog.setup({ threshold = watchdog.count() - 3, interval_ms = 20, dir = dir, notify = notify,
             lsof = script("lsof", "echo LSOF-MARK $@"), ps = ps })
-        assert.is_true(vim.wait(5000, function() return #warnings > 0 end))
+        assert.is_true(vim.wait(require("tests.helpers.arrival").MS, function() return #warnings > 0 end))
         vim.wait(200, function() return false end)
         assert.equals(1, #warnings, "one warning, not one per tick")
         assert.equals(vim.log.levels.WARN, warnings[1].level)
