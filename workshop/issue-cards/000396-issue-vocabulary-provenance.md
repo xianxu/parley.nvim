@@ -1,6 +1,6 @@
 ---
 id: 000396
-status: working
+status: codecomplete
 created: 2026-10-19
 updated: 2026-10-19
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:1
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot1/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 0.08
+tracker:
+    version: 1
+    completion:
+        token: close-a68e826c2c98
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: ef2039131025cd0c480c06ecf857cff3b5ff5bbc
+        evidence_commit: 9a4ef6c8a25f6d8d7261644d28232b2a92d15926
 ---
 
 # Repair issue vocabulary provenance
