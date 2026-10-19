@@ -5,15 +5,21 @@ local M = {}
 
 M.CAP = 32
 
--- A node from top-level frontmatter keys only (line 1 is `---`); an indented
--- key belongs to a `discussions:` entry. `parent:` resolves against `dir`.
+-- A YAML scalar: a quoted value as quoted, else the text before ` # comment`.
+local function scalar(value)
+    return value:match('^"([^"]*)"') or value:match("^'([^']*)'") or ((" " .. value):gsub("%s+#.*$", ""):gsub("^ ", ""))
+end
+
+-- A node from top-level frontmatter keys only (line 1 is `---`, trimmed as
+-- `find_header_end` trims it); an indented key belongs to a `discussions:`
+-- entry. `parent:` resolves against `dir`.
 function M.parse(lines, dir)
     local node = { tree = false }
-    if lines[1] ~= "---" then return node end
+    if not (lines[1] or ""):match("^%s*%-%-%-%s*$") then return node end
     for i = 2, (require("parley.chat_parser").find_header_end(lines) or 1) - 1 do
         local key, value = lines[i]:match("^([%w_-]+):%s*(.-)%s*$")
         if key == "discussions" then node.tree = true end
-        value = value and (value:match('^"(.*)"$') or value:match("^'(.*)'$") or value)
+        value = value and scalar(value)
         if key == "parent" and value ~= "" then
             node.parent = vim.fs.normalize(value:sub(1, 1) == "/" and value or dir .. "/" .. value)
         end

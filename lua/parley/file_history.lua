@@ -31,8 +31,9 @@ local function observation(win)
 end
 
 -- A loaded buffer is read as edited (changedtick); otherwise the file (mtime).
-local function read_node(path)
-    local buf = helpers.buffer_for(path, true)
+-- `buffers` is one `loaded_buffer_index` per chain, so lookups cost no scan.
+local function read_node(path, buffers)
+    local buf = buffers[path]
     local stamp
     if buf then
         stamp = "b" .. buf .. ":" .. vim.api.nvim_buf_get_changedtick(buf)
@@ -56,13 +57,14 @@ local function read_node(path)
     return node
 end
 
--- Repo-relative under the nearest .git, else home-relative, else absolute.
 local function path_display(path)
-    local base = vim.fs.root(path, ".git")
-    if base then return breadcrumb.path_value(path, vim.fn.resolve(base)) end
-    local home = vim.fn.resolve(vim.fn.expand("~"))
-    if path:sub(1, #home + 1) == home .. "/" then return breadcrumb.path_value(path, home, "~") end
-    return breadcrumb.path_value(path, "/")
+    local root = vim.fs.root(path, ".git")
+    return breadcrumb.located(path, root and vim.fn.resolve(root), vim.fn.resolve(vim.fn.expand("~")))
+end
+
+local function shown_value(path)
+    local buffers = helpers.loaded_buffer_index()
+    return side_tree.chain(path, function(node) return read_node(node, buffers) end) or path_display(path)
 end
 
 local function observe(win, kind)
@@ -83,7 +85,7 @@ local function observe(win, kind)
         histories[win] = model.transition(history, entry)
         local before = shown[win]
         if kind == "visit" or not before or before.path ~= entry.path then
-            shown[win] = { path = entry.path, value = side_tree.chain(entry.path, read_node) or path_display(entry.path) }
+            shown[win] = { path = entry.path, value = shown_value(entry.path) }
         end
         -- A frontmatter edit seen on re-entry changes the value, not the path.
         local moved = not before or not vim.deep_equal(before, shown[win])

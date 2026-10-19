@@ -78,6 +78,11 @@ describe("breadcrumb_model", function()
         assert.are.equal("etc › x", model.project(model.path_value("/etc/x.md", "/"), 100, ops))
         assert.are.equal("a › … › e › f", model.project(model.path_value("/r/a/b/c/d/e/f.md", "/r"), 14, ops))
         assert.is_true(model.visible(model.path_value("/r/README.md", "/r")))
+        -- Root wins, then home, then absolute (#397).
+        assert.are.equal("lua › x", model.project(model.located("/h/r/lua/x.lua", "/h/r", "/h"), 100, ops))
+        assert.are.equal("~ › notes › plan", model.project(model.located("/h/notes/plan.md", nil, "/h"), 100, ops))
+        assert.are.equal("etc › x", model.project(model.located("/etc/x.md", nil, "/h"), 100, ops))
+        assert.are.equal("hx › y", model.project(model.located("/hx/y.md", nil, "/h"), 100, ops))
     end)
 
     it("leads a side-doc tree path that stopped early with its marker (#391)", function()

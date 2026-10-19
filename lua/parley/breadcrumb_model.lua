@@ -159,6 +159,13 @@ function M.path_value(path, base, prefix)
     return { version = 1, paths = { path }, omitted = 0, labels = labels }
 end
 
+-- Repo-relative under `root`, else home-relative under `home`, else absolute.
+function M.located(path, root, home)
+    if root then return M.path_value(path, root) end
+    if home and path:sub(1, #home + 1) == home .. "/" then return M.path_value(path, home, "~") end
+    return M.path_value(path, "/")
+end
+
 -- Every display value shows, a tree root and a repo-top file included: the
 -- navigation trail, the one value a lone root once hid, is never displayed.
 function M.visible(value)

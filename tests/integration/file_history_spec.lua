@@ -143,6 +143,29 @@ describe("per-window file Back (#333)", function()
         assert.truthy(vim.wo.winbar:find("? › D", 1, true))
     end)
 
+    it("scans the buffer list once per tree path, whatever its depth (#397)", function()
+        local docs = {}
+        for i = 0, 8 do
+            docs[i] = root .. "/deep/" .. i .. ".md"
+            vim.fn.mkdir(vim.fs.dirname(docs[i]), "p")
+            vim.fn.writefile(i == 0 and { "---", "discussions:", "---" } or { "---", "parent: " .. (i - 1) .. ".md", "---" }, docs[i])
+            vim.cmd("edit " .. vim.fn.fnameescape(docs[i]))
+        end
+        local list_bufs, scans = api.nvim_list_bufs, 0
+        api.nvim_list_bufs = function() scans = scans + 1 return list_bufs() end
+        local function scans_for(path)
+            vim.cmd("edit " .. vim.fn.fnameescape(files.other))
+            scans = 0
+            vim.cmd("edit " .. vim.fn.fnameescape(path))
+            return scans
+        end
+        local ok, shallow, deep = pcall(function() return scans_for(docs[1]), scans_for(docs[8]) end)
+        api.nvim_list_bufs = list_bufs
+        assert.is_true(ok, shallow)
+        assert.truthy(vim.wo.winbar:find("0 › 1 › 2", 1, true) or vim.wo.winbar:find("0 › … › 7 › 8", 1, true))
+        assert.equals(shallow, deep)
+    end)
+
     it("exports detached trails for real Alt+o and restores native roots on Back", function()
         local history = require("parley.file_history")
         vim.fn.writefile({ "[answer](" .. files.answer .. ")" }, files.session)
