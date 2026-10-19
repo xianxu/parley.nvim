@@ -39,7 +39,7 @@ On open, place the cursor on the oldest unread entry: state `answered` (an answe
 
 - [x] Return an initial row index alongside the unchanged tree rows, choosing answered with earliest answered_at (legacy missing answer time falls back to submitted_at; ties keep tree order). Compute during the existing bounded row pass (ARCH-PURE, ARCH-DRY).
 - [x] Apply it on open and empty-query scope toggles; preserve selection for async updates and typed filters. Ensure the selected row is visible through the picker's existing viewport rule, without changing row order.
-- [ ] Red/green pure and native picker tests cover answer vs submit order, ties, seen/waiting, no unread, side-child position, both scopes, a below-fold target, typed filtering and late updates. Run required suite before close; normal landing follows.
+- [x] Red/green pure and native picker tests cover answer vs submit order, ties, seen/waiting, no unread, side-child position, both scopes, a below-fold target, typed filtering and late updates. Run required suite before close; normal landing follows.
 
 Actions: open, toggle scope, type a filter, move selection, close. No new persisted state or lifecycle.
 
@@ -65,6 +65,8 @@ Choice costs one comparison per displayed entry, bounded by the store's256 entri
 - Required suite passes on `0aacd31110b4b31e1c60c928d943b1f33f1f4a1e`:480 unique spec paths pass (960 PASS records),805 lint files clean, no surviving test processes. Retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/0aacd31110b4b31e1c60c928d943b1f33f1f4a1e/suite.log`, SHA256 `35d74c438f980020e127af3dc78e6199dc6ba4729661076567d6fd0c24103a6d`. Hub directed close and normal landing (submitted receiptbf032369-f897-456c-bfd5-65582f6747b1). This evidence-only commit leaves the tested source unchanged.
 
 - Close round1 returned REWORK, not an infrastructure error: Critical BR-1 picker-repaint-preserves-viewport. It did not finalize, so no merge began. `/tmp/parley392-br1-red.log` reproduces hidden below-fold selection on both successful and failed automatic probes before typing. The fix captures viewport before update's first reflow/refilter and passes it through both intermediate numeric selection and final identity resolution; explicit scope retargeting retains ensure-visible behavior. `/tmp/parley392-br1-green.log` passes34 finder +18 rows +82 picker cases (134 total), zero failures/errors, no survivors. Both outcomes exercise current/all views and scope toggles before the existing filter/late-reply checks. Two-file luacheck and whitespace checks clean. Lessons updated. New full source-head suite required before normal re-close; the later landing turn will integrate main's #396 CI fix.
+
+- Post-BR1 required suite passes on `384fc34433fc4fc5709cc5be8e75ac54e405d639`:480 unique spec paths pass (960 PASS records),805 lint files clean, no survivors. Retained log `/Users/xianxu/workspace/parley.nvim/.git/sdlc/local-checks/384fc34433fc4fc5709cc5be8e75ac54e405d639/suite.log`, SHA256 `e7e609bd987a58cfca2b9c30d02af304ca2acf22c1a696992ddc67422ff117a7`. Hub directed normal re-close then normal landing with main integration (#396), submitted receipt8bf472b1-14b9-4428-9622-ff8447a9c33a. Evidence-only checkpoint leaves the tested source unchanged.
 
 ## Revisions
 
