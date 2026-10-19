@@ -1,8 +1,8 @@
 ---
 id: 000391
-status: codecomplete
+status: done
 created: 2026-10-18
-updated: 2026-10-18
+updated: 2026-10-19
 estimate_hours:
 github_issue:
 started: 2026-10-18T20:36:10-07:00
@@ -21,6 +21,7 @@ tracker:
         repository: github.com/xianxu/parley.nvim
         reviewed_head: 0c9ab358822e20670a58467ad050217d830ff25c
         evidence_commit: 07dc3fdd5c1768c79406ac3a8bba9843e2569a9c
+        landed_commit: 63e46c363c9927c5248c9f967b2b17b1b4a19f58
 ---
 
 # breadcrumb winbar: show a side doc's tree path (parent chain), not the navigation path that reached it
