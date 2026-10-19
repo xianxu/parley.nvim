@@ -315,11 +315,11 @@ local config = {
 	-- re-parses the whole chat on every edit (#294). `true` keeps it, with its
 	-- fenced-code injections and conceal, at that cost.
 	chat_treesitter = false,
-	-- Spell underlines and completion are independent. Blink is used only after
-	-- the host has configured it; legacy native typeahead remains explicit opt-in.
+	-- Spell underlines stay on; both correction menus are opt-in. Set blink=true
+	-- after the host configures Blink, or typeahead=true for the legacy menu.
 	chat_spell = {
 		enable = true,
-		blink = true,
+		blink = false,
 		debounce_ms = 180,
 		typeahead = false,
 		spelllang = "en_us",
