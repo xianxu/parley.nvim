@@ -88,3 +88,10 @@ The same spec passed 11/11 immediately alone (/tmp/parley-393-registry-alone.log
 Filed unclaimed #394 with the narrow 0.6 s sleep / 1 s deadline evidence. One
 unchanged recorded rerun on d6e05403 is permitted by the worker flake rule; a
 second unrelated failure will be reported to the hub, not retried again.
+
+The runner refused d6e05403 because it is no longer an origin branch tip after
+close pushed its docs-only evidence. The accepted unchanged-code rerun is
+f5b9ea1e1accd92856d99af8f024f212 on pushed SHIP head ee9ad5130fc2; no code/test
+change since the failed run. That exact revision and exception are reported to
+the hub. The first run did not execute the compatibility pass; only a completed
+rerun can supply that missing evidence.
