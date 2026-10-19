@@ -52,6 +52,7 @@ Rescoped 2026-10-19 (see Revisions): the leak does not reproduce, so this issue 
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — Since close 196d419a only tests/integration/fd_watchdog_spec.lua changed: its warning wait uses tests.helpers.arrival MS (arch #374 guard). Full suite exit 0 on b1185fee (sdlc-local/suite, 6m0s). (fixed-then-ship); review verdict: SHIP
 - 2026-10-19: closed — On 637d080c: infra/fd_watchdog exit 0 (unit crossed/children/report/stale; integration with real timer and stand-in lsof/ps: one WARN names fd-captures/fd-<stamp>-<pid>.txt holding the count, this pid child as executable only, SECRET-TOKEN absent though the stand-in ps offers it for any non-comm query, lsof -p pid, five captures kept, setup does not re-arm; quiet below threshold and at 0). modes/session_sync exit 0 incl. 200-write and 50-doc rename-storm fd guards using fd_watchdog.count. Lint 0. Full suite running on 637d080c.; review verdict: SHIP
 - 2026-10-19: flow upgraded quick → full — 150 added lines in code files (limit 100); an earlier round of this close already ran the full review
 - Measured flat (open fds before = after; /dev/fd count in-process, lsof for peers):

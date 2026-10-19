@@ -202,6 +202,96 @@ rounds:
       isolation: checkout
       reviewed: 637d080c05278db659d095dceb7b58ce5f8d174d
       blocked: false
+    - reviewer_runs:
+        - version: 1
+          intent:
+            disposable_root: true
+            id: 818844b1-8184-42a3-a4e5-1297b8878893
+            repository: github.com/xianxu/parley.nvim
+            issue_id: "000399"
+            recipe: fix-review
+            round: 3
+            attempt: 1
+            agent: claude
+            root: /Users/xianxu/Library/Caches/sdlc/review-checkouts/331a21d8d28f37cf
+            reviewed_head: b1185fee8f6a52188254a6920db9a36871fe4ffe
+            slot: parley.nvim:3
+            requested_at: "2026-10-19T15:33:57.639948Z"
+          phase: finished
+          pid: 41872
+          started_at: "2026-10-19T15:33:57.848637Z"
+          finished_at: "2026-10-19T15:35:34.384888Z"
+          session_id: d127eea4-74c1-477f-9d01-1db8e6958af9
+          outcome: returned
+      actual_inputs:
+        version: 1
+        method: active-time-v3-engagement-queue-v1
+        repository: github.com/xianxu/parley.nvim
+        code_head: b1185fee8f6a52188254a6920db9a36871fe4ffe
+        tracker_head: d8e37dd7391706c60a58b6ae15acfd73d9a4e97a
+        branch_point: c631353ce8819de93750cc88a9c90322adedcf0e
+        since: "2026-10-19T07:21:18-07:00"
+        until: "2026-10-19T08:15:21-07:00"
+        brain_root: /Users/xianxu/workspace/brain
+        gap_minutes: 15
+        commit_weight: 1
+        include_assistant: true
+        engagements:
+            - start: "2026-10-19T07:21:18-07:00"
+              end: "2026-10-19T08:15:21-07:00"
+              began: "2026-10-19T07:21:18-07:00"
+              roots:
+                - /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+        sources:
+            - harness: claude
+              id: 338ec900-e10b-4fe4-be14-0f0ef1bf7fbd
+              slot: parley.nvim:3
+              cwd: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+              digest: 431399633cf781943535469eee6a1c4651e8bc971fd8e7fa626b3c6678c05310
+              started: "2026-10-18T22:09:43.273Z"
+              spawned: false
+              bytes: 6491051
+              windows:
+                - start: "2026-10-19T07:21:18-07:00"
+                  end: "2026-10-19T08:15:21-07:00"
+        queue_waits:
+            - attempt_id: a6494034c8fcb8f14e529d494fcc1a34
+              slot: parley.nvim:3
+              record_digest: cb65950cfcbf949a8eb75456f6c2b7242b0823ee868d8da1877e60411ac41742
+              start: "2026-10-19T14:52:56.584346Z"
+              end: "2026-10-19T14:53:15.069543Z"
+              queue_seconds: 18.485197
+              raw_seconds: 18.485197
+              exact: true
+            - attempt_id: 6544bfdcb6e1cf502fafd6cee090e2cb
+              slot: parley.nvim:3
+              record_digest: 2757243c096adc5ddc40ad3e9a724de32d8a560ec6e580f301179c1e7dccbfe2
+              start: "2026-10-19T15:07:18.32302Z"
+              end: "2026-10-19T15:10:13.849658Z"
+              queue_seconds: 175.526638
+              raw_seconds: 175.526638
+              exact: true
+        cuts:
+            - dispatched: "2026-10-19T07:53:31-07:00"
+              finalized: "2026-10-19T07:59:00-07:00"
+              finalizing: false
+            - dispatched: "2026-10-19T08:07:23-07:00"
+              finalized: "2026-10-19T08:14:25-07:00"
+              finalizing: true
+      "n": 3
+      timestamp: "2026-10-19T08:35:39-07:00"
+      dispatched: "2026-10-19T08:33:57-07:00"
+      agent: claude
+      reviewer: claude (anthropic; author anthropic)
+      dispose:
+        - id: BR-6
+          disposition: addressed
+          note: Issue line 33 now states the detect-and-capture rescope (watchdog past 200, executable names only, warn once, two fake guards, root cause to a new issue), consistent with Revisions line 50 and Done when lines 37-39; Done when and Revisions unchanged, so this records the fix rather than changing scope.
+          round: 3
+      recipe: fix-review
+      isolation: checkout
+      reviewed: b1185fee8f6a52188254a6920db9a36871fe4ffe
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#399 (boundary-review)
@@ -239,6 +329,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-6** [Minor] `stale-spec-after-rescope` (kind: defect) The issue's Spec paragraph still describes the root-cause fix the Revisions entry dropped
   Issue line 32 says to fix every child's stdio at the root; the 2026-10-19 hub rescope made it detect-and-capture. Rewrite the Spec to match.
 
+## Round 3 — 2026-10-19T08:35:39-07:00 (claude) — passed
+
+### Disposed
+
+- BR-6 — addressed — Issue line 33 now states the detect-and-capture rescope (watchdog past 200, executable names only, warn once, two fake guards, root cause to a new issue), consistent with Revisions line 50 and Done when lines 37-39; Done when and Revisions unchanged, so this records the fix rather than changing scope.
+
 ## Open findings
 
-- **BR-6** [Minor] `stale-spec-after-rescope` (kind: defect) The issue's Spec paragraph still describes the root-cause fix the Revisions entry dropped
+(none — every finding has been disposed)

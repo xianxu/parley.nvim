@@ -236,3 +236,68 @@ findings:
 ```
 
 <!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"ec9158f9-18ca-4e2d-ac06-1811435606e7","repository":"github.com/xianxu/parley.nvim","issue_id":"000399","recipe":"milestone-review","round":2,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/371a869578589110","reviewed_head":"637d080c05278db659d095dceb7b58ce5f8d174d","slot":"parley.nvim:3","requested_at":"2026-10-19T15:07:24.015601Z"},"phase":"finished","pid":56590,"started_at":"2026-10-19T15:07:24.240501Z","finished_at":"2026-10-19T15:14:23.763048Z","session_id":"de19bc9c-25e5-4f82-a305-24c942a78042","outcome":"returned"}] -->
+
+---
+
+## Re-review — 2026-10-19T08:35:39-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 399 — fd leak: embedded session-file nvim leaks a unix socket per session-sync reload/lease, hits the 256 limit overnight |
+| repo | parley.nvim |
+| issue file | workshop/issues/000399-fd-leak-embedded-session-file-nvim-leaks-a-unix-socket-per-session-sync-reload-lease-hits-the-256-limit-overnight.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 1d9ab0fda916eb0999224af77259b49060ac2bd5..b1185fee8f6a52188254a6920db9a36871fe4ffe |
+| command | sdlc close --issue 399 |
+| reviewer | claude (anthropic; author anthropic) |
+| isolation | checkout |
+| timestamp | 2026-10-19T08:35:39-07:00 |
+| verdict | SHIP |
+
+## Review
+
+Checking how the specs are run so I can run the changed watchdog spec and the arrival-budget arch check.
+
+Running the watchdog spec through `make test-spec`.
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+This fix window has two changes. The first rewrites the issue's `## Spec` so it describes the 2026-10-19 rescope instead of the original root-cause fix. The second makes the watchdog integration spec wait up to the suite's shared arrival budget (`tests/helpers/arrival.lua`, 15 s) instead of a hard-coded 5000 ms. The new Spec only records what `## Revisions` and the revised `## Done when` already say: watchdog plus capture, executable names only, warn once, two fake-backed guards, and the root cause moved to a new issue. So it is not a scope change, and it closes BR-6. `## Done when` and `## Revisions` are unchanged in the window. The test change is a one-line hardening that adds no behavior. Both `infra/fd_watchdog` spec files pass on the pinned head (integration 2/2, unit 4/4), and `tests/arch/arrival_budget_spec.lua` passes. Nothing here blocks shipping.
+
+1. **Strengths**
+   - Issue line 33: the Spec now matches the `## Revisions` entry (line 50) and the `## Done when` bullets (lines 37–39). It also says where the original root-cause spec now lives (the follow-up issue), so nothing is silently dropped.
+   - `tests/integration/fd_watchdog_spec.lua:45`: the positive wait now uses the shared arrival budget. A passing run costs nothing extra, and machine load can no longer turn into a flake. The 200 ms wait that checks no second warning arrives stays short, which is correct.
+
+2. **Critical findings:** none.
+
+3. **Important findings:** none.
+
+4. **Minor findings:** none raised against this window. See note 6.
+
+5. **Test coverage notes**
+   - I ran `make test-spec SPEC=infra/fd_watchdog` on head b1185fee. Integration: 2 passed, 0 failed. Unit: 4 passed, 0 failed.
+   - I ran `tests/arch/arrival_budget_spec.lua` with the make test environment: PASS.
+   - The orphan check was skipped because `ps` isn't available in this environment.
+
+6. **Architectural notes**
+   - ARCH-DRY: pass. The wait reuses the single arrival-budget helper instead of a literal.
+   - ARCH-PURE: pass. The change is test-only and moves no logic.
+   - ARCH-PURPOSE: pass. BR-6's class (a Spec left stale after a rescope) has one site in this issue, and the rewrite covers the whole paragraph, not just a phrase.
+   - ARCH-EVOLVE: not applicable. No persisted format changes.
+   - One observation outside this window, for later: the arrival-budget arch scanner never sees line 45. Its pattern `vim%.wait%(%s*([^,%)]+)%s*,` stops at the `)` in `require("tests.helpers.arrival").MS`, so any wait written with an inline `require(...)` is invisible to the guard. That is the very form the guard's own failure message recommends. The line itself is correct; it is just unchecked. A future change could make the scanner tolerate one level of parentheses, or the suite could prefer a local `arrival` binding.
+
+7. **Plan revision recommendations:** none. The Spec, Revisions, Done when and Plan now agree with each other and with the code.
+
+```findings
+dispose:
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Issue line 33 now states the detect-and-capture rescope (watchdog past 200, executable names only, warn once, two fake guards, root cause to a new issue), consistent with Revisions line 50 and Done when lines 37-39; Done when and Revisions unchanged, so this records the fix rather than changing scope.
+```
+
+<!-- sdlc-review-usage [{"version":1,"intent":{"disposable_root":true,"id":"818844b1-8184-42a3-a4e5-1297b8878893","repository":"github.com/xianxu/parley.nvim","issue_id":"000399","recipe":"fix-review","round":3,"attempt":1,"agent":"claude","root":"/Users/xianxu/Library/Caches/sdlc/review-checkouts/331a21d8d28f37cf","reviewed_head":"b1185fee8f6a52188254a6920db9a36871fe4ffe","slot":"parley.nvim:3","requested_at":"2026-10-19T15:33:57.639948Z"},"phase":"finished","pid":41872,"started_at":"2026-10-19T15:33:57.848637Z","finished_at":"2026-10-19T15:35:34.384888Z","session_id":"d127eea4-74c1-477f-9d01-1db8e6958af9","outcome":"returned"}] -->
