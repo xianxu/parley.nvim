@@ -42,6 +42,7 @@ Change the default of `chat_spell.blink` from true to false. `enable` (underline
 ## Log
 
 ### 2026-10-18
+- 2026-10-18: closed — 79 mapped spelling cases pass on each Neovim 0.12.5 and stock 0.11.7; 144 architecture/helper cases and lint 805 files clean. Bare setup/prep_chat with ready stateful Blink shows underlines and zero menu requests; explicit blink=true positive control opens corrections. Default and bare-setup assertions fail original config. Atlas default/opt-in updated, README has no default claim. Recorded suite cb7588a68bab3b4b10fa36c1e134718c queued on code-identical d6e05403, mandatory before landing. Hub approved suite/close and smoke in normal use, no :0 staging. (done-when: contract moved since change-code; judged by the close review); review verdict: SHIP
 
 ## Revisions
 
