@@ -95,3 +95,13 @@ f5b9ea1e1accd92856d99af8f024f212 on pushed SHIP head ee9ad5130fc2; no code/test
 change since the failed run. That exact revision and exception are reported to
 the hub. The first run did not execute the compatibility pass; only a completed
 rerun can supply that missing evidence.
+
+### 2026-10-18 — unchanged-code rerun green
+
+Recorded rerun f5b9ea1e1accd92856d99af8f024f212 passed exit 0 on ee9ad5130fc2
+with 960 spec-file executions across preferred 0.12.5 and stock 0.11.7.
+The registry spec passed in both runtimes, and all spelling cases passed.
+Execution 5m33s after a 3172s queue; no surviving test processes. The first
+failed attempt remains retained and linked to unclaimed #394. No source or
+test changed between those attempts; only close evidence/docs did.
+Rerun suite.log SHA-256: 56dd8f13162636cb11bb58a97b547f56a4c0337201542be1f22c1c2fa487c0cb.
