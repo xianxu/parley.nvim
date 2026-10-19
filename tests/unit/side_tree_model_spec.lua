@@ -71,4 +71,14 @@ describe("side_tree_model.chain (#391)", function()
         assert.are.same({ tree = false }, model.parse({ "---", "parent:", "---" }, "/r"))
         assert.are.same({ tree = false }, model.parse({ "---", "parent: a.md" }, "/r"))
     end)
+
+    it("drops a trailing comment and accepts a padded opener (#397)", function()
+        for _, line in ipairs({ "parent: ../a.md # note", "parent: \"../a.md\" # note", "parent: '../a.md'  # note",
+            "parent: ../a.md\t# note" }) do
+            assert.are.same({ tree = false, parent = "/r/a.md" }, model.parse({ "---", line, "---" }, "/r/x"), line)
+        end
+        assert.are.same({ tree = false, parent = "/r/x/a#b.md" }, model.parse({ "---", "parent: a#b.md", "---" }, "/r/x"))
+        assert.are.same({ tree = false }, model.parse({ "---", "parent: # none", "---" }, "/r/x"))
+        assert.are.same({ tree = true, parent = "/r/a.md" }, model.parse({ "--- ", "discussions: # kids", "parent: ../a.md", " ---" }, "/r/x"))
+    end)
 end)

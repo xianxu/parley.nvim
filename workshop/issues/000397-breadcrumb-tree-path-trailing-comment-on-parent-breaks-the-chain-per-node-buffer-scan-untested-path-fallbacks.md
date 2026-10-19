@@ -1,6 +1,6 @@
 ---
 id: 000397
-status: open
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-10-19
@@ -8,7 +8,17 @@ updated: 2026-10-19
 estimate_hours:
 severity: low
 collaboration-mode: collaboration
-card_mirror: 'c46637faddc9193be6b261d89bb585fa733b4612' # card fields mirrored from issue-cards; edit via sdlc
+card_mirror: '357b3f9b95f3e142e5ac5ad195922c9839fc6ab8' # card fields mirrored from issue-cards; edit via sdlc
+started: 2026-10-19T01:00:46-07:00
+claimant:
+    operator: Xian Xu
+    machine: 4716879978a7b90f6b583da1716fd0e9
+    machine_name: Xian’s MacBook Pro
+    workspace: parley.nvim:3
+    worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
+    repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "6e340b9c", done: "3b5e5ccc"}
+actual_hours: 0.24
 ---
 
 # breadcrumb tree path: trailing comment on parent: breaks the chain; per-node buffer scan; untested path fallbacks
@@ -31,8 +41,15 @@ Three Minor notes from #391's round-2 close review (archived close review for #3
 
 ## Plan
 
-- [ ]
+None written: the three fixes are small and recorded in the Log.
 
 ## Log
 
 ### 2026-10-19
+- 2026-10-19: closed — ui/breadcrumb (now mapping breadcrumb_model_spec) exit 0 on 555ad109, 74 cases: side_tree_model_spec parses parent: with trailing comments (bare, quoted, tab), keeps a#b.md, parent: # none is no parent, padded --- opener; breadcrumb_model_spec located() root/home/absolute/home-lookalike; file_history_spec depth-1 and depth-8 scans equal with the exact 9-segment winbar (old per-node lookup: 10 vs 3, red). Lint 0 warnings; full suite running on 555ad109.; review verdict: SHIP
+
+### 2026-10-19
+- `parse` takes a quoted value as quoted, else the text before whitespace + `#` (a leading `#` included, so `parent: # none` is no parent); `a#b.md` keeps its `#`. The opener trims as `find_header_end` does.
+- Buffer lookup: one `helper.loaded_buffer_index` per chain, sharing `buffer_for`'s key function (ARCH-DRY). Revert check: with the old per-node `buffer_for`, the depth test counts 10 scans for depth 8 against 3 for depth 1; with the index both are equal.
+- Path form selection moved to pure `breadcrumb_model.located` (ARCH-PURE) and unit-tested for root, home, absolute and a home-prefix lookalike (`/hx`).
+- Close review round 1 (REWORK, BR-1): the `located()` test expected `lua › x` for `x.lua`, and only `.md` is stripped. I didn't see the failure because `breadcrumb_model_spec` was mapped only under `ui/keybindings`, so my `ui/breadcrumb` runs skipped it. Fixed the expectation, mapped the model spec under `ui/breadcrumb` (the spec that owns the model), and pinned the depth test's winbar to the exact 9-segment chain (Minor).
