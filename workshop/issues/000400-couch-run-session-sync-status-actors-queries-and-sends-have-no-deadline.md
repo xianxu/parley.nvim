@@ -17,6 +17,7 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+flow: {kind: quick, provenance: inferred, spec: "e7520144", done: "220db29b"}
 ---
 
 # couch.run: session-sync status/actors queries and sends have no deadline
@@ -57,12 +58,12 @@ ARCH-CONSTRAINTS: these are local Unix-socket calls on the UI's async path; the 
 
 ## Plan
 
-- [ ] `couch.run` defaults `timeout` to `DEADLINE_MS`, and `timeout = false` means the caller bounds the child itself. Add `couch.timed_out(obj)` (code 124, signal 15).
-- [ ] `document_registry` passes `timeout = false`.
-- [ ] The legacy submit send reports a timeout as unconfirmed (it may have arrived), not as failed.
-- [ ] Fake: `$FAKE_COUCH_QUERY_SLEEP` delays query answers.
-- [ ] Unit tests: the default kills a hung child, the callback fires once with code 124, an explicit timeout wins, `false` sets no timeout.
-- [ ] Integration tests:
+- [x] `couch.run` defaults `timeout` to `DEADLINE_MS`, and `timeout = false` means the caller bounds the child itself. Add `couch.timed_out(obj)` (code 124, signal 15).
+- [x] `document_registry` passes `timeout = false`.
+- [x] The legacy submit send reports a timeout as unconfirmed (it may have arrived), not as failed.
+- [x] Fake: `$FAKE_COUCH_QUERY_SLEEP` delays query answers.
+- [x] Unit tests: the default kills a hung child, the callback fires once with code 124, an explicit timeout wins, `false` sets no timeout.
+- [x] Integration tests:
   - A probe whose status query hangs past the deadline clears `s.probing`, so the next poll probes again and the ping arrives.
   - Every `couch` spawn on the submit, probe and ping path carries a positive timeout.
   - The legacy submit timeout message says the send is unconfirmed.
@@ -70,3 +71,9 @@ ARCH-CONSTRAINTS: these are local Unix-socket calls on the UI's async path; the 
 ## Log
 
 ### 2026-10-19
+- The hub approved the plan, with two checks:
+  - **The callback can't fire twice when a kill and a normal exit race.** `couch.run`'s `finish` drops a second report; a unit spec feeds two reports and gets one. vim.system itself reports once, after its pipes close.
+  - **Nothing blocks the UI thread.** No `:wait()` in `couch`, `session_sync`, `agentic_document`, `attention` or `document_registry`; every call is async through vim.system's exit callback.
+- Finding: vim.system's exit callback waits for the stdio pipes to close (`_system.lua` `_on_exit`), so a timeout that kills only the direct child doesn't report while a grandchild holds the pipes. The real `couch` is a single Go binary (Mach-O), so a SIGTERM closes them. The fake's sleeps now end with the script, which dies by SIGTERM as couch would.
+- Red check: with the default removed from `couch.run`, all three new integration tests fail; with it restored, they pass. The probe test first passed unfixed, because duplicate attaches on open spawn a second probe. It now waits on a timed-out result.
+- Targeted runs: `make test-spec SPEC=modes/review` (couch_spec) and `SPEC=modes/session_sync`, all green.
