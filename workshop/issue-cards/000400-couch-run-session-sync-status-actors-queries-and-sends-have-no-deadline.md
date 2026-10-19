@@ -18,10 +18,10 @@ actual_hours: 1.24
 tracker:
     version: 1
     completion:
-        token: close-63ea18595ded
+        token: close-26e112a0e9e4
         repository: github.com/xianxu/parley.nvim
-        reviewed_head: 5b58f710009b8d7191052e9908c7b57da51fbbf8
-        evidence_commit: b0775d7737592c7ce7f252116363ee224a29b54c
+        reviewed_head: 0167f8fadbe8886ac18a06c01d006d0c8f4e8126
+        evidence_commit: a203fbd2cbb75b1192c449061dd8d5ffed455876
 ---
 
 # couch.run: session-sync status/actors queries and sends have no deadline
