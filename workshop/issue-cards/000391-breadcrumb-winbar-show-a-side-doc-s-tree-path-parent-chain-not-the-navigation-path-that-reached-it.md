@@ -1,6 +1,6 @@
 ---
 id: 000391
-status: working
+status: codecomplete
 created: 2026-10-18
 updated: 2026-10-18
 estimate_hours:
@@ -13,6 +13,14 @@ claimant:
     workspace: parley.nvim:3
     worktree: /Users/xianxu/workspace/worktree/parley.nvim-slot3/parley.nvim
     repository: github.com/xianxu/parley.nvim
+actual_hours: 1.65
+tracker:
+    version: 1
+    completion:
+        token: close-662d8a10a17f
+        repository: github.com/xianxu/parley.nvim
+        reviewed_head: 0c9ab358822e20670a58467ad050217d830ff25c
+        evidence_commit: 07dc3fdd5c1768c79406ac3a8bba9843e2569a9c
 ---
 
 # breadcrumb winbar: show a side doc's tree path (parent chain), not the navigation path that reached it
